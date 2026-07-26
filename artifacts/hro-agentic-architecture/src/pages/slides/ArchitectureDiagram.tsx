@@ -1,6 +1,6 @@
 export default function ArchitectureDiagram() {
   return (
-    <div className="slide w-screen h-screen overflow-hidden relative bg-bg">
+    <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1526] via-[#0c1a30] to-[#0a1526]" />
       <div className="absolute inset-0 flex flex-col px-[4.5vw] py-[5vh]">
         <div className="flex items-baseline justify-between">

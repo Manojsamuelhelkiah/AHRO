@@ -1,6 +1,6 @@
 export default function ExperienceIntake() {
   return (
-    <div className="slide w-screen h-screen overflow-hidden relative bg-bg">
+    <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1526] via-[#0c1a30] to-[#0a1526]" />
       <div className="absolute top-0 left-0 h-[1vh] w-[38vw] bg-primary" />
       <div className="absolute inset-0 flex flex-col px-[7vw] py-[8vh]">

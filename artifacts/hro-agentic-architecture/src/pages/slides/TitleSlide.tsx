@@ -2,7 +2,7 @@ const base = import.meta.env.BASE_URL;
 
 export default function TitleSlide() {
   return (
-    <div className="slide w-screen h-screen overflow-hidden relative bg-bg">
+    <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <img
         src={`${base}hero-agent-mesh.png`}
         crossOrigin="anonymous"

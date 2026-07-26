@@ -6,3 +6,9 @@ id = "4ypiH-PKaCRFGn5fHfLG_"
 uri = "file://.local/outputs/Autonomous-HRO-Agentic-Architecture.pdf"
 type = "pdf"
 title = "Autonomous HRO Agentic Architecture.pdf"
+
+[[outputs]]
+id = "atQEeNBLhDAmOQzscw1ld"
+uri = "file://.local/outputs/Autonomous-HRO-Agentic-Architecture.pptx"
+type = "slides"
+title = "Autonomous HRO Agentic Architecture (PPTX)"
