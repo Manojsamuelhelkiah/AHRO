@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "4ypiH-PKaCRFGn5fHfLG_"
+uri = "file://.local/outputs/Autonomous-HRO-Agentic-Architecture.pdf"
+type = "pdf"
+title = "Autonomous HRO Agentic Architecture.pdf"
