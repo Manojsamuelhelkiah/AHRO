@@ -1,0 +1,27 @@
+kind = "slides"
+previewPath = "/"
+title = "Autonomous HRO Agentic Architecture"
+version = "1.0.0"
+id = "artifacts/hro-agentic-architecture"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24953
+
+[services.development]
+run = "pnpm --filter @workspace/hro-agentic-architecture run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/hro-agentic-architecture", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/hro-agentic-architecture/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24953"
+BASE_PATH = "/"

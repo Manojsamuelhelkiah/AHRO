@@ -1,0 +1,50 @@
+[
+  {
+    "id": "0b6f6a54-9f1c-4f6e-9a2e-1c3d5e7f9a01",
+    "position": 1,
+    "filepath": "src/pages/slides/TitleSlide.tsx",
+    "title": "Autonomous HRO: The Agentic Hire-to-Retire Platform",
+    "description": "Title slide introducing the AI-native HRO architecture on Azure and the Microsoft stack.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "1c7e8b65-2a3d-4b5c-8d9e-2f4a6c8e0b12",
+    "position": 2,
+    "filepath": "src/pages/slides/ExperienceIntake.tsx",
+    "title": "The Agentic Experience & Multimodal Intake",
+    "description": "AI personas across channels and multimodal ingestion of documents, voice, and video.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "2d8f9c76-3b4e-4c6d-9eaf-3a5b7d9f1c23",
+    "position": 3,
+    "filepath": "src/pages/slides/IntentRouting.tsx",
+    "title": "Intent Classification, Routing & Multi-Loop Conversations",
+    "description": "HRO intent catalog, prioritization and routing, A2A multi-agent loops with human-in-the-loop.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "3e9a0d87-4c5f-4d7e-8fb0-4b6c8e0a2d34",
+    "position": 4,
+    "filepath": "src/pages/slides/BrainAndHands.tsx",
+    "title": "Services, Reasoning & Action",
+    "description": "MCP tool servers, policy RAG, fast and deep reasoning, and connectors into systems of record.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "4f0b1e98-5d6a-4e8f-9ac1-5c7d9f1b3e45",
+    "position": 5,
+    "filepath": "src/pages/slides/TrustFabric.tsx",
+    "title": "Trust Fabric: Security, Guardrails & Observability",
+    "description": "Entra ID agent identities, content safety guardrails, and end-to-end observability.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "position": 6,
+    "filepath": "src/pages/slides/InsightImpact.tsx",
+    "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
+    "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",
+    "speakerNotes": ""
+  }
+]
