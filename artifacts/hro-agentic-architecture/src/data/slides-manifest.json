@@ -12,12 +12,20 @@
     "position": 2,
     "filepath": "src/pages/slides/ArchitectureDiagram.tsx",
     "title": "Reference Architecture — One View",
-    "description": "Full layered architecture diagram: experience, multimodal, intent, orchestration, MCP services, reason, act, systems of record, and cross-cutting layers.",
+    "description": "Full layered architecture diagram: experience, gateway, intake, intent, orchestration, MCP services, case management, act, systems of record, and cross-cutting concerns.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7c3e4b21-8a9d-4b1c-adf4-8f0a2c4e6b78",
+    "position": 3,
+    "filepath": "src/pages/slides/FunctionalView.tsx",
+    "title": "Functional View — What Each Part Does",
+    "description": "Functional twin of the reference architecture: same numbered components described in business terms for a functional audience.",
     "speakerNotes": ""
   },
   {
     "id": "1c7e8b65-2a3d-4b5c-8d9e-2f4a6c8e0b12",
-    "position": 3,
+    "position": 4,
     "filepath": "src/pages/slides/ExperienceIntake.tsx",
     "title": "The Agentic Experience & Multimodal Intake",
     "description": "AI personas across channels and multimodal ingestion of documents, voice, and video.",
@@ -25,7 +33,7 @@
   },
   {
     "id": "2d8f9c76-3b4e-4c6d-9eaf-3a5b7d9f1c23",
-    "position": 4,
+    "position": 5,
     "filepath": "src/pages/slides/IntentRouting.tsx",
     "title": "Intent Classification, Routing & Multi-Loop Conversations",
     "description": "HRO intent catalog, prioritization and routing, A2A multi-agent loops with human-in-the-loop.",
@@ -33,7 +41,7 @@
   },
   {
     "id": "3e9a0d87-4c5f-4d7e-8fb0-4b6c8e0a2d34",
-    "position": 5,
+    "position": 6,
     "filepath": "src/pages/slides/BrainAndHands.tsx",
     "title": "Services, Reasoning & Action",
     "description": "MCP tool servers, policy RAG, fast and deep reasoning, and connectors into systems of record.",
@@ -41,15 +49,47 @@
   },
   {
     "id": "4f0b1e98-5d6a-4e8f-9ac1-5c7d9f1b3e45",
-    "position": 6,
+    "position": 7,
     "filepath": "src/pages/slides/TrustFabric.tsx",
     "title": "Trust Fabric: Security, Guardrails & Observability",
     "description": "Entra ID agent identities, content safety guardrails, and end-to-end observability.",
     "speakerNotes": ""
   },
   {
+    "id": "8d4f5c32-9bae-4c2d-be05-9a1b3d5f7c89",
+    "position": 8,
+    "filepath": "src/pages/slides/FlowPayslip.tsx",
+    "title": "Lifecycle Flow 1: Payslip Copy & Leave Balance",
+    "description": "As-is vs to-be for high-volume repetitive requests handled by a deterministic tool path.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "9e5a6d43-acbf-4d3e-af16-ab2c4e6a8d90",
+    "position": 9,
+    "filepath": "src/pages/slides/FlowPolicy.tsx",
+    "title": "Lifecycle Flow 2: Policy Question",
+    "description": "As-is vs to-be for policy questions answered from the country-aware HR policy library with citations.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "af6b7e54-bdca-4e4f-b027-bc3d5f7b9ea1",
+    "position": 10,
+    "filepath": "src/pages/slides/FlowPayroll.tsx",
+    "title": "Lifecycle Flow 3: Payroll Discrepancy Dispute",
+    "description": "As-is vs to-be for a complex multi-agent case with human-in-the-loop approval and gated write-back.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "ba7c8f65-cedb-4f5a-c138-cd4e6a8cafb2",
+    "position": 11,
+    "filepath": "src/pages/slides/FlowMobility.tsx",
+    "title": "Lifecycle Flow 4: Cross-Border Relocation",
+    "description": "As-is vs to-be for a frontier case beyond traditional automation: deep reasoning, multi-agent coordination, human gates.",
+    "speakerNotes": ""
+  },
+  {
     "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
-    "position": 7,
+    "position": 12,
     "filepath": "src/pages/slides/InsightImpact.tsx",
     "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
     "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",

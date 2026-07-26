@@ -158,7 +158,8 @@ export default function ArchitectureDiagram() {
                 </p>
               </div>
               <div className={`${cell} px-[0.9vw] py-[0.7vh]`}>
-                <p className="font-display font-bold text-accent text-[1.15vw]">
+                <p className="font-display font-bold text-accent text-[1.15vw] flex items-center">
+                  <Num n="6" />
                   Case Management &amp; SLA
                 </p>
                 <p className="font-body text-text text-[1.05vw] leading-snug">
@@ -167,7 +168,8 @@ export default function ArchitectureDiagram() {
                 </p>
               </div>
               <div className={`${cell} px-[0.9vw] py-[0.7vh]`}>
-                <p className="font-display font-bold text-accent text-[1.15vw]">
+                <p className="font-display font-bold text-accent text-[1.15vw] flex items-center">
+                  <Num n="6" />
                   Act — Integration Layer
                 </p>
                 <p className="font-body text-text text-[1.05vw] leading-snug">
