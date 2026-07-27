@@ -128,8 +128,24 @@
     "speakerNotes": ""
   },
   {
-    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "id": "1a3d2fcb-ce3b-4fba-d79e-cdaec02c4bb8",
     "position": 17,
+    "filepath": "src/pages/slides/Pricing.tsx",
+    "title": "Pricing Models & Options",
+    "description": "Three pricing models (PEPM, per resolved case, platform + usage), tier multipliers and add-ons, and commercial guardrails.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "2b4e30dc-df4c-40cb-e8af-debfd13d5cc9",
+    "position": 18,
+    "filepath": "src/pages/slides/Timeline.tsx",
+    "title": "Implementation Plan — ~26 Weeks to Full Rollout",
+    "description": "Gantt-style implementation timeline: discover, foundation, build, assure, launch phases with milestones and go/no-go gates.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "position": 19,
     "filepath": "src/pages/slides/InsightImpact.tsx",
     "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
     "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",
