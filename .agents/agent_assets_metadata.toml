@@ -12,3 +12,9 @@ id = "atQEeNBLhDAmOQzscw1ld"
 uri = "file://.local/outputs/Autonomous-HRO-Agentic-Architecture.pptx"
 type = "slides"
 title = "Autonomous HRO Agentic Architecture (PPTX)"
+
+[[outputs]]
+id = "n1pbwQC-yJoXOMPx_5UoH"
+uri = "file://legal-documents.zip"
+type = "unspecified"
+title = "Legal & Product Documentation Pack (18 PDFs)"
