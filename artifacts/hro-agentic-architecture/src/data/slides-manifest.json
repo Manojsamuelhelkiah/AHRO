@@ -144,8 +144,16 @@
     "speakerNotes": ""
   },
   {
-    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "id": "3c5f41ed-ea5d-41dc-a9b0-efc0e24e6dd0",
     "position": 19,
+    "filepath": "src/pages/slides/LegalDocs.tsx",
+    "title": "Legal & Product Documentation — Post-Release",
+    "description": "Legal and product documents by lifecycle stage: contract & onboard, live operations, change & update, incident & exit.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "position": 20,
     "filepath": "src/pages/slides/InsightImpact.tsx",
     "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
     "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",
