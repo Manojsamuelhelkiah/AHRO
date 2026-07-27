@@ -88,8 +88,24 @@
     "speakerNotes": ""
   },
   {
-    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "id": "cb8d9a76-dfec-4a6b-a249-de5f7b9db0c3",
     "position": 12,
+    "filepath": "src/pages/slides/MultiTenant.tsx",
+    "title": "From Solution to Product — Multi-Tenant by Design",
+    "description": "Multi-tenant product architecture: shared control plane, isolated tenant planes per client, shared foundation, and isolation tiers.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "dc9eab87-eafd-4b7c-b35a-ef6a8cae0dd4",
+    "position": 13,
+    "filepath": "src/pages/slides/ProductConsiderations.tsx",
+    "title": "Running It as a Product — What Else Must Be True",
+    "description": "Productization checklist: isolation, compliance and residency, commercial model, operations at scale, customization vs core, go-to-market.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "position": 14,
     "filepath": "src/pages/slides/InsightImpact.tsx",
     "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
     "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",
