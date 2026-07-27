@@ -104,8 +104,16 @@
     "speakerNotes": ""
   },
   {
-    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "id": "edaf0c98-fb0e-4c8d-a46b-fa7b9dbf1ee5",
     "position": 14,
+    "filepath": "src/pages/slides/IsolationTiers.tsx",
+    "title": "Choosing an Isolation Tier — Cost vs Control",
+    "description": "Comparison of pooled, siloed-database, and fully dedicated deployment tiers across sharing, security, compliance, cost, speed, and typical client.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
+    "position": 15,
     "filepath": "src/pages/slides/InsightImpact.tsx",
     "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
     "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",
