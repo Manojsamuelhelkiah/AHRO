@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/cost-explorer/"
+title = "HRO Intent Flow Cost-Benefit Explorer"
+description = "A business-case tool for the Autonomous HRO agentic platform. It hosts a corpus of hire-to-retire HR intents seeded from SAP-style taxonomies and public HR datasets, traces each intent's transaction flow end-to-end across the agentic architecture (intake, intent, orchestration, act, close), attaches per-step cost and benefit models with visible assumptions, and computes a client-level cost/benefit roll-up from committed transaction volumes distributed by a sector/size-driven model."
+version = "1.0.0"
+id = "artifacts/cost-explorer"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/cost-explorer/" ]
+localPort = 18940
+
+[services.development]
+run = "pnpm --filter @workspace/cost-explorer run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cost-explorer", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cost-explorer/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18940"
+BASE_PATH = "/cost-explorer/"

@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: corpus
+    description: HRO intent corpus and reference data
+  - name: scenarios
+    description: Client scenarios and cost-benefit roll-ups
 paths:
   /healthz:
     get:
@@ -24,6 +28,209 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /intents:
+    get:
+      operationId: listIntents
+      tags: [corpus]
+      summary: List all HRO intents in the corpus
+      responses:
+        "200":
+          description: Intent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Intent"
+  /flow-classes:
+    get:
+      operationId: listFlowClasses
+      tags: [corpus]
+      summary: List flow-class templates with their steps, costs and benefits
+      responses:
+        "200":
+          description: Flow class list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FlowClass"
+  /systems:
+    get:
+      operationId: listSystems
+      tags: [corpus]
+      summary: List modeled HR systems of record
+      responses:
+        "200":
+          description: System list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SystemInfo"
+  /profiles:
+    get:
+      operationId: listDistributionProfiles
+      tags: [corpus]
+      summary: List sector/size distribution profiles used to allocate transactions across intents
+      responses:
+        "200":
+          description: Profile list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DistributionProfile"
+  /assumptions:
+    get:
+      operationId: listAssumptions
+      tags: [corpus]
+      summary: List global default assumptions (rates, token prices, infra allocations)
+      responses:
+        "200":
+          description: Assumption list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GlobalAssumption"
+  /summary:
+    get:
+      operationId: getCorpusSummary
+      tags: [corpus]
+      summary: Corpus dashboard summary (counts by domain, flow class, sources)
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorpusSummary"
+  /scenarios:
+    get:
+      operationId: listScenarios
+      tags: [scenarios]
+      summary: List saved client scenarios
+      responses:
+        "200":
+          description: Scenario list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Scenario"
+    post:
+      operationId: createScenario
+      tags: [scenarios]
+      summary: Create a client scenario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+  /scenarios/{id}:
+    get:
+      operationId: getScenario
+      tags: [scenarios]
+      summary: Get a scenario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Scenario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      operationId: updateScenario
+      tags: [scenarios]
+      summary: Update a scenario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      operationId: deleteScenario
+      tags: [scenarios]
+      summary: Delete a scenario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /rollup:
+    post:
+      operationId: computeRollup
+      tags: [scenarios]
+      summary: Compute a cost-benefit roll-up for a set of scenario inputs (without saving)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollupRequest"
+      responses:
+        "200":
+          description: Roll-up result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rollup"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +240,473 @@ components:
           type: string
       required:
         - status
-
+    ErrorMessage:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    SourceRef:
+      type: object
+      description: Attribution of a data point to its origin corpus
+      properties:
+        name:
+          type: string
+          description: e.g. "SAP SuccessFactors service catalog (curated)", "Kaggle HR analytics", "GitHub HR intents corpus"
+        note:
+          type: string
+        confidence:
+          type: string
+          description: high | medium | low (documented-assumption)
+      required: [name, confidence]
+    Intent:
+      type: object
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+          description: hire | pay | leave | benefits | time | mobility | develop | retire | data-admin | policy
+        flowClass:
+          type: string
+          description: fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier
+        description:
+          type: string
+        source:
+          $ref: "#/components/schemas/SourceRef"
+        asIsHandlingMin:
+          type: number
+          description: Average human handling minutes per transaction today (as-is)
+        toBeHumanMin:
+          type: number
+          description: Residual human minutes per transaction in the to-be flow (HITL share included)
+        baseWeight:
+          type: number
+          description: Relative frequency weight in a neutral organization (used by the distribution model)
+        actGetActions:
+          type: integer
+          description: Number of GET system actions in the act phase of this intent (per touched system)
+        actPutActions:
+          type: integer
+          description: Number of PUT/write system actions in the act phase (approval-gated)
+        systemsTouchedBase:
+          type: integer
+          description: Minimum count of systems of record this intent touches regardless of landscape size
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - key
+        - name
+        - domain
+        - flowClass
+        - description
+        - source
+        - asIsHandlingMin
+        - toBeHumanMin
+        - baseWeight
+        - actGetActions
+        - actPutActions
+        - systemsTouchedBase
+        - tags
+    StepSystemTouch:
+      type: object
+      properties:
+        systemKey:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+          description: get | put
+        scalesWithLandscape:
+          type: boolean
+          description: When true, this touch repeats across additional client systems
+      required: [systemKey, actions, scalesWithLandscape]
+    CostComponent:
+      type: object
+      properties:
+        type:
+          type: string
+          description: ai-consumption | infra | human | build | other
+        label:
+          type: string
+        unitCostUsd:
+          type: number
+          description: Cost per transaction attributable to this component at this step
+        assumption:
+          type: string
+          description: Human-readable assumption behind the number
+        source:
+          $ref: "#/components/schemas/SourceRef"
+      required: [type, label, unitCostUsd, assumption, source]
+    BenefitComponent:
+      type: object
+      properties:
+        type:
+          type: string
+          description: human-effort | cycle-time | error-reduction | experience | compliance
+        label:
+          type: string
+        dollarized:
+          type: boolean
+        unitBenefitUsd:
+          type: number
+          description: Dollar benefit per transaction (0 when not dollarized)
+        qualitative:
+          type: string
+          description: Description of the non-dollar benefit
+        assumption:
+          type: string
+      required: [type, label, dollarized, unitBenefitUsd, qualitative, assumption]
+    FlowStep:
+      type: object
+      properties:
+        id:
+          type: string
+        stage:
+          type: string
+          description: intake | intent | orchestration | knowledge | communication | act | close
+        label:
+          type: string
+        componentRefs:
+          type: array
+          items:
+            type: string
+          description: Architecture components touched, using the deck's circled numbers 1-7
+        agents:
+          type: array
+          items:
+            type: string
+        human:
+          type: boolean
+          description: Human-in-the-loop step
+        systems:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepSystemTouch"
+        costs:
+          type: array
+          items:
+            $ref: "#/components/schemas/CostComponent"
+        benefits:
+          type: array
+          items:
+            $ref: "#/components/schemas/BenefitComponent"
+      required: [id, stage, label, componentRefs, agents, human, systems, costs, benefits]
+    FlowClass:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        slideRef:
+          type: string
+          description: Which deck slide this flow mirrors
+        description:
+          type: string
+        buildCostUsd:
+          type: number
+          description: One-time build cost for agents/flows of this class
+        buildAssumption:
+          type: string
+        amortizationTransactions:
+          type: number
+          description: Transactions over which build cost is amortized by default
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlowStep"
+      required: [key, name, slideRef, description, buildCostUsd, buildAssumption, amortizationTransactions, steps]
+    SystemInfo:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          description: hcm | payroll | benefits | ticketing | knowledge | identity | other
+        description:
+          type: string
+      required: [key, name, category, description]
+    DistributionProfile:
+      type: object
+      properties:
+        sector:
+          type: string
+        description:
+          type: string
+        source:
+          $ref: "#/components/schemas/SourceRef"
+        domainWeights:
+          type: object
+          additionalProperties:
+            type: number
+          description: Multiplier per lifecycle domain applied to intent base weights
+        sizeAdjustments:
+          type: object
+          additionalProperties:
+            type: number
+          description: Multiplier per size band (small|mid|large|enterprise) applied to per-employee volume
+      required: [sector, description, source, domainWeights, sizeAdjustments]
+    GlobalAssumption:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string
+        rationale:
+          type: string
+        source:
+          $ref: "#/components/schemas/SourceRef"
+      required: [key, label, value, unit, rationale, source]
+    CorpusSummary:
+      type: object
+      properties:
+        intentCount:
+          type: integer
+        systemCount:
+          type: integer
+        profileCount:
+          type: integer
+        byDomain:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountBucket"
+        byFlowClass:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountBucket"
+        bySource:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountBucket"
+      required: [intentCount, systemCount, profileCount, byDomain, byFlowClass, bySource]
+    CountBucket:
+      type: object
+      properties:
+        key:
+          type: string
+        count:
+          type: integer
+      required: [key, count]
+    ScenarioInputs:
+      type: object
+      properties:
+        numSystems:
+          type: integer
+          description: Number of HR systems of record in the client landscape (drives Act fan-out)
+        annualTransactions:
+          type: number
+          description: Committed HR transactions per year
+        employees:
+          type: integer
+        sector:
+          type: string
+        companyType:
+          type: string
+          description: single-country | multi-country | global
+        isolationTier:
+          type: string
+          description: pooled | siloed | dedicated
+        hrHourlyCostUsd:
+          type: number
+          description: Loaded hourly cost of client HR staff (as-is baseline)
+        hitlHourlyCostUsd:
+          type: number
+          description: Loaded hourly cost of HITL reviewers in the to-be model
+        countries:
+          type: integer
+        intentShareOverrides:
+          type: object
+          additionalProperties:
+            type: number
+          description: Optional manual overrides of intent shares (intent key to share fraction)
+      required:
+        - numSystems
+        - annualTransactions
+        - employees
+        - sector
+        - companyType
+        - isolationTier
+        - hrHourlyCostUsd
+        - hitlHourlyCostUsd
+        - countries
+    Scenario:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        inputs:
+          $ref: "#/components/schemas/ScenarioInputs"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, name, inputs, createdAt, updatedAt]
+    ScenarioInput:
+      type: object
+      properties:
+        name:
+          type: string
+        inputs:
+          $ref: "#/components/schemas/ScenarioInputs"
+      required: [name, inputs]
+    ScenarioUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        inputs:
+          $ref: "#/components/schemas/ScenarioInputs"
+    RollupRequest:
+      type: object
+      properties:
+        inputs:
+          $ref: "#/components/schemas/ScenarioInputs"
+      required: [inputs]
+    IntentRollupRow:
+      type: object
+      properties:
+        intentId:
+          type: integer
+        intentKey:
+          type: string
+        intentName:
+          type: string
+        domain:
+          type: string
+        flowClass:
+          type: string
+        share:
+          type: number
+          description: Fraction of total transactions allocated to this intent
+        transactions:
+          type: number
+        runCostUsd:
+          type: number
+        buildCostUsd:
+          type: number
+          description: Amortized build cost allocated to this intent for the committed volume
+        aiCostUsd:
+          type: number
+        infraCostUsd:
+          type: number
+        humanCostUsd:
+          type: number
+        otherCostUsd:
+          type: number
+        benefitUsd:
+          type: number
+        netUsd:
+          type: number
+        humanMinutesSaved:
+          type: number
+      required:
+        - intentId
+        - intentKey
+        - intentName
+        - domain
+        - flowClass
+        - share
+        - transactions
+        - runCostUsd
+        - buildCostUsd
+        - aiCostUsd
+        - infraCostUsd
+        - humanCostUsd
+        - otherCostUsd
+        - benefitUsd
+        - netUsd
+        - humanMinutesSaved
+    RollupTotals:
+      type: object
+      properties:
+        runCostUsd:
+          type: number
+        buildCostUsd:
+          type: number
+        totalCostUsd:
+          type: number
+        benefitUsd:
+          type: number
+        netUsd:
+          type: number
+        roi:
+          type: number
+          description: benefit divided by total cost
+        costPerTransactionUsd:
+          type: number
+        benefitPerTransactionUsd:
+          type: number
+        humanHoursSaved:
+          type: number
+        fteEquivalent:
+          type: number
+          description: Human hours saved divided by annual working hours
+      required:
+        - runCostUsd
+        - buildCostUsd
+        - totalCostUsd
+        - benefitUsd
+        - netUsd
+        - roi
+        - costPerTransactionUsd
+        - benefitPerTransactionUsd
+        - humanHoursSaved
+        - fteEquivalent
+    ComponentBucket:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        usd:
+          type: number
+      required: [key, label, usd]
+    Rollup:
+      type: object
+      properties:
+        totals:
+          $ref: "#/components/schemas/RollupTotals"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntentRollupRow"
+        byFlowClass:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentBucket"
+        byCostComponent:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentBucket"
+        byDomain:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentBucket"
+        tierMultiplier:
+          type: number
+          description: Isolation-tier cost multiplier applied (from the deck's tier uplift)
+        appliedAssumptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/GlobalAssumption"
+      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, appliedAssumptions]
