@@ -8,7 +8,8 @@ import {
   Settings2,
   ChevronRight,
   Menu,
-  X
+  X,
+  GitCompareArrows,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -21,6 +22,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Intent Corpus", href: "/intents", icon: Library },
     { name: "Flow Classes", href: "/flows", icon: Workflow },
     { name: "Scenario Builder", href: "/scenario", icon: Calculator },
+    { name: "Compare Scenarios", href: "/compare", icon: GitCompareArrows },
     { name: "Global Assumptions", href: "/assumptions", icon: Settings2 },
   ];
 

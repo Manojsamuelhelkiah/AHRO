@@ -11,6 +11,7 @@ import IntentDetail from '@/pages/intent-detail';
 import Flows from '@/pages/flows';
 import Scenario from '@/pages/scenario';
 import Assumptions from '@/pages/assumptions';
+import Compare from '@/pages/compare';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,7 @@ function Router() {
         <Route path="/intents/:key" component={IntentDetail} />
         <Route path="/flows" component={Flows} />
         <Route path="/scenario" component={Scenario} />
+        <Route path="/compare" component={Compare} />
         <Route path="/assumptions" component={Assumptions} />
         <Route component={NotFound} />
       </Switch>

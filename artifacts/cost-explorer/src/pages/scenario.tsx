@@ -13,7 +13,7 @@ import {
   ScenarioInputs,
   Rollup
 } from "@workspace/api-client-react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { 
-  Calculator, Save, Play, Clock, DollarSign, Activity, 
-  TrendingUp, Users, ArrowRight, Download, BarChart3, Database, Workflow,
-  Settings2
+  Calculator, Save, Play, DollarSign, 
+  TrendingUp, Users, BarChart3, Database, 
+  Settings2, GitCompareArrows
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -116,19 +116,6 @@ const fromApiInputs = (inputs: Record<string, unknown>): z.infer<typeof formSche
     containmentFc3: co["fc3-multiagent"],
     containmentFc4: co["fc4-frontier"]
   };
-};
-
-const formatCurrency = (val: number, compact = false) => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: compact ? "compact" : "standard",
-    maximumFractionDigits: compact ? 1 : 0
-  }).format(val);
-};
-
-const formatNumber = (val: number) => {
-  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(val);
 };
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -446,13 +433,24 @@ export default function Scenario() {
                 </div>
 
               </CardContent>
-              <div className="p-4 border-t border-border bg-muted/20 flex gap-3">
-                <Button type="submit" className="flex-1 font-semibold" disabled={computeRollup.isPending}>
-                  {computeRollup.isPending ? "Computing..." : <><Play className="w-4 h-4 mr-2" /> Compute</>}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollup.isPending}>
-                  <Save className="w-4 h-4" />
-                </Button>
+              <div className="p-4 border-t border-border bg-muted/20 flex flex-col gap-2">
+                <div className="flex gap-3">
+                  <Button type="submit" className="flex-1 font-semibold" disabled={computeRollup.isPending}>
+                    {computeRollup.isPending ? "Computing..." : <><Play className="w-4 h-4 mr-2" /> Compute</>}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollup.isPending}>
+                    <Save className="w-4 h-4" />
+                  </Button>
+                </div>
+                <Link
+                  href={parsedId ? `/compare?a=${parsedId}` : "/compare"}
+                  className="w-full"
+                >
+                  <Button type="button" variant="ghost" className="w-full text-muted-foreground text-xs">
+                    <GitCompareArrows className="w-3.5 h-3.5 mr-1.5" />
+                    Compare Scenarios
+                  </Button>
+                </Link>
               </div>
             </form>
           </Form>
