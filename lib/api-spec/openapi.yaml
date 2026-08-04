@@ -536,6 +536,29 @@ components:
           additionalProperties:
             type: number
           description: Optional manual overrides of intent shares (intent key to share fraction)
+        adoptionRate:
+          type: number
+          description: Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.
+        containmentOverrides:
+          type: object
+          additionalProperties:
+            type: number
+          description: Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-* assumptions. Uncontained transactions still incur AI/infra cost but fall back to full as-is human handling and yield no benefit.
+        hitlSamplingRate:
+          type: number
+          description: Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.
+        landscapeMaturity:
+          type: string
+          description: clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.
+        contractYears:
+          type: integer
+          description: Contract length in years used to amortize client onboarding cost (default 3)
+        reworkRatePct:
+          type: number
+          description: Client's as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.
+        peakLoadFactor:
+          type: number
+          description: Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.
       required:
         - numSystems
         - annualTransactions
@@ -705,8 +728,51 @@ components:
         tierMultiplier:
           type: number
           description: Isolation-tier cost multiplier applied (from the deck's tier uplift)
+        adoptionRate:
+          type: number
+          description: Effective adoption rate applied (share of committed volume in the agentic channel)
+        knowledgeMaintenanceUsd:
+          type: number
+          description: Fixed annual knowledge/content maintenance cost (per-country), included in run cost
+        onboardingAnnualUsd:
+          type: number
+          description: Annualized one-time client onboarding cost (amortized over contract years), included in build cost
         appliedAssumptions:
           type: array
           items:
             $ref: "#/components/schemas/GlobalAssumption"
-      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, appliedAssumptions]
+        confidence:
+          $ref: "#/components/schemas/Confidence"
+      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, appliedAssumptions, confidence]
+    Confidence:
+      type: object
+      description: How much of the model is driven by client-specific inputs vs generic defaults
+      properties:
+        score:
+          type: number
+          description: 0-100; higher means more of the business case rests on client-provided data
+        level:
+          type: string
+          description: low | medium | high
+        factors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfidenceFactor"
+      required: [score, level, factors]
+    ConfidenceFactor:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        provided:
+          type: boolean
+          description: Whether the client supplied this parameter or a generic default was used
+        weight:
+          type: number
+          description: Points this parameter contributes to the confidence score
+        note:
+          type: string
+          description: What assuming the default means for the result when the parameter is missing
+      required: [key, label, provided, weight, note]

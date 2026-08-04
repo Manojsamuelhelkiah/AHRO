@@ -33,6 +33,13 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
+/** Empty inputs are treated as "not provided" — the model falls back to documented defaults. */
+const optionalNumber = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(
+    (v) => (v === "" || v === null || v === undefined || (typeof v === "number" && Number.isNaN(v)) ? undefined : v),
+    schema.optional()
+  );
+
 const formSchema = z.object({
   numSystems: z.coerce.number().int("Whole number required").min(1, "At least 1 system"),
   annualTransactions: z.coerce.number().int("Whole number required").min(100, "Min 100 transactions"),
@@ -42,7 +49,17 @@ const formSchema = z.object({
   isolationTier: z.enum(["pooled", "siloed", "dedicated"]),
   hrHourlyCostUsd: z.coerce.number().min(1),
   hitlHourlyCostUsd: z.coerce.number().min(1),
-  countries: z.coerce.number().int("Whole number required").min(1)
+  countries: z.coerce.number().int("Whole number required").min(1),
+  adoptionRate: optionalNumber(z.coerce.number().min(0.01, "Min 1%").max(1, "Max 100%")),
+  hitlSamplingRate: optionalNumber(z.coerce.number().min(0.01, "Min 1%").max(1, "Max 100%")),
+  landscapeMaturity: z.enum(["clean", "mixed", "legacy"]).optional(),
+  contractYears: optionalNumber(z.coerce.number().int("Whole number required").min(1).max(10)),
+  reworkRatePct: optionalNumber(z.coerce.number().min(0).max(20, "Max 20%")),
+  peakLoadFactor: optionalNumber(z.coerce.number().min(1, "Min 1.0").max(1.5, "Max 1.5")),
+  containmentFc1: optionalNumber(z.coerce.number().min(0).max(1)),
+  containmentFc2: optionalNumber(z.coerce.number().min(0).max(1)),
+  containmentFc3: optionalNumber(z.coerce.number().min(0).max(1)),
+  containmentFc4: optionalNumber(z.coerce.number().min(0).max(1))
 });
 
 const defaultValues: z.infer<typeof formSchema> = {
@@ -55,6 +72,50 @@ const defaultValues: z.infer<typeof formSchema> = {
   hrHourlyCostUsd: 45,
   hitlHourlyCostUsd: 35,
   countries: 3
+};
+
+/** Maps the flat form values to the API ScenarioInputs shape. */
+const toApiInputs = (v: z.infer<typeof formSchema>) => {
+  const {
+    adoptionRate, hitlSamplingRate, landscapeMaturity, contractYears,
+    reworkRatePct, peakLoadFactor,
+    containmentFc1, containmentFc2, containmentFc3, containmentFc4,
+    ...core
+  } = v;
+  const containmentOverrides: Record<string, number> = {};
+  if (containmentFc1 !== undefined) containmentOverrides["fc1-deterministic"] = containmentFc1;
+  if (containmentFc2 !== undefined) containmentOverrides["fc2-policy"] = containmentFc2;
+  if (containmentFc3 !== undefined) containmentOverrides["fc3-multiagent"] = containmentFc3;
+  if (containmentFc4 !== undefined) containmentOverrides["fc4-frontier"] = containmentFc4;
+  return {
+    ...core,
+    ...(adoptionRate !== undefined && { adoptionRate }),
+    ...(hitlSamplingRate !== undefined && { hitlSamplingRate }),
+    ...(landscapeMaturity !== undefined && { landscapeMaturity }),
+    ...(contractYears !== undefined && { contractYears }),
+    ...(reworkRatePct !== undefined && { reworkRatePct }),
+    ...(peakLoadFactor !== undefined && { peakLoadFactor }),
+    ...(Object.keys(containmentOverrides).length > 0 && { containmentOverrides })
+  };
+};
+
+/** Maps stored API inputs back onto the flat form shape. */
+const fromApiInputs = (inputs: Record<string, unknown>): z.infer<typeof formSchema> => {
+  const co = (inputs.containmentOverrides ?? {}) as Record<string, number>;
+  return {
+    ...defaultValues,
+    ...(inputs as Partial<z.infer<typeof formSchema>>),
+    adoptionRate: inputs.adoptionRate as number | undefined,
+    hitlSamplingRate: inputs.hitlSamplingRate as number | undefined,
+    landscapeMaturity: inputs.landscapeMaturity as "clean" | "mixed" | "legacy" | undefined,
+    contractYears: inputs.contractYears as number | undefined,
+    reworkRatePct: inputs.reworkRatePct as number | undefined,
+    peakLoadFactor: inputs.peakLoadFactor as number | undefined,
+    containmentFc1: co["fc1-deterministic"],
+    containmentFc2: co["fc2-policy"],
+    containmentFc3: co["fc3-multiagent"],
+    containmentFc4: co["fc4-frontier"]
+  };
 };
 
 const formatCurrency = (val: number, compact = false) => {
@@ -101,14 +162,15 @@ export default function Scenario() {
   // Load scenario if ID in URL
   useEffect(() => {
     if (loadedScenario) {
-      form.reset(loadedScenario.inputs as z.infer<typeof formSchema>);
-      onSubmit(loadedScenario.inputs as z.infer<typeof formSchema>);
+      const values = fromApiInputs(loadedScenario.inputs as unknown as Record<string, unknown>);
+      form.reset(values);
+      onSubmit(values);
     }
   }, [loadedScenario, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      const result = await computeRollup.mutateAsync({ data: { inputs: values } });
+      const result = await computeRollup.mutateAsync({ data: { inputs: toApiInputs(values) } });
       setRollup(result);
     } catch (e) {
       toast({ title: "Computation Failed", description: "Could not compute rollup.", variant: "destructive" });
@@ -117,13 +179,14 @@ export default function Scenario() {
 
   const handleSave = form.handleSubmit(async (values) => {
     const name = `Scenario - ${values.employees} EEs, ${values.sector}`;
+    const inputs = toApiInputs(values);
 
     try {
       if (parsedId) {
-        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs: values } });
+        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs } });
         toast({ title: "Saved", description: "Scenario updated successfully." });
       } else {
-        await createScenario.mutateAsync({ data: { name, inputs: values } });
+        await createScenario.mutateAsync({ data: { name, inputs } });
         toast({ title: "Saved", description: "New scenario created." });
         refetchScenarios();
       }
@@ -270,6 +333,116 @@ export default function Scenario() {
                       </FormItem>
                     )} />
                   </div>
+
+                  <FormField control={form.control} name="reworkRatePct" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">As-Is Rework Rate %</FormLabel>
+                      <FormControl><Input type="number" step="0.5" {...field} value={field.value ?? ""} placeholder="default 0" className="bg-background" /></FormControl>
+                      <p className="text-[10px] text-muted-foreground">Share of transactions needing rework today; drives the error-reduction benefit</p>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border">
+                    <TrendingUp className="w-4 h-4 text-primary" />
+                    <h3 className="font-semibold text-sm">Adoption & Trust</h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="adoptionRate" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Adoption Rate (0-1)</FormLabel>
+                        <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="default 1.0" className="bg-background" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="hitlSamplingRate" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">HITL Sampling (0-1)</FormLabel>
+                        <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="default 1.0" className="bg-background" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium">Containment by Flow Class (0-1)</p>
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      <FormField control={form.control} name="containmentFc1" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-[10px] text-muted-foreground">Deterministic (FC1)</FormLabel>
+                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.95" className="bg-background" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="containmentFc2" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-[10px] text-muted-foreground">Policy (FC2)</FormLabel>
+                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.85" className="bg-background" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="containmentFc3" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-[10px] text-muted-foreground">Multi-Agent (FC3)</FormLabel>
+                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.75" className="bg-background" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="containmentFc4" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-[10px] text-muted-foreground">Frontier (FC4)</FormLabel>
+                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.60" className="bg-background" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Uncontained transactions still incur AI/infra cost but fall back to full human handling</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border">
+                    <Settings2 className="w-4 h-4 text-primary" />
+                    <h3 className="font-semibold text-sm">Delivery & Seasonality</h3>
+                  </div>
+
+                  <FormField control={form.control} name="landscapeMaturity" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Landscape Maturity</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl>
+                          <SelectTrigger className="bg-background"><SelectValue placeholder="Not assessed (defaults to mixed)" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="clean">Clean (API-first, −20% integration effort)</SelectItem>
+                          <SelectItem value="mixed">Mixed (baseline)</SelectItem>
+                          <SelectItem value="legacy">Legacy (+40% integration effort)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="contractYears" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Contract Years</FormLabel>
+                        <FormControl><Input type="number" {...field} value={field.value ?? ""} placeholder="default 3" className="bg-background" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="peakLoadFactor" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Peak Load Factor</FormLabel>
+                        <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="default 1.0" className="bg-background" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Onboarding cost is amortized over the contract; peak factor values automation at seasonal demand spikes (1.0-1.5)</p>
                 </div>
 
               </CardContent>
@@ -335,6 +508,46 @@ export default function Scenario() {
                   <div className="text-xs text-emerald-200 uppercase tracking-wider mb-1">FTE Equivalent Saved</div>
                   <div className="text-xl font-semibold font-mono text-emerald-100">{rollup.totals.fteEquivalent.toFixed(1)}</div>
                 </div>
+              </div>
+
+              {/* Confidence */}
+              <div className="mt-4 bg-background/10 rounded-lg p-4 border border-sidebar-border">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wider text-sidebar-foreground/60">Estimate Confidence</span>
+                    <Badge className={
+                      rollup.confidence.level === "high" ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/30" :
+                      rollup.confidence.level === "medium" ? "bg-amber-500/20 text-amber-200 border-amber-500/30" :
+                      "bg-red-500/20 text-red-200 border-red-500/30"
+                    }>
+                      {rollup.confidence.score}/100 · {rollup.confidence.level}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-background/20 mb-3">
+                  <div
+                    className={`h-1.5 rounded-full ${
+                      rollup.confidence.level === "high" ? "bg-emerald-400" :
+                      rollup.confidence.level === "medium" ? "bg-amber-400" : "bg-red-400"
+                    }`}
+                    style={{ width: `${rollup.confidence.score}%` }}
+                  />
+                </div>
+                {rollup.confidence.factors.some(f => !f.provided) ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-sidebar-foreground/70 font-medium">
+                      Missing client data (each adds points when provided):
+                    </p>
+                    {rollup.confidence.factors.filter(f => !f.provided).map(f => (
+                      <div key={f.key} className="flex gap-2 text-xs text-sidebar-foreground/60">
+                        <span className="font-mono text-amber-300/80 shrink-0">+{f.weight}</span>
+                        <span><span className="font-medium text-sidebar-foreground/80">{f.label}:</span> {f.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-sidebar-foreground/70">All client-specific parameters provided — the business case rests on client data rather than generic defaults.</p>
+                )}
               </div>
             </div>
 

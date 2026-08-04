@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ScenarioInputsContainmentOverrides } from './scenarioInputsContainmentOverrides';
 import type { ScenarioInputsIntentShareOverrides } from './scenarioInputsIntentShareOverrides';
 
 export interface ScenarioInputs {
@@ -25,4 +26,18 @@ export interface ScenarioInputs {
   countries: number;
   /** Optional manual overrides of intent shares (intent key to share fraction) */
   intentShareOverrides?: ScenarioInputsIntentShareOverrides;
+  /** Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit. */
+  adoptionRate?: number;
+  /** Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-* assumptions. Uncontained transactions still incur AI/infra cost but fall back to full as-is human handling and yield no benefit. */
+  containmentOverrides?: ScenarioInputsContainmentOverrides;
+  /** Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures. */
+  hitlSamplingRate?: number;
+  /** clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out. */
+  landscapeMaturity?: string;
+  /** Contract length in years used to amortize client onboarding cost (default 3) */
+  contractYears?: number;
+  /** Client's as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit. */
+  reworkRatePct?: number;
+  /** Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing. */
+  peakLoadFactor?: number;
 }

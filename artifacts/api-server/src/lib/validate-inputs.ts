@@ -1,4 +1,5 @@
 import { intentMap } from "../data/intents";
+import { flowClassMap } from "../data/flow-classes";
 import { profileMap } from "../data/profiles";
 import type { ScenarioInputs } from "./rollup";
 
@@ -68,5 +69,52 @@ export function validateScenarioInputs(inputs: ScenarioInputs): void {
         `intentShareOverrides sum to ${total.toFixed(3)}; they must not exceed 1`,
       );
     }
+  }
+
+  requireFractionIfPresent("adoptionRate", inputs.adoptionRate);
+  requireFractionIfPresent("hitlSamplingRate", inputs.hitlSamplingRate);
+
+  const containment = inputs.containmentOverrides;
+  if (containment) {
+    for (const [key, rate] of Object.entries(containment)) {
+      if (!flowClassMap[key]) {
+        throw new InputValidationError(
+          `Unknown flow class in containmentOverrides: "${key}". Valid keys: ${Object.keys(flowClassMap).join(", ")}`,
+        );
+      }
+      if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+        throw new InputValidationError(
+          `Containment rate for "${key}" must be between 0 and 1`,
+        );
+      }
+    }
+  }
+
+  if (inputs.landscapeMaturity !== undefined && !MATURITIES.has(inputs.landscapeMaturity)) {
+    throw new InputValidationError(
+      `landscapeMaturity must be one of: clean, mixed, legacy`,
+    );
+  }
+  if (inputs.contractYears !== undefined) {
+    requirePositiveInt("contractYears", inputs.contractYears, 10);
+  }
+  if (inputs.reworkRatePct !== undefined) {
+    if (!Number.isFinite(inputs.reworkRatePct) || inputs.reworkRatePct < 0 || inputs.reworkRatePct > 20) {
+      throw new InputValidationError(`reworkRatePct must be between 0 and 20`);
+    }
+  }
+  if (inputs.peakLoadFactor !== undefined) {
+    if (!Number.isFinite(inputs.peakLoadFactor) || inputs.peakLoadFactor < 1 || inputs.peakLoadFactor > 1.5) {
+      throw new InputValidationError(`peakLoadFactor must be between 1 and 1.5`);
+    }
+  }
+}
+
+const MATURITIES = new Set(["clean", "mixed", "legacy"]);
+
+function requireFractionIfPresent(name: string, value: number | undefined) {
+  if (value === undefined) return;
+  if (!Number.isFinite(value) || value <= 0 || value > 1) {
+    throw new InputValidationError(`${name} must be greater than 0 and at most 1`);
   }
 }

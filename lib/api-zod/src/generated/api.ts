@@ -175,7 +175,14 @@ export const ListScenariosResponseItem = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
-  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)')
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -198,7 +205,14 @@ export const CreateScenarioBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
-  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)')
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
 })
 })
 
@@ -215,7 +229,14 @@ export const CreateScenarioResponse = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
-  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)')
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -242,7 +263,14 @@ export const GetScenarioResponse = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
-  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)')
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -268,7 +296,14 @@ export const UpdateScenarioBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
-  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)')
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
 }).optional()
 })
 
@@ -285,7 +320,14 @@ export const UpdateScenarioResponse = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
-  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)')
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -316,7 +358,14 @@ export const ComputeRollupBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
-  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)')
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
 })
 })
 
@@ -367,6 +416,9 @@ export const ComputeRollupResponse = zod.object({
   "usd": zod.number()
 })),
   "tierMultiplier": zod.number().describe('Isolation-tier cost multiplier applied (from the deck\'s tier uplift)'),
+  "adoptionRate": zod.number().describe('Effective adoption rate applied (share of committed volume in the agentic channel)'),
+  "knowledgeMaintenanceUsd": zod.number().describe('Fixed annual knowledge\/content maintenance cost (per-country), included in run cost'),
+  "onboardingAnnualUsd": zod.number().describe('Annualized one-time client onboarding cost (amortized over contract years), included in build cost'),
   "appliedAssumptions": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
@@ -378,7 +430,18 @@ export const ComputeRollupResponse = zod.object({
   "note": zod.string().optional(),
   "confidence": zod.string().describe('high | medium | low (documented-assumption)')
 }).describe('Attribution of a data point to its origin corpus')
+})),
+  "confidence": zod.object({
+  "score": zod.number().describe('0-100; higher means more of the business case rests on client-provided data'),
+  "level": zod.string().describe('low | medium | high'),
+  "factors": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "provided": zod.boolean().describe('Whether the client supplied this parameter or a generic default was used'),
+  "weight": zod.number().describe('Points this parameter contributes to the confidence score'),
+  "note": zod.string().describe('What assuming the default means for the result when the parameter is missing')
 }))
+}).describe('How much of the model is driven by client-specific inputs vs generic defaults')
 })
 
 

@@ -8,6 +8,8 @@
 
 export * from './benefitComponent';
 export * from './componentBucket';
+export * from './confidence';
+export * from './confidenceFactor';
 export * from './corpusSummary';
 export * from './costComponent';
 export * from './countBucket';
@@ -27,6 +29,7 @@ export * from './rollupTotals';
 export * from './scenario';
 export * from './scenarioInput';
 export * from './scenarioInputs';
+export * from './scenarioInputsContainmentOverrides';
 export * from './scenarioInputsIntentShareOverrides';
 export * from './scenarioUpdate';
 export * from './sourceRef';

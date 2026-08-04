@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ComponentBucket } from './componentBucket';
+import type { Confidence } from './confidence';
 import type { GlobalAssumption } from './globalAssumption';
 import type { IntentRollupRow } from './intentRollupRow';
 import type { RollupTotals } from './rollupTotals';
@@ -18,5 +19,12 @@ export interface Rollup {
   byDomain: ComponentBucket[];
   /** Isolation-tier cost multiplier applied (from the deck's tier uplift) */
   tierMultiplier: number;
+  /** Effective adoption rate applied (share of committed volume in the agentic channel) */
+  adoptionRate: number;
+  /** Fixed annual knowledge/content maintenance cost (per-country), included in run cost */
+  knowledgeMaintenanceUsd: number;
+  /** Annualized one-time client onboarding cost (amortized over contract years), included in build cost */
+  onboardingAnnualUsd: number;
   appliedAssumptions: GlobalAssumption[];
+  confidence: Confidence;
 }
