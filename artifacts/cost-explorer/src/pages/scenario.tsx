@@ -537,7 +537,7 @@ export default function Scenario() {
                   </Button>
                 </div>
                 <Link
-                  href={parsedId ? `/compare?a=${parsedId}` : "/compare"}
+                  href={parsedId ? `/compare?ids=${parsedId}&baseline=${parsedId}` : "/compare"}
                   className="w-full"
                 >
                   <Button type="button" variant="ghost" className="w-full text-muted-foreground text-xs">
