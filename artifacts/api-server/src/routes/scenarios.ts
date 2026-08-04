@@ -12,6 +12,7 @@ import {
   ComputeRollupResponse,
 } from "@workspace/api-zod";
 import { computeRollup, type ScenarioInputs } from "../lib/rollup";
+import { loadActiveFlowOverrides } from "./flow-overrides";
 import { validateScenarioInputs, InputValidationError } from "../lib/validate-inputs";
 
 const router: IRouter = Router();
@@ -111,11 +112,12 @@ router.delete("/scenarios/:id", async (req, res, next) => {
   }
 });
 
-router.post("/rollup", (req, res, next) => {
+router.post("/rollup", async (req, res, next) => {
   try {
     const body = ComputeRollupBody.parse(req.body);
     validateScenarioInputs(body.inputs as ScenarioInputs);
-    const rollup = computeRollup(body.inputs as ScenarioInputs);
+    const overrides = await loadActiveFlowOverrides();
+    const rollup = computeRollup(body.inputs as ScenarioInputs, overrides);
     res.json(ComputeRollupResponse.parse(rollup));
   } catch (err) {
     next(err);

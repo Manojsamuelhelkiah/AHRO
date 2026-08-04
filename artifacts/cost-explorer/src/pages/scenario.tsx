@@ -5,6 +5,7 @@ import * as z from "zod";
 import { 
   useComputeRollup, 
   useListDistributionProfiles, 
+  useListModelCatalog, useListSystems,
   useListScenarios,
   useCreateScenario,
   useUpdateScenario,
@@ -29,9 +30,10 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Calculator, Save, Play, DollarSign, 
   TrendingUp, Users, BarChart3, Database, 
-  Settings2, GitCompareArrows
+  Settings2, GitCompareArrows, BrainCircuit
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { formatCurrency, formatNumber } from "@/lib/format";
 
 /** Empty inputs are treated as "not provided" — the model falls back to documented defaults. */
 const optionalNumber = <T extends z.ZodTypeAny>(schema: T) =>
@@ -59,7 +61,12 @@ const formSchema = z.object({
   containmentFc1: optionalNumber(z.coerce.number().min(0).max(1)),
   containmentFc2: optionalNumber(z.coerce.number().min(0).max(1)),
   containmentFc3: optionalNumber(z.coerce.number().min(0).max(1)),
-  containmentFc4: optionalNumber(z.coerce.number().min(0).max(1))
+  containmentFc4: optionalNumber(z.coerce.number().min(0).max(1)),
+  modelRouter: z.string().optional(),
+  modelReasoning: z.string().optional(),
+  modelFrontier: z.string().optional(),
+  modelData: z.string().optional(),
+  nonIntegratedSystems: z.array(z.string()).optional()
 });
 
 const defaultValues: z.infer<typeof formSchema> = {
@@ -80,8 +87,15 @@ const toApiInputs = (v: z.infer<typeof formSchema>) => {
     adoptionRate, hitlSamplingRate, landscapeMaturity, contractYears,
     reworkRatePct, peakLoadFactor,
     containmentFc1, containmentFc2, containmentFc3, containmentFc4,
+    modelRouter, modelReasoning, modelFrontier, modelData,
+    nonIntegratedSystems,
     ...core
   } = v;
+  const modelSelection: Record<string, string> = {};
+  if (modelRouter) modelSelection.router = modelRouter;
+  if (modelReasoning) modelSelection.reasoning = modelReasoning;
+  if (modelFrontier) modelSelection.frontier = modelFrontier;
+  if (modelData) modelSelection.data = modelData;
   const containmentOverrides: Record<string, number> = {};
   if (containmentFc1 !== undefined) containmentOverrides["fc1-deterministic"] = containmentFc1;
   if (containmentFc2 !== undefined) containmentOverrides["fc2-policy"] = containmentFc2;
@@ -95,13 +109,16 @@ const toApiInputs = (v: z.infer<typeof formSchema>) => {
     ...(contractYears !== undefined && { contractYears }),
     ...(reworkRatePct !== undefined && { reworkRatePct }),
     ...(peakLoadFactor !== undefined && { peakLoadFactor }),
-    ...(Object.keys(containmentOverrides).length > 0 && { containmentOverrides })
+    ...(Object.keys(containmentOverrides).length > 0 && { containmentOverrides }),
+    ...(Object.keys(modelSelection).length > 0 && { modelSelection }),
+    ...((nonIntegratedSystems?.length ?? 0) > 0 && { nonIntegratedSystems })
   };
 };
 
 /** Maps stored API inputs back onto the flat form shape. */
 const fromApiInputs = (inputs: Record<string, unknown>): z.infer<typeof formSchema> => {
   const co = (inputs.containmentOverrides ?? {}) as Record<string, number>;
+  const ms = (inputs.modelSelection ?? {}) as Record<string, string>;
   return {
     ...defaultValues,
     ...(inputs as Partial<z.infer<typeof formSchema>>),
@@ -114,7 +131,12 @@ const fromApiInputs = (inputs: Record<string, unknown>): z.infer<typeof formSche
     containmentFc1: co["fc1-deterministic"],
     containmentFc2: co["fc2-policy"],
     containmentFc3: co["fc3-multiagent"],
-    containmentFc4: co["fc4-frontier"]
+    containmentFc4: co["fc4-frontier"],
+    modelRouter: ms.router,
+    modelReasoning: ms.reasoning,
+    modelFrontier: ms.frontier,
+    modelData: ms.data,
+    nonIntegratedSystems: (inputs.nonIntegratedSystems as string[] | undefined) ?? []
   };
 };
 
@@ -130,6 +152,8 @@ export default function Scenario() {
   const [rollup, setRollup] = useState<Rollup | null>(null);
   
   const { data: profiles, isLoading: isLoadingProfiles } = useListDistributionProfiles();
+  const { data: modelCatalog } = useListModelCatalog();
+  const { data: systemsCatalog } = useListSystems();
   const { data: scenarios, refetch: refetchScenarios } = useListScenarios();
   const computeRollup = useComputeRollup();
   const createScenario = useCreateScenario();
@@ -430,6 +454,76 @@ export default function Scenario() {
                     )} />
                   </div>
                   <p className="text-[10px] text-muted-foreground">Onboarding cost is amortized over the contract; peak factor values automation at seasonal demand spikes (1.0-1.5)</p>
+
+                  <FormField control={form.control} name="nonIntegratedSystems" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Non-Integrated Systems</FormLabel>
+                      <p className="text-[10px] text-muted-foreground -mt-0.5 mb-1.5">
+                        Systems the client will NOT connect to the MCP layer (no API access, vendor restrictions, security policy). Their get/put actions stay manual: no MCP cost, but ~5 min of agent handling per action, reducing the benefit for intents touching them.
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {(systemsCatalog ?? []).map((sys) => {
+                          const selected = (field.value ?? []).includes(sys.key);
+                          return (
+                            <button
+                              key={sys.key}
+                              type="button"
+                              onClick={() => {
+                                const cur = field.value ?? [];
+                                field.onChange(selected ? cur.filter((k) => k !== sys.key) : [...cur, sys.key]);
+                              }}
+                              className={`text-left text-[11px] px-2 py-1.5 rounded-md border transition-colors ${
+                                selected
+                                  ? "border-destructive/50 bg-destructive/10 text-destructive font-medium"
+                                  : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                              }`}
+                              title={sys.name}
+                            >
+                              {selected ? "✕ " : ""}{sys.key}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+
+                <Separator />
+
+                {/* AI Model Stack */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold flex items-center text-sm uppercase tracking-wide text-muted-foreground">
+                    <BrainCircuit className="w-4 h-4 mr-2 text-primary" /> AI Model Stack
+                  </h3>
+                  {(["router", "reasoning", "frontier", "data"] as const).map((role) => {
+                    const fieldName = role === "router" ? "modelRouter" : role === "reasoning" ? "modelReasoning" : role === "frontier" ? "modelFrontier" : "modelData";
+                    const options = (modelCatalog ?? []).filter((m) => m.role === role);
+                    const label = role === "router" ? "Router / Classification (SLM)" : role === "reasoning" ? "Reasoning / Grounded Answers (LLM)" : role === "frontier" ? "Frontier / High-Judgment Cases (LRM)" : "Data Access / Legacy Databases (LDM)";
+                    return (
+                      <FormField key={role} control={form.control} name={fieldName} render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">{label}</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                            <FormControl>
+                              <SelectTrigger className="bg-background">
+                                <SelectValue placeholder="Default pricing (not confirmed)" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {options.map((m) => (
+                                <SelectItem key={m.key} value={m.key}>
+                                  {m.label} — ${m.pricePerCallUsd.toFixed(4)}/call{m.isDefault ? " (default)" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    );
+                  })}
+                  <p className="text-[10px] text-muted-foreground">Per-call prices from published token rates at a typical HRO call profile. Confirming the stack raises estimate confidence; every AI step reprices exactly.</p>
                 </div>
 
               </CardContent>
@@ -556,6 +650,7 @@ export default function Scenario() {
                   <TabsList className="bg-muted">
                     <TabsTrigger value="distribution"><Database className="w-4 h-4 mr-2"/> Intent Distribution</TabsTrigger>
                     <TabsTrigger value="charts"><BarChart3 className="w-4 h-4 mr-2"/> Breakdown Charts</TabsTrigger>
+                    <TabsTrigger value="build"><Database className="w-4 h-4 mr-2"/> Build Costs</TabsTrigger>
                     <TabsTrigger value="assumptions"><Settings2 className="w-4 h-4 mr-2"/> Applied Assumptions</TabsTrigger>
                   </TabsList>
                 </div>
@@ -578,7 +673,12 @@ export default function Scenario() {
                         <tbody className="divide-y divide-border">
                           {rollup.rows.sort((a,b) => b.share - a.share).map(row => (
                             <tr key={row.intentKey} className="hover:bg-muted/30 transition-colors">
-                              <td className="px-4 py-3 font-medium text-foreground">{row.intentName}</td>
+                              <td className="px-4 py-3 font-medium text-foreground">
+                                {row.intentName}
+                                {row.overridden && (
+                                  <Badge className="ml-2 bg-violet-500/15 text-violet-600 dark:text-violet-300 border-violet-500/30 text-[10px]">SME-adjusted</Badge>
+                                )}
+                              </td>
                               <td className="px-4 py-3">
                                 <Badge variant="outline" className="capitalize text-[10px] bg-background">
                                   {row.domain}
@@ -650,6 +750,48 @@ export default function Scenario() {
                           </ResponsiveContainer>
                         </CardContent>
                       </Card>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="build" className="m-0 h-full">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      What it costs to build each component of the solution. One-time = engineering cost to stand the component up (platform components scale with landscape maturity). Annual = the share amortized into this scenario's build cost — platform components over expected transaction volume, onboarding over the contract term. Annual amounts sum exactly to the scenario's total build cost.
+                    </p>
+                    <div className="rounded-md border border-border overflow-hidden">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-muted/50 text-muted-foreground text-xs uppercase font-semibold">
+                          <tr>
+                            <th className="px-4 py-3">Component</th>
+                            <th className="px-4 py-3">Type</th>
+                            <th className="px-4 py-3 text-right">One-Time Build</th>
+                            <th className="px-4 py-3 text-right">Annual (this scenario)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {[...rollup.buildBreakdown].sort((a, b) => b.annualUsd - a.annualUsd).map((c) => (
+                            <tr key={c.key} className="hover:bg-muted/30 transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-foreground">{c.name}</div>
+                                <div className="text-xs text-muted-foreground mt-0.5 max-w-xl">{c.description}</div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <Badge variant="outline" className={`text-[10px] capitalize ${c.kind === "platform" ? "bg-primary/5 text-primary border-primary/30" : "bg-background"}`}>
+                                  {c.kind}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(c.oneTimeUsd, true)}</td>
+                              <td className="px-4 py-3 text-right font-mono text-xs font-semibold">{formatCurrency(c.annualUsd, true)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-muted/50">
+                          <tr>
+                            <td className="px-4 py-3 font-semibold text-xs uppercase text-muted-foreground" colSpan={2}>Total build cost in this scenario</td>
+                            <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(rollup.buildBreakdown.reduce((a, c) => a + c.oneTimeUsd, 0), true)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrency(rollup.totals.buildCostUsd, true)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
                   </TabsContent>
 

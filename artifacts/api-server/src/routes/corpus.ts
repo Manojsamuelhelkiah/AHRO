@@ -5,6 +5,7 @@ import {
   ListSystemsResponse,
   ListDistributionProfilesResponse,
   ListAssumptionsResponse,
+  ListModelCatalogResponse,
   GetCorpusSummaryResponse,
 } from "@workspace/api-zod";
 import { intents } from "../data/intents";
@@ -12,6 +13,7 @@ import { flowClasses } from "../data/flow-classes";
 import { systems } from "../data/systems";
 import { profiles } from "../data/profiles";
 import { assumptions } from "../data/assumptions";
+import { modelCatalog } from "../data/model-catalog";
 
 const router: IRouter = Router();
 
@@ -29,6 +31,10 @@ router.get("/systems", (_req, res) => {
 
 router.get("/profiles", (_req, res) => {
   res.json(ListDistributionProfilesResponse.parse(profiles));
+});
+
+router.get("/model-catalog", (_req, res) => {
+  res.json(ListModelCatalogResponse.parse(modelCatalog));
 });
 
 router.get("/assumptions", (_req, res) => {

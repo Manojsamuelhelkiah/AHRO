@@ -25,4 +25,6 @@ export interface IntentRollupRow {
   benefitUsd: number;
   netUsd: number;
   humanMinutesSaved: number;
+  /** True when an approved SME flow override adjusted this intent */
+  overridden: boolean;
 }

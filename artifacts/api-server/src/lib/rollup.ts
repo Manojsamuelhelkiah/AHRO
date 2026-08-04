@@ -1,7 +1,9 @@
 import { intents } from "../data/intents";
+import { buildComponents } from "../data/build-components";
 import { flowClassMap } from "../data/flow-classes";
 import { profileMap, profiles } from "../data/profiles";
 import { assumptionMap } from "../data/assumptions";
+import { pricePerCall, MODEL_ROLES } from "../data/model-catalog";
 import type { GlobalAssumption, Intent } from "../data/types";
 
 export interface ScenarioInputs {
@@ -29,6 +31,18 @@ export interface ScenarioInputs {
   reworkRatePct?: number;
   /** Seasonality premium on avoided human effort (1-1.5, default 1). */
   peakLoadFactor?: number;
+  /** Chosen AI models per role (router | reasoning | frontier), keys from the model catalog. */
+  modelSelection?: Record<string, string>;
+  /** Landscape systems that will NOT be integrated with the MCP layer; their actions stay manual. */
+  nonIntegratedSystems?: string[];
+}
+
+/** Approved SME adjustments applied to an intent before pricing. */
+export interface FlowOverrideValues {
+  flowClass?: string;
+  toBeHumanMin?: number;
+  actGetActions?: number;
+  actPutActions?: number;
 }
 
 function sizeBand(employees: number): string {
@@ -103,6 +117,73 @@ export function maturityAssumptionFor(landscapeMaturity: string | undefined): Gl
   return assumptionMap[key] ?? assumptionMap["maturity-mixed"]!;
 }
 
+/**
+ * Per-action-type fractions of an intent's act-stage GET/PUT work that hit
+ * non-integrated systems. Those actions cannot go through the MCP layer and
+ * stay manual (swivel-chair) work.
+ *
+ * Each act-stage system touch contributes to the get/put pools per declared
+ * action, weighted by the landscape fan-out multiplier when the touch scales
+ * with the client landscape (a scaling system represents more real actions).
+ */
+export function manualActionFractions(
+  it: Intent,
+  inputs: ScenarioInputs,
+): { getFrac: number; putFrac: number; automatedUnits: number; manualUnits: number } {
+  const fc = flowClassMap[it.flowClass];
+  const maturity = maturityAssumptionFor(inputs.landscapeMaturity);
+  const fanout = assumptionMap["landscape-fanout"]!.value * maturity.value;
+  const extraSystems = Math.max(0, Math.min(inputs.numSystems, 12) - it.systemsTouchedBase);
+  const landscapeFactor = 1 + fanout * extraSystems;
+  const excluded = new Set(inputs.nonIntegratedSystems ?? []);
+
+  // Per action type: count act-stage touches (unweighted) and their fan-out
+  // weighted equivalents, tracking the excluded (non-integrated) share.
+  const pools = {
+    get: { touches: 0, weighted: 0, weightedExcluded: 0, anyScales: false },
+    put: { touches: 0, weighted: 0, weightedExcluded: 0, anyScales: false },
+  };
+  if (fc) {
+    for (const step of fc.steps) {
+      if (step.stage !== "act") continue;
+      for (const sys of step.systems) {
+        const weight = sys.scalesWithLandscape ? landscapeFactor : 1;
+        for (const action of sys.actions) {
+          const pool = action === "get" ? pools.get : action === "put" ? pools.put : undefined;
+          if (!pool) continue;
+          pool.touches += 1;
+          pool.weighted += weight;
+          if (sys.scalesWithLandscape) pool.anyScales = true;
+          if (excluded.has(sys.systemKey)) pool.weightedExcluded += weight;
+        }
+      }
+    }
+  }
+
+  // Distribute the intent's declared actions evenly across the touches of the
+  // matching type; each touch's actions carry its own fan-out weight exactly
+  // once. Units are "scaled action counts" ready to be priced directly.
+  const split = (actions: number, pool: (typeof pools)["get"]) => {
+    if (pool.touches === 0) {
+      // No modeled touch for this action type: nothing can be excluded; scale
+      // by the step-level factor as the original formula did.
+      return { automated: actions * (pool.anyScales ? landscapeFactor : 1), manual: 0, frac: 0 };
+    }
+    const perTouch = actions / pool.touches;
+    const manual = perTouch * pool.weightedExcluded;
+    const automated = perTouch * (pool.weighted - pool.weightedExcluded);
+    return { automated, manual, frac: pool.weightedExcluded / pool.weighted };
+  };
+  const g = split(it.actGetActions, pools.get);
+  const p = split(it.actPutActions, pools.put);
+  return {
+    getFrac: g.frac,
+    putFrac: p.frac,
+    automatedUnits: g.automated + p.automated,
+    manualUnits: g.manual + p.manual,
+  };
+}
+
 function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
   const fc = flowClassMap[it.flowClass];
   // Landscape maturity scales Act fan-out effort: legacy landscapes make each
@@ -110,6 +191,9 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
   const maturity = maturityAssumptionFor(inputs.landscapeMaturity);
   const fanout = assumptionMap["landscape-fanout"]!.value * maturity.value;
   const mcpCost = assumptionMap["mcp-action-cost"]!.value;
+  // Actions on non-integrated systems: no MCP cost, but manual minutes instead.
+  // Units already carry fan-out weighting exactly once per system touch.
+  const { automatedUnits, manualUnits } = manualActionFractions(it, inputs);
 
   let ai = 0;
   let infra = 0;
@@ -129,10 +213,21 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
         let unit = c.unitCostUsd;
         // MCP action costs are intent-specific: replace the template's nominal
         // action cost with (get+put actions × mcp-action-cost).
+        let alreadyScaled = false;
         if (isActStep && c.label.toLowerCase().includes("mcp")) {
-          unit = (it.actGetActions + it.actPutActions) * mcpCost;
+          // automatedUnits already carry fan-out weighting per system touch —
+          // do not apply the step-level landscape factor a second time.
+          unit = automatedUnits * mcpCost;
+          alreadyScaled = true;
+        } else if (c.calls && c.calls.length > 0) {
+          // Model-call costs are repriced exactly from the scenario's model
+          // selection (defaults match the registered *-call-cost assumptions).
+          unit = c.calls.reduce(
+            (a, call) => a + call.count * pricePerCall(call.role, inputs.modelSelection).price,
+            0,
+          );
         }
-        const scaled = unit * (scales ? landscapeFactor : 1);
+        const scaled = unit * (!alreadyScaled && scales ? landscapeFactor : 1);
         if (c.type === "ai-consumption") ai += scaled;
         else if (c.type === "infra") infra += scaled;
         else if (c.type === "other") other += scaled;
@@ -145,16 +240,25 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
     }
   }
 
+  // Actions on non-integrated systems stay manual: each such get/put adds
+  // handling minutes on EVERY transaction (not thinned by sampling — this is
+  // execution work, not review).
+  const manualMinutes =
+    manualUnits > 0 ? manualUnits * assumptionMap["manual-action-minutes"]!.value : 0;
   // Residual human review minutes on contained transactions, thinned by the
   // HITL sampling rate as review trust matures.
   const sampling = inputs.hitlSamplingRate ?? 1;
-  const human = (it.toBeHumanMin / 60) * sampling * inputs.hitlHourlyCostUsd;
+  const human =
+    ((it.toBeHumanMin / 60) * sampling + manualMinutes / 60) * inputs.hitlHourlyCostUsd;
   // Core dollarized benefit on contained transactions: human handling time
   // eliminated, valued at the client HR rate with a seasonality premium
-  // (automated capacity at peak avoids overstaffing).
+  // (automated capacity at peak avoids overstaffing). Manual minutes for
+  // non-integrated systems are handling time NOT eliminated.
   const peak = inputs.peakLoadFactor ?? 1;
   benefit +=
-    ((it.asIsHandlingMin - it.toBeHumanMin) / 60) * inputs.hrHourlyCostUsd * peak;
+    (Math.max(0, it.asIsHandlingMin - it.toBeHumanMin - manualMinutes) / 60) *
+    inputs.hrHourlyCostUsd *
+    peak;
   // Client-specific error-reduction benefit: a share of the client's as-is
   // rework volume is eliminated by systematic validation.
   const rework = (inputs.reworkRatePct ?? 0) / 100;
@@ -241,9 +345,16 @@ export function computeConfidence(inputs: ScenarioInputs): {
       weight: 5,
       note: "No seasonality premium applied. If the client overstaffs for open enrollment or year-end payroll peaks, the benefit is understated.",
     },
+    {
+      key: "modelSelection",
+      label: "AI model stack",
+      provided: !!inputs.modelSelection && Object.keys(inputs.modelSelection).length > 0,
+      weight: 5,
+      note: "Using default model prices per role. Confirming the actual router/reasoning/frontier models pins AI consumption to real contract rates.",
+    },
   ];
 
-  const BASE = 35; // core inputs (volume, landscape, sector, rates) are always present
+  const BASE = 30; // core inputs (volume, landscape, sector, rates) are always present
   const score = Math.round(
     BASE + factors.reduce((a, f) => a + (f.provided ? f.weight : 0), 0),
   );
@@ -251,7 +362,10 @@ export function computeConfidence(inputs: ScenarioInputs): {
   return { score, level, factors };
 }
 
-export function computeRollup(inputs: ScenarioInputs) {
+export function computeRollup(
+  inputs: ScenarioInputs,
+  flowOverrides?: Record<string, FlowOverrideValues>,
+) {
   const shares = computeShares(inputs);
   const tier = tierMultiplierFor(inputs.isolationTier);
   const company = companyMultiplierFor(inputs.companyType);
@@ -276,8 +390,23 @@ export function computeRollup(inputs: ScenarioInputs) {
   let buildCostUsd = 0;
   let benefitUsd = 0;
   let humanMinutesSaved = 0;
+  let anyManualActions = false;
+  // Txn-weighted amortization factor per flow class, for decomposing platform
+  // build cost into architecture components (reconciles exactly with buildCost).
+  const fcAmortFactor = new Map<string, number>();
 
-  for (const it of intents) {
+  for (const baseIntent of intents) {
+    // Approved SME flow overrides adjust the intent before pricing.
+    const ov = flowOverrides?.[baseIntent.key];
+    const it: Intent = ov
+      ? {
+          ...baseIntent,
+          ...(ov.flowClass !== undefined && { flowClass: ov.flowClass }),
+          ...(ov.toBeHumanMin !== undefined && { toBeHumanMin: ov.toBeHumanMin }),
+          ...(ov.actGetActions !== undefined && { actGetActions: ov.actGetActions }),
+          ...(ov.actPutActions !== undefined && { actPutActions: ov.actPutActions }),
+        }
+      : baseIntent;
     const share = shares.get(it.key) ?? 0;
     // Only adopted volume flows through the agentic channel; the remainder
     // stays in the as-is process (no platform cost, no benefit).
@@ -287,6 +416,7 @@ export function computeRollup(inputs: ScenarioInputs) {
     const fallbackTxns = txns - containedTxns;
     const per = perTransaction(it, inputs);
     const fc = flowClassMap[it.flowClass];
+    if (manualActionFractions(it, inputs).manualUnits > 0) anyManualActions = true;
 
     const localMult = LOCALIZED_CLASSES.has(it.flowClass) ? localizationMult : 1;
     // AI/infra run cost is incurred on ALL agentic transactions — including
@@ -302,6 +432,12 @@ export function computeRollup(inputs: ScenarioInputs) {
     // Build cost is amortized per flow class, scaled by landscape maturity.
     const buildPerTxn = fc ? (fc.buildCostUsd * maturity.value) / fc.amortizationTransactions : 0;
     const buildCost = buildPerTxn * txns;
+    if (fc) {
+      fcAmortFactor.set(
+        it.flowClass,
+        (fcAmortFactor.get(it.flowClass) ?? 0) + txns / fc.amortizationTransactions,
+      );
+    }
     // Benefits accrue only on contained transactions.
     const benefit = per.benefit * containedTxns;
     const minutesSaved = Math.max(0, it.asIsHandlingMin - it.toBeHumanMin) * containedTxns;
@@ -336,6 +472,7 @@ export function computeRollup(inputs: ScenarioInputs) {
       benefitUsd: benefit,
       netUsd: benefit - runCost - buildCost,
       humanMinutesSaved: minutesSaved,
+      overridden: !!ov,
     });
   }
 
@@ -374,6 +511,42 @@ export function computeRollup(inputs: ScenarioInputs) {
   buildCostUsd += onboardingAnnualUsd;
   byCost.build += onboardingAnnualUsd;
 
+  // Component-level build breakdown: platform components decompose each flow
+  // class's build cost exactly (same maturity scaling and amortization), and
+  // onboarding is split into its three drivers. Annual amounts sum to the
+  // roll-up's total build cost.
+  const buildBreakdown = [
+    ...buildComponents.map((c) => {
+      const oneTime =
+        maturity.value *
+        Object.values(c.perFlowClassUsd).reduce((a, v) => a + v, 0);
+      let annual = 0;
+      for (const [fcKey, factor] of fcAmortFactor) {
+        annual += (c.perFlowClassUsd[fcKey] ?? 0) * maturity.value * factor;
+      }
+      return {
+        key: c.key,
+        name: c.name,
+        description: c.description,
+        kind: "platform",
+        oneTimeUsd: oneTime,
+        annualUsd: annual,
+      };
+    }),
+    ...[
+      { a: assumptionMap["onboarding-base"]!, total: assumptionMap["onboarding-base"]!.value },
+      { a: assumptionMap["onboarding-per-system"]!, total: assumptionMap["onboarding-per-system"]!.value * inputs.numSystems },
+      { a: assumptionMap["onboarding-per-country"]!, total: assumptionMap["onboarding-per-country"]!.value * inputs.countries },
+    ].map(({ a, total }) => ({
+      key: a.key,
+      name: a.label,
+      description: a.rationale,
+      kind: "onboarding",
+      oneTimeUsd: total,
+      annualUsd: total / Math.max(1, contractYears),
+    })),
+  ];
+
   // Rebuild flow-class and domain buckets from the final rows so they stay
   // reconciled with the fixed-cost allocations above.
   byFlowClass.clear();
@@ -411,6 +584,22 @@ export function computeRollup(inputs: ScenarioInputs) {
     assumptionMap["onboarding-per-system"]!,
     assumptionMap["onboarding-per-country"]!,
     ...((inputs.reworkRatePct ?? 0) > 0 ? [assumptionMap["error-reduction-share"]!] : []),
+    ...(anyManualActions ? [assumptionMap["manual-action-minutes"]!] : []),
+    // The effective model per role (selected or default) with its per-call price.
+    ...MODEL_ROLES.map((role): GlobalAssumption => {
+      const { model } = pricePerCall(role, inputs.modelSelection);
+      return {
+        key: `model-${role}`,
+        label: `${role[0]!.toUpperCase()}${role.slice(1)} model: ${model.label}`,
+        value: model.pricePerCallUsd,
+        unit: "USD per call",
+        rationale: model.description,
+        source: {
+          name: inputs.modelSelection?.[role] ? "Scenario model selection" : "Default model stack",
+          confidence: inputs.modelSelection?.[role] ? "high" : "medium",
+        },
+      };
+    }),
   ];
 
   const fcLabels: Record<string, string> = {
@@ -450,6 +639,7 @@ export function computeRollup(inputs: ScenarioInputs) {
     adoptionRate: adoption,
     knowledgeMaintenanceUsd,
     onboardingAnnualUsd,
+    buildBreakdown,
     appliedAssumptions,
     confidence: computeConfidence(inputs),
   };

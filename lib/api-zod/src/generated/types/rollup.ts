@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BuildComponentCost } from './buildComponentCost';
 import type { ComponentBucket } from './componentBucket';
 import type { Confidence } from './confidence';
 import type { GlobalAssumption } from './globalAssumption';
@@ -25,6 +26,8 @@ export interface Rollup {
   knowledgeMaintenanceUsd: number;
   /** Annualized one-time client onboarding cost (amortized over contract years), included in build cost */
   onboardingAnnualUsd: number;
+  /** Component-level decomposition of build cost; annual amounts sum to totals build cost */
+  buildBreakdown: BuildComponentCost[];
   appliedAssumptions: GlobalAssumption[];
   confidence: Confidence;
 }

@@ -29,12 +29,19 @@ export interface StepSystemTouch {
   scalesWithLandscape: boolean;
 }
 
+export interface ModelCall {
+  role: string; // router | reasoning | frontier
+  count: number;
+}
+
 export interface CostComponent {
   type: string; // ai-consumption | infra | human | build | other
   label: string;
   unitCostUsd: number;
   assumption: string;
   source: SourceRef;
+  /** Model calls behind this cost; lets scenario model selection reprice it exactly. */
+  calls?: ModelCall[];
 }
 
 export interface BenefitComponent {
@@ -69,11 +76,19 @@ export interface FlowClass {
   steps: FlowStep[];
 }
 
+export interface McpIntegration {
+  method: string; // rest-odata | rag-index | doc-pipeline | event-webhook | scim-oidc | sftp-file | semantic-layer
+  label: string;
+  note: string;
+}
+
 export interface SystemInfo {
   key: string;
   name: string;
   category: string;
   description: string;
+  /** How this system is exposed to agents through the MCP server. */
+  integration: McpIntegration;
 }
 
 export interface DistributionProfile {

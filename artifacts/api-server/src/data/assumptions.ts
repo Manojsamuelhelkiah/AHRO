@@ -28,12 +28,28 @@ export const assumptions: GlobalAssumption[] = [
     source: { name: "Azure OpenAI / Anthropic list pricing, 2025", confidence: "medium" },
   },
   {
+    key: "data-call-cost",
+    label: "Structured data model (LDM/NL2SQL) call",
+    value: 0.02,
+    unit: "USD per call",
+    rationale: "Schema-grounded structured-data calls (NL2SQL generation, schema mapping, entity resolution across legacy databases with poor lineage) carry large schema/catalog context (~8-15K tokens) plus validation retries.",
+    source: { name: "Azure OpenAI list pricing at structured-data call profile", confidence: "medium" },
+  },
+  {
     key: "mcp-action-cost",
     label: "MCP system action cost",
     value: 0.004,
     unit: "USD per system action",
     rationale: "Each Act get/put via the MCP integration layer costs compute, API-management and connector amortization; benchmarked against Azure API Management + Functions consumption pricing.",
     source: { name: "Azure consumption pricing, internal benchmark", confidence: "medium" },
+  },
+  {
+    key: "manual-action-minutes",
+    label: "Manual handling per non-integrated action",
+    value: 5,
+    unit: "minutes per manual action",
+    rationale: "When a system is not integrated with the MCP layer, each get/put that would have been automated is instead performed manually by an HITL agent (swivel-chair: look up or key in data, attach evidence to the case). 5 minutes per action reflects a simple lookup or entry incl. context switching.",
+    source: { name: "HRO delivery time-and-motion benchmarks", confidence: "medium" },
   },
   {
     key: "infra-per-txn",

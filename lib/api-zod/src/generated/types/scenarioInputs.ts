@@ -7,6 +7,7 @@
  */
 import type { ScenarioInputsContainmentOverrides } from './scenarioInputsContainmentOverrides';
 import type { ScenarioInputsIntentShareOverrides } from './scenarioInputsIntentShareOverrides';
+import type { ScenarioInputsModelSelection } from './scenarioInputsModelSelection';
 
 export interface ScenarioInputs {
   /** Number of HR systems of record in the client landscape (drives Act fan-out) */
@@ -40,4 +41,8 @@ export interface ScenarioInputs {
   reworkRatePct?: number;
   /** Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing. */
   peakLoadFactor?: number;
+  /** Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions. */
+  modelSelection?: ScenarioInputsModelSelection;
+  /** System keys (see /systems) that will NOT be integrated with the MCP layer. Their get/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them. */
+  nonIntegratedSystems?: string[];
 }

@@ -24,9 +24,12 @@ import type {
   DistributionProfile,
   ErrorMessage,
   FlowClass,
+  FlowOverride,
+  FlowOverrideInput,
   GlobalAssumption,
   HealthStatus,
   Intent,
+  ModelOption,
   Rollup,
   RollupRequest,
   Scenario,
@@ -968,6 +971,444 @@ export const useDeleteScenario = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getDeleteScenarioMutationOptions(options));
+    }
+
+export const getListModelCatalogUrl = () => {
+
+
+
+
+  return `/api/model-catalog`
+}
+
+/**
+ * @summary List selectable AI models per role with per-call prices
+ */
+export const listModelCatalog = async ( options?: RequestInit): Promise<ModelOption[]> => {
+
+  return customFetch<ModelOption[]>(getListModelCatalogUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListModelCatalogQueryKey = () => {
+    return [
+    `/api/model-catalog`
+    ] as const;
+    }
+
+
+export const getListModelCatalogQueryOptions = <TData = Awaited<ReturnType<typeof listModelCatalog>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listModelCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListModelCatalogQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listModelCatalog>>> = ({ signal }) => listModelCatalog({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listModelCatalog>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListModelCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof listModelCatalog>>>
+export type ListModelCatalogQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List selectable AI models per role with per-call prices
+ */
+
+export function useListModelCatalog<TData = Awaited<ReturnType<typeof listModelCatalog>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listModelCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListModelCatalogQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListFlowOverridesUrl = () => {
+
+
+
+
+  return `/api/flow-overrides`
+}
+
+/**
+ * @summary List all SME flow override versions (newest first)
+ */
+export const listFlowOverrides = async ( options?: RequestInit): Promise<FlowOverride[]> => {
+
+  return customFetch<FlowOverride[]>(getListFlowOverridesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFlowOverridesQueryKey = () => {
+    return [
+    `/api/flow-overrides`
+    ] as const;
+    }
+
+
+export const getListFlowOverridesQueryOptions = <TData = Awaited<ReturnType<typeof listFlowOverrides>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFlowOverrides>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFlowOverridesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFlowOverrides>>> = ({ signal }) => listFlowOverrides({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFlowOverrides>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFlowOverridesQueryResult = NonNullable<Awaited<ReturnType<typeof listFlowOverrides>>>
+export type ListFlowOverridesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all SME flow override versions (newest first)
+ */
+
+export function useListFlowOverrides<TData = Awaited<ReturnType<typeof listFlowOverrides>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFlowOverrides>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFlowOverridesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFlowOverrideUrl = () => {
+
+
+
+
+  return `/api/flow-overrides`
+}
+
+/**
+ * @summary Propose a new flow override version for an intent (created as draft)
+ */
+export const createFlowOverride = async (flowOverrideInput: FlowOverrideInput, options?: RequestInit): Promise<FlowOverride> => {
+
+  return customFetch<FlowOverride>(getCreateFlowOverrideUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(flowOverrideInput)
+  }
+);}
+
+
+
+
+
+export const getCreateFlowOverrideMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFlowOverride>>, TError,{data: BodyType<FlowOverrideInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFlowOverride>>, TError,{data: BodyType<FlowOverrideInput>}, TContext> => {
+
+const mutationKey = ['createFlowOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFlowOverride>>, {data: BodyType<FlowOverrideInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFlowOverride(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFlowOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof createFlowOverride>>>
+    export type CreateFlowOverrideMutationBody = BodyType<FlowOverrideInput>
+    export type CreateFlowOverrideMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Propose a new flow override version for an intent (created as draft)
+ */
+export const useCreateFlowOverride = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFlowOverride>>, TError,{data: BodyType<FlowOverrideInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFlowOverride>>,
+        TError,
+        {data: BodyType<FlowOverrideInput>},
+        TContext
+      > => {
+      return useMutation(getCreateFlowOverrideMutationOptions(options));
+    }
+
+export const getRevokeFlowOverrideUrl = (id: number,) => {
+
+
+
+
+  return `/api/flow-overrides/${id}/revoke`
+}
+
+/**
+ * @summary Revoke an approved override version; the intent reverts to the reference flow (history is kept)
+ */
+export const revokeFlowOverride = async (id: number, options?: RequestInit): Promise<FlowOverride> => {
+
+  return customFetch<FlowOverride>(getRevokeFlowOverrideUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeFlowOverrideMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeFlowOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeFlowOverride>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['revokeFlowOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeFlowOverride>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revokeFlowOverride(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeFlowOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof revokeFlowOverride>>>
+
+    export type RevokeFlowOverrideMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Revoke an approved override version; the intent reverts to the reference flow (history is kept)
+ */
+export const useRevokeFlowOverride = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeFlowOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeFlowOverride>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRevokeFlowOverrideMutationOptions(options));
+    }
+
+export const getApproveFlowOverrideUrl = (id: number,) => {
+
+
+
+
+  return `/api/flow-overrides/${id}/approve`
+}
+
+/**
+ * @summary Approve a draft version; it becomes the single active adjustment for its intent and supersedes prior approvals
+ */
+export const approveFlowOverride = async (id: number, options?: RequestInit): Promise<FlowOverride> => {
+
+  return customFetch<FlowOverride>(getApproveFlowOverrideUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApproveFlowOverrideMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveFlowOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveFlowOverride>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['approveFlowOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveFlowOverride>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  approveFlowOverride(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveFlowOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof approveFlowOverride>>>
+
+    export type ApproveFlowOverrideMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Approve a draft version; it becomes the single active adjustment for its intent and supersedes prior approvals
+ */
+export const useApproveFlowOverride = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveFlowOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveFlowOverride>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getApproveFlowOverrideMutationOptions(options));
+    }
+
+export const getDeleteFlowOverrideUrl = (id: number,) => {
+
+
+
+
+  return `/api/flow-overrides/${id}`
+}
+
+/**
+ * @summary Delete an override version
+ */
+export const deleteFlowOverride = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteFlowOverrideUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteFlowOverrideMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFlowOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFlowOverride>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteFlowOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFlowOverride>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteFlowOverride(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFlowOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFlowOverride>>>
+
+    export type DeleteFlowOverrideMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Delete an override version
+ */
+export const useDeleteFlowOverride = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFlowOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFlowOverride>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteFlowOverrideMutationOptions(options));
     }
 
 export const getComputeRollupUrl = () => {

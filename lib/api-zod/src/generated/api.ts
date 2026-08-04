@@ -97,7 +97,12 @@ export const ListSystemsResponseItem = zod.object({
   "key": zod.string(),
   "name": zod.string(),
   "category": zod.string().describe('hcm | payroll | benefits | ticketing | knowledge | identity | other'),
-  "description": zod.string()
+  "description": zod.string(),
+  "integration": zod.object({
+  "method": zod.string().describe('rest-odata | rag-index | doc-pipeline | event-webhook | scim-oidc | sftp-file | semantic-layer'),
+  "label": zod.string(),
+  "note": zod.string()
+}).describe('How a landscape system is exposed to agents through the MCP server')
 })
 export const ListSystemsResponse = zod.array(ListSystemsResponseItem)
 
@@ -182,7 +187,9 @@ export const ListScenariosResponseItem = zod.object({
   "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
-  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -212,7 +219,9 @@ export const CreateScenarioBody = zod.object({
   "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
-  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 })
 })
 
@@ -236,7 +245,9 @@ export const CreateScenarioResponse = zod.object({
   "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
-  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -270,7 +281,9 @@ export const GetScenarioResponse = zod.object({
   "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
-  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -303,7 +316,9 @@ export const UpdateScenarioBody = zod.object({
   "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
-  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }).optional()
 })
 
@@ -327,7 +342,9 @@ export const UpdateScenarioResponse = zod.object({
   "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
-  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -342,6 +359,121 @@ export const DeleteScenarioParams = zod.object({
 })
 
 export const DeleteScenarioResponse = zod.void()
+
+
+/**
+ * @summary List selectable AI models per role with per-call prices
+ */
+export const ListModelCatalogResponseItem = zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "role": zod.string().describe('router | reasoning | frontier | data'),
+  "pricePerCallUsd": zod.number(),
+  "description": zod.string(),
+  "isDefault": zod.boolean()
+})
+export const ListModelCatalogResponse = zod.array(ListModelCatalogResponseItem)
+
+
+/**
+ * @summary List all SME flow override versions (newest first)
+ */
+export const ListFlowOverridesResponseItem = zod.object({
+  "id": zod.number(),
+  "intentKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.string().describe('draft | approved | superseded'),
+  "author": zod.string(),
+  "rationale": zod.string(),
+  "flowClass": zod.string().nullish(),
+  "toBeHumanMin": zod.number().nullish(),
+  "actGetActions": zod.number().nullish(),
+  "actPutActions": zod.number().nullish(),
+  "createdAt": zod.string()
+}).describe('A versioned SME adjustment to an intent\'s flow; latest approved version per intent is applied to roll-ups')
+export const ListFlowOverridesResponse = zod.array(ListFlowOverridesResponseItem)
+
+
+/**
+ * @summary Propose a new flow override version for an intent (created as draft)
+ */
+export const CreateFlowOverrideBody = zod.object({
+  "intentKey": zod.string(),
+  "author": zod.string(),
+  "rationale": zod.string(),
+  "flowClass": zod.string().optional(),
+  "toBeHumanMin": zod.number().optional(),
+  "actGetActions": zod.number().optional(),
+  "actPutActions": zod.number().optional()
+})
+
+export const CreateFlowOverrideResponse = zod.object({
+  "id": zod.number(),
+  "intentKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.string().describe('draft | approved | superseded'),
+  "author": zod.string(),
+  "rationale": zod.string(),
+  "flowClass": zod.string().nullish(),
+  "toBeHumanMin": zod.number().nullish(),
+  "actGetActions": zod.number().nullish(),
+  "actPutActions": zod.number().nullish(),
+  "createdAt": zod.string()
+}).describe('A versioned SME adjustment to an intent\'s flow; latest approved version per intent is applied to roll-ups')
+
+
+/**
+ * @summary Revoke an approved override version; the intent reverts to the reference flow (history is kept)
+ */
+export const RevokeFlowOverrideParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RevokeFlowOverrideResponse = zod.object({
+  "id": zod.number(),
+  "intentKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.string().describe('draft | approved | superseded'),
+  "author": zod.string(),
+  "rationale": zod.string(),
+  "flowClass": zod.string().nullish(),
+  "toBeHumanMin": zod.number().nullish(),
+  "actGetActions": zod.number().nullish(),
+  "actPutActions": zod.number().nullish(),
+  "createdAt": zod.string()
+}).describe('A versioned SME adjustment to an intent\'s flow; latest approved version per intent is applied to roll-ups')
+
+
+/**
+ * @summary Approve a draft version; it becomes the single active adjustment for its intent and supersedes prior approvals
+ */
+export const ApproveFlowOverrideParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ApproveFlowOverrideResponse = zod.object({
+  "id": zod.number(),
+  "intentKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.string().describe('draft | approved | superseded'),
+  "author": zod.string(),
+  "rationale": zod.string(),
+  "flowClass": zod.string().nullish(),
+  "toBeHumanMin": zod.number().nullish(),
+  "actGetActions": zod.number().nullish(),
+  "actPutActions": zod.number().nullish(),
+  "createdAt": zod.string()
+}).describe('A versioned SME adjustment to an intent\'s flow; latest approved version per intent is applied to roll-ups')
+
+
+/**
+ * @summary Delete an override version
+ */
+export const DeleteFlowOverrideParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteFlowOverrideResponse = zod.void()
 
 
 /**
@@ -365,7 +497,9 @@ export const ComputeRollupBody = zod.object({
   "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
-  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.')
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 })
 })
 
@@ -398,7 +532,8 @@ export const ComputeRollupResponse = zod.object({
   "otherCostUsd": zod.number(),
   "benefitUsd": zod.number(),
   "netUsd": zod.number(),
-  "humanMinutesSaved": zod.number()
+  "humanMinutesSaved": zod.number(),
+  "overridden": zod.boolean().describe('True when an approved SME flow override adjusted this intent')
 })),
   "byFlowClass": zod.array(zod.object({
   "key": zod.string(),
@@ -419,6 +554,14 @@ export const ComputeRollupResponse = zod.object({
   "adoptionRate": zod.number().describe('Effective adoption rate applied (share of committed volume in the agentic channel)'),
   "knowledgeMaintenanceUsd": zod.number().describe('Fixed annual knowledge\/content maintenance cost (per-country), included in run cost'),
   "onboardingAnnualUsd": zod.number().describe('Annualized one-time client onboarding cost (amortized over contract years), included in build cost'),
+  "buildBreakdown": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "kind": zod.string().describe('platform | onboarding'),
+  "oneTimeUsd": zod.number().describe('One-time build\/setup cost (maturity-scaled for platform components)'),
+  "annualUsd": zod.number().describe('Annualized share included in this scenario\'s build cost')
+})).describe('Component-level decomposition of build cost; annual amounts sum to totals build cost'),
   "appliedAssumptions": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),

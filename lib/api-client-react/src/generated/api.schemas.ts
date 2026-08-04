@@ -109,12 +109,23 @@ export interface FlowClass {
   steps: FlowStep[];
 }
 
+/**
+ * How a landscape system is exposed to agents through the MCP server
+ */
+export interface McpIntegration {
+  /** rest-odata | rag-index | doc-pipeline | event-webhook | scim-oidc | sftp-file | semantic-layer */
+  method: string;
+  label: string;
+  note: string;
+}
+
 export interface SystemInfo {
   key: string;
   name: string;
   /** hcm | payroll | benefits | ticketing | knowledge | identity | other */
   category: string;
   description: string;
+  integration: McpIntegration;
 }
 
 /**
@@ -170,6 +181,11 @@ export type ScenarioInputsIntentShareOverrides = {[key: string]: number};
  */
 export type ScenarioInputsContainmentOverrides = {[key: string]: number};
 
+/**
+ * Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions.
+ */
+export type ScenarioInputsModelSelection = {[key: string]: string};
+
 export interface ScenarioInputs {
   /** Number of HR systems of record in the client landscape (drives Act fan-out) */
   numSystems: number;
@@ -202,6 +218,10 @@ export interface ScenarioInputs {
   reworkRatePct?: number;
   /** Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing. */
   peakLoadFactor?: number;
+  /** Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions. */
+  modelSelection?: ScenarioInputsModelSelection;
+  /** System keys (see /systems) that will NOT be integrated with the MCP layer. Their get/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them. */
+  nonIntegratedSystems?: string[];
 }
 
 export interface Scenario {
@@ -245,6 +265,8 @@ export interface IntentRollupRow {
   benefitUsd: number;
   netUsd: number;
   humanMinutesSaved: number;
+  /** True when an approved SME flow override adjusted this intent */
+  overridden: boolean;
 }
 
 export interface RollupTotals {
@@ -266,6 +288,18 @@ export interface ComponentBucket {
   key: string;
   label: string;
   usd: number;
+}
+
+export interface BuildComponentCost {
+  key: string;
+  name: string;
+  description: string;
+  /** platform | onboarding */
+  kind: string;
+  /** One-time build/setup cost (maturity-scaled for platform components) */
+  oneTimeUsd: number;
+  /** Annualized share included in this scenario's build cost */
+  annualUsd: number;
 }
 
 export interface ConfidenceFactor {
@@ -304,7 +338,47 @@ export interface Rollup {
   knowledgeMaintenanceUsd: number;
   /** Annualized one-time client onboarding cost (amortized over contract years), included in build cost */
   onboardingAnnualUsd: number;
+  /** Component-level decomposition of build cost; annual amounts sum to totals build cost */
+  buildBreakdown: BuildComponentCost[];
   appliedAssumptions: GlobalAssumption[];
   confidence: Confidence;
+}
+
+export interface ModelOption {
+  key: string;
+  label: string;
+  /** router | reasoning | frontier | data */
+  role: string;
+  pricePerCallUsd: number;
+  description: string;
+  isDefault: boolean;
+}
+
+/**
+ * A versioned SME adjustment to an intent's flow; latest approved version per intent is applied to roll-ups
+ */
+export interface FlowOverride {
+  id: number;
+  intentKey: string;
+  version: number;
+  /** draft | approved | superseded */
+  status: string;
+  author: string;
+  rationale: string;
+  flowClass?: string | null;
+  toBeHumanMin?: number | null;
+  actGetActions?: number | null;
+  actPutActions?: number | null;
+  createdAt: string;
+}
+
+export interface FlowOverrideInput {
+  intentKey: string;
+  author: string;
+  rationale: string;
+  flowClass?: string;
+  toBeHumanMin?: number;
+  actGetActions?: number;
+  actPutActions?: number;
 }
 

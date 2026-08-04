@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { McpIntegration } from './mcpIntegration';
 
 export interface SystemInfo {
   key: string;
@@ -12,4 +13,5 @@ export interface SystemInfo {
   /** hcm | payroll | benefits | ticketing | knowledge | identity | other */
   category: string;
   description: string;
+  integration: McpIntegration;
 }

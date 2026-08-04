@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeRollup, computeShares, type ScenarioInputs } from "./rollup";
+import { computeRollup, computeShares, manualActionFractions, type ScenarioInputs } from "./rollup";
+import { intentMap } from "../data/intents";
+import { flowClassMap } from "../data/flow-classes";
+import { componentSumFor } from "../data/build-components";
 import { validateScenarioInputs, InputValidationError } from "./validate-inputs";
 
 const base: ScenarioInputs = {
@@ -130,7 +133,7 @@ test("confidence rises with provided parameters and lists what's missing", () =>
   const minimal = computeRollup(base);
   assert.equal(minimal.confidence.level, "low");
   const missing = minimal.confidence.factors.filter((f) => !f.provided);
-  assert.equal(missing.length, 7, "all optional parameters should be reported missing");
+  assert.equal(missing.length, 8, "all optional parameters should be reported missing");
   assert.ok(missing.every((f) => f.note.length > 0));
 
   const partial = computeRollup({ ...base, adoptionRate: 0.7, landscapeMaturity: "legacy" });
@@ -145,10 +148,143 @@ test("confidence rises with provided parameters and lists what's missing", () =>
     contractYears: 3,
     reworkRatePct: 5,
     peakLoadFactor: 1.2,
+    modelSelection: { reasoning: "gpt-5" },
   });
   assert.equal(full.confidence.score, 100);
   assert.equal(full.confidence.level, "high");
   assert.ok(full.confidence.factors.every((f) => f.provided));
+});
+
+test("model selection reprices AI consumption exactly", () => {
+  const def = computeRollup(base);
+  const explicitDefaults = computeRollup({
+    ...base,
+    modelSelection: { router: "gpt-5-mini", reasoning: "gpt-5", frontier: "claude-opus" },
+  });
+  assert.ok(
+    Math.abs(def.totals.runCostUsd - explicitDefaults.totals.runCostUsd) < 1e-6,
+    "selecting the default models must not change cost",
+  );
+  const cheaper = computeRollup({
+    ...base,
+    modelSelection: { router: "phi-onprem", reasoning: "gemini-pro", frontier: "o-series" },
+  });
+  assert.ok(cheaper.totals.runCostUsd < def.totals.runCostUsd, "cheaper models lower run cost");
+  assert.ok(cheaper.totals.netUsd > def.totals.netUsd, "cheaper models raise net value");
+  const applied = cheaper.appliedAssumptions.find((a) => a.key === "model-reasoning");
+  assert.ok(applied && applied.label.includes("Gemini Pro"));
+});
+
+test("approved flow overrides adjust intents and flag rows", () => {
+  const noOv = computeRollup(base);
+  const target = noOv.rows[0]!;
+  const withOv = computeRollup(base, {
+    [target.intentKey]: { toBeHumanMin: 45, actGetActions: 10, actPutActions: 10 },
+  });
+  const row = withOv.rows.find((r) => r.intentKey === target.intentKey)!;
+  assert.equal(row.overridden, true);
+  assert.ok(withOv.rows.filter((r) => r.overridden).length === 1);
+  assert.ok(row.runCostUsd > target.runCostUsd, "more actions + human minutes raise run cost");
+  assert.ok(row.benefitUsd < target.benefitUsd, "more residual human minutes lower benefit");
+  // untouched intents unchanged
+  const other = noOv.rows[1]!;
+  const otherAfter = withOv.rows.find((r) => r.intentKey === other.intentKey)!;
+  assert.ok(Math.abs(otherAfter.netUsd - other.netUsd) < 1e-6);
+  // reassigning flow class changes pricing template
+  const reclass = computeRollup(base, { [target.intentKey]: { flowClass: "fc4-frontier" } });
+  const reclassRow = reclass.rows.find((r) => r.intentKey === target.intentKey)!;
+  assert.equal(reclassRow.flowClass, "fc4-frontier");
+});
+
+test("non-integrated systems shift actions from MCP cost to manual minutes", () => {
+  const integrated = computeRollup(base);
+  // sf-ec appears in act steps of fc1/fc3/fc4 flows: marking it non-integrated
+  // must lower AI/infra-side MCP cost but raise human cost and cut benefit.
+  const partial = computeRollup({ ...base, nonIntegratedSystems: ["sf-ec"] });
+  const humanOf = (r: typeof integrated) =>
+    r.byCostComponent.find((c) => c.key === "human")!.usd;
+  assert.ok(humanOf(partial) > humanOf(integrated), "manual actions raise human cost");
+  assert.ok(
+    partial.totals.benefitUsd < integrated.totals.benefitUsd,
+    "manual handling reduces the eliminated-time benefit",
+  );
+  assert.ok(
+    partial.totals.netUsd < integrated.totals.netUsd,
+    "net value drops when a system stays manual",
+  );
+  // Intents that never touch sf-ec are unchanged.
+  const untouched = integrated.rows.find(
+    (r) => partial.rows.find((p) => p.intentKey === r.intentKey)!.netUsd === r.netUsd,
+  );
+  assert.ok(untouched, "at least one intent is unaffected");
+  // Applied assumptions surface the manual-handling assumption only when used.
+  assert.ok(partial.appliedAssumptions.some((a) => a.key === "manual-action-minutes"));
+  assert.ok(!integrated.appliedAssumptions.some((a) => a.key === "manual-action-minutes"));
+});
+
+test("manual action fractions are action-typed and stage-scoped", () => {
+  const it = intentMap["payslip-copy"]!; // fc1: act step reads sf-ec + sf-ecp; put only in close stage
+  // Excluding a read-only act system affects GET work only; both act systems
+  // scale with landscape (equal weight), so the fraction is exactly 1/2.
+  const readOnly = manualActionFractions(it, { ...base, nonIntegratedSystems: ["sf-ec"] });
+  assert.equal(readOnly.getFrac, 0.5);
+  assert.equal(readOnly.putFrac, 0);
+  // Excluding all act-stage systems moves all GET work to manual.
+  const all = manualActionFractions(it, {
+    ...base,
+    nonIntegratedSystems: ["sf-ec", "sf-ecp"],
+  });
+  assert.equal(all.getFrac, 1);
+  // Excluding a system touched only outside the act stage (ticketing, close
+  // step) changes nothing — and the manual-handling assumption is not surfaced.
+  const nonAct = manualActionFractions(it, { ...base, nonIntegratedSystems: ["ticketing"] });
+  assert.equal(nonAct.getFrac, 0);
+  assert.equal(nonAct.putFrac, 0);
+  const r = computeRollup({ ...base, nonIntegratedSystems: ["ats"] }); // ats not in any act step of the corpus? verify via assumption flag
+  const touched = r.appliedAssumptions.some((a) => a.key === "manual-action-minutes");
+  const anyRowChanged = r.totals.netUsd !== computeRollup(base).totals.netUsd;
+  assert.equal(touched, anyRowChanged, "assumption surfaces iff actions are actually excluded");
+});
+
+test("fan-out applies exactly once and identically to automated and manual units", () => {
+  const it = intentMap["payslip-copy"]!; // act step: sf-ec + sf-ecp, both get, both scale
+  const bigBase = { ...base, numSystems: 12 };
+  const none = manualActionFractions(it, bigBase);
+  const one = manualActionFractions(it, { ...bigBase, nonIntegratedSystems: ["sf-ec"] });
+  // Total scaled action units are conserved: excluding a system moves units
+  // from automated to manual one-for-one, never creating or destroying work.
+  assert.ok(Math.abs(none.automatedUnits - (one.automatedUnits + one.manualUnits)) < 1e-9);
+  // Both act touches carry equal fan-out weight, so exactly half moves.
+  assert.ok(Math.abs(one.manualUnits - none.automatedUnits / 2) < 1e-9);
+  // Fan-out grows the units with the landscape and with maturity.
+  const small = manualActionFractions(it, { ...base, numSystems: 2, nonIntegratedSystems: ["sf-ec"] });
+  assert.ok(one.manualUnits > small.manualUnits, "more systems -> more manual work at stake");
+  const legacy = manualActionFractions(it, { ...bigBase, landscapeMaturity: "legacy", nonIntegratedSystems: ["sf-ec"] });
+  assert.ok(legacy.manualUnits > one.manualUnits, "legacy maturity raises fan-out weighting");
+});
+
+test("build component decomposition matches each flow class's build cost", () => {
+  for (const fc of Object.values(flowClassMap)) {
+    assert.equal(componentSumFor(fc.key), fc.buildCostUsd, fc.key);
+  }
+});
+
+test("build breakdown reconciles exactly with total build cost", () => {
+  const r = computeRollup(base);
+  const breakdownAnnual = r.buildBreakdown.reduce((a, c) => a + c.annualUsd, 0);
+  assert.ok(Math.abs(breakdownAnnual - r.totals.buildCostUsd) < 1e-6);
+  // Platform component one-time costs decompose the flow-class build costs.
+  const platform = r.buildBreakdown.filter((c) => c.kind === "platform");
+  const oneTime = platform.reduce((a, c) => a + c.oneTimeUsd, 0);
+  assert.ok(Math.abs(oneTime - (18000 + 45000 + 120000 + 250000)) < 1e-6); // maturity mixed = 1.0
+  // Legacy maturity scales platform components but not onboarding drivers.
+  const legacy = computeRollup({ ...base, landscapeMaturity: "legacy" });
+  const legacyPlatform = legacy.buildBreakdown.filter((c) => c.kind === "platform");
+  assert.ok(legacyPlatform.reduce((a, c) => a + c.oneTimeUsd, 0) > oneTime);
+  const onboarding = (res: typeof r) =>
+    res.buildBreakdown.filter((c) => c.kind === "onboarding").reduce((a, c) => a + c.annualUsd, 0);
+  assert.ok(Math.abs(onboarding(legacy) - onboarding(r)) < 1e-6);
+  assert.ok(Math.abs(onboarding(r) - r.onboardingAnnualUsd) < 1e-6);
 });
 
 test("tier multiplier reported matches input tier", () => {

@@ -1,6 +1,8 @@
 import { intentMap } from "../data/intents";
 import { flowClassMap } from "../data/flow-classes";
 import { profileMap } from "../data/profiles";
+import { MODEL_ROLES, modelCatalogMap } from "../data/model-catalog";
+import { systems } from "../data/systems";
 import type { ScenarioInputs } from "./rollup";
 
 export class InputValidationError extends Error {
@@ -106,6 +108,34 @@ export function validateScenarioInputs(inputs: ScenarioInputs): void {
   if (inputs.peakLoadFactor !== undefined) {
     if (!Number.isFinite(inputs.peakLoadFactor) || inputs.peakLoadFactor < 1 || inputs.peakLoadFactor > 1.5) {
       throw new InputValidationError(`peakLoadFactor must be between 1 and 1.5`);
+    }
+  }
+
+  const selection = inputs.modelSelection;
+  if (selection) {
+    for (const [role, key] of Object.entries(selection)) {
+      if (!(MODEL_ROLES as readonly string[]).includes(role)) {
+        throw new InputValidationError(
+          `Unknown model role "${role}". Valid roles: ${MODEL_ROLES.join(", ")}`,
+        );
+      }
+      const model = modelCatalogMap[key];
+      if (!model || model.role !== role) {
+        throw new InputValidationError(
+          `Unknown model "${key}" for role "${role}". See /model-catalog for options.`,
+        );
+      }
+    }
+  }
+
+  const nonIntegrated = inputs.nonIntegratedSystems;
+  if (nonIntegrated !== undefined) {
+    for (const key of nonIntegrated) {
+      if (!systems.some((s) => s.key === key)) {
+        throw new InputValidationError(
+          `Unknown system "${key}" in nonIntegratedSystems. See /systems for valid keys.`,
+        );
+      }
     }
   }
 }

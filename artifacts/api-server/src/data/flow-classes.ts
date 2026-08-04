@@ -7,6 +7,7 @@ const SLM = assumptionMap["slm-call-cost"]!.value;
 const LLM = assumptionMap["llm-call-cost"]!.value;
 const FRONTIER = assumptionMap["frontier-call-cost"]!.value;
 const MCP = assumptionMap["mcp-action-cost"]!.value;
+const DATA = assumptionMap["data-call-cost"]!.value;
 const INFRA = assumptionMap["infra-per-txn"]!.value;
 
 const pricingSrc: SourceRef = {
@@ -59,7 +60,7 @@ export const flowClasses: FlowClass[] = [
         human: false,
         systems: [],
         costs: [
-          { type: "ai-consumption", label: "SLM routing call", unitCostUsd: SLM, assumption: "One small-model call (slm-call-cost) classifies and routes.", source: pricingSrc },
+          { type: "ai-consumption", label: "SLM routing call", unitCostUsd: SLM, calls: [{ role: "router", count: 1 }], assumption: "One small-model call (slm-call-cost) classifies and routes.", source: pricingSrc },
         ],
         benefits: [],
       },
@@ -133,7 +134,7 @@ export const flowClasses: FlowClass[] = [
         human: false,
         systems: [],
         costs: [
-          { type: "ai-consumption", label: "SLM routing call", unitCostUsd: SLM, assumption: "One small-model call (slm-call-cost) scopes the question to country/entity policy set.", source: pricingSrc },
+          { type: "ai-consumption", label: "SLM routing call", unitCostUsd: SLM, calls: [{ role: "router", count: 1 }], assumption: "One small-model call (slm-call-cost) scopes the question to country/entity policy set.", source: pricingSrc },
         ],
         benefits: [],
       },
@@ -149,7 +150,7 @@ export const flowClasses: FlowClass[] = [
           { systemKey: "sf-ec", actions: ["get"], scalesWithLandscape: true },
         ],
         costs: [
-          { type: "ai-consumption", label: "Retrieval + LLM synthesis", unitCostUsd: LLM + SLM, assumption: "One reasoning-model call (llm-call-cost) plus one small-model rerank call (slm-call-cost) with grounded context.", source: pricingSrc },
+          { type: "ai-consumption", label: "Retrieval + LLM synthesis", unitCostUsd: LLM + SLM, calls: [{ role: "reasoning", count: 1 }, { role: "router", count: 1 }], assumption: "One reasoning-model call (llm-call-cost) plus one small-model rerank call (slm-call-cost) with grounded context.", source: pricingSrc },
           { type: "infra", label: "Vector search infra", unitCostUsd: INFRA * 0.2, assumption: "20% of infra-per-txn: AI Search query share.", source: pricingSrc },
         ],
         benefits: [
@@ -206,7 +207,7 @@ export const flowClasses: FlowClass[] = [
         human: false,
         systems: [{ systemKey: "doc-store", actions: ["get", "put"], scalesWithLandscape: false }],
         costs: [
-          { type: "ai-consumption", label: "Document extraction call", unitCostUsd: SLM * 4, assumption: "Vision/document parsing at ~4x slm-call-cost for attached payslips or evidence.", source: pricingSrc },
+          { type: "ai-consumption", label: "Document extraction call", unitCostUsd: SLM * 4, calls: [{ role: "router", count: 4 }], assumption: "Vision/document parsing at ~4x slm-call-cost for attached payslips or evidence.", source: pricingSrc },
           { type: "infra", label: "Intake pipeline infra", unitCostUsd: INFRA * 0.2, assumption: "20% of infra-per-txn: blob storage, queue and scanning share.", source: pricingSrc },
         ],
         benefits: [],
@@ -220,7 +221,7 @@ export const flowClasses: FlowClass[] = [
         human: false,
         systems: [{ systemKey: "ticketing", actions: ["put"], scalesWithLandscape: false }],
         costs: [
-          { type: "ai-consumption", label: "SLM routing call", unitCostUsd: SLM, assumption: "One small-model call (slm-call-cost): classification plus SLA clock start.", source: pricingSrc },
+          { type: "ai-consumption", label: "SLM routing call", unitCostUsd: SLM, calls: [{ role: "router", count: 1 }], assumption: "One small-model call (slm-call-cost): classification plus SLA clock start.", source: pricingSrc },
         ],
         benefits: [],
       },
@@ -235,9 +236,11 @@ export const flowClasses: FlowClass[] = [
           { systemKey: "sf-ecp", actions: ["get"], scalesWithLandscape: true },
           { systemKey: "time-system", actions: ["get"], scalesWithLandscape: true },
           { systemKey: "sf-ec", actions: ["get"], scalesWithLandscape: true },
+          { systemKey: "legacy-db", actions: ["get"], scalesWithLandscape: true },
         ],
         costs: [
-          { type: "ai-consumption", label: "Multi-agent reasoning (3-5 LLM calls)", unitCostUsd: LLM * 4, assumption: "Supervisor plus specialist agents make ~4 reasoning calls (llm-call-cost x 4).", source: pricingSrc },
+          { type: "ai-consumption", label: "Multi-agent reasoning (3-5 LLM calls)", unitCostUsd: LLM * 4, calls: [{ role: "reasoning", count: 4 }], assumption: "Supervisor plus specialist agents make ~4 reasoning calls (llm-call-cost x 4).", source: pricingSrc },
+          { type: "ai-consumption", label: "Structured data access (LDM/NL2SQL)", unitCostUsd: DATA * 2, calls: [{ role: "data", count: 2 }], assumption: "~2 schema-grounded structured-data calls (data-call-cost x 2) retrieve and reconcile records from legacy databases with poor lineage.", source: pricingSrc },
           { type: "infra", label: "Orchestration + memory infra", unitCostUsd: INFRA * 0.4, assumption: "40% of infra-per-txn: durable orchestration state and agent memory.", source: pricingSrc },
         ],
         benefits: [
@@ -287,7 +290,7 @@ export const flowClasses: FlowClass[] = [
         human: false,
         systems: [{ systemKey: "ticketing", actions: ["put"], scalesWithLandscape: false }],
         costs: [
-          { type: "ai-consumption", label: "Explanation generation", unitCostUsd: SLM * 2, assumption: "Drafting the employee-facing explanation at ~2x slm-call-cost.", source: pricingSrc },
+          { type: "ai-consumption", label: "Explanation generation", unitCostUsd: SLM * 2, calls: [{ role: "router", count: 2 }], assumption: "Drafting the employee-facing explanation at ~2x slm-call-cost.", source: pricingSrc },
           { type: "infra", label: "Case close + audit", unitCostUsd: INFRA * 0.13, assumption: "13% of infra-per-txn: ticket closure, SLA stop, audit entry.", source: pricingSrc },
         ],
         benefits: [
@@ -316,7 +319,7 @@ export const flowClasses: FlowClass[] = [
         human: false,
         systems: [{ systemKey: "doc-store", actions: ["get", "put"], scalesWithLandscape: false }],
         costs: [
-          { type: "ai-consumption", label: "Document + form extraction", unitCostUsd: SLM * 5, assumption: "Document + form extraction at ~5x slm-call-cost (contracts, visas, assignment letters).", source: pricingSrc },
+          { type: "ai-consumption", label: "Document + form extraction", unitCostUsd: SLM * 5, calls: [{ role: "router", count: 5 }], assumption: "Document + form extraction at ~5x slm-call-cost (contracts, visas, assignment letters).", source: pricingSrc },
           { type: "infra", label: "Intake pipeline infra", unitCostUsd: INFRA * 0.2, assumption: "20% of infra-per-txn: storage, queue, scanning share.", source: pricingSrc },
         ],
         benefits: [],
@@ -328,9 +331,13 @@ export const flowClasses: FlowClass[] = [
         componentRefs: ["4", "5"],
         agents: ["Supervisor Agent", "Frontier Reasoning Agent"],
         human: false,
-        systems: [{ systemKey: "knowledge-base", actions: ["get"], scalesWithLandscape: false }],
+        systems: [
+          { systemKey: "knowledge-base", actions: ["get"], scalesWithLandscape: false },
+          { systemKey: "legacy-db", actions: ["get"], scalesWithLandscape: true },
+        ],
         costs: [
-          { type: "ai-consumption", label: "Frontier reasoning calls", unitCostUsd: FRONTIER * 2.5, assumption: "2-3 frontier-model calls (frontier-call-cost x 2.5) plan the case across tax, immigration, payroll and benefits threads.", source: pricingSrc },
+          { type: "ai-consumption", label: "Frontier reasoning calls", unitCostUsd: FRONTIER * 2.5, calls: [{ role: "frontier", count: 2.5 }], assumption: "2-3 frontier-model calls (frontier-call-cost x 2.5) plan the case across tax, immigration, payroll and benefits threads.", source: pricingSrc },
+          { type: "ai-consumption", label: "Structured data access (LDM/NL2SQL)", unitCostUsd: DATA * 3, calls: [{ role: "data", count: 3 }], assumption: "~3 structured-data calls (data-call-cost x 3) assemble the case picture from legacy databases and vendor extracts lacking lineage.", source: pricingSrc },
           { type: "infra", label: "Long-context memory infra", unitCostUsd: INFRA * 0.53, assumption: "53% of infra-per-txn: case memory, thread state, long-context caching.", source: pricingSrc },
         ],
         benefits: [
@@ -381,7 +388,7 @@ export const flowClasses: FlowClass[] = [
         human: true,
         systems: [{ systemKey: "ticketing", actions: ["put"], scalesWithLandscape: false }],
         costs: [
-          { type: "ai-consumption", label: "Case summary generation", unitCostUsd: LLM, assumption: "One reasoning-model call (llm-call-cost) compiles the full case narrative.", source: pricingSrc },
+          { type: "ai-consumption", label: "Case summary generation", unitCostUsd: LLM, calls: [{ role: "reasoning", count: 1 }], assumption: "One reasoning-model call (llm-call-cost) compiles the full case narrative.", source: pricingSrc },
           { type: "human", label: "Final human closure check", unitCostUsd: 0, assumption: "Included in intent-level residual minutes.", source: assumptionSrc },
         ],
         benefits: [

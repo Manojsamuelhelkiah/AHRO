@@ -90,6 +90,14 @@ export default function Assumptions() {
                       {sys.description}
                     </div>
                   </div>
+                  <div className="mt-3 pt-3 border-t border-border/60">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-0.5">
+                      {sys.integration.label}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground leading-snug">
+                      {sys.integration.note}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             ))}

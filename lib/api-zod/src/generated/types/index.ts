@@ -7,6 +7,7 @@
  */
 
 export * from './benefitComponent';
+export * from './buildComponentCost';
 export * from './componentBucket';
 export * from './confidence';
 export * from './confidenceFactor';
@@ -18,11 +19,15 @@ export * from './distributionProfileDomainWeights';
 export * from './distributionProfileSizeAdjustments';
 export * from './errorMessage';
 export * from './flowClass';
+export * from './flowOverride';
+export * from './flowOverrideInput';
 export * from './flowStep';
 export * from './globalAssumption';
 export * from './healthStatus';
 export * from './intent';
 export * from './intentRollupRow';
+export * from './mcpIntegration';
+export * from './modelOption';
 export * from './rollup';
 export * from './rollupRequest';
 export * from './rollupTotals';
@@ -31,6 +36,7 @@ export * from './scenarioInput';
 export * from './scenarioInputs';
 export * from './scenarioInputsContainmentOverrides';
 export * from './scenarioInputsIntentShareOverrides';
+export * from './scenarioInputsModelSelection';
 export * from './scenarioUpdate';
 export * from './sourceRef';
 export * from './stepSystemTouch';

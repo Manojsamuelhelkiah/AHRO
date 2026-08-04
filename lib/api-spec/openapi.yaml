@@ -213,6 +213,137 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /model-catalog:
+    get:
+      operationId: listModelCatalog
+      tags: [corpus]
+      summary: List selectable AI models per role with per-call prices
+      responses:
+        "200":
+          description: Model catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModelOption"
+  /flow-overrides:
+    get:
+      operationId: listFlowOverrides
+      tags: [flowOverrides]
+      summary: List all SME flow override versions (newest first)
+      responses:
+        "200":
+          description: All override versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FlowOverride"
+    post:
+      operationId: createFlowOverride
+      tags: [flowOverrides]
+      summary: Propose a new flow override version for an intent (created as draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlowOverrideInput"
+      responses:
+        "201":
+          description: Created draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowOverride"
+        "400":
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /flow-overrides/{id}/revoke:
+    post:
+      operationId: revokeFlowOverride
+      tags: [flowOverrides]
+      summary: Revoke an approved override version; the intent reverts to the reference flow (history is kept)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Revoked override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowOverride"
+        "400":
+          description: Not in a revocable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /flow-overrides/{id}/approve:
+    post:
+      operationId: approveFlowOverride
+      tags: [flowOverrides]
+      summary: Approve a draft version; it becomes the single active adjustment for its intent and supersedes prior approvals
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowOverride"
+        "400":
+          description: Not a draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /flow-overrides/{id}:
+    delete:
+      operationId: deleteFlowOverride
+      tags: [flowOverrides]
+      summary: Delete an override version
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /rollup:
     post:
       operationId: computeRollup
@@ -425,6 +556,18 @@ components:
           items:
             $ref: "#/components/schemas/FlowStep"
       required: [key, name, slideRef, description, buildCostUsd, buildAssumption, amortizationTransactions, steps]
+    McpIntegration:
+      type: object
+      description: How a landscape system is exposed to agents through the MCP server
+      properties:
+        method:
+          type: string
+          description: rest-odata | rag-index | doc-pipeline | event-webhook | scim-oidc | sftp-file | semantic-layer
+        label:
+          type: string
+        note:
+          type: string
+      required: [method, label, note]
     SystemInfo:
       type: object
       properties:
@@ -437,7 +580,9 @@ components:
           description: hcm | payroll | benefits | ticketing | knowledge | identity | other
         description:
           type: string
-      required: [key, name, category, description]
+        integration:
+          $ref: "#/components/schemas/McpIntegration"
+      required: [key, name, category, description, integration]
     DistributionProfile:
       type: object
       properties:
@@ -559,6 +704,16 @@ components:
         peakLoadFactor:
           type: number
           description: Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.
+        modelSelection:
+          type: object
+          additionalProperties:
+            type: string
+          description: Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions.
+        nonIntegratedSystems:
+          type: array
+          items:
+            type: string
+          description: System keys (see /systems) that will NOT be integrated with the MCP layer. Their get/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.
       required:
         - numSystems
         - annualTransactions
@@ -641,6 +796,9 @@ components:
           type: number
         humanMinutesSaved:
           type: number
+        overridden:
+          type: boolean
+          description: True when an approved SME flow override adjusted this intent
       required:
         - intentId
         - intentKey
@@ -648,6 +806,7 @@ components:
         - domain
         - flowClass
         - share
+        - overridden
         - transactions
         - runCostUsd
         - buildCostUsd
@@ -737,13 +896,104 @@ components:
         onboardingAnnualUsd:
           type: number
           description: Annualized one-time client onboarding cost (amortized over contract years), included in build cost
+        buildBreakdown:
+          type: array
+          description: Component-level decomposition of build cost; annual amounts sum to totals build cost
+          items:
+            $ref: "#/components/schemas/BuildComponentCost"
         appliedAssumptions:
           type: array
           items:
             $ref: "#/components/schemas/GlobalAssumption"
         confidence:
           $ref: "#/components/schemas/Confidence"
-      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, appliedAssumptions, confidence]
+      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, appliedAssumptions, confidence]
+    BuildComponentCost:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          description: platform | onboarding
+        oneTimeUsd:
+          type: number
+          description: One-time build/setup cost (maturity-scaled for platform components)
+        annualUsd:
+          type: number
+          description: Annualized share included in this scenario's build cost
+      required: [key, name, description, kind, oneTimeUsd, annualUsd]
+    ModelOption:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        role:
+          type: string
+          description: router | reasoning | frontier | data
+        pricePerCallUsd:
+          type: number
+        description:
+          type: string
+        isDefault:
+          type: boolean
+      required: [key, label, role, pricePerCallUsd, description, isDefault]
+    FlowOverride:
+      type: object
+      description: A versioned SME adjustment to an intent's flow; latest approved version per intent is applied to roll-ups
+      properties:
+        id:
+          type: integer
+        intentKey:
+          type: string
+        version:
+          type: integer
+        status:
+          type: string
+          description: draft | approved | superseded
+        author:
+          type: string
+        rationale:
+          type: string
+        flowClass:
+          type: string
+          nullable: true
+        toBeHumanMin:
+          type: number
+          nullable: true
+        actGetActions:
+          type: integer
+          nullable: true
+        actPutActions:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, intentKey, version, status, author, rationale, createdAt]
+    FlowOverrideInput:
+      type: object
+      properties:
+        intentKey:
+          type: string
+        author:
+          type: string
+        rationale:
+          type: string
+        flowClass:
+          type: string
+        toBeHumanMin:
+          type: number
+        actGetActions:
+          type: integer
+        actPutActions:
+          type: integer
+      required: [intentKey, author, rationale]
     Confidence:
       type: object
       description: How much of the model is driven by client-specific inputs vs generic defaults
