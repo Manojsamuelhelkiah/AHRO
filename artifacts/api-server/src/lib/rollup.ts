@@ -8,34 +8,73 @@ import type { GlobalAssumption, Intent } from "../data/types";
 
 export interface ScenarioInputs {
   numSystems: number;
+
   annualTransactions: number;
+
   employees: number;
+
   sector: string;
+
   companyType: string;
+
   isolationTier: string;
+
   hrHourlyCostUsd: number;
+
   hitlHourlyCostUsd: number;
+
   countries: number;
+
   intentShareOverrides?: Record<string, number>;
   /** Share of committed volume arriving through the agentic channel (0-1, default 1). */
+
   adoptionRate?: number;
   /** Per-flow-class containment overrides (0-1); defaults from containment-* assumptions. */
+
   containmentOverrides?: Record<string, number>;
   /** Fraction of default residual HITL minutes actually spent (0-1, default 1). */
+
   hitlSamplingRate?: number;
   /** clean | mixed | legacy (default mixed). */
+
   landscapeMaturity?: string;
   /** Contract length in years for onboarding amortization (default 3). */
+
   contractYears?: number;
   /** As-is rework share of transactions in percent (0-20, default 0). */
+
   reworkRatePct?: number;
   /** Seasonality premium on avoided human effort (1-1.5, default 1). */
+
   peakLoadFactor?: number;
   /** Chosen AI models per role (router | reasoning | frontier), keys from the model catalog. */
+
   modelSelection?: Record<string, string>;
   /** Landscape systems that will NOT be integrated with the MCP layer; their actions stay manual. */
+
   nonIntegratedSystems?: string[];
+
+  assumptionOverrides?: Record<string, number>;
 }
+
+/**
+ * The set of assumption keys that can be overridden per scenario.
+ * working-hours-year is intentionally excluded (FTE calc would surprise users).
+ */
+export const OVERRIDABLE_ASSUMPTION_KEYS = new Set([
+  "slm-call-cost",
+  "llm-call-cost",
+  "frontier-call-cost",
+  "mcp-action-cost",
+  "infra-per-txn",
+  "landscape-fanout",
+  "country-localization",
+  "tier-pooled",
+  "tier-siloed",
+  "tier-dedicated",
+  "company-multi-country",
+  "company-global",
+]);
 
 /** Approved SME adjustments applied to an intent before pricing. */
 export interface FlowOverrideValues {
@@ -55,11 +94,7 @@ function sizeBand(employees: number): string {
 const COMPLEX_CLASSES = new Set(["fc3-multiagent", "fc4-frontier"]);
 
 /**
- * Distribute total annual transactions across intents:
- * share_i ∝ baseWeight_i × sectorDomainWeight(domain_i)
- *          × (sizeAdjustment if intent is a complex class - larger orgs skew complex)
- * Manual intentShareOverrides pin exact shares; remaining intents are
- * normalized into the leftover share.
+ * Distribute total annual transactions across intents.
  */
 export function computeShares(inputs: ScenarioInputs): Map<string, number> {
   const profile = profileMap[inputs.sector] ?? profiles[0]!;
@@ -91,15 +126,32 @@ export function computeShares(inputs: ScenarioInputs): Map<string, number> {
   return shares;
 }
 
-function tierMultiplierFor(tier: string): { mult: number; assumption: GlobalAssumption } {
-  const key = tier === "dedicated" ? "tier-dedicated" : tier === "siloed" ? "tier-siloed" : "tier-pooled";
-  const a = assumptionMap[key]!;
+function tierMultiplierFor(
+  tier: string,
+  overrides?: Record<string, number>,
+): { mult: number; assumption: GlobalAssumption } {
+  const key =
+    tier === "dedicated"
+      ? "tier-dedicated"
+      : tier === "siloed"
+        ? "tier-siloed"
+        : "tier-pooled";
+  const a = effectiveAssumption(key, overrides);
   return { mult: a.value, assumption: a };
 }
 
-function companyMultiplierFor(companyType: string): { mult: number; assumption?: GlobalAssumption } {
-  if (companyType === "multi-country") return { mult: assumptionMap["company-multi-country"]!.value, assumption: assumptionMap["company-multi-country"]! };
-  if (companyType === "global") return { mult: assumptionMap["company-global"]!.value, assumption: assumptionMap["company-global"]! };
+function companyMultiplierFor(
+  companyType: string,
+  overrides?: Record<string, number>,
+): { mult: number; assumption?: GlobalAssumption } {
+  if (companyType === "multi-country") {
+    const a = effectiveAssumption("company-multi-country", overrides);
+    return { mult: a.value, assumption: a };
+  }
+  if (companyType === "global") {
+    const a = effectiveAssumption("company-global", overrides);
+    return { mult: a.value, assumption: a };
+  }
   return { mult: 1 };
 }
 
@@ -184,16 +236,32 @@ export function manualActionFractions(
   };
 }
 
+/** Per-transaction cost/benefit for one intent, before tier/company multipliers on ai+infra. */
 function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
+  const ov = inputs.assumptionOverrides;
   const fc = flowClassMap[it.flowClass];
   // Landscape maturity scales Act fan-out effort: legacy landscapes make each
   // extra system more expensive to touch, clean landscapes cheaper.
   const maturity = maturityAssumptionFor(inputs.landscapeMaturity);
-  const fanout = assumptionMap["landscape-fanout"]!.value * maturity.value;
-  const mcpCost = assumptionMap["mcp-action-cost"]!.value;
+  // landscape-fanout and mcp-action-cost are override-aware.
+  const fanout = eff("landscape-fanout", ov) * maturity.value;
+  const mcpCost = eff("mcp-action-cost", ov);
   // Actions on non-integrated systems: no MCP cost, but manual minutes instead.
   // Units already carry fan-out weighting exactly once per system touch.
   const { automatedUnits, manualUnits } = manualActionFractions(it, inputs);
+
+  // Compute model-cost scaling ratio for ai-consumption components that lack
+  // an explicit c.calls list. flow-classes.ts bakes the default assumption
+  // values into unitCostUsd; when a scenario overrides a model-cost assumption
+  // we scale by (effective / default). For mixed steps the primary model
+  // dominates cost so ratio-scaling gives a faithful approximation.
+  const primaryModelKey = FC_PRIMARY_MODEL[it.flowClass] ?? "slm-call-cost";
+  const defaultModelCost = assumptionMap[primaryModelKey]!.value;
+  const modelRatio = defaultModelCost > 0 ? eff(primaryModelKey, ov) / defaultModelCost : 1;
+
+  // Similarly scale infra components.
+  const defaultInfra = assumptionMap["infra-per-txn"]!.value;
+  const infraRatio = defaultInfra > 0 ? eff("infra-per-txn", ov) / defaultInfra : 1;
 
   let ai = 0;
   let infra = 0;
@@ -212,7 +280,7 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
       for (const c of step.costs) {
         let unit = c.unitCostUsd;
         // MCP action costs are intent-specific: replace the template's nominal
-        // action cost with (get+put actions × mcp-action-cost).
+        // action cost with (automated action units × effective mcp-action-cost).
         let alreadyScaled = false;
         if (isActStep && c.label.toLowerCase().includes("mcp")) {
           // automatedUnits already carry fan-out weighting per system touch —
@@ -222,10 +290,19 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
         } else if (c.calls && c.calls.length > 0) {
           // Model-call costs are repriced exactly from the scenario's model
           // selection (defaults match the registered *-call-cost assumptions).
+          // Note: pricePerCall uses model-catalog prices; assumptionOverrides
+          // model keys (slm-call-cost etc.) are a separate override path that
+          // does not interact with catalog-priced calls.
           unit = c.calls.reduce(
             (a, call) => a + call.count * pricePerCall(call.role, inputs.modelSelection).price,
             0,
           );
+        } else if (c.type === "ai-consumption") {
+          // Baked-in ai cost without an explicit call list: scale by the ratio
+          // of (effective / default) for this flow class's primary model.
+          unit = c.unitCostUsd * modelRatio;
+        } else if (c.type === "infra") {
+          unit = c.unitCostUsd * infraRatio;
         }
         const scaled = unit * (!alreadyScaled && scales ? landscapeFactor : 1);
         if (c.type === "ai-consumption") ai += scaled;
@@ -366,9 +443,10 @@ export function computeRollup(
   inputs: ScenarioInputs,
   flowOverrides?: Record<string, FlowOverrideValues>,
 ) {
+  const ov = inputs.assumptionOverrides;
   const shares = computeShares(inputs);
-  const tier = tierMultiplierFor(inputs.isolationTier);
-  const company = companyMultiplierFor(inputs.companyType);
+  const tier = tierMultiplierFor(inputs.isolationTier, ov);
+  const company = companyMultiplierFor(inputs.companyType, ov);
   const costMult = tier.mult * company.mult;
   const adoption = Math.min(Math.max(inputs.adoptionRate ?? 1, 0), 1);
   const maturity = maturityAssumptionFor(inputs.landscapeMaturity);
@@ -376,7 +454,7 @@ export function computeRollup(
 
   // Localization uplift: each extra country (capped at 20) adds AI/infra run
   // cost to knowledge-grounded (fc2) and frontier (fc4) flows.
-  const localization = assumptionMap["country-localization"]!;
+  const localization = effectiveAssumption("country-localization", ov);
   const localizationMult =
     1 + localization.value * Math.min(Math.max(0, inputs.countries - 1), 20);
   const LOCALIZED_CLASSES = new Set(["fc2-policy", "fc4-frontier"]);
@@ -564,12 +642,12 @@ export function computeRollup(
   const txnTotal = inputs.annualTransactions || 1;
 
   const appliedAssumptions: GlobalAssumption[] = [
-    assumptionMap["slm-call-cost"]!,
-    assumptionMap["llm-call-cost"]!,
-    assumptionMap["frontier-call-cost"]!,
-    assumptionMap["mcp-action-cost"]!,
-    assumptionMap["infra-per-txn"]!,
-    assumptionMap["landscape-fanout"]!,
+    effectiveAssumption("slm-call-cost", ov),
+    effectiveAssumption("llm-call-cost", ov),
+    effectiveAssumption("frontier-call-cost", ov),
+    effectiveAssumption("mcp-action-cost", ov),
+    effectiveAssumption("infra-per-txn", ov),
+    effectiveAssumption("landscape-fanout", ov),
     ...(inputs.countries > 1 ? [localization] : []),
     tier.assumption,
     ...(company.assumption ? [company.assumption] : []),
@@ -644,3 +722,40 @@ export function computeRollup(
     confidence: computeConfidence(inputs),
   };
 }
+
+/**
+ * Effective numeric value of an assumption (shorthand).
+ */
+function eff(key: string, overrides?: Record<string, number>): number {
+  return effectiveAssumption(key, overrides).value;
+}
+
+/**
+ * Returns the effective GlobalAssumption, substituting the override value if present.
+ * The assumption metadata (label, unit, rationale, source) is always from the global default.
+ */
+function effectiveAssumption(
+  key: string,
+  overrides?: Record<string, number>,
+): GlobalAssumption {
+  const base = assumptionMap[key]!;
+  if (overrides && overrides[key] !== undefined) {
+    return { ...base, value: overrides[key]! };
+  }
+  return base;
+}
+
+/**
+ * Per-flow-class primary AI model assumption key.
+ * Used to scale baked-in ai-consumption unit costs by the ratio of
+ * (effective model cost / default model cost) when overrides are present.
+ *
+ * For mixed steps (e.g. fc2 knowledge step = LLM + SLM) the primary model
+ * dominates cost so ratio-scaling gives a faithful approximation.
+ */
+const FC_PRIMARY_MODEL: Record<string, string> = {
+  "fc1-deterministic": "slm-call-cost",
+  "fc2-policy": "llm-call-cost",
+  "fc3-multiagent": "llm-call-cost",
+  "fc4-frontier": "frontier-call-cost",
+};

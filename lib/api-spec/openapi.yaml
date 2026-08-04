@@ -681,6 +681,18 @@ components:
           additionalProperties:
             type: number
           description: Optional manual overrides of intent shares (intent key to share fraction)
+        assumptionOverrides:
+          type: object
+          additionalProperties:
+            type: number
+            minimum: 0
+          description: >
+            Per-scenario overrides for global assumption values. Keys must match
+            a GlobalAssumption key from the overridable set: slm-call-cost,
+            llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn,
+            landscape-fanout, country-localization, tier-pooled, tier-siloed,
+            tier-dedicated, company-multi-country, company-global.
+            Absent keys use the global defaults. Values must be non-negative finite numbers.
         adoptionRate:
           type: number
           description: Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.

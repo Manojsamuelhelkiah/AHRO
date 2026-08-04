@@ -163,10 +163,10 @@ export const GetCorpusSummaryResponse = zod.object({
 }))
 })
 
-
 /**
  * @summary List saved client scenarios
  */
+export const listScenariosResponseInputsAssumptionOverridesMinOne = 0;
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -181,6 +181,7 @@ export const ListScenariosResponseItem = zod.object({
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(listScenariosResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
   "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
   "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
@@ -196,10 +197,10 @@ export const ListScenariosResponseItem = zod.object({
 })
 export const ListScenariosResponse = zod.array(ListScenariosResponseItem)
 
-
 /**
  * @summary Create a client scenario
  */
+export const createScenarioBodyInputsAssumptionOverridesMinOne = 0;
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -213,6 +214,7 @@ export const CreateScenarioBody = zod.object({
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(createScenarioBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
   "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
   "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
@@ -225,6 +227,7 @@ export const CreateScenarioBody = zod.object({
 })
 })
 
+export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 export const CreateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -239,6 +242,7 @@ export const CreateScenarioResponse = zod.object({
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(createScenarioResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
   "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
   "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
@@ -261,6 +265,7 @@ export const GetScenarioParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const getScenarioResponseInputsAssumptionOverridesMinOne = 0;
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -275,6 +280,7 @@ export const GetScenarioResponse = zod.object({
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(getScenarioResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
   "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
   "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
@@ -297,6 +303,7 @@ export const UpdateScenarioParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const updateScenarioBodyInputsAssumptionOverridesMinOne = 0;
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -310,6 +317,7 @@ export const UpdateScenarioBody = zod.object({
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(updateScenarioBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
   "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
   "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
@@ -322,6 +330,7 @@ export const UpdateScenarioBody = zod.object({
 }).optional()
 })
 
+export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 export const UpdateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -336,6 +345,7 @@ export const UpdateScenarioResponse = zod.object({
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(updateScenarioResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
   "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
   "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
@@ -359,6 +369,11 @@ export const DeleteScenarioParams = zod.object({
 })
 
 export const DeleteScenarioResponse = zod.void()
+
+/**
+ * @summary Compute a cost-benefit roll-up for a set of scenario inputs (without saving)
+ */
+export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 
 /**
@@ -476,9 +491,6 @@ export const DeleteFlowOverrideParams = zod.object({
 export const DeleteFlowOverrideResponse = zod.void()
 
 
-/**
- * @summary Compute a cost-benefit roll-up for a set of scenario inputs (without saving)
- */
 export const ComputeRollupBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -491,6 +503,7 @@ export const ComputeRollupBody = zod.object({
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(computeRollupBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
   "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
   "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
@@ -586,5 +599,4 @@ export const ComputeRollupResponse = zod.object({
 }))
 }).describe('How much of the model is driven by client-specific inputs vs generic defaults')
 })
-
 

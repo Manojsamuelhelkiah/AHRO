@@ -7,6 +7,7 @@ import {
   useListDistributionProfiles, 
   useListModelCatalog, useListSystems,
   useListScenarios,
+  useListAssumptions,
   useCreateScenario,
   useUpdateScenario,
   useGetScenario,
@@ -15,7 +16,7 @@ import {
   Rollup
 } from "@workspace/api-client-react";
 import { useLocation, Link } from "wouter";
-
+import { toApiInputs, fromApiInputs, OVERRIDABLE_ASSUMPTION_KEYS, type OverridableKey } from "@/lib/scenario-mapper";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,10 +31,12 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Calculator, Save, Play, DollarSign, 
   TrendingUp, Users, BarChart3, Database, 
-  Settings2, GitCompareArrows, BrainCircuit
+  Settings2, GitCompareArrows, BrainCircuit,
+  RotateCcw, ChevronDown
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { formatCurrency, formatNumber } from "@/lib/format";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 /** Empty inputs are treated as "not provided" — the model falls back to documented defaults. */
 const optionalNumber = <T extends z.ZodTypeAny>(schema: T) =>
@@ -41,6 +44,14 @@ const optionalNumber = <T extends z.ZodTypeAny>(schema: T) =>
     (v) => (v === "" || v === null || v === undefined || (typeof v === "number" && Number.isNaN(v)) ? undefined : v),
     schema.optional()
   );
+const assumptionOverridesSchema = z.object(
+  Object.fromEntries(
+    OVERRIDABLE_ASSUMPTION_KEYS.map((k) => [
+      k,
+      z.union([z.literal(""), z.coerce.number().min(0, "Must be ≥ 0")]).optional(),
+    ])
+  )
+);
 
 const formSchema = z.object({
   numSystems: z.coerce.number().int("Whole number required").min(1, "At least 1 system"),
@@ -66,10 +77,12 @@ const formSchema = z.object({
   modelReasoning: z.string().optional(),
   modelFrontier: z.string().optional(),
   modelData: z.string().optional(),
-  nonIntegratedSystems: z.array(z.string()).optional()
+  nonIntegratedSystems: z.array(z.string()).optional(),
+  _assumptionOverrides: assumptionOverridesSchema.optional(),
 });
 
-const defaultValues: z.infer<typeof formSchema> = {
+type FormValues = z.infer<typeof formSchema>;
+const defaultValues: FormValues = {
   numSystems: 5,
   annualTransactions: 50000,
   employees: 5000,
@@ -78,69 +91,9 @@ const defaultValues: z.infer<typeof formSchema> = {
   isolationTier: "siloed",
   hrHourlyCostUsd: 45,
   hitlHourlyCostUsd: 35,
-  countries: 3
+  countries: 3,
+  _assumptionOverrides: {} as any,
 };
-
-/** Maps the flat form values to the API ScenarioInputs shape. */
-const toApiInputs = (v: z.infer<typeof formSchema>) => {
-  const {
-    adoptionRate, hitlSamplingRate, landscapeMaturity, contractYears,
-    reworkRatePct, peakLoadFactor,
-    containmentFc1, containmentFc2, containmentFc3, containmentFc4,
-    modelRouter, modelReasoning, modelFrontier, modelData,
-    nonIntegratedSystems,
-    ...core
-  } = v;
-  const modelSelection: Record<string, string> = {};
-  if (modelRouter) modelSelection.router = modelRouter;
-  if (modelReasoning) modelSelection.reasoning = modelReasoning;
-  if (modelFrontier) modelSelection.frontier = modelFrontier;
-  if (modelData) modelSelection.data = modelData;
-  const containmentOverrides: Record<string, number> = {};
-  if (containmentFc1 !== undefined) containmentOverrides["fc1-deterministic"] = containmentFc1;
-  if (containmentFc2 !== undefined) containmentOverrides["fc2-policy"] = containmentFc2;
-  if (containmentFc3 !== undefined) containmentOverrides["fc3-multiagent"] = containmentFc3;
-  if (containmentFc4 !== undefined) containmentOverrides["fc4-frontier"] = containmentFc4;
-  return {
-    ...core,
-    ...(adoptionRate !== undefined && { adoptionRate }),
-    ...(hitlSamplingRate !== undefined && { hitlSamplingRate }),
-    ...(landscapeMaturity !== undefined && { landscapeMaturity }),
-    ...(contractYears !== undefined && { contractYears }),
-    ...(reworkRatePct !== undefined && { reworkRatePct }),
-    ...(peakLoadFactor !== undefined && { peakLoadFactor }),
-    ...(Object.keys(containmentOverrides).length > 0 && { containmentOverrides }),
-    ...(Object.keys(modelSelection).length > 0 && { modelSelection }),
-    ...((nonIntegratedSystems?.length ?? 0) > 0 && { nonIntegratedSystems })
-  };
-};
-
-/** Maps stored API inputs back onto the flat form shape. */
-const fromApiInputs = (inputs: Record<string, unknown>): z.infer<typeof formSchema> => {
-  const co = (inputs.containmentOverrides ?? {}) as Record<string, number>;
-  const ms = (inputs.modelSelection ?? {}) as Record<string, string>;
-  return {
-    ...defaultValues,
-    ...(inputs as Partial<z.infer<typeof formSchema>>),
-    adoptionRate: inputs.adoptionRate as number | undefined,
-    hitlSamplingRate: inputs.hitlSamplingRate as number | undefined,
-    landscapeMaturity: inputs.landscapeMaturity as "clean" | "mixed" | "legacy" | undefined,
-    contractYears: inputs.contractYears as number | undefined,
-    reworkRatePct: inputs.reworkRatePct as number | undefined,
-    peakLoadFactor: inputs.peakLoadFactor as number | undefined,
-    containmentFc1: co["fc1-deterministic"],
-    containmentFc2: co["fc2-policy"],
-    containmentFc3: co["fc3-multiagent"],
-    containmentFc4: co["fc4-frontier"],
-    modelRouter: ms.router,
-    modelReasoning: ms.reasoning,
-    modelFrontier: ms.frontier,
-    modelData: ms.data,
-    nonIntegratedSystems: (inputs.nonIntegratedSystems as string[] | undefined) ?? []
-  };
-};
-
-const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function Scenario() {
   const [location] = useLocation();
@@ -150,11 +103,13 @@ export default function Scenario() {
   
   const { toast } = useToast();
   const [rollup, setRollup] = useState<Rollup | null>(null);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   
   const { data: profiles, isLoading: isLoadingProfiles } = useListDistributionProfiles();
   const { data: modelCatalog } = useListModelCatalog();
   const { data: systemsCatalog } = useListSystems();
   const { data: scenarios, refetch: refetchScenarios } = useListScenarios();
+  const { data: globalAssumptions } = useListAssumptions();
   const computeRollup = useComputeRollup();
   const createScenario = useCreateScenario();
   const updateScenario = useUpdateScenario();
@@ -165,21 +120,30 @@ export default function Scenario() {
     } 
   });
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues
+    defaultValues,
   });
 
-  // Load scenario if ID in URL
+  // Load scenario if ID in URL; auto-open Tune Assumptions if saved overrides exist.
+  // fromApiInputs is used here to ensure assumptionOverrides / containmentOverrides
+  // never leak as raw top-level form keys (the root cause of the stale-override bug).
   useEffect(() => {
     if (loadedScenario) {
-      const values = fromApiInputs(loadedScenario.inputs as unknown as Record<string, unknown>);
-      form.reset(values);
-      onSubmit(values);
+      const formValues = fromApiInputs(
+        loadedScenario.inputs as unknown as Record<string, unknown>
+      ) as FormValues;
+      const hasOverrides =
+        Object.values(formValues._assumptionOverrides ?? {}).some(
+          (v) => v !== "" && v !== undefined
+        );
+      if (hasOverrides) setAssumptionsOpen(true);
+      form.reset(formValues);
+      onSubmit(formValues);
     }
-  }, [loadedScenario, form]);
+  }, [loadedScenario]);
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: FormValues) => {
     try {
       const result = await computeRollup.mutateAsync({ data: { inputs: toApiInputs(values) } });
       setRollup(result);
@@ -190,14 +154,12 @@ export default function Scenario() {
 
   const handleSave = form.handleSubmit(async (values) => {
     const name = `Scenario - ${values.employees} EEs, ${values.sector}`;
-    const inputs = toApiInputs(values);
-
     try {
       if (parsedId) {
-        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs } });
+        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs: toApiInputs(values) } });
         toast({ title: "Saved", description: "Scenario updated successfully." });
       } else {
-        await createScenario.mutateAsync({ data: { name, inputs } });
+        await createScenario.mutateAsync({ data: { name, inputs: toApiInputs(values) } });
         toast({ title: "Saved", description: "New scenario created." });
         refetchScenarios();
       }
@@ -205,6 +167,20 @@ export default function Scenario() {
       toast({ title: "Save Failed", description: "Could not save scenario.", variant: "destructive" });
     }
   });
+
+  const handleResetOverrides = () => {
+    const current = form.getValues();
+    // Build a correctly-typed partial so it is assignable to the Zod form field.
+    const cleared = Object.fromEntries(
+      OVERRIDABLE_ASSUMPTION_KEYS.map((k) => [k, "" as const])
+    ) as Partial<Record<OverridableKey, number | "">>;
+    form.reset({ ...current, _assumptionOverrides: cleared });
+  };
+
+  // Lookup global defaults for comparison in the Applied Assumptions tab
+  const globalDefaultMap = Object.fromEntries(
+    (globalAssumptions ?? []).map((a) => [a.key, a.value])
+  );
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -489,6 +465,135 @@ export default function Scenario() {
                   )} />
                 </div>
 
+
+                <Collapsible open={assumptionsOpen} onOpenChange={setAssumptionsOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between gap-2 pb-2 border-b border-border text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Settings2 className="w-4 h-4 text-primary" />
+                        <h3 className="font-semibold text-sm">Tune Assumptions</h3>
+                        {(() => {
+                          const ov = form.watch("_assumptionOverrides") ?? {};
+                          const count = Object.values(ov).filter(v => v !== "" && v !== undefined).length;
+                          return count > 0 ? (
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-primary/15 text-primary border-primary/20">
+                              {count} custom
+                            </Badge>
+                          ) : null;
+                        })()}
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${assumptionsOpen ? "rotate-180" : ""}`} />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-3 space-y-3">
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Override any global assumption for this scenario only. Leave blank to use the model default.
+                    </p>
+
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">AI model call costs</div>
+                      {(["slm-call-cost", "llm-call-cost", "frontier-call-cost"] as OverridableKey[]).map(key => {
+                        const def = globalDefaultMap[key];
+                        return (
+                          <FormField key={key} control={form.control} name={`_assumptionOverrides.${key}` as any} render={({ field }) => (
+                            <FormItem>
+                              <div className="flex items-center justify-between">
+                                <FormLabel className="text-xs font-normal text-foreground/80">
+                                  {key === "slm-call-cost" ? "SLM call" : key === "llm-call-cost" ? "LLM call" : "Frontier call"} <span className="text-muted-foreground">(USD)</span>
+                                </FormLabel>
+                                {def !== undefined && <span className="text-[10px] text-muted-foreground">default: {def}</span>}
+                              </div>
+                              <FormControl>
+                                <Input type="number" step="any" min="0" placeholder={def !== undefined ? String(def) : "default"} {...field} value={field.value ?? ""} className="bg-background h-8 text-xs" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Integration & infra</div>
+                      {(["mcp-action-cost", "infra-per-txn"] as OverridableKey[]).map(key => {
+                        const def = globalDefaultMap[key];
+                        return (
+                          <FormField key={key} control={form.control} name={`_assumptionOverrides.${key}` as any} render={({ field }) => (
+                            <FormItem>
+                              <div className="flex items-center justify-between">
+                                <FormLabel className="text-xs font-normal text-foreground/80">
+                                  {key === "mcp-action-cost" ? "MCP action" : "Infra per txn"} <span className="text-muted-foreground">(USD)</span>
+                                </FormLabel>
+                                {def !== undefined && <span className="text-[10px] text-muted-foreground">default: {def}</span>}
+                              </div>
+                              <FormControl>
+                                <Input type="number" step="any" min="0" placeholder={def !== undefined ? String(def) : "default"} {...field} value={field.value ?? ""} className="bg-background h-8 text-xs" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Landscape factors</div>
+                      {(["landscape-fanout", "country-localization"] as OverridableKey[]).map(key => {
+                        const def = globalDefaultMap[key];
+                        return (
+                          <FormField key={key} control={form.control} name={`_assumptionOverrides.${key}` as any} render={({ field }) => (
+                            <FormItem>
+                              <div className="flex items-center justify-between">
+                                <FormLabel className="text-xs font-normal text-foreground/80">
+                                  {key === "landscape-fanout" ? "Act fan-out per extra system" : "Localiz. uplift per country"}
+                                </FormLabel>
+                                {def !== undefined && <span className="text-[10px] text-muted-foreground">default: {def}</span>}
+                              </div>
+                              <FormControl>
+                                <Input type="number" step="any" min="0" placeholder={def !== undefined ? String(def) : "default"} {...field} value={field.value ?? ""} className="bg-background h-8 text-xs" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tier & company multipliers</div>
+                      {(["tier-pooled", "tier-siloed", "tier-dedicated", "company-multi-country", "company-global"] as OverridableKey[]).map(key => {
+                        const def = globalDefaultMap[key];
+                        const labels: Record<string, string> = {
+                          "tier-pooled": "Pooled multiplier", "tier-siloed": "Siloed multiplier",
+                          "tier-dedicated": "Dedicated multiplier", "company-multi-country": "Multi-country uplift",
+                          "company-global": "Global uplift",
+                        };
+                        return (
+                          <FormField key={key} control={form.control} name={`_assumptionOverrides.${key}` as any} render={({ field }) => (
+                            <FormItem>
+                              <div className="flex items-center justify-between">
+                                <FormLabel className="text-xs font-normal text-foreground/80">{labels[key]}</FormLabel>
+                                {def !== undefined && <span className="text-[10px] text-muted-foreground">default: {def}</span>}
+                              </div>
+                              <FormControl>
+                                <Input type="number" step="any" min="0" placeholder={def !== undefined ? String(def) : "default"} {...field} value={field.value ?? ""} className="bg-background h-8 text-xs" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        );
+                      })}
+                    </div>
+
+                    <Button type="button" variant="ghost" size="sm" onClick={handleResetOverrides} className="w-full text-xs text-muted-foreground hover:text-foreground h-8">
+                      <RotateCcw className="w-3 h-3 mr-1.5" />
+                      Reset all to defaults
+                    </Button>
+                  </CollapsibleContent>
+                </Collapsible>
                 <Separator />
 
                 {/* AI Model Stack */}
@@ -498,7 +603,7 @@ export default function Scenario() {
                   </h3>
                   {(["router", "reasoning", "frontier", "data"] as const).map((role) => {
                     const fieldName = role === "router" ? "modelRouter" : role === "reasoning" ? "modelReasoning" : role === "frontier" ? "modelFrontier" : "modelData";
-                    const options = (modelCatalog ?? []).filter((m) => m.role === role);
+                    const options = (modelCatalog ?? []).filter((m: { role: string; key: string; label: string; pricePerCallUsd: number; isDefault: boolean }) => m.role === role);
                     const label = role === "router" ? "Router / Classification (SLM)" : role === "reasoning" ? "Reasoning / Grounded Answers (LLM)" : role === "frontier" ? "Frontier / High-Judgment Cases (LRM)" : "Data Access / Legacy Databases (LDM)";
                     return (
                       <FormField key={role} control={form.control} name={fieldName} render={({ field }) => (
@@ -511,7 +616,7 @@ export default function Scenario() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {options.map((m) => (
+                              {options.map((m: { role: string; key: string; label: string; pricePerCallUsd: number; isDefault: boolean }) => (
                                 <SelectItem key={m.key} value={m.key}>
                                   {m.label} — ${m.pricePerCallUsd.toFixed(4)}/call{m.isDefault ? " (default)" : ""}
                                 </SelectItem>
@@ -571,6 +676,13 @@ export default function Scenario() {
                       Tier {rollup.tierMultiplier}x
                     </Badge>
                     <span>Based on {formatNumber(form.getValues().annualTransactions)} tx/yr</span>
+                    {rollup.appliedAssumptions.some(a =>
+                      globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
+                    ) && (
+                      <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px]">
+                        custom assumptions
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -651,7 +763,18 @@ export default function Scenario() {
                     <TabsTrigger value="distribution"><Database className="w-4 h-4 mr-2"/> Intent Distribution</TabsTrigger>
                     <TabsTrigger value="charts"><BarChart3 className="w-4 h-4 mr-2"/> Breakdown Charts</TabsTrigger>
                     <TabsTrigger value="build"><Database className="w-4 h-4 mr-2"/> Build Costs</TabsTrigger>
-                    <TabsTrigger value="assumptions"><Settings2 className="w-4 h-4 mr-2"/> Applied Assumptions</TabsTrigger>
+                    <TabsTrigger value="assumptions">
+                      <Settings2 className="w-4 h-4 mr-2"/> Applied Assumptions
+                      {rollup.appliedAssumptions.some(a =>
+                        globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
+                      ) && (
+                        <Badge className="ml-2 bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1">
+                          {rollup.appliedAssumptions.filter(a =>
+                            globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
+                          ).length} custom
+                        </Badge>
+                      )}
+                    </TabsTrigger>
                   </TabsList>
                 </div>
                 
@@ -675,7 +798,7 @@ export default function Scenario() {
                             <tr key={row.intentKey} className="hover:bg-muted/30 transition-colors">
                               <td className="px-4 py-3 font-medium text-foreground">
                                 {row.intentName}
-                                {row.overridden && (
+                                {(row as any).overridden && (
                                   <Badge className="ml-2 bg-violet-500/15 text-violet-600 dark:text-violet-300 border-violet-500/30 text-[10px]">SME-adjusted</Badge>
                                 )}
                               </td>
@@ -768,7 +891,7 @@ export default function Scenario() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {[...rollup.buildBreakdown].sort((a, b) => b.annualUsd - a.annualUsd).map((c) => (
+                          {[...(rollup as any).buildBreakdown].sort((a, b) => b.annualUsd - a.annualUsd).map((c) => (
                             <tr key={c.key} className="hover:bg-muted/30 transition-colors">
                               <td className="px-4 py-3">
                                 <div className="font-medium text-foreground">{c.name}</div>
@@ -787,7 +910,7 @@ export default function Scenario() {
                         <tfoot className="bg-muted/50">
                           <tr>
                             <td className="px-4 py-3 font-semibold text-xs uppercase text-muted-foreground" colSpan={2}>Total build cost in this scenario</td>
-                            <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(rollup.buildBreakdown.reduce((a, c) => a + c.oneTimeUsd, 0), true)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency((rollup as any).buildBreakdown.reduce((a: number, c: { oneTimeUsd: number }) => a + c.oneTimeUsd, 0), true)}</td>
                             <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrency(rollup.totals.buildCostUsd, true)}</td>
                           </tr>
                         </tfoot>
@@ -797,15 +920,36 @@ export default function Scenario() {
 
                   <TabsContent value="assumptions" className="m-0 h-full">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {rollup.appliedAssumptions.map(ass => (
-                        <div key={ass.key} className="bg-muted/30 p-4 rounded-lg border border-border">
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="font-semibold text-sm">{ass.label}</span>
-                            <Badge variant="outline" className="font-mono text-xs bg-card">{ass.value} {ass.unit}</Badge>
+                      {rollup.appliedAssumptions.map(ass => {
+                        const defaultVal = globalDefaultMap[ass.key];
+                        const isCustom = defaultVal !== undefined && ass.value !== defaultVal;
+                        return (
+                          <div
+                            key={ass.key}
+                            className={`p-4 rounded-lg border transition-colors ${
+                              isCustom ? "bg-amber-500/5 border-amber-500/30" : "bg-muted/30 border-border"
+                            }`}
+                          >
+                            <div className="flex justify-between items-start mb-2 gap-2">
+                              <span className="font-semibold text-sm">{ass.label}</span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {isCustom && (
+                                  <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1.5">
+                                    custom
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" className="font-mono text-xs bg-card">{ass.value} {ass.unit}</Badge>
+                              </div>
+                            </div>
+                            {isCustom && defaultVal !== undefined && (
+                              <div className="text-[11px] text-amber-600 dark:text-amber-400 mb-1.5">
+                                Default: {defaultVal} {ass.unit}
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground">{ass.rationale}</p>
                           </div>
-                          <p className="text-xs text-muted-foreground">{ass.rationale}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </TabsContent>
 
@@ -819,3 +963,4 @@ export default function Scenario() {
     </div>
   );
 }
+const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];

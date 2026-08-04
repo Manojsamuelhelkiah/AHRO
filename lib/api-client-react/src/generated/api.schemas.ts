@@ -177,6 +177,10 @@ export interface CorpusSummary {
 export type ScenarioInputsIntentShareOverrides = {[key: string]: number};
 
 /**
+ * Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.
+ */
+export type ScenarioInputsAssumptionOverrides = {[key: string]: number};
+/**
  * Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-* assumptions. Uncontained transactions still incur AI/infra cost but fall back to full as-is human handling and yield no benefit.
  */
 export type ScenarioInputsContainmentOverrides = {[key: string]: number};
@@ -204,6 +208,8 @@ export interface ScenarioInputs {
   countries: number;
   /** Optional manual overrides of intent shares (intent key to share fraction) */
   intentShareOverrides?: ScenarioInputsIntentShareOverrides;
+  /** Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers. */
+  assumptionOverrides?: ScenarioInputsAssumptionOverrides;
   /** Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit. */
   adoptionRate?: number;
   /** Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-* assumptions. Uncontained transactions still incur AI/infra cost but fall back to full as-is human handling and yield no benefit. */
@@ -381,4 +387,3 @@ export interface FlowOverrideInput {
   actGetActions?: number;
   actPutActions?: number;
 }
-

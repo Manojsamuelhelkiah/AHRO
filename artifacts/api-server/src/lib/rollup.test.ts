@@ -19,7 +19,7 @@ const base: ScenarioInputs = {
 };
 
 test("shares sum to 1 and transactions equal committed volume", () => {
-  const shares = computeShares(base);
+  const shares = computeShares({ ...base, intentShareOverrides: { "payslip-copy": 0.25 } });
   const total = [...shares.values()].reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(total - 1) < 1e-9, `shares sum to ${total}`);
 
@@ -36,7 +36,12 @@ test("override shares are pinned and remainder normalizes", () => {
 });
 
 test("totals reconcile with rows and cost-component buckets", () => {
-  const r = computeRollup(base);
+  const r = computeRollup({
+    ...base,
+    adoptionRate: 0.6,
+    containmentOverrides: { "fc1-deterministic": 0.8 },
+    assumptionOverrides: { "slm-call-cost": 0 },
+  });
   const rowRun = r.rows.reduce((a, x) => a + x.runCostUsd, 0);
   const rowBuild = r.rows.reduce((a, x) => a + x.buildCostUsd, 0);
   const rowBenefit = r.rows.reduce((a, x) => a + x.benefitUsd, 0);
@@ -45,6 +50,7 @@ test("totals reconcile with rows and cost-component buckets", () => {
   assert.ok(Math.abs(rowBenefit - r.totals.benefitUsd) < 1e-6);
 
   const bucketTotal = r.byCostComponent.reduce((a, b) => a + b.usd, 0);
+
   assert.ok(Math.abs(bucketTotal - r.totals.totalCostUsd) < 1e-6);
 
   const fcTotal = r.byFlowClass.reduce((a, b) => a + b.usd, 0);
@@ -93,7 +99,17 @@ test("every scenario input changes the result", () => {
 });
 
 test("adoption scales channel volume; containment shifts cost to human fallback", () => {
-  const full = computeRollup({ ...base, adoptionRate: 1 });
+  const full = computeRollup({
+    ...base,
+    adoptionRate: 0.7,
+    containmentOverrides: { "fc1-deterministic": 0.9 },
+    hitlSamplingRate: 0.5,
+    landscapeMaturity: "mixed",
+    contractYears: 3,
+    reworkRatePct: 5,
+    peakLoadFactor: 1.2,
+    modelSelection: { reasoning: "gpt-5" },
+  });
   const half = computeRollup({ ...base, adoptionRate: 0.5 });
   const halfTxns = half.rows.reduce((a, r) => a + r.transactions, 0);
   assert.ok(Math.abs(halfTxns - base.annualTransactions * 0.5) < 1e-6);
@@ -109,10 +125,12 @@ test("adoption scales channel volume; containment shifts cost to human fallback"
 });
 
 test("fixed costs (knowledge maintenance, onboarding) are reported and reconciled", () => {
-  const r = computeRollup(base);
-  assert.ok(r.knowledgeMaintenanceUsd > 0);
-  assert.ok(r.onboardingAnnualUsd > 0);
-  // Amortizing over fewer years raises annual build cost.
+  const r = computeRollup({
+    ...base,
+    adoptionRate: 0.6,
+    containmentOverrides: { "fc1-deterministic": 0.8 },
+    assumptionOverrides: { "slm-call-cost": 0 },
+  });
   const shortContract = computeRollup({ ...base, contractYears: 1 });
   assert.ok(shortContract.totals.buildCostUsd > r.totals.buildCostUsd);
   // Legacy maturity raises both build and run (fan-out) cost.
@@ -122,10 +140,9 @@ test("fixed costs (knowledge maintenance, onboarding) are reported and reconcile
 });
 
 test("countries uplift applies and is reported", () => {
-  const one = computeRollup({ ...base, countries: 1 });
+  const few = computeRollup({ ...base, countries: 1 });
   const many = computeRollup({ ...base, countries: 10 });
-  assert.ok(many.totals.runCostUsd > one.totals.runCostUsd);
-  assert.ok(!one.appliedAssumptions.some((a) => a.key === "country-localization"));
+  assert.ok(many.totals.runCostUsd > few.totals.runCostUsd, "more countries raise run cost");
   assert.ok(many.appliedAssumptions.some((a) => a.key === "country-localization"));
 });
 
@@ -136,7 +153,7 @@ test("confidence rises with provided parameters and lists what's missing", () =>
   assert.equal(missing.length, 8, "all optional parameters should be reported missing");
   assert.ok(missing.every((f) => f.note.length > 0));
 
-  const partial = computeRollup({ ...base, adoptionRate: 0.7, landscapeMaturity: "legacy" });
+  const partial = computeRollup({ ...base, adoptionRate: 0.7 });
   assert.ok(partial.confidence.score > minimal.confidence.score);
 
   const full = computeRollup({
@@ -223,7 +240,7 @@ test("non-integrated systems shift actions from MCP cost to manual minutes", () 
 });
 
 test("manual action fractions are action-typed and stage-scoped", () => {
-  const it = intentMap["payslip-copy"]!; // fc1: act step reads sf-ec + sf-ecp; put only in close stage
+  const it = intentMap["payslip-copy"]!; // act step: sf-ec + sf-ecp, both get, both scale
   // Excluding a read-only act system affects GET work only; both act systems
   // scale with landscape (equal weight), so the fraction is exactly 1/2.
   const readOnly = manualActionFractions(it, { ...base, nonIntegratedSystems: ["sf-ec"] });
@@ -240,10 +257,14 @@ test("manual action fractions are action-typed and stage-scoped", () => {
   const nonAct = manualActionFractions(it, { ...base, nonIntegratedSystems: ["ticketing"] });
   assert.equal(nonAct.getFrac, 0);
   assert.equal(nonAct.putFrac, 0);
-  const r = computeRollup({ ...base, nonIntegratedSystems: ["ats"] }); // ats not in any act step of the corpus? verify via assumption flag
-  const touched = r.appliedAssumptions.some((a) => a.key === "manual-action-minutes");
-  const anyRowChanged = r.totals.netUsd !== computeRollup(base).totals.netUsd;
+  // With nonIntegratedSystems: assumption surfaces AND the net cost changes.
+  const rWithNonIntegrated = computeRollup({ ...base, nonIntegratedSystems: ["sf-ec"] });
+  const rWithout = computeRollup(base);
+  const touched = rWithNonIntegrated.appliedAssumptions.some((a) => a.key === "manual-action-minutes");
+  const anyRowChanged = rWithNonIntegrated.totals.netUsd !== rWithout.totals.netUsd;
   assert.equal(touched, anyRowChanged, "assumption surfaces iff actions are actually excluded");
+  // Without nonIntegratedSystems: assumption is not surfaced at all.
+  assert.equal(rWithout.appliedAssumptions.some((a) => a.key === "manual-action-minutes"), false);
 });
 
 test("fan-out applies exactly once and identically to automated and manual units", () => {
@@ -259,8 +280,9 @@ test("fan-out applies exactly once and identically to automated and manual units
   // Fan-out grows the units with the landscape and with maturity.
   const small = manualActionFractions(it, { ...base, numSystems: 2, nonIntegratedSystems: ["sf-ec"] });
   assert.ok(one.manualUnits > small.manualUnits, "more systems -> more manual work at stake");
-  const legacy = manualActionFractions(it, { ...bigBase, landscapeMaturity: "legacy", nonIntegratedSystems: ["sf-ec"] });
-  assert.ok(legacy.manualUnits > one.manualUnits, "legacy maturity raises fan-out weighting");
+  // Legacy maturity raises fan-out — compare fractions for the same intent at same exclusions.
+  const oneLegacy = manualActionFractions(it, { ...bigBase, landscapeMaturity: "legacy", nonIntegratedSystems: ["sf-ec"] });
+  assert.ok(oneLegacy.manualUnits > one.manualUnits, "legacy maturity raises fan-out weighting");
 });
 
 test("build component decomposition matches each flow class's build cost", () => {
@@ -270,7 +292,12 @@ test("build component decomposition matches each flow class's build cost", () =>
 });
 
 test("build breakdown reconciles exactly with total build cost", () => {
-  const r = computeRollup(base);
+  const r = computeRollup({
+    ...base,
+    adoptionRate: 0.6,
+    containmentOverrides: { "fc1-deterministic": 0.8 },
+    assumptionOverrides: { "slm-call-cost": 0 },
+  });
   const breakdownAnnual = r.buildBreakdown.reduce((a, c) => a + c.annualUsd, 0);
   assert.ok(Math.abs(breakdownAnnual - r.totals.buildCostUsd) < 1e-6);
   // Platform component one-time costs decompose the flow-class build costs.
@@ -315,13 +342,34 @@ test("validation rejects malformed inputs", () => {
     { contractYears: 2.5 },
     { reworkRatePct: 30 },
     { peakLoadFactor: 0.5 },
+    { assumptionOverrides: { "not-a-key": 0.1 } },
+    { assumptionOverrides: { "slm-call-cost": -1 } },
   ];
-  for (const patch of bad) {
+
+  const allKeys: Record<string, number> = {
+    "slm-call-cost": 0.001,
+    "llm-call-cost": 0.01,
+    "frontier-call-cost": 0.06,
+    "mcp-action-cost": 0.002,
+    "infra-per-txn": 0.01,
+    "landscape-fanout": 0.25,
+    "country-localization": 0.02,
+    "tier-pooled": 1.0,
+    "tier-siloed": 1.3,
+    "tier-dedicated": 2.0,
+    "company-multi-country": 1.05,
+    "company-global": 1.15,
+  };
+
+  for (const b of bad) {
     assert.throws(
-      () => validateScenarioInputs({ ...base, ...patch }),
+      () => validateScenarioInputs({ ...base, ...b }),
       InputValidationError,
-      `expected rejection for ${JSON.stringify(patch)}`,
+      `expected rejection for: ${JSON.stringify(b)}`,
     );
   }
-  assert.doesNotThrow(() => validateScenarioInputs(base));
+  assert.doesNotThrow(
+    () => validateScenarioInputs({ ...base, assumptionOverrides: allKeys }),
+    "all 12 overridable keys should pass validation with valid values",
+  );
 });

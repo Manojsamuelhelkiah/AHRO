@@ -4,6 +4,7 @@ import { profileMap } from "../data/profiles";
 import { MODEL_ROLES, modelCatalogMap } from "../data/model-catalog";
 import { systems } from "../data/systems";
 import type { ScenarioInputs } from "./rollup";
+import { OVERRIDABLE_ASSUMPTION_KEYS } from "./rollup";
 
 export class InputValidationError extends Error {
   status = 400;
@@ -70,6 +71,22 @@ export function validateScenarioInputs(inputs: ScenarioInputs): void {
       throw new InputValidationError(
         `intentShareOverrides sum to ${total.toFixed(3)}; they must not exceed 1`,
       );
+    }
+  }
+
+  const assumptionOverrides = inputs.assumptionOverrides;
+  if (assumptionOverrides) {
+    for (const [key, value] of Object.entries(assumptionOverrides)) {
+      if (!OVERRIDABLE_ASSUMPTION_KEYS.has(key)) {
+        throw new InputValidationError(
+          `"${key}" is not an overridable assumption key. Allowed keys: ${[...OVERRIDABLE_ASSUMPTION_KEYS].join(", ")}`,
+        );
+      }
+      if (!Number.isFinite(value) || value < 0) {
+        throw new InputValidationError(
+          `assumptionOverrides["${key}"] must be a non-negative finite number`,
+        );
+      }
     }
   }
 
