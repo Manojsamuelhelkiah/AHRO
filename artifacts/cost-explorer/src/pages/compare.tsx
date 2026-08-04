@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import {
   useListScenarios,
@@ -23,8 +24,9 @@ import {
   Calculator,
   GitCompareArrows,
   PlusCircle,
-  X,
+  Printer,
   Star,
+  X,
 } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import {
@@ -189,6 +191,404 @@ const METRICS: MetricDef[] = [
   },
 ];
 
+// ─── Print portal (N-scenario one-pager) ─────────────────────────────────────
+
+interface PrintPortalProps {
+  slots: (number | null)[];
+  activeSlots: SlotState[];
+  intentDeltas: ReturnType<typeof buildIntentDeltas>;
+  effectiveBaselineId: number | null;
+  baselineIdx: number;
+  exportDate: string;
+}
+
+function PrintPortal({
+  slots,
+  activeSlots,
+  intentDeltas,
+  effectiveBaselineId,
+  baselineIdx,
+  exportDate,
+}: PrintPortalProps) {
+  const portal = document.getElementById("print-portal");
+  if (!portal) return null;
+
+  // Filled slots only (slot has an id AND a loaded rollup)
+  const filledSlots = activeSlots
+    .map((s, i) => ({ s, i }))
+    .filter(({ s, i }) => slots[i] !== null && s.rollup !== null);
+
+  if (filledSlots.length < 2) return null;
+
+  // Scenario names for the header subtitle
+  const scenarioNames = filledSlots.map(
+    ({ s, i }) => s.scenario?.name ?? `Scenario ${i + 1}`,
+  );
+  const baselineName =
+    baselineIdx >= 0
+      ? (activeSlots[baselineIdx]?.scenario?.name ?? `Scenario ${baselineIdx + 1}`)
+      : scenarioNames[0];
+
+  // Top 10 intent rows (already sorted by maxAbsDelta desc)
+  const topIntents = intentDeltas.slice(0, 10);
+
+  // Per-scenario font size for headline table — shrink slightly when ≥ 4 scenarios
+  const tableFontSz = filledSlots.length >= 4 ? "7.5pt" : "8.5pt";
+
+  const content = (
+    <div
+      className="print-content"
+      style={{ fontFamily: "Inter, sans-serif", color: "#000" }}
+    >
+      {/* ── Document header ─────────────────────────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: "10pt",
+          borderBottom: "2pt solid #1e3a5f",
+          paddingBottom: "6pt",
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: "15pt", fontWeight: 700, margin: 0, color: "#1e293b" }}>
+            Scenario Comparison
+          </h1>
+          <div style={{ fontSize: "8.5pt", color: "#475569", marginTop: "2pt" }}>
+            {scenarioNames.map((name, idx) => (
+              <span key={idx}>
+                {idx > 0 && <span style={{ color: "#94a3b8", margin: "0 4pt" }}>·</span>}
+                <span
+                  style={{
+                    fontWeight: slots[filledSlots[idx]?.i] === effectiveBaselineId ? 700 : 500,
+                  }}
+                >
+                  {name}
+                  {slots[filledSlots[idx]?.i] === effectiveBaselineId && (
+                    <span style={{ color: "#d97706", marginLeft: "3pt" }}>★</span>
+                  )}
+                </span>
+              </span>
+            ))}
+          </div>
+          <div style={{ fontSize: "7.5pt", color: "#94a3b8", marginTop: "2pt" }}>
+            Baseline: <strong style={{ color: "#475569" }}>{baselineName}</strong>
+            {" "}— deltas shown vs baseline
+          </div>
+        </div>
+        <div style={{ textAlign: "right", fontSize: "8pt", color: "#64748b" }}>
+          <div style={{ fontWeight: 600 }}>HRO Intent Flow Cost-Benefit Explorer</div>
+          <div>{exportDate}</div>
+        </div>
+      </div>
+
+      {/* ── Headline metrics ─────────────────────────────────────────────────── */}
+      <div
+        className="print-section"
+        style={{ marginBottom: "10pt" }}
+      >
+        <div
+          style={{
+            fontSize: "8pt",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.07em",
+            color: "#475569",
+            borderBottom: "1pt solid #cbd5e1",
+            paddingBottom: "2pt",
+            marginBottom: "4pt",
+          }}
+        >
+          Headline Metrics
+        </div>
+        <table
+          style={{ width: "100%", borderCollapse: "collapse", fontSize: tableFontSz }}
+        >
+          <thead>
+            <tr style={{ background: "#f1f5f9" }}>
+              <th
+                style={{
+                  padding: "3pt 6pt",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  borderBottom: "1pt solid #cbd5e1",
+                  color: "#334155",
+                }}
+              >
+                Metric
+              </th>
+              {filledSlots.map(({ s, i }) => {
+                const isBase = slots[i] === effectiveBaselineId;
+                const name = s.scenario?.name ?? `Scenario ${i + 1}`;
+                return (
+                  <th
+                    key={i}
+                    style={{
+                      padding: "3pt 6pt",
+                      textAlign: "right",
+                      fontWeight: 600,
+                      borderBottom: "1pt solid #cbd5e1",
+                      color: isBase ? "#92400e" : "#334155",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isBase ? `★ ${name}` : name}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {METRICS.map((m) => {
+              const baselineRollup =
+                baselineIdx >= 0 ? activeSlots[baselineIdx]?.rollup : null;
+              const baselineVal = baselineRollup ? m.get(baselineRollup) : null;
+
+              return (
+                <tr key={m.label} style={{ borderBottom: "0.5pt solid #e2e8f0" }}>
+                  <td style={{ padding: "2.5pt 6pt", color: "#475569" }}>{m.label}</td>
+                  {filledSlots.map(({ s, i }) => {
+                    if (!s.rollup) return <td key={i} />;
+                    const val = m.get(s.rollup);
+                    const isBase = slots[i] === effectiveBaselineId;
+                    const d =
+                      !isBase && baselineVal !== null
+                        ? calcDelta(val, baselineVal, m.fav)
+                        : null;
+                    const deltaStr = d
+                      ? d.favorable === null
+                        ? ""
+                        : `${d.delta > 0 ? "+" : ""}${m.format(d.delta)} ${d.delta > 0 ? "↑" : "↓"} (${d.pct >= 0 ? "+" : ""}${(d.pct * 100).toFixed(1)}%)`
+                      : "";
+                    const deltaColor =
+                      d && d.favorable !== null
+                        ? d.favorable
+                          ? "#059669"
+                          : "#dc2626"
+                        : "#64748b";
+
+                    return (
+                      <td
+                        key={i}
+                        style={{ padding: "2.5pt 6pt", textAlign: "right" }}
+                      >
+                        <div
+                          style={{
+                            fontFamily: "monospace",
+                            fontWeight: 600,
+                            color: "#1e293b",
+                          }}
+                        >
+                          {m.format(val)}
+                        </div>
+                        {deltaStr && (
+                          <div
+                            style={{
+                              fontSize: "6.5pt",
+                              fontFamily: "monospace",
+                              color: deltaColor,
+                              marginTop: "1pt",
+                            }}
+                          >
+                            {deltaStr}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Top intent divergences ───────────────────────────────────────────── */}
+      <div className="print-section">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            borderBottom: "1pt solid #cbd5e1",
+            paddingBottom: "2pt",
+            marginBottom: "4pt",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "8pt",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.07em",
+              color: "#475569",
+            }}
+          >
+            Top Intent Divergences
+          </div>
+          <div style={{ fontSize: "7pt", color: "#94a3b8" }}>
+            Sorted by max |Δ Net| vs baseline — top {topIntents.length} of{" "}
+            {intentDeltas.length}
+          </div>
+        </div>
+        <table
+          style={{ width: "100%", borderCollapse: "collapse", fontSize: "7.5pt" }}
+        >
+          <thead>
+            <tr style={{ background: "#f1f5f9" }}>
+              <th
+                style={{
+                  padding: "3pt 6pt",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  borderBottom: "1pt solid #cbd5e1",
+                  color: "#334155",
+                }}
+              >
+                Intent
+              </th>
+              <th
+                style={{
+                  padding: "3pt 6pt",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  borderBottom: "1pt solid #cbd5e1",
+                  color: "#334155",
+                }}
+              >
+                Domain
+              </th>
+              {filledSlots.map(({ s, i }) => {
+                const isBase = slots[i] === effectiveBaselineId;
+                const name = s.scenario?.name ?? `Scenario ${i + 1}`;
+                return (
+                  <th
+                    key={i}
+                    style={{
+                      padding: "3pt 6pt",
+                      textAlign: "right",
+                      fontWeight: 600,
+                      borderBottom: "1pt solid #cbd5e1",
+                      color: isBase ? "#92400e" : "#334155",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isBase ? `★ ${name}` : name}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {topIntents.map((row) => {
+              const baselineNet =
+                baselineIdx >= 0 ? (row.netBySlot[baselineIdx] ?? 0) : 0;
+
+              return (
+                <tr key={row.intentKey} style={{ borderBottom: "0.5pt solid #e2e8f0" }}>
+                  <td
+                    style={{
+                      padding: "2pt 6pt",
+                      fontWeight: 500,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {row.intentName}
+                  </td>
+                  <td style={{ padding: "2pt 6pt" }}>
+                    <span
+                      style={{
+                        border: "0.5pt solid #cbd5e1",
+                        borderRadius: "3pt",
+                        padding: "0 3pt",
+                        fontSize: "6.5pt",
+                        color: "#475569",
+                      }}
+                    >
+                      {row.domain}
+                    </span>
+                  </td>
+                  {filledSlots.map(({ i }) => {
+                    const net = row.netBySlot[i] ?? 0;
+                    const isBase = slots[i] === effectiveBaselineId;
+                    const netColor = net >= 0 ? "#059669" : "#dc2626";
+                    const d =
+                      !isBase
+                        ? calcDelta(net, baselineNet, "higher-is-better")
+                        : null;
+                    const deltaStr = d
+                      ? d.favorable === null
+                        ? ""
+                        : `${d.delta > 0 ? "+" : ""}${formatCurrency(d.delta, true)} ${d.delta > 0 ? "↑" : "↓"}`
+                      : "";
+                    const deltaColor =
+                      d && d.favorable !== null
+                        ? d.favorable
+                          ? "#059669"
+                          : "#dc2626"
+                        : "#64748b";
+
+                    return (
+                      <td
+                        key={i}
+                        style={{ padding: "2pt 6pt", textAlign: "right" }}
+                      >
+                        <div
+                          style={{
+                            fontFamily: "monospace",
+                            fontWeight: 600,
+                            color: netColor,
+                          }}
+                        >
+                          {net >= 0 ? "+" : ""}
+                          {formatCurrency(net, true)}
+                        </div>
+                        {deltaStr && (
+                          <div
+                            style={{
+                              fontSize: "6.5pt",
+                              fontFamily: "monospace",
+                              color: deltaColor,
+                              marginTop: "1pt",
+                            }}
+                          >
+                            {deltaStr}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Footer ──────────────────────────────────────────────────────────── */}
+      <div
+        style={{
+          marginTop: "8pt",
+          fontSize: "7pt",
+          color: "#94a3b8",
+          borderTop: "0.5pt solid #e2e8f0",
+          paddingTop: "4pt",
+          display: "flex",
+          justifyContent: "space-between",
+        }}
+      >
+        <span>Generated by HRO Intent Flow Cost-Benefit Explorer</span>
+        <span>
+          Δ vs {baselineName} &nbsp;·&nbsp; ↑ higher &nbsp;·&nbsp; green = favorable
+        </span>
+      </div>
+    </div>
+  );
+
+  return createPortal(content, portal);
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function Compare() {
@@ -270,6 +670,10 @@ export default function Compare() {
     }
   };
 
+  const handleExport = () => {
+    window.print();
+  };
+
   // ── Ready state ──────────────────────────────────────────────────────────────
   const filledSlotCount = slots.filter((id) => id !== null).length;
   const loadedRollupCount = activeSlots.filter(
@@ -287,6 +691,13 @@ export default function Compare() {
         baselineIdx >= 0 ? baselineIdx : 0,
       )
     : [];
+
+  // Export date
+  const exportDate = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   // ── Loading skeleton ─────────────────────────────────────────────────────────
   if (isLoadingScenarios) {
@@ -322,18 +733,31 @@ export default function Compare() {
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       {/* Page header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Scenario Comparison
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Compare up to {MAX_SCENARIOS} saved scenarios side-by-side. Mark one as
-          baseline — all deltas are computed against it.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Scenario Comparison
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Compare up to {MAX_SCENARIOS} saved scenarios side-by-side. Mark one as
+            baseline — all deltas are computed against it.
+          </p>
+        </div>
+        {readyToCompare && (
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            className="shrink-0 gap-2 print:hidden"
+            title="Export as PDF via browser print dialog"
+          >
+            <Printer className="w-4 h-4" />
+            Export / Print
+          </Button>
+        )}
       </div>
 
       {/* ── Selector bar ──────────────────────────────────────────────────────── */}
-      <Card className="shadow-sm border-border">
+      <Card className="shadow-sm border-border print:hidden">
         <CardContent className="p-4">
           <div className="flex flex-wrap gap-3 items-end">
             {slots.map((id, slotIdx) => {
@@ -671,6 +1095,16 @@ export default function Compare() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Print portal — rendered outside app shell, only visible when printing */}
+          <PrintPortal
+            slots={slots}
+            activeSlots={activeSlots}
+            intentDeltas={intentDeltas}
+            effectiveBaselineId={effectiveBaselineId}
+            baselineIdx={baselineIdx >= 0 ? baselineIdx : 0}
+            exportDate={exportDate}
+          />
         </>
       ) : null}
     </div>

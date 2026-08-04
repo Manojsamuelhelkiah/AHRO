@@ -162,6 +162,72 @@
   }
 }
 
+/* ─── Print / Export styles ──────────────────────────────────────────────────
+   These rules make the Compare page render as a clean one-pager when the user
+   invokes window.print() (or uses the browser's Print-to-PDF option).
+   All app chrome is hidden; only .print-content is shown.
+ */
+@media print {
+  /* Reset page to full width, no margins that clip content */
+  @page {
+    size: A4 landscape;
+    margin: 14mm 16mm;
+  }
+
+  /* Kill the shell */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 10pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide every element by default, then show only .print-content */
+  body > * {
+    display: none !important;
+  }
+
+  /* The Vite #root hosts everything – we selectively show the print target */
+  #root {
+    display: block !important;
+  }
+
+  /* Hide the full app shell */
+  #root > * {
+    display: none !important;
+  }
+
+  /* Show only the portalled print container */
+  #print-portal {
+    display: block !important;
+    position: static !important;
+  }
+
+  .print-content {
+    display: block !important;
+    width: 100%;
+    page-break-inside: avoid;
+  }
+
+  /* Typography resets for print */
+  .print-content h1 { font-size: 15pt; font-weight: 700; margin: 0 0 2pt; }
+  .print-content h2 { font-size: 10pt; font-weight: 600; margin: 6pt 0 2pt; }
+  .print-content table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  .print-content th { background: #f1f5f9 !important; font-weight: 600; padding: 3pt 6pt; text-align: left; border-bottom: 1pt solid #cbd5e1; }
+  .print-content th.right, .print-content td.right { text-align: right; }
+  .print-content td { padding: 2.5pt 6pt; border-bottom: 0.5pt solid #e2e8f0; }
+  .print-content .section-title { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; padding: 4pt 0 2pt; border-bottom: 1pt solid #cbd5e1; margin-bottom: 2pt; }
+  .print-content .mono { font-family: 'JetBrains Mono', monospace; }
+  .print-content .up { color: #059669 !important; }
+  .print-content .down { color: #dc2626 !important; }
+  .print-content .neutral { color: #64748b !important; }
+  .print-content .badge { border: 0.5pt solid #cbd5e1; border-radius: 3pt; padding: 0 3pt; font-size: 7pt; }
+
+  /* Keep the two sections together but allow a page break between them if truly needed */
+  .print-section { page-break-inside: avoid; }
+}
+
 /* Custom scrollbar for data tables */
 ::-webkit-scrollbar {
   width: 6px;
