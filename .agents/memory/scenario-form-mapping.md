@@ -1,9 +1,12 @@
 ---
 name: Scenario form/API mapping
-description: Rule for mapping ScenarioInputs between API and form state in cost-explorer
+description: Durable convention for mapping scenario form state to/from API inputs
 ---
-Use one canonical mapper pair (`toApiInputs` / `fromApiInputs` in cost-explorer's scenario-mapper lib) for scenario form ⇄ API conversion; never spread raw API inputs into form state.
 
-**Why:** Spreading raw `inputs` left a stale top-level `assumptionOverrides` key in form state, so "Reset all to defaults" silently kept applying old overrides on recompute/save. Duplicate mappers also drifted (one missed containment fields).
+# Scenario form/API mapping
 
-**How to apply:** Any new ScenarioInputs field with a form-side private representation must be explicitly destructured out in `fromApiInputs` and rebuilt in `toApiInputs`; extend the mapper tests when adding fields.
+Always map scenario form state through the single canonical mapper pair (one shared module, no page-local duplicates). Never spread raw API inputs into form state.
+
+**Why:** page-local mapper copies silently dropped assumption overrides and legacy scalar fields on load/save round-trips.
+
+**How to apply:** any new ScenarioInputs field must be added to the canonical mappers plus a round-trip test (load → compute → save preserves it, including legacy-field fallbacks).

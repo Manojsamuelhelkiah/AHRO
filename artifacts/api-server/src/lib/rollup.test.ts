@@ -5,6 +5,7 @@ import { intentMap } from "../data/intents";
 import { flowClassMap } from "../data/flow-classes";
 import { componentSumFor } from "../data/build-components";
 import { validateScenarioInputs, validateActualsOverlay, InputValidationError } from "./validate-inputs";
+import { assumptionMap } from "../data/assumptions";
 import type { ActualsOverlay } from "../data/types";
 
 const base: ScenarioInputs = {
@@ -19,14 +20,17 @@ const base: ScenarioInputs = {
   countries: 6,
 };
 
+// ─── Core share / rollup tests ────────────────────────────────────────────────
+
 test("shares sum to 1 and transactions equal committed volume", () => {
-  const shares = computeShares({ ...base, intentShareOverrides: { "payslip-copy": 0.25 } });
+  const shares = computeShares(base);
   const total = [...shares.values()].reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(total - 1) < 1e-9, `shares sum to ${total}`);
 
   const rollup = computeRollup(base);
+  // Year-1 transactions = committed volume × ramp[0] (0.40 default).
   const txns = rollup.rows.reduce((a, r) => a + r.transactions, 0);
-  assert.ok(Math.abs(txns - base.annualTransactions) < 1e-6);
+  assert.ok(Math.abs(txns - base.annualTransactions * 0.40) < 1e-4);
 });
 
 test("override shares are pinned and remainder normalizes", () => {
@@ -51,7 +55,6 @@ test("totals reconcile with rows and cost-component buckets", () => {
   assert.ok(Math.abs(rowBenefit - r.totals.benefitUsd) < 1e-6);
 
   const bucketTotal = r.byCostComponent.reduce((a, b) => a + b.usd, 0);
-
   assert.ok(Math.abs(bucketTotal - r.totals.totalCostUsd) < 1e-6);
 
   const fcTotal = r.byFlowClass.reduce((a, b) => a + b.usd, 0);
@@ -118,7 +121,7 @@ test("adoption scales channel volume; containment shifts cost to human fallback"
 
   const low = computeRollup({ ...base, containmentOverrides: {
     "fc1-deterministic": 0.4, "fc2-policy": 0.4, "fc3-multiagent": 0.4, "fc4-frontier": 0.4,
-  }});
+  } });
   assert.ok(low.totals.benefitUsd < full.totals.benefitUsd, "lower containment must cut benefit");
   const humanLow = low.byCostComponent.find((c) => c.key === "human")!.usd;
   const humanFull = full.byCostComponent.find((c) => c.key === "human")!.usd;
@@ -132,12 +135,14 @@ test("fixed costs (knowledge maintenance, onboarding) are reported and reconcile
     containmentOverrides: { "fc1-deterministic": 0.8 },
     assumptionOverrides: { "slm-call-cost": 0 },
   });
-  const shortContract = computeRollup({ ...base, contractYears: 1 });
+  // Shorter contract raises annual amortized build cost.
+  const shortContract = computeRollup({ ...base, adoptionRate: 0.6, contractYears: 1 });
   assert.ok(shortContract.totals.buildCostUsd > r.totals.buildCostUsd);
-  // Legacy maturity raises both build and run (fan-out) cost.
+  // Legacy maturity raises both build and run (fan-out) cost vs a clean baseline.
+  const baseClean = computeRollup(base);
   const legacy = computeRollup({ ...base, landscapeMaturity: "legacy" });
-  assert.ok(legacy.totals.buildCostUsd > r.totals.buildCostUsd);
-  assert.ok(legacy.totals.runCostUsd > r.totals.runCostUsd);
+  assert.ok(legacy.totals.buildCostUsd > baseClean.totals.buildCostUsd);
+  assert.ok(legacy.totals.runCostUsd > baseClean.totals.runCostUsd);
 });
 
 test("countries uplift applies and is reported", () => {
@@ -151,26 +156,52 @@ test("confidence rises with provided parameters and lists what's missing", () =>
   const minimal = computeRollup(base);
   assert.equal(minimal.confidence.level, "low");
   const missing = minimal.confidence.factors.filter((f) => !f.provided);
-  assert.equal(missing.length, 8, "all optional parameters should be reported missing");
+  assert.equal(missing.length, 7, "all optional parameters should be reported missing");
   assert.ok(missing.every((f) => f.note.length > 0));
 
   const partial = computeRollup({ ...base, adoptionRate: 0.7 });
   assert.ok(partial.confidence.score > minimal.confidence.score);
 
+  // 1-of-4 FC containment supplied → partial fractional credit (1/4 of weight), NOT full.
+  const oneFC = computeRollup({
+    ...base,
+    containmentOverrides: { "fc1-deterministic": 0.9 },
+  });
+  const containmentFactor = oneFC.confidence.factors.find((f) => f.key === "containmentRates")!;
+  assert.ok(containmentFactor.provided, "containment is partially provided");
+  assert.ok(containmentFactor.fraction < 1, "fraction must be < 1 when only 1 of 4 FCs supplied");
+  assert.ok(containmentFactor.fraction > 0, "fraction must be > 0 when 1 FC supplied");
+
+  // Score must be strictly less than if all 4 FCs were supplied.
+  const allFC = computeRollup({
+    ...base,
+    containmentRates: { "fc1-deterministic": 0.9, "fc2-policy": 0.8, "fc3-multiagent": 0.7, "fc4-frontier": 0.6 },
+  });
+  assert.ok(
+    oneFC.confidence.score < allFC.confidence.score,
+    "partial FC coverage must score lower than full FC coverage",
+  );
+
+  // Supply all 4 FC containment rates plus all other optional fields to get score = 100.
   const full = computeRollup({
     ...base,
     adoptionRate: 0.7,
-    containmentOverrides: { "fc1-deterministic": 0.9 },
+    containmentRates: {
+      "fc1-deterministic": 0.95,
+      "fc2-policy": 0.88,
+      "fc3-multiagent": 0.80,
+      "fc4-frontier": 0.70,
+    },
     hitlSamplingRate: 0.5,
     landscapeMaturity: "mixed",
     contractYears: 3,
     reworkRatePct: 5,
     peakLoadFactor: 1.2,
-    modelSelection: { reasoning: "gpt-5" },
   });
   assert.equal(full.confidence.score, 100);
   assert.equal(full.confidence.level, "high");
   assert.ok(full.confidence.factors.every((f) => f.provided));
+  assert.ok(full.confidence.factors.every((f) => f.fraction === 1), "every factor must be fully provided");
 });
 
 test("model selection reprices AI consumption exactly", () => {
@@ -433,6 +464,153 @@ test("flow override is accepted on a custom intent key and adjusts the row", () 
   assert.ok(Math.abs(rowRun - with_.totals.runCostUsd) < 1e-6, "totals reconcile with override on custom intent");
 });
 
+// ─── Per-FC precision: containment, adoption ramp, HITL sampling ──────────────
+
+test("full containment=1 across all FCs yields maximum benefit", () => {
+  const full: ScenarioInputs = {
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    containmentRates: {
+      "fc1-deterministic": 1,
+      "fc2-policy": 1,
+      "fc3-multiagent": 1,
+      "fc4-frontier": 1,
+    },
+    hitlSamplingRates: {
+      "fc1-deterministic": 1,
+      "fc2-policy": 1,
+      "fc3-multiagent": 1,
+      "fc4-frontier": 1,
+    },
+  };
+  const r = computeRollup(full);
+  // rows.transactions should sum to annualTransactions when ramp=1
+  const txns = r.rows.reduce((a, x) => a + x.transactions, 0);
+  assert.ok(Math.abs(txns - base.annualTransactions) < 1e-4, `expected ${base.annualTransactions}, got ${txns}`);
+  assert.ok(r.totals.benefitUsd > 0);
+});
+
+test("containment=0 yields zero benefit and full fallback human cost", () => {
+  const noContain: ScenarioInputs = {
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    containmentRates: {
+      "fc1-deterministic": 0,
+      "fc2-policy": 0,
+      "fc3-multiagent": 0,
+      "fc4-frontier": 0,
+    },
+  };
+  const r = computeRollup(noContain);
+  assert.equal(r.totals.benefitUsd.toFixed(4), "0.0000", "benefit should be zero with 0% containment");
+  // AI/infra is charged on ADOPTED (attempted) volume — failed attempts still ran before escalating.
+  // So AI cost > 0 even with 0% containment.
+  const aiRow = r.byCostComponent.find((b) => b.key === "ai-consumption");
+  assert.ok((aiRow?.usd ?? 0) > 0, "AI cost is charged on attempted (adopted) txns, not containment-gated");
+  // Human cost > 0 (all fallback)
+  const humanRow = r.byCostComponent.find((b) => b.key === "human");
+  assert.ok((humanRow?.usd ?? 0) > 0, "fallback human cost should be positive with 0% containment");
+  assert.ok(r.totals.runCostUsd > 0, "total run cost should be positive");
+});
+
+test("reducing containment rate increases human cost and reduces benefit", () => {
+  const high: ScenarioInputs = {
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    containmentRates: {
+      "fc1-deterministic": 0.95,
+      "fc2-policy": 0.88,
+      "fc3-multiagent": 0.80,
+      "fc4-frontier": 0.70,
+    },
+  };
+  const low: ScenarioInputs = {
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    containmentRates: {
+      "fc1-deterministic": 0.50,
+      "fc2-policy": 0.50,
+      "fc3-multiagent": 0.50,
+      "fc4-frontier": 0.50,
+    },
+  };
+  const rHigh = computeRollup(high);
+  const rLow = computeRollup(low);
+  assert.ok(rLow.totals.benefitUsd < rHigh.totals.benefitUsd, "lower containment should reduce benefit");
+  const humanHigh = rHigh.byCostComponent.find((b) => b.key === "human")!.usd;
+  const humanLow = rLow.byCostComponent.find((b) => b.key === "human")!.usd;
+  assert.ok(humanLow.toFixed(2) !== humanHigh.toFixed(2), "containment change should alter human cost");
+});
+
+test("default containment assumptions appear in appliedAssumptions", () => {
+  const r = computeRollup(base);
+  assert.ok(r.appliedAssumptions.some((a) => a.key === "containment-fc1"));
+  assert.ok(r.appliedAssumptions.some((a) => a.key === "containment-fc4"));
+});
+
+test("overriding containment per-FC reflects scenario value in appliedAssumptions", () => {
+  // All 4 FCs overridden via containmentRates — all 4 assumptions still appear in
+  // appliedAssumptions (needed for variance computation) but each carries the scenario
+  // value and a "Scenario inputs / high" source rather than the register default.
+  const r = computeRollup({
+    ...base,
+    containmentRates: {
+      "fc1-deterministic": 0.9,
+      "fc2-policy": 0.8,
+      "fc3-multiagent": 0.7,
+      "fc4-frontier": 0.6,
+    },
+  });
+  const fc1 = r.appliedAssumptions.find((a) => a.key === "containment-fc1");
+  const fc4 = r.appliedAssumptions.find((a) => a.key === "containment-fc4");
+  assert.ok(fc1, "containment-fc1 must still appear in appliedAssumptions when overridden");
+  assert.ok(fc4, "containment-fc4 must still appear in appliedAssumptions when overridden");
+  assert.ok(Math.abs(fc1!.value - 0.9) < 1e-9, "fc1 value must be the overridden value 0.9");
+  assert.ok(Math.abs(fc4!.value - 0.6) < 1e-9, "fc4 value must be the overridden value 0.6");
+  assert.equal(fc1!.source.confidence, "high", "overridden fc1 must have high (scenario inputs) confidence");
+});
+
+test("adoption ramp changes year-over-year totals monotonically", () => {
+  const r = computeRollup({ ...base, adoptionRamp: [0.3, 0.6, 1.0] });
+  assert.ok(r.byYear.length === 3);
+  // Cost and benefit both rise as adoption grows each year.
+  assert.ok(r.byYear[1]!.totalCostUsd > r.byYear[0]!.totalCostUsd, "y2 cost > y1");
+  assert.ok(r.byYear[2]!.totalCostUsd > r.byYear[1]!.totalCostUsd, "y3 cost > y2");
+  assert.ok(r.byYear[1]!.benefitUsd > r.byYear[0]!.benefitUsd, "y2 benefit > y1");
+  assert.ok(r.byYear[2]!.benefitUsd > r.byYear[1]!.benefitUsd, "y3 benefit > y2");
+});
+
+test("HITL sampling rate changes human cost and benefit correctly", () => {
+  const fullSampling = computeRollup({
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    hitlSamplingRates: {
+      "fc1-deterministic": 1,
+      "fc2-policy": 1,
+      "fc3-multiagent": 1,
+      "fc4-frontier": 1,
+    },
+  });
+  const noSampling = computeRollup({
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    hitlSamplingRates: {
+      "fc1-deterministic": 0,
+      "fc2-policy": 0,
+      "fc3-multiagent": 0,
+      "fc4-frontier": 0,
+    },
+  });
+  // Full sampling means every contained txn gets a human review → higher human cost.
+  const humanFull = fullSampling.byCostComponent.find((b) => b.key === "human")!.usd;
+  const humanNone = noSampling.byCostComponent.find((b) => b.key === "human")!.usd;
+  assert.ok(humanFull > humanNone, "more sampling raises human cost");
+  // No sampling means more of the human time is eliminated → higher benefit.
+  assert.ok(noSampling.totals.benefitUsd > fullSampling.totals.benefitUsd, "less sampling raises benefit");
+});
+
+// ─── Validation tests ─────────────────────────────────────────────────────────
+
 test("validation rejects malformed inputs", () => {
   const bad: Array<Partial<ScenarioInputs>> = [
     { numSystems: 0 },
@@ -550,7 +728,8 @@ test("overlay with per-intent containment overrides flow-class rate for that int
 
 test("overlay with measured HITL sampling rate moves cost and is flagged", () => {
   const baseline = computeRollup(base);
-  const overlay: ActualsOverlay = { measuredHitlSamplingRate: 0.3 };
+  // Use 0.02 — definitively below all per-FC defaults (fc1=0.05, fc2=0.15, fc3=0.30, fc4=0.60)
+  const overlay: ActualsOverlay = { measuredHitlSamplingRate: 0.02 };
   const calibrated = computeRollup(base, undefined, overlay);
   // Lower HITL sampling → less review cost on contained transactions → lower human cost
   const humanBaseline = baseline.byCostComponent.find((c) => c.key === "human")!.usd;
@@ -560,7 +739,7 @@ test("overlay with measured HITL sampling rate moves cost and is flagged", () =>
   const samplingEntry = calibrated.appliedAssumptions.find((a) => a.key === "hitl-sampling-rate");
   assert.ok(samplingEntry, "hitl-sampling-rate must appear in appliedAssumptions when overlay provides it");
   assert.equal(samplingEntry!.source.confidence, "measured");
-  assert.ok(Math.abs(samplingEntry!.measuredValue! - 0.3) < 1e-9);
+  assert.ok(Math.abs(samplingEntry!.measuredValue! - 0.02) < 1e-9);
 });
 
 test("overlay with token actuals reprices model calls and flags model assumptions", () => {
@@ -662,14 +841,14 @@ test("measured tier yields strictly higher confidence score than client-confirme
     measured.confidence.score > clientConfirmed.confidence.score,
     `measured score (${measured.confidence.score}) must exceed client-confirmed score (${clientConfirmed.confidence.score})`,
   );
-  // The containmentOverrides factor must carry the "measured" source tier
-  const factor = measured.confidence.factors.find((f) => f.key === "containmentOverrides");
+  // The containmentRates factor must carry the "measured" source tier
+  const factor = measured.confidence.factors.find((f) => f.key === "containmentRates");
   assert.ok(factor && factor.sourceTier === "measured",
-    "containmentOverrides factor must have sourceTier = measured");
+    "containmentRates factor must have sourceTier = measured");
   // Client-confirmed factor has correct tier too
-  const ccFactor = clientConfirmed.confidence.factors.find((f) => f.key === "containmentOverrides");
+  const ccFactor = clientConfirmed.confidence.factors.find((f) => f.key === "containmentRates");
   assert.ok(ccFactor && ccFactor.sourceTier === "client-confirmed",
-    "client-confirmed containmentOverrides factor must have sourceTier = client-confirmed");
+    "client-confirmed containmentRates factor must have sourceTier = client-confirmed");
 });
 
 test("measured tier on hitlSamplingRate and tokenPricing yield higher score", () => {
@@ -681,16 +860,15 @@ test("measured tier on hitlSamplingRate and tokenPricing yield higher score", ()
     withHitlMeasured.confidence.score > withHitlInput.confidence.score,
     "measured HITL sampling must score higher than client-confirmed",
   );
-  // Model token actuals
+  // Model token actuals: reprice model calls and flag assumptions as measured
   const overlayTokens: ActualsOverlay = {
     tokenActualsByRole: { reasoning: { avgInputTokens: 4000, avgOutputTokens: 800 } },
   };
-  const withModelInput = computeRollup({ ...base, modelSelection: { reasoning: "gpt-5" } });
   const withModelMeasured = computeRollup(base, undefined, overlayTokens);
-  assert.ok(
-    withModelMeasured.confidence.score > withModelInput.confidence.score,
-    "measured token pricing must score higher than client-confirmed model selection",
-  );
+  // Token actuals should be reflected in appliedAssumptions as measured
+  const reasoningEntry = withModelMeasured.appliedAssumptions.find((a) => a.key === "model-reasoning");
+  assert.ok(reasoningEntry && reasoningEntry.source.confidence === "measured",
+    "model-reasoning must be flagged as measured when token actuals are provided");
 });
 
 test("fully-measured overlay can push score above 100 (calibrated level)", () => {
@@ -707,17 +885,22 @@ test("fully-measured overlay can push score above 100 (calibrated level)", () =>
       reasoning: { avgInputTokens: 4500, avgOutputTokens: 700 },
     },
   };
-  // Baseline full client-confirmed input caps at 100
+  // Baseline full client-confirmed input caps at 100 (all 7 factors fully provided → 35+65=100)
   const fullClientConfirmed = computeRollup({
     ...base,
     adoptionRate: 0.7,
-    containmentOverrides: { "fc1-deterministic": 0.9 },
-    hitlSamplingRate: 0.5,
-    landscapeMaturity: "mixed",
-    contractYears: 3,
-    reworkRatePct: 5,
-    peakLoadFactor: 1.2,
-    modelSelection: { reasoning: "gpt-5" },
+    // All 4 FCs provided → containmentFraction = 4/4 = 1 → weight 15
+    containmentRates: {
+      "fc1-deterministic": 0.93,
+      "fc2-policy": 0.82,
+      "fc3-multiagent": 0.71,
+      "fc4-frontier": 0.58,
+    },
+    hitlSamplingRate: 0.5,     // scalar covers all 4 FCs → samplingFraction=1 → weight 8
+    landscapeMaturity: "mixed", // weight 10
+    contractYears: 3,           // weight 5
+    reworkRatePct: 5,           // weight 10
+    peakLoadFactor: 1.2,        // weight 5
   });
   assert.equal(fullClientConfirmed.confidence.score, 100);
   assert.equal(fullClientConfirmed.confidence.level, "high");
@@ -942,12 +1125,12 @@ test("measured containment against untuned scenario uses register default as est
   const fc2Var = variance.find(v => v.assumptionKey === "containment-fc2");
   assert.ok(fc2Var, "containment-fc2 variance entry must exist");
   assert.ok(
-    Math.abs(fc2Var!.estimatedValue - 0.85) < 1e-9,
-    `without tuning, estimatedValue must be register default 0.85, got ${fc2Var!.estimatedValue}`,
+    Math.abs(fc2Var!.estimatedValue - 0.88) < 1e-9,
+    `without tuning, estimatedValue must be register default 0.88, got ${fc2Var!.estimatedValue}`,
   );
   assert.ok(
-    Math.abs(fc2Var!.absVariance - (0.79 - 0.85)) < 1e-9,
-    `absVariance must be 0.79 - 0.85 = -0.06, got ${fc2Var!.absVariance}`,
+    Math.abs(fc2Var!.absVariance - (0.79 - 0.88)) < 1e-9,
+    `absVariance must be 0.79 - 0.88 = -0.09, got ${fc2Var!.absVariance}`,
   );
 });
 
@@ -1169,4 +1352,344 @@ test("per-intent avgHitlMinutes from overlay replaces toBeHumanMin and moves res
   const otherCalibrated = calibrated.rows.find((r) => r.intentKey === other.intentKey)!;
   assert.ok(Math.abs(otherCalibrated.benefitUsd - other.benefitUsd) < 1e-6,
     "unaffected intent benefit must be unchanged");
+});
+
+test("validation rejects malformed containmentRates", () => {
+  const badContainment: Array<Partial<ScenarioInputs>> = [
+    { containmentRates: { "unknown-fc": 0.5 } },
+    { containmentRates: { "fc1-deterministic": 1.1 } },
+    { containmentRates: { "fc2-policy": -0.1 } },
+  ];
+  for (const patch of badContainment) {
+    assert.throws(
+      () => validateScenarioInputs({ ...base, ...patch }),
+      InputValidationError,
+      `expected rejection for containmentRates: ${JSON.stringify(patch)}`,
+    );
+  }
+  assert.doesNotThrow(() => validateScenarioInputs({ ...base, containmentRates: { "fc3-multiagent": 0.8 } }));
+});
+
+test("validation rejects malformed adoptionRamp", () => {
+  const badRamp: Array<Partial<ScenarioInputs>> = [
+    { adoptionRamp: [0.5, 0.3, 1.0] as [number, number, number] }, // non-monotonic
+    { adoptionRamp: [0.4, 0.7] as unknown as [number, number, number] }, // wrong length
+    { adoptionRamp: [0.4, 0.7, 1.2] as [number, number, number] }, // value > 1
+  ];
+  for (const patch of badRamp) {
+    assert.throws(
+      () => validateScenarioInputs({ ...base, ...patch }),
+      InputValidationError,
+      `expected rejection for adoptionRamp: ${JSON.stringify(patch)}`,
+    );
+  }
+  assert.doesNotThrow(() => validateScenarioInputs({ ...base, adoptionRamp: [0.4, 0.7, 1.0] }));
+});
+
+test("validation rejects malformed hitlSamplingRates", () => {
+  const badSampling: Array<Partial<ScenarioInputs>> = [
+    { hitlSamplingRates: { "fc4-frontier": 1.1 } },
+    { hitlSamplingRates: { "unknown-fc": 0.5 } },
+  ];
+  for (const patch of badSampling) {
+    assert.throws(
+      () => validateScenarioInputs({ ...base, ...patch }),
+      InputValidationError,
+      `expected rejection for hitlSamplingRates: ${JSON.stringify(patch)}`,
+    );
+  }
+  assert.doesNotThrow(() => validateScenarioInputs({ ...base, hitlSamplingRates: { "fc3-multiagent": 0.3 } }));
+});
+
+// ─── Failed-attempt cost reconciliation ──────────────────────────────────────
+
+test("failed-attempt costs: AI/infra charged on full adopted volume regardless of containment", () => {
+  // Same adoption, same base; only containment differs.
+  // AI/infra/build costs should be identical (all attempts incur them);
+  // only human cost and benefit change.
+  const highContain: ScenarioInputs = {
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    containmentRates: {
+      "fc1-deterministic": 1,
+      "fc2-policy": 1,
+      "fc3-multiagent": 1,
+      "fc4-frontier": 1,
+    },
+  };
+  const zeroContain: ScenarioInputs = {
+    ...base,
+    adoptionRamp: [1, 1, 1],
+    containmentRates: {
+      "fc1-deterministic": 0,
+      "fc2-policy": 0,
+      "fc3-multiagent": 0,
+      "fc4-frontier": 0,
+    },
+  };
+  const rHigh = computeRollup(highContain);
+  const rZero = computeRollup(zeroContain);
+
+  const aiHigh = rHigh.byCostComponent.find((b) => b.key === "ai-consumption")!.usd;
+  const aiZero = rZero.byCostComponent.find((b) => b.key === "ai-consumption")!.usd;
+  const infHigh = rHigh.byCostComponent.find((b) => b.key === "infra")!.usd;
+  const infZero = rZero.byCostComponent.find((b) => b.key === "infra")!.usd;
+
+  // AI and infra costs must be identical — both scenarios made the same number of attempts
+  assert.ok(
+    Math.abs(aiHigh - aiZero) < 1e-4,
+    `AI cost must equal at 0% vs 100% containment (${aiHigh.toFixed(2)} vs ${aiZero.toFixed(2)})`,
+  );
+  assert.ok(Math.abs(infHigh - infZero) < 1e-4, "Infra cost must equal at 0% vs 100% containment");
+
+  // Zero containment: benefit = 0; high containment: benefit > 0
+  assert.equal(rZero.totals.benefitUsd.toFixed(4), "0.0000");
+  assert.ok(rHigh.totals.benefitUsd > 0);
+
+  // Zero containment: higher human cost (full as-is fallback on all txns)
+  const humanHigh = rHigh.byCostComponent.find((b) => b.key === "human")!.usd;
+  const humanZero = rZero.byCostComponent.find((b) => b.key === "human")!.usd;
+  assert.ok(humanZero > humanHigh, "zero containment must have higher human fallback cost");
+});
+
+// ─── Onboarding byYear reconciliation ────────────────────────────────────────
+
+test("1-year contract: onboarding charged only in year 1 byYear slice, sum equals one-time cost", () =>
+{
+
+  const r = computeRollup(
+{
+ ...base, adoptionRamp: [1, 1, 1], contractYears: 1 
+}
+)
+;
+
+  // onboardingTotal = onboardingAnnualUsd * contractYears = onboardingAnnualUsd * 1
+  const onboardingTotal = r.onboardingAnnualUsd * 1
+;
+
+  // Sum onboarding contribution across byYear slices.
+  // byYear[0].totalCostUsd - byYear[0] without onboarding can't be isolated directly, so we
+  // compare total cumulative with what we'd expect if all 3 years were charged (the bug).
+  // Instead: 3-year version with same inputs → year2+year3 costs should be LOWER for 1-year contract.
+  const r3 = computeRollup(
+{
+ ...base, adoptionRamp: [1, 1, 1], contractYears: 3 
+}
+)
+;
+
+  // Year 1: both contracts charge onboardingAnnualUsd (though the amounts differ).
+  // Year 2+3 for the 1-year contract: no onboarding charged.
+  // Year 2 for 1-year should be lower than year 2 for 3-year contract by
+  // (r3.onboardingAnnualUsd - 0) vs (r.onboardingAnnualUsd - 0).
+  // The simplest assertion: sum of byYear totalCostUsd for the 1-year contract
+  // must equal the non-onboarding portion + onboardingTotal (charged once, in year 1 only).
+  const cumulativeOnboarding1 = r.byYear.reduce((sum, y) => sum + y.totalCostUsd, 0)
+    - r3.byYear.reduce((sum, y) => sum + y.totalCostUsd, 0)
+    + r3.onboardingAnnualUsd * 3
+;
+
+  // For a 1-year contract the total onboarding spread across byYear slices must equal
+  // r.onboardingAnnualUsd * 1 = onboardingTotal.  Cross-check using the simpler invariant:
+  // byYear[1] and byYear[2] for the 1-year contract must NOT include any onboarding cost
+  // i.e. their totalCostUsd must equal year2/year3 of the 3-year contract PLUS the 3-year
+  // annual amount MINUS zero (since 1-year adds nothing past year 1).
+  assert.ok(
+    r.byYear[1]!.totalCostUsd < r.byYear[0]!.totalCostUsd,
+    "year 2 total cost must be lower than year 1 for a 1-year contract (no onboarding in y2)",
+  )
+;
+
+  assert.ok(
+    Math.abs(r.byYear[1]!.totalCostUsd - r.byYear[2]!.totalCostUsd) < 1,
+    "year 2 and year 3 costs must be equal when no onboarding is charged past year 1",
+  )
+;
+
+  void onboardingTotal
+;
+  void cumulativeOnboarding1
+;
+
+}
+)
+;
+
+test("cumulative byYear onboarding never exceeds one-time cost for 1-, 2-, 3-year contracts", () =>
+{
+
+  for (const contractYears of [1, 2, 3] as const)
+{
+
+    const r = computeRollup(
+{
+ ...base, adoptionRamp: [1, 1, 1], contractYears 
+}
+)
+;
+
+    // onboardingAnnualUsd = onboardingTotal / contractYears
+    // Slices charged = min(contractYears, 3)
+    // Cumulative = onboardingAnnualUsd * min(contractYears, 3) = onboardingTotal * (min/contractYears)
+    // For contractYears ≤ 3 this equals onboardingTotal exactly.
+    const onboardingTotal = r.onboardingAnnualUsd * contractYears
+;
+
+    // Build an independent estimate of how much onboarding appears in byYear by
+    // comparing against a no-onboarding baseline (impossible to isolate directly),
+    // so instead: directly verify the structural invariant:
+    // for contractYears=1: byYear[1] and byYear[2] must lack the extra annual onboarding cost.
+    // for contractYears=2: byYear[2] must lack the extra annual onboarding cost.
+    // for contractYears=3: all three slices include it.
+    if (contractYears === 1)
+{
+
+      // y2 and y3 must not include onboarding
+      const diff_y1_y2 = r.byYear[0]!.totalCostUsd - r.byYear[1]!.totalCostUsd
+;
+
+      assert.ok(
+        Math.abs(diff_y1_y2 - r.onboardingAnnualUsd) < 1,
+        `contractYears=1: y1−y2 cost diff (${diff_y1_y2.toFixed(2)}) should equal onboardingAnnual (${r.onboardingAnnualUsd.toFixed(2)})`,
+      )
+;
+
+    
+}
+
+    if (contractYears === 2)
+{
+
+      const diff_y2_y3 = r.byYear[1]!.totalCostUsd - r.byYear[2]!.totalCostUsd
+;
+
+      assert.ok(
+        Math.abs(diff_y2_y3 - r.onboardingAnnualUsd) < 1,
+        `contractYears=2: y2−y3 cost diff (${diff_y2_y3.toFixed(2)}) should equal onboardingAnnual (${r.onboardingAnnualUsd.toFixed(2)})`,
+      )
+;
+
+    
+}
+
+    if (contractYears === 3)
+{
+
+      // All three years include onboarding; y1=y2=y3 cost (uniform adoption ramp = 1)
+      assert.ok(
+        Math.abs(r.byYear[0]!.totalCostUsd - r.byYear[1]!.totalCostUsd) < 1,
+        "contractYears=3: y1 and y2 costs must be equal",
+      )
+;
+
+    
+}
+
+    assert.ok(onboardingTotal > 0)
+;
+
+  
+}
+
+}
+)
+;
+
+// ─── Call-cost override regression tests ─────────────────────────────────────
+// Each test verifies that scenario assumptionOverrides for a call-cost assumption
+// reprice exactly the calls using the DEFAULT model for that role, and nothing else.
+// Precedence: token actuals > explicit non-default model > default model + override.
+
+const aiUsd = (r: ReturnType<typeof computeRollup>) =>
+  r.byCostComponent.find((b) => b.key === "ai-consumption")!.usd;
+const humanUsd = (r: ReturnType<typeof computeRollup>) =>
+  r.byCostComponent.find((b) => b.key === "human")!.usd;
+
+test("call-cost override: slm-call-cost override reprices default-router calls; human cost unchanged", () => {
+  const normal   = computeRollup(base);
+  const zeroed   = computeRollup({ ...base, assumptionOverrides: { "slm-call-cost": 0 } });
+  const doubled  = computeRollup({ ...base, assumptionOverrides: { "slm-call-cost": assumptionMap["slm-call-cost"]!.value * 2 } });
+  assert.ok(aiUsd(zeroed)  < aiUsd(normal),  "zeroing slm-call-cost must reduce AI cost");
+  assert.ok(aiUsd(doubled) > aiUsd(normal),  "doubling slm-call-cost must raise AI cost");
+  // Human cost is independent of model pricing
+  assert.ok(Math.abs(humanUsd(normal) - humanUsd(zeroed)) < 1e-6,
+    "slm-call-cost override must not affect human cost");
+});
+
+test("call-cost override: llm-call-cost override reprices default-reasoning calls; human cost unchanged", () => {
+  const normal  = computeRollup(base);
+  const zeroed  = computeRollup({ ...base, assumptionOverrides: { "llm-call-cost": 0 } });
+  const doubled = computeRollup({ ...base, assumptionOverrides: { "llm-call-cost": assumptionMap["llm-call-cost"]!.value * 2 } });
+  assert.ok(aiUsd(zeroed)  < aiUsd(normal),  "zeroing llm-call-cost must reduce AI cost");
+  assert.ok(aiUsd(doubled) > aiUsd(normal),  "doubling llm-call-cost must raise AI cost");
+  assert.ok(Math.abs(humanUsd(normal) - humanUsd(zeroed)) < 1e-6,
+    "llm-call-cost override must not affect human cost");
+});
+
+test("call-cost override: frontier-call-cost override reprices default-frontier calls; human cost unchanged", () => {
+  const normal  = computeRollup(base);
+  const zeroed  = computeRollup({ ...base, assumptionOverrides: { "frontier-call-cost": 0 } });
+  const doubled = computeRollup({ ...base, assumptionOverrides: { "frontier-call-cost": assumptionMap["frontier-call-cost"]!.value * 2 } });
+  assert.ok(aiUsd(zeroed)  < aiUsd(normal),  "zeroing frontier-call-cost must reduce AI cost");
+  assert.ok(aiUsd(doubled) > aiUsd(normal),  "doubling frontier-call-cost must raise AI cost");
+  assert.ok(Math.abs(humanUsd(normal) - humanUsd(zeroed)) < 1e-6,
+    "frontier-call-cost override must not affect human cost");
+});
+
+test("call-cost override: zeroing slm-call-cost does not eliminate all AI cost (reasoning/frontier calls remain)", () => {
+  const slmZero   = computeRollup({ ...base, assumptionOverrides: { "slm-call-cost": 0 } });
+  const allZero   = computeRollup({ ...base, assumptionOverrides: { "slm-call-cost": 0, "llm-call-cost": 0, "frontier-call-cost": 0 } });
+  // Router calls cost nothing, but reasoning/frontier calls still produce AI spend
+  assert.ok(aiUsd(slmZero) > 0,
+    "AI cost > 0 with slm zeroed: reasoning and frontier calls still have non-zero cost");
+  // Zeroing all three roles drives AI lower still
+  assert.ok(aiUsd(allZero) < aiUsd(slmZero),
+    "zeroing llm+frontier on top of slm=0 must reduce AI cost further");
+});
+
+test("call-cost override: mixed-model step — overriding one role does not affect the other role's cost", () => {
+  // fc2-policy knowledge step carries both reasoning:1 and router:1 calls in one cost item.
+  // Zeroing slm-call-cost must reduce AI cost less than zeroing both slm+llm.
+  const slmOnly = computeRollup({ ...base, assumptionOverrides: { "slm-call-cost": 0 } });
+  const llmOnly = computeRollup({ ...base, assumptionOverrides: { "llm-call-cost": 0 } });
+  const both    = computeRollup({ ...base, assumptionOverrides: { "slm-call-cost": 0, "llm-call-cost": 0 } });
+  assert.ok(aiUsd(both) < aiUsd(slmOnly),
+    "zeroing both roles reduces AI more than slm alone (llm portion still counted in slm-only)");
+  assert.ok(aiUsd(both) < aiUsd(llmOnly),
+    "zeroing both roles reduces AI more than llm alone (slm portion still counted in llm-only)");
+});
+
+test("call-cost override: non-default router model takes precedence — slm-call-cost override has no effect", () => {
+  // gemini-flash is a non-default router model; its catalog price is used directly.
+  // Changing slm-call-cost (which governs the DEFAULT router model) must have no effect.
+  const base_     = computeRollup({ ...base, modelSelection: { router: "gemini-flash" } });
+  const override_ = computeRollup({ ...base, modelSelection: { router: "gemini-flash" }, assumptionOverrides: { "slm-call-cost": 999 } });
+  assert.ok(Math.abs(aiUsd(base_) - aiUsd(override_)) < 1e-6,
+    "slm-call-cost override must not reprice non-default gemini-flash router calls");
+});
+
+test("call-cost override: non-default reasoning model takes precedence — llm-call-cost override has no effect", () => {
+  // claude-sonnet is a non-default reasoning model; catalog price is used regardless of override.
+  const base_     = computeRollup({ ...base, modelSelection: { reasoning: "claude-sonnet" } });
+  const override_ = computeRollup({ ...base, modelSelection: { reasoning: "claude-sonnet" }, assumptionOverrides: { "llm-call-cost": 999 } });
+  assert.ok(Math.abs(aiUsd(base_) - aiUsd(override_)) < 1e-6,
+    "llm-call-cost override must not reprice non-default claude-sonnet reasoning calls");
+});
+
+test("call-cost override: non-default frontier model takes precedence — frontier-call-cost override has no effect", () => {
+  // gpt-5-pro is a non-default frontier model; catalog price is used regardless of override.
+  const base_     = computeRollup({ ...base, modelSelection: { frontier: "gpt-5-pro" } });
+  const override_ = computeRollup({ ...base, modelSelection: { frontier: "gpt-5-pro" }, assumptionOverrides: { "frontier-call-cost": 999 } });
+  assert.ok(Math.abs(aiUsd(base_) - aiUsd(override_)) < 1e-6,
+    "frontier-call-cost override must not reprice non-default gpt-5-pro frontier calls");
+});
+
+// ─── Assumption register integrity ───────────────────────────────────────────
+
+test("assumption register has no duplicate keys", async () => {
+  const { assumptions } = await import("../data/assumptions");
+  const keys = assumptions.map((a: any) => a.key);
+  const dupes = keys.filter((k: string, i: number) => keys.indexOf(k) !== i);
+  assert.equal(dupes.length, 0, `Duplicate assumption keys: ${[...new Set(dupes)].join(", ")}`);
 });

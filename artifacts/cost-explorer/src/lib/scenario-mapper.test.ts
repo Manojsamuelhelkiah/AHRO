@@ -1,195 +1,76 @@
+/**
+ * Tests for scenario-mapper.ts support exports only.
+ * The canonical mapper pair (toApiInputs / fromApiInputs) is tested in
+ * scenario-form.test.ts.
+ */
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  toApiInputs,
-  fromApiInputs,
+  buildAssumptionOverrides,
   OVERRIDABLE_ASSUMPTION_KEYS,
 } from "./scenario-mapper.js";
 
 // ---------------------------------------------------------------------------
-// Shared base values
+// buildAssumptionOverrides
 // ---------------------------------------------------------------------------
 
-const BASE = {
-  numSystems: 4,
-  annualTransactions: 120_000,
-  employees: 8_000,
-  sector: "manufacturing",
-  companyType: "multi-country",
-  isolationTier: "siloed",
-  hrHourlyCostUsd: 38,
-  hitlHourlyCostUsd: 42,
-  countries: 6,
-  _assumptionOverrides: {} as Record<string, number | "">,
-};
-
-// ---------------------------------------------------------------------------
-// toApiInputs — stale-override stripping (the regression)
-// ---------------------------------------------------------------------------
-
-test("toApiInputs: stale assumptionOverrides stripped when _assumptionOverrides is empty", () => {
-  const values = {
-    ...BASE,
-    // Stale field that ended up in form values when a saved scenario was loaded
-    assumptionOverrides: { "llm-call-cost": 0.099 },
-    _assumptionOverrides: {}, // user clicked "Reset all"
-  };
-  const result = toApiInputs(values);
-  assert.ok(
-    !("assumptionOverrides" in result),
-    "stale assumptionOverrides must not appear in output after reset",
-  );
+test("buildAssumptionOverrides: returns undefined for undefined input", () => {
+  assert.equal(buildAssumptionOverrides(undefined), undefined);
 });
 
-test("toApiInputs: stale assumptionOverrides replaced by fresh _assumptionOverrides", () => {
-  const values = {
-    ...BASE,
-    assumptionOverrides: { "llm-call-cost": 0.099 }, // stale
-    _assumptionOverrides: { "slm-call-cost": 0.001 as number | "" },
-  };
-  const result = toApiInputs(values);
-  assert.ok("assumptionOverrides" in result, "rebuilt overrides must appear in output");
-  assert.deepEqual(result.assumptionOverrides, { "slm-call-cost": 0.001 });
-  assert.ok(
-    !(result.assumptionOverrides as any)?.["llm-call-cost"],
-    "stale key must not appear in rebuilt overrides",
-  );
-});
-
-test("toApiInputs: empty-string override entries are omitted from payload", () => {
-  const values = {
-    ...BASE,
-    _assumptionOverrides: {
-      "slm-call-cost": "" as number | "",
-      "llm-call-cost": 0.005 as number | "",
-    },
-  };
-  const result = toApiInputs(values);
-  assert.deepEqual(result.assumptionOverrides, { "llm-call-cost": 0.005 });
-});
-
-test("toApiInputs: no assumptionOverrides key in output when all entries are empty", () => {
-  const allEmpty = Object.fromEntries(
+test("buildAssumptionOverrides: returns undefined when all entries are empty strings", () => {
+  const raw = Object.fromEntries(
     OVERRIDABLE_ASSUMPTION_KEYS.map((k) => [k, "" as number | ""]),
   );
-  const result = toApiInputs({ ...BASE, _assumptionOverrides: allEmpty });
-  assert.ok(!("assumptionOverrides" in result));
+  assert.equal(buildAssumptionOverrides(raw), undefined);
 });
 
-// ---------------------------------------------------------------------------
-// toApiInputs — containment mapping
-// ---------------------------------------------------------------------------
-
-test("toApiInputs: containmentFc fields are mapped to containmentOverrides", () => {
-  const values = { ...BASE, containmentFc1: 0.9, containmentFc3: 0.7 };
-  const result = toApiInputs(values);
-  assert.deepEqual(result.containmentOverrides, {
-    "fc1-deterministic": 0.9,
-    "fc3-multiagent": 0.7,
+test("buildAssumptionOverrides: strips empty-string entries, keeps numeric values", () => {
+  const result = buildAssumptionOverrides({
+    "slm-call-cost": "" as number | "",
+    "llm-call-cost": 0.005 as number | "",
   });
-  assert.ok(!("containmentFc1" in result), "flat form key must not leak into output");
-  assert.ok(!("containmentFc3" in result));
+  assert.deepEqual(result, { "llm-call-cost": 0.005 });
 });
 
-test("toApiInputs: no containmentOverrides key when no containment fields set", () => {
-  const result = toApiInputs(BASE);
-  assert.ok(!("containmentOverrides" in result));
+test("buildAssumptionOverrides: returns undefined when all values are empty after filtering", () => {
+  const result = buildAssumptionOverrides({ "slm-call-cost": "" as number | "" });
+  assert.equal(result, undefined);
 });
 
-// ---------------------------------------------------------------------------
-// fromApiInputs — stale-field isolation (the companion regression)
-// ---------------------------------------------------------------------------
-
-test("fromApiInputs: assumptionOverrides not spread as top-level form field", () => {
-  const apiInputs = {
-    ...BASE,
-    assumptionOverrides: { "llm-call-cost": 0.005 },
-  };
-  const form = fromApiInputs(apiInputs);
-  assert.ok(
-    !("assumptionOverrides" in form),
-    "assumptionOverrides must not appear as a raw top-level form key",
-  );
-  assert.equal(
-    (form._assumptionOverrides as any)?.["llm-call-cost"],
-    0.005,
-    "override must be accessible via _assumptionOverrides",
-  );
+test("buildAssumptionOverrides: coerces number strings to numbers", () => {
+  // Number() cast is applied — passing 0.001 as a number should survive.
+  const result = buildAssumptionOverrides({ "frontier-call-cost": 0.001 as number | "" });
+  assert.deepEqual(result, { "frontier-call-cost": 0.001 });
 });
 
-test("fromApiInputs: containmentOverrides not spread as top-level form field", () => {
-  const apiInputs = {
-    ...BASE,
-    containmentOverrides: { "fc1-deterministic": 0.9, "fc4-frontier": 0.6 },
-  };
-  const form = fromApiInputs(apiInputs);
-  assert.ok(!("containmentOverrides" in form));
-  assert.equal(form.containmentFc1, 0.9);
-  assert.equal(form.containmentFc4, 0.6);
+test("buildAssumptionOverrides: multiple valid entries all preserved", () => {
+  const result = buildAssumptionOverrides({
+    "slm-call-cost":      0.002 as number | "",
+    "llm-call-cost":      0.008 as number | "",
+    "frontier-call-cost": 0.05  as number | "",
+  });
+  assert.deepEqual(result, {
+    "slm-call-cost":      0.002,
+    "llm-call-cost":      0.008,
+    "frontier-call-cost": 0.05,
+  });
 });
 
 // ---------------------------------------------------------------------------
-// Round-trip regression: load → reset → toApiInputs
+// OVERRIDABLE_ASSUMPTION_KEYS registry
 // ---------------------------------------------------------------------------
 
-test("round-trip: load scenario with overrides, reset all, payload has no assumptionOverrides", () => {
-  // Step 1 — simulate loading a saved scenario that had overrides
-  const saved = {
-    numSystems: 4,
-    annualTransactions: 120_000,
-    employees: 8_000,
-    sector: "manufacturing",
-    companyType: "multi-country",
-    isolationTier: "siloed",
-    hrHourlyCostUsd: 38,
-    hitlHourlyCostUsd: 42,
-    countries: 6,
-    assumptionOverrides: { "llm-call-cost": 0.005, "slm-call-cost": 0.001 },
-  };
-  const formValues = fromApiInputs(saved);
-
-  // fromApiInputs must never produce a top-level assumptionOverrides key
-  assert.ok(!("assumptionOverrides" in formValues));
-
-  // Step 2 — simulate handleResetOverrides clearing _assumptionOverrides
-  const cleared = Object.fromEntries(
-    OVERRIDABLE_ASSUMPTION_KEYS.map((k) => [k, "" as number | ""]),
-  );
-  const afterReset = { ...formValues, _assumptionOverrides: cleared };
-
-  // Step 3 — toApiInputs for recompute/save
-  const payload = toApiInputs(afterReset);
-  assert.ok(
-    !("assumptionOverrides" in payload),
-    "after reset, payload must carry no assumptionOverrides",
-  );
+test("OVERRIDABLE_ASSUMPTION_KEYS: contains no duplicate entries", () => {
+  const seen = new Set<string>();
+  for (const k of OVERRIDABLE_ASSUMPTION_KEYS) {
+    assert.ok(!seen.has(k), `Duplicate key: ${k}`);
+    seen.add(k);
+  }
 });
 
-test("round-trip: load scenario with overrides, change one, payload reflects only new override", () => {
-  const saved = {
-    numSystems: 4,
-    annualTransactions: 120_000,
-    employees: 8_000,
-    sector: "manufacturing",
-    companyType: "multi-country",
-    isolationTier: "siloed",
-    hrHourlyCostUsd: 38,
-    hitlHourlyCostUsd: 42,
-    countries: 6,
-    assumptionOverrides: { "llm-call-cost": 0.005, "slm-call-cost": 0.001 },
-  };
-  const formValues = fromApiInputs(saved);
-
-  // User edits only slm-call-cost, clears llm-call-cost
-  const edited = {
-    ...formValues,
-    _assumptionOverrides: {
-      ...((formValues._assumptionOverrides as any) ?? {}),
-      "llm-call-cost": "" as number | "",
-      "slm-call-cost": 0.002 as number | "",
-    },
-  };
-
-  const payload = toApiInputs(edited);
-  assert.deepEqual(payload.assumptionOverrides, { "slm-call-cost": 0.002 });
+test("OVERRIDABLE_ASSUMPTION_KEYS: contains expected call-cost keys", () => {
+  assert.ok(OVERRIDABLE_ASSUMPTION_KEYS.includes("slm-call-cost"));
+  assert.ok(OVERRIDABLE_ASSUMPTION_KEYS.includes("llm-call-cost"));
+  assert.ok(OVERRIDABLE_ASSUMPTION_KEYS.includes("frontier-call-cost"));
 });

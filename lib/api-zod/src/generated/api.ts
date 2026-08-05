@@ -171,8 +171,7 @@ export const GetCorpusSummaryResponse = zod.object({
  */
 export const listScenariosResponseInputsAssumptionOverridesMinOne = 0;
 
-
-
+export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -195,6 +194,9 @@ export const ListScenariosResponseItem = zod.object({
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
   "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(listScenariosResponseInputsAdoptionRampMin).max(listScenariosResponseInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
@@ -209,8 +211,7 @@ export const ListScenariosResponse = zod.array(ListScenariosResponseItem)
  */
 export const createScenarioBodyInputsAssumptionOverridesMinOne = 0;
 
-
-
+export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -232,6 +233,9 @@ export const CreateScenarioBody = zod.object({
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
   "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(createScenarioBodyInputsAdoptionRampMin).max(createScenarioBodyInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 })
@@ -239,8 +243,7 @@ export const CreateScenarioBody = zod.object({
 
 export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
-
-
+export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const CreateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -263,6 +266,9 @@ export const CreateScenarioResponse = zod.object({
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
   "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(createScenarioResponseInputsAdoptionRampMin).max(createScenarioResponseInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
@@ -280,8 +286,7 @@ export const GetScenarioParams = zod.object({
 
 export const getScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
-
-
+export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -304,6 +309,9 @@ export const GetScenarioResponse = zod.object({
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
   "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(getScenarioResponseInputsAdoptionRampMin).max(getScenarioResponseInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
@@ -321,8 +329,7 @@ export const UpdateScenarioParams = zod.object({
 
 export const updateScenarioBodyInputsAssumptionOverridesMinOne = 0;
 
-
-
+export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -344,6 +351,9 @@ export const UpdateScenarioBody = zod.object({
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
   "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(updateScenarioBodyInputsAdoptionRampMin).max(updateScenarioBodyInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }).optional()
@@ -351,8 +361,7 @@ export const UpdateScenarioBody = zod.object({
 
 export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
-
-
+export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const UpdateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -375,6 +384,9 @@ export const UpdateScenarioResponse = zod.object({
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
   "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(updateScenarioResponseInputsAdoptionRampMin).max(updateScenarioResponseInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
@@ -695,8 +707,7 @@ export const RetireCustomIntentResponse = zod.object({
  */
 export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
-
-
+export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const ComputeRollupBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -717,6 +728,9 @@ export const ComputeRollupBody = zod.object({
   "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
   "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
   "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(computeRollupBodyInputsAdoptionRampMin).max(computeRollupBodyInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
 }),
@@ -736,6 +750,15 @@ export const ComputeRollupResponse = zod.object({
   "humanHoursSaved": zod.number(),
   "fteEquivalent": zod.number().describe('Human hours saved divided by annual working hours')
 }),
+  "byYear": zod.array(zod.object({
+  "year": zod.number().describe('1, 2, or 3'),
+  "adoptionFraction": zod.number().describe('Fraction of annualTransactions routed to the automated channel this year'),
+  "benefitUsd": zod.number(),
+  "totalCostUsd": zod.number(),
+  "netUsd": zod.number(),
+  "humanHoursSaved": zod.number(),
+  "fteEquivalent": zod.number()
+}).describe('Per-year cost\/benefit summary after applying adoption ramp, containment and HITL sampling')).describe('Three-year view of cost\/benefit after applying adoption ramp, containment and HITL sampling'),
   "rows": zod.array(zod.object({
   "intentId": zod.number(),
   "intentKey": zod.string(),
@@ -796,14 +819,15 @@ export const ComputeRollupResponse = zod.object({
 }).describe('Attribution of a data point to its origin corpus')
 })),
   "confidence": zod.object({
-  "score": zod.number().describe('0-100; higher means more of the business case rests on client-provided data'),
-  "level": zod.string().describe('low | medium | high'),
+  "score": zod.number().describe('0-100 (up to ~115 with measured overlay); higher means more of the business case rests on client-provided data'),
+  "level": zod.string().describe('low | medium | high | calibrated'),
   "factors": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
-  "provided": zod.boolean().describe('Whether this parameter is supplied (either client-confirmed or measured).'),
-  "weight": zod.number().describe('Base points this parameter contributes to the confidence score when client-confirmed. Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score.'),
-  "note": zod.string().describe('What assuming the default means for the result when the parameter is missing.'),
+  "provided": zod.boolean().describe('True when any client-specific value was supplied (fraction > 0). For per-FC factors this can be true while fraction < 1, indicating partial data.'),
+  "fraction": zod.number().describe('0–1 scoring fraction. Non-per-FC factors are 0 or 1; per-FC factors (containment, HITL) equal (supplied FC count \/ total FC count), so 2 of 4 classes awards half the weight.'),
+  "weight": zod.number().describe('Base points this parameter contributes to the confidence score at full (fraction=1). Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score.'),
+  "note": zod.string().describe('What assuming the default means for the result when the parameter is missing or partial.'),
   "sourceTier": zod.string().optional().describe('Tier of the supplied value: client-confirmed (user provided) or measured (from a calibration actuals overlay). Absent when not provided.')
 }))
 }).describe('How much of the model is driven by client-specific inputs vs generic defaults'),
@@ -1022,3 +1046,16 @@ export const DeleteActualsOverlayParams = zod.object({
 export const DeleteActualsOverlayResponse = zod.void()
 
 
+export const getScenarioResponseInputsAdoptionRampMax = 3;
+
+export const updateScenarioResponseInputsAdoptionRampMax = 3;
+
+export const computeRollupBodyInputsAdoptionRampMax = 3;
+
+export const createScenarioBodyInputsAdoptionRampMax = 3;
+
+export const listScenariosResponseInputsAdoptionRampMax = 3;
+
+export const updateScenarioBodyInputsAdoptionRampMax = 3;
+
+export const createScenarioResponseInputsAdoptionRampMax = 3;

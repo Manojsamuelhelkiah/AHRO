@@ -4,8 +4,8 @@ import { profileMap } from "../data/profiles";
 import { MODEL_ROLES, modelCatalogMap } from "../data/model-catalog";
 import { systems } from "../data/systems";
 import type { ScenarioInputs } from "./rollup";
-import { OVERRIDABLE_ASSUMPTION_KEYS } from "./rollup";
 import type { ActualsOverlay } from "../data/types";
+import { OVERRIDABLE_ASSUMPTION_KEYS, VALID_FLOW_CLASSES } from "./rollup";
 
 export class InputValidationError extends Error {
   status = 400;
@@ -30,6 +30,11 @@ function requirePositiveInt(name: string, value: number, max: number) {
   }
 }
 
+function requireRate(name: string, value: number) {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new InputValidationError(`${name} must be a number between 0 and 1`);
+  }
+}
 /**
  * Validates scenario inputs beyond structural typing; throws InputValidationError.
  * Pass `extraValidIntentKeys` to allow custom intent keys in intentShareOverrides.
@@ -58,6 +63,7 @@ export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentK
     );
   }
 
+  // --- intentShareOverrides ---
   const overrides = inputs.intentShareOverrides;
   if (overrides) {
     let total = 0;
@@ -79,6 +85,7 @@ export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentK
     }
   }
 
+  // --- assumptionOverrides ---
   const assumptionOverrides = inputs.assumptionOverrides;
   if (assumptionOverrides) {
     for (const [key, value] of Object.entries(assumptionOverrides)) {
@@ -95,12 +102,12 @@ export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentK
     }
   }
 
+  // --- Scalar optional fields ---
   requireFractionIfPresent("adoptionRate", inputs.adoptionRate);
   requireFractionIfPresent("hitlSamplingRate", inputs.hitlSamplingRate);
 
-  const containment = inputs.containmentOverrides;
-  if (containment) {
-    for (const [key, rate] of Object.entries(containment)) {
+  if (inputs.containmentOverrides) {
+    for (const [key, rate] of Object.entries(inputs.containmentOverrides)) {
       if (!flowClassMap[key]) {
         throw new InputValidationError(
           `Unknown flow class in containmentOverrides: "${key}". Valid keys: ${Object.keys(flowClassMap).join(", ")}`,
@@ -108,7 +115,7 @@ export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentK
       }
       if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
         throw new InputValidationError(
-          `Containment rate for "${key}" must be between 0 and 1`,
+          `Containment rate for "${key}" in containmentOverrides must be between 0 and 1`,
         );
       }
     }
@@ -133,6 +140,51 @@ export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentK
     }
   }
 
+  // --- Per-FC precision fields ---
+  if (inputs.containmentRates) {
+    for (const [fc, rate] of Object.entries(inputs.containmentRates)) {
+      if (rate === undefined) continue;
+      if (!VALID_FLOW_CLASSES.has(fc)) {
+        throw new InputValidationError(
+          `Unknown flow class key in containmentRates: "${fc}". Valid keys: ${[...VALID_FLOW_CLASSES].join(", ")}`,
+        );
+      }
+      if (rate === undefined) continue;
+      requireRate(`containmentRates["${fc}"]`, rate);
+    }
+  }
+
+  if (inputs.adoptionRamp !== undefined) {
+    const ramp = inputs.adoptionRamp;
+    if (!Array.isArray(ramp) || ramp.length !== 3) {
+      throw new InputValidationError("adoptionRamp must be an array of exactly 3 numbers");
+    }
+    for (let i = 0; i < 3; i++) {
+      const v = ramp[i];
+      if (v === undefined) throw new InputValidationError(`adoptionRamp[${i}] is missing`);
+      requireRate(`adoptionRamp[${i}]`, v);
+    }
+    if (ramp[0]! > ramp[1]! + 1e-9 || ramp[1]! > ramp[2]! + 1e-9) {
+      throw new InputValidationError(
+        "adoptionRamp must be non-decreasing: ramp[0] \u2264 ramp[1] \u2264 ramp[2]",
+      );
+    }
+  }
+
+  if (inputs.hitlSamplingRates) {
+    for (const [fc, rate] of Object.entries(inputs.hitlSamplingRates)) {
+      if (rate === undefined) continue;
+      if (!VALID_FLOW_CLASSES.has(fc)) {
+        throw new InputValidationError(
+          `Unknown flow class key in hitlSamplingRates: "${fc}". Valid keys: ${[...VALID_FLOW_CLASSES].join(", ")}`,
+        );
+      }
+      if (rate === undefined) continue;
+      requireRate(`hitlSamplingRates["${fc}"]`, rate);
+    }
+  }
+
+  // --- Model selection ---
   const selection = inputs.modelSelection;
   if (selection) {
     for (const [role, key] of Object.entries(selection)) {
@@ -150,6 +202,7 @@ export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentK
     }
   }
 
+  // --- Non-integrated systems ---
   const nonIntegrated = inputs.nonIntegratedSystems;
   if (nonIntegrated !== undefined) {
     for (const key of nonIntegrated) {

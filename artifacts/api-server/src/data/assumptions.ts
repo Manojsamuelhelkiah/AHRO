@@ -116,38 +116,6 @@ export const assumptions: GlobalAssumption[] = [
     source: { name: "Documented assumption from integration sizing", confidence: "low" },
   },
   {
-    key: "containment-fc1",
-    label: "Default containment: deterministic self-service",
-    value: 0.95,
-    unit: "fraction of transactions",
-    rationale: "Deterministic retrieve-and-deliver flows resolve almost all requests; ~5% fail (data gaps, edge entitlements) and fall back to full human handling while still incurring the AI/infra run cost.",
-    source: { name: "Contact-center deflection benchmarks (curated)", confidence: "medium" },
-  },
-  {
-    key: "containment-fc2",
-    label: "Default containment: grounded policy answers",
-    value: 0.85,
-    unit: "fraction of transactions",
-    rationale: "Policy answers depend on knowledge coverage; ~15% are out-of-corpus or low-confidence and escalate to full human handling.",
-    source: { name: "RAG deflection benchmarks (curated)", confidence: "medium" },
-  },
-  {
-    key: "containment-fc3",
-    label: "Default containment: multi-agent transactions",
-    value: 0.75,
-    unit: "fraction of transactions",
-    rationale: "Complex reconciliations hit data-quality and exception branches more often; ~25% require full manual takeover.",
-    source: { name: "Documented assumption from case-automation pilots", confidence: "low" },
-  },
-  {
-    key: "containment-fc4",
-    label: "Default containment: frontier judgment cases",
-    value: 0.6,
-    unit: "fraction of transactions",
-    rationale: "High-judgment cases are co-piloted: ~40% end up substantially human-driven even with agent support.",
-    source: { name: "Documented assumption", confidence: "low" },
-  },
-  {
     key: "knowledge-maintenance-country",
     label: "Knowledge maintenance per country per year",
     value: 6000,
@@ -233,6 +201,108 @@ export const assumptions: GlobalAssumption[] = [
     value: 1.2,
     unit: "multiplier",
     rationale: "Global clients add time-zone follow-the-sun handling and regulatory breadth.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  // --- Containment rates (default per flow class) ---
+  {
+    key: "containment-fc1",
+    label: "Containment rate: Deterministic Self-Service (fc1)",
+    value: 0.95,
+    unit: "rate",
+    rationale:
+      "Deterministic self-service flows (password reset, payslip copy) have highly predictable intent and system state. 95% containment is consistent with IVR/chatbot benchmarks for single-step, zero-judgment transactions.",
+    source: { name: "Gartner HR SSC benchmark 2024 / Documented assumption", confidence: "medium" },
+  },
+  {
+    key: "containment-fc2",
+    label: "Containment rate: Grounded Policy Answer (fc2)",
+    value: 0.88,
+    unit: "rate",
+    rationale:
+      "Policy-answer flows require knowledge retrieval and can fail when the policy KB is incomplete or ambiguous. 88% containment aligns with enterprise Q&A RAG benchmarks for well-maintained corpora.",
+    source: { name: "Documented assumption from RAG deployment benchmarks", confidence: "low" },
+  },
+  {
+    key: "containment-fc3",
+    label: "Containment rate: Multi-Agent Transaction (fc3)",
+    value: 0.80,
+    unit: "rate",
+    rationale:
+      "Multi-agent transactions touch multiple systems and require sequential approvals. A 20% fallback rate accounts for system errors, missing approvals and edge-case policy gaps.",
+    source: { name: "Documented assumption from integration sizing", confidence: "low" },
+  },
+  {
+    key: "containment-fc4",
+    label: "Containment rate: Frontier Judgment Case (fc4)",
+    value: 0.70,
+    unit: "rate",
+    rationale:
+      "Frontier judgment cases are by definition low-structure. A 30% fallback is conservative given the novelty of agentic HR case handling in production.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  // --- HITL sampling rates (default per flow class) ---
+  {
+    key: "hitl-sample-fc1",
+    label: "HITL sampling rate: Deterministic Self-Service (fc1)",
+    value: 0.05,
+    unit: "rate",
+    rationale:
+      "5% spot audit of deterministic flows matches regulated-industry quality-assurance sampling norms for low-risk, high-confidence automated transactions.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  {
+    key: "hitl-sample-fc2",
+    label: "HITL sampling rate: Grounded Policy Answer (fc2)",
+    value: 0.15,
+    unit: "rate",
+    rationale:
+      "15% review for policy answers reflects the higher compliance exposure of incorrect policy guidance delivered at scale.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  {
+    key: "hitl-sample-fc3",
+    label: "HITL sampling rate: Multi-Agent Transaction (fc3)",
+    value: 0.30,
+    unit: "rate",
+    rationale:
+      "30% review for multi-system transactions; write-backs and approval chains warrant higher oversight during initial deployment.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  {
+    key: "hitl-sample-fc4",
+    label: "HITL sampling rate: Frontier Judgment Case (fc4)",
+    value: 0.60,
+    unit: "rate",
+    rationale:
+      "60% review for frontier judgment cases reflects that these are still partially human-in-the-loop by design; the agent assists rather than replaces.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  // --- Adoption ramp defaults ---
+  {
+    key: "ramp-y1",
+    label: "Adoption ramp: Year 1",
+    value: 0.40,
+    unit: "rate",
+    rationale:
+      "Year 1 is limited to pilot cohort, change management lag, and integration stabilization. 40% adoption is achievable for tier-1 intents in a structured rollout.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  {
+    key: "ramp-y2",
+    label: "Adoption ramp: Year 2",
+    value: 0.75,
+    unit: "rate",
+    rationale:
+      "Year 2 covers broad rollout with training complete and early intents proven in production.",
+    source: { name: "Documented assumption", confidence: "low" },
+  },
+  {
+    key: "ramp-y3",
+    label: "Adoption ramp: Year 3",
+    value: 1.00,
+    unit: "rate",
+    rationale:
+      "Year 3 represents full steady-state adoption of all committed transaction volume.",
     source: { name: "Documented assumption", confidence: "low" },
   },
 ];

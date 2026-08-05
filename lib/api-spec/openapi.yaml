@@ -1024,6 +1024,33 @@ components:
         peakLoadFactor:
           type: number
           description: Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.
+        containmentRates:
+          type: object
+          additionalProperties:
+            type: number
+          description: >
+            Per-flow-class fraction of transactions that complete in the automated flow (0–1).
+            Non-contained (failed) transactions fall back to full as-is human cost; AI/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected.
+            Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.
+        adoptionRamp:
+          type: array
+          items:
+            type: number
+          minItems: 3
+          maxItems: 3
+          description: >
+            Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions
+            routed to the automated channel in that year (0–1, non-decreasing).
+            Non-adopted volume stays at as-is cost and generates no benefit.
+            Default: [0.40, 0.75, 1.00].
+        hitlSamplingRates:
+          type: object
+          additionalProperties:
+            type: number
+          description: >
+            Per-flow-class fraction of automated (contained) transactions that also receive human review.
+            Multiplies toBeHumanMin to give effective residual human minutes per automated transaction.
+            Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.
         modelSelection:
           type: object
           additionalProperties:
@@ -1186,11 +1213,37 @@ components:
         usd:
           type: number
       required: [key, label, usd]
+    YearSlice:
+      type: object
+      description: Per-year cost/benefit summary after applying adoption ramp, containment and HITL sampling
+      properties:
+        year:
+          type: integer
+          description: 1, 2, or 3
+        adoptionFraction:
+          type: number
+          description: Fraction of annualTransactions routed to the automated channel this year
+        benefitUsd:
+          type: number
+        totalCostUsd:
+          type: number
+        netUsd:
+          type: number
+        humanHoursSaved:
+          type: number
+        fteEquivalent:
+          type: number
+      required: [year, adoptionFraction, benefitUsd, totalCostUsd, netUsd, humanHoursSaved, fteEquivalent]
     Rollup:
       type: object
       properties:
         totals:
           $ref: "#/components/schemas/RollupTotals"
+        byYear:
+          type: array
+          items:
+            $ref: "#/components/schemas/YearSlice"
+          description: Three-year view of cost/benefit after applying adoption ramp, containment and HITL sampling
         rows:
           type: array
           items:
@@ -1246,7 +1299,7 @@ components:
           description: Intent keys present in the actuals overlay that no longer exist in the active intent registry (reference + custom). The rollup proceeded on the valid remainder; these entries were silently skipped without this field. Present only when at least one orphan is detected.
           items:
             type: string
-      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, appliedAssumptions, confidence, calibrated]
+      required: [totals, byYear, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, appliedAssumptions, confidence, calibrated]
     BuildComponentCost:
       type: object
       properties:
@@ -1474,10 +1527,10 @@ components:
       properties:
         score:
           type: number
-          description: 0-100; higher means more of the business case rests on client-provided data
+          description: 0-100 (up to ~115 with measured overlay); higher means more of the business case rests on client-provided data
         level:
           type: string
-          description: low | medium | high
+          description: low | medium | high | calibrated
         factors:
           type: array
           items:
@@ -1492,17 +1545,20 @@ components:
           type: string
         provided:
           type: boolean
-          description: Whether this parameter is supplied (either client-confirmed or measured).
+          description: True when any client-specific value was supplied (fraction > 0). For per-FC factors this can be true while fraction < 1, indicating partial data.
+        fraction:
+          type: number
+          description: "0–1 scoring fraction. Non-per-FC factors are 0 or 1; per-FC factors (containment, HITL) equal (supplied FC count / total FC count), so 2 of 4 classes awards half the weight."
         weight:
           type: number
-          description: Base points this parameter contributes to the confidence score when client-confirmed. Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score.
+          description: Base points this parameter contributes to the confidence score at full (fraction=1). Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score.
         note:
           type: string
-          description: What assuming the default means for the result when the parameter is missing.
+          description: What assuming the default means for the result when the parameter is missing or partial.
         sourceTier:
           type: string
           description: "Tier of the supplied value: client-confirmed (user provided) or measured (from a calibration actuals overlay). Absent when not provided."
-      required: [key, label, provided, weight, note]
+      required: [key, label, provided, fraction, weight, note]
     VarianceEntry:
       type: object
       description: Per-assumption comparison between the estimated value (from assumptions register or scenario inputs) and the measured value (from actuals overlay).

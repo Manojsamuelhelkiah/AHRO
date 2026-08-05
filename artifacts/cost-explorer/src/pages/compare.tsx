@@ -28,6 +28,15 @@ import {
   Star,
   X,
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  Radar,
+  Tooltip as RadarTooltip,
+  Legend as RadarLegend,
+} from "recharts";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import {
   calcDelta,
@@ -876,6 +885,84 @@ export default function Compare() {
         </div>
       ) : readyToCompare ? (
         <>
+          {/* ── Radar comparison chart ───────────────────────────────────────── */}
+          {(() => {
+            // Build normalized radar data across 5 dimensions
+            const dims = [
+              { key: "roi",      label: "ROI",              get: (r: Rollup) => r.totals.roi,                      higher: true },
+              { key: "net",      label: "Net Value",        get: (r: Rollup) => r.totals.netUsd,                   higher: true },
+              { key: "fte",      label: "FTE Saved",        get: (r: Rollup) => r.totals.fteEquivalent,            higher: true },
+              { key: "bpt",      label: "Benefit/Txn",      get: (r: Rollup) => r.totals.benefitPerTransactionUsd, higher: true },
+              { key: "cost_eff", label: "Cost Efficiency",  get: (r: Rollup) => 1 / (r.totals.costPerTransactionUsd + 0.0001), higher: true },
+            ];
+            const filledSlotData = activeSlots
+              .map((s, i) => ({ s, i }))
+              .filter(({ s, i }) => slots[i] !== null && s.rollup !== null);
+            if (filledSlotData.length < 2) return null;
+
+            // Per-dim min/max for normalization
+            const radarData = dims.map(dim => {
+              const vals = filledSlotData.map(({ s }) => dim.get(s.rollup!));
+              const mn = Math.min(...vals), mx = Math.max(...vals);
+              const row: Record<string, number | string> = { dim: dim.label };
+              filledSlotData.forEach(({ s, i }) => {
+                const raw = dim.get(s.rollup!);
+                // Normalize 0–100; if all equal set to 75 (mid-high)
+                const norm = mx === mn ? 75 : ((raw - mn) / (mx - mn)) * 70 + 30;
+                row[`s${i}`] = Math.round(norm);
+              });
+              return row;
+            });
+
+            const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
+
+            return (
+              <Card className="shadow-sm border-border">
+                <CardHeader className="px-4 py-3 border-b border-border bg-muted/30">
+                  <CardTitle className="text-sm font-semibold">Business Case Shape</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Normalized comparison — each axis shows relative strength within this set.
+                  </p>
+                </CardHeader>
+                <CardContent className="pt-4 pb-2">
+                  <div className="h-[280px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={radarData} margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
+                        <PolarGrid stroke="hsl(var(--border))" />
+                        <PolarAngleAxis
+                          dataKey="dim"
+                          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))", fontFamily: "Inter, sans-serif" }}
+                        />
+                        {filledSlotData.map(({ s, i }) => {
+                          const name = s.scenario?.name ?? `Scenario ${i + 1}`;
+                          const isBase = slots[i] === effectiveBaselineId;
+                          return (
+                            <Radar
+                              key={i}
+                              name={isBase ? `★ ${name}` : name}
+                              dataKey={`s${i}`}
+                              stroke={COLORS[i % COLORS.length]}
+                              fill={COLORS[i % COLORS.length]}
+                              fillOpacity={0.12}
+                              strokeWidth={2}
+                            />
+                          );
+                        })}
+                        <RadarTooltip
+                          formatter={(val: number) => [`${val}/100`, ""]}
+                          contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 11 }}
+                        />
+                        <RadarLegend
+                          wrapperStyle={{ fontSize: 11, paddingTop: 8, fontFamily: "Inter, sans-serif" }}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* ── Headline metrics ─────────────────────────────────────────────── */}
           <Card className="shadow-sm border-border overflow-hidden">
             <CardHeader className="px-4 py-3 border-b border-border bg-muted/30">

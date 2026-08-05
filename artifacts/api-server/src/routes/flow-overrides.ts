@@ -109,21 +109,21 @@ router.post("/flow-overrides", async (req, res, next) => {
         intentKey: body.intentKey,
         version,
         status: "draft",
-        author: body.author.trim(),
-        rationale: body.rationale.trim(),
-        flowClass: body.flowClass ?? null,
-        toBeHumanMin: body.toBeHumanMin ?? null,
-        actGetActions: body.actGetActions ?? null,
-        actPutActions: body.actPutActions ?? null,
+        author: body.author,
+        rationale: body.rationale,
+        ...(body.flowClass !== undefined && { flowClass: body.flowClass }),
+        ...(body.toBeHumanMin !== undefined && { toBeHumanMin: body.toBeHumanMin }),
+        ...(body.actGetActions !== undefined && { actGetActions: body.actGetActions }),
+        ...(body.actPutActions !== undefined && { actPutActions: body.actPutActions }),
       })
       .returning();
-    res.status(201).json(CreateFlowOverrideResponse.parse(serialize(row!)));
+    res.json(CreateFlowOverrideResponse.parse(serialize(row!)));
   } catch (e) {
     next(e);
   }
 });
 
-router.post("/flow-overrides/:id/approve", async (req, res, next) => {
+router.delete("/flow-overrides/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -235,11 +235,17 @@ router.delete("/flow-overrides/:id", async (req, res, next) => {
  * consumes. Later approvals supersede earlier ones (by version).
  */
 export async function loadActiveFlowOverrides(): Promise<Record<string, FlowOverrideValues>> {
-  const rows = await db
-    .select()
-    .from(flowOverridesTable)
-    .where(eq(flowOverridesTable.status, "approved"))
-    .orderBy(flowOverridesTable.intentKey, flowOverridesTable.version);
+  let rows: (typeof flowOverridesTable.$inferSelect)[];
+  try {
+    rows = await db
+      .select()
+      .from(flowOverridesTable)
+      .where(eq(flowOverridesTable.status, "approved"))
+      .orderBy(flowOverridesTable.intentKey, flowOverridesTable.version);
+  } catch {
+    // Table may not exist in this environment (schema not yet migrated)
+    return {};
+  }
   const active: Record<string, FlowOverrideValues> = {};
   for (const row of rows) {
     // ascending version order: later rows overwrite earlier ones

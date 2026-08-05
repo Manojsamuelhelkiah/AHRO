@@ -192,6 +192,10 @@ export type ScenarioInputsAssumptionOverrides = {[key: string]: number};
 export type ScenarioInputsContainmentOverrides = {[key: string]: number};
 
 /**
+ * Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.
+ */
+export type ScenarioInputsContainmentRates = {[key: string]: number};
+/**
  * Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions.
  */
 export type ScenarioInputsModelSelection = {[key: string]: string};
@@ -230,6 +234,16 @@ export interface ScenarioInputs {
   reworkRatePct?: number;
   /** Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing. */
   peakLoadFactor?: number;
+  /** Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70. */
+  containmentRates?: ScenarioInputsContainmentRates;
+  /**
+     * Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].
+     * @minItems 3
+     * @maxItems 3
+     */
+  adoptionRamp?: number[];
+  /** Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60. */
+  hitlSamplingRates?: ScenarioInputsHitlSamplingRates;
   /** Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions. */
   modelSelection?: ScenarioInputsModelSelection;
   /** System keys (see /systems) that will NOT be integrated with the MCP layer. Their get/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them. */
@@ -304,6 +318,20 @@ export interface ComponentBucket {
   usd: number;
 }
 
+/**
+ * Per-year cost/benefit summary after applying adoption ramp, containment and HITL sampling
+ */
+export interface YearSlice {
+  /** 1, 2, or 3 */
+  year: number;
+  /** Fraction of annualTransactions routed to the automated channel this year */
+  adoptionFraction: number;
+  benefitUsd: number;
+  totalCostUsd: number;
+  netUsd: number;
+  humanHoursSaved: number;
+  fteEquivalent: number;
+}
 export interface BuildComponentCost {
   key: string;
   name: string;
@@ -319,11 +347,13 @@ export interface BuildComponentCost {
 export interface ConfidenceFactor {
   key: string;
   label: string;
-  /** Whether this parameter is supplied (either client-confirmed or measured). */
+  /** True when any client-specific value was supplied (fraction > 0). For per-FC factors this can be true while fraction < 1, indicating partial data. */
   provided: boolean;
-  /** Base points this parameter contributes to the confidence score when client-confirmed. Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score. */
+  /** 0–1 scoring fraction. Non-per-FC factors are 0 or 1; per-FC factors (containment, HITL) equal (supplied FC count / total FC count), so 2 of 4 classes awards half the weight. */
+  fraction: number;
+  /** Base points this parameter contributes to the confidence score at full (fraction=1). Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score. */
   weight: number;
-  /** What assuming the default means for the result when the parameter is missing. */
+  /** What assuming the default means for the result when the parameter is missing or partial. */
   note: string;
   /** Tier of the supplied value: client-confirmed (user provided) or measured (from a calibration actuals overlay). Absent when not provided. */
   sourceTier?: string;
@@ -333,9 +363,9 @@ export interface ConfidenceFactor {
  * How much of the model is driven by client-specific inputs vs generic defaults
  */
 export interface Confidence {
-  /** 0-100; higher means more of the business case rests on client-provided data */
+  /** 0-100 (up to ~115 with measured overlay); higher means more of the business case rests on client-provided data */
   score: number;
-  /** low | medium | high */
+  /** low | medium | high | calibrated */
   level: string;
   factors: ConfidenceFactor[];
 }
@@ -362,6 +392,8 @@ export interface VarianceEntry {
 
 export interface Rollup {
   totals: RollupTotals;
+  /** Three-year view of cost/benefit after applying adoption ramp, containment and HITL sampling */
+  byYear: YearSlice[];
   rows: IntentRollupRow[];
   byFlowClass: ComponentBucket[];
   byCostComponent: ComponentBucket[];
@@ -621,3 +653,8 @@ export type ParseActualsLogBody = {
   logFile: Blob;
 };
 
+
+/**
+ * Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.
+ */
+export type ScenarioInputsHitlSamplingRates = {[key: string]: number};

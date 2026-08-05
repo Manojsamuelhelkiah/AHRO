@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { 
-  useComputeRollup, 
-  useListDistributionProfiles, 
+import {
+  useComputeRollup,
+  useListDistributionProfiles,
   useListModelCatalog, useListSystems,
   useListScenarios,
   useListAssumptions,
+  useListFlowClasses,
   useCreateScenario,
   useUpdateScenario,
   useGetScenario,
@@ -18,8 +18,13 @@ import {
   type ActualsOverlayRecord,
 } from "@workspace/api-client-react";
 import { useLocation, Link } from "wouter";
-import { toApiInputs, fromApiInputs, OVERRIDABLE_ASSUMPTION_KEYS, type OverridableKey } from "@/lib/scenario-mapper";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  FLOW_CLASSES, DEFAULT_CONTAINMENT, DEFAULT_SAMPLING,
+  type FcKey, formSchema, type FormValues, defaultValues,
+  toApiInputs, fromApiInputs,
+} from "@/lib/scenario-form";
+import { OVERRIDABLE_ASSUMPTION_KEYS, type OverridableKey } from "@/lib/scenario-mapper";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,79 +33,25 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Calculator, Save, Play, DollarSign, 
-  TrendingUp, Users, BarChart3, Database, 
+import {
+  Calculator, Save, Play, DollarSign,
+  TrendingUp, Users, BarChart3, Database,
   Settings2, GitCompareArrows, BrainCircuit,
-  RotateCcw, ChevronDown,
+  RotateCcw, ChevronDown, ShieldCheck, GitBranch,
   FlaskConical, X, ArrowRight, TrendingDown, CheckCircle2, AlertCircle,
 } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
-import { formatCurrency, formatNumber } from "@/lib/format";
+import {
+  ResponsiveContainer, ComposedChart, BarChart, PieChart, Pie, Cell,
+  CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Area, Line, ReferenceLine,
+} from "recharts";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FlowDiagram } from "@/components/flow-diagram";
 
-/** Empty inputs are treated as "not provided" — the model falls back to documented defaults. */
-const optionalNumber = <T extends z.ZodTypeAny>(schema: T) =>
-  z.preprocess(
-    (v) => (v === "" || v === null || v === undefined || (typeof v === "number" && Number.isNaN(v)) ? undefined : v),
-    schema.optional()
-  );
-const assumptionOverridesSchema = z.object(
-  Object.fromEntries(
-    OVERRIDABLE_ASSUMPTION_KEYS.map((k) => [
-      k,
-      z.union([z.literal(""), z.coerce.number().min(0, "Must be ≥ 0")]).optional(),
-    ])
-  )
-);
-
-const formSchema = z.object({
-  numSystems: z.coerce.number().int("Whole number required").min(1, "At least 1 system"),
-  annualTransactions: z.coerce.number().int("Whole number required").min(100, "Min 100 transactions"),
-  employees: z.coerce.number().int("Whole number required").min(10, "Min 10 employees"),
-  sector: z.string().min(1, "Required"),
-  companyType: z.enum(["single-country", "multi-country", "global"]),
-  isolationTier: z.enum(["pooled", "siloed", "dedicated"]),
-  hrHourlyCostUsd: z.coerce.number().min(1),
-  hitlHourlyCostUsd: z.coerce.number().min(1),
-  countries: z.coerce.number().int("Whole number required").min(1),
-  adoptionRate: optionalNumber(z.coerce.number().min(0.01, "Min 1%").max(1, "Max 100%")),
-  hitlSamplingRate: optionalNumber(z.coerce.number().min(0.01, "Min 1%").max(1, "Max 100%")),
-  landscapeMaturity: z.enum(["clean", "mixed", "legacy"]).optional(),
-  contractYears: optionalNumber(z.coerce.number().int("Whole number required").min(1).max(10)),
-  reworkRatePct: optionalNumber(z.coerce.number().min(0).max(20, "Max 20%")),
-  peakLoadFactor: optionalNumber(z.coerce.number().min(1, "Min 1.0").max(1.5, "Max 1.5")),
-  containmentFc1: optionalNumber(z.coerce.number().min(0).max(1)),
-  containmentFc2: optionalNumber(z.coerce.number().min(0).max(1)),
-  containmentFc3: optionalNumber(z.coerce.number().min(0).max(1)),
-  containmentFc4: optionalNumber(z.coerce.number().min(0).max(1)),
-  modelRouter: z.string().optional(),
-  modelReasoning: z.string().optional(),
-  modelFrontier: z.string().optional(),
-  modelData: z.string().optional(),
-  nonIntegratedSystems: z.array(z.string()).optional(),
-  _assumptionOverrides: assumptionOverridesSchema.optional(),
-});
-
-type FormValues = z.infer<typeof formSchema>;
-const defaultValues: FormValues = {
-  numSystems: 5,
-  annualTransactions: 50000,
-  employees: 5000,
-  sector: "technology",
-  companyType: "multi-country",
-  isolationTier: "siloed",
-  hrHourlyCostUsd: 45,
-  hitlHourlyCostUsd: 35,
-  countries: 3,
-  _assumptionOverrides: {} as any,
-};
+const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 export default function Scenario() {
-  const [location] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const scenarioId = searchParams.get("id");
   const parsedId = scenarioId ? parseInt(scenarioId, 10) : null;
@@ -111,75 +62,76 @@ export default function Scenario() {
 
   const { toast } = useToast();
   const [rollup, setRollup] = useState<Rollup | null>(null);
-  const [activeOverlayId, setActiveOverlayId] = useState<number | null>(parsedOverlayId);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
-  
+  const [activeOverlayId, setActiveOverlayId] = useState<number | null>(parsedOverlayId);
+
+  // Local aliases for module-level helpers (defined after component).
+  const formatCurrency = formatCurrencyLocal;
+  const formatNumber   = formatNumberLocal;
+
   const { data: profiles, isLoading: isLoadingProfiles } = useListDistributionProfiles();
   const { data: modelCatalog } = useListModelCatalog();
   const { data: systemsCatalog } = useListSystems();
-  const { data: scenarios, refetch: refetchScenarios } = useListScenarios();
+  const { refetch: refetchScenarios } = useListScenarios();
   const { data: overlays } = useListActualsOverlays();
   const { data: globalAssumptions } = useListAssumptions();
-  const computeRollup = useComputeRollup();
+  const { data: flowClasses } = useListFlowClasses();
+  const computeRollupMutation = useComputeRollup();
   const createScenario = useCreateScenario();
   const updateScenario = useUpdateScenario();
-  const { data: loadedScenario } = useGetScenario(parsedId as number, { 
-    query: { 
+  const { data: loadedScenario } = useGetScenario(parsedId as number, {
+    query: {
       enabled: !!parsedId,
-      queryKey: getGetScenarioQueryKey(parsedId as number)
-    } 
+      queryKey: getGetScenarioQueryKey(parsedId as number),
+    },
   });
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues
+    defaultValues,
   });
 
   // Load scenario if ID in URL; auto-open Tune Assumptions if saved overrides exist.
-  // fromApiInputs ensures assumptionOverrides never leak as raw top-level form keys.
+  // fromApiInputs ensures assumptionOverrides / containmentOverrides never leak as
+  // raw top-level form keys (the stale-override bug root cause).
   useEffect(() => {
     if (loadedScenario) {
-      const formValues = fromApiInputs(
-        loadedScenario.inputs as unknown as Record<string, unknown>
-      ) as FormValues;
-      const hasOverrides =
-        Object.values(formValues._assumptionOverrides ?? {}).some(
-          (v) => v !== "" && v !== undefined
-        );
+      const formValues = fromApiInputs(loadedScenario.inputs as ScenarioInputs);
+      const hasOverrides = Object.values(formValues._assumptionOverrides ?? {}).some(
+        (v) => v !== "" && v !== undefined
+      );
       if (hasOverrides) setAssumptionsOpen(true);
       form.reset(formValues);
       onSubmit(formValues);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedScenario]);
 
-
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: FormValues) => {
     try {
       const body: { inputs: ScenarioInputs; actualsOverlayId?: number } = {
         inputs: toApiInputs(values) as ScenarioInputs,
       };
       if (activeOverlayId !== null) body.actualsOverlayId = activeOverlayId;
-      const result = await computeRollup.mutateAsync({ data: body });
+      const result = await computeRollupMutation.mutateAsync({ data: body });
       setRollup(result);
-    } catch (e) {
+    } catch {
       toast({ title: "Computation Failed", description: "Could not compute rollup.", variant: "destructive" });
     }
   };
 
   const handleSave = form.handleSubmit(async (values) => {
-    const name = `Scenario - ${values.employees} EEs, ${values.sector}`;
-    const inputs = toApiInputs(values);
-
+    const name = `Scenario – ${values.employees} EEs, ${values.sector}`;
     try {
       if (parsedId) {
-        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs } });
+        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs: toApiInputs(values) } });
         toast({ title: "Saved", description: "Scenario updated successfully." });
       } else {
-        await createScenario.mutateAsync({ data: { name, inputs } });
+        await createScenario.mutateAsync({ data: { name, inputs: toApiInputs(values) } });
         toast({ title: "Saved", description: "New scenario created." });
         refetchScenarios();
       }
-    } catch (e) {
+    } catch {
       toast({ title: "Save Failed", description: "Could not save scenario.", variant: "destructive" });
     }
   });
@@ -192,30 +144,23 @@ export default function Scenario() {
     form.reset({ ...current, _assumptionOverrides: cleared });
   };
 
-  // When overlay changes, clear stale rollup so user must recompute
-  const handleOverlaySelect = (id: number) => {
-    setActiveOverlayId(id);
-    setRollup(null);
-  };
-  const handleOverlayClear = () => {
-    setActiveOverlayId(null);
-    setRollup(null);
-  };
+  const handleOverlaySelect = (id: number) => { setActiveOverlayId(id); setRollup(null); };
+  const handleOverlayClear  = () => { setActiveOverlayId(null); setRollup(null); };
 
-  // Tabs: include variance when calibrated
+  // Show Variance tab when a calibrated rollup is present.
   const showVarianceTab = rollup?.calibrated === true;
-  const defaultTab = showVarianceTab ? "variance" : "distribution";
+  const defaultTab = showVarianceTab ? "variance" : "flowdiagram";
 
-  // Lookup global defaults for comparison in the Applied Assumptions tab
+  // Lookup global defaults for custom-assumption highlighting.
   const globalDefaultMap = Object.fromEntries(
     (globalAssumptions ?? []).map((a) => [a.key, a.value])
   );
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      
-      {/* LEFT PANE: Form */}
-      <div className="w-full lg:w-[400px] flex-shrink-0 flex flex-col gap-4">
+
+      {/* ── LEFT PANE: Form ─────────────────────────────────────────────── */}
+      <div className="w-full lg:w-[420px] flex-shrink-0 flex flex-col gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Scenario Builder</h1>
           <p className="text-muted-foreground mt-1">Configure client landscape</p>
@@ -225,13 +170,10 @@ export default function Scenario() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full">
               <CardContent className="flex-1 overflow-y-auto p-5 space-y-5">
-                
+
+                {/* Scale & Scope */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-border">
-                    <Users className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Scale & Scope</h3>
-                  </div>
-                  
+                  <SectionHeader icon={<Users className="w-4 h-4 text-primary" />} label="Scale & Scope" />
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="employees" render={({ field }) => (
                       <FormItem>
@@ -248,15 +190,12 @@ export default function Scenario() {
                       </FormItem>
                     )} />
                   </div>
-                  
                   <FormField control={form.control} name="sector" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs">Sector</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingProfiles}>
                         <FormControl>
-                          <SelectTrigger className="bg-background">
-                            <SelectValue placeholder="Select sector" />
-                          </SelectTrigger>
+                          <SelectTrigger className="bg-background"><SelectValue placeholder="Select sector" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {profiles?.map(p => (
@@ -269,12 +208,9 @@ export default function Scenario() {
                   )} />
                 </div>
 
+                {/* Landscape Complexity */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-border">
-                    <Database className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Landscape Complexity</h3>
-                  </div>
-                  
+                  <SectionHeader icon={<Database className="w-4 h-4 text-primary" />} label="Landscape Complexity" />
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="numSystems" render={({ field }) => (
                       <FormItem>
@@ -291,7 +227,6 @@ export default function Scenario() {
                       </FormItem>
                     )} />
                   </div>
-
                   <FormField control={form.control} name="companyType" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs">Geographic Span</FormLabel>
@@ -301,14 +236,13 @@ export default function Scenario() {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="single-country">Single Country</SelectItem>
-                          <SelectItem value="multi-country">Multi-Country (2-5)</SelectItem>
+                          <SelectItem value="multi-country">Multi-Country (2–5)</SelectItem>
                           <SelectItem value="global">Global (6+)</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
                   )} />
-
                   <FormField control={form.control} name="isolationTier" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs">Compute Isolation</FormLabel>
@@ -327,12 +261,9 @@ export default function Scenario() {
                   )} />
                 </div>
 
+                {/* Cost Baseline */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-border">
-                    <DollarSign className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Cost Baseline</h3>
-                  </div>
-                  
+                  <SectionHeader icon={<DollarSign className="w-4 h-4 text-primary" />} label="Cost Baseline" />
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="hrHourlyCostUsd" render={({ field }) => (
                       <FormItem>
@@ -349,81 +280,118 @@ export default function Scenario() {
                       </FormItem>
                     )} />
                   </div>
-
                   <FormField control={form.control} name="reworkRatePct" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs">As-Is Rework Rate %</FormLabel>
-                      <FormControl><Input type="number" step="0.5" {...field} value={field.value ?? ""} placeholder="default 0" className="bg-background" /></FormControl>
+                      <FormControl>
+                        <Input type="number" step="0.5" {...field} value={field.value ?? ""} placeholder="default 0" className="bg-background" />
+                      </FormControl>
                       <p className="text-[10px] text-muted-foreground">Share of transactions needing rework today; drives the error-reduction benefit</p>
                       <FormMessage />
                     </FormItem>
                   )} />
                 </div>
 
+                {/* Automation Fidelity */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-border">
-                    <TrendingUp className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Adoption & Trust</h3>
-                  </div>
+                  <SectionHeader icon={<ShieldCheck className="w-4 h-4 text-primary" />} label="Automation Fidelity" />
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="adoptionRate" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Adoption Rate (0-1)</FormLabel>
-                        <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="default 1.0" className="bg-background" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="hitlSamplingRate" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">HITL Sampling (0-1)</FormLabel>
-                        <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="default 1.0" className="bg-background" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-
+                  {/* Adoption Ramp */}
                   <div>
-                    <p className="text-xs font-medium">Containment by Flow Class (0-1)</p>
-                    <div className="grid grid-cols-2 gap-3 mt-2">
-                      <FormField control={form.control} name="containmentFc1" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-[10px] text-muted-foreground">Deterministic (FC1)</FormLabel>
-                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.95" className="bg-background" /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="containmentFc2" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-[10px] text-muted-foreground">Policy (FC2)</FormLabel>
-                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.85" className="bg-background" /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="containmentFc3" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-[10px] text-muted-foreground">Multi-Agent (FC3)</FormLabel>
-                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.75" className="bg-background" /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="containmentFc4" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-[10px] text-muted-foreground">Frontier (FC4)</FormLabel>
-                          <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="0.60" className="bg-background" /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Adoption ramp (fraction automated per year)</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["adoptionRampY1", "adoptionRampY2", "adoptionRampY3"] as const).map((fieldName, i) => (
+                        <FormField key={fieldName} control={form.control} name={fieldName} render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-center block">Year {i + 1}</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  type="number" step="0.01" min="0" max="1"
+                                  {...field}
+                                  value={field.value ?? ""}
+                                  placeholder={["0.40", "0.75", "1.00"][i]}
+                                  className="bg-background pr-6 text-xs"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      ))}
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Uncontained transactions still incur AI/infra cost but fall back to full human handling</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Fraction of annual volume entering the automated channel each year (0–1, non-decreasing). Default: 40/75/100%.</p>
+                  </div>
+
+                  {/* Containment Rates */}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Containment rate per flow class</p>
+                    <div className="space-y-2">
+                      {FLOW_CLASSES.map(({ key, label }) => (
+                        <FormField
+                          key={key}
+                          control={form.control}
+                          name={`containmentRates.${key}` as any}
+                          render={({ field }) => (
+                            <FormItem className="flex items-center gap-3">
+                              <FormLabel className="text-xs w-36 shrink-0 text-muted-foreground">{label}</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number" step="0.01" min="0" max="1"
+                                  {...field}
+                                  value={field.value ?? ""}
+                                  placeholder={({"fc1-deterministic": "0.95", "fc2-policy": "0.88", "fc3-multiagent": "0.80", "fc4-frontier": "0.70"} as Record<string, string>)[key]}
+                                  className="bg-background h-7 text-xs"
+                                />
+                              </FormControl>
+                              <span className="text-xs text-muted-foreground w-8 shrink-0">
+                                {field.value !== undefined ? pct(Number(field.value)) : "—"}
+                              </span>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Share of automated transactions that complete without human fallback. Supplying all 4 raises confidence. Non-contained transactions still incur AI/infra cost but fall back to full human handling.</p>
+                  </div>
+
+                  {/* HITL Sampling Rates */}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">HITL sampling rate per flow class</p>
+                    <div className="space-y-2">
+                      {FLOW_CLASSES.map(({ key, label }) => (
+                        <FormField
+                          key={key}
+                          control={form.control}
+                          name={`hitlSamplingRates.${key}` as any}
+                          render={({ field }) => (
+                            <FormItem className="flex items-center gap-3">
+                              <FormLabel className="text-xs w-36 shrink-0 text-muted-foreground">{label}</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number" step="0.01" min="0" max="1"
+                                  {...field}
+                                  value={field.value ?? ""}
+                                  placeholder={({"fc1-deterministic": "0.05", "fc2-policy": "0.15", "fc3-multiagent": "0.30", "fc4-frontier": "0.60"} as Record<string, string>)[key]}
+                                  className="bg-background h-7 text-xs"
+                                />
+                              </FormControl>
+                              <span className="text-xs text-muted-foreground w-8 shrink-0">
+                                {field.value !== undefined ? pct(Number(field.value)) : "—"}
+                              </span>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Fraction of contained transactions receiving human review (scales HITL cost). Default: 5/15/30/60%.</p>
                   </div>
                 </div>
 
+                {/* Delivery & Seasonality */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-border">
-                    <Settings2 className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-sm">Delivery & Seasonality</h3>
-                  </div>
+                  <SectionHeader icon={<Settings2 className="w-4 h-4 text-primary" />} label="Delivery & Seasonality" />
 
                   <FormField control={form.control} name="landscapeMaturity" render={({ field }) => (
                     <FormItem>
@@ -446,25 +414,29 @@ export default function Scenario() {
                     <FormField control={form.control} name="contractYears" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Contract Years</FormLabel>
-                        <FormControl><Input type="number" {...field} value={field.value ?? ""} placeholder="default 3" className="bg-background" /></FormControl>
+                        <FormControl>
+                          <Input type="number" {...field} value={field.value ?? ""} placeholder="default 3" className="bg-background" />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="peakLoadFactor" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Peak Load Factor</FormLabel>
-                        <FormControl><Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="default 1.0" className="bg-background" /></FormControl>
+                        <FormControl>
+                          <Input type="number" step="0.05" {...field} value={field.value ?? ""} placeholder="default 1.0" className="bg-background" />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Onboarding cost is amortized over the contract; peak factor values automation at seasonal demand spikes (1.0-1.5)</p>
+                  <p className="text-[10px] text-muted-foreground">Onboarding cost is amortized over the contract; peak factor values automation at seasonal demand spikes (1.0–1.5).</p>
 
                   <FormField control={form.control} name="nonIntegratedSystems" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs">Non-Integrated Systems</FormLabel>
                       <p className="text-[10px] text-muted-foreground -mt-0.5 mb-1.5">
-                        Systems the client will NOT connect to the MCP layer (no API access, vendor restrictions, security policy). Their get/put actions stay manual: no MCP cost, but ~5 min of agent handling per action, reducing the benefit for intents touching them.
+                        Systems the client will NOT connect to the MCP layer. Their get/put actions stay manual: no MCP cost, but ~5 min per action, reducing the benefit for intents touching them.
                       </p>
                       <div className="grid grid-cols-2 gap-1.5">
                         {(systemsCatalog ?? []).map((sys) => {
@@ -475,7 +447,7 @@ export default function Scenario() {
                               type="button"
                               onClick={() => {
                                 const cur = field.value ?? [];
-                                field.onChange(selected ? cur.filter((k) => k !== sys.key) : [...cur, sys.key]);
+                                field.onChange(selected ? cur.filter(k => k !== sys.key) : [...cur, sys.key]);
                               }}
                               className={`text-left text-[11px] px-2 py-1.5 rounded-md border transition-colors ${
                                 selected
@@ -494,6 +466,7 @@ export default function Scenario() {
                   )} />
                 </div>
 
+                {/* Tune Assumptions */}
                 <Collapsible open={assumptionsOpen} onOpenChange={setAssumptionsOpen}>
                   <CollapsibleTrigger asChild>
                     <button
@@ -627,25 +600,32 @@ export default function Scenario() {
 
                 {/* AI Model Stack */}
                 <div className="space-y-4">
-                  <h3 className="font-semibold flex items-center text-sm uppercase tracking-wide text-muted-foreground">
-                    <BrainCircuit className="w-4 h-4 mr-2 text-primary" /> AI Model Stack
-                  </h3>
+                  <SectionHeader icon={<BrainCircuit className="w-4 h-4 text-primary" />} label="AI Model Stack" />
                   {(["router", "reasoning", "frontier", "data"] as const).map((role) => {
-                    const fieldName = role === "router" ? "modelRouter" : role === "reasoning" ? "modelReasoning" : role === "frontier" ? "modelFrontier" : "modelData";
-                    const options = (modelCatalog ?? []).filter((m) => m.role === role);
-                    const label = role === "router" ? "Router / Classification (SLM)" : role === "reasoning" ? "Reasoning / Grounded Answers (LLM)" : role === "frontier" ? "Frontier / High-Judgment Cases (LRM)" : "Data Access / Legacy Databases (LDM)";
+                    const fieldName = (
+                      role === "router"    ? "modelRouter"    :
+                      role === "reasoning" ? "modelReasoning" :
+                      role === "frontier"  ? "modelFrontier"  : "modelData"
+                    ) as keyof FormValues;
+                    const options = (modelCatalog ?? []).filter(m => m.role === role);
+                    const label = (
+                      role === "router"    ? "Router / Classification (SLM)" :
+                      role === "reasoning" ? "Reasoning / Grounded Answers (LLM)" :
+                      role === "frontier"  ? "Frontier / High-Judgment Cases (LRM)" :
+                                            "Data Access / Legacy Databases (LDM)"
+                    );
                     return (
                       <FormField key={role} control={form.control} name={fieldName} render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs">{label}</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                          <Select onValueChange={field.onChange} value={(field.value as string) ?? ""}>
                             <FormControl>
                               <SelectTrigger className="bg-background">
                                 <SelectValue placeholder="Default pricing (not confirmed)" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {options.map((m) => (
+                              {options.map(m => (
                                 <SelectItem key={m.key} value={m.key}>
                                   {m.label} — ${m.pricePerCallUsd.toFixed(4)}/call{m.isDefault ? " (default)" : ""}
                                 </SelectItem>
@@ -657,7 +637,7 @@ export default function Scenario() {
                       )} />
                     );
                   })}
-                  <p className="text-[10px] text-muted-foreground">Per-call prices from published token rates at a typical HRO call profile. Confirming the stack raises estimate confidence; every AI step reprices exactly.</p>
+                  <p className="text-[10px] text-muted-foreground">Confirming the model stack raises estimate confidence and reprices every AI step exactly.</p>
                 </div>
 
                 <Separator />
@@ -676,19 +656,17 @@ export default function Scenario() {
                 </div>
 
               </CardContent>
+
               <div className="p-4 border-t border-border bg-muted/20 flex flex-col gap-2">
                 <div className="flex gap-3">
-                  <Button type="submit" className="flex-1 font-semibold" disabled={computeRollup.isPending}>
-                    {computeRollup.isPending ? "Computing..." : <><Play className="w-4 h-4 mr-2" /> {activeOverlayId ? "Compute (Calibrated)" : "Compute"}</>}
+                  <Button type="submit" className="flex-1 font-semibold" disabled={computeRollupMutation.isPending}>
+                    {computeRollupMutation.isPending ? "Computing…" : <><Play className="w-4 h-4 mr-2" /> {activeOverlayId ? "Compute (Calibrated)" : "Compute"}</>}
                   </Button>
-                  <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollup.isPending}>
+                  <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollupMutation.isPending}>
                     <Save className="w-4 h-4" />
                   </Button>
                 </div>
-                <Link
-                  href={parsedId ? `/compare?ids=${parsedId}&baseline=${parsedId}` : "/compare"}
-                  className="w-full"
-                >
+                <Link href={parsedId ? `/compare?ids=${parsedId}&baseline=${parsedId}` : "/compare"} className="w-full">
                   <Button type="button" variant="ghost" className="w-full text-muted-foreground text-xs">
                     <GitCompareArrows className="w-3.5 h-3.5 mr-1.5" />
                     Compare Scenarios
@@ -700,7 +678,7 @@ export default function Scenario() {
         </Card>
       </div>
 
-      {/* RIGHT PANE: Results */}
+      {/* ── RIGHT PANE: Results ────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-h-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         {!rollup ? (
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
@@ -720,7 +698,8 @@ export default function Scenario() {
           </div>
         ) : (
           <div className="flex flex-col h-full">
-            {/* Header Totals */}
+
+            {/* Header KPIs */}
             <div className="p-6 border-b border-border bg-sidebar text-sidebar-foreground">
               <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                 <div>
@@ -736,44 +715,39 @@ export default function Scenario() {
                     <Badge className="bg-sidebar-primary text-sidebar-primary-foreground border-none font-mono">
                       Tier {rollup.tierMultiplier}x
                     </Badge>
-                    <span>Based on {formatNumber(form.getValues().annualTransactions)} tx/yr</span>
+                    <span>Year 1 of {formatNumber(form.getValues().annualTransactions)} tx/yr committed</span>
+                    {rollup.appliedAssumptions.some(a =>
+                      globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
+                    ) && (
+                      <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px]">
+                        custom assumptions
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-emerald-400">
-                    {formatCurrency(rollup.totals.netUsd, true)} Net Value
+                    {formatCurrencyLocal(rollup.totals.netUsd, true)} Net
                   </div>
                   {rollup.calibrated && rollup.estimatedTotals && (
                     <div className="text-xs text-sidebar-foreground/60 mt-0.5">
-                      Est. {formatCurrency(rollup.estimatedTotals.netUsd, true)} before calibration
+                      Est. {formatCurrencyLocal(rollup.estimatedTotals.netUsd, true)} before calibration
                     </div>
                   )}
                   <div className="text-sm font-medium text-sidebar-foreground/80">
-                    {rollup.totals.roi.toFixed(1)}x ROI
+                    {rollup.totals.roi.toFixed(1)}x ROI · Year 1
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-background/10 rounded-lg p-3 border border-sidebar-border">
-                  <div className="text-xs text-sidebar-foreground/60 uppercase tracking-wider mb-1">Total Run Cost</div>
-                  <div className="text-xl font-semibold font-mono">{formatCurrency(rollup.totals.runCostUsd, true)}</div>
-                </div>
-                <div className="bg-background/10 rounded-lg p-3 border border-sidebar-border">
-                  <div className="text-xs text-sidebar-foreground/60 uppercase tracking-wider mb-1">Total Build Cost</div>
-                  <div className="text-xl font-semibold font-mono">{formatCurrency(rollup.totals.buildCostUsd, true)}</div>
-                </div>
-                <div className="bg-background/10 rounded-lg p-3 border border-sidebar-border">
-                  <div className="text-xs text-sidebar-foreground/60 uppercase tracking-wider mb-1">Gross Benefit</div>
-                  <div className="text-xl font-semibold font-mono">{formatCurrency(rollup.totals.benefitUsd, true)}</div>
-                </div>
-                <div className="bg-emerald-500/20 rounded-lg p-3 border border-emerald-500/30">
-                  <div className="text-xs text-emerald-200 uppercase tracking-wider mb-1">FTE Equivalent Saved</div>
-                  <div className="text-xl font-semibold font-mono text-emerald-100">{rollup.totals.fteEquivalent.toFixed(1)}</div>
-                </div>
+                <KpiTile label="Total Run Cost"   value={formatCurrencyLocal(rollup.totals.runCostUsd, true)} color="blue" />
+                <KpiTile label="Total Build Cost" value={formatCurrencyLocal(rollup.totals.buildCostUsd, true)} color="amber" />
+                <KpiTile label="Gross Benefit"    value={formatCurrencyLocal(rollup.totals.benefitUsd, true)} color="emerald" />
+                <KpiTile label="FTE Saved (Yr 1)" value={rollup.totals.fteEquivalent.toFixed(1)} accent color="emerald" />
               </div>
 
-              {/* Confidence */}
+              {/* Confidence widget */}
               <div className="mt-4 bg-background/10 rounded-lg p-4 border border-sidebar-border">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -785,8 +759,8 @@ export default function Scenario() {
                   <div
                     className={`h-1.5 rounded-full transition-all ${
                       rollup.confidence.level === "calibrated" ? "bg-violet-400" :
-                      rollup.confidence.level === "high" ? "bg-emerald-400" :
-                      rollup.confidence.level === "medium" ? "bg-amber-400" : "bg-red-400"
+                      rollup.confidence.level === "high"   ? "bg-emerald-400" :
+                      rollup.confidence.level === "medium" ? "bg-amber-400"   : "bg-red-400"
                     }`}
                     style={{ width: `${Math.min(rollup.confidence.score, 100)}%` }}
                   />
@@ -796,25 +770,51 @@ export default function Scenario() {
                     <CheckCircle2 className="w-3 h-3 inline mr-1" />
                     Fully calibrated — at least one assumption has been replaced by measured production data. The business case reflects actuals, not estimates.
                   </p>
-                ) : rollup.confidence.factors.some(f => !f.provided) ? (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-sidebar-foreground/70 font-medium">
-                      Missing client data (each adds points when provided):
-                    </p>
-                    {rollup.confidence.factors.filter(f => !f.provided).map(f => (
-                      <div key={f.key} className="flex gap-2 text-xs text-sidebar-foreground/60">
-                        <span className="font-mono text-amber-300/80 shrink-0">+{f.weight}</span>
-                        <span><span className="font-medium text-sidebar-foreground/80">{f.label}:</span> {f.note}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-sidebar-foreground/70">All client-specific parameters provided — the business case rests on client data rather than generic defaults.</p>
-                )}
+                ) : (() => {
+                  const absent  = rollup.confidence.factors.filter(f => f.fraction === 0);
+                  const partial = rollup.confidence.factors.filter(f => f.fraction > 0 && f.fraction < 1);
+                  if (absent.length === 0 && partial.length === 0) {
+                    return <p className="text-xs text-sidebar-foreground/70">All client-specific parameters provided — the business case rests on client data rather than generic defaults.</p>;
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {partial.length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-sidebar-foreground/70 font-medium">Partial data — remaining flow classes use defaults:</p>
+                          {partial.map(f => {
+                            const remaining = Math.round(f.weight * (1 - f.fraction));
+                            const suppliedCount = Math.round(f.fraction * 4);
+                            return (
+                              <div key={f.key} className="flex gap-2 text-xs text-sidebar-foreground/60">
+                                <span className="font-mono text-sky-300/80 shrink-0">+{remaining}</span>
+                                <span>
+                                  <span className="font-medium text-sidebar-foreground/80">{f.label}</span>
+                                  {" "}({suppliedCount}/4 flow classes){": "}
+                                  {f.note}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {absent.length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-sidebar-foreground/70 font-medium">Missing client data (each adds points when provided):</p>
+                          {absent.map(f => (
+                            <div key={f.key} className="flex gap-2 text-xs text-sidebar-foreground/60">
+                              <span className="font-mono text-amber-300/80 shrink-0">+{f.weight}</span>
+                              <span><span className="font-medium text-sidebar-foreground/80">{f.label}:</span> {f.note}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
-            {/* Orphaned intent keys warning */}
+            {/* Orphaned-intent keys warning */}
             {rollup.orphanedIntentKeys && rollup.orphanedIntentKeys.length > 0 && (
               <div className="px-6 pt-4">
                 <Alert className="border-amber-500/40 bg-amber-500/10">
@@ -839,19 +839,32 @@ export default function Scenario() {
             <div className="flex-1 overflow-hidden flex flex-col">
               <Tabs defaultValue={defaultTab} key={defaultTab} className="flex-1 flex flex-col">
                 <div className="px-6 pt-4 border-b border-border overflow-x-auto">
-                  <TabsList className="bg-muted">
+                  <TabsList className="bg-muted flex-wrap">
                     {showVarianceTab && (
                       <TabsTrigger value="variance" className="text-violet-700 dark:text-violet-300 data-[state=active]:bg-violet-500/20">
                         <FlaskConical className="w-4 h-4 mr-2" /> Variance
                       </TabsTrigger>
                     )}
-                    <TabsTrigger value="distribution"><Database className="w-4 h-4 mr-2"/> Intent Distribution</TabsTrigger>
-                    <TabsTrigger value="charts"><BarChart3 className="w-4 h-4 mr-2"/> Breakdown Charts</TabsTrigger>
-                    <TabsTrigger value="build"><Database className="w-4 h-4 mr-2"/> Build Costs</TabsTrigger>
-                    <TabsTrigger value="assumptions"><Settings2 className="w-4 h-4 mr-2"/> Applied Assumptions</TabsTrigger>
+                    <TabsTrigger value="flowdiagram"><GitBranch className="w-4 h-4 mr-2" />Flow Diagram</TabsTrigger>
+                    <TabsTrigger value="distribution"><Database className="w-4 h-4 mr-2" />Intent Distribution</TabsTrigger>
+                    <TabsTrigger value="3year"><TrendingUp className="w-4 h-4 mr-2" />3-Year View</TabsTrigger>
+                    <TabsTrigger value="charts"><BarChart3 className="w-4 h-4 mr-2" />Breakdown</TabsTrigger>
+                    <TabsTrigger value="build"><Settings2 className="w-4 h-4 mr-2" />Build Costs</TabsTrigger>
+                    <TabsTrigger value="assumptions">
+                      <Settings2 className="w-4 h-4 mr-2" />Assumptions
+                      {rollup.appliedAssumptions.some(a =>
+                        globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
+                      ) && (
+                        <Badge className="ml-2 bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1">
+                          {rollup.appliedAssumptions.filter(a =>
+                            globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
+                          ).length} custom
+                        </Badge>
+                      )}
+                    </TabsTrigger>
                   </TabsList>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto p-6">
 
                   {/* Variance tab */}
@@ -860,7 +873,61 @@ export default function Scenario() {
                       <VarianceView rollup={rollup} />
                     </TabsContent>
                   )}
-                  
+
+                  {/* Flow Diagram */}
+                  <TabsContent value="flowdiagram" className="m-0 h-full">
+                    <div className="space-y-6">
+                      {(() => {
+                        const formVals = form.getValues();
+                        const adoptFrac = rollup.byYear[0]?.adoptionFraction ?? rollup.adoptionRate;
+                        const fcVolumes: Record<string, number> = {};
+                        for (const row of rollup.rows) {
+                          fcVolumes[row.flowClass] = (fcVolumes[row.flowClass] ?? 0) + row.transactions;
+                        }
+                        return FLOW_CLASSES.map(fc => {
+                          const fcSteps = flowClasses?.find(f => f.key === fc.key)?.steps ?? [];
+                          const containFrac = formVals.containmentRates?.[fc.key] !== undefined
+                            ? formVals.containmentRates![fc.key]!
+                            : DEFAULT_CONTAINMENT[fc.key as FcKey];
+                          const hitlFrac = formVals.hitlSamplingRates?.[fc.key] !== undefined
+                            ? formVals.hitlSamplingRates![fc.key]!
+                            : DEFAULT_SAMPLING[fc.key as FcKey];
+                          const usingContainDefault = formVals.containmentRates?.[fc.key] === undefined;
+                          const usingHitlDefault = formVals.hitlSamplingRates?.[fc.key] === undefined;
+                          const usingAdoptDefault = formVals.adoptionRampY1 === undefined;
+                          const usingDefaults = usingContainDefault || usingHitlDefault || usingAdoptDefault;
+                          const fcTxn = fcVolumes[fc.key] ?? 0;
+                          if (fcSteps.length === 0) return null;
+                          return (
+                            <div key={fc.key} className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <Badge variant="outline" className="font-mono text-xs bg-muted/50">{fc.key}</Badge>
+                                <h3 className="font-semibold text-sm text-foreground">{fc.label}</h3>
+                                {fcTxn > 0 && (
+                                  <span className="text-xs text-muted-foreground ml-auto font-mono">
+                                    {formatNumberLocal(fcTxn)} txn/yr allocated
+                                  </span>
+                                )}
+                              </div>
+                              <FlowDiagram
+                                steps={fcSteps}
+                                fcKey={fc.key}
+                                annotations={{
+                                  adoptionFraction: adoptFrac,
+                                  containmentFraction: containFrac,
+                                  hitlSamplingFraction: hitlFrac,
+                                  annualTransactions: fcTxn > 0 ? fcTxn : undefined,
+                                  usingDefaults,
+                                }}
+                              />
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </TabsContent>
+
+                  {/* Intent Distribution */}
                   <TabsContent value="distribution" className="m-0 h-full">
                     <div className="rounded-md border border-border overflow-hidden">
                       <table className="w-full text-sm text-left">
@@ -875,7 +942,7 @@ export default function Scenario() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {rollup.rows.sort((a,b) => b.share - a.share).map(row => (
+                          {rollup.rows.sort((a, b) => b.share - a.share).map(row => (
                             <tr key={row.intentKey} className="hover:bg-muted/30 transition-colors">
                               <td className="px-4 py-3 font-medium text-foreground">
                                 {row.intentName}
@@ -884,13 +951,21 @@ export default function Scenario() {
                                 )}
                               </td>
                               <td className="px-4 py-3">
-                                <Badge variant="outline" className="capitalize text-[10px] bg-background">
-                                  {row.domain}
-                                </Badge>
+                                <Badge variant="outline" className="capitalize text-[10px] bg-background">{row.domain}</Badge>
                               </td>
-                              <td className="px-4 py-3 text-right font-mono text-xs">
-                                {(row.share * 100).toFixed(1)}%<br/>
-                                <span className="text-muted-foreground">{formatNumber(row.transactions)}</span>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2 min-w-[100px]">
+                                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-primary/60"
+                                      style={{ width: `${Math.min(row.share * 100 * 5, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                                    {(row.share * 100).toFixed(1)}%
+                                  </span>
+                                </div>
+                                <span className="font-mono text-[10px] text-muted-foreground">{formatNumber(row.transactions)} txn</span>
                               </td>
                               <td className="px-4 py-3 text-right font-mono text-xs">
                                 {formatCurrency(row.runCostUsd + row.buildCostUsd, true)}
@@ -910,8 +985,114 @@ export default function Scenario() {
                     </div>
                   </TabsContent>
 
+                  {/* 3-Year View */}
+                  <TabsContent value="3year" className="m-0 h-full">
+                    <div className="space-y-6">
+                      <div className="rounded-md border border-border overflow-hidden">
+                        <table className="w-full text-sm text-left">
+                          <thead className="bg-muted/50 text-muted-foreground text-xs uppercase font-semibold">
+                            <tr>
+                              <th className="px-4 py-3">Year</th>
+                              <th className="px-4 py-3 text-right">Adoption</th>
+                              <th className="px-4 py-3 text-right">Total Cost</th>
+                              <th className="px-4 py-3 text-right">Gross Benefit</th>
+                              <th className="px-4 py-3 text-right">Net Value</th>
+                              <th className="px-4 py-3 text-right">FTE Saved</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {rollup.byYear.map(y => (
+                              <tr key={y.year} className="hover:bg-muted/30 transition-colors">
+                                <td className="px-4 py-3 font-semibold">Year {y.year}</td>
+                                <td className="px-4 py-3 text-right font-mono text-xs">{pct(y.adoptionFraction)}</td>
+                                <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrencyLocal(y.totalCostUsd, true)}</td>
+                                <td className="px-4 py-3 text-right font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                                  {formatCurrencyLocal(y.benefitUsd, true)}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono font-semibold">
+                                  <span className={y.netUsd >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                                    {y.netUsd >= 0 ? "+" : ""}{formatCurrencyLocal(y.netUsd, true)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-xs">{y.fteEquivalent.toFixed(1)}</td>
+                              </tr>
+                            ))}
+                            {(() => {
+                              const cum = rollup.byYear.reduce(
+                                (a, y) => ({ cost: a.cost + y.totalCostUsd, benefit: a.benefit + y.benefitUsd, fte: a.fte + y.fteEquivalent }),
+                                { cost: 0, benefit: 0, fte: 0 },
+                              );
+                              return (
+                                <tr className="bg-muted/40 font-semibold">
+                                  <td className="px-4 py-3">3-Yr Cumulative</td>
+                                  <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">—</td>
+                                  <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrencyLocal(cum.cost, true)}</td>
+                                  <td className="px-4 py-3 text-right font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                                    {formatCurrencyLocal(cum.benefit, true)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-mono font-semibold">
+                                    <span className={cum.benefit - cum.cost >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                                      {cum.benefit - cum.cost >= 0 ? "+" : ""}{formatCurrencyLocal(cum.benefit - cum.cost, true)}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-mono text-xs">{cum.fte.toFixed(1)}</td>
+                                </tr>
+                              );
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <Card className="shadow-none border-border">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Benefit vs. Cost Ramp</CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-[260px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart
+                              data={rollup.byYear.map(y => ({
+                                name: `Year ${y.year}`,
+                                benefit: y.benefitUsd,
+                                cost:    y.totalCostUsd,
+                                net:     y.netUsd,
+                              }))}
+                              margin={{ top: 10, right: 24, left: 10, bottom: 5 }}
+                            >
+                              <defs>
+                                <linearGradient id="benefitGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25} />
+                                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.04} />
+                                </linearGradient>
+                                <linearGradient id="costGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.2} />
+                                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.04} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
+                              <YAxis tickFormatter={(v) => formatCurrencyLocal(v, true)} stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                              <Tooltip
+                                formatter={(val: number, name: string) => [
+                                  formatCurrencyLocal(val, false),
+                                  name === "benefit" ? "Gross Benefit" : name === "cost" ? "Total Cost" : "Net Value",
+                                ]}
+                                contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                              />
+                              <Legend formatter={n => n === "benefit" ? "Gross Benefit" : n === "cost" ? "Total Cost" : "Net Value"} />
+                              <Area type="monotone" dataKey="benefit" stroke="#10b981" strokeWidth={2} fill="url(#benefitGrad)" dot={{ r: 4, fill: "#10b981" }} />
+                              <Area type="monotone" dataKey="cost" stroke="#3b82f6" strokeWidth={2} fill="url(#costGrad)" dot={{ r: 4, fill: "#3b82f6" }} />
+                              <Line type="monotone" dataKey="net" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 5, fill: "#8b5cf6", strokeWidth: 2, stroke: "#fff" }} />
+                              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 2" />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+
+                  {/* Breakdown Charts */}
                   <TabsContent value="charts" className="m-0 h-full">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <Card className="shadow-none border-border">
                         <CardHeader className="pb-2">
                           <CardTitle className="text-sm">Cost Breakdown by Type</CardTitle>
@@ -924,14 +1105,13 @@ export default function Scenario() {
                                 cx="50%" cy="50%"
                                 innerRadius={60} outerRadius={80}
                                 paddingAngle={5}
-                                dataKey="usd"
-                                nameKey="label"
+                                dataKey="usd" nameKey="label"
                               >
-                                {rollup.byCostComponent.map((entry, index) => (
+                                {rollup.byCostComponent.map((_, index) => (
                                   <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(val: number) => formatCurrency(val, true)} />
+                              <Tooltip formatter={(val: number) => formatCurrencyLocal(val, true)} />
                               <Legend />
                             </PieChart>
                           </ResponsiveContainer>
@@ -946,9 +1126,9 @@ export default function Scenario() {
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={rollup.byDomain} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
-                              <XAxis type="number" tickFormatter={(val) => formatNumber(val)} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                              <XAxis type="number" tickFormatter={formatNumberLocal} stroke="hsl(var(--muted-foreground))" fontSize={12} />
                               <YAxis type="category" dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                              <Tooltip formatter={(val: number) => formatCurrency(val, true)} />
+                              <Tooltip formatter={(val: number) => formatCurrencyLocal(val, true)} />
                               <Bar dataKey="usd" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                             </BarChart>
                           </ResponsiveContainer>
@@ -957,9 +1137,10 @@ export default function Scenario() {
                     </div>
                   </TabsContent>
 
+                  {/* Build Cost Breakdown */}
                   <TabsContent value="build" className="m-0 h-full">
                     <p className="text-xs text-muted-foreground mb-3">
-                      What it costs to build each component of the solution. One-time = engineering cost to stand the component up (platform components scale with landscape maturity). Annual = the share amortized into this scenario's build cost — platform components over expected transaction volume, onboarding over the contract term. Annual amounts sum exactly to the scenario's total build cost.
+                      Component-level build cost. One-time = engineering cost to stand the component up (platform components scale with landscape maturity). Annual = share amortized into this scenario — platform over expected volume, onboarding over the contract term. Annual amounts sum exactly to the scenario's total build cost.
                     </p>
                     <div className="rounded-md border border-border overflow-hidden">
                       <table className="w-full text-sm text-left">
@@ -972,7 +1153,7 @@ export default function Scenario() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {[...rollup.buildBreakdown].sort((a, b) => b.annualUsd - a.annualUsd).map((c) => (
+                          {[...rollup.buildBreakdown].sort((a, b) => b.annualUsd - a.annualUsd).map(c => (
                             <tr key={c.key} className="hover:bg-muted/30 transition-colors">
                               <td className="px-4 py-3">
                                 <div className="font-medium text-foreground">{c.name}</div>
@@ -983,22 +1164,23 @@ export default function Scenario() {
                                   {c.kind}
                                 </Badge>
                               </td>
-                              <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(c.oneTimeUsd, true)}</td>
-                              <td className="px-4 py-3 text-right font-mono text-xs font-semibold">{formatCurrency(c.annualUsd, true)}</td>
+                              <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrencyLocal(c.oneTimeUsd, true)}</td>
+                              <td className="px-4 py-3 text-right font-mono text-xs font-semibold">{formatCurrencyLocal(c.annualUsd, true)}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot className="bg-muted/50">
                           <tr>
                             <td className="px-4 py-3 font-semibold text-xs uppercase text-muted-foreground" colSpan={2}>Total build cost in this scenario</td>
-                            <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(rollup.buildBreakdown.reduce((a, c) => a + c.oneTimeUsd, 0), true)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrency(rollup.totals.buildCostUsd, true)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrencyLocal(rollup.buildBreakdown.reduce((a, c) => a + c.oneTimeUsd, 0), true)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrencyLocal(rollup.totals.buildCostUsd, true)}</td>
                           </tr>
                         </tfoot>
                       </table>
                     </div>
                   </TabsContent>
 
+                  {/* Applied Assumptions */}
                   <TabsContent value="assumptions" className="m-0 h-full">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {rollup.appliedAssumptions.map(ass => {
@@ -1015,9 +1197,7 @@ export default function Scenario() {
                               <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                                 {isMeasured ? (
                                   <>
-                                    <Badge className="bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30 text-[10px]">
-                                      measured
-                                    </Badge>
+                                    <Badge className="bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30 text-[10px]">measured</Badge>
                                     <Badge variant="outline" className="font-mono text-xs bg-card line-through text-muted-foreground">
                                       {ass.value} {ass.unit}
                                     </Badge>
@@ -1028,14 +1208,10 @@ export default function Scenario() {
                                 ) : (
                                   <>
                                     {isCustom && (
-                                      <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1.5">
-                                        custom
-                                      </Badge>
+                                      <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1.5">custom</Badge>
                                     )}
                                     {ass.source?.confidence === "client-confirmed" && (
-                                      <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">
-                                        client-confirmed
-                                      </Badge>
+                                      <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">client-confirmed</Badge>
                                     )}
                                     <Badge variant="outline" className="font-mono text-xs bg-card">{ass.value} {ass.unit}</Badge>
                                   </>
@@ -1065,12 +1241,10 @@ export default function Scenario() {
           </div>
         )}
       </div>
-
     </div>
   );
 }
-const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
-
+const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
 function ConfidenceBadge({ level, score }: { level: string; score: number }) {
   if (level === "calibrated") {
     return (
@@ -1165,7 +1339,7 @@ function VarianceView({ rollup }: { rollup: Rollup }) {
   const benefitDelta = act.benefitUsd - est.benefitUsd;
   const netDelta = act.netUsd - est.netUsd;
 
-  const fmt = (v: number) => formatCurrency(v, true);
+  const fmt = (v: number) => formatCurrencyLocal(v, true);
   const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
   const fmtAbs = (v: number) => `${v >= 0 ? "+" : ""}${fmt(Math.abs(v))}`;
 
@@ -1257,4 +1431,41 @@ function VarianceView({ rollup }: { rollup: Rollup }) {
       </div>
     </div>
   );
+}
+
+function KpiTile({ label, value, accent, color }: { label: string; value: string; accent?: boolean; color?: "blue" | "amber" | "emerald" }) {
+  const styles = {
+    blue:    { bg: "bg-blue-500/15 border-blue-500/30",   label: "text-blue-200",   val: "text-blue-100" },
+    amber:   { bg: "bg-amber-500/15 border-amber-500/30", label: "text-amber-200",  val: "text-amber-100" },
+    emerald: { bg: "bg-emerald-500/20 border-emerald-500/30", label: "text-emerald-200", val: "text-emerald-100" },
+  };
+  const s = color ? styles[color] : null;
+  return (
+    <div className={`rounded-lg p-3 border ${s ? s.bg : "bg-background/10 border-sidebar-border"}`}>
+      <div className={`text-xs uppercase tracking-wider mb-1 ${s ? s.label : "text-sidebar-foreground/60"}`}>{label}</div>
+      <div className={`text-xl font-semibold font-mono ${s ? s.val : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+function formatNumberLocal(val: number) {
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(val);
+}
+
+function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-2 pb-2 border-b border-border">
+      {icon}
+      <h3 className="font-semibold text-sm">{label}</h3>
+    </div>
+  );
+}
+
+
+function formatCurrencyLocal(val: number, compact = false) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD",
+    notation: compact ? "compact" : "standard",
+    maximumFractionDigits: compact ? 1 : 0,
+  }).format(val);
 }
