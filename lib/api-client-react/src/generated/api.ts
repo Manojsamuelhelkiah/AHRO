@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ActualsLogParseResult,
   ActualsOverlayInput,
   ActualsOverlayRecord,
   ActualsValidationResult,
@@ -37,6 +38,7 @@ import type {
   Intent,
   ListCustomIntentsParams,
   ModelOption,
+  ParseActualsLogBody,
   Rollup,
   RollupRequest,
   Scenario,
@@ -2152,6 +2154,80 @@ export const useValidateActualsOverlay = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getValidateActualsOverlayMutationOptions(options));
+    }
+
+export const getParseActualsLogUrl = () => {
+
+
+
+
+  return `/api/actuals/parse-log`
+}
+
+/**
+ * Accepts a multipart/form-data upload of a raw call-log CSV (one row per call/transaction). Returns a proposed ActualsOverlayInput ready to review, adjust, and save via POST /actuals, plus parse diagnostics (unknown intents, duplicate call IDs, thin-sample warnings). Maximum file size 20 MB.
+ * @summary Parse a raw call-log CSV and aggregate it into a proposed actuals overlay
+ */
+export const parseActualsLog = async (parseActualsLogBody: ParseActualsLogBody, options?: RequestInit): Promise<ActualsLogParseResult> => {
+    const formData = new FormData();
+formData.append(`logFile`, parseActualsLogBody.logFile);
+
+  return customFetch<ActualsLogParseResult>(getParseActualsLogUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getParseActualsLogMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseActualsLog>>, TError,{data: BodyType<ParseActualsLogBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof parseActualsLog>>, TError,{data: BodyType<ParseActualsLogBody>}, TContext> => {
+
+const mutationKey = ['parseActualsLog'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof parseActualsLog>>, {data: BodyType<ParseActualsLogBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  parseActualsLog(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ParseActualsLogMutationResult = NonNullable<Awaited<ReturnType<typeof parseActualsLog>>>
+    export type ParseActualsLogMutationBody = BodyType<ParseActualsLogBody>
+    export type ParseActualsLogMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Parse a raw call-log CSV and aggregate it into a proposed actuals overlay
+ */
+export const useParseActualsLog = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseActualsLog>>, TError,{data: BodyType<ParseActualsLogBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof parseActualsLog>>,
+        TError,
+        {data: BodyType<ParseActualsLogBody>},
+        TContext
+      > => {
+      return useMutation(getParseActualsLogMutationOptions(options));
     }
 
 export const getGetActualsOverlayUrl = (id: number,) => {

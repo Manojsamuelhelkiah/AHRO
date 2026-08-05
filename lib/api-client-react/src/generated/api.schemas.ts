@@ -556,6 +556,50 @@ export interface ActualsOverlayRecord {
   createdAt: string;
 }
 
+/**
+ * Per-intent parse statistics from a raw call-log import.
+ */
+export interface ActualsLogIntentStat {
+  intentKey: string;
+  /** Number of rows in the log for this intent. */
+  rowCount: number;
+  /** True when rowCount < 30 — measurement is emitted but flagged as thin. */
+  belowMinThreshold: boolean;
+}
+
+/**
+ * An intent key found in the log that is not present in the corpus.
+ */
+export interface ActualsLogUnknownIntent {
+  intentKey: string;
+  rowCount: number;
+}
+
+/**
+ * Result of parsing a raw call-log CSV into a proposed actuals overlay.
+ */
+export interface ActualsLogParseResult {
+  proposedOverlay: ActualsOverlayInput;
+  /** ISO date (YYYY-MM-DD) of the earliest timestamp in the log. */
+  periodStart?: string | null;
+  /** ISO date (YYYY-MM-DD) of the latest timestamp in the log. */
+  periodEnd?: string | null;
+  /** Total non-blank data rows found in the file (before any filtering). */
+  totalRows: number;
+  /** Rows remaining after removing duplicate call_id entries (totalRows minus duplicateCount). Some of these may still be skipped as invalid (see invalidRowSkips). */
+  deduplicatedRows: number;
+  /** Number of rows skipped because their call_id was already seen. */
+  duplicateCount: number;
+  /** Number of rows skipped due to data quality issues (blank call_id, blank intent_key, unrecognisable contained value, etc.) after deduplication. These are separate from duplicates. */
+  invalidRowSkips: number;
+  /** Per-intent statistics for known intents found in the log. */
+  intentStats: ActualsLogIntentStat[];
+  /** Intent keys present in the log that are not in the corpus. */
+  unknownIntents: ActualsLogUnknownIntent[];
+  /** Non-fatal issues encountered during parsing (duplicate IDs, unparseable rows, etc.). */
+  parseWarnings: string[];
+}
+
 export interface ActualsValidationResult {
   valid: boolean;
   errors: string[];
@@ -570,5 +614,10 @@ export type ListCustomIntentsParams = {
  * active (default) | all
  */
 status?: string;
+};
+
+export type ParseActualsLogBody = {
+  /** Raw call-log CSV file (max 20 MB). */
+  logFile: Blob;
 };
 

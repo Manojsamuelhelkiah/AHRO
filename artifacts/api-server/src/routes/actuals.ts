@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
+import multer from "multer";
 import { db, actualsOverlaysTable } from "@workspace/db";
 import {
   ListActualsOverlaysResponse,
@@ -11,9 +12,16 @@ import {
 } from "@workspace/api-zod";
 import { validateActualsOverlay, validateActualsOverlayOrThrow, InputValidationError } from "../lib/validate-inputs";
 import { loadActiveCustomIntents } from "./custom-intents";
+import { aggregateCallLog } from "../lib/aggregate-log";
 import type { ActualsOverlay } from "../data/types";
 
 const router: IRouter = Router();
+
+// 20 MB limit for raw call-log uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
 
 function serialize(row: typeof actualsOverlaysTable.$inferSelect) {
   return {
@@ -58,6 +66,23 @@ router.post("/actuals/validate", async (req, res, next) => {
     next(err);
   }
 });
+
+router.post(
+  "/actuals/parse-log",
+  upload.single("logFile"),
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        throw new InputValidationError("logFile field is required");
+      }
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = aggregateCallLog(csvText);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 router.post("/actuals", async (req, res, next) => {
   try {

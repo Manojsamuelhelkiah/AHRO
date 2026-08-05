@@ -937,6 +937,50 @@ export const ValidateActualsOverlayResponse = zod.object({
 
 
 /**
+ * Accepts a multipart/form-data upload of a raw call-log CSV (one row per call/transaction). Returns a proposed ActualsOverlayInput ready to review, adjust, and save via POST /actuals, plus parse diagnostics (unknown intents, duplicate call IDs, thin-sample warnings). Maximum file size 20 MB.
+ * @summary Parse a raw call-log CSV and aggregate it into a proposed actuals overlay
+ */
+export const ParseActualsLogBody = zod.object({
+  "logFile": zod.instanceof(File).describe('Raw call-log CSV file (max 20 MB).')
+})
+
+export const ParseActualsLogResponse = zod.object({
+  "proposedOverlay": zod.object({
+  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
+  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
+  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
+  "intents": zod.array(zod.object({
+  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
+  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
+  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
+}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
+  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
+  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
+  "tokenActualsByRole": zod.record(zod.string(), zod.object({
+  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
+  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
+}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
+}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.'),
+  "periodStart": zod.string().nullish().describe('ISO date (YYYY-MM-DD) of the earliest timestamp in the log.'),
+  "periodEnd": zod.string().nullish().describe('ISO date (YYYY-MM-DD) of the latest timestamp in the log.'),
+  "totalRows": zod.number().describe('Total non-blank data rows found in the file (before any filtering).'),
+  "deduplicatedRows": zod.number().describe('Rows remaining after removing duplicate call_id entries (totalRows minus duplicateCount). Some of these may still be skipped as invalid (see invalidRowSkips).\n'),
+  "duplicateCount": zod.number().describe('Number of rows skipped because their call_id was already seen.'),
+  "invalidRowSkips": zod.number().describe('Number of rows skipped due to data quality issues (blank call_id, blank intent_key, unrecognisable contained value, etc.) after deduplication. These are separate from duplicates.\n'),
+  "intentStats": zod.array(zod.object({
+  "intentKey": zod.string(),
+  "rowCount": zod.number().describe('Number of rows in the log for this intent.'),
+  "belowMinThreshold": zod.boolean().describe('True when rowCount < 30 — measurement is emitted but flagged as thin.')
+}).describe('Per-intent parse statistics from a raw call-log import.')).describe('Per-intent statistics for known intents found in the log.'),
+  "unknownIntents": zod.array(zod.object({
+  "intentKey": zod.string(),
+  "rowCount": zod.number()
+}).describe('An intent key found in the log that is not present in the corpus.')).describe('Intent keys present in the log that are not in the corpus.'),
+  "parseWarnings": zod.array(zod.string()).describe('Non-fatal issues encountered during parsing (duplicate IDs, unparseable rows, etc.).')
+}).describe('Result of parsing a raw call-log CSV into a proposed actuals overlay.')
+
+
+/**
  * @summary Get a saved actuals overlay by id
  */
 export const GetActualsOverlayParams = zod.object({

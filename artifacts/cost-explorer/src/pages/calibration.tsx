@@ -4,11 +4,13 @@ import {
   useCreateActualsOverlay,
   useValidateActualsOverlay,
   useDeleteActualsOverlay,
+  useParseActualsLog,
   getListActualsOverlaysQueryKey,
   useListIntents,
   type ActualsOverlayInput,
   type ActualsValidationResult,
   type ActualsOverlayRecord,
+  type ActualsLogParseResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -49,6 +51,9 @@ import {
   TrendingDown,
   Minus,
   GitMerge,
+  FileText,
+  Info,
+  Loader2,
 } from "lucide-react";
 import {
   computeDrift,
@@ -271,10 +276,49 @@ function OverlayCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Form state
-// ---------------------------------------------------------------------------
+function overlayToForm(overlay: ActualsOverlayInput): Partial<FormState> {
+  const patch: Partial<FormState> = {};
 
+  if (overlay.clientLabel) patch.clientLabel = overlay.clientLabel;
+  if (overlay.periodStart) patch.periodStart = overlay.periodStart;
+  if (overlay.periodEnd) patch.periodEnd = overlay.periodEnd;
+
+  if (overlay.measuredHitlSamplingRate !== undefined) {
+    patch.hitlSamplingRate = String(overlay.measuredHitlSamplingRate);
+  }
+
+  if (overlay.measuredContainmentByFlowClass) {
+    patch.fcContainment = Object.fromEntries(
+      Object.entries(overlay.measuredContainmentByFlowClass).map(([k, v]) => [k, String(v)]),
+    );
+  }
+
+  if (overlay.tokenActualsByRole) {
+    patch.tokenActuals = Object.fromEntries(
+      Object.entries(overlay.tokenActualsByRole).map(([role, t]) => [
+        role,
+        { input: String(t.avgInputTokens), output: String(t.avgOutputTokens) },
+      ]),
+    );
+  }
+
+  if (overlay.intents) {
+    const contMap: Record<string, string> = {};
+    const hitlMap: Record<string, string> = {};
+    for (const row of overlay.intents) {
+      if (row.measuredContainmentRate !== undefined) {
+        contMap[row.intentKey] = String(row.measuredContainmentRate);
+      }
+      if (row.avgHitlMinutes !== undefined) {
+        hitlMap[row.intentKey] = String(row.avgHitlMinutes);
+      }
+    }
+    if (Object.keys(contMap).length) patch.intentContainment = contMap;
+    if (Object.keys(hitlMap).length) patch.intentHitlMin = hitlMap;
+  }
+
+  return patch;
+}
 interface FormState {
   clientLabel: string;
   periodStart: string;
@@ -356,21 +400,28 @@ export default function Calibration() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [showAllIntents, setShowAllIntents] = useState(false);
   const [expandedIntents, setExpandedIntents] = useState<Set<string>>(new Set());
+  // Outer tab: Import & Manage vs Drift Analysis (task-23)
   const [outerTab, setOuterTab] = useState<"manage" | "drift">(() =>
     new URLSearchParams(window.location.search).get("tab") === "drift" ? "drift" : "manage"
   );
-  const [activeTab, setActiveTab] = useState<"form" | "csv">("form");
+  // Inner import-method tab: form, csv, or raw call-log (task-22)
+  const [activeTab, setActiveTab] = useState<"form" | "csv" | "rawlog">("form");
   const [validation, setValidation] = useState<ActualsValidationResult | null>(null);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [csvParsed, setCsvParsed] = useState<ActualsOverlayInput | null>(null);
   const [csvRowCount, setCsvRowCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Raw call-log import state (task-22)
+  const [logParseResult, setLogParseResult] = useState<ActualsLogParseResult | null>(null);
+  const logFileInputRef = useRef<HTMLInputElement>(null);
+
   const { data: overlays, refetch: refetchOverlays } = useListActualsOverlays();
   const { data: intents } = useListIntents();
   const createOverlay = useCreateActualsOverlay();
   const validateOverlay = useValidateActualsOverlay();
   const deleteOverlay = useDeleteActualsOverlay();
+  const parseActualsLogMutation = useParseActualsLog();
 
   // ---- helpers ----
 
@@ -436,6 +487,8 @@ export default function Calibration() {
       setValidation(null);
       setCsvParsed(null);
       setCsvErrors([]);
+      setLogParseResult(null);
+      parseActualsLogMutation.reset();
     } catch {
       toast({ title: "Save Failed", description: "Could not persist overlay.", variant: "destructive" });
     }
@@ -467,6 +520,66 @@ export default function Calibration() {
     e.target.value = "";
   }, [form.clientLabel, form.periodStart, form.periodEnd]);
 
+  // ---- Raw call-log upload (task-22) ----
+
+  /**
+   * Merge period/label metadata from the form (user-typed values take precedence)
+   * and the log parse result (auto-detected fallback) into the proposed overlay.
+   * This ensures Save and Validate carry the full period even if the user edited
+   * the date fields after uploading.
+   */
+  const buildRawLogOverlay = useCallback(
+    (proposed: ActualsOverlayInput): ActualsOverlayInput => {
+      const r = logParseResult;
+      return {
+        ...proposed,
+        ...(form.clientLabel ? { clientLabel: form.clientLabel } : {}),
+        ...(form.periodStart || r?.periodStart
+          ? { periodStart: form.periodStart || r?.periodStart || undefined }
+          : {}),
+        ...(form.periodEnd || r?.periodEnd
+          ? { periodEnd: form.periodEnd || r?.periodEnd || undefined }
+          : {}),
+      };
+    },
+    [logParseResult, form.clientLabel, form.periodStart, form.periodEnd],
+  );
+
+  const handleLogFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setLogParseResult(null);
+    setValidation(null);
+    try {
+      const result = await parseActualsLogMutation.mutateAsync({ data: { logFile: file } });
+      setLogParseResult(result);
+      // Auto-validate with the auto-detected period
+      if (result.proposedOverlay && Object.keys(result.proposedOverlay).length > 0) {
+        await handleValidate({
+          ...result.proposedOverlay as ActualsOverlayInput,
+          ...(result.periodStart ? { periodStart: result.periodStart } : {}),
+          ...(result.periodEnd ? { periodEnd: result.periodEnd } : {}),
+        });
+      }
+    } catch (err: unknown) {
+      setLogParseResult(null);
+      console.error("Log parse failed:", err);
+    }
+  }, [parseActualsLogMutation]);
+
+  // Pre-fill the Form Entry tab from the log parse result
+  const handlePrefillForm = useCallback(() => {
+    if (!logParseResult) return;
+    const patch = overlayToForm(logParseResult.proposedOverlay as ActualsOverlayInput);
+    // Don't overwrite dates the user has already typed
+    if (form.periodStart && patch.periodStart) delete patch.periodStart;
+    if (form.periodEnd && patch.periodEnd) delete patch.periodEnd;
+    setForm(prev => ({ ...emptyForm(), ...prev, ...patch }));
+    setActiveTab("form");
+    toast({ title: "Form pre-filled", description: "Review and adjust, then save." });
+  }, [logParseResult, form.periodStart, form.periodEnd]);
+
   // ---- delete ----
 
   const handleDelete = async (id: number) => {
@@ -488,8 +601,15 @@ export default function Calibration() {
     ...Object.keys(form.intentHitlMin).filter(k => form.intentHitlMin[k] !== ""),
   ]);
 
-  // Determine effective overlay for validation badge
-  const activeOverlay = activeTab === "csv" ? csvParsed : formToOverlay(form);
+  // Effective overlay for the validation badge — rawlog merges period via buildRawLogOverlay
+  const activeOverlay =
+    activeTab === "csv"
+      ? csvParsed
+      : activeTab === "rawlog"
+        ? logParseResult
+          ? buildRawLogOverlay(logParseResult.proposedOverlay as ActualsOverlayInput)
+          : null
+        : formToOverlay(form);
   const hasAnyData = activeOverlay && overlayMeasuredFields(activeOverlay).length > 0;
 
   return (
@@ -505,6 +625,7 @@ export default function Calibration() {
         </p>
       </div>
 
+      {/* Outer tabs: Import & Manage | Drift Analysis */}
       <Tabs
         value={outerTab}
         onValueChange={(v) => setOuterTab(v as "manage" | "drift")}
@@ -519,289 +640,292 @@ export default function Calibration() {
         </TabsList>
 
         <TabsContent value="manage" className="mt-4">
-      <div className="flex flex-col xl:flex-row gap-6">
-        {/* ---- LEFT: Import form ---- */}
-        <div className="flex-1 min-w-0 flex flex-col gap-4">
-          <Card className="shadow-sm border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">New Actuals Overlay</CardTitle>
-              <CardDescription>
-                Provide observed values — any combination of containment rates, HITL minutes, sampling rates, or token counts. All fields are optional; at least one measurement must be present to save.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
+          <div className="flex flex-col xl:flex-row gap-6">
+            {/* ---- LEFT: Import form ---- */}
+            <div className="flex-1 min-w-0 flex flex-col gap-4">
+              <Card className="shadow-sm border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">New Actuals Overlay</CardTitle>
+                  <CardDescription>
+                    Provide observed values — any combination of containment rates, HITL minutes, sampling rates, or token counts. All fields are optional; at least one measurement must be present to save.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
 
-              {/* Meta */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-1 space-y-1.5">
-                  <Label className="text-xs">Client label</Label>
-                  <Input
-                    value={form.clientLabel}
-                    onChange={e => patchForm({ clientLabel: e.target.value })}
-                    placeholder="e.g. Acme Q1 2025"
-                    className="bg-background"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Period start</Label>
-                  <Input
-                    value={form.periodStart}
-                    onChange={e => patchForm({ periodStart: e.target.value })}
-                    placeholder="e.g. 2025-01-01"
-                    className="bg-background"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Period end</Label>
-                  <Input
-                    value={form.periodEnd}
-                    onChange={e => patchForm({ periodEnd: e.target.value })}
-                    placeholder="e.g. 2025-03-31"
-                    className="bg-background"
-                  />
-                </div>
-              </div>
-
-              <Tabs value={activeTab} onValueChange={v => { setActiveTab(v as "form" | "csv"); setValidation(null); }}>
-                <TabsList className="bg-muted">
-                  <TabsTrigger value="form">Form Entry</TabsTrigger>
-                  <TabsTrigger value="csv">CSV Upload</TabsTrigger>
-                </TabsList>
-
-                {/* ---- FORM ENTRY ---- */}
-                <TabsContent value="form" className="mt-4 space-y-6">
-
-                  {/* HITL sampling */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-border">
-                      <Users className="w-4 h-4 text-primary" />
-                      <h3 className="font-semibold text-sm">Global HITL Sampling Rate</h3>
-                    </div>
-                    <div className="max-w-xs space-y-1.5">
-                      <Label className="text-xs">Measured sampling rate (0–1)</Label>
+                  {/* Meta */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-1 space-y-1.5">
+                      <Label className="text-xs">Client label</Label>
                       <Input
-                        type="number" step="0.05" min="0.01" max="1"
-                        value={form.hitlSamplingRate}
-                        onChange={e => patchForm({ hitlSamplingRate: e.target.value })}
-                        placeholder="default 1.0 (review every checkpoint)"
+                        value={form.clientLabel}
+                        onChange={e => patchForm({ clientLabel: e.target.value })}
+                        placeholder="e.g. Acme Q1 2025"
                         className="bg-background"
                       />
-                      <p className="text-[10px] text-muted-foreground">
-                        Fraction of residual HITL checkpoints actually reviewed in production.
-                      </p>
                     </div>
-                  </div>
-
-                  {/* Per-role token actuals */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-border">
-                      <Cpu className="w-4 h-4 text-primary" />
-                      <h3 className="font-semibold text-sm">Avg Token Counts by Model Role</h3>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Period start</Label>
+                      <Input
+                        value={form.periodStart}
+                        onChange={e => patchForm({ periodStart: e.target.value })}
+                        placeholder="e.g. 2025-01-01"
+                        className="bg-background"
+                      />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      When provided, the model cost is recomputed from actual token consumption × published per-token rates, replacing the baked per-call profile.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {ROLES.map(role => (
-                        <div key={role} className="space-y-1.5 p-3 rounded-lg border border-border bg-muted/20">
-                          <p className="text-xs font-medium">{ROLE_LABELS[role]}</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Avg input tokens</Label>
-                              <Input
-                                type="number" min="0"
-                                value={form.tokenActuals[role]?.input ?? ""}
-                                onChange={e => setToken(role, "input", e.target.value)}
-                                placeholder="e.g. 900"
-                                className="bg-background mt-0.5"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Avg output tokens</Label>
-                              <Input
-                                type="number" min="0"
-                                value={form.tokenActuals[role]?.output ?? ""}
-                                onChange={e => setToken(role, "output", e.target.value)}
-                                placeholder="e.g. 120"
-                                className="bg-background mt-0.5"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Flow class containment */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-border">
-                      <BarChart2 className="w-4 h-4 text-primary" />
-                      <h3 className="font-semibold text-sm">Containment by Flow Class</h3>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Applies to all intents in a flow class unless a per-intent measured rate overrides it below.
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {Object.entries(FC_LABELS).map(([fc, label]) => (
-                        <div key={fc} className="space-y-1.5">
-                          <Label className="text-[10px]">{label}</Label>
-                          <Input
-                            type="number" step="0.01" min="0" max="1"
-                            value={form.fcContainment[fc] ?? ""}
-                            onChange={e => setFc(fc, e.target.value)}
-                            placeholder={`default ${FC_DEFAULTS[fc]}`}
-                            className="bg-background"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Per-intent */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between pb-1.5 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <FlaskConical className="w-4 h-4 text-primary" />
-                        <h3 className="font-semibold text-sm">Per-Intent Measurements</h3>
-                        {touchedIntentKeys.size > 0 && (
-                          <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 text-[10px]">
-                            {touchedIntentKeys.size} filled
-                          </Badge>
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        Per-intent containment overrides the flow-class rate
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      {visibleIntents.map(intent => {
-                        const hasCont = !!form.intentContainment[intent.key];
-                        const hasHitl = !!form.intentHitlMin[intent.key];
-                        const isExpanded = expandedIntents.has(intent.key) || hasCont || hasHitl;
-                        return (
-                          <div key={intent.key} className={`rounded-md border transition-colors ${(hasCont || hasHitl) ? "border-blue-500/40 bg-blue-500/5" : "border-border"}`}>
-                            <button
-                              type="button"
-                              onClick={() => toggleIntent(intent.key)}
-                              className="w-full flex items-center justify-between px-3 py-2 text-left"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                                <span className="text-sm font-medium truncate">{intent.name}</span>
-                                <Badge variant="outline" className="text-[9px] capitalize bg-background shrink-0 hidden sm:inline-flex">{intent.domain}</Badge>
-                              </div>
-                              <div className="flex gap-1 shrink-0">
-                                {hasCont && <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[9px]">containment</Badge>}
-                                {hasHitl && <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[9px]">HITL min</Badge>}
-                              </div>
-                            </button>
-                            {isExpanded && (
-                              <div className="px-3 pb-3 grid grid-cols-2 gap-3">
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] text-muted-foreground">Containment rate (0–1)</Label>
-                                  <Input
-                                    type="number" step="0.01" min="0" max="1"
-                                    value={form.intentContainment[intent.key] ?? ""}
-                                    onChange={e => setIntentField(intent.key, "containment", e.target.value)}
-                                    placeholder="flow-class default"
-                                    className="bg-background h-8 text-sm"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] text-muted-foreground">Avg HITL minutes</Label>
-                                  <Input
-                                    type="number" step="0.5" min="0" max="600"
-                                    value={form.intentHitlMin[intent.key] ?? ""}
-                                    onChange={e => setIntentField(intent.key, "hitl", e.target.value)}
-                                    placeholder="intent default"
-                                    className="bg-background h-8 text-sm"
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {allIntents.length > 12 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllIntents(v => !v)}
-                        className="text-xs text-primary hover:underline mt-1"
-                      >
-                        {showAllIntents ? "Show fewer intents" : `Show all ${allIntents.length} intents…`}
-                      </button>
-                    )}
-                  </div>
-                </TabsContent>
-
-                {/* ---- CSV UPLOAD ---- */}
-                <TabsContent value="csv" className="mt-4 space-y-5">
-                  <div className="flex flex-col sm:flex-row gap-3 p-4 rounded-lg border border-dashed border-border bg-muted/30">
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium">Upload a completed CSV file</p>
-                      <p className="text-xs text-muted-foreground">
-                        Supports <code className="font-mono">intent</code>, <code className="font-mono">flowclass</code>, <code className="font-mono">global</code>, and <code className="font-mono">tokenRole</code> row types. Download the template to see the format.
-                      </p>
-                    </div>
-                    <div className="flex flex-col sm:items-end gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
-                        <Download className="w-3.5 h-3.5 mr-1.5" />
-                        Download Template
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full sm:w-auto"
-                      >
-                        <Upload className="w-3.5 h-3.5 mr-1.5" />
-                        Choose File
-                      </Button>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".csv,text/csv"
-                        className="hidden"
-                        onChange={handleFileChange}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Period end</Label>
+                      <Input
+                        value={form.periodEnd}
+                        onChange={e => patchForm({ periodEnd: e.target.value })}
+                        placeholder="e.g. 2025-03-31"
+                        className="bg-background"
                       />
                     </div>
                   </div>
 
-                  {/* CSV parse errors */}
-                  {csvErrors.length > 0 && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        <p className="font-medium mb-1">{csvErrors.length} error{csvErrors.length !== 1 ? "s" : ""} in file — fix and re-upload:</p>
-                        <ul className="text-xs space-y-0.5 list-disc list-inside">
-                          {csvErrors.map((e, i) => <li key={i}>{e}</li>)}
-                        </ul>
-                      </AlertDescription>
-                    </Alert>
-                  )}
+                  {/* Inner import-method tabs: Form | CSV | Call Log */}
+                  <Tabs value={activeTab} onValueChange={v => { setActiveTab(v as "form" | "csv" | "rawlog"); setValidation(null); }}>
+                    <TabsList className="bg-muted">
+                      <TabsTrigger value="form">Form Entry</TabsTrigger>
+                      <TabsTrigger value="csv">CSV Upload</TabsTrigger>
+                      <TabsTrigger value="rawlog" className="gap-1.5">
+                        <FileText className="w-3.5 h-3.5" />
+                        Call Log Import
+                      </TabsTrigger>
+                    </TabsList>
 
-                  {/* CSV parsed summary */}
-                  {csvParsed && csvErrors.length === 0 && (
-                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                      <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4" />
-                        Parsed {csvRowCount} rows successfully
-                      </p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {overlayMeasuredFields(csvParsed).map(f => (
-                          <Badge key={f} className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">{f}</Badge>
-                        ))}
+                    {/* ---- FORM ENTRY ---- */}
+                    <TabsContent value="form" className="mt-4 space-y-6">
+
+                      {/* HITL sampling */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-border">
+                          <Users className="w-4 h-4 text-primary" />
+                          <h3 className="font-semibold text-sm">Global HITL Sampling Rate</h3>
+                        </div>
+                        <div className="max-w-xs space-y-1.5">
+                          <Label className="text-xs">Measured sampling rate (0–1)</Label>
+                          <Input
+                            type="number" step="0.05" min="0.01" max="1"
+                            value={form.hitlSamplingRate}
+                            onChange={e => patchForm({ hitlSamplingRate: e.target.value })}
+                            placeholder="default 1.0 (review every checkpoint)"
+                            className="bg-background"
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Fraction of residual HITL checkpoints actually reviewed in production.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
 
-                  {/* CSV Template reference */}
-                  <details className="text-xs text-muted-foreground">
-                    <summary className="cursor-pointer font-medium mb-2">CSV format reference</summary>
-                    <pre className="bg-muted rounded p-3 overflow-x-auto text-[10px] font-mono leading-relaxed whitespace-pre">
+                      {/* Per-role token actuals */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-border">
+                          <Cpu className="w-4 h-4 text-primary" />
+                          <h3 className="font-semibold text-sm">Avg Token Counts by Model Role</h3>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          When provided, the model cost is recomputed from actual token consumption × published per-token rates, replacing the baked per-call profile.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {ROLES.map(role => (
+                            <div key={role} className="space-y-1.5 p-3 rounded-lg border border-border bg-muted/20">
+                              <p className="text-xs font-medium">{ROLE_LABELS[role]}</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-[10px] text-muted-foreground">Avg input tokens</Label>
+                                  <Input
+                                    type="number" min="0"
+                                    value={form.tokenActuals[role]?.input ?? ""}
+                                    onChange={e => setToken(role, "input", e.target.value)}
+                                    placeholder="e.g. 900"
+                                    className="bg-background mt-0.5"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] text-muted-foreground">Avg output tokens</Label>
+                                  <Input
+                                    type="number" min="0"
+                                    value={form.tokenActuals[role]?.output ?? ""}
+                                    onChange={e => setToken(role, "output", e.target.value)}
+                                    placeholder="e.g. 120"
+                                    className="bg-background mt-0.5"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Flow class containment */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-border">
+                          <BarChart2 className="w-4 h-4 text-primary" />
+                          <h3 className="font-semibold text-sm">Containment by Flow Class</h3>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Applies to all intents in a flow class unless a per-intent measured rate overrides it below.
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {Object.entries(FC_LABELS).map(([fc, label]) => (
+                            <div key={fc} className="space-y-1.5">
+                              <Label className="text-[10px]">{label}</Label>
+                              <Input
+                                type="number" step="0.01" min="0" max="1"
+                                value={form.fcContainment[fc] ?? ""}
+                                onChange={e => setFc(fc, e.target.value)}
+                                placeholder={`default ${FC_DEFAULTS[fc]}`}
+                                className="bg-background"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Per-intent */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-border">
+                          <div className="flex items-center gap-2">
+                            <FlaskConical className="w-4 h-4 text-primary" />
+                            <h3 className="font-semibold text-sm">Per-Intent Measurements</h3>
+                            {touchedIntentKeys.size > 0 && (
+                              <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 text-[10px]">
+                                {touchedIntentKeys.size} filled
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            Per-intent containment overrides the flow-class rate
+                          </span>
+                        </div>
+
+                        <div className="space-y-1">
+                          {visibleIntents.map(intent => {
+                            const hasCont = !!form.intentContainment[intent.key];
+                            const hasHitl = !!form.intentHitlMin[intent.key];
+                            const isExpanded = expandedIntents.has(intent.key) || hasCont || hasHitl;
+                            return (
+                              <div key={intent.key} className={`rounded-md border transition-colors ${(hasCont || hasHitl) ? "border-blue-500/40 bg-blue-500/5" : "border-border"}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleIntent(intent.key)}
+                                  className="w-full flex items-center justify-between px-3 py-2 text-left"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                                    <span className="text-sm font-medium truncate">{intent.name}</span>
+                                    <Badge variant="outline" className="text-[9px] capitalize bg-background shrink-0 hidden sm:inline-flex">{intent.domain}</Badge>
+                                  </div>
+                                  <div className="flex gap-1 shrink-0">
+                                    {hasCont && <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[9px]">containment</Badge>}
+                                    {hasHitl && <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[9px]">HITL min</Badge>}
+                                  </div>
+                                </button>
+                                {isExpanded && (
+                                  <div className="px-3 pb-3 grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] text-muted-foreground">Containment rate (0–1)</Label>
+                                      <Input
+                                        type="number" step="0.01" min="0" max="1"
+                                        value={form.intentContainment[intent.key] ?? ""}
+                                        onChange={e => setIntentField(intent.key, "containment", e.target.value)}
+                                        placeholder="flow-class default"
+                                        className="bg-background h-8 text-sm"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] text-muted-foreground">Avg HITL minutes</Label>
+                                      <Input
+                                        type="number" step="0.5" min="0" max="600"
+                                        value={form.intentHitlMin[intent.key] ?? ""}
+                                        onChange={e => setIntentField(intent.key, "hitl", e.target.value)}
+                                        placeholder="intent default"
+                                        className="bg-background h-8 text-sm"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {allIntents.length > 12 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllIntents(v => !v)}
+                            className="text-xs text-primary hover:underline mt-1"
+                          >
+                            {showAllIntents ? "Show fewer intents" : `Show all ${allIntents.length} intents…`}
+                          </button>
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    {/* ---- CSV UPLOAD ---- */}
+                    <TabsContent value="csv" className="mt-4 space-y-5">
+                      <div className="flex flex-col sm:flex-row gap-3 p-4 rounded-lg border border-dashed border-border bg-muted/30">
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium">Upload a completed CSV file</p>
+                          <p className="text-xs text-muted-foreground">
+                            Supports <code className="font-mono">intent</code>, <code className="font-mono">flowclass</code>, <code className="font-mono">global</code>, and <code className="font-mono">tokenRole</code> row types. Download the template to see the format.
+                          </p>
+                        </div>
+                        <div className="flex flex-col sm:items-end gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
+                            <Download className="w-3.5 h-3.5 mr-1.5" />
+                            Download Template
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-full sm:w-auto"
+                          >
+                            <Upload className="w-3.5 h-3.5 mr-1.5" />
+                            Choose File
+                          </Button>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".csv,text/csv"
+                            className="hidden"
+                            onChange={handleFileChange}
+                          />
+                        </div>
+                      </div>
+
+                      {/* CSV parse errors */}
+                      {csvErrors.length > 0 && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            <p className="font-medium mb-1">{csvErrors.length} error{csvErrors.length !== 1 ? "s" : ""} in file — fix and re-upload:</p>
+                            <ul className="text-xs space-y-0.5 list-disc list-inside">
+                              {csvErrors.map((e, i) => <li key={i}>{e}</li>)}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {csvParsed && csvErrors.length === 0 && (
+                        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Parsed {csvRowCount} rows successfully
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {overlayMeasuredFields(csvParsed).map(f => (
+                              <Badge key={f} className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">{f}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <details className="text-xs text-muted-foreground">
+                        <summary className="cursor-pointer font-medium mb-2">CSV format reference</summary>
+                        <pre className="bg-muted rounded p-3 overflow-x-auto text-[10px] font-mono leading-relaxed whitespace-pre">
 {`${CSV_HEADER}
 intent,<intentKey>,<containmentRate>,<avgHitlMinutes>,[notes]
 flowclass,<fc-key>,<containmentRate>,,
@@ -811,112 +935,362 @@ tokenRole,<role>,<avgInputTokens>,<avgOutputTokens>,
 Valid flow class keys: fc1-deterministic, fc2-policy, fc3-multiagent, fc4-frontier
 Valid roles: router, reasoning, frontier, data
 Blank cells skip that field (not treated as zero).`}
-                    </pre>
-                  </details>
-                </TabsContent>
-              </Tabs>
+                        </pre>
+                      </details>
+                    </TabsContent>
 
-              {/* Validation result */}
-              {validation && (
-                <div className={`p-3 rounded-lg border ${validation.valid ? "border-emerald-500/30 bg-emerald-500/10" : "border-destructive/30 bg-destructive/10"}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    {validation.valid
-                      ? <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      : <AlertCircle className="w-4 h-4 text-destructive" />}
-                    <span className={`text-sm font-semibold ${validation.valid ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"}`}>
-                      {validation.valid ? "Validation passed" : `${validation.errors.length} validation error${validation.errors.length !== 1 ? "s" : ""}`}
-                    </span>
-                  </div>
-                  {!validation.valid && (
-                    <ul className="text-xs text-destructive space-y-0.5 list-disc list-inside mt-1">
-                      {validation.errors.map((e, i) => <li key={i}>{e}</li>)}
-                    </ul>
-                  )}
-                  {validation.valid && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {validation.measuredFields.map(f => (
-                        <Badge key={f} className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">{f}</Badge>
-                      ))}
+                    {/* ---- CALL LOG IMPORT (task-22) ---- */}
+                    <TabsContent value="rawlog" className="mt-4 space-y-5">
+
+                      {/* Upload affordance */}
+                      <div className="flex flex-col sm:flex-row gap-3 p-4 rounded-lg border border-dashed border-border bg-muted/30">
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium">Upload a raw call-log CSV</p>
+                          <p className="text-xs text-muted-foreground">
+                            One row per call/transaction. The server aggregates it into a proposed overlay that you can review, adjust, and save. Max 20 MB.
+                          </p>
+                        </div>
+                        <div className="flex flex-col sm:items-end gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={downloadLogTemplate}>
+                            <Download className="w-3.5 h-3.5 mr-1.5" />
+                            Download Template
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => logFileInputRef.current?.click()}
+                            disabled={parseActualsLogMutation.isPending}
+                            className="w-full sm:w-auto"
+                          >
+                            {parseActualsLogMutation.isPending
+                              ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Parsing…</>
+                              : <><Upload className="w-3.5 h-3.5 mr-1.5" />Choose File</>}
+                          </Button>
+                          <input
+                            ref={logFileInputRef}
+                            type="file"
+                            accept=".csv,text/csv,.tsv,text/tab-separated-values"
+                            className="hidden"
+                            onChange={handleLogFileChange}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Upload error */}
+                      {parseActualsLogMutation.error && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            {parseActualsLogMutation.error instanceof Error
+                              ? parseActualsLogMutation.error.message
+                              : "Upload failed — check the file and try again."}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {/* Parse results */}
+                      {logParseResult && (
+                        <div className="space-y-4">
+
+                          {/* Summary bar */}
+                          <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                            <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                              Parsed {logParseResult.totalRows.toLocaleString()} rows
+                              {logParseResult.duplicateCount > 0 && (
+                                <> · {logParseResult.duplicateCount} duplicate{logParseResult.duplicateCount !== 1 ? "s" : ""} removed</>
+                              )}
+                              {logParseResult.invalidRowSkips > 0 && (
+                                <> · {logParseResult.invalidRowSkips} invalid row{logParseResult.invalidRowSkips !== 1 ? "s" : ""} skipped</>
+                              )}
+                            </span>
+                            <div className="flex flex-wrap gap-1 ml-auto">
+                              {overlayMeasuredFields(logParseResult.proposedOverlay as ActualsOverlayInput).map(f => (
+                                <Badge key={f} className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 text-[10px]">{f}</Badge>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Period dates (pre-filled but editable) */}
+                          {(logParseResult.periodStart || logParseResult.periodEnd) && (
+                            <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5" /> Detected period
+                              </p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-muted-foreground">Period start</Label>
+                                  <Input
+                                    value={form.periodStart || logParseResult.periodStart || ""}
+                                    onChange={e => patchForm({ periodStart: e.target.value })}
+                                    placeholder={logParseResult.periodStart ?? ""}
+                                    className="bg-background h-8 text-sm"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-muted-foreground">Period end</Label>
+                                  <Input
+                                    value={form.periodEnd || logParseResult.periodEnd || ""}
+                                    onChange={e => patchForm({ periodEnd: e.target.value })}
+                                    placeholder={logParseResult.periodEnd ?? ""}
+                                    className="bg-background h-8 text-sm"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Unknown intents warning */}
+                          {logParseResult.unknownIntents.length > 0 && (
+                            <Alert>
+                              <AlertCircle className="h-4 w-4 text-amber-500" />
+                              <AlertDescription>
+                                <p className="font-medium text-sm mb-1">
+                                  {logParseResult.unknownIntents.length} unknown intent key{logParseResult.unknownIntents.length !== 1 ? "s" : ""} excluded from per-intent and flow-class aggregates
+                                </p>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {logParseResult.unknownIntents.map(u => (
+                                    <Badge key={u.intentKey} variant="outline" className="font-mono text-[10px] bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300">
+                                      {u.intentKey} ({u.rowCount})
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </AlertDescription>
+                            </Alert>
+                          )}
+
+                          {/* Parse warnings */}
+                          {logParseResult.parseWarnings.length > 0 && (
+                            <details className="text-xs">
+                              <summary className="cursor-pointer font-medium text-muted-foreground mb-1.5">
+                                {logParseResult.parseWarnings.length} parse warning{logParseResult.parseWarnings.length !== 1 ? "s" : ""}
+                              </summary>
+                              <ul className="space-y-0.5 list-disc list-inside text-muted-foreground">
+                                {logParseResult.parseWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                              </ul>
+                            </details>
+                          )}
+
+                          {/* Intent stats table */}
+                          {logParseResult.intentStats.length > 0 && (
+                            <details>
+                              <summary className="cursor-pointer text-xs font-medium text-muted-foreground mb-2">
+                                Intent detail ({logParseResult.intentStats.length} intents)
+                              </summary>
+                              <div className="rounded-lg border border-border overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead className="bg-muted/50">
+                                    <tr>
+                                      <th className="text-left px-3 py-2 font-medium">Intent</th>
+                                      <th className="text-right px-3 py-2 font-medium">Rows</th>
+                                      <th className="text-right px-3 py-2 font-medium">Containment</th>
+                                      <th className="text-right px-3 py-2 font-medium">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border">
+                                    {logParseResult.intentStats.map(stat => {
+                                      const intentRow = logParseResult.proposedOverlay.intents?.find(r => r.intentKey === stat.intentKey);
+                                      return (
+                                        <tr key={stat.intentKey} className="hover:bg-muted/30">
+                                          <td className="px-3 py-1.5 font-mono">{stat.intentKey}</td>
+                                          <td className="px-3 py-1.5 text-right">{stat.rowCount}</td>
+                                          <td className="px-3 py-1.5 text-right">
+                                            {intentRow?.measuredContainmentRate !== undefined
+                                              ? `${(intentRow.measuredContainmentRate * 100).toFixed(1)}%`
+                                              : "—"}
+                                          </td>
+                                          <td className="px-3 py-1.5 text-right">
+                                            {stat.belowMinThreshold
+                                              ? <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[9px]">thin sample</Badge>
+                                              : <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[9px]">ok</Badge>}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </details>
+                          )}
+
+                          {/* Pre-fill form button */}
+                          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-border">
+                            <Info className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <p className="text-xs text-muted-foreground flex-1">
+                              Want to tweak individual values before saving? Pre-fill the Form Entry tab from this result.
+                            </p>
+                            <Button type="button" variant="outline" size="sm" onClick={handlePrefillForm}>
+                              Pre-fill Form
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Aggregation rules */}
+                      <details className="text-xs text-muted-foreground">
+                        <summary className="cursor-pointer font-medium mb-2">Log format &amp; aggregation rules</summary>
+                        <div className="space-y-3 mt-2">
+                          <div>
+                            <p className="font-medium text-foreground mb-1">Column definitions (comma-separated, header row required)</p>
+                            <table className="w-full text-[10px] border border-border rounded overflow-hidden">
+                              <thead className="bg-muted/50">
+                                <tr>
+                                  <th className="text-left px-2 py-1 font-medium">Column</th>
+                                  <th className="text-left px-2 py-1 font-medium">Required</th>
+                                  <th className="text-left px-2 py-1 font-medium">Description</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border font-mono">
+                                {[
+                                  ["call_id", "Yes", "Unique call identifier — duplicates are skipped (first kept)"],
+                                  ["timestamp", "No", "ISO-8601 datetime — used to derive period start/end"],
+                                  ["intent_key", "Yes", "Must match a key in the intent corpus (see /intents)"],
+                                  ["contained", "Yes", "true/false/1/0 — whether the call resolved without escalation"],
+                                  ["hitl_reviewed", "No", "true/false/1/0 — whether this uncontained call was HITL-sampled"],
+                                  ["hitl_minutes", "No", "Minutes spent in HITL review (blank = not reviewed)"],
+                                  ["flow_class", "No", "fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier — overrides corpus lookup"],
+                                  ["router_input_tokens / router_output_tokens", "No", "Token counts for the router/SLM role (blank = role not invoked)"],
+                                  ["reasoning_input_tokens / reasoning_output_tokens", "No", "Token counts for the reasoning/LLM role"],
+                                  ["frontier_input_tokens / frontier_output_tokens", "No", "Token counts for the frontier/LRM role"],
+                                  ["data_input_tokens / data_output_tokens", "No", "Token counts for the data/LDM role"],
+                                ].map(([col, req, desc]) => (
+                                  <tr key={col} className="hover:bg-muted/30">
+                                    <td className="px-2 py-1 whitespace-nowrap">{col}</td>
+                                    <td className="px-2 py-1">{req}</td>
+                                    <td className="px-2 py-1 font-sans">{desc}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div>
+                            <p className="font-medium text-foreground mb-1">Aggregation rules</p>
+                            <ul className="space-y-1 list-disc list-inside">
+                              <li><span className="font-medium">Per-intent containment:</span> count(contained=true) / count(all rows for intent). Intents with &lt;30 rows are flagged as thin samples but still emitted.</li>
+                              <li><span className="font-medium">Per-intent avg HITL minutes:</span> mean(hitl_minutes where contained=true AND hitl_minutes not blank).</li>
+                              <li><span className="font-medium">Flow-class containment:</span> count(contained=true) / count(all rows in FC). FC resolved from the flow_class column if present, otherwise looked up from the intent corpus. Unknown intents with no FC are excluded.</li>
+                              <li><span className="font-medium">Global HITL sampling rate:</span> count(hitl_reviewed=true AND contained=false) / count(contained=false). Omitted if all calls were contained.</li>
+                              <li><span className="font-medium">Token averages:</span> mean only over rows where the column is non-blank — blank means the role was not invoked on that call and is excluded from the average.</li>
+                              <li><span className="font-medium">Unknown intents:</span> collected and reported; never silently dropped. They do not contribute to per-intent or FC aggregates but their token columns do contribute to role averages.</li>
+                              <li><span className="font-medium">Duplicate call_id:</span> first occurrence kept; subsequent occurrences skipped and counted in warnings.</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </details>
+                    </TabsContent>
+                  </Tabs>
+
+                  {/* Validation result */}
+                  {validation && (
+                    <div className={`p-3 rounded-lg border ${validation.valid ? "border-emerald-500/30 bg-emerald-500/10" : "border-destructive/30 bg-destructive/10"}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {validation.valid
+                          ? <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          : <AlertCircle className="w-4 h-4 text-destructive" />}
+                        <span className={`text-sm font-semibold ${validation.valid ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"}`}>
+                          {validation.valid ? "Validation passed" : `${validation.errors.length} validation error${validation.errors.length !== 1 ? "s" : ""}`}
+                        </span>
+                      </div>
+                      {!validation.valid && (
+                        <ul className="text-xs text-destructive space-y-0.5 list-disc list-inside mt-1">
+                          {validation.errors.map((e, i) => <li key={i}>{e}</li>)}
+                        </ul>
+                      )}
+                      {validation.valid && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {validation.measuredFields.map(f => (
+                            <Badge key={f} className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">{f}</Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Actions */}
-              <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleValidate(activeTab === "csv" ? csvParsed ?? undefined : undefined)}
-                  disabled={validateOverlay.isPending || !hasAnyData}
-                  className="flex-1 sm:flex-none"
-                >
-                  {validateOverlay.isPending ? "Validating…" : "Validate"}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => handleSave(activeTab === "csv" ? csvParsed ?? undefined : undefined)}
-                  disabled={createOverlay.isPending || !hasAnyData}
-                  className="flex-1"
-                >
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  {createOverlay.isPending ? "Saving…" : "Save Overlay"}
-                </Button>
-              </div>
+                  {/* Actions — dispatch per active tab */}
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (activeTab === "csv") handleValidate(csvParsed ?? undefined);
+                        else if (activeTab === "rawlog" && logParseResult)
+                          handleValidate(buildRawLogOverlay(logParseResult.proposedOverlay as ActualsOverlayInput));
+                        else handleValidate();
+                      }}
+                      disabled={validateOverlay.isPending || !hasAnyData}
+                      className="flex-1 sm:flex-none"
+                    >
+                      {validateOverlay.isPending ? "Validating…" : "Validate"}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (activeTab === "csv") handleSave(csvParsed ?? undefined);
+                        else if (activeTab === "rawlog" && logParseResult)
+                          handleSave(buildRawLogOverlay(logParseResult.proposedOverlay as ActualsOverlayInput));
+                        else handleSave();
+                      }}
+                      disabled={createOverlay.isPending || !hasAnyData}
+                      className="flex-1"
+                    >
+                      <Plus className="w-4 h-4 mr-1.5" />
+                      {createOverlay.isPending ? "Saving…" : "Save Overlay"}
+                    </Button>
+                  </div>
 
-            </CardContent>
-          </Card>
-        </div>
+                </CardContent>
+              </Card>
+            </div>
 
-        {/* ---- RIGHT: Saved overlays ---- */}
-        <div className="xl:w-[360px] shrink-0 flex flex-col gap-4">
-          <Card className="shadow-sm border-border flex-1">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
-                Saved Overlays
-                <Badge variant="outline" className="font-mono text-xs">{overlays?.length ?? 0}</Badge>
-              </CardTitle>
-              <CardDescription>
-                Select an overlay in Scenario Builder to apply it and see the calibrated business case.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!overlays || overlays.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  <FlaskConical className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                  <p className="text-sm">No overlays saved yet.</p>
-                  <p className="text-xs mt-1">Create one using the form or CSV upload.</p>
-                </div>
-              ) : (
-                overlays.map(overlay => (
-                  <OverlayCard
-                    key={overlay.id}
-                    overlay={overlay}
-                    onDelete={handleDelete}
-                  />
-                ))
-              )}
-            </CardContent>
-          </Card>
+            {/* ---- RIGHT: Saved overlays ---- */}
+            <div className="xl:w-[360px] shrink-0 flex flex-col gap-4">
+              <Card className="shadow-sm border-border flex-1">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center justify-between">
+                    Saved Overlays
+                    <Badge variant="outline" className="font-mono text-xs">{overlays?.length ?? 0}</Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    Select an overlay in Scenario Builder to apply it and see the calibrated business case.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!overlays || overlays.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <FlaskConical className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                      <p className="text-sm">No overlays saved yet.</p>
+                      <p className="text-xs mt-1">Create one using the form, CSV, or call log.</p>
+                    </div>
+                  ) : (
+                    overlays.map(overlay => (
+                      <OverlayCard
+                        key={overlay.id}
+                        overlay={overlay}
+                        onDelete={handleDelete}
+                      />
+                    ))
+                  )}
+                </CardContent>
+              </Card>
 
-          {/* How it works */}
-          <Card className="shadow-sm border-border bg-muted/20">
-            <CardContent className="pt-4 space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">How calibration works</p>
-              <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
-                <li>Enter measured values (form or CSV) and save an overlay.</li>
-                <li>Open Scenario Builder and select the overlay in the Calibration panel.</li>
-                <li>Compute — the rollup runs twice: once estimated, once calibrated.</li>
-                <li>The Variance tab shows per-assumption estimated vs. measured, and the headline shifts from estimate to actuals.</li>
-              </ol>
-              <Separator />
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium">Measurement priority:</span> per-intent measured containment → flow-class measured → scenario override → assumption default.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              {/* How it works */}
+              <Card className="shadow-sm border-border bg-muted/20">
+                <CardContent className="pt-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">How calibration works</p>
+                  <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
+                    <li>Enter measured values (form, CSV, or call log) and save an overlay.</li>
+                    <li>Open Scenario Builder and select the overlay in the Calibration panel.</li>
+                    <li>Compute — the rollup runs twice: once estimated, once calibrated.</li>
+                    <li>The Variance tab shows per-assumption estimated vs. measured, and the headline shifts from estimate to actuals.</li>
+                  </ol>
+                  <Separator />
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium">Measurement priority:</span> per-intent measured containment → flow-class measured → scenario override → assumption default.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="drift" className="mt-4">
@@ -1519,3 +1893,24 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
     </div>
   );
 }
+
+const LOG_HEADER =
+  "call_id,timestamp,intent_key,contained,hitl_reviewed,hitl_minutes,flow_class,router_input_tokens,router_output_tokens,reasoning_input_tokens,reasoning_output_tokens,frontier_input_tokens,frontier_output_tokens,data_input_tokens,data_output_tokens";
+
+function downloadLogTemplate() {
+  const content = [LOG_HEADER, ...LOG_TEMPLATE_ROWS].join("\n");
+  const blob = new Blob([content], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "call-log-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+const LOG_TEMPLATE_ROWS = [
+  "call-001,2025-03-01T09:00:00Z,payslip-copy,true,false,,,900,120,,,,,,",
+  "call-002,2025-03-01T09:05:00Z,leave-balance,false,true,4.5,,900,120,,,,,,",
+  "call-003,2025-03-01T09:12:00Z,payroll-discrepancy,true,false,2.0,fc3-multiagent,900,120,4500,700,,,3000,600",
+  "call-004,2025-03-01T09:20:00Z,payslip-copy,true,false,,,900,120,,,,,,",
+];

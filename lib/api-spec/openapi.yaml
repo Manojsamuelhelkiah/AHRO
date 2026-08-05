@@ -584,6 +584,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActualsValidationResult"
+  /actuals/parse-log:
+    post:
+      operationId: parseActualsLog
+      tags: [actuals]
+      summary: Parse a raw call-log CSV and aggregate it into a proposed actuals overlay
+      description: >
+        Accepts a multipart/form-data upload of a raw call-log CSV (one row per call/transaction).
+        Returns a proposed ActualsOverlayInput ready to review, adjust, and save via POST /actuals,
+        plus parse diagnostics (unknown intents, duplicate call IDs, thin-sample warnings).
+        Maximum file size 20 MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                logFile:
+                  type: string
+                  format: binary
+                  description: Raw call-log CSV file (max 20 MB).
+              required:
+                - logFile
+      responses:
+        "200":
+          description: Parse result with proposed overlay and diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActualsLogParseResult"
+        "400":
+          description: Malformed upload or CSV
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /actuals/{id}:
     get:
       operationId: getActualsOverlay
@@ -1570,6 +1606,76 @@ components:
         createdAt:
           type: string
       required: [id, payload, createdAt]
+    ActualsLogIntentStat:
+      type: object
+      description: Per-intent parse statistics from a raw call-log import.
+      properties:
+        intentKey:
+          type: string
+        rowCount:
+          type: integer
+          description: Number of rows in the log for this intent.
+        belowMinThreshold:
+          type: boolean
+          description: True when rowCount < 30 — measurement is emitted but flagged as thin.
+      required: [intentKey, rowCount, belowMinThreshold]
+    ActualsLogUnknownIntent:
+      type: object
+      description: An intent key found in the log that is not present in the corpus.
+      properties:
+        intentKey:
+          type: string
+        rowCount:
+          type: integer
+      required: [intentKey, rowCount]
+    ActualsLogParseResult:
+      type: object
+      description: Result of parsing a raw call-log CSV into a proposed actuals overlay.
+      properties:
+        proposedOverlay:
+          $ref: "#/components/schemas/ActualsOverlayInput"
+        periodStart:
+          type: string
+          nullable: true
+          description: ISO date (YYYY-MM-DD) of the earliest timestamp in the log.
+        periodEnd:
+          type: string
+          nullable: true
+          description: ISO date (YYYY-MM-DD) of the latest timestamp in the log.
+        totalRows:
+          type: integer
+          description: Total non-blank data rows found in the file (before any filtering).
+        deduplicatedRows:
+          type: integer
+          description: >
+            Rows remaining after removing duplicate call_id entries
+            (totalRows minus duplicateCount). Some of these may still be
+            skipped as invalid (see invalidRowSkips).
+        duplicateCount:
+          type: integer
+          description: Number of rows skipped because their call_id was already seen.
+        invalidRowSkips:
+          type: integer
+          description: >
+            Number of rows skipped due to data quality issues (blank call_id,
+            blank intent_key, unrecognisable contained value, etc.) after
+            deduplication. These are separate from duplicates.
+        intentStats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActualsLogIntentStat"
+          description: Per-intent statistics for known intents found in the log.
+        unknownIntents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActualsLogUnknownIntent"
+          description: Intent keys present in the log that are not in the corpus.
+        parseWarnings:
+          type: array
+          items:
+            type: string
+          description: Non-fatal issues encountered during parsing (duplicate IDs, unparseable rows, etc.).
+      required: [proposedOverlay, totalRows, deduplicatedRows, duplicateCount, invalidRowSkips, intentStats, unknownIntents, parseWarnings]
     ActualsValidationResult:
       type: object
       properties:
