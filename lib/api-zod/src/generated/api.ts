@@ -829,7 +829,8 @@ export const ComputeRollupResponse = zod.object({
   "absVariance": zod.number().describe('actualValue - estimatedValue'),
   "pctVariance": zod.number().describe('(actualValue - estimatedValue) \/ |estimatedValue| × 100. Zero when estimatedValue is zero.'),
   "direction": zod.string().describe('Which side of the model this assumption affects: cost | benefit | both')
-}).describe('Per-assumption comparison between the estimated value (from assumptions register or scenario inputs) and the measured value (from actuals overlay).')).optional().describe('Per-assumption variance between the estimated and measured values. Present only when calibrated=true.')
+}).describe('Per-assumption comparison between the estimated value (from assumptions register or scenario inputs) and the measured value (from actuals overlay).')).optional().describe('Per-assumption variance between the estimated and measured values. Present only when calibrated=true.'),
+  "orphanedIntentKeys": zod.array(zod.string()).optional().describe('Intent keys present in the actuals overlay that no longer exist in the active intent registry (reference + custom). The rollup proceeded on the valid remainder; these entries were silently skipped without this field. Present only when at least one orphan is detected.')
 })
 
 

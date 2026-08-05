@@ -182,8 +182,17 @@ export interface ActualsValidationResult {
  * Validates an actuals overlay payload. Returns a structured result rather than
  * throwing so callers can surface all errors at once. Throws InputValidationError
  * only on fatal structural issues (use validateActualsOverlayOrThrow for that).
+ *
+ * @param extraValidIntentKeys  Keys of currently-active custom intents. When
+ *   supplied, overlay entries referencing those keys are treated as valid even
+ *   though they are not in the static reference intentMap. Pass the key-set from
+ *   loadActiveCustomIntents() in any route that persists or validates overlays so
+ *   that an overlay can legitimately reference a custom intent while it is active.
  */
-export function validateActualsOverlay(overlay: ActualsOverlay): ActualsValidationResult {
+export function validateActualsOverlay(
+  overlay: ActualsOverlay,
+  extraValidIntentKeys?: Set<string>,
+): ActualsValidationResult {
   const errors: string[] = [];
   const measuredFields = new Set<string>();
   let intentRowCount = 0;
@@ -199,9 +208,10 @@ export function validateActualsOverlay(overlay: ActualsOverlay): ActualsValidati
           errors.push(`intents[${idx}]: intentKey is required and must be a string`);
           continue;
         }
-        if (!intentMap[row.intentKey]) {
+        const knownKey = !!intentMap[row.intentKey] || !!extraValidIntentKeys?.has(row.intentKey);
+        if (!knownKey) {
           errors.push(
-            `intents[${idx}]: unknown intentKey "${row.intentKey}". Check /intents for valid keys.`,
+            `intents[${idx}]: unknown intentKey "${row.intentKey}". Check /intents or /custom-intents for valid keys.`,
           );
           continue; // skip field validation for unknown intent
         }
@@ -307,9 +317,16 @@ export function validateActualsOverlay(overlay: ActualsOverlay): ActualsValidati
   };
 }
 
-/** Validates overlay and throws InputValidationError with the first error message if invalid. */
-export function validateActualsOverlayOrThrow(overlay: ActualsOverlay): void {
-  const result = validateActualsOverlay(overlay);
+/**
+ * Validates overlay and throws InputValidationError with the first error message if invalid.
+ * Pass `extraValidIntentKeys` (keys of active custom intents) so overlay entries that
+ * reference active custom intents are accepted rather than rejected as unknown.
+ */
+export function validateActualsOverlayOrThrow(
+  overlay: ActualsOverlay,
+  extraValidIntentKeys?: Set<string>,
+): void {
+  const result = validateActualsOverlay(overlay, extraValidIntentKeys);
   if (!result.valid) {
     throw new InputValidationError(result.errors[0]!);
   }

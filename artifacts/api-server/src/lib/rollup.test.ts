@@ -778,6 +778,48 @@ test("actuals overlay validation: rejects unknown intent keys and flow classes",
   });
   assert.equal(badTokenRole.valid, false);
   assert.ok(badTokenRole.errors.some((e) => e.includes("super-intelligence")));
+
+  // Custom intent key is still rejected when extraValidIntentKeys is absent.
+  const badCustomNoSet = validateActualsOverlay({
+    intents: [{ intentKey: "custom-visa-support", measuredContainmentRate: 0.7 }],
+  });
+  assert.equal(badCustomNoSet.valid, false, "custom key rejected without extraValidIntentKeys");
+
+  // Custom intent key is still rejected when it is not in the provided set.
+  const badCustomWrongSet = validateActualsOverlay(
+    { intents: [{ intentKey: "custom-visa-support", measuredContainmentRate: 0.7 }] },
+    new Set(["some-other-custom-key"]),
+  );
+  assert.equal(badCustomWrongSet.valid, false, "custom key rejected when absent from extraValidIntentKeys");
+});
+
+test("actuals overlay validation: accepts active custom intent keys via extraValidIntentKeys", () => {
+  const customKey = "custom-visa-support";
+  const activeCustomKeys = new Set([customKey]);
+
+  // Key in extraValidIntentKeys → accepted.
+  const good = validateActualsOverlay(
+    { intents: [{ intentKey: customKey, measuredContainmentRate: 0.72 }] },
+    activeCustomKeys,
+  );
+  assert.equal(good.valid, true, "custom key accepted when in extraValidIntentKeys");
+  assert.equal(good.intentRowCount, 1);
+  assert.ok(good.measuredFields.includes("containment"));
+
+  // Mix of reference key + custom key → both accepted.
+  const mixed = validateActualsOverlay(
+    {
+      intents: [
+        { intentKey: "payslip-copy", measuredContainmentRate: 0.88 },
+        { intentKey: customKey, avgHitlMinutes: 4.5 },
+      ],
+    },
+    activeCustomKeys,
+  );
+  assert.equal(mixed.valid, true, "mix of reference and custom keys both accepted");
+  assert.equal(mixed.intentRowCount, 2);
+  assert.ok(mixed.measuredFields.includes("containment"));
+  assert.ok(mixed.measuredFields.includes("hitlMinutes"));
 });
 
 test("actuals overlay validation: accepts valid payloads and reports measured fields", () => {
@@ -1037,6 +1079,73 @@ test("multiple tunings + overlay: all measured values win, all variances referen
   // All results reconcile (rows + buckets still sum correctly)
   const bucketTotal = actual.byCostComponent.reduce((a, b) => a + b.usd, 0);
   assert.ok(Math.abs(bucketTotal - actual.totals.totalCostUsd) < 1e-6, "buckets reconcile after multi-tuning + overlay");
+});
+
+// ── Orphaned intent key tests ─────────────────────────────────────────────
+
+test("orphanedIntentKeys lists unknown keys and rollup proceeds on valid remainder", () => {
+  // Pick a known reference intent to supply a valid measurement.
+  const knownKey = "payslip-copy";
+  const orphanKey1 = "retired-custom-visa-support";
+  const orphanKey2 = "another-deleted-intent";
+
+  const overlay: ActualsOverlay = {
+    intents: [
+      { intentKey: knownKey, measuredContainmentRate: 0.88 }, // valid
+      { intentKey: orphanKey1, measuredContainmentRate: 0.75 }, // orphan
+      { intentKey: orphanKey2, avgHitlMinutes: 5 },            // orphan
+    ],
+  };
+
+  const r = computeRollup(base, undefined, overlay, []);
+
+  // Rollup must complete and produce valid totals.
+  assert.ok(r.totals.totalCostUsd > 0, "rollup proceeds: total cost > 0");
+  assert.ok(r.totals.benefitUsd > 0, "rollup proceeds: benefit > 0");
+
+  // The valid intent row must still appear.
+  const validRow = r.rows.find((row) => row.intentKey === knownKey);
+  assert.ok(validRow, "valid overlay intent row appears in rollup");
+
+  // orphanedIntentKeys must list exactly the two unknown keys (order may vary).
+  assert.ok(r.orphanedIntentKeys, "orphanedIntentKeys is present");
+  assert.equal(r.orphanedIntentKeys!.length, 2, "exactly 2 orphaned keys reported");
+  assert.ok(r.orphanedIntentKeys!.includes(orphanKey1), `${orphanKey1} reported as orphan`);
+  assert.ok(r.orphanedIntentKeys!.includes(orphanKey2), `${orphanKey2} reported as orphan`);
+});
+
+test("orphanedIntentKeys is absent when overlay has no orphans", () => {
+  const knownKey = "payslip-copy";
+  const overlay: ActualsOverlay = {
+    intents: [{ intentKey: knownKey, measuredContainmentRate: 0.88 }],
+  };
+  const r = computeRollup(base, undefined, overlay, []);
+  // Field should be absent (or empty) when there are no orphans.
+  const absent = r.orphanedIntentKeys === undefined || r.orphanedIntentKeys.length === 0;
+  assert.ok(absent, "orphanedIntentKeys absent or empty when no orphans");
+});
+
+test("orphanedIntentKeys is absent when no overlay is applied", () => {
+  const r = computeRollup(base);
+  const absent = r.orphanedIntentKeys === undefined || r.orphanedIntentKeys.length === 0;
+  assert.ok(absent, "orphanedIntentKeys absent when no overlay");
+});
+
+test("custom intent key in overlay is valid when intent is active; orphan when retired", () => {
+  const overlay: ActualsOverlay = {
+    intents: [{ intentKey: customIntent.key, measuredContainmentRate: 0.7 }],
+  };
+
+  // When the custom intent is active (passed in extraIntents) — no orphan.
+  const withActive = computeRollup(base, undefined, overlay, [customIntent]);
+  const absentActive =
+    withActive.orphanedIntentKeys === undefined || withActive.orphanedIntentKeys.length === 0;
+  assert.ok(absentActive, "active custom intent key is not an orphan");
+
+  // When the custom intent is retired (not in extraIntents) — becomes an orphan.
+  const withRetired = computeRollup(base, undefined, overlay, []);
+  assert.ok(withRetired.orphanedIntentKeys?.includes(customIntent.key),
+    "retired custom intent key reported as orphan");
 });
 
 test("per-intent avgHitlMinutes from overlay replaces toBeHumanMin and moves result", () => {

@@ -1205,6 +1205,11 @@ components:
           description: Per-assumption variance between the estimated and measured values. Present only when calibrated=true.
           items:
             $ref: "#/components/schemas/VarianceEntry"
+        orphanedIntentKeys:
+          type: array
+          description: Intent keys present in the actuals overlay that no longer exist in the active intent registry (reference + custom). The rollup proceeded on the valid remainder; these entries were silently skipped without this field. Present only when at least one orphan is detected.
+          items:
+            type: string
       required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, appliedAssumptions, confidence, calibrated]
     BuildComponentCost:
       type: object

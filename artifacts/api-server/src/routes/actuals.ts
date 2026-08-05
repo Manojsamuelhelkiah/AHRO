@@ -10,6 +10,7 @@ import {
   ValidateActualsOverlayResponse,
 } from "@workspace/api-zod";
 import { validateActualsOverlay, validateActualsOverlayOrThrow, InputValidationError } from "../lib/validate-inputs";
+import { loadActiveCustomIntents } from "./custom-intents";
 import type { ActualsOverlay } from "../data/types";
 
 const router: IRouter = Router();
@@ -49,7 +50,9 @@ router.post("/actuals/validate", async (req, res, next) => {
   try {
     const body = ValidateActualsOverlayBody.parse(req.body);
     const overlay = body as ActualsOverlay;
-    const result = validateActualsOverlay(overlay);
+    const customIntents = await loadActiveCustomIntents();
+    const customKeys = new Set(customIntents.map((i) => i.key));
+    const result = validateActualsOverlay(overlay, customKeys);
     res.json(ValidateActualsOverlayResponse.parse(result));
   } catch (err) {
     next(err);
@@ -60,7 +63,9 @@ router.post("/actuals", async (req, res, next) => {
   try {
     const body = CreateActualsOverlayBody.parse(req.body);
     const overlay = body as ActualsOverlay;
-    validateActualsOverlayOrThrow(overlay);
+    const customIntents = await loadActiveCustomIntents();
+    const customKeys = new Set(customIntents.map((i) => i.key));
+    validateActualsOverlayOrThrow(overlay, customKeys);
 
     const [row] = await db
       .insert(actualsOverlaysTable)

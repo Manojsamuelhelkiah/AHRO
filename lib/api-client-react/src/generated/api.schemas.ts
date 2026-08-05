@@ -384,6 +384,8 @@ export interface Rollup {
   estimatedTotals?: RollupTotals;
   /** Per-assumption variance between the estimated and measured values. Present only when calibrated=true. */
   variance?: VarianceEntry[];
+  /** Intent keys present in the actuals overlay that no longer exist in the active intent registry (reference + custom). The rollup proceeded on the valid remainder; these entries were silently skipped without this field. Present only when at least one orphan is detected. */
+  orphanedIntentKeys?: string[];
 }
 
 export interface ModelOption {

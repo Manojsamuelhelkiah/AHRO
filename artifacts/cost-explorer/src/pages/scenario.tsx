@@ -35,11 +35,12 @@ import {
   TrendingUp, Users, BarChart3, Database, 
   Settings2, GitCompareArrows, BrainCircuit,
   RotateCcw, ChevronDown,
-  FlaskConical, X, ArrowRight, TrendingDown, CheckCircle2,
+  FlaskConical, X, ArrowRight, TrendingDown, CheckCircle2, AlertCircle,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 /** Empty inputs are treated as "not provided" — the model falls back to documented defaults. */
 const optionalNumber = <T extends z.ZodTypeAny>(schema: T) =>
@@ -103,10 +104,14 @@ export default function Scenario() {
   const searchParams = new URLSearchParams(window.location.search);
   const scenarioId = searchParams.get("id");
   const parsedId = scenarioId ? parseInt(scenarioId, 10) : null;
-  
+  // overlayId URL param lets deep-links (and tests) pre-select an overlay so
+  // the auto-compute that fires on scenario load already applies it.
+  const urlOverlayId = searchParams.get("overlayId");
+  const parsedOverlayId = urlOverlayId ? parseInt(urlOverlayId, 10) : null;
+
   const { toast } = useToast();
   const [rollup, setRollup] = useState<Rollup | null>(null);
-  const [activeOverlayId, setActiveOverlayId] = useState<number | null>(null);
+  const [activeOverlayId, setActiveOverlayId] = useState<number | null>(parsedOverlayId);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   
   const { data: profiles, isLoading: isLoadingProfiles } = useListDistributionProfiles();
@@ -808,6 +813,27 @@ export default function Scenario() {
                 )}
               </div>
             </div>
+
+            {/* Orphaned intent keys warning */}
+            {rollup.orphanedIntentKeys && rollup.orphanedIntentKeys.length > 0 && (
+              <div className="px-6 pt-4">
+                <Alert className="border-amber-500/40 bg-amber-500/10">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-amber-800 dark:text-amber-200 text-xs">
+                    <span className="font-semibold">
+                      {rollup.orphanedIntentKeys.length === 1
+                        ? "1 intent in this overlay no longer exists"
+                        : `${rollup.orphanedIntentKeys.length} intents in this overlay no longer exist`}{" "}
+                      and {rollup.orphanedIntentKeys.length === 1 ? "was" : "were"} skipped — the rollup used the valid remainder:
+                    </span>{" "}
+                    <span className="font-mono">{rollup.orphanedIntentKeys.join(", ")}</span>.
+                    {" "}Edit the overlay on the{" "}
+                    <Link href="/calibration" className="underline hover:no-underline">Calibration page</Link>
+                    {" "}or restore the retired intents.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="flex-1 overflow-hidden flex flex-col">

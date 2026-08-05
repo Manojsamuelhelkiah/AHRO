@@ -532,6 +532,15 @@ export function computeRollup(
     }
   }
 
+  // Detect overlay intent keys that have no matching entry in the active registry.
+  // The rollup proceeds on the valid remainder; orphans are reported to callers.
+  const knownIntentKeys = new Set(allIntents.map((i) => i.key));
+  const orphanedIntentKeys: string[] = overlay
+    ? (overlay.intents ?? [])
+        .map((i) => i.intentKey)
+        .filter((k) => !knownIntentKeys.has(k))
+    : [];
+
   const rows = [];
   const byFlowClass = new Map<string, number>();
   const byDomain = new Map<string, number>();
@@ -865,6 +874,7 @@ export function computeRollup(
     appliedAssumptions,
     confidence: computeConfidence(inputs, measuredFactorKeys),
     calibrated: !!overlay,
+    ...(orphanedIntentKeys.length > 0 ? { orphanedIntentKeys } : {}),
   };
 }
 
