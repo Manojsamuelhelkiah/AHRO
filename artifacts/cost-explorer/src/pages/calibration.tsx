@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo, Fragment, useEffect } from "react";
 import {
   useListActualsOverlays,
   useCreateActualsOverlay,
@@ -19,7 +19,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
 import {
   FlaskConical,
   Upload,
@@ -34,7 +45,16 @@ import {
   Cpu,
   BarChart2,
   Users,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  GitMerge,
 } from "lucide-react";
+import {
+  computeDrift,
+  type DriftSeries,
+  type DriftOverlayInput,
+} from "@/lib/drift";
 
 // ---------------------------------------------------------------------------
 // CSV template helpers
@@ -336,6 +356,9 @@ export default function Calibration() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [showAllIntents, setShowAllIntents] = useState(false);
   const [expandedIntents, setExpandedIntents] = useState<Set<string>>(new Set());
+  const [outerTab, setOuterTab] = useState<"manage" | "drift">(() =>
+    new URLSearchParams(window.location.search).get("tab") === "drift" ? "drift" : "manage"
+  );
   const [activeTab, setActiveTab] = useState<"form" | "csv">("form");
   const [validation, setValidation] = useState<ActualsValidationResult | null>(null);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
@@ -482,6 +505,20 @@ export default function Calibration() {
         </p>
       </div>
 
+      <Tabs
+        value={outerTab}
+        onValueChange={(v) => setOuterTab(v as "manage" | "drift")}
+        className="w-full"
+      >
+        <TabsList className="bg-muted w-full sm:w-auto">
+          <TabsTrigger value="manage">Import &amp; Manage</TabsTrigger>
+          <TabsTrigger value="drift" className="flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5" />
+            Drift Analysis
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="manage" className="mt-4">
       <div className="flex flex-col xl:flex-row gap-6">
         {/* ---- LEFT: Import form ---- */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -880,6 +917,605 @@ Blank cells skip that field (not treated as zero).`}
           </Card>
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="drift" className="mt-4">
+          <DriftTab overlays={overlays ?? []} intentList={allIntents} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DriftTab — multi-period calibration drift analysis
+// ---------------------------------------------------------------------------
+
+const TREND_CONFIG = {
+  improving: {
+    label: "Improving",
+    icon: TrendingUp,
+    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  },
+  degrading: {
+    label: "Degrading",
+    icon: TrendingDown,
+    className: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
+  },
+  stable: {
+    label: "Stable",
+    icon: Minus,
+    className: "bg-muted text-muted-foreground border-border",
+  },
+  mixed: {
+    label: "Mixed",
+    icon: GitMerge,
+    className: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30",
+  },
+} as const;
+
+function TrendBadge({ trend }: { trend: DriftSeries["trend"] }) {
+  const cfg = TREND_CONFIG[trend];
+  const Icon = cfg.icon;
+  return (
+    <Badge className={`flex items-center gap-1 text-[10px] font-medium ${cfg.className}`}>
+      <Icon className="w-3 h-3 shrink-0" />
+      {cfg.label}
+    </Badge>
+  );
+}
+
+/** Tiny sparkline for the summary table — no axes, just the line shape. */
+function Sparkline({
+  series,
+  width = 100,
+  height = 36,
+}: {
+  series: DriftSeries;
+  width?: number;
+  height?: number;
+}) {
+  const data = series.points.map((p) => ({
+    name: p.periodLabel,
+    value: p.measuredValue,
+  }));
+  const hasEstimate = series.estimate !== null;
+  const lineColor =
+    series.trend === "improving"
+      ? "#10b981"
+      : series.trend === "degrading"
+        ? "#f59e0b"
+        : "#6366f1";
+
+  return (
+    <LineChart width={width} height={height} data={data} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+      {hasEstimate && (
+        <ReferenceLine y={series.estimate!} stroke="#94a3b8" strokeDasharray="3 3" strokeWidth={1} />
+      )}
+      <Line
+        type="monotone"
+        dataKey="value"
+        stroke={lineColor}
+        strokeWidth={1.5}
+        dot={false}
+        connectNulls={false}
+      />
+    </LineChart>
+  );
+}
+
+/** Full expanded line chart for one assumption series. */
+function FullDriftChart({ series }: { series: DriftSeries }) {
+  const data = series.points.map((p) => ({
+    name: p.periodLabel,
+    measured: p.measuredValue,
+  }));
+  const hasEstimate = series.estimate !== null;
+  const lineColor =
+    series.trend === "improving"
+      ? "#10b981"
+      : series.trend === "degrading"
+        ? "#f59e0b"
+        : "#6366f1";
+
+  // Y-axis domain: bracket both measured values and estimate with some padding
+  const allValues = series.points
+    .filter((p) => p.measuredValue !== null)
+    .map((p) => p.measuredValue!);
+  if (hasEstimate) allValues.push(series.estimate!);
+  const minVal = Math.min(...allValues);
+  const maxVal = Math.max(...allValues);
+  const pad = Math.max((maxVal - minVal) * 0.15, 0.02);
+  const domainMin = Math.max(0, minVal - pad);
+  const domainMax = maxVal + pad;
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-foreground">{series.label}</span>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-4 h-0.5 rounded" style={{ background: lineColor }} />
+            Measured
+          </span>
+          {hasEstimate && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-4 border-t border-dashed border-slate-400" />
+              Estimate ({series.estimate!.toFixed(series.unit === "minutes" ? 1 : 4)} {series.unit})
+            </span>
+          )}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis
+            dataKey="name"
+            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            tickLine={false}
+          />
+          <YAxis
+            domain={[domainMin, domainMax]}
+            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            tickLine={false}
+            tickFormatter={(v: number) =>
+              series.unit === "fraction" ? v.toFixed(2) : v.toFixed(1)
+            }
+            width={44}
+          />
+          <Tooltip
+            formatter={(value: unknown) => {
+              const v = typeof value === "number" ? value : null;
+              return v === null ? "—" : `${v.toFixed(series.unit === "minutes" ? 1 : 4)} ${series.unit}`;
+            }}
+            labelStyle={{ fontWeight: 600, fontSize: 11 }}
+            contentStyle={{
+              fontSize: 11,
+              borderRadius: 6,
+              border: "1px solid hsl(var(--border))",
+              background: "hsl(var(--card))",
+              color: "hsl(var(--foreground))",
+            }}
+          />
+          {hasEstimate && (
+            <ReferenceLine
+              y={series.estimate!}
+              stroke="#94a3b8"
+              strokeDasharray="4 3"
+              strokeWidth={1.5}
+              label={{
+                value: "estimate",
+                position: "insideTopRight",
+                fontSize: 10,
+                fill: "#94a3b8",
+              }}
+            />
+          )}
+          <Line
+            type="monotone"
+            dataKey="measured"
+            stroke={lineColor}
+            strokeWidth={2}
+            dot={{ r: 3.5, fill: lineColor, strokeWidth: 0 }}
+            activeDot={{ r: 5 }}
+            connectNulls={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+interface DriftTabProps {
+  overlays: ActualsOverlayRecord[];
+  intentList: { key: string; name: string }[];
+}
+
+function DriftTab({ overlays, intentList }: DriftTabProps) {
+  // ----- Client groups -----
+  // null key = unlabeled group (clientLabel is null/undefined).
+  // Drift is always per single client — no cross-client mixing allowed.
+  const clientGroups = useMemo<Array<{ key: string | null; label: string; count: number }>>(() => {
+    const map = new Map<string | null, number>();
+    for (const o of overlays) {
+      const k = o.clientLabel ?? null;
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return [...map.entries()]
+      .map(([key, count]) => ({
+        key,
+        label: key ?? "(Unlabeled)",
+        count,
+      }))
+      .sort((a, b) => {
+        // Named clients first, alphabetically; unlabeled last
+        if (a.key === null) return 1;
+        if (b.key === null) return -1;
+        return a.key.localeCompare(b.key);
+      });
+  }, [overlays]);
+
+  // selectedClient: null = not yet chosen (waiting for overlays to load).
+  // Initialised by effect once clientGroups first becomes non-empty.
+  const [selectedClient, setSelectedClient] = useState<string | null | "__unset__">("__unset__");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Once clientGroups loads, pick the first group and select all its overlays.
+  useEffect(() => {
+    if (selectedClient === "__unset__" && clientGroups.length > 0) {
+      const firstKey = clientGroups[0]!.key;
+      setSelectedClient(firstKey);
+      const firstGroupOverlays = overlays.filter((o) =>
+        firstKey === null
+          ? (o.clientLabel ?? null) === null
+          : o.clientLabel === firstKey,
+      );
+      setSelectedIds(new Set(firstGroupOverlays.map((o) => o.id)));
+    }
+  }, [clientGroups, selectedClient, overlays]);
+
+  // The effective client key to use for filtering (treat "__unset__" as no match)
+  const activeClient = selectedClient === "__unset__" ? null : selectedClient;
+
+  // Overlays belonging to the currently selected client group
+  const clientOverlays = useMemo(
+    () =>
+      selectedClient === "__unset__"
+        ? []
+        : overlays.filter((o) =>
+            activeClient === null
+              ? (o.clientLabel ?? null) === null
+              : o.clientLabel === activeClient,
+          ),
+    [overlays, selectedClient, activeClient],
+  );
+
+  // When client changes: switch selection to all overlays in the new group
+  const handleClientChange = (key: string | null) => {
+    setSelectedClient(key);
+    const newClientOverlays = overlays.filter((o) =>
+      key === null ? (o.clientLabel ?? null) === null : o.clientLabel === key,
+    );
+    setSelectedIds(new Set(newClientOverlays.map((o) => o.id)));
+    setExpandedKey(null);
+  };
+
+  // toggleId: only allowed for overlays that belong to the current client group
+  const toggleId = (id: number) => {
+    // Verify the overlay is in the current client group (defence-in-depth)
+    const belongs = clientOverlays.some((o) => o.id === id);
+    if (!belongs) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  const selectedOverlays = useMemo(
+    () => clientOverlays.filter((o) => selectedIds.has(o.id)),
+    [clientOverlays, selectedIds],
+  );
+
+  const intentLabels = useMemo(
+    () => Object.fromEntries(intentList.map((i) => [i.key, i.name])),
+    [intentList],
+  );
+
+  const driftSeries = useMemo(() => {
+    if (selectedOverlays.length < 2) return [];
+    try {
+      return computeDrift(
+        selectedOverlays as unknown as DriftOverlayInput[],
+        {},
+        intentLabels,
+      );
+    } catch {
+      // MixedClientError: should not happen given the UI filters, but
+      // fail safe rather than crashing the component
+      return [];
+    }
+  }, [selectedOverlays, intentLabels]);
+
+  const canCompare = selectedOverlays.length >= 2;
+
+  if (overlays.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+        <FlaskConical className="w-10 h-10 opacity-20" />
+        <p className="text-sm font-medium">No overlays saved yet.</p>
+        <p className="text-xs">
+          Create at least two overlays in <span className="font-medium">Import &amp; Manage</span> to compare drift across periods.
+        </p>
+      </div>
+    );
+  }
+
+  if (clientGroups.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* -- Selection panel -- */}
+      <Card className="shadow-sm border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Select Overlays to Compare</CardTitle>
+          <CardDescription>
+            Pick a client, then choose which of their overlays to include. Drift tracks one client's measurements across time — cross-client comparison is not supported.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Client picker — one button per distinct clientLabel group */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Client
+            </Label>
+            <div className="flex gap-2 flex-wrap">
+              {clientGroups.map((grp) => (
+                <button
+                  key={grp.key ?? "__unlabeled__"}
+                  type="button"
+                  onClick={() => handleClientChange(grp.key)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                    selectedClient === grp.key
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background border-border hover:bg-muted"
+                  }`}
+                >
+                  {grp.label}
+                  <span
+                    className={`text-[10px] rounded-full px-1.5 py-0 font-normal ${
+                      selectedClient === grp.key
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {grp.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Overlay checkboxes — only for the selected client */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Periods to include
+              </Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set(clientOverlays.map((o) => o.id)))}
+                  className="text-xs h-6 px-2"
+                >
+                  All
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs h-6 px-2"
+                >
+                  None
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {clientOverlays.map((ov) => {
+                const checked = selectedIds.has(ov.id);
+                const period =
+                  ov.periodStart
+                    ? `${ov.periodStart}${ov.periodEnd ? ` → ${ov.periodEnd}` : ""}`
+                    : "No period";
+                return (
+                  <label
+                    key={ov.id}
+                    className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      checked
+                        ? "border-violet-500/40 bg-violet-500/5"
+                        : "border-border hover:bg-muted/30"
+                    }`}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleId(ov.id)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        {period}
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-[9px] bg-background mt-1"
+                      >
+                        #{ov.id}
+                      </Badge>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Selection status */}
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={canCompare ? "default" : "outline"}
+              className={canCompare ? "bg-violet-600 hover:bg-violet-600" : ""}
+            >
+              {selectedOverlays.length} selected
+            </Badge>
+            {!canCompare && (
+              <span className="text-xs text-muted-foreground">
+                Select at least 2 periods to see drift.
+              </span>
+            )}
+            {canCompare && driftSeries.length === 0 && (
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                No shared measurements found across the selected periods.
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* -- Drift table -- */}
+      {canCompare && driftSeries.length > 0 && (
+        <Card className="shadow-sm border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>Per-Assumption Drift</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {selectedOverlays.length} periods · click a row to expand chart
+              </span>
+            </CardTitle>
+            <CardDescription>
+              Measured values vs. the global assumptions register default (dashed reference line).
+              Trend is relative to the estimate across the selected periods.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="rounded-b-lg overflow-hidden">
+              {/* Table header */}
+              <div className="grid gap-0 overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-[28%]">
+                        Assumption
+                      </th>
+                      <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right">
+                        Estimate
+                      </th>
+                      {/* Period columns — one per selected overlay (sorted) */}
+                      {driftSeries[0]!.points.map((p) => (
+                        <th
+                          key={p.overlayId}
+                          className="px-3 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide text-right"
+                        >
+                          {p.periodLabel}
+                        </th>
+                      ))}
+                      <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center">
+                        Trend
+                      </th>
+                      <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center w-[90px]">
+                        Sparkline
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {driftSeries.map((series) => {
+                      const isExpanded = expandedKey === series.assumptionKey;
+                      const fmtVal = (v: number | null) => {
+                        if (v === null) return "—";
+                        if (series.unit === "fraction") return v.toFixed(3);
+                        if (series.unit === "minutes") return `${v.toFixed(1)} min`;
+                        return v.toFixed(4);
+                      };
+                      return (
+                        <Fragment key={series.assumptionKey}>
+                          <tr
+                            className={`hover:bg-muted/30 transition-colors cursor-pointer ${
+                              isExpanded ? "bg-muted/20" : ""
+                            }`}
+                            onClick={() =>
+                              setExpandedKey(isExpanded ? null : series.assumptionKey)
+                            }
+                          >
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-xs text-foreground leading-snug">
+                                {series.label}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono mt-0.5 flex items-center gap-1">
+                                {series.polarity === "higher-is-better" ? (
+                                  <TrendingUp className="w-2.5 h-2.5 text-emerald-500" />
+                                ) : (
+                                  <TrendingDown className="w-2.5 h-2.5 text-amber-500" />
+                                )}
+                                {series.polarity === "higher-is-better"
+                                  ? "higher is better"
+                                  : "lower is better"}{" "}
+                                · {series.unit}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-xs text-muted-foreground">
+                              {series.estimate !== null ? fmtVal(series.estimate) : "N/A"}
+                            </td>
+                            {series.points.map((p) => {
+                              const isNull = p.measuredValue === null;
+                              const aboveEstimate =
+                                !isNull &&
+                                series.estimate !== null &&
+                                series.polarity === "higher-is-better"
+                                  ? p.measuredValue! >= series.estimate
+                                  : series.estimate !== null && !isNull
+                                    ? p.measuredValue! <= series.estimate
+                                    : null;
+                              return (
+                                <td
+                                  key={p.overlayId}
+                                  className={`px-3 py-3 text-right font-mono text-xs font-semibold ${
+                                    isNull
+                                      ? "text-muted-foreground"
+                                      : aboveEstimate === true
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : aboveEstimate === false
+                                          ? "text-amber-600 dark:text-amber-400"
+                                          : "text-foreground"
+                                  }`}
+                                >
+                                  {fmtVal(p.measuredValue)}
+                                </td>
+                              );
+                            })}
+                            <td className="px-3 py-3 text-center">
+                              <TrendBadge trend={series.trend} />
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex justify-center">
+                                <Sparkline series={series} width={90} height={34} />
+                              </div>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={series.points.length + 4} className="px-4 pb-4">
+                                <FullDriftChart series={series} />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* -- Legend / notes -- */}
+      {canCompare && driftSeries.length > 0 && (
+        <div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground px-1">
+          <span>
+            <span className="font-medium text-foreground">Trend rules:</span> improving = quality moving in the favorable direction;
+            degrading = moving away; stable = variation &lt; {(0.05 * 100).toFixed(0)}% of estimate; mixed = direction reverses.
+          </span>
+          <span>
+            <span className="font-medium text-foreground">Reference line:</span> global assumptions register default.
+            "N/A" = no per-intent register default (trend still computed from measured values).
+          </span>
+        </div>
+      )}
     </div>
   );
 }
