@@ -30,4 +30,6 @@ export interface Intent {
   /** Minimum count of systems of record this intent touches regardless of landscape size */
   systemsTouchedBase: number;
   tags: string[];
+  /** True when this intent was added by a client; false for the fixed reference corpus */
+  isCustom?: boolean;
 }

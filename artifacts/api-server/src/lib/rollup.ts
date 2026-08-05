@@ -5,6 +5,7 @@ import { profileMap, profiles } from "../data/profiles";
 import { assumptionMap } from "../data/assumptions";
 import { pricePerCall, pricePerCallWithOverlay, MODEL_ROLES } from "../data/model-catalog";
 import type { GlobalAssumption, Intent, ActualsOverlay } from "../data/types";
+import { intents as referenceIntents } from "../data/intents";
 
 export interface ScenarioInputs {
   numSystems: number;
@@ -106,16 +107,24 @@ function sizeBand(employees: number): string {
 const COMPLEX_CLASSES = new Set(["fc3-multiagent", "fc4-frontier"]);
 
 /**
- * Distribute total annual transactions across intents.
+ * Distribute total annual transactions across intents:
+ * share_i ∝ baseWeight_i × sectorDomainWeight(domain_i)
+ *          × (sizeAdjustment if intent is a complex class - larger orgs skew complex)
+ * Manual intentShareOverrides pin exact shares; remaining intents are
+ * normalized into the leftover share.
+ *
+ * @param extraIntents  Active custom intents loaded from the DB; they participate
+ *                      in the weight pool exactly like reference intents.
  */
-export function computeShares(inputs: ScenarioInputs): Map<string, number> {
+export function computeShares(inputs: ScenarioInputs, extraIntents: Intent[] = []): Map<string, number> {
+  const allIntents = [...referenceIntents, ...extraIntents];
   const profile = profileMap[inputs.sector] ?? profiles[0]!;
   const band = sizeBand(inputs.employees);
   const sizeAdj = profile.sizeAdjustments[band] ?? 1;
   const overrides = inputs.intentShareOverrides ?? {};
 
   const weights = new Map<string, number>();
-  for (const it of intents) {
+  for (const it of allIntents) {
     if (overrides[it.key] !== undefined) continue;
     const dw = profile.domainWeights[it.domain] ?? 1;
     const complexAdj = COMPLEX_CLASSES.has(it.flowClass) ? sizeAdj : 1;
@@ -123,14 +132,14 @@ export function computeShares(inputs: ScenarioInputs): Map<string, number> {
   }
 
   const overrideTotal = Object.entries(overrides).reduce(
-    (s, [k, v]) => (intents.some((i) => i.key === k) ? s + Math.max(0, v) : s),
+    (s, [k, v]) => (allIntents.some((i) => i.key === k) ? s + Math.max(0, v) : s),
     0,
   );
   const remaining = Math.max(0, 1 - Math.min(1, overrideTotal));
   const weightSum = [...weights.values()].reduce((a, b) => a + b, 0) || 1;
 
   const shares = new Map<string, number>();
-  for (const it of intents) {
+  for (const it of allIntents) {
     const ov = overrides[it.key];
     if (ov !== undefined) shares.set(it.key, Math.max(0, ov));
     else shares.set(it.key, ((weights.get(it.key) ?? 0) / weightSum) * remaining);
@@ -488,9 +497,11 @@ export function computeRollup(
   inputs: ScenarioInputs,
   flowOverrides?: Record<string, FlowOverrideValues>,
   overlay?: ActualsOverlay,
+  extraIntents: Intent[] = [],
 ) {
   const ov = inputs.assumptionOverrides;
-  const shares = computeShares(inputs);
+  const allIntents = [...referenceIntents, ...extraIntents];
+  const shares = computeShares(inputs, extraIntents);
   const tier = tierMultiplierFor(inputs.isolationTier, ov);
   const company = companyMultiplierFor(inputs.companyType, ov);
   const costMult = tier.mult * company.mult;
@@ -535,7 +546,7 @@ export function computeRollup(
   // build cost into architecture components (reconciles exactly with buildCost).
   const fcAmortFactor = new Map<string, number>();
 
-  for (const baseIntent of intents) {
+  for (const baseIntent of allIntents) {
     // Approved SME flow overrides adjust the intent before pricing.
     const flowOv = flowOverrides?.[baseIntent.key];
     const it: Intent = flowOv

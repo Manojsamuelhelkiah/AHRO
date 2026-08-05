@@ -16,6 +16,8 @@ tags:
     description: Client scenarios and cost-benefit roll-ups
   - name: actuals
     description: Calibration actuals overlays (measured production data)
+  - name: customIntents
+    description: Client-specific intents that extend the reference corpus
 paths:
   /healthz:
     get:
@@ -346,6 +348,163 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /custom-intents:
+    get:
+      operationId: listCustomIntents
+      tags: [customIntents]
+      summary: List custom (client-specific) intents
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            description: "active (default) | all"
+      responses:
+        "200":
+          description: Custom intent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomIntent"
+    post:
+      operationId: createCustomIntent
+      tags: [customIntents]
+      summary: Create a new custom intent (key is auto-generated from name)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomIntentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomIntent"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /custom-intents/{key}:
+    get:
+      operationId: getCustomIntent
+      tags: [customIntents]
+      summary: Get a single custom intent by key
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Custom intent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomIntent"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      operationId: updateCustomIntent
+      tags: [customIntents]
+      summary: Update a custom intent (last-writer-wins)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomIntentUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomIntent"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      operationId: deleteCustomIntent
+      tags: [customIntents]
+      summary: Hard-delete a custom intent (blocked if SME flow-override history exists; use /retire instead)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Has flow-override history — use retire
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /custom-intents/{key}/retire:
+    post:
+      operationId: retireCustomIntent
+      tags: [customIntents]
+      summary: Retire a custom intent — removes it from roll-ups but preserves flow-override history
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Retired custom intent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomIntent"
+        "400":
+          description: Already retired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /rollup:
     post:
       operationId: computeRollup
@@ -537,6 +696,9 @@ components:
           type: array
           items:
             type: string
+        isCustom:
+          type: boolean
+          description: True when this intent was added by a client; false for the fixed reference corpus
       required:
         - id
         - key
@@ -1080,6 +1242,141 @@ components:
         isDefault:
           type: boolean
       required: [key, label, role, pricePerCallUsd, description, isDefault]
+    CustomIntent:
+      type: object
+      description: A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+          description: Auto-generated URL-safe slug (unique across reference corpus and custom intents)
+        name:
+          type: string
+        domain:
+          type: string
+        flowClass:
+          type: string
+          description: fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier
+        description:
+          type: string
+        asIsHandlingMin:
+          type: number
+        toBeHumanMin:
+          type: number
+        baseWeight:
+          type: number
+        actGetActions:
+          type: integer
+        actPutActions:
+          type: integer
+        systemsTouchedBase:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+          description: Free-text rationale or provenance
+        author:
+          type: string
+        status:
+          type: string
+          description: active | retired
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - key
+        - name
+        - domain
+        - flowClass
+        - description
+        - asIsHandlingMin
+        - toBeHumanMin
+        - baseWeight
+        - actGetActions
+        - actPutActions
+        - systemsTouchedBase
+        - tags
+        - source
+        - author
+        - status
+        - createdAt
+        - updatedAt
+    CustomIntentInput:
+      type: object
+      description: Fields required to create a custom intent. Key is auto-generated from name.
+      properties:
+        name:
+          type: string
+        domain:
+          type: string
+        flowClass:
+          type: string
+        description:
+          type: string
+        asIsHandlingMin:
+          type: number
+        toBeHumanMin:
+          type: number
+        baseWeight:
+          type: number
+        actGetActions:
+          type: integer
+        actPutActions:
+          type: integer
+        systemsTouchedBase:
+          type: integer
+          description: Default 2
+        source:
+          type: string
+          description: Rationale or provenance for this intent
+        author:
+          type: string
+      required:
+        - name
+        - domain
+        - flowClass
+        - description
+        - asIsHandlingMin
+        - toBeHumanMin
+        - baseWeight
+        - actGetActions
+        - actPutActions
+        - source
+        - author
+    CustomIntentUpdate:
+      type: object
+      description: Partial update for a custom intent (all fields optional)
+      properties:
+        name:
+          type: string
+        domain:
+          type: string
+        flowClass:
+          type: string
+        description:
+          type: string
+        asIsHandlingMin:
+          type: number
+        toBeHumanMin:
+          type: number
+        baseWeight:
+          type: number
+        actGetActions:
+          type: integer
+        actPutActions:
+          type: integer
+        systemsTouchedBase:
+          type: integer
+        source:
+          type: string
+        author:
+          type: string
     FlowOverride:
       type: object
       description: A versioned SME adjustment to an intent's flow; latest approved version per intent is applied to roll-ups

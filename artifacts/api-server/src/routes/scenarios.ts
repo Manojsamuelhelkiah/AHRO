@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { computeRollup, computeVariance, type ScenarioInputs } from "../lib/rollup";
 import { loadActiveFlowOverrides } from "./flow-overrides";
+import { loadActiveCustomIntents } from "./custom-intents";
 import { validateScenarioInputs, InputValidationError } from "../lib/validate-inputs";
 import type { ActualsOverlay } from "../data/types";
 
@@ -48,7 +49,12 @@ router.get("/scenarios", async (_req, res, next) => {
 router.post("/scenarios", async (req, res, next) => {
   try {
     const body = CreateScenarioBody.parse(req.body);
-    validateScenarioInputs(body.inputs as ScenarioInputs);
+    const [overrides, customIntents] = await Promise.all([
+      loadActiveFlowOverrides(),
+      loadActiveCustomIntents(),
+    ]);
+    const customKeys = new Set(customIntents.map((i) => i.key));
+    validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
     const [row] = await db
       .insert(scenariosTable)
       .values({ name: body.name, inputs: body.inputs })
@@ -62,7 +68,10 @@ router.post("/scenarios", async (req, res, next) => {
 router.get("/scenarios/:id", async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
-    const [row] = await db.select().from(scenariosTable).where(eq(scenariosTable.id, id));
+    const [row] = await db
+      .select()
+      .from(scenariosTable)
+      .where(eq(scenariosTable.id, id));
     if (!row) {
       res.status(404).json({ error: "Scenario not found" });
       return;
@@ -77,7 +86,11 @@ router.patch("/scenarios/:id", async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
     const body = UpdateScenarioBody.parse(req.body);
-    if (body.inputs !== undefined) validateScenarioInputs(body.inputs as ScenarioInputs);
+    if (body.inputs !== undefined) {
+      const customIntents = await loadActiveCustomIntents();
+      const customKeys = new Set(customIntents.map((i) => i.key));
+      validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
+    }
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) updates["name"] = body.name;
     if (body.inputs !== undefined) updates["inputs"] = body.inputs;
@@ -116,11 +129,15 @@ router.delete("/scenarios/:id", async (req, res, next) => {
 router.post("/rollup", async (req, res, next) => {
   try {
     const body = ComputeRollupBody.parse(req.body);
-    validateScenarioInputs(body.inputs as ScenarioInputs);
-    const overrides = await loadActiveFlowOverrides();
+    const [overrides, customIntents] = await Promise.all([
+      loadActiveFlowOverrides(),
+      loadActiveCustomIntents(),
+    ]);
     const inputs = body.inputs as ScenarioInputs;
+    const customKeys = new Set(customIntents.map((i) => i.key));
+    validateScenarioInputs(inputs, customKeys);
 
-    // Load actuals overlay if requested
+    // Load actuals overlay if requested.
     let overlay: ActualsOverlay | undefined;
     if (body.actualsOverlayId !== undefined) {
       const [overlayRow] = await db
@@ -136,8 +153,8 @@ router.post("/rollup", async (req, res, next) => {
 
     if (overlay) {
       // Two-pass: estimate without overlay, then compute with overlay, diff for variance.
-      const estimated = computeRollup(inputs, overrides);
-      const actual = computeRollup(inputs, overrides, overlay);
+      const estimated = computeRollup(inputs, overrides, undefined, customIntents);
+      const actual = computeRollup(inputs, overrides, overlay, customIntents);
       const variance = computeVariance(estimated, actual);
       const response = {
         ...actual,
@@ -147,7 +164,7 @@ router.post("/rollup", async (req, res, next) => {
       };
       res.json(ComputeRollupResponse.parse(response));
     } else {
-      const rollup = computeRollup(inputs, overrides);
+      const rollup = computeRollup(inputs, overrides, undefined, customIntents);
       res.json(ComputeRollupResponse.parse(rollup));
     }
   } catch (err) {

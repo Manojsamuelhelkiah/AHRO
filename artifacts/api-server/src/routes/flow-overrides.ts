@@ -10,6 +10,8 @@ import {
 } from "@workspace/api-zod";
 import { intentMap } from "../data/intents";
 import { flowClassMap } from "../data/flow-classes";
+import { db as _db, customIntentsTable } from "@workspace/db";
+import { eq as _eq } from "drizzle-orm";
 import { InputValidationError } from "../lib/validate-inputs";
 import type { FlowOverrideValues } from "../lib/rollup";
 
@@ -46,8 +48,25 @@ router.get("/flow-overrides", async (_req, res, next) => {
 router.post("/flow-overrides", async (req, res, next) => {
   try {
     const body = CreateFlowOverrideBody.parse(req.body);
-    const intent = intentMap[body.intentKey];
-    if (!intent) {
+    // Accept both reference corpus intents and active custom intents.
+    const isReferenceIntent = !!intentMap[body.intentKey];
+    const isCustomIntent = !isReferenceIntent
+      ? (
+          await _db
+            .select({ id: customIntentsTable.id })
+            .from(customIntentsTable)
+            .where(
+              and(
+                _eq(customIntentsTable.key, body.intentKey),
+                _eq(customIntentsTable.status, "active"),
+              ),
+            )
+            .limit(1)
+        ).length > 0
+      : false;
+    if (!isReferenceIntent && !isCustomIntent) {
+      // Rejects both unknown keys and retired custom intents (retired intents
+      // keep their existing override history readable but accept no new drafts).
       throw new InputValidationError(`Unknown intent key "${body.intentKey}"`);
     }
     if (!body.author.trim() || !body.rationale.trim()) {

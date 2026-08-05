@@ -199,7 +199,7 @@ test("approved flow overrides adjust intents and flag rows", () => {
   const withOv = computeRollup(base, {
     [target.intentKey]: { toBeHumanMin: 45, actGetActions: 10, actPutActions: 10 },
   });
-  const row = withOv.rows.find((r) => r.intentKey === target.intentKey)!;
+  const row = withOv.rows.find((rr) => rr.intentKey === target.intentKey)!;
   assert.equal(row.overridden, true);
   assert.ok(withOv.rows.filter((r) => r.overridden).length === 1);
   assert.ok(row.runCostUsd > target.runCostUsd, "more actions + human minutes raise run cost");
@@ -305,6 +305,132 @@ test("build breakdown reconciles exactly with total build cost", () => {
 test("tier multiplier reported matches input tier", () => {
   assert.equal(computeRollup({ ...base, isolationTier: "pooled" }).tierMultiplier, 1.0);
   assert.equal(computeRollup({ ...base, isolationTier: "dedicated" }).tierMultiplier, 2.5);
+});
+
+// ── Custom intent tests ───────────────────────────────────────────────────
+
+/** Minimal custom intent fixture in Intent shape (no DB needed — pure function tests). */
+const customIntent = {
+  id: -99,
+  key: "custom-visa-support",
+  name: "Visa Support Request",
+  domain: "mobility",
+  flowClass: "fc2-policy" as const,
+  description: "Client-specific visa support flow.",
+  source: { name: "Client workshop", confidence: "medium" as const },
+  asIsHandlingMin: 40,
+  toBeHumanMin: 8,
+  baseWeight: 3,
+  actGetActions: 2,
+  actPutActions: 0,
+  systemsTouchedBase: 2,
+  tags: ["custom"],
+};
+
+test("shares still sum to 1 when a custom intent is added", () => {
+  const shares = computeShares(base, [customIntent]);
+  const total = [...shares.values()].reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(total - 1) < 1e-9, `shares sum to ${total}`);
+  assert.ok(shares.has(customIntent.key), "custom intent has a share entry");
+  assert.ok((shares.get(customIntent.key) ?? 0) > 0, "custom intent share is positive");
+});
+
+test("custom intent row appears in rollup and totals reconcile", () => {
+  const r = computeRollup(base, undefined, undefined, [customIntent]);
+
+  // Row appears in the result
+  const row = r.rows.find((rr) => rr.intentKey === customIntent.key);
+  assert.ok(row, "custom intent row must appear in rollup rows");
+  assert.ok(row!.transactions > 0, "custom intent row has allocated transactions");
+  assert.ok(row!.benefitUsd > 0, "custom intent has positive benefit (asIs > toBe)");
+
+  // Domain bucket picks up the custom intent's domain
+  const domainBucket = r.byDomain.find((b) => b.key === customIntent.domain);
+  assert.ok(domainBucket, "custom intent domain appears in byDomain");
+
+  // Totals still reconcile
+  const rowRun = r.rows.reduce((a, x) => a + x.runCostUsd, 0);
+  const rowBuild = r.rows.reduce((a, x) => a + x.buildCostUsd, 0);
+  const rowBenefit = r.rows.reduce((a, x) => a + x.benefitUsd, 0);
+  assert.ok(Math.abs(rowRun - r.totals.runCostUsd) < 1e-6, "run cost reconciles");
+  assert.ok(Math.abs(rowBuild - r.totals.buildCostUsd) < 1e-6, "build cost reconciles");
+  assert.ok(Math.abs(rowBenefit - r.totals.benefitUsd) < 1e-6, "benefit reconciles");
+
+  const bucketTotal = r.byCostComponent.reduce((a, b) => a + b.usd, 0);
+  assert.ok(Math.abs(bucketTotal - r.totals.totalCostUsd) < 1e-6, "cost-component buckets reconcile");
+
+  const fcTotal = r.byFlowClass.reduce((a, b) => a + b.usd, 0);
+  assert.ok(Math.abs(fcTotal - r.totals.totalCostUsd) < 1e-6, "byFlowClass reconciles");
+
+  const domainTotal = r.byDomain.reduce((a, b) => a + b.usd, 0);
+  assert.ok(Math.abs(domainTotal - r.totals.totalCostUsd) < 1e-6, "byDomain reconciles");
+});
+
+test("custom intent moves rollup totals vs no custom intents", () => {
+  const without = computeRollup(base);
+  const with_ = computeRollup(base, undefined, undefined, [customIntent]);
+  // Adding an intent with positive benefit and non-zero transactions must change totals.
+  assert.notEqual(
+    with_.totals.totalCostUsd.toFixed(6),
+    without.totals.totalCostUsd.toFixed(6),
+    "total cost must change when custom intent added",
+  );
+  assert.notEqual(
+    with_.totals.benefitUsd.toFixed(6),
+    without.totals.benefitUsd.toFixed(6),
+    "benefit must change when custom intent added",
+  );
+  // Row count increases
+  assert.equal(with_.rows.length, without.rows.length + 1, "one extra row for custom intent");
+});
+
+test("retired custom intent excluded — rollup reverts to reference-only result", () => {
+  // Simulate retirement by passing no extraIntents (retired intents are filtered by the route
+  // before calling computeRollup; the pure function only sees what it's given).
+  const without = computeRollup(base);
+  const withCustom = computeRollup(base, undefined, undefined, [customIntent]);
+  const retired = computeRollup(base, undefined, undefined, []); // retired = not passed in
+
+  // After retirement the rollup is identical to the no-custom baseline.
+  assert.equal(retired.rows.length, without.rows.length, "retired intent not in row count");
+  assert.ok(
+    Math.abs(retired.totals.totalCostUsd - without.totals.totalCostUsd) < 1e-6,
+    "retired intent: total cost equals reference-only rollup",
+  );
+  // And it differs from the with-custom version.
+  assert.notEqual(
+    retired.totals.totalCostUsd.toFixed(6),
+    withCustom.totals.totalCostUsd.toFixed(6),
+    "retired rollup differs from active-custom rollup",
+  );
+});
+
+test("flow override is accepted on a custom intent key and adjusts the row", () => {
+  // The rollup applies overrides keyed on intent key — custom keys work identically.
+  const without = computeRollup(base, undefined, undefined, [customIntent]);
+  const baseRow = without.rows.find((r) => r.intentKey === customIntent.key)!;
+
+  const with_ = computeRollup(
+    base,
+    { [customIntent.key]: { toBeHumanMin: 20, actGetActions: 5 } },
+    undefined,
+    [customIntent],
+  );
+  const overriddenRow = with_.rows.find((r) => r.intentKey === customIntent.key)!;
+  assert.equal(overriddenRow.overridden, true, "override flag set for custom intent");
+  // More residual human minutes → higher human cost
+  assert.ok(
+    overriddenRow.humanCostUsd > baseRow.humanCostUsd,
+    "override raising toBeHumanMin raises human cost",
+  );
+  // More GET actions → higher run cost
+  assert.ok(
+    overriddenRow.runCostUsd > baseRow.runCostUsd,
+    "override adding GET actions raises run cost",
+  );
+  // Totals still reconcile after override
+  const rowRun = with_.rows.reduce((a, x) => a + x.runCostUsd, 0);
+  assert.ok(Math.abs(rowRun - with_.totals.runCostUsd) < 1e-6, "totals reconcile with override on custom intent");
 });
 
 test("validation rejects malformed inputs", () => {

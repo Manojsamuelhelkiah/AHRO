@@ -38,7 +38,8 @@ export const ListIntentsResponseItem = zod.object({
   "actGetActions": zod.number().describe('Number of GET system actions in the act phase of this intent (per touched system)'),
   "actPutActions": zod.number().describe('Number of PUT\/write system actions in the act phase (approval-gated)'),
   "systemsTouchedBase": zod.number().describe('Minimum count of systems of record this intent touches regardless of landscape size'),
-  "tags": zod.array(zod.string())
+  "tags": zod.array(zod.string()),
+  "isCustom": zod.boolean().optional().describe('True when this intent was added by a client; false for the fixed reference corpus')
 })
 export const ListIntentsResponse = zod.array(ListIntentsResponseItem)
 
@@ -164,10 +165,14 @@ export const GetCorpusSummaryResponse = zod.object({
 }))
 })
 
+
 /**
  * @summary List saved client scenarios
  */
 export const listScenariosResponseInputsAssumptionOverridesMinOne = 0;
+
+
+
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -198,10 +203,14 @@ export const ListScenariosResponseItem = zod.object({
 })
 export const ListScenariosResponse = zod.array(ListScenariosResponseItem)
 
+
 /**
  * @summary Create a client scenario
  */
 export const createScenarioBodyInputsAssumptionOverridesMinOne = 0;
+
+
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -229,6 +238,9 @@ export const CreateScenarioBody = zod.object({
 })
 
 export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
+
+
+
 export const CreateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -267,6 +279,9 @@ export const GetScenarioParams = zod.object({
 })
 
 export const getScenarioResponseInputsAssumptionOverridesMinOne = 0;
+
+
+
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -305,6 +320,9 @@ export const UpdateScenarioParams = zod.object({
 })
 
 export const updateScenarioBodyInputsAssumptionOverridesMinOne = 0;
+
+
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -332,6 +350,9 @@ export const UpdateScenarioBody = zod.object({
 })
 
 export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
+
+
+
 export const UpdateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -370,11 +391,6 @@ export const DeleteScenarioParams = zod.object({
 })
 
 export const DeleteScenarioResponse = zod.void()
-
-/**
- * @summary Compute a cost-benefit roll-up for a set of scenario inputs (without saving)
- */
-export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 
 /**
@@ -490,6 +506,195 @@ export const DeleteFlowOverrideParams = zod.object({
 })
 
 export const DeleteFlowOverrideResponse = zod.void()
+
+
+/**
+ * @summary List custom (client-specific) intents
+ */
+export const ListCustomIntentsQueryParams = zod.object({
+  "status": zod.coerce.string().optional()
+})
+
+export const ListCustomIntentsResponseItem = zod.object({
+  "id": zod.number(),
+  "key": zod.string().describe('Auto-generated URL-safe slug (unique across reference corpus and custom intents)'),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "flowClass": zod.string().describe('fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier'),
+  "description": zod.string(),
+  "asIsHandlingMin": zod.number(),
+  "toBeHumanMin": zod.number(),
+  "baseWeight": zod.number(),
+  "actGetActions": zod.number(),
+  "actPutActions": zod.number(),
+  "systemsTouchedBase": zod.number(),
+  "tags": zod.array(zod.string()),
+  "source": zod.string().describe('Free-text rationale or provenance'),
+  "author": zod.string(),
+  "status": zod.string().describe('active | retired'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
+export const ListCustomIntentsResponse = zod.array(ListCustomIntentsResponseItem)
+
+
+/**
+ * @summary Create a new custom intent (key is auto-generated from name)
+ */
+export const CreateCustomIntentBody = zod.object({
+  "name": zod.string(),
+  "domain": zod.string(),
+  "flowClass": zod.string(),
+  "description": zod.string(),
+  "asIsHandlingMin": zod.number(),
+  "toBeHumanMin": zod.number(),
+  "baseWeight": zod.number(),
+  "actGetActions": zod.number(),
+  "actPutActions": zod.number(),
+  "systemsTouchedBase": zod.number().optional().describe('Default 2'),
+  "source": zod.string().describe('Rationale or provenance for this intent'),
+  "author": zod.string()
+}).describe('Fields required to create a custom intent. Key is auto-generated from name.')
+
+export const CreateCustomIntentResponse = zod.object({
+  "id": zod.number(),
+  "key": zod.string().describe('Auto-generated URL-safe slug (unique across reference corpus and custom intents)'),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "flowClass": zod.string().describe('fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier'),
+  "description": zod.string(),
+  "asIsHandlingMin": zod.number(),
+  "toBeHumanMin": zod.number(),
+  "baseWeight": zod.number(),
+  "actGetActions": zod.number(),
+  "actPutActions": zod.number(),
+  "systemsTouchedBase": zod.number(),
+  "tags": zod.array(zod.string()),
+  "source": zod.string().describe('Free-text rationale or provenance'),
+  "author": zod.string(),
+  "status": zod.string().describe('active | retired'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
+
+
+/**
+ * @summary Get a single custom intent by key
+ */
+export const GetCustomIntentParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const GetCustomIntentResponse = zod.object({
+  "id": zod.number(),
+  "key": zod.string().describe('Auto-generated URL-safe slug (unique across reference corpus and custom intents)'),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "flowClass": zod.string().describe('fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier'),
+  "description": zod.string(),
+  "asIsHandlingMin": zod.number(),
+  "toBeHumanMin": zod.number(),
+  "baseWeight": zod.number(),
+  "actGetActions": zod.number(),
+  "actPutActions": zod.number(),
+  "systemsTouchedBase": zod.number(),
+  "tags": zod.array(zod.string()),
+  "source": zod.string().describe('Free-text rationale or provenance'),
+  "author": zod.string(),
+  "status": zod.string().describe('active | retired'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
+
+
+/**
+ * @summary Update a custom intent (last-writer-wins)
+ */
+export const UpdateCustomIntentParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const UpdateCustomIntentBody = zod.object({
+  "name": zod.string().optional(),
+  "domain": zod.string().optional(),
+  "flowClass": zod.string().optional(),
+  "description": zod.string().optional(),
+  "asIsHandlingMin": zod.number().optional(),
+  "toBeHumanMin": zod.number().optional(),
+  "baseWeight": zod.number().optional(),
+  "actGetActions": zod.number().optional(),
+  "actPutActions": zod.number().optional(),
+  "systemsTouchedBase": zod.number().optional(),
+  "source": zod.string().optional(),
+  "author": zod.string().optional()
+}).describe('Partial update for a custom intent (all fields optional)')
+
+export const UpdateCustomIntentResponse = zod.object({
+  "id": zod.number(),
+  "key": zod.string().describe('Auto-generated URL-safe slug (unique across reference corpus and custom intents)'),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "flowClass": zod.string().describe('fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier'),
+  "description": zod.string(),
+  "asIsHandlingMin": zod.number(),
+  "toBeHumanMin": zod.number(),
+  "baseWeight": zod.number(),
+  "actGetActions": zod.number(),
+  "actPutActions": zod.number(),
+  "systemsTouchedBase": zod.number(),
+  "tags": zod.array(zod.string()),
+  "source": zod.string().describe('Free-text rationale or provenance'),
+  "author": zod.string(),
+  "status": zod.string().describe('active | retired'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
+
+
+/**
+ * @summary Hard-delete a custom intent (blocked if SME flow-override history exists; use /retire instead)
+ */
+export const DeleteCustomIntentParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const DeleteCustomIntentResponse = zod.void()
+
+
+/**
+ * @summary Retire a custom intent — removes it from roll-ups but preserves flow-override history
+ */
+export const RetireCustomIntentParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const RetireCustomIntentResponse = zod.object({
+  "id": zod.number(),
+  "key": zod.string().describe('Auto-generated URL-safe slug (unique across reference corpus and custom intents)'),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "flowClass": zod.string().describe('fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier'),
+  "description": zod.string(),
+  "asIsHandlingMin": zod.number(),
+  "toBeHumanMin": zod.number(),
+  "baseWeight": zod.number(),
+  "actGetActions": zod.number(),
+  "actPutActions": zod.number(),
+  "systemsTouchedBase": zod.number(),
+  "tags": zod.array(zod.string()),
+  "source": zod.string().describe('Free-text rationale or provenance'),
+  "author": zod.string(),
+  "status": zod.string().describe('active | retired'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
+
+
+/**
+ * @summary Compute a cost-benefit roll-up for a set of scenario inputs (without saving)
+ */
+export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
+
 
 
 export const ComputeRollupBody = zod.object({
@@ -627,10 +832,117 @@ export const ComputeRollupResponse = zod.object({
 }).describe('Per-assumption comparison between the estimated value (from assumptions register or scenario inputs) and the measured value (from actuals overlay).')).optional().describe('Per-assumption variance between the estimated and measured values. Present only when calibrated=true.')
 })
 
+
 /**
  * @summary List all saved calibration actuals overlays
  */
 export const ListActualsOverlaysResponseItem = zod.object({
+  "id": zod.number(),
+  "clientLabel": zod.string().nullish(),
+  "periodStart": zod.string().nullish(),
+  "periodEnd": zod.string().nullish(),
+  "payload": zod.object({
+  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
+  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
+  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
+  "intents": zod.array(zod.object({
+  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
+  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
+  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
+}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
+  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
+  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
+  "tokenActualsByRole": zod.record(zod.string(), zod.object({
+  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
+  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
+}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
+}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.'),
+  "createdAt": zod.string()
+}).describe('A saved actuals overlay with its database id and timestamps.')
+export const ListActualsOverlaysResponse = zod.array(ListActualsOverlaysResponseItem)
+
+
+/**
+ * @summary Save a new calibration actuals overlay
+ */
+export const CreateActualsOverlayBody = zod.object({
+  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
+  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
+  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
+  "intents": zod.array(zod.object({
+  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
+  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
+  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
+}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
+  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
+  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
+  "tokenActualsByRole": zod.record(zod.string(), zod.object({
+  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
+  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
+}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
+}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.')
+
+export const CreateActualsOverlayResponse = zod.object({
+  "id": zod.number(),
+  "clientLabel": zod.string().nullish(),
+  "periodStart": zod.string().nullish(),
+  "periodEnd": zod.string().nullish(),
+  "payload": zod.object({
+  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
+  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
+  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
+  "intents": zod.array(zod.object({
+  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
+  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
+  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
+}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
+  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
+  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
+  "tokenActualsByRole": zod.record(zod.string(), zod.object({
+  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
+  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
+}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
+}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.'),
+  "createdAt": zod.string()
+}).describe('A saved actuals overlay with its database id and timestamps.')
+
+
+/**
+ * @summary Validate an actuals overlay payload without persisting it
+ */
+export const ValidateActualsOverlayBody = zod.object({
+  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
+  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
+  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
+  "intents": zod.array(zod.object({
+  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
+  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
+  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
+}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
+  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
+  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
+  "tokenActualsByRole": zod.record(zod.string(), zod.object({
+  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
+  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
+}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
+}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.')
+
+export const ValidateActualsOverlayResponse = zod.object({
+  "valid": zod.boolean(),
+  "errors": zod.array(zod.string()),
+  "intentRowCount": zod.number().describe('Number of intent rows recognised and validated.'),
+  "measuredFields": zod.array(zod.string()).describe('List of measurement dimensions present in the overlay (e.g. containment, tokenPricing, hitlSampling, hitlMinutes).')
+})
+
+
+/**
+ * @summary Get a saved actuals overlay by id
+ */
+export const GetActualsOverlayParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetActualsOverlayResponse = zod.object({
   "id": zod.number(),
   "clientLabel": zod.string().nullish(),
   "periodStart": zod.string().nullish(),
@@ -664,106 +976,4 @@ export const DeleteActualsOverlayParams = zod.object({
 
 export const DeleteActualsOverlayResponse = zod.void()
 
-/**
- * @summary Get a saved actuals overlay by id
- */
-export const GetActualsOverlayParams = zod.object({
-  "id": zod.coerce.number()
-})
 
-export const CreateActualsOverlayResponse = zod.object({
-  "id": zod.number(),
-  "clientLabel": zod.string().nullish(),
-  "periodStart": zod.string().nullish(),
-  "periodEnd": zod.string().nullish(),
-  "payload": zod.object({
-  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
-  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
-  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
-  "intents": zod.array(zod.object({
-  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
-  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
-  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
-}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
-  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
-  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
-  "tokenActualsByRole": zod.record(zod.string(), zod.object({
-  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
-  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
-}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
-}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.'),
-  "createdAt": zod.string()
-}).describe('A saved actuals overlay with its database id and timestamps.')
-
-/**
- * @summary Save a new calibration actuals overlay
- */
-export const CreateActualsOverlayBody = zod.object({
-  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
-  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
-  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
-  "intents": zod.array(zod.object({
-  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
-  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
-  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
-}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
-  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
-  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
-  "tokenActualsByRole": zod.record(zod.string(), zod.object({
-  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
-  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
-}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
-}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.')
-
-export const GetActualsOverlayResponse = zod.object({
-  "id": zod.number(),
-  "clientLabel": zod.string().nullish(),
-  "periodStart": zod.string().nullish(),
-  "periodEnd": zod.string().nullish(),
-  "payload": zod.object({
-  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
-  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
-  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
-  "intents": zod.array(zod.object({
-  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
-  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
-  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
-}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
-  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
-  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
-  "tokenActualsByRole": zod.record(zod.string(), zod.object({
-  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
-  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
-}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
-}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.'),
-  "createdAt": zod.string()
-}).describe('A saved actuals overlay with its database id and timestamps.')
-
-/**
- * @summary Validate an actuals overlay payload without persisting it
- */
-export const ValidateActualsOverlayBody = zod.object({
-  "clientLabel": zod.string().optional().describe('Human-readable label, e.g. \"Acme Q1 2025 production logs\".'),
-  "periodStart": zod.string().optional().describe('ISO date string for the start of the observed period.'),
-  "periodEnd": zod.string().optional().describe('ISO date string for the end of the observed period.'),
-  "intents": zod.array(zod.object({
-  "intentKey": zod.string().describe('Must match a key in the intent corpus.'),
-  "measuredContainmentRate": zod.number().optional().describe('Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.'),
-  "avgHitlMinutes": zod.number().optional().describe('Measured average residual human-in-the-loop minutes per contained transaction for this intent.')
-}).describe('Per-intent measured values. At least one measured field must be present.')).optional().describe('Per-intent measured values.'),
-  "measuredContainmentByFlowClass": zod.record(zod.string(), zod.number()).optional().describe('Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.'),
-  "measuredHitlSamplingRate": zod.number().optional().describe('Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.'),
-  "tokenActualsByRole": zod.record(zod.string(), zod.object({
-  "avgInputTokens": zod.number().describe('Average input (prompt) tokens per call.'),
-  "avgOutputTokens": zod.number().describe('Average output (completion) tokens per call.')
-}).describe('Measured average token counts per model call for a given role, taken from production logs.')).optional().describe('Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.')
-}).describe('Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.')
-
-export const ListActualsOverlaysResponse = zod.array(ListActualsOverlaysResponseItem)
-
-export const ValidateActualsOverlayResponse = zod.object({
-  "valid": zod.boolean(),
-  "errors": zod.array(zod.string()),
-  "intentRowCount": zod.number().describe('Number of intent rows recognised and validated.'),
-  "measuredFields": zod.array(zod.string()).describe('List of measurement dimensions present in the overlay (e.g. containment, tokenPricing, hitlSampling, hitlMinutes).')
-})

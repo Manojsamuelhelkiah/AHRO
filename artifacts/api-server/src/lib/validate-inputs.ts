@@ -30,8 +30,11 @@ function requirePositiveInt(name: string, value: number, max: number) {
   }
 }
 
-/** Validates scenario inputs beyond structural typing; throws InputValidationError. */
-export function validateScenarioInputs(inputs: ScenarioInputs): void {
+/**
+ * Validates scenario inputs beyond structural typing; throws InputValidationError.
+ * Pass `extraValidIntentKeys` to allow custom intent keys in intentShareOverrides.
+ */
+export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentKeys?: Set<string>): void {
   requirePositiveInt("numSystems", inputs.numSystems, 100);
   requirePositiveInt("annualTransactions", inputs.annualTransactions, 100_000_000);
   requirePositiveInt("employees", inputs.employees, 10_000_000);
@@ -59,7 +62,7 @@ export function validateScenarioInputs(inputs: ScenarioInputs): void {
   if (overrides) {
     let total = 0;
     for (const [key, share] of Object.entries(overrides)) {
-      if (!intentMap[key]) {
+      if (!intentMap[key] && !extraValidIntentKeys?.has(key)) {
         throw new InputValidationError(`Unknown intent key in intentShareOverrides: "${key}"`);
       }
       if (!Number.isFinite(share) || share < 0 || share > 1) {

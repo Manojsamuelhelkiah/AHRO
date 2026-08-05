@@ -24,6 +24,9 @@ import type {
   ActualsOverlayRecord,
   ActualsValidationResult,
   CorpusSummary,
+  CustomIntent,
+  CustomIntentInput,
+  CustomIntentUpdate,
   DistributionProfile,
   ErrorMessage,
   FlowClass,
@@ -32,6 +35,7 @@ import type {
   GlobalAssumption,
   HealthStatus,
   Intent,
+  ListCustomIntentsParams,
   ModelOption,
   Rollup,
   RollupRequest,
@@ -1412,6 +1416,452 @@ export const useDeleteFlowOverride = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getDeleteFlowOverrideMutationOptions(options));
+    }
+
+export const getListCustomIntentsUrl = (params?: ListCustomIntentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/custom-intents?${stringifiedParams}` : `/api/custom-intents`
+}
+
+/**
+ * @summary List custom (client-specific) intents
+ */
+export const listCustomIntents = async (params?: ListCustomIntentsParams, options?: RequestInit): Promise<CustomIntent[]> => {
+
+  return customFetch<CustomIntent[]>(getListCustomIntentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomIntentsQueryKey = (params?: ListCustomIntentsParams,) => {
+    return [
+    `/api/custom-intents`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCustomIntentsQueryOptions = <TData = Awaited<ReturnType<typeof listCustomIntents>>, TError = ErrorType<unknown>>(params?: ListCustomIntentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomIntents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomIntentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomIntents>>> = ({ signal }) => listCustomIntents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomIntents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomIntentsQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomIntents>>>
+export type ListCustomIntentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List custom (client-specific) intents
+ */
+
+export function useListCustomIntents<TData = Awaited<ReturnType<typeof listCustomIntents>>, TError = ErrorType<unknown>>(
+ params?: ListCustomIntentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomIntents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomIntentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCustomIntentUrl = () => {
+
+
+
+
+  return `/api/custom-intents`
+}
+
+/**
+ * @summary Create a new custom intent (key is auto-generated from name)
+ */
+export const createCustomIntent = async (customIntentInput: CustomIntentInput, options?: RequestInit): Promise<CustomIntent> => {
+
+  return customFetch<CustomIntent>(getCreateCustomIntentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customIntentInput)
+  }
+);}
+
+
+
+
+
+export const getCreateCustomIntentMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomIntent>>, TError,{data: BodyType<CustomIntentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCustomIntent>>, TError,{data: BodyType<CustomIntentInput>}, TContext> => {
+
+const mutationKey = ['createCustomIntent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCustomIntent>>, {data: BodyType<CustomIntentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCustomIntent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCustomIntentMutationResult = NonNullable<Awaited<ReturnType<typeof createCustomIntent>>>
+    export type CreateCustomIntentMutationBody = BodyType<CustomIntentInput>
+    export type CreateCustomIntentMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Create a new custom intent (key is auto-generated from name)
+ */
+export const useCreateCustomIntent = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomIntent>>, TError,{data: BodyType<CustomIntentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCustomIntent>>,
+        TError,
+        {data: BodyType<CustomIntentInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCustomIntentMutationOptions(options));
+    }
+
+export const getGetCustomIntentUrl = (key: string,) => {
+
+
+
+
+  return `/api/custom-intents/${key}`
+}
+
+/**
+ * @summary Get a single custom intent by key
+ */
+export const getCustomIntent = async (key: string, options?: RequestInit): Promise<CustomIntent> => {
+
+  return customFetch<CustomIntent>(getGetCustomIntentUrl(key),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCustomIntentQueryKey = (key: string,) => {
+    return [
+    `/api/custom-intents/${key}`
+    ] as const;
+    }
+
+
+export const getGetCustomIntentQueryOptions = <TData = Awaited<ReturnType<typeof getCustomIntent>>, TError = ErrorType<ErrorMessage>>(key: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomIntent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomIntentQueryKey(key);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomIntent>>> = ({ signal }) => getCustomIntent(key, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: key !== null && key !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCustomIntent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCustomIntentQueryResult = NonNullable<Awaited<ReturnType<typeof getCustomIntent>>>
+export type GetCustomIntentQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get a single custom intent by key
+ */
+
+export function useGetCustomIntent<TData = Awaited<ReturnType<typeof getCustomIntent>>, TError = ErrorType<ErrorMessage>>(
+ key: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomIntent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCustomIntentQueryOptions(key,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCustomIntentUrl = (key: string,) => {
+
+
+
+
+  return `/api/custom-intents/${key}`
+}
+
+/**
+ * @summary Update a custom intent (last-writer-wins)
+ */
+export const updateCustomIntent = async (key: string,
+    customIntentUpdate: CustomIntentUpdate, options?: RequestInit): Promise<CustomIntent> => {
+
+  return customFetch<CustomIntent>(getUpdateCustomIntentUrl(key),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customIntentUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateCustomIntentMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomIntent>>, TError,{key: string;data: BodyType<CustomIntentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCustomIntent>>, TError,{key: string;data: BodyType<CustomIntentUpdate>}, TContext> => {
+
+const mutationKey = ['updateCustomIntent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCustomIntent>>, {key: string;data: BodyType<CustomIntentUpdate>}> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  updateCustomIntent(key,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCustomIntentMutationResult = NonNullable<Awaited<ReturnType<typeof updateCustomIntent>>>
+    export type UpdateCustomIntentMutationBody = BodyType<CustomIntentUpdate>
+    export type UpdateCustomIntentMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Update a custom intent (last-writer-wins)
+ */
+export const useUpdateCustomIntent = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomIntent>>, TError,{key: string;data: BodyType<CustomIntentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCustomIntent>>,
+        TError,
+        {key: string;data: BodyType<CustomIntentUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCustomIntentMutationOptions(options));
+    }
+
+export const getDeleteCustomIntentUrl = (key: string,) => {
+
+
+
+
+  return `/api/custom-intents/${key}`
+}
+
+/**
+ * @summary Hard-delete a custom intent (blocked if SME flow-override history exists; use /retire instead)
+ */
+export const deleteCustomIntent = async (key: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCustomIntentUrl(key),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCustomIntentMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomIntent>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCustomIntent>>, TError,{key: string}, TContext> => {
+
+const mutationKey = ['deleteCustomIntent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCustomIntent>>, {key: string}> = (props) => {
+          const {key} = props ?? {};
+
+          return  deleteCustomIntent(key,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCustomIntentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCustomIntent>>>
+
+    export type DeleteCustomIntentMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Hard-delete a custom intent (blocked if SME flow-override history exists; use /retire instead)
+ */
+export const useDeleteCustomIntent = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomIntent>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCustomIntent>>,
+        TError,
+        {key: string},
+        TContext
+      > => {
+      return useMutation(getDeleteCustomIntentMutationOptions(options));
+    }
+
+export const getRetireCustomIntentUrl = (key: string,) => {
+
+
+
+
+  return `/api/custom-intents/${key}/retire`
+}
+
+/**
+ * @summary Retire a custom intent — removes it from roll-ups but preserves flow-override history
+ */
+export const retireCustomIntent = async (key: string, options?: RequestInit): Promise<CustomIntent> => {
+
+  return customFetch<CustomIntent>(getRetireCustomIntentUrl(key),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetireCustomIntentMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireCustomIntent>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retireCustomIntent>>, TError,{key: string}, TContext> => {
+
+const mutationKey = ['retireCustomIntent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retireCustomIntent>>, {key: string}> = (props) => {
+          const {key} = props ?? {};
+
+          return  retireCustomIntent(key,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetireCustomIntentMutationResult = NonNullable<Awaited<ReturnType<typeof retireCustomIntent>>>
+
+    export type RetireCustomIntentMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Retire a custom intent — removes it from roll-ups but preserves flow-override history
+ */
+export const useRetireCustomIntent = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireCustomIntent>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retireCustomIntent>>,
+        TError,
+        {key: string},
+        TContext
+      > => {
+      return useMutation(getRetireCustomIntentMutationOptions(options));
     }
 
 export const getComputeRollupUrl = () => {

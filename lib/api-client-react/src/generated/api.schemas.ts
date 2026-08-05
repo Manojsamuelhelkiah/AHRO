@@ -47,6 +47,8 @@ export interface Intent {
   /** Minimum count of systems of record this intent touches regardless of landscape size */
   systemsTouchedBase: number;
   tags: string[];
+  /** True when this intent was added by a client; false for the fixed reference corpus */
+  isCustom?: boolean;
 }
 
 export interface StepSystemTouch {
@@ -183,6 +185,7 @@ export type ScenarioInputsIntentShareOverrides = {[key: string]: number};
  * Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.
  */
 export type ScenarioInputsAssumptionOverrides = {[key: string]: number};
+
 /**
  * Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-* assumptions. Uncontained transactions still incur AI/infra cost but fall back to full as-is human handling and yield no benefit.
  */
@@ -356,6 +359,7 @@ export interface VarianceEntry {
   /** Which side of the model this assumption affects: cost | benefit | both */
   direction: string;
 }
+
 export interface Rollup {
   totals: RollupTotals;
   rows: IntentRollupRow[];
@@ -390,6 +394,72 @@ export interface ModelOption {
   pricePerCallUsd: number;
   description: string;
   isDefault: boolean;
+}
+
+/**
+ * A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.
+ */
+export interface CustomIntent {
+  id: number;
+  /** Auto-generated URL-safe slug (unique across reference corpus and custom intents) */
+  key: string;
+  name: string;
+  domain: string;
+  /** fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier */
+  flowClass: string;
+  description: string;
+  asIsHandlingMin: number;
+  toBeHumanMin: number;
+  baseWeight: number;
+  actGetActions: number;
+  actPutActions: number;
+  systemsTouchedBase: number;
+  tags: string[];
+  /** Free-text rationale or provenance */
+  source: string;
+  author: string;
+  /** active | retired */
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Fields required to create a custom intent. Key is auto-generated from name.
+ */
+export interface CustomIntentInput {
+  name: string;
+  domain: string;
+  flowClass: string;
+  description: string;
+  asIsHandlingMin: number;
+  toBeHumanMin: number;
+  baseWeight: number;
+  actGetActions: number;
+  actPutActions: number;
+  /** Default 2 */
+  systemsTouchedBase?: number;
+  /** Rationale or provenance for this intent */
+  source: string;
+  author: string;
+}
+
+/**
+ * Partial update for a custom intent (all fields optional)
+ */
+export interface CustomIntentUpdate {
+  name?: string;
+  domain?: string;
+  flowClass?: string;
+  description?: string;
+  asIsHandlingMin?: number;
+  toBeHumanMin?: number;
+  baseWeight?: number;
+  actGetActions?: number;
+  actPutActions?: number;
+  systemsTouchedBase?: number;
+  source?: string;
+  author?: string;
 }
 
 /**
@@ -430,20 +500,6 @@ export interface TokenRoleActuals {
   avgOutputTokens: number;
 }
 
-export interface ActualsValidationResult {
-  valid: boolean;
-  errors: string[];
-  /** Number of intent rows recognised and validated. */
-  intentRowCount: number;
-  /** List of measurement dimensions present in the overlay (e.g. containment, tokenPricing, hitlSampling, hitlMinutes). */
-  measuredFields: string[];
-}
-
-/**
- * Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.
- */
-export type ActualsOverlayInputTokenActualsByRole = {[key: string]: TokenRoleActuals};
-
 /**
  * Per-intent measured values. At least one measured field must be present.
  */
@@ -455,6 +511,16 @@ export interface IntentActuals {
   /** Measured average residual human-in-the-loop minutes per contained transaction for this intent. */
   avgHitlMinutes?: number;
 }
+
+/**
+ * Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.
+ */
+export type ActualsOverlayInputMeasuredContainmentByFlowClass = {[key: string]: number};
+
+/**
+ * Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.
+ */
+export type ActualsOverlayInputTokenActualsByRole = {[key: string]: TokenRoleActuals};
 
 /**
  * Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.
@@ -477,11 +543,6 @@ export interface ActualsOverlayInput {
 }
 
 /**
- * Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.
- */
-export type ActualsOverlayInputMeasuredContainmentByFlowClass = {[key: string]: number};
-
-/**
  * A saved actuals overlay with its database id and timestamps.
  */
 export interface ActualsOverlayRecord {
@@ -492,3 +553,20 @@ export interface ActualsOverlayRecord {
   payload: ActualsOverlayInput;
   createdAt: string;
 }
+
+export interface ActualsValidationResult {
+  valid: boolean;
+  errors: string[];
+  /** Number of intent rows recognised and validated. */
+  intentRowCount: number;
+  /** List of measurement dimensions present in the overlay (e.g. containment, tokenPricing, hitlSampling, hitlMinutes). */
+  measuredFields: string[];
+}
+
+export type ListCustomIntentsParams = {
+/**
+ * active (default) | all
+ */
+status?: string;
+};
+
