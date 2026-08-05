@@ -13,6 +13,6 @@ export interface SourceRef {
   /** e.g. "SAP SuccessFactors service catalog (curated)", "Kaggle HR analytics", "GitHub HR intents corpus" */
   name: string;
   note?: string;
-  /** high | medium | low (documented-assumption) */
+  /** measured | high | medium | low (documented-assumption). "measured" is the strongest tier, meaning the value came from observed production data. */
   confidence: string;
 }

@@ -12,6 +12,7 @@ import Flows from '@/pages/flows';
 import Scenario from '@/pages/scenario';
 import Assumptions from '@/pages/assumptions';
 import Compare from '@/pages/compare';
+import Calibration from '@/pages/calibration';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +34,7 @@ function Router() {
         <Route path="/scenario" component={Scenario} />
         <Route path="/compare" component={Compare} />
         <Route path="/assumptions" component={Assumptions} />
+        <Route path="/calibration" component={Calibration} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

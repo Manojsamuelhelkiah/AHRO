@@ -6,6 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './actualsOverlayInput';
+export * from './actualsOverlayInputMeasuredContainmentByFlowClass';
+export * from './actualsOverlayInputTokenActualsByRole';
+export * from './actualsOverlayRecord';
+export * from './actualsValidationResult';
 export * from './benefitComponent';
 export * from './buildComponentCost';
 export * from './componentBucket';
@@ -25,6 +30,7 @@ export * from './flowStep';
 export * from './globalAssumption';
 export * from './healthStatus';
 export * from './intent';
+export * from './intentActuals';
 export * from './intentRollupRow';
 export * from './mcpIntegration';
 export * from './modelOption';
@@ -42,3 +48,5 @@ export * from './scenarioUpdate';
 export * from './sourceRef';
 export * from './stepSystemTouch';
 export * from './systemInfo';
+export * from './tokenRoleActuals';
+export * from './varianceEntry';

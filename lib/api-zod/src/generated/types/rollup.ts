@@ -11,6 +11,7 @@ import type { Confidence } from './confidence';
 import type { GlobalAssumption } from './globalAssumption';
 import type { IntentRollupRow } from './intentRollupRow';
 import type { RollupTotals } from './rollupTotals';
+import type { VarianceEntry } from './varianceEntry';
 
 export interface Rollup {
   totals: RollupTotals;
@@ -30,4 +31,10 @@ export interface Rollup {
   buildBreakdown: BuildComponentCost[];
   appliedAssumptions: GlobalAssumption[];
   confidence: Confidence;
+  /** True when a calibration actuals overlay was applied to this rollup. */
+  calibrated: boolean;
+  /** Pre-calibration totals (from the pass without overlay). Present only when calibrated=true. */
+  estimatedTotals?: RollupTotals;
+  /** Per-assumption variance between the estimated and measured values. Present only when calibrated=true. */
+  variance?: VarianceEntry[];
 }

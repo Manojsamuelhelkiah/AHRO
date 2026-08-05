@@ -1,10 +1,22 @@
 import { assumptionMap } from "./assumptions";
+import type { TokenRoleActuals } from "./types";
 
 export interface ModelOption {
   key: string;
   label: string;
   role: string; // router | reasoning | frontier | data
   pricePerCallUsd: number;
+  /**
+   * Published input (prompt) price per million tokens.
+   * Used only when an actuals overlay supplies measured avg token counts
+   * for this role; otherwise pricePerCallUsd is used unchanged.
+   */
+  inputPricePerMillionTokens: number;
+  /**
+   * Published output (completion) price per million tokens.
+   * Same conditions as inputPricePerMillionTokens.
+   */
+  outputPricePerMillionTokens: number;
   description: string;
   isDefault: boolean;
 }
@@ -15,6 +27,10 @@ export interface ModelOption {
  * ~6k in / 1k out; frontier ~20k in / 4k out with multi-turn planning).
  * The default option in each role matches the registered *-call-cost
  * assumption so scenarios without a model selection are unchanged.
+ *
+ * Per-token rates (inputPricePerMillionTokens / outputPricePerMillionTokens)
+ * are the published list prices used when an actuals overlay supplies measured
+ * average token counts, enabling exact repricing from real production logs.
  */
 export const modelCatalog: ModelOption[] = [
   // Router / classification (small models)
@@ -23,6 +39,8 @@ export const modelCatalog: ModelOption[] = [
     label: "GPT-5 mini",
     role: "router",
     pricePerCallUsd: assumptionMap["slm-call-cost"]!.value,
+    inputPricePerMillionTokens: 0.6,
+    outputPricePerMillionTokens: 2.4,
     description: "Default small model for intent routing and classification.",
     isDefault: true,
   },
@@ -31,6 +49,8 @@ export const modelCatalog: ModelOption[] = [
     label: "Gemini Flash",
     role: "router",
     pricePerCallUsd: 0.001,
+    inputPricePerMillionTokens: 0.35,
+    outputPricePerMillionTokens: 1.4,
     description: "Lower-cost router option at comparable routing accuracy.",
     isDefault: false,
   },
@@ -39,6 +59,8 @@ export const modelCatalog: ModelOption[] = [
     label: "Phi (provisioned)",
     role: "router",
     pricePerCallUsd: 0.0008,
+    inputPricePerMillionTokens: 0.4,
+    outputPricePerMillionTokens: 1.6,
     description: "Provisioned small model on dedicated capacity; cheapest per call at high volume.",
     isDefault: false,
   },
@@ -48,6 +70,8 @@ export const modelCatalog: ModelOption[] = [
     label: "GPT-5",
     role: "reasoning",
     pricePerCallUsd: assumptionMap["llm-call-cost"]!.value,
+    inputPricePerMillionTokens: 2.5,
+    outputPricePerMillionTokens: 10.0,
     description: "Default reasoning model for grounded policy answers and agent steps.",
     isDefault: true,
   },
@@ -56,6 +80,8 @@ export const modelCatalog: ModelOption[] = [
     label: "Claude Sonnet",
     role: "reasoning",
     pricePerCallUsd: 0.018,
+    inputPricePerMillionTokens: 3.0,
+    outputPricePerMillionTokens: 15.0,
     description: "Comparable reasoning quality; slightly lower per-call cost at the HRO token profile.",
     isDefault: false,
   },
@@ -64,6 +90,8 @@ export const modelCatalog: ModelOption[] = [
     label: "Gemini Pro",
     role: "reasoning",
     pricePerCallUsd: 0.014,
+    inputPricePerMillionTokens: 1.25,
+    outputPricePerMillionTokens: 5.0,
     description: "Lowest-cost mainstream reasoning option; validate quality on policy-heavy intents.",
     isDefault: false,
   },
@@ -73,6 +101,8 @@ export const modelCatalog: ModelOption[] = [
     label: "Claude Opus",
     role: "frontier",
     pricePerCallUsd: assumptionMap["frontier-call-cost"]!.value,
+    inputPricePerMillionTokens: 15.0,
+    outputPricePerMillionTokens: 75.0,
     description: "Default frontier model for cross-border and high-judgment cases.",
     isDefault: true,
   },
@@ -81,6 +111,8 @@ export const modelCatalog: ModelOption[] = [
     label: "GPT-5 Pro",
     role: "frontier",
     pricePerCallUsd: 0.15,
+    inputPricePerMillionTokens: 20.0,
+    outputPricePerMillionTokens: 80.0,
     description: "Premium frontier option with longer planning chains.",
     isDefault: false,
   },
@@ -89,6 +121,8 @@ export const modelCatalog: ModelOption[] = [
     label: "o-series reasoning",
     role: "frontier",
     pricePerCallUsd: 0.1,
+    inputPricePerMillionTokens: 10.0,
+    outputPricePerMillionTokens: 40.0,
     description: "Cheaper frontier-class option; test on complex multi-thread cases first.",
     isDefault: false,
   },
@@ -99,6 +133,8 @@ export const modelCatalog: ModelOption[] = [
     label: "LDM (schema-grounded)",
     role: "data",
     pricePerCallUsd: assumptionMap["data-call-cost"]!.value,
+    inputPricePerMillionTokens: 2.5,
+    outputPricePerMillionTokens: 10.0,
     description: "Default structured-data model: NL2SQL with live schema catalog grounding, lineage inference and entity resolution for broken/legacy databases.",
     isDefault: true,
   },
@@ -107,6 +143,8 @@ export const modelCatalog: ModelOption[] = [
     label: "NL2SQL small model",
     role: "data",
     pricePerCallUsd: 0.006,
+    inputPricePerMillionTokens: 0.6,
+    outputPricePerMillionTokens: 2.4,
     description: "Fine-tuned small model for well-mapped schemas; cheap but needs curated semantic-layer metadata — weak on undocumented legacy estates.",
     isDefault: false,
   },
@@ -115,6 +153,8 @@ export const modelCatalog: ModelOption[] = [
     label: "Frontier data agent",
     role: "data",
     pricePerCallUsd: 0.06,
+    inputPricePerMillionTokens: 15.0,
+    outputPricePerMillionTokens: 60.0,
     description: "Frontier-class model with exploratory querying and self-correction; strongest on undocumented schemas and missing lineage, at a premium per call.",
     isDefault: false,
   },
@@ -136,4 +176,35 @@ export function pricePerCall(
     ? modelCatalogMap[selectedKey]!
     : modelCatalog.find((m) => m.role === role && m.isDefault)!;
   return { price: model.pricePerCallUsd, model };
+}
+
+/**
+ * Resolves the per-call price for a role, repricing from measured token counts
+ * when the actuals overlay provides them. Falls back to pricePerCall behaviour
+ * (no overlay, or no token data for this role) so existing logic is unchanged.
+ *
+ * Returns { price, model, fromTokens } where fromTokens indicates whether the
+ * per-token path was used (for appliedAssumptions tagging).
+ */
+export function pricePerCallWithOverlay(
+  role: string,
+  selection: Record<string, string> | undefined,
+  tokenActuals: Record<string, TokenRoleActuals> | undefined,
+): { price: number; model: ModelOption; fromTokens: boolean } {
+  const { model } = pricePerCall(role, selection);
+  const tokens = tokenActuals?.[role];
+  if (
+    !tokens ||
+    !Number.isFinite(tokens.avgInputTokens) ||
+    !Number.isFinite(tokens.avgOutputTokens) ||
+    tokens.avgInputTokens < 0 ||
+    tokens.avgOutputTokens < 0
+  ) {
+    return { price: model.pricePerCallUsd, model, fromTokens: false };
+  }
+  const tokenPrice =
+    (tokens.avgInputTokens * model.inputPricePerMillionTokens +
+      tokens.avgOutputTokens * model.outputPricePerMillionTokens) /
+    1_000_000;
+  return { price: tokenPrice, model, fromTokens: true };
 }

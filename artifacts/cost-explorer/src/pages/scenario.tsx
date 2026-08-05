@@ -12,8 +12,10 @@ import {
   useUpdateScenario,
   useGetScenario,
   getGetScenarioQueryKey,
+  useListActualsOverlays,
   ScenarioInputs,
-  Rollup
+  Rollup,
+  type ActualsOverlayRecord,
 } from "@workspace/api-client-react";
 import { useLocation, Link } from "wouter";
 import { toApiInputs, fromApiInputs, OVERRIDABLE_ASSUMPTION_KEYS, type OverridableKey } from "@/lib/scenario-mapper";
@@ -32,7 +34,8 @@ import {
   Calculator, Save, Play, DollarSign, 
   TrendingUp, Users, BarChart3, Database, 
   Settings2, GitCompareArrows, BrainCircuit,
-  RotateCcw, ChevronDown
+  RotateCcw, ChevronDown,
+  FlaskConical, X, ArrowRight, TrendingDown, CheckCircle2,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { formatCurrency, formatNumber } from "@/lib/format";
@@ -103,12 +106,14 @@ export default function Scenario() {
   
   const { toast } = useToast();
   const [rollup, setRollup] = useState<Rollup | null>(null);
+  const [activeOverlayId, setActiveOverlayId] = useState<number | null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   
   const { data: profiles, isLoading: isLoadingProfiles } = useListDistributionProfiles();
   const { data: modelCatalog } = useListModelCatalog();
   const { data: systemsCatalog } = useListSystems();
   const { data: scenarios, refetch: refetchScenarios } = useListScenarios();
+  const { data: overlays } = useListActualsOverlays();
   const { data: globalAssumptions } = useListAssumptions();
   const computeRollup = useComputeRollup();
   const createScenario = useCreateScenario();
@@ -120,14 +125,13 @@ export default function Scenario() {
     } 
   });
 
-  const form = useForm<FormValues>({
+  const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues,
+    defaultValues
   });
 
   // Load scenario if ID in URL; auto-open Tune Assumptions if saved overrides exist.
-  // fromApiInputs is used here to ensure assumptionOverrides / containmentOverrides
-  // never leak as raw top-level form keys (the root cause of the stale-override bug).
+  // fromApiInputs ensures assumptionOverrides never leak as raw top-level form keys.
   useEffect(() => {
     if (loadedScenario) {
       const formValues = fromApiInputs(
@@ -143,9 +147,14 @@ export default function Scenario() {
     }
   }, [loadedScenario]);
 
-  const onSubmit = async (values: FormValues) => {
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      const result = await computeRollup.mutateAsync({ data: { inputs: toApiInputs(values) } });
+      const body: { inputs: ScenarioInputs; actualsOverlayId?: number } = {
+        inputs: toApiInputs(values) as ScenarioInputs,
+      };
+      if (activeOverlayId !== null) body.actualsOverlayId = activeOverlayId;
+      const result = await computeRollup.mutateAsync({ data: body });
       setRollup(result);
     } catch (e) {
       toast({ title: "Computation Failed", description: "Could not compute rollup.", variant: "destructive" });
@@ -154,12 +163,14 @@ export default function Scenario() {
 
   const handleSave = form.handleSubmit(async (values) => {
     const name = `Scenario - ${values.employees} EEs, ${values.sector}`;
+    const inputs = toApiInputs(values);
+
     try {
       if (parsedId) {
-        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs: toApiInputs(values) } });
+        await updateScenario.mutateAsync({ id: parsedId, data: { name, inputs } });
         toast({ title: "Saved", description: "Scenario updated successfully." });
       } else {
-        await createScenario.mutateAsync({ data: { name, inputs: toApiInputs(values) } });
+        await createScenario.mutateAsync({ data: { name, inputs } });
         toast({ title: "Saved", description: "New scenario created." });
         refetchScenarios();
       }
@@ -170,12 +181,25 @@ export default function Scenario() {
 
   const handleResetOverrides = () => {
     const current = form.getValues();
-    // Build a correctly-typed partial so it is assignable to the Zod form field.
     const cleared = Object.fromEntries(
       OVERRIDABLE_ASSUMPTION_KEYS.map((k) => [k, "" as const])
     ) as Partial<Record<OverridableKey, number | "">>;
     form.reset({ ...current, _assumptionOverrides: cleared });
   };
+
+  // When overlay changes, clear stale rollup so user must recompute
+  const handleOverlaySelect = (id: number) => {
+    setActiveOverlayId(id);
+    setRollup(null);
+  };
+  const handleOverlayClear = () => {
+    setActiveOverlayId(null);
+    setRollup(null);
+  };
+
+  // Tabs: include variance when calibrated
+  const showVarianceTab = rollup?.calibrated === true;
+  const defaultTab = showVarianceTab ? "variance" : "distribution";
 
   // Lookup global defaults for comparison in the Applied Assumptions tab
   const globalDefaultMap = Object.fromEntries(
@@ -465,7 +489,6 @@ export default function Scenario() {
                   )} />
                 </div>
 
-
                 <Collapsible open={assumptionsOpen} onOpenChange={setAssumptionsOpen}>
                   <CollapsibleTrigger asChild>
                     <button
@@ -594,6 +617,7 @@ export default function Scenario() {
                     </Button>
                   </CollapsibleContent>
                 </Collapsible>
+
                 <Separator />
 
                 {/* AI Model Stack */}
@@ -603,7 +627,7 @@ export default function Scenario() {
                   </h3>
                   {(["router", "reasoning", "frontier", "data"] as const).map((role) => {
                     const fieldName = role === "router" ? "modelRouter" : role === "reasoning" ? "modelReasoning" : role === "frontier" ? "modelFrontier" : "modelData";
-                    const options = (modelCatalog ?? []).filter((m: { role: string; key: string; label: string; pricePerCallUsd: number; isDefault: boolean }) => m.role === role);
+                    const options = (modelCatalog ?? []).filter((m) => m.role === role);
                     const label = role === "router" ? "Router / Classification (SLM)" : role === "reasoning" ? "Reasoning / Grounded Answers (LLM)" : role === "frontier" ? "Frontier / High-Judgment Cases (LRM)" : "Data Access / Legacy Databases (LDM)";
                     return (
                       <FormField key={role} control={form.control} name={fieldName} render={({ field }) => (
@@ -616,7 +640,7 @@ export default function Scenario() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {options.map((m: { role: string; key: string; label: string; pricePerCallUsd: number; isDefault: boolean }) => (
+                              {options.map((m) => (
                                 <SelectItem key={m.key} value={m.key}>
                                   {m.label} — ${m.pricePerCallUsd.toFixed(4)}/call{m.isDefault ? " (default)" : ""}
                                 </SelectItem>
@@ -631,11 +655,26 @@ export default function Scenario() {
                   <p className="text-[10px] text-muted-foreground">Per-call prices from published token rates at a typical HRO call profile. Confirming the stack raises estimate confidence; every AI step reprices exactly.</p>
                 </div>
 
+                <Separator />
+
+                {/* Calibration overlay selector */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold flex items-center text-sm uppercase tracking-wide text-muted-foreground">
+                    <FlaskConical className="w-4 h-4 mr-2 text-primary" /> Calibration
+                  </h3>
+                  <OverlaySelector
+                    overlays={overlays ?? []}
+                    activeId={activeOverlayId}
+                    onSelect={handleOverlaySelect}
+                    onClear={handleOverlayClear}
+                  />
+                </div>
+
               </CardContent>
               <div className="p-4 border-t border-border bg-muted/20 flex flex-col gap-2">
                 <div className="flex gap-3">
                   <Button type="submit" className="flex-1 font-semibold" disabled={computeRollup.isPending}>
-                    {computeRollup.isPending ? "Computing..." : <><Play className="w-4 h-4 mr-2" /> Compute</>}
+                    {computeRollup.isPending ? "Computing..." : <><Play className="w-4 h-4 mr-2" /> {activeOverlayId ? "Compute (Calibrated)" : "Compute"}</>}
                   </Button>
                   <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollup.isPending}>
                     <Save className="w-4 h-4" />
@@ -662,33 +701,48 @@ export default function Scenario() {
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
             <Calculator className="w-16 h-16 mb-4 opacity-20" />
             <h2 className="text-xl font-semibold text-foreground mb-2">Ready to Compute</h2>
-            <p className="max-w-md">Enter client parameters on the left and click Compute to generate a full cost-benefit rollup.</p>
+            <p className="max-w-md">
+              {activeOverlayId
+                ? "Calibration overlay selected — click Compute (Calibrated) to see the measured business case and variance."
+                : "Enter client parameters on the left and click Compute to generate a full cost-benefit rollup."}
+            </p>
+            {activeOverlayId && (
+              <Badge className="mt-3 bg-violet-500/20 text-violet-700 dark:text-violet-300 border-violet-500/30">
+                <FlaskConical className="w-3 h-3 mr-1" />
+                Overlay #{activeOverlayId} ready
+              </Badge>
+            )}
           </div>
         ) : (
           <div className="flex flex-col h-full">
             {/* Header Totals */}
             <div className="p-6 border-b border-border bg-sidebar text-sidebar-foreground">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight">Business Case Rollup</h2>
+                  <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                    Business Case Rollup
+                    {rollup.calibrated && (
+                      <Badge className="bg-violet-500/20 text-violet-200 border-violet-500/30 text-xs font-normal">
+                        <FlaskConical className="w-3 h-3 mr-1" /> calibrated
+                      </Badge>
+                    )}
+                  </h2>
                   <div className="text-sm text-sidebar-foreground/70 flex items-center gap-2 mt-1">
                     <Badge className="bg-sidebar-primary text-sidebar-primary-foreground border-none font-mono">
                       Tier {rollup.tierMultiplier}x
                     </Badge>
                     <span>Based on {formatNumber(form.getValues().annualTransactions)} tx/yr</span>
-                    {rollup.appliedAssumptions.some(a =>
-                      globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
-                    ) && (
-                      <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px]">
-                        custom assumptions
-                      </Badge>
-                    )}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-emerald-400">
                     {formatCurrency(rollup.totals.netUsd, true)} Net Value
                   </div>
+                  {rollup.calibrated && rollup.estimatedTotals && (
+                    <div className="text-xs text-sidebar-foreground/60 mt-0.5">
+                      Est. {formatCurrency(rollup.estimatedTotals.netUsd, true)} before calibration
+                    </div>
+                  )}
                   <div className="text-sm font-medium text-sidebar-foreground/80">
                     {rollup.totals.roi.toFixed(1)}x ROI
                   </div>
@@ -719,25 +773,25 @@ export default function Scenario() {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase tracking-wider text-sidebar-foreground/60">Estimate Confidence</span>
-                    <Badge className={
-                      rollup.confidence.level === "high" ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/30" :
-                      rollup.confidence.level === "medium" ? "bg-amber-500/20 text-amber-200 border-amber-500/30" :
-                      "bg-red-500/20 text-red-200 border-red-500/30"
-                    }>
-                      {rollup.confidence.score}/100 · {rollup.confidence.level}
-                    </Badge>
+                    <ConfidenceBadge level={rollup.confidence.level} score={rollup.confidence.score} />
                   </div>
                 </div>
                 <div className="w-full h-1.5 rounded-full bg-background/20 mb-3">
                   <div
-                    className={`h-1.5 rounded-full ${
+                    className={`h-1.5 rounded-full transition-all ${
+                      rollup.confidence.level === "calibrated" ? "bg-violet-400" :
                       rollup.confidence.level === "high" ? "bg-emerald-400" :
                       rollup.confidence.level === "medium" ? "bg-amber-400" : "bg-red-400"
                     }`}
-                    style={{ width: `${rollup.confidence.score}%` }}
+                    style={{ width: `${Math.min(rollup.confidence.score, 100)}%` }}
                   />
                 </div>
-                {rollup.confidence.factors.some(f => !f.provided) ? (
+                {rollup.confidence.level === "calibrated" ? (
+                  <p className="text-xs text-violet-300">
+                    <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                    Fully calibrated — at least one assumption has been replaced by measured production data. The business case reflects actuals, not estimates.
+                  </p>
+                ) : rollup.confidence.factors.some(f => !f.provided) ? (
                   <div className="space-y-1.5">
                     <p className="text-xs text-sidebar-foreground/70 font-medium">
                       Missing client data (each adds points when provided):
@@ -755,30 +809,31 @@ export default function Scenario() {
               </div>
             </div>
 
-            {/* Tabs for details */}
+            {/* Tabs */}
             <div className="flex-1 overflow-hidden flex flex-col">
-              <Tabs defaultValue="distribution" className="flex-1 flex flex-col">
-                <div className="px-6 pt-4 border-b border-border">
+              <Tabs defaultValue={defaultTab} key={defaultTab} className="flex-1 flex flex-col">
+                <div className="px-6 pt-4 border-b border-border overflow-x-auto">
                   <TabsList className="bg-muted">
+                    {showVarianceTab && (
+                      <TabsTrigger value="variance" className="text-violet-700 dark:text-violet-300 data-[state=active]:bg-violet-500/20">
+                        <FlaskConical className="w-4 h-4 mr-2" /> Variance
+                      </TabsTrigger>
+                    )}
                     <TabsTrigger value="distribution"><Database className="w-4 h-4 mr-2"/> Intent Distribution</TabsTrigger>
                     <TabsTrigger value="charts"><BarChart3 className="w-4 h-4 mr-2"/> Breakdown Charts</TabsTrigger>
                     <TabsTrigger value="build"><Database className="w-4 h-4 mr-2"/> Build Costs</TabsTrigger>
-                    <TabsTrigger value="assumptions">
-                      <Settings2 className="w-4 h-4 mr-2"/> Applied Assumptions
-                      {rollup.appliedAssumptions.some(a =>
-                        globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
-                      ) && (
-                        <Badge className="ml-2 bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1">
-                          {rollup.appliedAssumptions.filter(a =>
-                            globalDefaultMap[a.key] !== undefined && a.value !== globalDefaultMap[a.key]
-                          ).length} custom
-                        </Badge>
-                      )}
-                    </TabsTrigger>
+                    <TabsTrigger value="assumptions"><Settings2 className="w-4 h-4 mr-2"/> Applied Assumptions</TabsTrigger>
                   </TabsList>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-6">
+
+                  {/* Variance tab */}
+                  {showVarianceTab && (
+                    <TabsContent value="variance" className="m-0">
+                      <VarianceView rollup={rollup} />
+                    </TabsContent>
+                  )}
                   
                   <TabsContent value="distribution" className="m-0 h-full">
                     <div className="rounded-md border border-border overflow-hidden">
@@ -798,7 +853,7 @@ export default function Scenario() {
                             <tr key={row.intentKey} className="hover:bg-muted/30 transition-colors">
                               <td className="px-4 py-3 font-medium text-foreground">
                                 {row.intentName}
-                                {(row as any).overridden && (
+                                {row.overridden && (
                                   <Badge className="ml-2 bg-violet-500/15 text-violet-600 dark:text-violet-300 border-violet-500/30 text-[10px]">SME-adjusted</Badge>
                                 )}
                               </td>
@@ -891,7 +946,7 @@ export default function Scenario() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {[...(rollup as any).buildBreakdown].sort((a, b) => b.annualUsd - a.annualUsd).map((c) => (
+                          {[...rollup.buildBreakdown].sort((a, b) => b.annualUsd - a.annualUsd).map((c) => (
                             <tr key={c.key} className="hover:bg-muted/30 transition-colors">
                               <td className="px-4 py-3">
                                 <div className="font-medium text-foreground">{c.name}</div>
@@ -910,7 +965,7 @@ export default function Scenario() {
                         <tfoot className="bg-muted/50">
                           <tr>
                             <td className="px-4 py-3 font-semibold text-xs uppercase text-muted-foreground" colSpan={2}>Total build cost in this scenario</td>
-                            <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency((rollup as any).buildBreakdown.reduce((a: number, c: { oneTimeUsd: number }) => a + c.oneTimeUsd, 0), true)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrency(rollup.buildBreakdown.reduce((a, c) => a + c.oneTimeUsd, 0), true)}</td>
                             <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrency(rollup.totals.buildCostUsd, true)}</td>
                           </tr>
                         </tfoot>
@@ -921,32 +976,57 @@ export default function Scenario() {
                   <TabsContent value="assumptions" className="m-0 h-full">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {rollup.appliedAssumptions.map(ass => {
-                        const defaultVal = globalDefaultMap[ass.key];
-                        const isCustom = defaultVal !== undefined && ass.value !== defaultVal;
+                        const isMeasured = ass.source?.confidence === "measured";
+                        const isCustom = !isMeasured && globalDefaultMap[ass.key] !== undefined && ass.value !== globalDefaultMap[ass.key];
                         return (
-                          <div
-                            key={ass.key}
-                            className={`p-4 rounded-lg border transition-colors ${
-                              isCustom ? "bg-amber-500/5 border-amber-500/30" : "bg-muted/30 border-border"
-                            }`}
-                          >
-                            <div className="flex justify-between items-start mb-2 gap-2">
+                          <div key={ass.key} className={`p-4 rounded-lg border transition-colors ${
+                            isMeasured ? "border-violet-500/40 bg-violet-500/5" :
+                            isCustom ? "bg-amber-500/5 border-amber-500/30" :
+                            "bg-muted/30 border-border"
+                          }`}>
+                            <div className="flex justify-between items-start mb-2 gap-2 flex-wrap">
                               <span className="font-semibold text-sm">{ass.label}</span>
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                {isCustom && (
-                                  <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1.5">
-                                    custom
-                                  </Badge>
+                              <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                                {isMeasured ? (
+                                  <>
+                                    <Badge className="bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30 text-[10px]">
+                                      measured
+                                    </Badge>
+                                    <Badge variant="outline" className="font-mono text-xs bg-card line-through text-muted-foreground">
+                                      {ass.value} {ass.unit}
+                                    </Badge>
+                                    <Badge className="font-mono text-xs bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30">
+                                      {ass.measuredValue?.toFixed(4)} {ass.unit}
+                                    </Badge>
+                                  </>
+                                ) : (
+                                  <>
+                                    {isCustom && (
+                                      <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30 text-[10px] h-4 px-1.5">
+                                        custom
+                                      </Badge>
+                                    )}
+                                    {ass.source?.confidence === "client-confirmed" && (
+                                      <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px]">
+                                        client-confirmed
+                                      </Badge>
+                                    )}
+                                    <Badge variant="outline" className="font-mono text-xs bg-card">{ass.value} {ass.unit}</Badge>
+                                  </>
                                 )}
-                                <Badge variant="outline" className="font-mono text-xs bg-card">{ass.value} {ass.unit}</Badge>
                               </div>
                             </div>
-                            {isCustom && defaultVal !== undefined && (
+                            {isCustom && globalDefaultMap[ass.key] !== undefined && (
                               <div className="text-[11px] text-amber-600 dark:text-amber-400 mb-1.5">
-                                Default: {defaultVal} {ass.unit}
+                                Default: {globalDefaultMap[ass.key]} {ass.unit}
                               </div>
                             )}
                             <p className="text-xs text-muted-foreground">{ass.rationale}</p>
+                            {isMeasured && ass.source?.name && (
+                              <p className="text-[10px] text-violet-600 dark:text-violet-400 mt-1.5 flex items-center gap-1">
+                                <FlaskConical className="w-3 h-3" /> {ass.source.name}
+                              </p>
+                            )}
                           </div>
                         );
                       })}
@@ -964,3 +1044,191 @@ export default function Scenario() {
   );
 }
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+function ConfidenceBadge({ level, score }: { level: string; score: number }) {
+  if (level === "calibrated") {
+    return (
+      <Badge className="bg-violet-500/20 text-violet-200 border-violet-500/30 flex items-center gap-1">
+        <CheckCircle2 className="w-3 h-3" />
+        {score} · calibrated
+      </Badge>
+    );
+  }
+  return (
+    <Badge className={
+      level === "high" ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/30" :
+      level === "medium" ? "bg-amber-500/20 text-amber-200 border-amber-500/30" :
+      "bg-red-500/20 text-red-200 border-red-500/30"
+    }>
+      {score}/100 · {level}
+    </Badge>
+  );
+}
+
+function OverlaySelector({
+  overlays,
+  activeId,
+  onSelect,
+  onClear,
+}: {
+  overlays: ActualsOverlayRecord[];
+  activeId: number | null;
+  onSelect: (id: number) => void;
+  onClear: () => void;
+}) {
+  const active = overlays.find(o => o.id === activeId);
+  return (
+    <div className={`rounded-lg border p-3 space-y-2 transition-colors ${active ? "border-violet-500/40 bg-violet-500/5" : "border-border bg-muted/20"}`}>
+      <div className="flex items-center gap-2">
+        <FlaskConical className={`w-4 h-4 ${active ? "text-violet-500" : "text-muted-foreground"}`} />
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Calibration Overlay</span>
+        {active && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="ml-auto text-muted-foreground hover:text-foreground"
+            title="Remove overlay"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {active ? (
+        <div>
+          <p className="text-sm font-medium text-violet-700 dark:text-violet-300 truncate">
+            {active.clientLabel ?? `Overlay #${active.id}`}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Applied — recompute to see calibrated business case + variance
+          </p>
+        </div>
+      ) : (
+        <div>
+          {overlays.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No overlays saved yet.{" "}
+              <Link href="/calibration" className="text-primary hover:underline">Create one in Calibration →</Link>
+            </p>
+          ) : (
+            <Select onValueChange={v => onSelect(Number(v))}>
+              <SelectTrigger className="bg-background h-8 text-xs">
+                <SelectValue placeholder="Select overlay to apply…" />
+              </SelectTrigger>
+              <SelectContent>
+                {overlays.map(o => (
+                  <SelectItem key={o.id} value={String(o.id)}>
+                    #{o.id} · {o.clientLabel ?? "Unnamed"}
+                    {o.periodStart ? ` (${o.periodStart})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VarianceView({ rollup }: { rollup: Rollup }) {
+  if (!rollup.calibrated || !rollup.variance || !rollup.estimatedTotals) return null;
+
+  const est = rollup.estimatedTotals;
+  const act = rollup.totals;
+  const costDelta = act.totalCostUsd - est.totalCostUsd;
+  const benefitDelta = act.benefitUsd - est.benefitUsd;
+  const netDelta = act.netUsd - est.netUsd;
+
+  const fmt = (v: number) => formatCurrency(v, true);
+  const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  const fmtAbs = (v: number) => `${v >= 0 ? "+" : ""}${fmt(Math.abs(v))}`;
+
+  return (
+    <div className="space-y-5">
+      {/* Business case delta summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          { label: "Total Cost", est: est.totalCostUsd, act: act.totalCostUsd, delta: costDelta, positiveIsGood: false },
+          { label: "Gross Benefit", est: est.benefitUsd, act: act.benefitUsd, delta: benefitDelta, positiveIsGood: true },
+          { label: "Net Value", est: est.netUsd, act: act.netUsd, delta: netDelta, positiveIsGood: true },
+        ].map(({ label, est: e, act: a, delta, positiveIsGood }) => {
+          const good = positiveIsGood ? delta > 0 : delta < 0;
+          const neutral = Math.abs(delta) < 1;
+          return (
+            <div key={label} className={`rounded-lg border p-3 ${neutral ? "border-border" : good ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{label}</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm text-muted-foreground line-through">{fmt(e)}</span>
+                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span className="font-bold font-mono">{fmt(a)}</span>
+              </div>
+              {!neutral && (
+                <div className={`text-xs font-mono mt-1 flex items-center gap-1 ${good ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                  {good ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {fmtAbs(delta)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Per-assumption variance table */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Per-Assumption Variance</h3>
+        <div className="rounded-md border border-border overflow-hidden">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-muted/50 text-muted-foreground text-xs uppercase font-semibold">
+              <tr>
+                <th className="px-4 py-3">Assumption</th>
+                <th className="px-4 py-3 text-center">Affects</th>
+                <th className="px-4 py-3 text-right">Estimated</th>
+                <th className="px-4 py-3 text-right">Measured</th>
+                <th className="px-4 py-3 text-right">Δ abs</th>
+                <th className="px-4 py-3 text-right">Δ %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rollup.variance.map(v => {
+                const pct = v.pctVariance;
+                const isNeg = v.absVariance < 0;
+                const isZero = Math.abs(v.absVariance) < 1e-9;
+                return (
+                  <tr key={v.assumptionKey} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground text-xs">{v.label}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">{v.unit}</div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Badge variant="outline" className="text-[9px] capitalize bg-background">
+                        {v.direction}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
+                      {v.estimatedValue.toFixed(v.unit.includes("USD") ? 4 : 4)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs font-semibold">
+                      {v.actualValue.toFixed(4)}
+                      <Badge className="ml-1.5 bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30 text-[9px]">
+                        measured
+                      </Badge>
+                    </td>
+                    <td className={`px-4 py-3 text-right font-mono text-xs font-semibold ${isZero ? "text-muted-foreground" : isNeg ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                      {isZero ? "—" : `${isNeg ? "" : "+"}${v.absVariance.toFixed(4)}`}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-mono text-xs font-semibold ${isZero ? "text-muted-foreground" : Math.abs(pct) > 10 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
+                      {isZero ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Estimated values are pre-calibration (assumptions register / scenario inputs). Measured values come from the actuals overlay. Δ = measured − estimated.
+        </p>
+      </div>
+    </div>
+  );
+}

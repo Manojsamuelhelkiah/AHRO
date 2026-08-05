@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, scenariosTable } from "@workspace/db";
+import { db, scenariosTable, actualsOverlaysTable } from "@workspace/db";
 import {
   ListScenariosResponse,
   CreateScenarioBody,
@@ -11,9 +11,10 @@ import {
   ComputeRollupBody,
   ComputeRollupResponse,
 } from "@workspace/api-zod";
-import { computeRollup, type ScenarioInputs } from "../lib/rollup";
+import { computeRollup, computeVariance, type ScenarioInputs } from "../lib/rollup";
 import { loadActiveFlowOverrides } from "./flow-overrides";
 import { validateScenarioInputs, InputValidationError } from "../lib/validate-inputs";
+import type { ActualsOverlay } from "../data/types";
 
 const router: IRouter = Router();
 
@@ -117,8 +118,38 @@ router.post("/rollup", async (req, res, next) => {
     const body = ComputeRollupBody.parse(req.body);
     validateScenarioInputs(body.inputs as ScenarioInputs);
     const overrides = await loadActiveFlowOverrides();
-    const rollup = computeRollup(body.inputs as ScenarioInputs, overrides);
-    res.json(ComputeRollupResponse.parse(rollup));
+    const inputs = body.inputs as ScenarioInputs;
+
+    // Load actuals overlay if requested
+    let overlay: ActualsOverlay | undefined;
+    if (body.actualsOverlayId !== undefined) {
+      const [overlayRow] = await db
+        .select()
+        .from(actualsOverlaysTable)
+        .where(eq(actualsOverlaysTable.id, body.actualsOverlayId));
+      if (!overlayRow) {
+        res.status(400).json({ error: `Actuals overlay ${body.actualsOverlayId} not found` });
+        return;
+      }
+      overlay = overlayRow.payload as ActualsOverlay;
+    }
+
+    if (overlay) {
+      // Two-pass: estimate without overlay, then compute with overlay, diff for variance.
+      const estimated = computeRollup(inputs, overrides);
+      const actual = computeRollup(inputs, overrides, overlay);
+      const variance = computeVariance(estimated, actual);
+      const response = {
+        ...actual,
+        calibrated: true,
+        estimatedTotals: estimated.totals,
+        variance,
+      };
+      res.json(ComputeRollupResponse.parse(response));
+    } else {
+      const rollup = computeRollup(inputs, overrides);
+      res.json(ComputeRollupResponse.parse(rollup));
+    }
   } catch (err) {
     next(err);
   }

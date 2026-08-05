@@ -10,7 +10,10 @@ import type { SourceRef } from './sourceRef';
 export interface GlobalAssumption {
   key: string;
   label: string;
+  /** The canonical estimated/modelled value from the assumptions register. */
   value: number;
+  /** The value observed in production actuals. Present only when this assumption was replaced by a calibration overlay. The rollup applied measuredValue; value is retained as the pre-calibration estimate for variance display. */
+  measuredValue?: number;
   unit: string;
   rationale: string;
   source: SourceRef;

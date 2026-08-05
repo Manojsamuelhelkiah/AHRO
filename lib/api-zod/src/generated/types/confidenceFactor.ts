@@ -9,10 +9,12 @@
 export interface ConfidenceFactor {
   key: string;
   label: string;
-  /** Whether the client supplied this parameter or a generic default was used */
+  /** Whether this parameter is supplied (either client-confirmed or measured). */
   provided: boolean;
-  /** Points this parameter contributes to the confidence score */
+  /** Base points this parameter contributes to the confidence score when client-confirmed. Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score. */
   weight: number;
-  /** What assuming the default means for the result when the parameter is missing */
+  /** What assuming the default means for the result when the parameter is missing. */
   note: string;
+  /** Tier of the supplied value: client-confirmed (user provided) or measured (from a calibration actuals overlay). Absent when not provided. */
+  sourceTier?: string;
 }

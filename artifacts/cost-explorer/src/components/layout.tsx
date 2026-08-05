@@ -10,6 +10,7 @@ import {
   Menu,
   X,
   GitCompareArrows,
+  FlaskConical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +25,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Scenario Builder", href: "/scenario", icon: Calculator },
     { name: "Compare Scenarios", href: "/compare", icon: GitCompareArrows },
     { name: "Global Assumptions", href: "/assumptions", icon: Settings2 },
+    { name: "Calibration", href: "/calibration", icon: FlaskConical },
   ];
 
   return (
@@ -63,6 +65,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {navigation.map((item) => {
               const isActive = location === item.href || 
                               (item.href !== "/" && location.startsWith(item.href));
+              const isCalibration = item.href === "/calibration";
               
               return (
                 <Link
@@ -71,12 +74,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors ${
                     isActive 
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                      ? isCalibration
+                        ? "bg-violet-500/20 text-violet-200 font-medium"
+                        : "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
+                      : isCalibration
+                        ? "text-violet-300/70 hover:bg-violet-500/10 hover:text-violet-200"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <item.icon className={`w-4 h-4 ${isActive ? "text-primary" : ""}`} />
+                    <item.icon className={`w-4 h-4 ${isActive ? (isCalibration ? "text-violet-300" : "text-primary") : isCalibration ? "text-violet-400/70" : ""}`} />
                     {item.name}
                   </div>
                   {isActive && <ChevronRight className="w-4 h-4 opacity-50" />}
@@ -88,7 +95,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         
         <div className="p-4 border-t border-sidebar-border">
           <div className="text-xs text-sidebar-foreground/40 font-mono">
-            v2.4.0 — Architecture Ref
+            v2.5.0 — Architecture Ref
           </div>
         </div>
       </div>

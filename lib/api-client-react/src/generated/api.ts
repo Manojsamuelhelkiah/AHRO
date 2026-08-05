@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ActualsOverlayInput,
+  ActualsOverlayRecord,
+  ActualsValidationResult,
   CorpusSummary,
   DistributionProfile,
   ErrorMessage,
@@ -1437,7 +1440,7 @@ export const computeRollup = async (rollupRequest: RollupRequest, options?: Requ
 
 
 
-export const getComputeRollupMutationOptions = <TError = ErrorType<unknown>,
+export const getComputeRollupMutationOptions = <TError = ErrorType<ErrorMessage>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeRollup>>, TError,{data: BodyType<RollupRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof computeRollup>>, TError,{data: BodyType<RollupRequest>}, TContext> => {
 
@@ -1466,12 +1469,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ComputeRollupMutationResult = NonNullable<Awaited<ReturnType<typeof computeRollup>>>
     export type ComputeRollupMutationBody = BodyType<RollupRequest>
-    export type ComputeRollupMutationError = ErrorType<unknown>
+    export type ComputeRollupMutationError = ErrorType<ErrorMessage>
 
     /**
  * @summary Compute a cost-benefit roll-up for a set of scenario inputs (without saving)
  */
-export const useComputeRollup = <TError = ErrorType<unknown>,
+export const useComputeRollup = <TError = ErrorType<ErrorMessage>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeRollup>>, TError,{data: BodyType<RollupRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof computeRollup>>,
@@ -1480,5 +1483,372 @@ export const useComputeRollup = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getComputeRollupMutationOptions(options));
+    }
+
+export const getListActualsOverlaysUrl = () => {
+
+
+
+
+  return `/api/actuals`
+}
+
+/**
+ * @summary List all saved calibration actuals overlays
+ */
+export const listActualsOverlays = async ( options?: RequestInit): Promise<ActualsOverlayRecord[]> => {
+
+  return customFetch<ActualsOverlayRecord[]>(getListActualsOverlaysUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListActualsOverlaysQueryKey = () => {
+    return [
+    `/api/actuals`
+    ] as const;
+    }
+
+
+export const getListActualsOverlaysQueryOptions = <TData = Awaited<ReturnType<typeof listActualsOverlays>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActualsOverlays>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListActualsOverlaysQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listActualsOverlays>>> = ({ signal }) => listActualsOverlays({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listActualsOverlays>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListActualsOverlaysQueryResult = NonNullable<Awaited<ReturnType<typeof listActualsOverlays>>>
+export type ListActualsOverlaysQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all saved calibration actuals overlays
+ */
+
+export function useListActualsOverlays<TData = Awaited<ReturnType<typeof listActualsOverlays>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActualsOverlays>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListActualsOverlaysQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateActualsOverlayUrl = () => {
+
+
+
+
+  return `/api/actuals`
+}
+
+/**
+ * @summary Save a new calibration actuals overlay
+ */
+export const createActualsOverlay = async (actualsOverlayInput: ActualsOverlayInput, options?: RequestInit): Promise<ActualsOverlayRecord> => {
+
+  return customFetch<ActualsOverlayRecord>(getCreateActualsOverlayUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(actualsOverlayInput)
+  }
+);}
+
+
+
+
+
+export const getCreateActualsOverlayMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createActualsOverlay>>, TError,{data: BodyType<ActualsOverlayInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createActualsOverlay>>, TError,{data: BodyType<ActualsOverlayInput>}, TContext> => {
+
+const mutationKey = ['createActualsOverlay'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createActualsOverlay>>, {data: BodyType<ActualsOverlayInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createActualsOverlay(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateActualsOverlayMutationResult = NonNullable<Awaited<ReturnType<typeof createActualsOverlay>>>
+    export type CreateActualsOverlayMutationBody = BodyType<ActualsOverlayInput>
+    export type CreateActualsOverlayMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Save a new calibration actuals overlay
+ */
+export const useCreateActualsOverlay = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createActualsOverlay>>, TError,{data: BodyType<ActualsOverlayInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createActualsOverlay>>,
+        TError,
+        {data: BodyType<ActualsOverlayInput>},
+        TContext
+      > => {
+      return useMutation(getCreateActualsOverlayMutationOptions(options));
+    }
+
+export const getValidateActualsOverlayUrl = () => {
+
+
+
+
+  return `/api/actuals/validate`
+}
+
+/**
+ * @summary Validate an actuals overlay payload without persisting it
+ */
+export const validateActualsOverlay = async (actualsOverlayInput: ActualsOverlayInput, options?: RequestInit): Promise<ActualsValidationResult> => {
+
+  return customFetch<ActualsValidationResult>(getValidateActualsOverlayUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(actualsOverlayInput)
+  }
+);}
+
+
+
+
+
+export const getValidateActualsOverlayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateActualsOverlay>>, TError,{data: BodyType<ActualsOverlayInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof validateActualsOverlay>>, TError,{data: BodyType<ActualsOverlayInput>}, TContext> => {
+
+const mutationKey = ['validateActualsOverlay'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof validateActualsOverlay>>, {data: BodyType<ActualsOverlayInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  validateActualsOverlay(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ValidateActualsOverlayMutationResult = NonNullable<Awaited<ReturnType<typeof validateActualsOverlay>>>
+    export type ValidateActualsOverlayMutationBody = BodyType<ActualsOverlayInput>
+    export type ValidateActualsOverlayMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Validate an actuals overlay payload without persisting it
+ */
+export const useValidateActualsOverlay = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateActualsOverlay>>, TError,{data: BodyType<ActualsOverlayInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof validateActualsOverlay>>,
+        TError,
+        {data: BodyType<ActualsOverlayInput>},
+        TContext
+      > => {
+      return useMutation(getValidateActualsOverlayMutationOptions(options));
+    }
+
+export const getGetActualsOverlayUrl = (id: number,) => {
+
+
+
+
+  return `/api/actuals/${id}`
+}
+
+/**
+ * @summary Get a saved actuals overlay by id
+ */
+export const getActualsOverlay = async (id: number, options?: RequestInit): Promise<ActualsOverlayRecord> => {
+
+  return customFetch<ActualsOverlayRecord>(getGetActualsOverlayUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActualsOverlayQueryKey = (id: number,) => {
+    return [
+    `/api/actuals/${id}`
+    ] as const;
+    }
+
+
+export const getGetActualsOverlayQueryOptions = <TData = Awaited<ReturnType<typeof getActualsOverlay>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActualsOverlay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetActualsOverlayQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActualsOverlay>>> = ({ signal }) => getActualsOverlay(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActualsOverlay>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetActualsOverlayQueryResult = NonNullable<Awaited<ReturnType<typeof getActualsOverlay>>>
+export type GetActualsOverlayQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get a saved actuals overlay by id
+ */
+
+export function useGetActualsOverlay<TData = Awaited<ReturnType<typeof getActualsOverlay>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActualsOverlay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActualsOverlayQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteActualsOverlayUrl = (id: number,) => {
+
+
+
+
+  return `/api/actuals/${id}`
+}
+
+/**
+ * @summary Delete a saved actuals overlay
+ */
+export const deleteActualsOverlay = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteActualsOverlayUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteActualsOverlayMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteActualsOverlay>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteActualsOverlay>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteActualsOverlay'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteActualsOverlay>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteActualsOverlay(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteActualsOverlayMutationResult = NonNullable<Awaited<ReturnType<typeof deleteActualsOverlay>>>
+
+    export type DeleteActualsOverlayMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Delete a saved actuals overlay
+ */
+export const useDeleteActualsOverlay = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteActualsOverlay>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteActualsOverlay>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteActualsOverlayMutationOptions(options));
     }
 

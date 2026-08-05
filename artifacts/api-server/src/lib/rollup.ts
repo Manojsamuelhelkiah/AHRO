@@ -1,10 +1,10 @@
-import { intents } from "../data/intents";
+import { intents, intentMap } from "../data/intents";
 import { buildComponents } from "../data/build-components";
 import { flowClassMap } from "../data/flow-classes";
 import { profileMap, profiles } from "../data/profiles";
 import { assumptionMap } from "../data/assumptions";
-import { pricePerCall, MODEL_ROLES } from "../data/model-catalog";
-import type { GlobalAssumption, Intent } from "../data/types";
+import { pricePerCall, pricePerCallWithOverlay, MODEL_ROLES } from "../data/model-catalog";
+import type { GlobalAssumption, Intent, ActualsOverlay } from "../data/types";
 
 export interface ScenarioInputs {
   numSystems: number;
@@ -84,6 +84,18 @@ export interface FlowOverrideValues {
   actPutActions?: number;
 }
 
+/** Per-assumption variance between pre-calibration estimate and overlay measurement. */
+export interface VarianceEntry {
+  assumptionKey: string;
+  label: string;
+  unit: string;
+  estimatedValue: number;
+  actualValue: number;
+  absVariance: number;
+  pctVariance: number;
+  /** Which side of the model this assumption primarily affects. */
+  direction: "cost" | "benefit" | "both";
+}
 function sizeBand(employees: number): string {
   if (employees < 1000) return "small";
   if (employees < 5000) return "mid";
@@ -173,10 +185,6 @@ export function maturityAssumptionFor(landscapeMaturity: string | undefined): Gl
  * Per-action-type fractions of an intent's act-stage GET/PUT work that hit
  * non-integrated systems. Those actions cannot go through the MCP layer and
  * stay manual (swivel-chair) work.
- *
- * Each act-stage system touch contributes to the get/put pools per declared
- * action, weighted by the landscape fan-out multiplier when the touch scales
- * with the client landscape (a scaling system represents more real actions).
  */
 export function manualActionFractions(
   it: Intent,
@@ -189,8 +197,6 @@ export function manualActionFractions(
   const landscapeFactor = 1 + fanout * extraSystems;
   const excluded = new Set(inputs.nonIntegratedSystems ?? []);
 
-  // Per action type: count act-stage touches (unweighted) and their fan-out
-  // weighted equivalents, tracking the excluded (non-integrated) share.
   const pools = {
     get: { touches: 0, weighted: 0, weightedExcluded: 0, anyScales: false },
     put: { touches: 0, weighted: 0, weightedExcluded: 0, anyScales: false },
@@ -212,13 +218,8 @@ export function manualActionFractions(
     }
   }
 
-  // Distribute the intent's declared actions evenly across the touches of the
-  // matching type; each touch's actions carry its own fan-out weight exactly
-  // once. Units are "scaled action counts" ready to be priced directly.
   const split = (actions: number, pool: (typeof pools)["get"]) => {
     if (pool.touches === 0) {
-      // No modeled touch for this action type: nothing can be excluded; scale
-      // by the step-level factor as the original formula did.
       return { automated: actions * (pool.anyScales ? landscapeFactor : 1), manual: 0, frac: 0 };
     }
     const perTouch = actions / pool.touches;
@@ -235,26 +236,31 @@ export function manualActionFractions(
     manualUnits: g.manual + p.manual,
   };
 }
-
 /** Per-transaction cost/benefit for one intent, before tier/company multipliers on ai+infra. */
-function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
+function perTransaction(
+  it: Intent,
+  inputs: ScenarioInputs,
+  ctx?: OverlayContext,
+): PerTxnCost {
   const ov = inputs.assumptionOverrides;
   const fc = flowClassMap[it.flowClass];
-  // Landscape maturity scales Act fan-out effort: legacy landscapes make each
-  // extra system more expensive to touch, clean landscapes cheaper.
+  // Landscape maturity scales Act fan-out effort.
   const maturity = maturityAssumptionFor(inputs.landscapeMaturity);
   // landscape-fanout and mcp-action-cost are override-aware.
   const fanout = eff("landscape-fanout", ov) * maturity.value;
   const mcpCost = eff("mcp-action-cost", ov);
-  // Actions on non-integrated systems: no MCP cost, but manual minutes instead.
-  // Units already carry fan-out weighting exactly once per system touch.
   const { automatedUnits, manualUnits } = manualActionFractions(it, inputs);
 
+  // Overlay-resolved values: overlay beats scenario input beats default.
+  const effectiveHumanMin = ctx?.effectiveHumanMin ?? it.toBeHumanMin;
+  const sampling = ctx?.hitlSamplingRate ?? inputs.hitlSamplingRate ?? 1;
+  const tokenActuals = ctx?.tokenActuals;
+
   // Compute model-cost scaling ratio for ai-consumption components that lack
-  // an explicit c.calls list. flow-classes.ts bakes the default assumption
-  // values into unitCostUsd; when a scenario overrides a model-cost assumption
-  // we scale by (effective / default). For mixed steps the primary model
-  // dominates cost so ratio-scaling gives a faithful approximation.
+  // an explicit c.calls list. flow-classes.ts bakes default assumption values
+  // into unitCostUsd; when a scenario overrides a model-cost assumption we
+  // scale by (effective / default). For mixed steps the primary model
+  // dominates so ratio-scaling is a faithful approximation.
   const primaryModelKey = FC_PRIMARY_MODEL[it.flowClass] ?? "slm-call-cost";
   const defaultModelCost = assumptionMap[primaryModelKey]!.value;
   const modelRatio = defaultModelCost > 0 ? eff(primaryModelKey, ov) / defaultModelCost : 1;
@@ -279,27 +285,23 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
 
       for (const c of step.costs) {
         let unit = c.unitCostUsd;
-        // MCP action costs are intent-specific: replace the template's nominal
-        // action cost with (automated action units × effective mcp-action-cost).
         let alreadyScaled = false;
         if (isActStep && c.label.toLowerCase().includes("mcp")) {
-          // automatedUnits already carry fan-out weighting per system touch —
-          // do not apply the step-level landscape factor a second time.
+          // automatedUnits already carry fan-out weighting — do not apply
+          // step-level landscape factor a second time.
           unit = automatedUnits * mcpCost;
           alreadyScaled = true;
         } else if (c.calls && c.calls.length > 0) {
-          // Model-call costs are repriced exactly from the scenario's model
-          // selection (defaults match the registered *-call-cost assumptions).
-          // Note: pricePerCall uses model-catalog prices; assumptionOverrides
-          // model keys (slm-call-cost etc.) are a separate override path that
-          // does not interact with catalog-priced calls.
+          // Explicit call list: reprice from overlay token actuals when available
+          // (overlay beats catalog). assumptionOverrides model keys (slm-call-cost
+          // etc.) are a separate path for baked-in costs and do not interact here.
           unit = c.calls.reduce(
-            (a, call) => a + call.count * pricePerCall(call.role, inputs.modelSelection).price,
+            (a, call) =>
+              a + call.count * pricePerCallWithOverlay(call.role, inputs.modelSelection, tokenActuals).price,
             0,
           );
         } else if (c.type === "ai-consumption") {
-          // Baked-in ai cost without an explicit call list: scale by the ratio
-          // of (effective / default) for this flow class's primary model.
+          // Baked-in ai cost: scale by (effective / default) for this fc's primary model.
           unit = c.unitCostUsd * modelRatio;
         } else if (c.type === "infra") {
           unit = c.unitCostUsd * infraRatio;
@@ -309,7 +311,7 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
         else if (c.type === "infra") infra += scaled;
         else if (c.type === "other") other += scaled;
         // c.type === "human" carries no unit cost; residual human minutes are
-        // intent-level (toBeHumanMin) and priced below.
+        // intent-level (effectiveHumanMin) and priced below.
       }
       for (const b of step.benefits) {
         if (b.dollarized) benefit += b.unitBenefitUsd;
@@ -317,27 +319,23 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
     }
   }
 
-  // Actions on non-integrated systems stay manual: each such get/put adds
-  // handling minutes on EVERY transaction (not thinned by sampling — this is
-  // execution work, not review).
+  // Actions on non-integrated systems stay manual: each get/put adds handling
+  // minutes on EVERY transaction (not thinned by sampling — execution work).
   const manualMinutes =
     manualUnits > 0 ? manualUnits * assumptionMap["manual-action-minutes"]!.value : 0;
-  // Residual human review minutes on contained transactions, thinned by the
-  // HITL sampling rate as review trust matures.
-  const sampling = inputs.hitlSamplingRate ?? 1;
+  // Residual human review on contained transactions, thinned by HITL sampling rate.
+  // Overlay context (measured rate) beats scenario input beats default.
   const human =
-    ((it.toBeHumanMin / 60) * sampling + manualMinutes / 60) * inputs.hitlHourlyCostUsd;
-  // Core dollarized benefit on contained transactions: human handling time
-  // eliminated, valued at the client HR rate with a seasonality premium
-  // (automated capacity at peak avoids overstaffing). Manual minutes for
-  // non-integrated systems are handling time NOT eliminated.
+    ((effectiveHumanMin / 60) * sampling + manualMinutes / 60) * inputs.hitlHourlyCostUsd;
+  // Core dollarized benefit: human handling time eliminated, valued at client HR
+  // rate with seasonality premium. Manual minutes for non-integrated systems are NOT eliminated.
   const peak = inputs.peakLoadFactor ?? 1;
   benefit +=
-    (Math.max(0, it.asIsHandlingMin - it.toBeHumanMin - manualMinutes) / 60) *
+    (Math.max(0, it.asIsHandlingMin - effectiveHumanMin - manualMinutes) / 60) *
     inputs.hrHourlyCostUsd *
     peak;
-  // Client-specific error-reduction benefit: a share of the client's as-is
-  // rework volume is eliminated by systematic validation.
+  // Client-specific error-reduction benefit: a share of as-is rework volume
+  // is eliminated by systematic validation.
   const rework = (inputs.reworkRatePct ?? 0) / 100;
   if (rework > 0) {
     const errShare = assumptionMap["error-reduction-share"]!.value;
@@ -346,28 +344,52 @@ function perTransaction(it: Intent, inputs: ScenarioInputs): PerTxnCost {
 
   return { ai, infra, human, other, benefit };
 }
-
-export function containmentRateFor(it: Intent, inputs: ScenarioInputs): number {
+/**
+ * Resolve the effective containment rate for an intent, honouring the overlay
+ * hierarchy: per-intent measured > per-flow-class measured > scenario override
+ * > assumption default.
+ */
+export function containmentRateFor(
+  it: Intent,
+  inputs: ScenarioInputs,
+  overlay?: ActualsOverlay,
+): number {
+  // 1. Per-intent measured containment (most specific)
+  const intentActuals = overlay?.intents?.find((i) => i.intentKey === it.key);
+  if (intentActuals?.measuredContainmentRate !== undefined) {
+    return intentActuals.measuredContainmentRate;
+  }
+  // 2. Per-flow-class measured containment
+  const fcMeasured = overlay?.measuredContainmentByFlowClass?.[it.flowClass];
+  if (fcMeasured !== undefined) return fcMeasured;
+  // 3. Scenario-level client-confirmed containment override
   const override = inputs.containmentOverrides?.[it.flowClass];
   if (override !== undefined) return override;
+  // 4. Default from the assumptions register
   const key = `containment-${it.flowClass.split("-")[0]}`;
   return assumptionMap[key]?.value ?? 1;
 }
 
+/** Maps the four containment assumption keys to flow-class keys. */
+const CONTAINMENT_FC_MAP: Record<string, string> = {
+  "containment-fc1": "fc1-deterministic",
+  "containment-fc2": "fc2-policy",
+  "containment-fc3": "fc3-multiagent",
+  "containment-fc4": "fc4-frontier",
+};
 interface ConfidenceFactor {
   key: string;
   label: string;
   provided: boolean;
   weight: number;
   note: string;
+  sourceTier?: "client-confirmed" | "measured";
 }
 
-/**
- * Confidence reflects how much of the business case rests on client-specific
- * data vs generic defaults. Core inputs (always required) earn the base score;
- * each optional parameter adds its weight when provided.
- */
-export function computeConfidence(inputs: ScenarioInputs): {
+export function computeConfidence(
+  inputs: ScenarioInputs,
+  measuredFactorKeys?: Set<string>,
+): {
   score: number;
   level: string;
   factors: ConfidenceFactor[];
@@ -383,7 +405,8 @@ export function computeConfidence(inputs: ScenarioInputs): {
     {
       key: "containmentOverrides",
       label: "Containment rates",
-      provided: !!inputs.containmentOverrides && Object.keys(inputs.containmentOverrides).length > 0,
+      provided:
+        !!inputs.containmentOverrides && Object.keys(inputs.containmentOverrides).length > 0,
       weight: 15,
       note: "Using generic per-flow-class deflection benchmarks (95/85/75/60%). Client-specific pilot or vendor data would materially firm up both cost and benefit.",
     },
@@ -431,17 +454,40 @@ export function computeConfidence(inputs: ScenarioInputs): {
     },
   ];
 
-  const BASE = 30; // core inputs (volume, landscape, sector, rates) are always present
-  const score = Math.round(
-    BASE + factors.reduce((a, f) => a + (f.provided ? f.weight : 0), 0),
-  );
-  const level = score >= 75 ? "high" : score >= 55 ? "medium" : "low";
+  const BASE = 30; // core inputs always present
+  let score = BASE;
+
+  for (const f of factors) {
+    const isMeasured = measuredFactorKeys?.has(f.key) ?? false;
+    if (isMeasured) {
+      f.provided = true;
+      f.sourceTier = "measured";
+      score += f.weight + MEASURED_BONUS;
+    } else if (f.provided) {
+      f.sourceTier = "client-confirmed";
+      score += f.weight;
+    }
+  }
+
+  score = Math.round(score);
+  const level =
+    score > 100 ? "calibrated" : score >= 75 ? "high" : score >= 55 ? "medium" : "low";
   return { score, level, factors };
 }
 
+/** Context carrying overlay values relevant to a single intent's pricing. */
+interface OverlayContext {
+  /** Replaces it.toBeHumanMin when supplied from overlay. */
+  effectiveHumanMin?: number;
+  /** Replaces inputs.hitlSamplingRate when supplied from overlay. */
+  hitlSamplingRate?: number;
+  /** Token counts per role for per-token repricing. */
+  tokenActuals?: Record<string, { avgInputTokens: number; avgOutputTokens: number }>;
+}
 export function computeRollup(
   inputs: ScenarioInputs,
   flowOverrides?: Record<string, FlowOverrideValues>,
+  overlay?: ActualsOverlay,
 ) {
   const ov = inputs.assumptionOverrides;
   const shares = computeShares(inputs);
@@ -459,6 +505,22 @@ export function computeRollup(
     1 + localization.value * Math.min(Math.max(0, inputs.countries - 1), 20);
   const LOCALIZED_CLASSES = new Set(["fc2-policy", "fc4-frontier"]);
 
+  // ---------------------------------------------------------------------------
+  // Determine which confidence factors are backed by measurements from overlay
+  // ---------------------------------------------------------------------------
+  const measuredFactorKeys = new Set<string>();
+  if (overlay) {
+    const hasContainmentMeasurement =
+      (overlay.measuredContainmentByFlowClass &&
+        Object.keys(overlay.measuredContainmentByFlowClass).length > 0) ||
+      overlay.intents?.some((i) => i.measuredContainmentRate !== undefined);
+    if (hasContainmentMeasurement) measuredFactorKeys.add("containmentOverrides");
+    if (overlay.measuredHitlSamplingRate !== undefined) measuredFactorKeys.add("hitlSamplingRate");
+    if (overlay.tokenActualsByRole && Object.keys(overlay.tokenActualsByRole).length > 0) {
+      measuredFactorKeys.add("modelSelection");
+    }
+  }
+
   const rows = [];
   const byFlowClass = new Map<string, number>();
   const byDomain = new Map<string, number>();
@@ -475,24 +537,37 @@ export function computeRollup(
 
   for (const baseIntent of intents) {
     // Approved SME flow overrides adjust the intent before pricing.
-    const ov = flowOverrides?.[baseIntent.key];
-    const it: Intent = ov
+    const flowOv = flowOverrides?.[baseIntent.key];
+    const it: Intent = flowOv
       ? {
           ...baseIntent,
-          ...(ov.flowClass !== undefined && { flowClass: ov.flowClass }),
-          ...(ov.toBeHumanMin !== undefined && { toBeHumanMin: ov.toBeHumanMin }),
-          ...(ov.actGetActions !== undefined && { actGetActions: ov.actGetActions }),
-          ...(ov.actPutActions !== undefined && { actPutActions: ov.actPutActions }),
+          ...(flowOv.flowClass !== undefined && { flowClass: flowOv.flowClass }),
+          ...(flowOv.toBeHumanMin !== undefined && { toBeHumanMin: flowOv.toBeHumanMin }),
+          ...(flowOv.actGetActions !== undefined && { actGetActions: flowOv.actGetActions }),
+          ...(flowOv.actPutActions !== undefined && { actPutActions: flowOv.actPutActions }),
         }
       : baseIntent;
     const share = shares.get(it.key) ?? 0;
     // Only adopted volume flows through the agentic channel; the remainder
     // stays in the as-is process (no platform cost, no benefit).
     const txns = share * inputs.annualTransactions * adoption;
-    const containment = containmentRateFor(it, inputs);
+    const containment = containmentRateFor(it, inputs, overlay);
     const containedTxns = txns * containment;
     const fallbackTxns = txns - containedTxns;
-    const per = perTransaction(it, inputs);
+
+    // Resolve per-intent overlay context (overlay beats scenario input beats default).
+    const intentActualsData = overlay?.intents?.find((i) => i.intentKey === it.key);
+    const ctx: OverlayContext | undefined = overlay
+      ? {
+          effectiveHumanMin: intentActualsData?.avgHitlMinutes,
+          hitlSamplingRate: overlay.measuredHitlSamplingRate,
+          tokenActuals: overlay.tokenActualsByRole,
+        }
+      : undefined;
+    // Effective HITL minutes (may differ from it.toBeHumanMin when overlay present).
+    const effectiveHumanMin = ctx?.effectiveHumanMin ?? it.toBeHumanMin;
+
+    const per = perTransaction(it, inputs, ctx);
     const fc = flowClassMap[it.flowClass];
     if (manualActionFractions(it, inputs).manualUnits > 0) anyManualActions = true;
 
@@ -518,7 +593,7 @@ export function computeRollup(
     }
     // Benefits accrue only on contained transactions.
     const benefit = per.benefit * containedTxns;
-    const minutesSaved = Math.max(0, it.asIsHandlingMin - it.toBeHumanMin) * containedTxns;
+    const minutesSaved = Math.max(0, it.asIsHandlingMin - effectiveHumanMin) * containedTxns;
 
     runCostUsd += runCost;
     buildCostUsd += buildCost;
@@ -550,7 +625,7 @@ export function computeRollup(
       benefitUsd: benefit,
       netUsd: benefit - runCost - buildCost,
       humanMinutesSaved: minutesSaved,
-      overridden: !!ov,
+      overridden: !!flowOv,
     });
   }
 
@@ -561,9 +636,10 @@ export function computeRollup(
   const localizedRows = rows.filter((r) => LOCALIZED_CLASSES.has(r.flowClass));
   const localizedTxns = localizedRows.reduce((a, r) => a + r.transactions, 0);
   for (const r of localizedRows) {
-    const alloc = localizedTxns > 0
-      ? knowledgeMaintenanceUsd * (r.transactions / localizedTxns)
-      : knowledgeMaintenanceUsd / (localizedRows.length || 1);
+    const alloc =
+      localizedTxns > 0
+        ? knowledgeMaintenanceUsd * (r.transactions / localizedTxns)
+        : knowledgeMaintenanceUsd / (localizedRows.length || 1);
     r.otherCostUsd += alloc;
     r.runCostUsd += alloc;
     r.netUsd -= alloc;
@@ -580,9 +656,10 @@ export function computeRollup(
   const onboardingAnnualUsd = onboardingTotal / Math.max(1, contractYears);
   const allTxns = rows.reduce((a, r) => a + r.transactions, 0);
   for (const r of rows) {
-    const alloc = allTxns > 0
-      ? onboardingAnnualUsd * (r.transactions / allTxns)
-      : onboardingAnnualUsd / rows.length;
+    const alloc =
+      allTxns > 0
+        ? onboardingAnnualUsd * (r.transactions / allTxns)
+        : onboardingAnnualUsd / rows.length;
     r.buildCostUsd += alloc;
     r.netUsd -= alloc;
   }
@@ -641,6 +718,9 @@ export function computeRollup(
   const humanHoursSaved = humanMinutesSaved / 60;
   const txnTotal = inputs.annualTransactions || 1;
 
+  // appliedAssumptions: use effectiveAssumption() for override-aware entries;
+  // our containment-tuning fix (variance = measured − tuned_or_default, not
+  // measured − raw_default); pricePerCallWithOverlay for model-role entries.
   const appliedAssumptions: GlobalAssumption[] = [
     effectiveAssumption("slm-call-cost", ov),
     effectiveAssumption("llm-call-cost", ov),
@@ -652,10 +732,36 @@ export function computeRollup(
     tier.assumption,
     ...(company.assumption ? [company.assumption] : []),
     assumptionMap["working-hours-year"]!,
-    assumptionMap["containment-fc1"]!,
-    assumptionMap["containment-fc2"]!,
-    assumptionMap["containment-fc3"]!,
-    assumptionMap["containment-fc4"]!,
+    // Containment assumptions — reflect scenario-level tuning in `value` so that
+    // computeVariance compares measured against the *effective* estimate (the tuned
+    // value the user would otherwise get), not the stale register default.
+    ...["containment-fc1", "containment-fc2", "containment-fc3", "containment-fc4"].map(
+      (key): GlobalAssumption => {
+        const a = assumptionMap[key]!;
+        const fcKey = CONTAINMENT_FC_MAP[key];
+        // Tuned value: scenario-level containmentOverrides win over the register default.
+        const scenarioTuned = fcKey ? inputs.containmentOverrides?.[fcKey] : undefined;
+        const effectiveEstimate = scenarioTuned ?? a.value;
+        // Measured value: flow-class measured from overlay.
+        const measuredRate = fcKey ? overlay?.measuredContainmentByFlowClass?.[fcKey] : undefined;
+        if (measuredRate !== undefined) {
+          return {
+            ...a,
+            value: effectiveEstimate,
+            measuredValue: measuredRate,
+            source: { name: "Measured actuals", confidence: "measured" },
+          };
+        }
+        if (scenarioTuned !== undefined) {
+          return {
+            ...a,
+            value: scenarioTuned,
+            source: { name: "Scenario inputs", confidence: "high" },
+          };
+        }
+        return a;
+      },
+    ),
     maturity,
     kmAssumption,
     assumptionMap["onboarding-base"]!,
@@ -663,21 +769,48 @@ export function computeRollup(
     assumptionMap["onboarding-per-country"]!,
     ...((inputs.reworkRatePct ?? 0) > 0 ? [assumptionMap["error-reduction-share"]!] : []),
     ...(anyManualActions ? [assumptionMap["manual-action-minutes"]!] : []),
-    // The effective model per role (selected or default) with its per-call price.
+    // The effective model per role — tagged measured when overlay supplies token actuals.
     ...MODEL_ROLES.map((role): GlobalAssumption => {
-      const { model } = pricePerCall(role, inputs.modelSelection);
+      const { price: effectivePrice, model, fromTokens } = pricePerCallWithOverlay(
+        role,
+        inputs.modelSelection,
+        overlay?.tokenActualsByRole,
+      );
+      const tokenData = overlay?.tokenActualsByRole?.[role];
       return {
         key: `model-${role}`,
         label: `${role[0]!.toUpperCase()}${role.slice(1)} model: ${model.label}`,
         value: model.pricePerCallUsd,
         unit: "USD per call",
-        rationale: model.description,
+        rationale: fromTokens
+          ? `Repriced from measured tokens: avg ${tokenData!.avgInputTokens} input + ${tokenData!.avgOutputTokens} output tokens × catalog per-token rates.`
+          : model.description,
         source: {
-          name: inputs.modelSelection?.[role] ? "Scenario model selection" : "Default model stack",
-          confidence: inputs.modelSelection?.[role] ? "high" : "medium",
+          name: fromTokens
+            ? "Measured actuals"
+            : inputs.modelSelection?.[role]
+              ? "Scenario model selection"
+              : "Default model stack",
+          confidence: fromTokens ? "measured" : inputs.modelSelection?.[role] ? "high" : "medium",
         },
+        ...(fromTokens ? { measuredValue: effectivePrice } : {}),
       };
     }),
+    // HITL sampling — tagged measured when overlay supplies it.
+    ...(overlay?.measuredHitlSamplingRate !== undefined
+      ? [
+          {
+            key: "hitl-sampling-rate",
+            label: "HITL sampling rate (measured)",
+            value: inputs.hitlSamplingRate ?? 1,
+            measuredValue: overlay.measuredHitlSamplingRate,
+            unit: "fraction",
+            rationale:
+              "Measured fraction of residual HITL checkpoints actually reviewed in production.",
+            source: { name: "Measured actuals", confidence: "measured" as const },
+          },
+        ]
+      : []),
   ];
 
   const fcLabels: Record<string, string> = {
@@ -719,9 +852,16 @@ export function computeRollup(
     onboardingAnnualUsd,
     buildBreakdown,
     appliedAssumptions,
-    confidence: computeConfidence(inputs),
+    confidence: computeConfidence(inputs, measuredFactorKeys),
+    calibrated: !!overlay,
   };
 }
+
+/** Map from assumption keys that are directionally "benefit" drivers. */
+const BENEFIT_KEYS = new Set([
+  "containment-fc1", "containment-fc2", "containment-fc3", "containment-fc4",
+  "hitl-sampling-rate",
+]);
 
 /**
  * Effective numeric value of an assumption (shorthand).
@@ -759,3 +899,59 @@ const FC_PRIMARY_MODEL: Record<string, string> = {
   "fc3-multiagent": "llm-call-cost",
   "fc4-frontier": "frontier-call-cost",
 };
+
+/**
+ * Confidence score:
+ *  - BASE = 30 (core inputs always present)
+ *  - Each optional factor adds `weight` when client-confirmed (provided)
+ *  - When a factor is backed by a measured actuals overlay it adds
+ *    `weight + MEASURED_BONUS`, guaranteeing a strictly higher score than
+ *    merely providing the same input as a client estimate.
+ *  - Score is NOT capped at 100; exceeding 100 signals full calibration.
+ *  - Level: > 100 → "calibrated", ≥ 75 → "high", ≥ 55 → "medium", else "low"
+ */
+const MEASURED_BONUS = 3;
+
+/** Map from assumption keys that are directionally "cost" drivers. */
+const COST_KEYS = new Set([
+  "model-router", "model-reasoning", "model-frontier", "model-data",
+]);
+
+/**
+ * Compute per-assumption variance between an estimated rollup (no overlay)
+ * and a calibrated rollup (with overlay). Returns one entry per assumption
+ * where a measuredValue is present in the calibrated result.
+ */
+export function computeVariance(
+  estimated: ReturnType<typeof computeRollup>,
+  actual: ReturnType<typeof computeRollup>,
+): VarianceEntry[] {
+  const entries: VarianceEntry[] = [];
+  const estimatedMap = new Map(estimated.appliedAssumptions.map((a) => [a.key, a]));
+
+  for (const a of actual.appliedAssumptions) {
+    if (a.measuredValue === undefined) continue;
+    const est = estimatedMap.get(a.key);
+    const estimatedValue = est?.value ?? a.value;
+    const actualValue = a.measuredValue;
+    const absVariance = actualValue - estimatedValue;
+    const pctVariance =
+      estimatedValue !== 0 ? (absVariance / Math.abs(estimatedValue)) * 100 : 0;
+
+    let direction: VarianceEntry["direction"] = "both";
+    if (COST_KEYS.has(a.key)) direction = "cost";
+    else if (BENEFIT_KEYS.has(a.key)) direction = "benefit";
+
+    entries.push({
+      assumptionKey: a.key,
+      label: a.label,
+      unit: a.unit,
+      estimatedValue,
+      actualValue,
+      absVariance,
+      pctVariance,
+      direction,
+    });
+  }
+  return entries;
+}

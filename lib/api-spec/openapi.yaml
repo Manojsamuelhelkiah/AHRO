@@ -14,6 +14,8 @@ tags:
     description: HRO intent corpus and reference data
   - name: scenarios
     description: Client scenarios and cost-benefit roll-ups
+  - name: actuals
+    description: Calibration actuals overlays (measured production data)
 paths:
   /healthz:
     get:
@@ -362,6 +364,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Rollup"
+        "400":
+          description: Invalid inputs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /actuals:
+    get:
+      operationId: listActualsOverlays
+      tags: [actuals]
+      summary: List all saved calibration actuals overlays
+      responses:
+        "200":
+          description: Overlay list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActualsOverlayRecord"
+    post:
+      operationId: createActualsOverlay
+      tags: [actuals]
+      summary: Save a new calibration actuals overlay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActualsOverlayInput"
+      responses:
+        "201":
+          description: Created overlay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActualsOverlayRecord"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /actuals/validate:
+    post:
+      operationId: validateActualsOverlay
+      tags: [actuals]
+      summary: Validate an actuals overlay payload without persisting it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActualsOverlayInput"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActualsValidationResult"
+  /actuals/{id}:
+    get:
+      operationId: getActualsOverlay
+      tags: [actuals]
+      summary: Get a saved actuals overlay by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Overlay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActualsOverlayRecord"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      operationId: deleteActualsOverlay
+      tags: [actuals]
+      summary: Delete a saved actuals overlay
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 components:
   schemas:
     HealthStatus:
@@ -388,7 +494,7 @@ components:
           type: string
         confidence:
           type: string
-          description: high | medium | low (documented-assumption)
+          description: measured | high | medium | low (documented-assumption). "measured" is the strongest tier, meaning the value came from observed production data.
       required: [name, confidence]
     Intent:
       type: object
@@ -612,6 +718,10 @@ components:
           type: string
         value:
           type: number
+          description: The canonical estimated/modelled value from the assumptions register.
+        measuredValue:
+          type: number
+          description: The value observed in production actuals. Present only when this assumption was replaced by a calibration overlay. The rollup applied measuredValue; value is retained as the pre-calibration estimate for variance display.
         unit:
           type: string
         rationale:
@@ -770,6 +880,9 @@ components:
       properties:
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+        actualsOverlayId:
+          type: integer
+          description: Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array.
       required: [inputs]
     IntentRollupRow:
       type: object
@@ -919,7 +1032,18 @@ components:
             $ref: "#/components/schemas/GlobalAssumption"
         confidence:
           $ref: "#/components/schemas/Confidence"
-      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, appliedAssumptions, confidence]
+        calibrated:
+          type: boolean
+          description: True when a calibration actuals overlay was applied to this rollup.
+        estimatedTotals:
+          $ref: "#/components/schemas/RollupTotals"
+          description: Pre-calibration totals (from the pass without overlay). Present only when calibrated=true.
+        variance:
+          type: array
+          description: Per-assumption variance between the estimated and measured values. Present only when calibrated=true.
+          items:
+            $ref: "#/components/schemas/VarianceEntry"
+      required: [totals, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, appliedAssumptions, confidence, calibrated]
     BuildComponentCost:
       type: object
       properties:
@@ -1030,11 +1154,135 @@ components:
           type: string
         provided:
           type: boolean
-          description: Whether the client supplied this parameter or a generic default was used
+          description: Whether this parameter is supplied (either client-confirmed or measured).
         weight:
           type: number
-          description: Points this parameter contributes to the confidence score
+          description: Base points this parameter contributes to the confidence score when client-confirmed. Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score.
         note:
           type: string
-          description: What assuming the default means for the result when the parameter is missing
+          description: What assuming the default means for the result when the parameter is missing.
+        sourceTier:
+          type: string
+          description: "Tier of the supplied value: client-confirmed (user provided) or measured (from a calibration actuals overlay). Absent when not provided."
       required: [key, label, provided, weight, note]
+    VarianceEntry:
+      type: object
+      description: Per-assumption comparison between the estimated value (from assumptions register or scenario inputs) and the measured value (from actuals overlay).
+      properties:
+        assumptionKey:
+          type: string
+          description: Matches a key in appliedAssumptions.
+        label:
+          type: string
+        unit:
+          type: string
+        estimatedValue:
+          type: number
+          description: Value used in the pre-calibration (estimated) rollup.
+        actualValue:
+          type: number
+          description: Value applied in the calibrated rollup (from overlay).
+        absVariance:
+          type: number
+          description: actualValue - estimatedValue
+        pctVariance:
+          type: number
+          description: "(actualValue - estimatedValue) / |estimatedValue| × 100. Zero when estimatedValue is zero."
+        direction:
+          type: string
+          description: "Which side of the model this assumption affects: cost | benefit | both"
+      required: [assumptionKey, label, unit, estimatedValue, actualValue, absVariance, pctVariance, direction]
+    TokenRoleActuals:
+      type: object
+      description: Measured average token counts per model call for a given role, taken from production logs.
+      properties:
+        avgInputTokens:
+          type: number
+          description: Average input (prompt) tokens per call.
+        avgOutputTokens:
+          type: number
+          description: Average output (completion) tokens per call.
+      required: [avgInputTokens, avgOutputTokens]
+    IntentActuals:
+      type: object
+      description: Per-intent measured values. At least one measured field must be present.
+      properties:
+        intentKey:
+          type: string
+          description: Must match a key in the intent corpus.
+        measuredContainmentRate:
+          type: number
+          description: Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present.
+        avgHitlMinutes:
+          type: number
+          description: Measured average residual human-in-the-loop minutes per contained transaction for this intent.
+      required: [intentKey]
+    ActualsOverlayInput:
+      type: object
+      description: Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.
+      properties:
+        clientLabel:
+          type: string
+          description: Human-readable label, e.g. "Acme Q1 2025 production logs".
+        periodStart:
+          type: string
+          description: ISO date string for the start of the observed period.
+        periodEnd:
+          type: string
+          description: ISO date string for the end of the observed period.
+        intents:
+          type: array
+          description: Per-intent measured values.
+          items:
+            $ref: "#/components/schemas/IntentActuals"
+        measuredContainmentByFlowClass:
+          type: object
+          additionalProperties:
+            type: number
+          description: Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.
+        measuredHitlSamplingRate:
+          type: number
+          description: Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs.
+        tokenActualsByRole:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/TokenRoleActuals"
+          description: "Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd."
+    ActualsOverlayRecord:
+      type: object
+      description: A saved actuals overlay with its database id and timestamps.
+      properties:
+        id:
+          type: integer
+        clientLabel:
+          type: string
+          nullable: true
+        periodStart:
+          type: string
+          nullable: true
+        periodEnd:
+          type: string
+          nullable: true
+        payload:
+          $ref: "#/components/schemas/ActualsOverlayInput"
+        createdAt:
+          type: string
+      required: [id, payload, createdAt]
+    ActualsValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        intentRowCount:
+          type: integer
+          description: Number of intent rows recognised and validated.
+        measuredFields:
+          type: array
+          items:
+            type: string
+          description: List of measurement dimensions present in the overlay (e.g. containment, tokenPricing, hitlSampling, hitlMinutes).
+      required: [valid, errors, intentRowCount, measuredFields]

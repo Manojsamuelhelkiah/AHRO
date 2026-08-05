@@ -9,4 +9,6 @@ import type { ScenarioInputs } from './scenarioInputs';
 
 export interface RollupRequest {
   inputs: ScenarioInputs;
+  /** Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array. */
+  actualsOverlayId?: number;
 }

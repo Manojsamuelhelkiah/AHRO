@@ -20,7 +20,7 @@ export interface SourceRef {
   /** e.g. "SAP SuccessFactors service catalog (curated)", "Kaggle HR analytics", "GitHub HR intents corpus" */
   name: string;
   note?: string;
-  /** high | medium | low (documented-assumption) */
+  /** measured | high | medium | low (documented-assumption). "measured" is the strongest tier, meaning the value came from observed production data. */
   confidence: string;
 }
 
@@ -151,7 +151,10 @@ export interface DistributionProfile {
 export interface GlobalAssumption {
   key: string;
   label: string;
+  /** The canonical estimated/modelled value from the assumptions register. */
   value: number;
+  /** The value observed in production actuals. Present only when this assumption was replaced by a calibration overlay. The rollup applied measuredValue; value is retained as the pre-calibration estimate for variance display. */
+  measuredValue?: number;
   unit: string;
   rationale: string;
   source: SourceRef;
@@ -250,6 +253,8 @@ export interface ScenarioUpdate {
 
 export interface RollupRequest {
   inputs: ScenarioInputs;
+  /** Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array. */
+  actualsOverlayId?: number;
 }
 
 export interface IntentRollupRow {
@@ -311,12 +316,14 @@ export interface BuildComponentCost {
 export interface ConfidenceFactor {
   key: string;
   label: string;
-  /** Whether the client supplied this parameter or a generic default was used */
+  /** Whether this parameter is supplied (either client-confirmed or measured). */
   provided: boolean;
-  /** Points this parameter contributes to the confidence score */
+  /** Base points this parameter contributes to the confidence score when client-confirmed. Measured inputs earn weight + MEASURED_BONUS, yielding a strictly higher score. */
   weight: number;
-  /** What assuming the default means for the result when the parameter is missing */
+  /** What assuming the default means for the result when the parameter is missing. */
   note: string;
+  /** Tier of the supplied value: client-confirmed (user provided) or measured (from a calibration actuals overlay). Absent when not provided. */
+  sourceTier?: string;
 }
 
 /**
@@ -330,6 +337,25 @@ export interface Confidence {
   factors: ConfidenceFactor[];
 }
 
+/**
+ * Per-assumption comparison between the estimated value (from assumptions register or scenario inputs) and the measured value (from actuals overlay).
+ */
+export interface VarianceEntry {
+  /** Matches a key in appliedAssumptions. */
+  assumptionKey: string;
+  label: string;
+  unit: string;
+  /** Value used in the pre-calibration (estimated) rollup. */
+  estimatedValue: number;
+  /** Value applied in the calibrated rollup (from overlay). */
+  actualValue: number;
+  /** actualValue - estimatedValue */
+  absVariance: number;
+  /** (actualValue - estimatedValue) / |estimatedValue| × 100. Zero when estimatedValue is zero. */
+  pctVariance: number;
+  /** Which side of the model this assumption affects: cost | benefit | both */
+  direction: string;
+}
 export interface Rollup {
   totals: RollupTotals;
   rows: IntentRollupRow[];
@@ -348,6 +374,12 @@ export interface Rollup {
   buildBreakdown: BuildComponentCost[];
   appliedAssumptions: GlobalAssumption[];
   confidence: Confidence;
+  /** True when a calibration actuals overlay was applied to this rollup. */
+  calibrated: boolean;
+  /** Pre-calibration totals (from the pass without overlay). Present only when calibrated=true. */
+  estimatedTotals?: RollupTotals;
+  /** Per-assumption variance between the estimated and measured values. Present only when calibrated=true. */
+  variance?: VarianceEntry[];
 }
 
 export interface ModelOption {
@@ -386,4 +418,77 @@ export interface FlowOverrideInput {
   toBeHumanMin?: number;
   actGetActions?: number;
   actPutActions?: number;
+}
+
+/**
+ * Measured average token counts per model call for a given role, taken from production logs.
+ */
+export interface TokenRoleActuals {
+  /** Average input (prompt) tokens per call. */
+  avgInputTokens: number;
+  /** Average output (completion) tokens per call. */
+  avgOutputTokens: number;
+}
+
+export interface ActualsValidationResult {
+  valid: boolean;
+  errors: string[];
+  /** Number of intent rows recognised and validated. */
+  intentRowCount: number;
+  /** List of measurement dimensions present in the overlay (e.g. containment, tokenPricing, hitlSampling, hitlMinutes). */
+  measuredFields: string[];
+}
+
+/**
+ * Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.
+ */
+export type ActualsOverlayInputTokenActualsByRole = {[key: string]: TokenRoleActuals};
+
+/**
+ * Per-intent measured values. At least one measured field must be present.
+ */
+export interface IntentActuals {
+  /** Must match a key in the intent corpus. */
+  intentKey: string;
+  /** Measured containment rate for this specific intent (0-1). Overrides the flow-class level measurement when present. */
+  measuredContainmentRate?: number;
+  /** Measured average residual human-in-the-loop minutes per contained transaction for this intent. */
+  avgHitlMinutes?: number;
+}
+
+/**
+ * Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.
+ */
+export interface ActualsOverlayInput {
+  /** Human-readable label, e.g. "Acme Q1 2025 production logs". */
+  clientLabel?: string;
+  /** ISO date string for the start of the observed period. */
+  periodStart?: string;
+  /** ISO date string for the end of the observed period. */
+  periodEnd?: string;
+  /** Per-intent measured values. */
+  intents?: IntentActuals[];
+  /** Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided. */
+  measuredContainmentByFlowClass?: ActualsOverlayInputMeasuredContainmentByFlowClass;
+  /** Measured fraction of residual HITL checkpoints actually reviewed (0-1). Replaces hitlSamplingRate from scenario inputs. */
+  measuredHitlSamplingRate?: number;
+  /** Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd. */
+  tokenActualsByRole?: ActualsOverlayInputTokenActualsByRole;
+}
+
+/**
+ * Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.
+ */
+export type ActualsOverlayInputMeasuredContainmentByFlowClass = {[key: string]: number};
+
+/**
+ * A saved actuals overlay with its database id and timestamps.
+ */
+export interface ActualsOverlayRecord {
+  id: number;
+  clientLabel?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  payload: ActualsOverlayInput;
+  createdAt: string;
 }
