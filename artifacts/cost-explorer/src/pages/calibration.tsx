@@ -63,7 +63,8 @@ import {
   type DriftSeries,
   type DriftOverlayInput,
 } from "@/lib/drift";
-import { DEFAULT_ROLE_PRICING, formatUsdPerCall } from "@/lib/token-pricing";
+import { DEFAULT_ROLE_PRICING, formatUsdPerCall, type RolePricingEntry } from "@/lib/token-pricing";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 // ---------------------------------------------------------------------------
 // CSV template helpers
@@ -1500,6 +1501,285 @@ function FullDriftChart({ series }: { series: DriftSeries }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// TokenCostExplainPopover — explains estimate baseline vs measured token usage
+// ---------------------------------------------------------------------------
+
+interface TokenCostPeriodDatum {
+  periodLabel: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  measuredUsd: number | null;
+}
+
+/**
+ * ⓘ icon that opens a popover explaining why a measured token cost can legitimately
+ * exceed the baked estimate.  Receives all data via props so the calling site
+ * (DriftTab) controls the pricing source — no direct DEFAULT_ROLE_PRICING import here.
+ */
+function TokenCostExplainPopover({
+  pricing,
+  estimateUsd,
+  periodData,
+}: {
+  pricing: RolePricingEntry;
+  /** Effective estimate shown in the table (may be scenario-overridden). */
+  estimateUsd: number;
+  periodData: TokenCostPeriodDatum[];
+}) {
+  // Most recent period that has raw token counts
+  const latestWithTokens = [...periodData]
+    .reverse()
+    .find((p) => p.inputTokens !== null && p.outputTokens !== null) ?? null;
+
+  const latestMeasuredUsd = latestWithTokens?.measuredUsd ?? null;
+
+  // How much heavier is measured vs estimate?
+  const multiplier =
+    latestMeasuredUsd !== null && estimateUsd > 0
+      ? latestMeasuredUsd / estimateUsd
+      : null;
+  const gap = latestMeasuredUsd !== null ? latestMeasuredUsd - estimateUsd : null;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center w-4 h-4 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Why does measured cost differ from the estimate?"
+        >
+          <Info className="w-3 h-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[22rem] text-xs space-y-3 p-4" align="start" side="right">
+        <p className="font-semibold text-sm text-foreground">
+          Why does measured cost differ from the estimate?
+        </p>
+
+        {/* Estimate basis */}
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Estimate basis
+          </p>
+          <p className="text-foreground">
+            Baked at{" "}
+            <span className="font-mono font-semibold">{formatUsdPerCall(estimateUsd)}/call</span>{" "}
+            — set before production token counts were available.
+          </p>
+          <p className="text-muted-foreground">Model: {pricing.label}</p>
+          <p className="text-muted-foreground">
+            Published rates:{" "}
+            <span className="font-mono">
+              ${pricing.inputPricePerMillionTokens}/M&nbsp;input&nbsp;·&nbsp;
+              ${pricing.outputPricePerMillionTokens}/M&nbsp;output
+            </span>
+          </p>
+          <p className="text-muted-foreground italic text-[11px]">
+            The exact token profile behind this estimate wasn't recorded — it was derived
+            from an assumed call shape before logs were available.
+          </p>
+        </div>
+
+        <Separator />
+
+        {/* Measured usage */}
+        {latestWithTokens ? (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Measured usage ({latestWithTokens.periodLabel})
+            </p>
+            <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5">
+              <span className="text-muted-foreground">Avg input tokens</span>
+              <span className="font-mono font-semibold text-right">
+                {latestWithTokens.inputTokens!.toLocaleString()}
+              </span>
+              <span className="text-muted-foreground">Avg output tokens</span>
+              <span className="font-mono font-semibold text-right">
+                {latestWithTokens.outputTokens!.toLocaleString()}
+              </span>
+              {latestMeasuredUsd !== null && (
+                <>
+                  <span className="text-muted-foreground">Cost at same rates</span>
+                  <span className="font-mono font-semibold text-right">
+                    {formatUsdPerCall(latestMeasuredUsd)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted-foreground italic">
+            No token breakdown available for the selected periods.
+          </p>
+        )}
+
+        {/* Gap explanation */}
+        {gap !== null && multiplier !== null && (
+          <>
+            <Separator />
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Gap
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Measured vs estimate</span>
+                <span
+                  className={`font-mono font-semibold ${
+                    gap > 0
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-emerald-600 dark:text-emerald-400"
+                  }`}
+                >
+                  {gap >= 0 ? "+" : ""}
+                  {formatUsdPerCall(gap)}{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({multiplier.toFixed(1)}×)
+                  </span>
+                </span>
+              </div>
+              <div className="rounded bg-muted/60 p-2.5 leading-relaxed text-muted-foreground">
+                {Math.abs(gap) < 0.0005 ? (
+                  <span>Usage closely matches the estimate — no significant gap.</span>
+                ) : gap > 0 ? (
+                  <>
+                    <span className="font-semibold text-foreground">
+                      Usage-profile driven, not a pricing change.
+                    </span>{" "}
+                    Published rates are unchanged from when the estimate was set. Your
+                    measured calls consume roughly{" "}
+                    <span className="font-semibold text-foreground">
+                      {multiplier.toFixed(1)}× as many token-weighted units
+                    </span>{" "}
+                    as the estimate assumed — meaning clients send heavier prompts or
+                    receive longer responses than the baseline expected.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-foreground">
+                      Lighter usage than assumed.
+                    </span>{" "}
+                    Published rates are unchanged. Your calls consume fewer tokens than the
+                    estimate assumed — the business case is conservative on this cost.
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TokenProfileBreakdownTable — per-period token counts in the expanded chart row
+// ---------------------------------------------------------------------------
+
+function TokenProfileBreakdownTable({
+  series,
+  periodData,
+  pricing,
+  estimateUsd,
+}: {
+  series: DriftSeries;
+  periodData: TokenCostPeriodDatum[];
+  pricing: RolePricingEntry;
+  estimateUsd: number;
+}) {
+  const hasAnyTokens = periodData.some((r) => r.inputTokens !== null);
+  if (!hasAnyTokens) return null;
+
+  return (
+    <div className="mt-5 space-y-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Token profile by period
+      </p>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Period</th>
+              <th className="text-right px-3 py-2 font-medium text-muted-foreground">
+                Avg Input Tokens
+              </th>
+              <th className="text-right px-3 py-2 font-medium text-muted-foreground">
+                Avg Output Tokens
+              </th>
+              <th className="text-right px-3 py-2 font-medium text-muted-foreground">
+                Cost/call
+              </th>
+              <th className="text-right px-3 py-2 font-medium text-muted-foreground">
+                vs Estimate
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {periodData.map((row) => {
+              const gap =
+                row.measuredUsd !== null ? row.measuredUsd - estimateUsd : null;
+              const mult =
+                row.measuredUsd !== null && estimateUsd > 0
+                  ? row.measuredUsd / estimateUsd
+                  : null;
+              return (
+                <tr key={row.periodLabel} className="hover:bg-muted/30">
+                  <td className="px-3 py-2 font-medium">{row.periodLabel}</td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {row.inputTokens !== null
+                      ? row.inputTokens.toLocaleString()
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {row.outputTokens !== null
+                      ? row.outputTokens.toLocaleString()
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {row.measuredUsd !== null ? formatUsdPerCall(row.measuredUsd) : "—"}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right font-mono font-semibold ${
+                      gap === null
+                        ? "text-muted-foreground"
+                        : gap > 0
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {gap !== null ? (
+                      <>
+                        {gap >= 0 ? "+" : ""}
+                        {formatUsdPerCall(gap)}
+                        {mult !== null && (
+                          <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                            ({mult.toFixed(1)}×)
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Rates: <span className="font-mono">
+          ${pricing.inputPricePerMillionTokens}/M input ·{" "}
+          ${pricing.outputPricePerMillionTokens}/M output
+        </span>{" "}
+        ({pricing.label}). Published rates are unchanged from the estimate — gaps are
+        driven by token usage, not pricing changes.
+      </p>
+    </div>
+  );
+}
+
 interface DriftTabProps {
   overlays: ActualsOverlayRecord[];
   intentList: { key: string; name: string; flowClass: string }[];
@@ -1931,6 +2211,37 @@ function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTa
                         if (series.unit === "USD") return formatUsdPerCall(v);
                         return v.toFixed(4);
                       };
+
+                      // Token-cost series extras — built here so both the label
+                      // popover and the expanded breakdown can share the same data.
+                      const isTokenCost =
+                        series.unit === "USD" &&
+                        series.assumptionKey.startsWith("token-cost-");
+                      const tokenRole = isTokenCost
+                        ? series.assumptionKey.slice("token-cost-".length)
+                        : null;
+                      // Pricing passed via DEFAULT_ROLE_PRICING here in DriftTab;
+                      // components receive it as a prop (no direct import inside them).
+                      const tokenPricing = tokenRole
+                        ? DEFAULT_ROLE_PRICING[tokenRole] ?? null
+                        : null;
+                      const tokenPeriodData: TokenCostPeriodDatum[] | null =
+                        isTokenCost && tokenRole
+                          ? series.points.map((p) => {
+                              const ov = selectedOverlays.find(
+                                (o) => o.id === p.overlayId,
+                              );
+                              const actuals =
+                                ov?.payload.tokenActualsByRole?.[tokenRole!];
+                              return {
+                                periodLabel: p.periodLabel,
+                                inputTokens: actuals?.avgInputTokens ?? null,
+                                outputTokens: actuals?.avgOutputTokens ?? null,
+                                measuredUsd: p.measuredValue,
+                              };
+                            })
+                          : null;
+
                       return (
                         <Fragment key={series.assumptionKey}>
                           <tr
@@ -1942,8 +2253,18 @@ function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTa
                             }
                           >
                             <td className="px-4 py-3">
-                              <div className="font-medium text-xs text-foreground leading-snug">
+                              <div className="font-medium text-xs text-foreground leading-snug flex items-center gap-1">
                                 {series.label}
+                                {isTokenCost &&
+                                  tokenPricing &&
+                                  tokenPeriodData &&
+                                  series.estimate !== null && (
+                                    <TokenCostExplainPopover
+                                      pricing={tokenPricing}
+                                      estimateUsd={series.estimate}
+                                      periodData={tokenPeriodData}
+                                    />
+                                  )}
                               </div>
                               <div className="text-[10px] text-muted-foreground font-mono mt-0.5 flex items-center gap-1">
                                 {series.polarity === "higher-is-better" ? (
@@ -2000,6 +2321,17 @@ function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTa
                             <tr>
                               <td colSpan={series.points.length + 4} className="px-4 pb-4">
                                 <FullDriftChart series={series} />
+                                {isTokenCost &&
+                                  tokenPricing &&
+                                  tokenPeriodData &&
+                                  series.estimate !== null && (
+                                    <TokenProfileBreakdownTable
+                                      series={series}
+                                      periodData={tokenPeriodData}
+                                      pricing={tokenPricing}
+                                      estimateUsd={series.estimate}
+                                    />
+                                  )}
                               </td>
                             </tr>
                           )}
