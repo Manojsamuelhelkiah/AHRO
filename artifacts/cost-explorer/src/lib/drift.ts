@@ -6,8 +6,15 @@
  * scenario's appliedAssumptions later (Decision B: global defaults now, scenario-
  * supplied estimate in the future). Keys are assumption keys exactly as used by
  * the rollup engine (e.g. "containment-fc1", "hitl-sampling-rate",
- * "intent-cont-{intentKey}", "intent-hitl-{intentKey}").
+ * "intent-cont-{intentKey}", "intent-hitl-{intentKey}", "token-cost-{role}").
+ *
+ * Token-cost series: pass a `RolePricingMap` as the fourth argument to
+ * `computeDrift` to emit per-role USD/call drift series. Omitting it (or passing
+ * undefined) is backward-compatible — no token-cost series are emitted.
  */
+
+import type { RolePricingMap } from "./token-pricing";
+import { repriceRole } from "./token-pricing";
 
 /**
  * Local type alias for the actuals overlay payload.
@@ -306,22 +313,29 @@ export function computeTrend(
 /**
  * Compute drift series from a set of actuals overlays.
  *
- * @param overlays     Two or more overlays to compare. Order does not matter —
- *                     the function sorts internally by periodStart asc, id asc.
- * @param estimateMap  Optional caller-supplied estimate overrides keyed by
- *                     assumption key. Accepts any subset of keys; the function
- *                     falls back to register defaults for un-supplied keys.
- *                     Future: pass scenario.appliedAssumptions values here.
- * @param intentLabels Optional display name map (intentKey → name) for per-intent
- *                     series labels.
+ * @param overlays       Two or more overlays to compare. Order does not matter —
+ *                       the function sorts internally by periodStart asc, id asc.
+ * @param estimateMap    Optional caller-supplied estimate overrides keyed by
+ *                       assumption key. Accepts any subset of keys; the function
+ *                       falls back to register defaults for un-supplied keys.
+ *                       Future: pass scenario.appliedAssumptions values here.
+ *                       Token-cost keys follow the pattern "token-cost-{role}".
+ * @param intentLabels   Optional display name map (intentKey → name) for per-intent
+ *                       series labels.
+ * @param rolePricingMap Optional per-role pricing catalog used to reprice overlay
+ *                       tokenActualsByRole into USD/call drift series. When omitted,
+ *                       no token-cost series are emitted (backward-compatible).
+ *                       See token-pricing.ts for the DEFAULT_ROLE_PRICING constant.
  *
  * Returns one DriftSeries per assumption that is measured in at least one overlay.
- * Flow-class containment and HITL sampling come first, per-intent rows follow.
+ * Order: flow-class containment → HITL sampling → token cost per role →
+ *        per-intent containment → per-intent HITL minutes.
  */
 export function computeDrift(
   overlays: DriftOverlayInput[],
   estimateMap: Record<string, number> = {},
   intentLabels: Record<string, string> = {},
+  rolePricingMap?: RolePricingMap,
 ): DriftSeries[] {
   if (overlays.length === 0) return [];
 
@@ -368,6 +382,60 @@ export function computeDrift(
       trend: computeTrend(points, spec.polarity, estimate),
       trendDelta: nonNull.length >= 2 ? lastQ - firstQ : undefined,
     });
+  }
+
+  // -- Per-role token cost (USD/call) --
+  // Emitted only when rolePricingMap is provided and at least one overlay has
+  // tokenActualsByRole data for the role. Polarity is lower-is-better: cheaper
+  // calls represent improvement. Estimate = defaultPricePerCallUsd from the
+  // pricing map (the baked per-call cost the model was assumed to have before
+  // token actuals were measured).
+  if (rolePricingMap) {
+    // Collect every role present across all overlays that also has a pricing entry.
+    const tokenRoles = new Set<string>();
+    for (const ov of sorted) {
+      for (const role of Object.keys(ov.payload.tokenActualsByRole ?? {})) {
+        if (rolePricingMap[role]) tokenRoles.add(role);
+      }
+    }
+
+    for (const role of tokenRoles) {
+      const assumptionKey = `token-cost-${role}`;
+      const pricing = rolePricingMap[role]!;
+      const estimate: number =
+        estimateMap[assumptionKey] !== undefined
+          ? estimateMap[assumptionKey]!
+          : pricing.defaultPricePerCallUsd;
+
+      const points: DriftPoint[] = sorted.map((ov, i) => {
+        const actuals = ov.payload.tokenActualsByRole?.[role];
+        return {
+          overlayId: ov.id,
+          periodLabel: uniqueLabels[i]!,
+          measuredValue:
+            actuals !== undefined
+              ? repriceRole(actuals, pricing)
+              : null,
+        };
+      });
+
+      if (points.every((p) => p.measuredValue === null)) continue;
+
+      const nonNull = points.filter((p) => p.measuredValue !== null);
+      const firstQ = toQuality(nonNull[0]!.measuredValue!, "lower-is-better");
+      const lastQ = toQuality(nonNull[nonNull.length - 1]!.measuredValue!, "lower-is-better");
+
+      series.push({
+        assumptionKey,
+        label: `Token cost/call: ${pricing.label}`,
+        unit: "USD",
+        polarity: "lower-is-better",
+        estimate,
+        points,
+        trend: computeTrend(points, "lower-is-better", estimate),
+        trendDelta: nonNull.length >= 2 ? lastQ - firstQ : undefined,
+      });
+    }
   }
 
   // -- Per-intent containment --

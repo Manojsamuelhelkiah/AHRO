@@ -60,6 +60,7 @@ import {
   type DriftSeries,
   type DriftOverlayInput,
 } from "@/lib/drift";
+import { DEFAULT_ROLE_PRICING, formatUsdPerCall } from "@/lib/token-pricing";
 
 // ---------------------------------------------------------------------------
 // CSV template helpers
@@ -1415,7 +1416,13 @@ function FullDriftChart({ series }: { series: DriftSeries }) {
           {hasEstimate && (
             <span className="flex items-center gap-1">
               <span className="inline-block w-4 border-t border-dashed border-slate-400" />
-              Estimate ({series.estimate!.toFixed(series.unit === "minutes" ? 1 : 4)} {series.unit})
+              Estimate (
+              {series.unit === "USD"
+                ? formatUsdPerCall(series.estimate!)
+                : series.unit === "minutes"
+                  ? `${series.estimate!.toFixed(1)} min`
+                  : series.estimate!.toFixed(4)}
+              )
             </span>
           )}
         </div>
@@ -1432,15 +1439,19 @@ function FullDriftChart({ series }: { series: DriftSeries }) {
             domain={[domainMin, domainMax]}
             tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
             tickLine={false}
-            tickFormatter={(v: number) =>
-              series.unit === "fraction" ? v.toFixed(2) : v.toFixed(1)
-            }
-            width={44}
+            tickFormatter={(v: number) => {
+              if (series.unit === "fraction") return v.toFixed(2);
+              if (series.unit === "USD") return formatUsdPerCall(v);
+              return v.toFixed(1);
+            }}
+            width={series.unit === "USD" ? 62 : 44}
           />
           <Tooltip
             formatter={(value: unknown) => {
               const v = typeof value === "number" ? value : null;
-              return v === null ? "—" : `${v.toFixed(series.unit === "minutes" ? 1 : 4)} ${series.unit}`;
+              if (v === null) return "—";
+              if (series.unit === "USD") return formatUsdPerCall(v);
+              return `${v.toFixed(series.unit === "minutes" ? 1 : 4)} ${series.unit}`;
             }}
             labelStyle={{ fontWeight: 600, fontSize: 11 }}
             contentStyle={{
@@ -1585,6 +1596,7 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
         selectedOverlays as unknown as DriftOverlayInput[],
         {},
         intentLabels,
+        DEFAULT_ROLE_PRICING,
       );
     } catch {
       // MixedClientError: should not happen given the UI filters, but
@@ -1792,6 +1804,7 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
                         if (v === null) return "—";
                         if (series.unit === "fraction") return v.toFixed(3);
                         if (series.unit === "minutes") return `${v.toFixed(1)} min`;
+                        if (series.unit === "USD") return formatUsdPerCall(v);
                         return v.toFixed(4);
                       };
                       return (
