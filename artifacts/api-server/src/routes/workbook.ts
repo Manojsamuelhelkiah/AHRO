@@ -26,7 +26,19 @@ async function sendWorkbook(inputs: ScenarioInputs, res: Parameters<Parameters<I
 router.get("/workbook/export", async (req, res, next) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : "";
-    if (!q) throw new InputValidationError("Missing q parameter (base64url-encoded {inputs})");
+    if (!q) {
+      // No payload → serve the default reference scenario. Keeps the share
+      // link short and un-mangleable on mobile.
+      await sendWorkbook(
+        {
+          numSystems: 5, annualTransactions: 50000, employees: 5000,
+          sector: "technology", companyType: "multi-country", isolationTier: "siloed",
+          hrHourlyCostUsd: 45, hitlHourlyCostUsd: 35, countries: 3,
+        } as ScenarioInputs,
+        res,
+      );
+      return;
+    }
     let parsedBody: unknown;
     try {
       parsedBody = JSON.parse(Buffer.from(q, "base64url").toString("utf8"));
