@@ -663,6 +663,13 @@ export type ListCustomIntentsParams = {
 status?: string;
 };
 
+export type ExportScenarioWorkbookLinkParams = {
+/**
+ * base64url-encoded JSON of {"inputs":ScenarioInputs}.
+ */
+q: string;
+};
+
 export type ImportScenarioWorkbookBody = {
   /** Filled-in shadow workbook (.xlsx, max 10 MB). */
   workbookFile: Blob;

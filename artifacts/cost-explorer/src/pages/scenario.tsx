@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useComputeRollup,
-  useExportScenarioWorkbook,
   useImportScenarioWorkbook,
   useListDistributionProfiles,
   useListModelCatalog, useListSystems,
@@ -80,7 +79,6 @@ export default function Scenario() {
   const { data: globalAssumptions } = useListAssumptions();
   const { data: flowClasses } = useListFlowClasses();
   const computeRollupMutation = useComputeRollup();
-  const exportWorkbookMutation = useExportScenarioWorkbook();
   const importWorkbookMutation = useImportScenarioWorkbook();
   const workbookFileRef = useRef<HTMLInputElement>(null);
   const createScenario = useCreateScenario();
@@ -152,18 +150,18 @@ export default function Scenario() {
 
   // Excel shadow workbook: download prefilled from the current form; on import
   // the server reads ONLY the inputs and we reprice with the exact engine.
-  const handleWorkbookExport = form.handleSubmit(async (values) => {
-    try {
-      const blob = await exportWorkbookMutation.mutateAsync({ data: { inputs: toApiInputs(values) as ScenarioInputs } });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "hro-cost-shadow.xlsx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast({ title: "Export Failed", description: "Could not generate the workbook.", variant: "destructive" });
-    }
+  // Direct-navigation download (GET + base64url payload): blob-based
+  // programmatic downloads are blocked by mobile browsers in the preview iframe.
+  const handleWorkbookExport = form.handleSubmit((values) => {
+    const json = JSON.stringify({ inputs: toApiInputs(values) });
+    const q = btoa(String.fromCharCode(...new TextEncoder().encode(json)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const a = document.createElement("a");
+    a.href = `/api/workbook/export?q=${q}`;
+    a.download = "hro-cost-shadow.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   });
 
   const handleWorkbookImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -705,9 +703,9 @@ export default function Scenario() {
                   </Button>
                 </div>
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" className="flex-1 text-xs" onClick={handleWorkbookExport} disabled={exportWorkbookMutation.isPending} data-testid="button-export-workbook">
+                  <Button type="button" variant="outline" size="sm" className="flex-1 text-xs" onClick={handleWorkbookExport} data-testid="button-export-workbook">
                     <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
-                    {exportWorkbookMutation.isPending ? "Generating…" : "Excel Shadow"}
+                    Excel Shadow
                   </Button>
                   <Button type="button" variant="outline" size="sm" className="flex-1 text-xs" onClick={() => workbookFileRef.current?.click()} disabled={importWorkbookMutation.isPending} data-testid="button-import-workbook">
                     <Upload className="w-3.5 h-3.5 mr-1.5" />

@@ -30,6 +30,7 @@ import type {
   CustomIntentUpdate,
   DistributionProfile,
   ErrorMessage,
+  ExportScenarioWorkbookLinkParams,
   FlowClass,
   FlowOverride,
   FlowOverrideInput,
@@ -1867,6 +1868,91 @@ export const useRetireCustomIntent = <TError = ErrorType<ErrorMessage>,
       > => {
       return useMutation(getRetireCustomIntentMutationOptions(options));
     }
+
+export const getExportScenarioWorkbookLinkUrl = (params: ExportScenarioWorkbookLinkParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/workbook/export?${stringifiedParams}` : `/api/workbook/export`
+}
+
+/**
+ * Same as POST /workbook/export but takes the request body as a base64url-encoded JSON query parameter, so browsers (especially mobile) can download via plain navigation.
+ * @summary Direct-navigation workbook download (mobile-friendly)
+ */
+export const exportScenarioWorkbookLink = async (params: ExportScenarioWorkbookLinkParams, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getExportScenarioWorkbookLinkUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportScenarioWorkbookLinkQueryKey = (params?: ExportScenarioWorkbookLinkParams,) => {
+    return [
+    `/api/workbook/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportScenarioWorkbookLinkQueryOptions = <TData = Awaited<ReturnType<typeof exportScenarioWorkbookLink>>, TError = ErrorType<ErrorMessage>>(params: ExportScenarioWorkbookLinkParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportScenarioWorkbookLink>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportScenarioWorkbookLinkQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportScenarioWorkbookLink>>> = ({ signal }) => exportScenarioWorkbookLink(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportScenarioWorkbookLink>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportScenarioWorkbookLinkQueryResult = NonNullable<Awaited<ReturnType<typeof exportScenarioWorkbookLink>>>
+export type ExportScenarioWorkbookLinkQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Direct-navigation workbook download (mobile-friendly)
+ */
+
+export function useExportScenarioWorkbookLink<TData = Awaited<ReturnType<typeof exportScenarioWorkbookLink>>, TError = ErrorType<ErrorMessage>>(
+ params: ExportScenarioWorkbookLinkParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportScenarioWorkbookLink>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportScenarioWorkbookLinkQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getExportScenarioWorkbookUrl = () => {
 

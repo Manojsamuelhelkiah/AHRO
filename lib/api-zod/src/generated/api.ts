@@ -729,6 +729,17 @@ export const RetireCustomIntentResponse = zod.object({
 
 
 /**
+ * Same as POST /workbook/export but takes the request body as a base64url-encoded JSON query parameter, so browsers (especially mobile) can download via plain navigation.
+ * @summary Direct-navigation workbook download (mobile-friendly)
+ */
+export const ExportScenarioWorkbookLinkQueryParams = zod.object({
+  "q": zod.coerce.string().describe('base64url-encoded JSON of {\"inputs\":ScenarioInputs}.')
+})
+
+export const ExportScenarioWorkbookLinkResponse = zod.unknown()
+
+
+/**
  * Returns an .xlsx workbook with live formulas approximating the pricing engine plus structured input sheets (Inputs, Flow Classes, Assumptions, Model Stack, Systems) that can be edited offline and re-imported via POST /workbook/import.
  * @summary Generate the Excel shadow-model workbook prefilled from scenario inputs
  */
