@@ -7,10 +7,12 @@ import {
   useParseActualsLog,
   getListActualsOverlaysQueryKey,
   useListIntents,
+  useListScenarios,
   type ActualsOverlayInput,
   type ActualsValidationResult,
   type ActualsOverlayRecord,
   type ActualsLogParseResult,
+  type Scenario,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -57,6 +59,7 @@ import {
 } from "lucide-react";
 import {
   computeDrift,
+  scenarioToEstimateMap,
   type DriftSeries,
   type DriftOverlayInput,
 } from "@/lib/drift";
@@ -419,6 +422,7 @@ export default function Calibration() {
 
   const { data: overlays, refetch: refetchOverlays } = useListActualsOverlays();
   const { data: intents } = useListIntents();
+  const { data: scenarios, isLoading: scenariosLoading } = useListScenarios();
   const createOverlay = useCreateActualsOverlay();
   const validateOverlay = useValidateActualsOverlay();
   const deleteOverlay = useDeleteActualsOverlay();
@@ -1295,7 +1299,12 @@ Blank cells skip that field (not treated as zero).`}
         </TabsContent>
 
         <TabsContent value="drift" className="mt-4">
-          <DriftTab overlays={overlays ?? []} intentList={allIntents} />
+          <DriftTab
+            overlays={overlays ?? []}
+            intentList={allIntents}
+            scenarios={scenarios ?? []}
+            scenariosLoading={scenariosLoading}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -1493,10 +1502,12 @@ function FullDriftChart({ series }: { series: DriftSeries }) {
 
 interface DriftTabProps {
   overlays: ActualsOverlayRecord[];
-  intentList: { key: string; name: string }[];
+  intentList: { key: string; name: string; flowClass: string }[];
+  scenarios: Scenario[];
+  scenariosLoading: boolean;
 }
 
-function DriftTab({ overlays, intentList }: DriftTabProps) {
+function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTabProps) {
   // ----- Client groups -----
   // null key = unlabeled group (clientLabel is null/undefined).
   // Drift is always per single client — no cross-client mixing allowed.
@@ -1524,6 +1535,15 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
   // Initialised by effect once clientGroups first becomes non-empty.
   const [selectedClient, setSelectedClient] = useState<string | null | "__unset__">("__unset__");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // selectedScenarioId: null = "Global defaults" (no scenario selected).
+  // Resets to null whenever the client changes (different client → different scenario context).
+  // Initialised from ?scenario=<id> URL param on mount for deep-linking.
+  const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("scenario");
+    const parsed = raw !== null ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  });
 
   // Once clientGroups loads, pick the first group and select all its overlays.
   useEffect(() => {
@@ -1556,6 +1576,7 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
   );
 
   // When client changes: switch selection to all overlays in the new group
+  // and reset scenario picker to "Global defaults"
   const handleClientChange = (key: string | null) => {
     setSelectedClient(key);
     const newClientOverlays = overlays.filter((o) =>
@@ -1563,6 +1584,7 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
     );
     setSelectedIds(new Set(newClientOverlays.map((o) => o.id)));
     setExpandedKey(null);
+    setSelectedScenarioId(null); // reset to global defaults on client change
   };
 
   // toggleId: only allowed for overlays that belong to the current client group
@@ -1589,12 +1611,39 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
     [intentList],
   );
 
+  // intentFlowClasses: intentKey → flowClass — used by scenarioToEstimateMap (Option 3)
+  const intentFlowClasses = useMemo(
+    () => Object.fromEntries(intentList.map((i) => [i.key, i.flowClass])),
+    [intentList],
+  );
+
+  // Resolve the currently selected scenario object (null if "Global defaults" or not found)
+  const selectedScenario = useMemo(
+    () => (selectedScenarioId !== null ? (scenarios.find((s) => s.id === selectedScenarioId) ?? null) : null),
+    [scenarios, selectedScenarioId],
+  );
+
+  // If the scenario was deleted / is no longer in the list, treat as missing
+  const scenarioMissing = selectedScenarioId !== null && selectedScenario === null && !scenariosLoading;
+
+  // Build estimateMap from selected scenario; {} = global defaults (fall-through)
+  const estimateMap = useMemo(() => {
+    if (!selectedScenario) return {};
+    return scenarioToEstimateMap(
+      {
+        containmentOverrides: selectedScenario.inputs.containmentOverrides as Record<string, number> | undefined,
+        hitlSamplingRate: selectedScenario.inputs.hitlSamplingRate,
+      },
+      intentFlowClasses,
+    );
+  }, [selectedScenario, intentFlowClasses]);
+
   const driftSeries = useMemo(() => {
     if (selectedOverlays.length < 2) return [];
     try {
       return computeDrift(
         selectedOverlays as unknown as DriftOverlayInput[],
-        {},
+        estimateMap,
         intentLabels,
         DEFAULT_ROLE_PRICING,
       );
@@ -1603,7 +1652,7 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
       // fail safe rather than crashing the component
       return [];
     }
-  }, [selectedOverlays, intentLabels]);
+  }, [selectedOverlays, estimateMap, intentLabels]);
 
   const canCompare = selectedOverlays.length >= 2;
 
@@ -1662,6 +1711,66 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Scenario picker — choose estimate reference source */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Compare estimates against
+            </Label>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* "Global defaults" option */}
+              <button
+                type="button"
+                onClick={() => setSelectedScenarioId(null)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                  selectedScenarioId === null
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                Global defaults
+              </button>
+
+              {/* Scenario buttons */}
+              {scenariosLoading && (
+                <span className="text-xs text-muted-foreground italic">Loading scenarios…</span>
+              )}
+              {!scenariosLoading && scenarios.length === 0 && (
+                <span className="text-xs text-muted-foreground">
+                  No scenarios saved — create one in{" "}
+                  <a href="/cost-explorer/scenario" className="text-primary underline underline-offset-2">
+                    Scenario Builder
+                  </a>{" "}
+                  to use it as a reference.
+                </span>
+              )}
+              {!scenariosLoading &&
+                scenarios.map((sc) => (
+                  <button
+                    key={sc.id}
+                    type="button"
+                    onClick={() => setSelectedScenarioId(sc.id)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                      selectedScenarioId === sc.id
+                        ? "bg-violet-600 text-white border-violet-600"
+                        : "bg-background border-border hover:bg-muted"
+                    }`}
+                  >
+                    {sc.name}
+                  </button>
+                ))}
+            </div>
+
+            {/* Missing scenario notice */}
+            {scenarioMissing && (
+              <Alert variant="destructive" className="py-2 mt-1">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  The selected scenario was deleted. Estimates are falling back to global defaults.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           {/* Overlay checkboxes — only for the selected client */}
@@ -1756,15 +1865,30 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
       {canCompare && driftSeries.length > 0 && (
         <Card className="shadow-sm border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center justify-between">
+            <CardTitle className="text-base flex items-center justify-between flex-wrap gap-2">
               <span>Per-Assumption Drift</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {selectedOverlays.length} periods · click a row to expand chart
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Estimate source indicator */}
+                {selectedScenario ? (
+                  <Badge className="bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30 font-normal">
+                    Estimates: {selectedScenario.name}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="font-normal text-muted-foreground">
+                    Estimates: Global defaults
+                  </Badge>
+                )}
+                <span className="text-xs font-normal text-muted-foreground">
+                  {selectedOverlays.length} periods · click a row to expand chart
+                </span>
+              </div>
             </CardTitle>
             <CardDescription>
-              Measured values vs. the global assumptions register default (dashed reference line).
-              Trend is relative to the estimate across the selected periods.
+              Measured values vs.{" "}
+              {selectedScenario
+                ? `"${selectedScenario.name}" scenario estimates`
+                : "global assumptions register defaults"}{" "}
+              (dashed reference line). Trend is relative to the estimate across the selected periods.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -1898,8 +2022,11 @@ function DriftTab({ overlays, intentList }: DriftTabProps) {
             degrading = moving away; stable = variation &lt; {(0.05 * 100).toFixed(0)}% of estimate; mixed = direction reverses.
           </span>
           <span>
-            <span className="font-medium text-foreground">Reference line:</span> global assumptions register default.
-            "N/A" = no per-intent register default (trend still computed from measured values).
+            <span className="font-medium text-foreground">Reference line:</span>{" "}
+            {selectedScenario
+              ? `"${selectedScenario.name}" scenario estimate. Per-intent rows use the scenario's flow-class override for their class (Option 3 expansion).`
+              : "global assumptions register default."}{" "}
+            "N/A" = no estimate available for this row from the active source (trend still computed from measured values).
           </span>
         </div>
       )}

@@ -6,10 +6,12 @@ import {
   periodLabel,
   toQuality,
   requireSingleClient,
+  scenarioToEstimateMap,
   MixedClientError,
   STABLE_TOLERANCE,
   type DriftOverlayInput,
   type DriftPoint,
+  type ScenarioEstimateSource,
 } from "./drift";
 import { DEFAULT_ROLE_PRICING, repriceRole, formatUsdPerCall, type RolePricingMap } from "./token-pricing";
 
@@ -780,4 +782,166 @@ test("regression: DEFAULT_ROLE_PRICING.data matches model-catalog ldm-schema-gro
     "data inputPricePerMillionTokens must equal ldm-schema-grounded catalog rate (2.5)");
   assert.equal(r.outputPricePerMillionTokens, 10.0,
     "data outputPricePerMillionTokens must equal ldm-schema-grounded catalog rate (10.0)");
+});
+
+// ---------------------------------------------------------------------------
+// scenarioToEstimateMap — basic mapping
+// ---------------------------------------------------------------------------
+
+test("scenarioToEstimateMap: empty source returns empty map", () => {
+  const map = scenarioToEstimateMap({});
+  assert.deepEqual(map, {});
+});
+
+test("scenarioToEstimateMap: hitlSamplingRate is mapped", () => {
+  const map = scenarioToEstimateMap({ hitlSamplingRate: 0.6 });
+  assert.equal(map["hitl-sampling-rate"], 0.6);
+});
+
+test("scenarioToEstimateMap: containmentOverrides for all four flow classes", () => {
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: {
+      "fc1-deterministic": 0.90,
+      "fc2-policy": 0.80,
+      "fc3-multiagent": 0.70,
+      "fc4-frontier": 0.55,
+    },
+  };
+  const map = scenarioToEstimateMap(source);
+  assert.equal(map["containment-fc1"], 0.90);
+  assert.equal(map["containment-fc2"], 0.80);
+  assert.equal(map["containment-fc3"], 0.70);
+  assert.equal(map["containment-fc4"], 0.55);
+  // No HITL key when not set
+  assert.equal(map["hitl-sampling-rate"], undefined);
+});
+
+test("scenarioToEstimateMap: unrecognised flow-class key is silently ignored", () => {
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc5-future": 0.50 },
+  };
+  const map = scenarioToEstimateMap(source);
+  // No fc5 key in FC_KEY_TO_DRIFT_KEY → nothing added
+  assert.equal(Object.keys(map).length, 0);
+});
+
+test("scenarioToEstimateMap: partial containmentOverrides — missing keys absent from map", () => {
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc2-policy": 0.82 },
+  };
+  const map = scenarioToEstimateMap(source);
+  assert.equal(map["containment-fc2"], 0.82);
+  // fc1/fc3/fc4 not overridden → absent so computeDrift falls through to register defaults
+  assert.equal(map["containment-fc1"], undefined);
+  assert.equal(map["containment-fc3"], undefined);
+  assert.equal(map["containment-fc4"], undefined);
+});
+
+// ---------------------------------------------------------------------------
+// scenarioToEstimateMap — Option 3: per-intent expansion
+// ---------------------------------------------------------------------------
+
+test("scenarioToEstimateMap: expands fc2 override into intent-cont keys for fc2 intents", () => {
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc2-policy": 0.82 },
+  };
+  const intentFlowClasses: Record<string, string> = {
+    "payslip-query": "fc2-policy",
+    "leave-balance": "fc2-policy",
+    "payslip-copy": "fc1-deterministic", // different class — no override
+  };
+  const map = scenarioToEstimateMap(source, intentFlowClasses);
+  assert.equal(map["intent-cont-payslip-query"], 0.82, "fc2 intent gets estimate");
+  assert.equal(map["intent-cont-leave-balance"], 0.82, "fc2 intent gets estimate");
+  assert.equal(map["intent-cont-payslip-copy"], undefined, "fc1 intent absent when fc1 not overridden");
+});
+
+test("scenarioToEstimateMap: intents whose flow class is not overridden get no entry", () => {
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc1-deterministic": 0.93 },
+  };
+  const intentFlowClasses: Record<string, string> = {
+    "payslip-copy": "fc1-deterministic",
+    "leave-balance": "fc2-policy",
+  };
+  const map = scenarioToEstimateMap(source, intentFlowClasses);
+  assert.equal(map["intent-cont-payslip-copy"], 0.93);
+  assert.equal(map["intent-cont-leave-balance"], undefined);
+});
+
+test("scenarioToEstimateMap: no intentFlowClasses → no per-intent keys emitted", () => {
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc2-policy": 0.82 },
+  };
+  const map = scenarioToEstimateMap(source); // no second arg
+  const intentKeys = Object.keys(map).filter((k) => k.startsWith("intent-cont-"));
+  assert.equal(intentKeys.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// scenarioToEstimateMap — integration with computeDrift
+// ---------------------------------------------------------------------------
+
+test("scenarioToEstimateMap → computeDrift: fc1 estimate reflects scenario override", () => {
+  const ovs: DriftOverlayInput[] = [
+    overlay(1, "2025-01-01", { measuredContainmentByFlowClass: { "fc1-deterministic": 0.88 } }),
+    overlay(2, "2025-02-01", { measuredContainmentByFlowClass: { "fc1-deterministic": 0.90 } }),
+  ];
+  const estimateMap = scenarioToEstimateMap({
+    containmentOverrides: { "fc1-deterministic": 0.85 },
+  });
+  const series = computeDrift(ovs, estimateMap);
+  const fc1 = series.find((s) => s.assumptionKey === "containment-fc1")!;
+  assert.equal(fc1.estimate, 0.85, "estimate uses scenario override, not register default 0.95");
+});
+
+test("scenarioToEstimateMap → computeDrift: un-overridden keys fall through to register defaults", () => {
+  const ovs: DriftOverlayInput[] = [
+    overlay(1, "2025-01-01", {
+      measuredContainmentByFlowClass: { "fc1-deterministic": 0.88, "fc2-policy": 0.76 },
+    }),
+    overlay(2, "2025-02-01", {
+      measuredContainmentByFlowClass: { "fc1-deterministic": 0.90, "fc2-policy": 0.78 },
+    }),
+  ];
+  // Only fc1 overridden in scenario
+  const estimateMap = scenarioToEstimateMap({
+    containmentOverrides: { "fc1-deterministic": 0.85 },
+  });
+  const series = computeDrift(ovs, estimateMap);
+  const fc1 = series.find((s) => s.assumptionKey === "containment-fc1")!;
+  const fc2 = series.find((s) => s.assumptionKey === "containment-fc2")!;
+  assert.equal(fc1.estimate, 0.85, "fc1 uses scenario override");
+  assert.equal(fc2.estimate, 0.85, "fc2 falls through to register default 0.85");
+});
+
+test("scenarioToEstimateMap → computeDrift: per-intent rows get real estimates via Option 3", () => {
+  const ovs: DriftOverlayInput[] = [
+    overlay(1, "2025-01-01", { intents: [{ intentKey: "payslip-query", measuredContainmentRate: 0.77 }] }),
+    overlay(2, "2025-02-01", { intents: [{ intentKey: "payslip-query", measuredContainmentRate: 0.81 }] }),
+  ];
+  const estimateMap = scenarioToEstimateMap(
+    { containmentOverrides: { "fc2-policy": 0.82 } },
+    { "payslip-query": "fc2-policy" }, // intent is in fc2
+  );
+  const series = computeDrift(ovs, estimateMap);
+  const ps = series.find((s) => s.assumptionKey === "intent-cont-payslip-query")!;
+  assert.ok(ps, "per-intent series present");
+  assert.equal(ps.estimate, 0.82, "estimate is the fc2 scenario override, not null");
+});
+
+test("scenarioToEstimateMap → computeDrift: per-intent estimate null when flow class not overridden", () => {
+  const ovs: DriftOverlayInput[] = [
+    overlay(1, "2025-01-01", { intents: [{ intentKey: "leave-balance", measuredContainmentRate: 0.70 }] }),
+    overlay(2, "2025-02-01", { intents: [{ intentKey: "leave-balance", measuredContainmentRate: 0.75 }] }),
+  ];
+  // fc3 not overridden in scenario
+  const estimateMap = scenarioToEstimateMap(
+    { containmentOverrides: { "fc2-policy": 0.82 } },
+    { "leave-balance": "fc3-multiagent" },
+  );
+  const series = computeDrift(ovs, estimateMap);
+  const lb = series.find((s) => s.assumptionKey === "intent-cont-leave-balance")!;
+  assert.ok(lb, "per-intent series present");
+  assert.equal(lb.estimate, null, "no estimate when intent's flow class is not overridden");
 });

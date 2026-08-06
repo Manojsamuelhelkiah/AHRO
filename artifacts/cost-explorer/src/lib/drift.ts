@@ -3,9 +3,9 @@
  * No React, no browser globals — safe to unit-test in Node.
  *
  * Design note: `estimateMap` is the single extension point for plugging in a
- * scenario's appliedAssumptions later (Decision B: global defaults now, scenario-
- * supplied estimate in the future). Keys are assumption keys exactly as used by
- * the rollup engine (e.g. "containment-fc1", "hitl-sampling-rate",
+ * scenario's appliedAssumptions (Decision B, now implemented via
+ * scenarioToEstimateMap). Keys are assumption keys exactly as used by the
+ * rollup engine (e.g. "containment-fc1", "hitl-sampling-rate",
  * "intent-cont-{intentKey}", "intent-hitl-{intentKey}", "token-cost-{role}").
  *
  * Token-cost series: pass a `RolePricingMap` as the fourth argument to
@@ -81,10 +81,17 @@ export interface DriftOverlayInput {
   payload: OverlayPayload;
 }
 
-// ---------------------------------------------------------------------------
-// Client-isolation guard
-// ---------------------------------------------------------------------------
-
+/**
+ * Minimal slice of ScenarioInputs that scenarioToEstimateMap needs.
+ * Kept local (no workspace-package imports) so drift.ts stays unit-testable
+ * in a plain Node context.
+ */
+export interface ScenarioEstimateSource {
+  /** Per-flow-class containment overrides (flow-class key → 0-1 fraction). */
+  containmentOverrides?: Record<string, number>;
+  /** Fraction of HITL checkpoints actually reviewed (0-1). */
+  hitlSamplingRate?: number;
+}
 /**
  * Thrown by requireSingleClient (and transitively by computeDrift) when the
  * caller supplies overlays that span more than one clientLabel group.
@@ -524,3 +531,62 @@ export function computeDrift(
 
   return series;
 }
+
+/**
+ * Convert a scenario's applied assumptions into an `estimateMap` for
+ * `computeDrift`.
+ *
+ * Flow-class containment overrides are expanded in two ways:
+ *   1. Fixed-spec keys: "containment-fc1" … "containment-fc4"
+ *   2. Per-intent keys (Option 3): "intent-cont-{intentKey}" for every intent
+ *      whose flowClass maps to an overridden flow class. This populates
+ *      per-intent estimate cells that would otherwise show "N/A".
+ *
+ * Keys absent from the returned map fall through to register defaults in
+ * computeDrift — no key is added for unset or unrecognised inputs.
+ *
+ * @param source            Scenario inputs slice.
+ * @param intentFlowClasses Map of intentKey → flowClass for per-intent
+ *                          expansion. Pass `{}` or omit when not needed.
+ */
+export function scenarioToEstimateMap(
+  source: ScenarioEstimateSource,
+  intentFlowClasses: Record<string, string> = {},
+): Record<string, number> {
+  const map: Record<string, number> = {};
+  const co = source.containmentOverrides ?? {};
+
+  // 1. Flow-class containment overrides → fixed drift-spec keys
+  for (const [fcKey, val] of Object.entries(co)) {
+    const driftKey = FC_KEY_TO_DRIFT_KEY[fcKey];
+    if (driftKey !== undefined) map[driftKey] = val;
+  }
+
+  // 2. HITL sampling rate
+  if (source.hitlSamplingRate !== undefined) {
+    map["hitl-sampling-rate"] = source.hitlSamplingRate;
+  }
+
+  // 3. Per-intent containment expansion from flow-class overrides.
+  //    For each intent whose flow class has a scenario override, emit
+  //    intent-cont-{intentKey} = that override value.
+  for (const [intentKey, flowClass] of Object.entries(intentFlowClasses)) {
+    const fcVal = co[flowClass];
+    if (fcVal !== undefined) {
+      map[`intent-cont-${intentKey}`] = fcVal;
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Maps a flow-class key (as used by ScenarioInputs.containmentOverrides)
+ * to the corresponding drift assumptionKey used by computeDrift.
+ */
+const FC_KEY_TO_DRIFT_KEY: Record<string, string> = {
+  "fc1-deterministic": "containment-fc1",
+  "fc2-policy": "containment-fc2",
+  "fc3-multiagent": "containment-fc3",
+  "fc4-frontier": "containment-fc4",
+};
