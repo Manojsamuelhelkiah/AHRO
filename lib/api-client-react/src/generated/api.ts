@@ -35,6 +35,8 @@ import type {
   FlowOverrideInput,
   GlobalAssumption,
   HealthStatus,
+  ImportScenarioWorkbookBody,
+  ImportWorkbookResult,
   Intent,
   ListCustomIntentsParams,
   ModelOption,
@@ -1864,6 +1866,152 @@ export const useRetireCustomIntent = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getRetireCustomIntentMutationOptions(options));
+    }
+
+export const getExportScenarioWorkbookUrl = () => {
+
+
+
+
+  return `/api/workbook/export`
+}
+
+/**
+ * Returns an .xlsx workbook with live formulas approximating the pricing engine plus structured input sheets (Inputs, Flow Classes, Assumptions, Model Stack, Systems) that can be edited offline and re-imported via POST /workbook/import.
+ * @summary Generate the Excel shadow-model workbook prefilled from scenario inputs
+ */
+export const exportScenarioWorkbook = async (rollupRequest: RollupRequest, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getExportScenarioWorkbookUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(rollupRequest)
+  }
+);}
+
+
+
+
+
+export const getExportScenarioWorkbookMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportScenarioWorkbook>>, TError,{data: BodyType<RollupRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportScenarioWorkbook>>, TError,{data: BodyType<RollupRequest>}, TContext> => {
+
+const mutationKey = ['exportScenarioWorkbook'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportScenarioWorkbook>>, {data: BodyType<RollupRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportScenarioWorkbook(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportScenarioWorkbookMutationResult = NonNullable<Awaited<ReturnType<typeof exportScenarioWorkbook>>>
+    export type ExportScenarioWorkbookMutationBody = BodyType<RollupRequest>
+    export type ExportScenarioWorkbookMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Generate the Excel shadow-model workbook prefilled from scenario inputs
+ */
+export const useExportScenarioWorkbook = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportScenarioWorkbook>>, TError,{data: BodyType<RollupRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exportScenarioWorkbook>>,
+        TError,
+        {data: BodyType<RollupRequest>},
+        TContext
+      > => {
+      return useMutation(getExportScenarioWorkbookMutationOptions(options));
+    }
+
+export const getImportScenarioWorkbookUrl = () => {
+
+
+
+
+  return `/api/workbook/import`
+}
+
+/**
+ * Reads ONLY the inputs from an uploaded shadow workbook (never Excel's computed numbers), validates them, and returns ScenarioInputs ready to load into the Scenario Builder where the exact engine reprices them. Maximum file size 10 MB.
+ * @summary Parse a filled-in shadow workbook back into scenario inputs
+ */
+export const importScenarioWorkbook = async (importScenarioWorkbookBody: ImportScenarioWorkbookBody, options?: RequestInit): Promise<ImportWorkbookResult> => {
+    const formData = new FormData();
+formData.append(`workbookFile`, importScenarioWorkbookBody.workbookFile);
+
+  return customFetch<ImportWorkbookResult>(getImportScenarioWorkbookUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getImportScenarioWorkbookMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importScenarioWorkbook>>, TError,{data: BodyType<ImportScenarioWorkbookBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importScenarioWorkbook>>, TError,{data: BodyType<ImportScenarioWorkbookBody>}, TContext> => {
+
+const mutationKey = ['importScenarioWorkbook'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importScenarioWorkbook>>, {data: BodyType<ImportScenarioWorkbookBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importScenarioWorkbook(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportScenarioWorkbookMutationResult = NonNullable<Awaited<ReturnType<typeof importScenarioWorkbook>>>
+    export type ImportScenarioWorkbookMutationBody = BodyType<ImportScenarioWorkbookBody>
+    export type ImportScenarioWorkbookMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Parse a filled-in shadow workbook back into scenario inputs
+ */
+export const useImportScenarioWorkbook = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importScenarioWorkbook>>, TError,{data: BodyType<ImportScenarioWorkbookBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importScenarioWorkbook>>,
+        TError,
+        {data: BodyType<ImportScenarioWorkbookBody>},
+        TContext
+      > => {
+      return useMutation(getImportScenarioWorkbookMutationOptions(options));
     }
 
 export const getComputeRollupUrl = () => {

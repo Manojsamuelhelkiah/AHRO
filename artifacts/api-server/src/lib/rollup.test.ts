@@ -333,6 +333,35 @@ test("build breakdown reconciles exactly with total build cost", () => {
   assert.ok(Math.abs(onboarding(r) - r.onboardingAnnualUsd) < 1e-6);
 });
 
+test("shadow workbook round-trips inputs exactly", async () => {
+  const { buildScenarioWorkbook, parseScenarioWorkbook } = await import("./workbook");
+  const inputs = {
+    ...base,
+    adoptionRamp: [0.3, 0.6, 0.95] as [number, number, number],
+    landscapeMaturity: "legacy",
+    contractYears: 4,
+    intentShareOverrides: { "payslip-copy": 0.2 },
+    containmentRates: { "fc2-policy": 0.9 },
+    hitlSamplingRates: { "fc4-frontier": 0.5 },
+    assumptionOverrides: { "llm-call-cost": 0.02 },
+    modelSelection: { data: "nl2sql-slm", frontier: "gpt-5-pro" },
+    nonIntegratedSystems: ["time-system"],
+  };
+  const buf = await buildScenarioWorkbook(inputs);
+  const parsed = await parseScenarioWorkbook(buf);
+  assert.deepEqual(parsed, inputs);
+  // Engine reprices the re-imported inputs identically to the originals.
+  assert.deepEqual(computeRollup(parsed).totals, computeRollup(inputs).totals);
+
+  // Minimal inputs: optional fields must round-trip as absent, not defaults.
+  const buf2 = await buildScenarioWorkbook(base);
+  const parsed2 = await parseScenarioWorkbook(buf2);
+  assert.deepEqual(parsed2, base);
+
+  // Garbage bytes are rejected cleanly.
+  await assert.rejects(() => parseScenarioWorkbook(Buffer.from("not a workbook")));
+});
+
 test("tier multiplier reported matches input tier", () => {
   assert.equal(computeRollup({ ...base, isolationTier: "pooled" }).tierMultiplier, 1.0);
   assert.equal(computeRollup({ ...base, isolationTier: "dedicated" }).tierMultiplier, 2.5);

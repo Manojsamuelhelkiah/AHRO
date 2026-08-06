@@ -5,6 +5,7 @@ import scenariosRouter from "./scenarios";
 import flowOverridesRouter from "./flow-overrides";
 import actualsRouter from "./actuals";
 import customIntentsRouter from "./custom-intents";
+import workbookRouter from "./workbook";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(scenariosRouter);
 router.use(flowOverridesRouter);
 router.use(actualsRouter);
 router.use(customIntentsRouter);
+router.use(workbookRouter);
 
 export default router;

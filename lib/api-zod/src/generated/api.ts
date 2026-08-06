@@ -172,6 +172,10 @@ export const GetCorpusSummaryResponse = zod.object({
 export const listScenariosResponseInputsAssumptionOverridesMinOne = 0;
 
 export const listScenariosResponseInputsAdoptionRampMin = 3;
+export const listScenariosResponseInputsAdoptionRampMax = 3;
+
+
+
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -212,6 +216,10 @@ export const ListScenariosResponse = zod.array(ListScenariosResponseItem)
 export const createScenarioBodyInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioBodyInputsAdoptionRampMin = 3;
+export const createScenarioBodyInputsAdoptionRampMax = 3;
+
+
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -244,6 +252,10 @@ export const CreateScenarioBody = zod.object({
 export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioResponseInputsAdoptionRampMin = 3;
+export const createScenarioResponseInputsAdoptionRampMax = 3;
+
+
+
 export const CreateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -287,6 +299,10 @@ export const GetScenarioParams = zod.object({
 export const getScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const getScenarioResponseInputsAdoptionRampMin = 3;
+export const getScenarioResponseInputsAdoptionRampMax = 3;
+
+
+
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -330,6 +346,10 @@ export const UpdateScenarioParams = zod.object({
 export const updateScenarioBodyInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioBodyInputsAdoptionRampMin = 3;
+export const updateScenarioBodyInputsAdoptionRampMax = 3;
+
+
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -362,6 +382,10 @@ export const UpdateScenarioBody = zod.object({
 export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioResponseInputsAdoptionRampMin = 3;
+export const updateScenarioResponseInputsAdoptionRampMax = 3;
+
+
+
 export const UpdateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -703,11 +727,102 @@ export const RetireCustomIntentResponse = zod.object({
 
 
 /**
+ * Returns an .xlsx workbook with live formulas approximating the pricing engine plus structured input sheets (Inputs, Flow Classes, Assumptions, Model Stack, Systems) that can be edited offline and re-imported via POST /workbook/import.
+ * @summary Generate the Excel shadow-model workbook prefilled from scenario inputs
+ */
+export const exportScenarioWorkbookBodyInputsAssumptionOverridesMinOne = 0;
+
+export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
+export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
+
+
+
+export const ExportScenarioWorkbookBody = zod.object({
+  "inputs": zod.object({
+  "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
+  "annualTransactions": zod.number().describe('Committed HR transactions per year'),
+  "employees": zod.number(),
+  "sector": zod.string(),
+  "companyType": zod.string().describe('single-country | multi-country | global'),
+  "isolationTier": zod.string().describe('pooled | siloed | dedicated'),
+  "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
+  "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
+  "countries": zod.number(),
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(exportScenarioWorkbookBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(exportScenarioWorkbookBodyInputsAdoptionRampMin).max(exportScenarioWorkbookBodyInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
+}),
+  "actualsOverlayId": zod.number().optional().describe('Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array.')
+})
+
+export const ExportScenarioWorkbookResponse = zod.unknown()
+
+
+/**
+ * Reads ONLY the inputs from an uploaded shadow workbook (never Excel's computed numbers), validates them, and returns ScenarioInputs ready to load into the Scenario Builder where the exact engine reprices them. Maximum file size 10 MB.
+ * @summary Parse a filled-in shadow workbook back into scenario inputs
+ */
+export const ImportScenarioWorkbookBody = zod.object({
+  "workbookFile": zod.instanceof(File).describe('Filled-in shadow workbook (.xlsx, max 10 MB).')
+})
+
+export const importScenarioWorkbookResponseInputsAssumptionOverridesMinOne = 0;
+
+export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
+export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
+
+
+
+export const ImportScenarioWorkbookResponse = zod.object({
+  "inputs": zod.object({
+  "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
+  "annualTransactions": zod.number().describe('Committed HR transactions per year'),
+  "employees": zod.number(),
+  "sector": zod.string(),
+  "companyType": zod.string().describe('single-country | multi-country | global'),
+  "isolationTier": zod.string().describe('pooled | siloed | dedicated'),
+  "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
+  "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
+  "countries": zod.number(),
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(importScenarioWorkbookResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(importScenarioWorkbookResponseInputsAdoptionRampMin).max(importScenarioWorkbookResponseInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.')
+})
+})
+
+
+/**
  * @summary Compute a cost-benefit roll-up for a set of scenario inputs (without saving)
  */
 export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 export const computeRollupBodyInputsAdoptionRampMin = 3;
+export const computeRollupBodyInputsAdoptionRampMax = 3;
+
+
+
 export const ComputeRollupBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -1046,16 +1161,3 @@ export const DeleteActualsOverlayParams = zod.object({
 export const DeleteActualsOverlayResponse = zod.void()
 
 
-export const getScenarioResponseInputsAdoptionRampMax = 3;
-
-export const updateScenarioResponseInputsAdoptionRampMax = 3;
-
-export const computeRollupBodyInputsAdoptionRampMax = 3;
-
-export const createScenarioBodyInputsAdoptionRampMax = 3;
-
-export const listScenariosResponseInputsAdoptionRampMax = 3;
-
-export const updateScenarioBodyInputsAdoptionRampMax = 3;
-
-export const createScenarioResponseInputsAdoptionRampMax = 3;

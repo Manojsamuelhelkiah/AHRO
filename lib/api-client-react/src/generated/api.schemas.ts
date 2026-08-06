@@ -195,6 +195,12 @@ export type ScenarioInputsContainmentOverrides = {[key: string]: number};
  * Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.
  */
 export type ScenarioInputsContainmentRates = {[key: string]: number};
+
+/**
+ * Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.
+ */
+export type ScenarioInputsHitlSamplingRates = {[key: string]: number};
+
 /**
  * Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions.
  */
@@ -268,6 +274,10 @@ export interface ScenarioUpdate {
   inputs?: ScenarioInputs;
 }
 
+export interface ImportWorkbookResult {
+  inputs: ScenarioInputs;
+}
+
 export interface RollupRequest {
   inputs: ScenarioInputs;
   /** Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array. */
@@ -332,6 +342,7 @@ export interface YearSlice {
   humanHoursSaved: number;
   fteEquivalent: number;
 }
+
 export interface BuildComponentCost {
   key: string;
   name: string;
@@ -648,13 +659,13 @@ export type ListCustomIntentsParams = {
 status?: string;
 };
 
+export type ImportScenarioWorkbookBody = {
+  /** Filled-in shadow workbook (.xlsx, max 10 MB). */
+  workbookFile: Blob;
+};
+
 export type ParseActualsLogBody = {
   /** Raw call-log CSV file (max 20 MB). */
   logFile: Blob;
 };
 
-
-/**
- * Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.
- */
-export type ScenarioInputsHitlSamplingRates = {[key: string]: number};

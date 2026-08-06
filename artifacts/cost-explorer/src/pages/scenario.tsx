@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useComputeRollup,
+  useExportScenarioWorkbook,
+  useImportScenarioWorkbook,
   useListDistributionProfiles,
   useListModelCatalog, useListSystems,
   useListScenarios,
@@ -40,6 +42,7 @@ import {
   Settings2, GitCompareArrows, BrainCircuit,
   RotateCcw, ChevronDown, ShieldCheck, GitBranch,
   FlaskConical, X, ArrowRight, TrendingDown, CheckCircle2, AlertCircle,
+  FileSpreadsheet, Upload,
 } from "lucide-react";
 import {
   ResponsiveContainer, ComposedChart, BarChart, PieChart, Pie, Cell,
@@ -77,6 +80,9 @@ export default function Scenario() {
   const { data: globalAssumptions } = useListAssumptions();
   const { data: flowClasses } = useListFlowClasses();
   const computeRollupMutation = useComputeRollup();
+  const exportWorkbookMutation = useExportScenarioWorkbook();
+  const importWorkbookMutation = useImportScenarioWorkbook();
+  const workbookFileRef = useRef<HTMLInputElement>(null);
   const createScenario = useCreateScenario();
   const updateScenario = useUpdateScenario();
   const { data: loadedScenario } = useGetScenario(parsedId as number, {
@@ -142,6 +148,38 @@ export default function Scenario() {
       OVERRIDABLE_ASSUMPTION_KEYS.map((k) => [k, "" as const])
     ) as Partial<Record<OverridableKey, number | "">>;
     form.reset({ ...current, _assumptionOverrides: cleared });
+  };
+
+  // Excel shadow workbook: download prefilled from the current form; on import
+  // the server reads ONLY the inputs and we reprice with the exact engine.
+  const handleWorkbookExport = form.handleSubmit(async (values) => {
+    try {
+      const blob = await exportWorkbookMutation.mutateAsync({ data: { inputs: toApiInputs(values) as ScenarioInputs } });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "hro-cost-shadow.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Export Failed", description: "Could not generate the workbook.", variant: "destructive" });
+    }
+  });
+
+  const handleWorkbookImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const result = await importWorkbookMutation.mutateAsync({ data: { workbookFile: file } });
+      const formValues = fromApiInputs(result.inputs as ScenarioInputs);
+      form.reset(formValues);
+      setActiveOverlayId(null);
+      await onSubmit(formValues);
+      toast({ title: "Workbook Imported", description: "Inputs loaded and repriced with the exact engine." });
+    } catch (err) {
+      toast({ title: "Import Failed", description: (err as { message?: string })?.message || "Could not read the workbook.", variant: "destructive" });
+    }
   };
 
   const handleOverlaySelect = (id: number) => { setActiveOverlayId(id); setRollup(null); };
@@ -665,6 +703,17 @@ export default function Scenario() {
                   <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollupMutation.isPending}>
                     <Save className="w-4 h-4" />
                   </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" className="flex-1 text-xs" onClick={handleWorkbookExport} disabled={exportWorkbookMutation.isPending} data-testid="button-export-workbook">
+                    <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
+                    {exportWorkbookMutation.isPending ? "Generating…" : "Excel Shadow"}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" className="flex-1 text-xs" onClick={() => workbookFileRef.current?.click()} disabled={importWorkbookMutation.isPending} data-testid="button-import-workbook">
+                    <Upload className="w-3.5 h-3.5 mr-1.5" />
+                    {importWorkbookMutation.isPending ? "Importing…" : "Import Workbook"}
+                  </Button>
+                  <input ref={workbookFileRef} type="file" accept=".xlsx" className="hidden" onChange={handleWorkbookImport} data-testid="input-workbook-file" />
                 </div>
                 <Link href={parsedId ? `/compare?ids=${parsedId}&baseline=${parsedId}` : "/compare"} className="w-full">
                   <Button type="button" variant="ghost" className="w-full text-muted-foreground text-xs">

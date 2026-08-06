@@ -505,6 +505,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /workbook/export:
+    post:
+      operationId: exportScenarioWorkbook
+      tags: [workbook]
+      summary: Generate the Excel shadow-model workbook prefilled from scenario inputs
+      description: >
+        Returns an .xlsx workbook with live formulas approximating the pricing engine plus structured
+        input sheets (Inputs, Flow Classes, Assumptions, Model Stack, Systems) that can be edited
+        offline and re-imported via POST /workbook/import.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollupRequest"
+      responses:
+        "200":
+          description: Excel workbook
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid inputs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /workbook/import:
+    post:
+      operationId: importScenarioWorkbook
+      tags: [workbook]
+      summary: Parse a filled-in shadow workbook back into scenario inputs
+      description: >
+        Reads ONLY the inputs from an uploaded shadow workbook (never Excel's computed numbers),
+        validates them, and returns ScenarioInputs ready to load into the Scenario Builder where the
+        exact engine reprices them. Maximum file size 10 MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                workbookFile:
+                  type: string
+                  format: binary
+                  description: Filled-in shadow workbook (.xlsx, max 10 MB).
+              required:
+                - workbookFile
+      responses:
+        "200":
+          description: Parsed scenario inputs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWorkbookResult"
+        "400":
+          description: Invalid or unrecognized workbook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /rollup:
     post:
       operationId: computeRollup
@@ -1100,6 +1164,12 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+    ImportWorkbookResult:
+      type: object
+      properties:
+        inputs:
+          $ref: "#/components/schemas/ScenarioInputs"
+      required: [inputs]
     RollupRequest:
       type: object
       properties:
