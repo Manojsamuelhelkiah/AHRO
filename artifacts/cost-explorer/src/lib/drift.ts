@@ -332,7 +332,8 @@ export function computeTrend(
  * @param rolePricingMap Optional per-role pricing catalog used to reprice overlay
  *                       tokenActualsByRole into USD/call drift series. When omitted,
  *                       no token-cost series are emitted (backward-compatible).
- *                       See token-pricing.ts for the DEFAULT_ROLE_PRICING constant.
+ *                       Derived at runtime from the live /model-catalog API endpoint
+ *                       (see calibration.tsx). Pass undefined to suppress token series.
  *
  * Returns one DriftSeries per assumption that is measured in at least one overlay.
  * Order: flow-class containment → HITL sampling → token cost per role →

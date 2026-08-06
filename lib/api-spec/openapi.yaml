@@ -1401,11 +1401,17 @@ components:
           description: router | reasoning | frontier | data
         pricePerCallUsd:
           type: number
+        inputPricePerMillionTokens:
+          type: number
+          description: Published input (prompt) price per million tokens. Used to reprice calls from measured token actuals.
+        outputPricePerMillionTokens:
+          type: number
+          description: Published output (completion) price per million tokens. Used to reprice calls from measured token actuals.
         description:
           type: string
         isDefault:
           type: boolean
-      required: [key, label, role, pricePerCallUsd, description, isDefault]
+      required: [key, label, role, pricePerCallUsd, inputPricePerMillionTokens, outputPricePerMillionTokens, description, isDefault]
     CustomIntent:
       type: object
       description: A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.

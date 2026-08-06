@@ -437,6 +437,10 @@ export interface ModelOption {
   /** router | reasoning | frontier | data */
   role: string;
   pricePerCallUsd: number;
+  /** Published input (prompt) price per million tokens. Used to reprice calls from measured token actuals. */
+  inputPricePerMillionTokens: number;
+  /** Published output (completion) price per million tokens. Used to reprice calls from measured token actuals. */
+  outputPricePerMillionTokens: number;
   description: string;
   isDefault: boolean;
 }

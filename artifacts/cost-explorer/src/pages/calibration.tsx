@@ -7,6 +7,7 @@ import {
   useParseActualsLog,
   getListActualsOverlaysQueryKey,
   useListIntents,
+  useListModelCatalog,
   useListScenarios,
   type ActualsOverlayInput,
   type ActualsValidationResult,
@@ -63,7 +64,7 @@ import {
   type DriftSeries,
   type DriftOverlayInput,
 } from "@/lib/drift";
-import { DEFAULT_ROLE_PRICING, formatUsdPerCall, type RolePricingEntry } from "@/lib/token-pricing";
+import { formatUsdPerCall, type RolePricingMap, type RolePricingEntry } from "@/lib/token-pricing";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 // ---------------------------------------------------------------------------
@@ -1787,7 +1788,42 @@ interface DriftTabProps {
   scenariosLoading: boolean;
 }
 
+/**
+ * Role → human-readable prefix used in drift series labels.
+ * Matches the display strings previously hardcoded in DEFAULT_ROLE_PRICING.
+ */
+const ROLE_PREFIXES: Record<string, string> = {
+  router:    "Router / Classification",
+  reasoning: "Reasoning / Grounded Answers",
+  frontier:  "Frontier / High-Judgment",
+  data:      "Data Access / Legacy DB",
+};
 function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTabProps) {
+  // ----- Model catalog (live pricing source of truth) -----
+  const {
+    data: catalogData,
+    isLoading: catalogLoading,
+    isError: catalogError,
+  } = useListModelCatalog();
+
+  // Derive RolePricingMap from the default model per role in the catalog.
+  const rolePricingMap = useMemo<RolePricingMap | undefined>(() => {
+    if (!catalogData) return undefined;
+    const result: RolePricingMap = {};
+    for (const m of catalogData) {
+      if (m.isDefault) {
+        const prefix = ROLE_PREFIXES[m.role] ?? m.role;
+        result[m.role] = {
+          label: `${prefix} (${m.label})`,
+          inputPricePerMillionTokens: m.inputPricePerMillionTokens,
+          outputPricePerMillionTokens: m.outputPricePerMillionTokens,
+          defaultPricePerCallUsd: m.pricePerCallUsd,
+        };
+      }
+    }
+    return result;
+  }, [catalogData]);
+
   // ----- Client groups -----
   // null key = unlabeled group (clientLabel is null/undefined).
   // Drift is always per single client — no cross-client mixing allowed.
@@ -1925,14 +1961,16 @@ function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTa
         selectedOverlays as unknown as DriftOverlayInput[],
         estimateMap,
         intentLabels,
-        DEFAULT_ROLE_PRICING,
+        // rolePricingMap is undefined while catalog loads — computeDrift
+        // simply omits token-cost series when the map is not provided.
+        rolePricingMap,
       );
     } catch {
       // MixedClientError: should not happen given the UI filters, but
       // fail safe rather than crashing the component
       return [];
     }
-  }, [selectedOverlays, estimateMap, intentLabels]);
+  }, [selectedOverlays, estimateMap, intentLabels, rolePricingMap]);
 
   const canCompare = selectedOverlays.length >= 2;
 
@@ -2141,6 +2179,25 @@ function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTa
         </CardContent>
       </Card>
 
+      {/* -- Catalog pricing notice (loading / error) -- */}
+      {canCompare && catalogLoading && (
+        <Alert className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+          <AlertDescription className="text-xs text-blue-700 dark:text-blue-300">
+            Loading model catalog… token cost/call series will appear once pricing data is available.
+          </AlertDescription>
+        </Alert>
+      )}
+      {canCompare && catalogError && (
+        <Alert className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+          <AlertCircle className="w-4 h-4 text-amber-500" />
+          <AlertDescription className="text-xs text-amber-700 dark:text-amber-300">
+            Could not load the model catalog — token cost/call series are unavailable.
+            Other drift metrics are unaffected. Reload the page to retry.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* -- Drift table -- */}
       {canCompare && driftSeries.length > 0 && (
         <Card className="shadow-sm border-border">
@@ -2220,11 +2277,12 @@ function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTa
                       const tokenRole = isTokenCost
                         ? series.assumptionKey.slice("token-cost-".length)
                         : null;
-                      // Pricing passed via DEFAULT_ROLE_PRICING here in DriftTab;
+                      // Pricing sourced from the live catalog-derived rolePricingMap;
                       // components receive it as a prop (no direct import inside them).
-                      const tokenPricing = tokenRole
-                        ? DEFAULT_ROLE_PRICING[tokenRole] ?? null
-                        : null;
+                      const tokenPricing =
+                        tokenRole && rolePricingMap
+                          ? rolePricingMap[tokenRole] ?? null
+                          : null;
                       const tokenPeriodData: TokenCostPeriodDatum[] | null =
                         isTokenCost && tokenRole
                           ? series.points.map((p) => {

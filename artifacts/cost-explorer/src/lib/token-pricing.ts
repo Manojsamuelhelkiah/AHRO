@@ -1,9 +1,9 @@
 /**
- * Per-role pricing constants used to reprice overlay token actuals into USD/call.
+ * Types and pure functions for repricing overlay token actuals into USD/call.
  *
- * Source of truth: artifacts/api-server/src/data/model-catalog.ts
- * These values mirror the default model in each role. If a default model or its
- * published rates change in model-catalog.ts, update the entries below to match.
+ * The RolePricingMap used at runtime is derived from the live /model-catalog API
+ * (GET /api/model-catalog → default ModelOption per role) rather than from any
+ * static constant here. See calibration.tsx for the derivation.
  *
  * Formula (from pricePerCallWithOverlay in model-catalog.ts):
  *   tokenPrice = (avgInputTokens × inputPricePerMillionTokens
@@ -28,43 +28,6 @@ export interface RolePricingEntry {
 }
 
 export type RolePricingMap = Record<string, RolePricingEntry>;
-
-/**
- * Default model pricing per role.
- *
- * router    → GPT-5 mini    (slm-call-cost assumption)
- * reasoning → GPT-5         (llm-call-cost assumption)
- * frontier  → Claude Opus   (frontier-call-cost assumption)
- * data      → LDM schema-grounded (data-call-cost assumption)
- *
- * Rates: published list prices as recorded in model-catalog.ts at time of writing.
- */
-export const DEFAULT_ROLE_PRICING: RolePricingMap = {
-  router: {
-    label: "Router / Classification (GPT-5 mini)",
-    inputPricePerMillionTokens: 0.6,   // model-catalog: gpt-5-mini.inputPricePerMillionTokens
-    outputPricePerMillionTokens: 2.4,  // model-catalog: gpt-5-mini.outputPricePerMillionTokens
-    defaultPricePerCallUsd: 0.002,     // assumptions: slm-call-cost.value
-  },
-  reasoning: {
-    label: "Reasoning / Grounded Answers (GPT-5)",
-    inputPricePerMillionTokens: 2.5,   // model-catalog: gpt-5.inputPricePerMillionTokens
-    outputPricePerMillionTokens: 10.0, // model-catalog: gpt-5.outputPricePerMillionTokens
-    defaultPricePerCallUsd: 0.02,      // assumptions: llm-call-cost.value
-  },
-  frontier: {
-    label: "Frontier / High-Judgment (Claude Opus)",
-    inputPricePerMillionTokens: 15.0,  // model-catalog: claude-opus.inputPricePerMillionTokens
-    outputPricePerMillionTokens: 75.0, // model-catalog: claude-opus.outputPricePerMillionTokens
-    defaultPricePerCallUsd: 0.12,      // assumptions: frontier-call-cost.value
-  },
-  data: {
-    label: "Data Access / Legacy DB (LDM)",
-    inputPricePerMillionTokens: 2.5,   // model-catalog: ldm-schema-grounded.inputPricePerMillionTokens
-    outputPricePerMillionTokens: 10.0, // model-catalog: ldm-schema-grounded.outputPricePerMillionTokens
-    defaultPricePerCallUsd: 0.02,      // assumptions: data-call-cost.value
-  },
-};
 
 /**
  * Reprice one role's measured token actuals to USD/call.

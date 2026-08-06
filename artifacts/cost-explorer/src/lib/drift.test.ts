@@ -13,7 +13,7 @@ import {
   type DriftPoint,
   type ScenarioEstimateSource,
 } from "./drift";
-import { DEFAULT_ROLE_PRICING, repriceRole, formatUsdPerCall, type RolePricingMap } from "./token-pricing";
+import { repriceRole, formatUsdPerCall, type RolePricingMap } from "./token-pricing";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -695,7 +695,13 @@ test("computeDrift without rolePricingMap: no token-cost series emitted", () => 
 // ---------------------------------------------------------------------------
 
 test("repriceRole: computes correct USD/call from token counts and rates", () => {
-  const pricing = DEFAULT_ROLE_PRICING.router!;
+  // Inline fixture — rates match the gpt-5-mini model in model-catalog.ts
+  const pricing = {
+    label: "GPT-5 mini",
+    inputPricePerMillionTokens: 0.6,
+    outputPricePerMillionTokens: 2.4,
+    defaultPricePerCallUsd: 0.002,
+  };
   // (1500 × 0.6 + 200 × 2.4) / 1_000_000 = (900 + 480) / 1_000_000 = 0.00138
   const result = repriceRole({ avgInputTokens: 1500, avgOutputTokens: 200 }, pricing);
   assert.ok(Math.abs(result - 0.00138) < 1e-10, `expected 0.00138, got ${result}`);
@@ -718,71 +724,10 @@ test("formatUsdPerCall: zero returns $0.00", () => {
   assert.equal(formatUsdPerCall(0), "$0.00");
 });
 
-// ---------------------------------------------------------------------------
-// DEFAULT_ROLE_PRICING regression — pins every value against the model-catalog
-// and assumption-register source of truth.
-//
-// Source:  artifacts/api-server/src/data/model-catalog.ts  (per-token rates)
-//          artifacts/api-server/src/data/assumptions.ts     (defaultPricePerCallUsd)
-//
-// Default models per role:
-//   router    → gpt-5-mini         (slm-call-cost)
-//   reasoning → gpt-5              (llm-call-cost)
-//   frontier  → claude-opus        (frontier-call-cost)
-//   data      → ldm-schema-grounded (data-call-cost)
-//
-// If any of these assertions fail, update token-pricing.ts to match the
-// upstream source file that changed — do NOT just adjust the expected value
-// here without also updating the comment pointing at the upstream source.
-// ---------------------------------------------------------------------------
-
-test("regression: DEFAULT_ROLE_PRICING.router matches model-catalog gpt-5-mini and slm-call-cost assumption", () => {
-  const r = DEFAULT_ROLE_PRICING.router!;
-  // assumptions.ts: slm-call-cost.value = 0.002
-  assert.equal(r.defaultPricePerCallUsd, 0.002,
-    "router defaultPricePerCallUsd must equal assumptions slm-call-cost.value (0.002)");
-  // model-catalog.ts: gpt-5-mini rates
-  assert.equal(r.inputPricePerMillionTokens, 0.6,
-    "router inputPricePerMillionTokens must equal gpt-5-mini catalog rate (0.6)");
-  assert.equal(r.outputPricePerMillionTokens, 2.4,
-    "router outputPricePerMillionTokens must equal gpt-5-mini catalog rate (2.4)");
-});
-
-test("regression: DEFAULT_ROLE_PRICING.reasoning matches model-catalog gpt-5 and llm-call-cost assumption", () => {
-  const r = DEFAULT_ROLE_PRICING.reasoning!;
-  // assumptions.ts: llm-call-cost.value = 0.02
-  assert.equal(r.defaultPricePerCallUsd, 0.02,
-    "reasoning defaultPricePerCallUsd must equal assumptions llm-call-cost.value (0.02)");
-  // model-catalog.ts: gpt-5 rates
-  assert.equal(r.inputPricePerMillionTokens, 2.5,
-    "reasoning inputPricePerMillionTokens must equal gpt-5 catalog rate (2.5)");
-  assert.equal(r.outputPricePerMillionTokens, 10.0,
-    "reasoning outputPricePerMillionTokens must equal gpt-5 catalog rate (10.0)");
-});
-
-test("regression: DEFAULT_ROLE_PRICING.frontier matches model-catalog claude-opus and frontier-call-cost assumption", () => {
-  const r = DEFAULT_ROLE_PRICING.frontier!;
-  // assumptions.ts: frontier-call-cost.value = 0.12
-  assert.equal(r.defaultPricePerCallUsd, 0.12,
-    "frontier defaultPricePerCallUsd must equal assumptions frontier-call-cost.value (0.12)");
-  // model-catalog.ts: claude-opus rates
-  assert.equal(r.inputPricePerMillionTokens, 15.0,
-    "frontier inputPricePerMillionTokens must equal claude-opus catalog rate (15.0)");
-  assert.equal(r.outputPricePerMillionTokens, 75.0,
-    "frontier outputPricePerMillionTokens must equal claude-opus catalog rate (75.0)");
-});
-
-test("regression: DEFAULT_ROLE_PRICING.data matches model-catalog ldm-schema-grounded and data-call-cost assumption", () => {
-  const r = DEFAULT_ROLE_PRICING.data!;
-  // assumptions.ts: data-call-cost.value = 0.02
-  assert.equal(r.defaultPricePerCallUsd, 0.02,
-    "data defaultPricePerCallUsd must equal assumptions data-call-cost.value (0.02)");
-  // model-catalog.ts: ldm-schema-grounded rates
-  assert.equal(r.inputPricePerMillionTokens, 2.5,
-    "data inputPricePerMillionTokens must equal ldm-schema-grounded catalog rate (2.5)");
-  assert.equal(r.outputPricePerMillionTokens, 10.0,
-    "data outputPricePerMillionTokens must equal ldm-schema-grounded catalog rate (10.0)");
-});
+// DEFAULT_ROLE_PRICING regression tests removed — the static constant was
+// deleted in favour of deriving the pricing map at runtime from the live
+// /model-catalog API endpoint (see calibration.tsx). Invariant tests for
+// catalog consistency live in artifacts/api-server/src/data/model-catalog.test.ts.
 
 // ---------------------------------------------------------------------------
 // scenarioToEstimateMap — basic mapping
@@ -944,4 +889,65 @@ test("scenarioToEstimateMap → computeDrift: per-intent estimate null when flow
   const lb = series.find((s) => s.assumptionKey === "intent-cont-leave-balance")!;
   assert.ok(lb, "per-intent series present");
   assert.equal(lb.estimate, null, "no estimate when intent's flow class is not overridden");
+});
+
+// ---------------------------------------------------------------------------
+// Regression: late-arriving rolePricingMap (catalog-derived token pricing)
+//
+// The driftSeries useMemo in calibration.tsx must include rolePricingMap in its
+// dependency array. This unit test proves the underlying computeDrift contract:
+// calling with rolePricingMap=undefined suppresses token-cost series entirely,
+// and calling again with the same overlays plus a valid map produces them. This
+// is the observable behaviour that the deps-array fix enables in the component.
+// ---------------------------------------------------------------------------
+
+test("computeDrift: token-cost series absent when rolePricingMap is undefined (catalog not yet loaded)", () => {
+  const ovs = [
+    overlay(1, "2025-01-01", {
+      tokenActualsByRole: { router: { avgInputTokens: 900, avgOutputTokens: 120 } },
+    }),
+    overlay(2, "2025-02-01", {
+      tokenActualsByRole: { router: { avgInputTokens: 950, avgOutputTokens: 130 } },
+    }),
+  ];
+  const series = computeDrift(ovs, {}, {}, undefined);
+  const tokenSeries = series.filter((s) => s.assumptionKey.startsWith("token-cost-"));
+  assert.equal(tokenSeries.length, 0, "no token-cost series emitted without rolePricingMap");
+});
+
+test("computeDrift: token-cost series appear when rolePricingMap is provided (catalog resolved)", () => {
+  const ovs = [
+    overlay(1, "2025-01-01", {
+      tokenActualsByRole: { router: { avgInputTokens: 900, avgOutputTokens: 120 } },
+    }),
+    overlay(2, "2025-02-01", {
+      tokenActualsByRole: { router: { avgInputTokens: 950, avgOutputTokens: 130 } },
+    }),
+  ];
+  const pricing: RolePricingMap = {
+    router: {
+      label: "Router / Classification (gpt-5-mini)",
+      inputPricePerMillionTokens: 0.6,
+      outputPricePerMillionTokens: 2.4,
+      defaultPricePerCallUsd: 0.002,
+    },
+  };
+  // First call: no pricing map — no token-cost series
+  const before = computeDrift(ovs, {}, {}, undefined);
+  assert.equal(
+    before.filter((s) => s.assumptionKey.startsWith("token-cost-")).length,
+    0,
+    "no token series before catalog resolves",
+  );
+
+  // Second call: same overlays, catalog now available — token-cost series appear
+  const after = computeDrift(ovs, {}, {}, pricing);
+  const routerSeries = after.find((s) => s.assumptionKey === "token-cost-router");
+  assert.ok(routerSeries, "token-cost-router series present once catalog resolves");
+  assert.equal(routerSeries!.unit, "USD");
+  assert.equal(routerSeries!.polarity, "lower-is-better");
+  // Both periods have token data → two data points, each with a non-null value
+  assert.equal(routerSeries!.points.length, 2);
+  assert.ok(routerSeries!.points.every((p) => p.measuredValue !== null),
+    "all data points have computed USD values");
 });

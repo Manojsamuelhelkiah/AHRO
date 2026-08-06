@@ -437,6 +437,8 @@ export const ListModelCatalogResponseItem = zod.object({
   "label": zod.string(),
   "role": zod.string().describe('router | reasoning | frontier | data'),
   "pricePerCallUsd": zod.number(),
+  "inputPricePerMillionTokens": zod.number().describe('Published input (prompt) price per million tokens. Used to reprice calls from measured token actuals.'),
+  "outputPricePerMillionTokens": zod.number().describe('Published output (completion) price per million tokens. Used to reprice calls from measured token actuals.'),
   "description": zod.string(),
   "isDefault": zod.boolean()
 })
