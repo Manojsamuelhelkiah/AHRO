@@ -47,6 +47,8 @@ import type {
   Scenario,
   ScenarioInput,
   ScenarioUpdate,
+  SensitivityRequest,
+  SensitivityResult,
   SystemInfo
 } from './api.schemas';
 
@@ -1867,6 +1869,78 @@ export const useRetireCustomIntent = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getRetireCustomIntentMutationOptions(options));
+    }
+
+export const getComputeSensitivityUrl = () => {
+
+
+
+
+  return `/api/sensitivity`
+}
+
+/**
+ * Nudges each driver (overridable assumptions, labor rates, per-flow-class containment, adoption ramp) ±20% while holding everything else constant, re-runs the exact pricing engine, and returns rows sorted by how far each nudge swings the net benefit.
+ * @summary One-at-a-time sensitivity analysis of the business case
+ */
+export const computeSensitivity = async (sensitivityRequest: SensitivityRequest, options?: RequestInit): Promise<SensitivityResult> => {
+
+  return customFetch<SensitivityResult>(getComputeSensitivityUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sensitivityRequest)
+  }
+);}
+
+
+
+
+
+export const getComputeSensitivityMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeSensitivity>>, TError,{data: BodyType<SensitivityRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof computeSensitivity>>, TError,{data: BodyType<SensitivityRequest>}, TContext> => {
+
+const mutationKey = ['computeSensitivity'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof computeSensitivity>>, {data: BodyType<SensitivityRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  computeSensitivity(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ComputeSensitivityMutationResult = NonNullable<Awaited<ReturnType<typeof computeSensitivity>>>
+    export type ComputeSensitivityMutationBody = BodyType<SensitivityRequest>
+    export type ComputeSensitivityMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary One-at-a-time sensitivity analysis of the business case
+ */
+export const useComputeSensitivity = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeSensitivity>>, TError,{data: BodyType<SensitivityRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof computeSensitivity>>,
+        TError,
+        {data: BodyType<SensitivityRequest>},
+        TContext
+      > => {
+      return useMutation(getComputeSensitivityMutationOptions(options));
     }
 
 export const getExportScenarioWorkbookLinkUrl = (params: ExportScenarioWorkbookLinkParams,) => {

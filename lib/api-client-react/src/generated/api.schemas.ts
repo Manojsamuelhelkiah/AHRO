@@ -281,6 +281,42 @@ export interface ScenarioUpdate {
   inputs?: ScenarioInputs;
 }
 
+export interface SensitivityRequest {
+  inputs: ScenarioInputs;
+  /** Optional saved actuals overlay id; held constant across baseline and every nudge so the tornado matches the calibrated rollup. */
+  actualsOverlayId?: number;
+}
+
+export type SensitivityRowGroup = typeof SensitivityRowGroup[keyof typeof SensitivityRowGroup];
+
+
+export const SensitivityRowGroup = {
+  assumption: 'assumption',
+  labor: 'labor',
+  containment: 'containment',
+  adoption: 'adoption',
+} as const;
+
+export interface SensitivityRow {
+  key: string;
+  label: string;
+  group: SensitivityRowGroup;
+  baseValue: number;
+  lowValue: number;
+  highValue: number;
+  netLowUsd: number;
+  netHighUsd: number;
+  /** Max absolute deviation of net benefit from baseline across the two nudges. */
+  swingUsd: number;
+}
+
+export interface SensitivityResult {
+  baselineNetUsd: number;
+  /** Fractional nudge applied to each driver (0.2 = ±20%). */
+  nudgePct: number;
+  rows: SensitivityRow[];
+}
+
 export interface ImportWorkbookResult {
   inputs: ScenarioInputs;
 }

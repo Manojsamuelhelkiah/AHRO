@@ -505,6 +505,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /sensitivity:
+    post:
+      operationId: computeSensitivity
+      tags: [scenarios]
+      summary: One-at-a-time sensitivity analysis of the business case
+      description: >
+        Nudges each driver (overridable assumptions, labor rates, per-flow-class containment,
+        adoption ramp) ±20% while holding everything else constant, re-runs the exact pricing
+        engine, and returns rows sorted by how far each nudge swings the net benefit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SensitivityRequest"
+      responses:
+        "200":
+          description: Sensitivity analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SensitivityResult"
+        "400":
+          description: Invalid inputs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /workbook/export:
     get:
       operationId: exportScenarioWorkbookLink
@@ -1201,6 +1229,52 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+    SensitivityRequest:
+      type: object
+      properties:
+        inputs:
+          $ref: "#/components/schemas/ScenarioInputs"
+        actualsOverlayId:
+          type: integer
+          description: Optional saved actuals overlay id; held constant across baseline and every nudge so the tornado matches the calibrated rollup.
+      required: [inputs]
+    SensitivityRow:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        group:
+          type: string
+          enum: [assumption, labor, containment, adoption]
+        baseValue:
+          type: number
+        lowValue:
+          type: number
+        highValue:
+          type: number
+        netLowUsd:
+          type: number
+        netHighUsd:
+          type: number
+        swingUsd:
+          type: number
+          description: Max absolute deviation of net benefit from baseline across the two nudges.
+      required: [key, label, group, baseValue, lowValue, highValue, netLowUsd, netHighUsd, swingUsd]
+    SensitivityResult:
+      type: object
+      properties:
+        baselineNetUsd:
+          type: number
+        nudgePct:
+          type: number
+          description: Fractional nudge applied to each driver (0.2 = ±20%).
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SensitivityRow"
+      required: [baselineNetUsd, nudgePct, rows]
     ImportWorkbookResult:
       type: object
       properties:

@@ -333,6 +333,43 @@ test("build breakdown reconciles exactly with total build cost", () => {
   assert.ok(Math.abs(onboarding(r) - r.onboardingAnnualUsd) < 1e-6);
 });
 
+test("sensitivity analysis: rows sorted by swing, nudges move net benefit consistently", async () => {
+  const { computeSensitivity } = await import("./sensitivity");
+  const result = computeSensitivity(base);
+  assert.equal(result.baselineNetUsd, computeRollup(base).totals.netUsd);
+  assert.equal(result.nudgePct, 0.2);
+  assert.ok(result.rows.length >= 15, `expected >=15 drivers, got ${result.rows.length}`);
+  // Sorted descending by swing.
+  for (let i = 1; i < result.rows.length; i++) {
+    assert.ok(result.rows[i - 1]!.swingUsd >= result.rows[i]!.swingUsd);
+  }
+  // Every swing equals the max deviation of its two nudged nets from baseline.
+  for (const r of result.rows) {
+    const expected = Math.max(Math.abs(r.netLowUsd - result.baselineNetUsd), Math.abs(r.netHighUsd - result.baselineNetUsd));
+    assert.ok(Math.abs(r.swingUsd - expected) < 1e-6, r.key);
+  }
+  // Cost-side drivers: raising a call cost must not increase net benefit.
+  const llm = result.rows.find((r) => r.key === "llm-call-cost")!;
+  assert.ok(llm.netHighUsd <= result.baselineNetUsd && llm.netLowUsd >= result.baselineNetUsd);
+  // Adoption and containment cut both ways but must move the result.
+  const adoption = result.rows.find((r) => r.key === "adoption")!;
+  assert.ok(adoption.netLowUsd !== result.baselineNetUsd);
+  // Scenario assumption overrides are respected as the base value.
+  const withOverride = computeSensitivity({ ...base, assumptionOverrides: { "llm-call-cost": 0.05 } });
+  assert.equal(withOverride.rows.find((r) => r.key === "llm-call-cost")!.baseValue, 0.05);
+
+  // With an actuals overlay: baseline equals the calibrated rollup and the
+  // overlay is held constant across nudges (measured containment pins fc2,
+  // so nudging the fc2 containment assumption moves nothing).
+  const overlay = { measuredContainmentByFlowClass: { "fc2-policy": 0.5 } } as never;
+  const cal = computeSensitivity(base, undefined, [], overlay);
+  assert.equal(cal.baselineNetUsd, computeRollup(base, undefined, overlay).totals.netUsd);
+  assert.notEqual(cal.baselineNetUsd, result.baselineNetUsd);
+  const fc2 = cal.rows.find((r) => r.key === "containment-fc2")!;
+  assert.equal(fc2.netLowUsd, cal.baselineNetUsd);
+  assert.equal(fc2.netHighUsd, cal.baselineNetUsd);
+});
+
 test("shadow workbook round-trips inputs exactly", async () => {
   const { buildScenarioWorkbook, parseScenarioWorkbook } = await import("./workbook");
   const inputs = {

@@ -735,6 +735,64 @@ export const RetireCustomIntentResponse = zod.object({
 
 
 /**
+ * Nudges each driver (overridable assumptions, labor rates, per-flow-class containment, adoption ramp) ±20% while holding everything else constant, re-runs the exact pricing engine, and returns rows sorted by how far each nudge swings the net benefit.
+ * @summary One-at-a-time sensitivity analysis of the business case
+ */
+export const computeSensitivityBodyInputsAssumptionOverridesMinOne = 0;
+
+export const computeSensitivityBodyInputsAdoptionRampMin = 3;
+export const computeSensitivityBodyInputsAdoptionRampMax = 3;
+
+
+
+export const ComputeSensitivityBody = zod.object({
+  "inputs": zod.object({
+  "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
+  "annualTransactions": zod.number().describe('Committed HR transactions per year'),
+  "employees": zod.number(),
+  "sector": zod.string(),
+  "companyType": zod.string().describe('single-country | multi-country | global'),
+  "isolationTier": zod.string().describe('pooled | siloed | dedicated'),
+  "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
+  "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
+  "countries": zod.number(),
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(computeSensitivityBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(computeSensitivityBodyInputsAdoptionRampMin).max(computeSensitivityBodyInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
+  "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
+}),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved actuals overlay id; held constant across baseline and every nudge so the tornado matches the calibrated rollup.')
+})
+
+export const ComputeSensitivityResponse = zod.object({
+  "baselineNetUsd": zod.number(),
+  "nudgePct": zod.number().describe('Fractional nudge applied to each driver (0.2 = ±20%).'),
+  "rows": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "group": zod.enum(['assumption', 'labor', 'containment', 'adoption']),
+  "baseValue": zod.number(),
+  "lowValue": zod.number(),
+  "highValue": zod.number(),
+  "netLowUsd": zod.number(),
+  "netHighUsd": zod.number(),
+  "swingUsd": zod.number().describe('Max absolute deviation of net benefit from baseline across the two nudges.')
+}))
+})
+
+
+/**
  * Same as POST /workbook/export but takes the request body as a base64url-encoded JSON query parameter, so browsers (especially mobile) can download via plain navigation.
  * @summary Direct-navigation workbook download (mobile-friendly)
  */

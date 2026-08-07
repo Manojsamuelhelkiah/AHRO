@@ -6,6 +6,7 @@ import flowOverridesRouter from "./flow-overrides";
 import actualsRouter from "./actuals";
 import customIntentsRouter from "./custom-intents";
 import workbookRouter from "./workbook";
+import sensitivityRouter from "./sensitivity";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(flowOverridesRouter);
 router.use(actualsRouter);
 router.use(customIntentsRouter);
 router.use(workbookRouter);
+router.use(sensitivityRouter);
 
 export default router;

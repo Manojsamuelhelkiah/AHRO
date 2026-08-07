@@ -4,6 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useComputeRollup,
   useImportScenarioWorkbook,
+  useComputeSensitivity,
+  type SensitivityResult,
   useListDistributionProfiles,
   useListModelCatalog, useListSystems,
   useListScenarios,
@@ -42,7 +44,7 @@ import {
   Settings2, GitCompareArrows, BrainCircuit,
   RotateCcw, ChevronDown, ShieldCheck, GitBranch,
   FlaskConical, X, ArrowRight, TrendingDown, CheckCircle2, AlertCircle,
-  FileSpreadsheet, Upload,
+  FileSpreadsheet, Upload, Gauge,
 } from "lucide-react";
 import {
   ResponsiveContainer, ComposedChart, BarChart, PieChart, Pie, Cell,
@@ -83,6 +85,9 @@ export default function Scenario() {
   const { data: intentList } = useListIntents();
   const computeRollupMutation = useComputeRollup();
   const importWorkbookMutation = useImportScenarioWorkbook();
+  const sensitivityMutation = useComputeSensitivity();
+  const [sensitivity, setSensitivity] = useState<SensitivityResult | null>(null);
+  const sensitivityReqRef = useRef(0);
   const workbookFileRef = useRef<HTMLInputElement>(null);
   const createScenario = useCreateScenario();
   const updateScenario = useUpdateScenario();
@@ -120,6 +125,14 @@ export default function Scenario() {
         inputs: toApiInputs(values) as ScenarioInputs,
       };
       if (activeOverlayId !== null) body.actualsOverlayId = activeOverlayId;
+      // Sensitivity runs in parallel; its failure must not block the rollup.
+      // The request id guards against a stale response landing after a newer
+      // compute. Overlay id is forwarded so the tornado matches the rollup.
+      const reqId = ++sensitivityReqRef.current;
+      setSensitivity(null);
+      sensitivityMutation.mutateAsync({ data: { inputs: body.inputs, actualsOverlayId: body.actualsOverlayId } })
+        .then((r) => { if (sensitivityReqRef.current === reqId) setSensitivity(r); })
+        .catch(() => { if (sensitivityReqRef.current === reqId) setSensitivity(null); });
       const result = await computeRollupMutation.mutateAsync({ data: body });
       setRollup(result);
     } catch {
@@ -1004,6 +1017,7 @@ export default function Scenario() {
                     <TabsTrigger value="3year"><TrendingUp className="w-4 h-4 mr-2" />3-Year View</TabsTrigger>
                     <TabsTrigger value="charts"><BarChart3 className="w-4 h-4 mr-2" />Breakdown</TabsTrigger>
                     <TabsTrigger value="build"><Settings2 className="w-4 h-4 mr-2" />Build Costs</TabsTrigger>
+                    <TabsTrigger value="sensitivity" data-testid="tab-sensitivity"><Gauge className="w-4 h-4 mr-2" />Sensitivity</TabsTrigger>
                     <TabsTrigger value="assumptions">
                       <Settings2 className="w-4 h-4 mr-2" />Assumptions
                       {rollup.appliedAssumptions.some(a =>
@@ -1335,6 +1349,75 @@ export default function Scenario() {
                   </TabsContent>
 
                   {/* Applied Assumptions */}
+                  {/* Sensitivity (tornado) */}
+                  <TabsContent value="sensitivity" className="m-0 h-full">
+                    {!sensitivity ? (
+                      <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
+                        {sensitivityMutation.isPending ? "Running sensitivity analysis…" : "Sensitivity analysis unavailable — recompute the scenario."}
+                      </div>
+                    ) : (
+                      <div className="space-y-4" data-testid="sensitivity-panel">
+                        <div>
+                          <h3 className="text-lg font-semibold">What moves the business case</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Each driver nudged ±{Math.round(sensitivity.nudgePct * 100)}% with everything else held constant, repriced with the exact engine.
+                            Baseline net benefit: <span className="font-medium text-foreground">${Math.round(sensitivity.baselineNetUsd).toLocaleString()}</span>.
+                            Wide bars are the assumptions worth validating with the client; narrow bars barely matter.
+                          </p>
+                        </div>
+                        <ResponsiveContainer width="100%" height={Math.max(320, sensitivity.rows.length * 34)}>
+                          <BarChart
+                            layout="vertical"
+                            data={sensitivity.rows.map((r) => ({
+                              name: r.label,
+                              low: Math.round(r.netLowUsd - sensitivity.baselineNetUsd),
+                              high: Math.round(r.netHighUsd - sensitivity.baselineNetUsd),
+                            }))}
+                            margin={{ left: 8, right: 24 }}
+                            stackOffset="sign"
+                          >
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis type="number" tickFormatter={(v: number) => `${v >= 0 ? "+" : "-"}$${Math.abs(v / 1000).toFixed(0)}k`} />
+                            <YAxis type="category" dataKey="name" width={280} tick={{ fontSize: 11 }} />
+                            <Tooltip formatter={(v: number, n: string) => [`${v >= 0 ? "+" : "-"}$${Math.abs(v).toLocaleString()}`, n === "low" ? `Driver -${Math.round(sensitivity.nudgePct * 100)}%` : `Driver +${Math.round(sensitivity.nudgePct * 100)}%`]} />
+                            <ReferenceLine x={0} stroke="hsl(var(--foreground))" />
+                            <Bar dataKey="low" fill="#f59e0b" stackId="t" />
+                            <Bar dataKey="high" fill="#3b82f6" stackId="t" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                        <div className="text-xs text-muted-foreground flex gap-4">
+                          <span><span className="inline-block w-3 h-3 rounded-sm align-middle mr-1" style={{ background: "#f59e0b" }} />Driver −{Math.round(sensitivity.nudgePct * 100)}%</span>
+                          <span><span className="inline-block w-3 h-3 rounded-sm align-middle mr-1" style={{ background: "#3b82f6" }} />Driver +{Math.round(sensitivity.nudgePct * 100)}%</span>
+                          <span>Bars show change in net benefit vs baseline.</span>
+                        </div>
+                        <div className="border border-border rounded-md overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50 text-xs text-muted-foreground">
+                              <tr>
+                                <th className="text-left px-3 py-2">Driver</th>
+                                <th className="text-right px-3 py-2">Base value</th>
+                                <th className="text-right px-3 py-2">Net @ −{Math.round(sensitivity.nudgePct * 100)}%</th>
+                                <th className="text-right px-3 py-2">Net @ +{Math.round(sensitivity.nudgePct * 100)}%</th>
+                                <th className="text-right px-3 py-2">Max swing</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sensitivity.rows.map((r) => (
+                                <tr key={r.key} className="border-t border-border">
+                                  <td className="px-3 py-1.5">{r.label}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums">{r.baseValue < 10 ? r.baseValue.toFixed(r.baseValue < 1 ? 3 : 2) : Math.round(r.baseValue).toLocaleString()}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums">${Math.round(r.netLowUsd).toLocaleString()}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums">${Math.round(r.netHighUsd).toLocaleString()}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums font-medium">${Math.round(r.swingUsd).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+
                   <TabsContent value="assumptions" className="m-0 h-full">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {rollup.appliedAssumptions.map(ass => {
