@@ -951,3 +951,147 @@ test("computeDrift: token-cost series appear when rolePricingMap is provided (ca
   assert.ok(routerSeries!.points.every((p) => p.measuredValue !== null),
     "all data points have computed USD values");
 });
+
+// ---------------------------------------------------------------------------
+// scenarioToEstimateMap — containmentRates field name (Decision D: bridge fix)
+// ---------------------------------------------------------------------------
+
+test("scenarioToEstimateMap: containmentRates (current field name) maps to fixed drift-spec keys", () => {
+  const source: ScenarioEstimateSource = {
+    containmentRates: {
+      "fc1-deterministic": 0.93,
+      "fc2-policy": 0.82,
+    },
+  };
+  const map = scenarioToEstimateMap(source);
+  assert.equal(map["containment-fc1"], 0.93);
+  assert.equal(map["containment-fc2"], 0.82);
+  assert.equal(map["containment-fc3"], undefined);
+});
+
+test("scenarioToEstimateMap: containmentRates wins over containmentOverrides when both present", () => {
+  // containmentRates = current, containmentOverrides = legacy; current wins.
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc1-deterministic": 0.80 }, // legacy
+    containmentRates:    { "fc1-deterministic": 0.93 }, // current — should win
+  };
+  const map = scenarioToEstimateMap(source);
+  assert.equal(map["containment-fc1"], 0.93, "containmentRates must win over containmentOverrides");
+});
+
+test("scenarioToEstimateMap: containmentOverrides still works when containmentRates absent (backward-compat)", () => {
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc2-policy": 0.82 },
+  };
+  const map = scenarioToEstimateMap(source);
+  assert.equal(map["containment-fc2"], 0.82);
+});
+
+// ---------------------------------------------------------------------------
+// scenarioToEstimateMap — intentContainmentOverrides (task #34)
+// ---------------------------------------------------------------------------
+
+test("scenarioToEstimateMap: intentContainmentOverrides emits intent-cont-{key} entries", () => {
+  const source: ScenarioEstimateSource = {
+    intentContainmentOverrides: {
+      "payslip-copy": 0.84,
+      "leave-balance": 0.72,
+    },
+  };
+  const map = scenarioToEstimateMap(source);
+  assert.equal(map["intent-cont-payslip-copy"], 0.84);
+  assert.equal(map["intent-cont-leave-balance"], 0.72);
+});
+
+test("scenarioToEstimateMap: intentContainmentOverrides wins over flow-class expansion for the same intent", () => {
+  // fc2 override expands to payslip-query (step 3), but intentContainmentOverrides
+  // sets a different value for payslip-query (step 4) → step 4 wins.
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc2-policy": 0.82 },
+    intentContainmentOverrides: { "payslip-query": 0.91 },
+  };
+  const map = scenarioToEstimateMap(source, { "payslip-query": "fc2-policy" });
+  assert.equal(
+    map["intent-cont-payslip-query"],
+    0.91,
+    "direct per-intent override must beat flow-class expansion",
+  );
+});
+
+test("scenarioToEstimateMap: non-overridden intents still get flow-class expansion", () => {
+  // payslip-query gets a direct override; leave-balance (also fc2) only gets the expansion.
+  const source: ScenarioEstimateSource = {
+    containmentOverrides: { "fc2-policy": 0.82 },
+    intentContainmentOverrides: { "payslip-query": 0.91 },
+  };
+  const intentFlowClasses = {
+    "payslip-query": "fc2-policy",
+    "leave-balance": "fc2-policy",
+  };
+  const map = scenarioToEstimateMap(source, intentFlowClasses);
+  assert.equal(map["intent-cont-payslip-query"], 0.91, "direct override applies");
+  assert.equal(map["intent-cont-leave-balance"], 0.82, "fc expansion applies for non-overridden intent");
+});
+
+test("scenarioToEstimateMap: intentContainmentOverrides without intentFlowClasses still emits keys", () => {
+  // Even with no intentFlowClasses, per-intent overrides are emitted.
+  const source: ScenarioEstimateSource = {
+    intentContainmentOverrides: { "payslip-copy": 0.84 },
+  };
+  const map = scenarioToEstimateMap(source); // no second arg
+  assert.equal(map["intent-cont-payslip-copy"], 0.84);
+});
+
+test("scenarioToEstimateMap: empty intentContainmentOverrides emits no extra keys", () => {
+  const source: ScenarioEstimateSource = {
+    intentContainmentOverrides: {},
+  };
+  const map = scenarioToEstimateMap(source);
+  const intentKeys = Object.keys(map).filter((k) => k.startsWith("intent-cont-"));
+  assert.equal(intentKeys.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// scenarioToEstimateMap → computeDrift: per-intent override precedence (task #34)
+// ---------------------------------------------------------------------------
+
+test("scenarioToEstimateMap → computeDrift: direct intent override used as estimate reference", () => {
+  const ovs: DriftOverlayInput[] = [
+    overlay(1, "2025-01-01", { intents: [{ intentKey: "payslip-query", measuredContainmentRate: 0.77 }] }),
+    overlay(2, "2025-02-01", { intents: [{ intentKey: "payslip-query", measuredContainmentRate: 0.85 }] }),
+  ];
+  // Both flow-class expansion and direct override available; direct wins.
+  const estimateMap = scenarioToEstimateMap(
+    {
+      containmentOverrides: { "fc2-policy": 0.82 }, // step 3 would set 0.82
+      intentContainmentOverrides: { "payslip-query": 0.91 }, // step 4 overrides to 0.91
+    },
+    { "payslip-query": "fc2-policy" },
+  );
+  const series = computeDrift(ovs, estimateMap);
+  const ps = series.find((s) => s.assumptionKey === "intent-cont-payslip-query")!;
+  assert.ok(ps, "per-intent series present");
+  assert.equal(ps.estimate, 0.91, "estimate must use the direct per-intent override, not fc expansion");
+});
+
+test("scenarioToEstimateMap → computeDrift: non-overridden intent still gets fc-expansion estimate", () => {
+  const ovs: DriftOverlayInput[] = [
+    overlay(1, "2025-01-01", { intents: [{ intentKey: "leave-balance", measuredContainmentRate: 0.70 }] }),
+    overlay(2, "2025-02-01", { intents: [{ intentKey: "leave-balance", measuredContainmentRate: 0.75 }] }),
+  ];
+  // Only payslip-query has a direct override; leave-balance uses fc expansion.
+  const estimateMap = scenarioToEstimateMap(
+    {
+      containmentOverrides: { "fc2-policy": 0.82 },
+      intentContainmentOverrides: { "payslip-query": 0.91 },
+    },
+    {
+      "payslip-query": "fc2-policy",
+      "leave-balance": "fc2-policy",
+    },
+  );
+  const series = computeDrift(ovs, estimateMap);
+  const lb = series.find((s) => s.assumptionKey === "intent-cont-leave-balance")!;
+  assert.ok(lb, "leave-balance series present");
+  assert.equal(lb.estimate, 0.82, "leave-balance estimate comes from fc2 expansion (0.82)");
+});

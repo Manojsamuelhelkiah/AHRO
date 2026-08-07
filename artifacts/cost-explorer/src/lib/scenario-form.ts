@@ -120,6 +120,17 @@ export const formSchema = z.object({
   // form.  The API-shaped assumptionOverrides key must NEVER appear as a
   // top-level form value (fromApiInputs strips it and re-exposes via this field).
   _assumptionOverrides: assumptionOverridesSchema.optional(),
+
+  // Per-intent containment targets (drift comparison only).
+  // The private _intentContainmentOverrides field is the ONLY place these live
+  // in the form. Never spread raw API intentContainmentOverrides here.
+  // Empty-string entries mean "cleared / not set" and are stripped by toApiInputs.
+  _intentContainmentOverrides: z.record(
+    z.preprocess(
+      (v) => (v === "" || v === null || v === undefined || (typeof v === "number" && Number.isNaN(v)) ? undefined : v),
+      z.number().min(0).max(1).optional(),
+    )
+  ).optional(),
 });
 
 export type FormValues = z.infer<typeof formSchema>;
@@ -225,6 +236,20 @@ export function toApiInputs(v: FormValues): ScenarioInputs {
   if (assumptionOverrides !== undefined)
     inputs.assumptionOverrides = assumptionOverrides;
 
+  // Per-intent containment overrides (drift comparison only).
+  // Collapse _intentContainmentOverrides → intentContainmentOverrides, stripping empties/undefined.
+  const ico = v._intentContainmentOverrides;
+  if (ico) {
+    const result: Record<string, number> = {};
+    for (const [k, val] of Object.entries(ico)) {
+      if (val !== undefined && val !== null && val !== ("" as unknown)) {
+        result[k] = Number(val);
+      }
+    }
+    if (Object.keys(result).length > 0)
+      inputs.intentContainmentOverrides = result;
+  }
+
   return inputs;
 }
 
@@ -247,6 +272,7 @@ export function fromApiInputs(s: ScenarioInputs): FormValues {
   const hsr  = raw.hitlSamplingRates as Record<string, number> | undefined;
   const ms   = raw.modelSelection   as Record<string, string>  | undefined;
   const ov   = raw.assumptionOverrides as Record<string, number> | undefined;
+  const ico  = raw.intentContainmentOverrides as Record<string, number> | undefined;
 
   // Merge legacy containmentOverrides (lower priority) with current containmentRates.
   const mergedCr: Record<string, number> | undefined =
@@ -257,6 +283,17 @@ export function fromApiInputs(s: ScenarioInputs): FormValues {
   if (ov) {
     for (const k of OVERRIDABLE_ASSUMPTION_KEYS) {
       if (ov[k] !== undefined) _assumptionOverrides[k] = ov[k];
+    }
+  }
+
+  // Rebuild _intentContainmentOverrides — never expose raw intentContainmentOverrides
+  // as a top-level form key. Only carry through valid numeric 0-1 values.
+  const _intentContainmentOverrides: Record<string, number | undefined> = {};
+  if (ico) {
+    for (const [k, v] of Object.entries(ico)) {
+      if (typeof v === "number" && v >= 0 && v <= 1) {
+        _intentContainmentOverrides[k] = v;
+      }
     }
   }
 
@@ -292,5 +329,7 @@ export function fromApiInputs(s: ScenarioInputs): FormValues {
     nonIntegratedSystems: (raw.nonIntegratedSystems as string[] | undefined) ?? [],
     _assumptionOverrides:
       Object.keys(_assumptionOverrides).length > 0 ? _assumptionOverrides : {},
+    _intentContainmentOverrides:
+      Object.keys(_intentContainmentOverrides).length > 0 ? _intentContainmentOverrides : {},
   };
 }

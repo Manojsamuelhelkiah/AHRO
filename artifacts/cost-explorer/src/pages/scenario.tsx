@@ -9,6 +9,7 @@ import {
   useListScenarios,
   useListAssumptions,
   useListFlowClasses,
+  useListIntents,
   useCreateScenario,
   useUpdateScenario,
   useGetScenario,
@@ -65,6 +66,7 @@ export default function Scenario() {
   const { toast } = useToast();
   const [rollup, setRollup] = useState<Rollup | null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  const [intentOverridesOpen, setIntentOverridesOpen] = useState(false);
   const [activeOverlayId, setActiveOverlayId] = useState<number | null>(parsedOverlayId);
 
   // Local aliases for module-level helpers (defined after component).
@@ -78,6 +80,7 @@ export default function Scenario() {
   const { data: overlays } = useListActualsOverlays();
   const { data: globalAssumptions } = useListAssumptions();
   const { data: flowClasses } = useListFlowClasses();
+  const { data: intentList } = useListIntents();
   const computeRollupMutation = useComputeRollup();
   const importWorkbookMutation = useImportScenarioWorkbook();
   const workbookFileRef = useRef<HTMLInputElement>(null);
@@ -391,6 +394,110 @@ export default function Scenario() {
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">Share of automated transactions that complete without human fallback. Supplying all 4 raises confidence. Non-contained transactions still incur AI/infra cost but fall back to full human handling.</p>
                   </div>
+
+                  {/* Per-Intent Containment Targets (drift comparison only) */}
+                  {(intentList ?? []).length > 0 && (
+                    <Collapsible open={intentOverridesOpen} onOpenChange={setIntentOverridesOpen}>
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between gap-2 py-1.5 text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Per-intent containment targets
+                            </span>
+                            <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-violet-500/40 text-violet-600 dark:text-violet-400 bg-violet-500/5">
+                              Drift only
+                            </Badge>
+                            {(() => {
+                              const ico = form.watch("_intentContainmentOverrides") ?? {};
+                              const count = Object.values(ico).filter(v => v !== undefined && v !== null && v !== ("" as unknown)).length;
+                              return count > 0 ? (
+                                <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-primary/15 text-primary border-primary/20">
+                                  {count} set
+                                </Badge>
+                              ) : null;
+                            })()}
+                          </div>
+                          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${intentOverridesOpen ? "rotate-180" : ""}`} />
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-2 space-y-3">
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Set a specific containment target per intent for drift comparison only — overrides the flow-class value as the reference line in the Drift tab. Does not affect the cost model. Leave blank to use the flow-class default.
+                        </p>
+                        {/* Group intents by flow class */}
+                        {FLOW_CLASSES.map(({ key: fcKey, label: fcLabel }) => {
+                          const fcIntents = (intentList ?? []).filter(i => i.flowClass === fcKey);
+                          if (fcIntents.length === 0) return null;
+                          return (
+                            <div key={fcKey}>
+                              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                                {fcLabel}
+                              </div>
+                              <div className="space-y-1">
+                                {fcIntents.map(intent => {
+                                  const fieldKey = `_intentContainmentOverrides.${intent.key}` as any;
+                                  const watchedVal = form.watch(fieldKey);
+                                  return (
+                                    <div key={intent.key} className="flex items-center gap-2">
+                                      <span className="text-xs text-foreground/80 truncate flex-1 min-w-0" title={intent.name}>
+                                        {intent.name}
+                                      </span>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="1"
+                                        value={watchedVal ?? ""}
+                                        onChange={e => {
+                                          const raw = e.target.value;
+                                          if (raw === "") {
+                                            form.setValue(fieldKey, undefined as any, { shouldDirty: true });
+                                          } else {
+                                            const n = parseFloat(raw);
+                                            if (!isNaN(n) && n >= 0 && n <= 1) {
+                                              form.setValue(fieldKey, n as any, { shouldDirty: true });
+                                            }
+                                          }
+                                        }}
+                                        placeholder={
+                                          // Placeholder: FC-level override if set, otherwise FC default
+                                          (() => {
+                                            const fcOverride = form.watch(`containmentRates.${fcKey}` as any);
+                                            const def = ({ "fc1-deterministic": "0.95", "fc2-policy": "0.88", "fc3-multiagent": "0.80", "fc4-frontier": "0.70" } as Record<string, string>)[fcKey] ?? "";
+                                            return fcOverride !== undefined ? String(fcOverride) : def;
+                                          })()
+                                        }
+                                        className="bg-background h-6 text-xs w-20 shrink-0"
+                                      />
+                                      <span className="text-xs text-muted-foreground w-8 shrink-0 text-right">
+                                        {watchedVal !== undefined && watchedVal !== null && watchedVal !== ("" as unknown)
+                                          ? pct(Number(watchedVal))
+                                          : "—"}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                          onClick={() => {
+                            const ico = form.getValues("_intentContainmentOverrides") ?? {};
+                            const cleared = Object.fromEntries(Object.keys(ico).map(k => [k, undefined]));
+                            form.setValue("_intentContainmentOverrides", cleared as any, { shouldDirty: true });
+                          }}
+                        >
+                          Clear all per-intent targets
+                        </button>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
 
                   {/* HITL Sampling Rates */}
                   <div>

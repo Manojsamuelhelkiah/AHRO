@@ -577,3 +577,97 @@ test("round-trip: load scenario with overrides, change one, payload reflects onl
   const payload = toApiInputs(edited);
   assert.deepEqual(payload.assumptionOverrides, { "slm-call-cost": 0.002 });
 });
+
+// ---------------------------------------------------------------------------
+// intentContainmentOverrides — fromApiInputs / toApiInputs round-trips (task #34)
+// ---------------------------------------------------------------------------
+
+test("fromApiInputs: intentContainmentOverrides → _intentContainmentOverrides (never raw top-level)", () => {
+  const form = fromApiInputs(asInputs({
+    ...BASE,
+    intentContainmentOverrides: { "payslip-copy": 0.84, "leave-balance": 0.72 },
+  }));
+  assert.ok(
+    !("intentContainmentOverrides" in form),
+    "intentContainmentOverrides must not appear as a raw top-level form key",
+  );
+  const ico = form._intentContainmentOverrides as Record<string, number | undefined>;
+  assert.equal(ico?.["payslip-copy"], 0.84);
+  assert.equal(ico?.["leave-balance"], 0.72);
+});
+
+test("fromApiInputs: absent intentContainmentOverrides → empty _intentContainmentOverrides", () => {
+  const form = fromApiInputs(BASE);
+  const ico = form._intentContainmentOverrides ?? {};
+  assert.deepEqual(ico, {});
+});
+
+test("toApiInputs: _intentContainmentOverrides collapses to intentContainmentOverrides in payload", () => {
+  const form = fromApiInputs(BASE);
+  const result = toApiInputs({
+    ...form,
+    _intentContainmentOverrides: { "payslip-copy": 0.84, "leave-balance": 0.72 },
+  });
+  const raw = result as unknown as Record<string, unknown>;
+  assert.deepEqual(raw.intentContainmentOverrides, {
+    "payslip-copy": 0.84,
+    "leave-balance": 0.72,
+  });
+});
+
+test("toApiInputs: undefined entries in _intentContainmentOverrides are stripped", () => {
+  const form = fromApiInputs(BASE);
+  const result = toApiInputs({
+    ...form,
+    _intentContainmentOverrides: { "payslip-copy": 0.84, "leave-balance": undefined },
+  });
+  const raw = result as unknown as Record<string, unknown>;
+  const ico = raw.intentContainmentOverrides as Record<string, number> | undefined;
+  assert.ok(ico !== undefined, "intentContainmentOverrides should be present");
+  assert.ok(!("leave-balance" in (ico ?? {})), "undefined entry must be stripped");
+  assert.equal(ico?.["payslip-copy"], 0.84);
+});
+
+test("toApiInputs: all-undefined _intentContainmentOverrides → no intentContainmentOverrides in payload", () => {
+  const form = fromApiInputs(BASE);
+  const result = toApiInputs({
+    ...form,
+    _intentContainmentOverrides: { "payslip-copy": undefined, "leave-balance": undefined },
+  });
+  const raw = result as unknown as Record<string, unknown>;
+  const ico = raw.intentContainmentOverrides as Record<string, number> | undefined;
+  assert.ok(
+    ico === undefined || Object.keys(ico).length === 0,
+    "intentContainmentOverrides must be absent when all entries are undefined",
+  );
+});
+
+test("round-trip: intentContainmentOverrides survives fromApiInputs → toApiInputs", () => {
+  const stored = asInputs({
+    ...BASE,
+    intentContainmentOverrides: { "payslip-copy": 0.84, "leave-balance": 0.72 },
+  });
+  const form = fromApiInputs(stored);
+  const payload = toApiInputs(form);
+  const raw = payload as unknown as Record<string, unknown>;
+  assert.deepEqual(raw.intentContainmentOverrides, {
+    "payslip-copy": 0.84,
+    "leave-balance": 0.72,
+  });
+});
+
+test("round-trip: clearing all intent overrides removes intentContainmentOverrides from payload", () => {
+  const stored = asInputs({
+    ...BASE,
+    intentContainmentOverrides: { "payslip-copy": 0.84 },
+  });
+  const form = fromApiInputs(stored);
+  const cleared = { ...form, _intentContainmentOverrides: { "payslip-copy": undefined } };
+  const payload = toApiInputs(cleared);
+  const raw = payload as unknown as Record<string, unknown>;
+  const ico = raw.intentContainmentOverrides as Record<string, number> | undefined;
+  assert.ok(
+    ico === undefined || Object.keys(ico).length === 0,
+    "intentContainmentOverrides must be absent after clearing",
+  );
+});

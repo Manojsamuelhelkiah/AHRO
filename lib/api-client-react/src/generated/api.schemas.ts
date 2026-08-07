@@ -206,6 +206,11 @@ export type ScenarioInputsHitlSamplingRates = {[key: string]: number};
  */
 export type ScenarioInputsModelSelection = {[key: string]: string};
 
+/**
+ * Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup/cost engine. Absent keys fall back to the flow-class expansion from containmentRates/containmentOverrides.
+ */
+export type ScenarioInputsIntentContainmentOverrides = {[key: string]: number};
+
 export interface ScenarioInputs {
   /** Number of HR systems of record in the client landscape (drives Act fan-out) */
   numSystems: number;
@@ -254,6 +259,8 @@ export interface ScenarioInputs {
   modelSelection?: ScenarioInputsModelSelection;
   /** System keys (see /systems) that will NOT be integrated with the MCP layer. Their get/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them. */
   nonIntegratedSystems?: string[];
+  /** Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup/cost engine. Absent keys fall back to the flow-class expansion from containmentRates/containmentOverrides. */
+  intentContainmentOverrides?: ScenarioInputsIntentContainmentOverrides;
 }
 
 export interface Scenario {

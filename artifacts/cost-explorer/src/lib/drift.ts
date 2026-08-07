@@ -85,12 +85,32 @@ export interface DriftOverlayInput {
  * Minimal slice of ScenarioInputs that scenarioToEstimateMap needs.
  * Kept local (no workspace-package imports) so drift.ts stays unit-testable
  * in a plain Node context.
+ *
+ * Field name notes:
+ *   - `containmentOverrides` is the legacy API field (still accepted).
+ *   - `containmentRates` is the current primary field (added task-23).
+ *   Both are accepted here; `containmentRates` takes precedence when both present.
  */
 export interface ScenarioEstimateSource {
-  /** Per-flow-class containment overrides (flow-class key → 0-1 fraction). */
+  /**
+   * Per-flow-class containment rates — current primary field name.
+   * Maps flow-class key → 0-1 fraction.
+   */
+  containmentRates?: Record<string, number>;
+  /**
+   * Per-flow-class containment overrides — legacy field name.
+   * Accepted for backward-compat; `containmentRates` wins when both are set.
+   */
   containmentOverrides?: Record<string, number>;
   /** Fraction of HITL checkpoints actually reviewed (0-1). */
   hitlSamplingRate?: number;
+  /**
+   * Per-intent containment targets for drift comparison only.
+   * Maps intentKey → 0-1 fraction.
+   * Highest precedence: overrides the flow-class expansion for matched intents.
+   * Does not affect the rollup/cost engine.
+   */
+  intentContainmentOverrides?: Record<string, number>;
 }
 /**
  * Thrown by requireSingleClient (and transitively by computeDrift) when the
@@ -555,7 +575,13 @@ export function scenarioToEstimateMap(
   intentFlowClasses: Record<string, string> = {},
 ): Record<string, number> {
   const map: Record<string, number> = {};
-  const co = source.containmentOverrides ?? {};
+
+  // Merge containment fields: containmentRates (current) wins over
+  // containmentOverrides (legacy) when both are present.
+  const co: Record<string, number> = {
+    ...(source.containmentOverrides ?? {}),
+    ...(source.containmentRates ?? {}),
+  };
 
   // 1. Flow-class containment overrides → fixed drift-spec keys
   for (const [fcKey, val] of Object.entries(co)) {
@@ -576,6 +602,15 @@ export function scenarioToEstimateMap(
     if (fcVal !== undefined) {
       map[`intent-cont-${intentKey}`] = fcVal;
     }
+  }
+
+  // 4. Per-intent containment overrides — highest precedence.
+  //    Direct per-intent targets overwrite any value step 3 may have set
+  //    for the same intent key.
+  for (const [intentKey, val] of Object.entries(
+    source.intentContainmentOverrides ?? {},
+  )) {
+    map[`intent-cont-${intentKey}`] = val;
   }
 
   return map;

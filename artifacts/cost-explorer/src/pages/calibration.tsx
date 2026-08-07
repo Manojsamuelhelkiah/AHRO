@@ -1947,8 +1947,11 @@ function DriftTab({ overlays, intentList, scenarios, scenariosLoading }: DriftTa
     if (!selectedScenario) return {};
     return scenarioToEstimateMap(
       {
+        // Pass both field names — scenarioToEstimateMap merges them, current wins.
+        containmentRates:    selectedScenario.inputs.containmentRates    as Record<string, number> | undefined,
         containmentOverrides: selectedScenario.inputs.containmentOverrides as Record<string, number> | undefined,
         hitlSamplingRate: selectedScenario.inputs.hitlSamplingRate,
+        intentContainmentOverrides: selectedScenario.inputs.intentContainmentOverrides as Record<string, number> | undefined,
       },
       intentFlowClasses,
     );
