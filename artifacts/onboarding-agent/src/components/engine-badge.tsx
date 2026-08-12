@@ -11,10 +11,17 @@ export function EngineBadge({ engine, className }: { engine: string, className?:
     case 'llm':
       color = 'bg-purple-100 text-purple-700 border-purple-200';
       Icon = BrainCircuit;
+      label = 'AI';
       break;
     case 'ldm':
       color = 'bg-emerald-100 text-emerald-700 border-emerald-200';
       Icon = Cpu;
+      label = 'RULES';
+      break;
+    case 'human':
+      color = 'bg-blue-100 text-blue-700 border-blue-200';
+      Icon = User;
+      label = 'HUMAN';
       break;
     case 'orchestrator':
       color = 'bg-amber-100 text-amber-700 border-amber-200';

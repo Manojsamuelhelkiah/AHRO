@@ -108,7 +108,7 @@ export function CaseDetailPage() {
 
           <Card>
             <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-base">LLM Plan Summary</CardTitle>
+              <CardTitle className="text-base">AI Plan Summary</CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
               <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
