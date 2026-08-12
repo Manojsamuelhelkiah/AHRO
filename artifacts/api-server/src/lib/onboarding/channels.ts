@@ -1,5 +1,8 @@
 import { db } from "@workspace/db";
 import { onbCommunications } from "@workspace/db/schema";
+import { ReplitConnectors } from "@replit/connectors-sdk";
+
+const connectors = new ReplitConnectors();
 
 export type ChannelInfo = {
   configured: boolean;
@@ -19,14 +22,11 @@ function maskPhone(phone: string): string {
 }
 
 export function emailChannelInfo(): ChannelInfo {
-  const configured = Boolean(process.env.RESEND_API_KEY);
   return {
-    configured,
-    provider: configured ? "resend" : "logged-only",
+    configured: true,
+    provider: "gmail",
     target: "He***@gmail.com",
-    note: configured
-      ? "Outbound email is live via Resend."
-      : "Email provider not connected yet — messages are composed and logged in the case timeline, not delivered.",
+    note: "Outbound email is live via the connected Gmail account.",
   };
 }
 
@@ -51,27 +51,27 @@ async function sendEmail(
   subject: string,
   body: string,
 ): Promise<{ status: string; failureReason: string | null }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    return { status: "logged-only", failureReason: null };
-  }
   try {
-    const resp = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+    const rfc2822 = [
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      "",
+      body,
+    ].join("\r\n");
+    const raw = Buffer.from(rfc2822).toString("base64url");
+    const resp = await connectors.proxy(
+      "google-mail",
+      "/gmail/v1/users/me/messages/send",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raw }),
       },
-      body: JSON.stringify({
-        from: process.env.RESEND_FROM ?? "Onboarding Agent <onboarding@resend.dev>",
-        to: [to],
-        subject,
-        text: body,
-      }),
-    });
+    );
     if (!resp.ok) {
       const detail = await resp.text();
-      return { status: "failed", failureReason: `Resend ${resp.status}: ${detail.slice(0, 300)}` };
+      return { status: "failed", failureReason: `Gmail ${resp.status}: ${detail.slice(0, 300)}` };
     }
     return { status: "sent", failureReason: null };
   } catch (err) {
