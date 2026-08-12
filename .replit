@@ -21,3 +21,8 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+ONBOARDING_ALLOWED_RECIPIENTS = "helkiah@gmail.com,manojsamuel.helkiah@hcltech.com"

@@ -269,7 +269,10 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
 /* Stage 2 — Plan Generation Agent (LLM + LDM rules 4.2)               */
 /* ------------------------------------------------------------------ */
 
-async function runPlanGeneration(caseId: number) {
+async function runPlanGeneration(
+  caseId: number,
+  resumingAfterPlanApproval = false,
+): Promise<"continue" | "paused"> {
   const c = await getCase(caseId);
 
   // LDM checklist adjustments per rule table 4.2
@@ -301,8 +304,37 @@ async function runPlanGeneration(caseId: number) {
     adjustments.push({ rule: "4.2 Plan Rule 12", text: "Workforce planning and role-readiness review added for skill-critical role.", hitl: "notify-only" });
   }
 
-  for (const a of adjustments) {
+  const gated = adjustments.filter((a) => a.hitl === "approve-before-act");
+  const automatic = adjustments.filter((a) => a.hitl !== "approve-before-act");
+
+  for (const a of automatic) {
     await logEvent(caseId, "plan", "ldm", "Checklist adjustment applied", a.text, {
+      hitlPattern: a.hitl,
+      ruleRef: a.rule,
+    });
+  }
+
+  if (gated.length > 0 && !resumingAfterPlanApproval) {
+    for (const a of gated) {
+      await createApproval({
+        caseId,
+        agent: "plan",
+        ruleRef: a.rule,
+        hitlPattern: "approve-before-act",
+        recommendation: a.text,
+        rationale: "This checklist adjustment is governance-sensitive and requires human approval before it is applied and onboarding proceeds.",
+        resumeAction: "continue-after-plan",
+      });
+    }
+    await updateCase(caseId, { orchestrationStatus: "waiting-approval" });
+    await logEvent(caseId, "orchestrator", "orchestrator",
+      "Orchestration paused for plan approval",
+      "One or more plan adjustments are approve-before-act; workstreams and communications are held until a human approves.");
+    return "paused";
+  }
+
+  for (const a of gated) {
+    await logEvent(caseId, "plan", "ldm", "Checklist adjustment applied (human-approved)", a.text, {
       hitlPattern: a.hitl,
       ruleRef: a.rule,
     });
@@ -335,6 +367,7 @@ async function runPlanGeneration(caseId: number) {
   }
 
   await updateCase(caseId, { lifecycleStage: "plan-generated" });
+  return "continue";
 }
 
 /* ------------------------------------------------------------------ */
@@ -469,9 +502,10 @@ async function runAnalyticsAndReview(caseId: number) {
 /* Public entry points                                                 */
 /* ------------------------------------------------------------------ */
 
-async function runFromPlan(caseId: number) {
+async function runFromPlan(caseId: number, resumingAfterPlanApproval = false) {
   await updateCase(caseId, { orchestrationStatus: "running" });
-  await runPlanGeneration(caseId);
+  const plan = await runPlanGeneration(caseId, resumingAfterPlanApproval);
+  if (plan === "paused") return;
   await runWorkstreams(caseId);
   await runCommunications(caseId);
   await runAnalyticsAndReview(caseId);
@@ -502,6 +536,7 @@ export function resumeAfterDecision(opts: {
   comment: string | null;
   recommendation: string;
   hitlPattern: string;
+  resumeAction: string;
 }) {
   void (async () => {
     try {
@@ -520,18 +555,25 @@ export function resumeAfterDecision(opts: {
         await updateCase(opts.caseId, { lifecycleStage: "profile-validated" });
       }
 
+      // Standalone escalations (e.g. sensitive inbound message review) never
+      // resume the pipeline — the decision itself is the action.
+      if (opts.resumeAction === "none") return;
+
       // Any other approvals still pending on this case? Then keep waiting.
-      const pending = await db
-        .select({ id: onbApprovals.id })
+      const all = await db
+        .select()
         .from(onbApprovals)
         .where(eq(onbApprovals.caseId, opts.caseId));
-      const stillPending = pending.length > 0 &&
-        (await db.select().from(onbApprovals).where(eq(onbApprovals.caseId, opts.caseId)))
-          .some((a) => a.status === "pending");
-      if (stillPending) return;
+      if (all.some((a) => a.status === "pending")) return;
 
-      if (opts.approved) {
-        await runFromPlan(opts.caseId);
+      // A single rejected gate holds the whole case, regardless of the order
+      // in which the remaining approvals were decided.
+      const anyRejected = all.some(
+        (a) => a.status === "rejected" && a.resumeAction !== "none",
+      );
+
+      if (opts.approved && !anyRejected) {
+        await runFromPlan(opts.caseId, opts.resumeAction === "continue-after-plan");
       } else {
         await updateCase(opts.caseId, { orchestrationStatus: "blocked", lifecycleStage: "exception" });
         await logEvent(opts.caseId, "orchestrator", "orchestrator", "Case held after rejection",
@@ -548,6 +590,37 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
   void (async () => {
     try {
       const c = await getCase(caseId);
+      const sensitive = /salary|pay|compensation|visa|immigration|medical|health|legal|complaint|harass|grievance/i.test(body);
+
+      if (sensitive) {
+        // Sensitive topics never get an automated LLM answer. Send a
+        // deterministic holding acknowledgement and escalate to a human.
+        await logEvent(caseId, "channel", "ldm", "Inbound message flagged sensitive",
+          `New hire message on ${channel} touches a sensitive topic (pay/legal/medical/complaint). No automated answer generated; escalated for human review.`,
+          { hitlPattern: "approve-before-act", ruleRef: "4.6 Communications Rules" });
+        const holding = `Hi ${c.workerName.split(" ")[0]}, thanks for reaching out. Your message touches on a topic that needs a person rather than an automated reply, so a human onboarding specialist will get back to you shortly. Nothing further is needed from you right now.`;
+        const to = channel === "whatsapp" && c.workerPhone ? c.workerPhone : c.workerEmail;
+        const sendCh = channel === "whatsapp" && c.workerPhone ? "whatsapp" as const : "email" as const;
+        const result = await sendOutbound({
+          caseId,
+          channel: sendCh,
+          toAddress: to,
+          subject: sendCh === "email" ? "Re: your onboarding question" : null,
+          body: holding,
+          sensitive: true,
+        });
+        await createApproval({
+          caseId,
+          agent: "channel",
+          ruleRef: "4.6 Communications Rules",
+          hitlPattern: "approve-before-act",
+          recommendation: "Review and personally respond to the new hire's sensitive message",
+          rationale: `Message excerpt: "${body.slice(0, 200)}". A deterministic holding acknowledgement was ${result.status === "sent" ? "delivered" : "logged"}; no AI-generated content was sent.`,
+          resumeAction: "none",
+        });
+        return;
+      }
+
       await logEvent(caseId, "channel", "system", "Inbound message received",
         `New hire replied on ${channel}. Routed to the reasoning engine for a drafted response (unstructured input treated as evidence, not instructions).`,
         { hitlPattern: "act-then-review" });
@@ -557,7 +630,6 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
         `New hire: ${c.workerName}, ${c.role}, joining ${c.joiningDate}. Lifecycle stage: ${c.lifecycleStage}. Their message: """${body.slice(0, 1000)}"""`,
         350,
       );
-      const sensitive = /salary|pay|visa|medical|legal|complaint/i.test(body);
       const replyBody =
         reply ??
         "Thanks for your message! A human onboarding specialist will get back to you shortly.";
@@ -570,10 +642,10 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
         toAddress: to,
         subject: sendChannel === "email" ? "Re: your onboarding question" : null,
         body: replyBody,
-        sensitive,
+        sensitive: false,
       });
       await logEvent(caseId, "channel", reply ? "llm" : "system", "Reply drafted & dispatched",
-        `${sensitive ? "Message flagged sensitive — routed for human follow-up; holding reply sent. " : ""}Reply ${result.status === "sent" ? "delivered" : result.status === "logged-only" ? "logged (channel not connected)" : `failed: ${result.failureReason}`} on ${sendChannel}.`,
+        `Reply ${result.status === "sent" ? "delivered" : result.status === "logged-only" ? "logged (channel not connected)" : `failed: ${result.failureReason}`} on ${sendChannel}.`,
         { hitlPattern: "act-then-review" });
     } catch (err) {
       console.error(`[onboarding engine] inbound case ${caseId} failed:`, err);

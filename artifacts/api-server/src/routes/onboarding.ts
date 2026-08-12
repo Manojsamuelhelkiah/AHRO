@@ -397,6 +397,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       comment: body.comment ?? null,
       recommendation: a.recommendation,
       hitlPattern: a.hitlPattern,
+      resumeAction: a.resumeAction ?? "none",
     });
     res.json({
       id: updated.id,

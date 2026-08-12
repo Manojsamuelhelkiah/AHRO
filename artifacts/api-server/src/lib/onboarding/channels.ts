@@ -116,6 +116,42 @@ async function sendWhatsApp(
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Abuse controls for live delivery                                     */
+/*                                                                      */
+/* The POC API is not behind a login yet, so live sends are restricted  */
+/* server-side: only allow-listed recipients receive real messages      */
+/* (everything else is composed and logged only), and total live sends  */
+/* are rate-limited per hour. Set ONBOARDING_ALLOWED_RECIPIENTS to a    */
+/* comma-separated list of emails/phone numbers to change the list.     */
+/* ------------------------------------------------------------------ */
+
+const DEFAULT_ALLOWED_RECIPIENTS = ["helkiah@gmail.com"];
+const MAX_LIVE_SENDS_PER_HOUR = 30;
+let sendWindowStart = Date.now();
+let sendWindowCount = 0;
+
+function recipientAllowed(address: string): boolean {
+  const configured = (process.env.ONBOARDING_ALLOWED_RECIPIENTS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const allowed = configured.length > 0 ? configured : DEFAULT_ALLOWED_RECIPIENTS;
+  const normalized = address.trim().toLowerCase().replace(/^whatsapp:/, "");
+  return allowed.includes(normalized);
+}
+
+function withinRateLimit(): boolean {
+  const now = Date.now();
+  if (now - sendWindowStart > 3600_000) {
+    sendWindowStart = now;
+    sendWindowCount = 0;
+  }
+  if (sendWindowCount >= MAX_LIVE_SENDS_PER_HOUR) return false;
+  sendWindowCount += 1;
+  return true;
+}
+
 /**
  * Send an outbound message on a channel and persist it to the case timeline.
  * Never throws — delivery failures are recorded on the communication row.
@@ -129,7 +165,18 @@ export async function sendOutbound(opts: {
   sensitive?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null };
-  if (opts.channel === "email") {
+  if (!recipientAllowed(opts.toAddress)) {
+    result = {
+      status: "logged-only",
+      failureReason:
+        "Recipient is not on the demo allowlist — message composed and logged, not delivered (set ONBOARDING_ALLOWED_RECIPIENTS to change).",
+    };
+  } else if (!withinRateLimit()) {
+    result = {
+      status: "logged-only",
+      failureReason: "Hourly live-send limit reached — message logged, not delivered.",
+    };
+  } else if (opts.channel === "email") {
     result = await sendEmail(opts.toAddress, opts.subject ?? "Onboarding update", opts.body);
   } else {
     result = await sendWhatsApp(opts.toAddress, opts.body);
