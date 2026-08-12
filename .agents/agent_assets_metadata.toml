@@ -5,7 +5,8 @@ generated = []
 id = "4ypiH-PKaCRFGn5fHfLG_"
 uri = "file://.local/outputs/Autonomous-HRO-Agentic-Architecture.pdf"
 type = "pdf"
-title = "Autonomous HRO Agentic Architecture.pdf"
+title = "Autonomous HRO Agentic Architecture (PDF)"
+description = "PDF export of the slide deck."
 
 [[outputs]]
 id = "atQEeNBLhDAmOQzscw1ld"
