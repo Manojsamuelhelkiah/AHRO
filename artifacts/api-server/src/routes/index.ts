@@ -7,6 +7,7 @@ import actualsRouter from "./actuals";
 import customIntentsRouter from "./custom-intents";
 import workbookRouter from "./workbook";
 import sensitivityRouter from "./sensitivity";
+import slideDeckRouter from "./slide-deck";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(actualsRouter);
 router.use(customIntentsRouter);
 router.use(workbookRouter);
 router.use(sensitivityRouter);
+router.use(slideDeckRouter);
 
 export default router;
