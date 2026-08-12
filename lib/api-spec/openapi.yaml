@@ -18,6 +18,8 @@ tags:
     description: Calibration actuals overlays (measured production data)
   - name: customIntents
     description: Client-specific intents that extend the reference corpus
+  - name: onboarding
+    description: Orchestrated multi-agent onboarding POC (cases, agents, approvals, channels, connectors, analytics)
 paths:
   /healthz:
     get:
@@ -783,6 +785,353 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/dashboard:
+    get:
+      operationId: getOnboardingDashboard
+      tags: [onboarding]
+      summary: Control-tower dashboard summary (case counts by stage, pending approvals, blockers)
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbDashboard"
+  /onboarding/scenarios:
+    get:
+      operationId: listOnboardingScenarios
+      tags: [onboarding]
+      summary: List the demo scenarios (worked examples from the SME spec)
+      responses:
+        "200":
+          description: Scenario list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbScenarioDef"
+  /onboarding/scenarios/{key}/run:
+    post:
+      operationId: runOnboardingScenario
+      tags: [onboarding]
+      summary: Launch a demo scenario — creates the case and starts orchestration asynchronously
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Created case (orchestration runs in the background; poll the case and its events)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCase"
+        "404":
+          description: Unknown scenario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases:
+    get:
+      operationId: listOnboardingCases
+      tags: [onboarding]
+      summary: List onboarding cases (newest first)
+      responses:
+        "200":
+          description: Case list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbCase"
+    post:
+      operationId: createOnboardingCase
+      tags: [onboarding]
+      summary: Create an onboarding case from a manual trigger (intake form) and start orchestration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbCaseIntake"
+      responses:
+        "201":
+          description: Created case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCase"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Duplicate active case detected for this person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}:
+    get:
+      operationId: getOnboardingCase
+      tags: [onboarding]
+      summary: Get a case with workstreams, readiness checklist and blockers
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Case detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCase"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/events:
+    get:
+      operationId: listOnboardingCaseEvents
+      tags: [onboarding]
+      summary: Audit trail / live agent activity feed for a case (oldest first)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbEvent"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/communications:
+    get:
+      operationId: listOnboardingCaseCommunications
+      tags: [onboarding]
+      summary: Email/WhatsApp timeline for a case (oldest first)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Communication list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbCommunication"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/inbound:
+    post:
+      operationId: receiveOnboardingInbound
+      tags: [onboarding]
+      summary: Record an inbound message from the new hire (WhatsApp/email reply) and let the agents react
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbInboundMessage"
+      responses:
+        "201":
+          description: Recorded inbound communication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCommunication"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/approvals:
+    get:
+      operationId: listOnboardingApprovals
+      tags: [onboarding]
+      summary: Human-in-the-loop approval queue
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            description: pending (default) | all
+      responses:
+        "200":
+          description: Approval list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbApproval"
+  /onboarding/approvals/{id}/decide:
+    post:
+      operationId: decideOnboardingApproval
+      tags: [onboarding]
+      summary: Approve or reject a pending agent recommendation; orchestration resumes accordingly
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbApprovalDecision"
+      responses:
+        "200":
+          description: Decided approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbApproval"
+        "400":
+          description: Not pending or invalid decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/connectors:
+    get:
+      operationId: listOnboardingConnectors
+      tags: [onboarding]
+      summary: Connected HR systems panel (pluggable adapter per system role)
+      responses:
+        "200":
+          description: Connector list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbConnector"
+  /onboarding/connectors/{key}:
+    patch:
+      operationId: updateOnboardingConnector
+      tags: [onboarding]
+      summary: Swap the vendor behind a system role or toggle connection (demonstrates any-HR-system pluggability)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbConnectorUpdate"
+      responses:
+        "200":
+          description: Updated connector
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbConnector"
+        "400":
+          description: Unknown vendor for this system role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/analytics:
+    get:
+      operationId: getOnboardingAnalytics
+      tags: [onboarding]
+      summary: Data & Analytics Agent aggregated insights (skill inflow, bottlenecks, cohort readiness) with small-population suppression
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbAnalytics"
+  /onboarding/channels:
+    get:
+      operationId: getOnboardingChannels
+      tags: [onboarding]
+      summary: Communication channel configuration status (email, WhatsApp)
+      responses:
+        "200":
+          description: Channel status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChannelStatus"
+  /onboarding/channels/test:
+    post:
+      operationId: testOnboardingChannel
+      tags: [onboarding]
+      summary: Send a test message on a channel to verify configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbChannelTest"
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChannelTestResult"
 components:
   schemas:
     HealthStatus:
@@ -1937,3 +2286,453 @@ components:
             type: string
           description: List of measurement dimensions present in the overlay (e.g. containment, tokenPricing, hitlSampling, hitlMinutes).
       required: [valid, errors, intentRowCount, measuredFields]
+    OnbReadinessItem:
+      type: object
+      description: One entry of the 7-point Day-1 readiness checklist
+      properties:
+        key:
+          type: string
+          description: profile | documentation | payroll | access | assets | learning | checkpoints
+        label:
+          type: string
+        status:
+          type: string
+          description: pending | in-progress | ready | exception
+        note:
+          type: string
+      required: [key, label, status]
+    OnbWorkstream:
+      type: object
+      description: A parallel readiness workstream owned by one agent
+      properties:
+        key:
+          type: string
+          description: documentation | access | assets | learning | analytics
+        label:
+          type: string
+        agent:
+          type: string
+        status:
+          type: string
+          description: pending | in-progress | blocked | ready | exception
+        owner:
+          type: string
+          description: Accountable human owner
+        blockers:
+          type: array
+          items:
+            type: string
+      required: [key, label, agent, status, owner, blockers]
+    OnbCase:
+      type: object
+      properties:
+        id:
+          type: integer
+        workerName:
+          type: string
+        workerEmail:
+          type: string
+        workerPhone:
+          type: ["string", "null"]
+          description: E.164 phone for WhatsApp; null when not provided
+        hireType:
+          type: string
+          description: external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited
+        workerCategory:
+          type: string
+          description: employee | contractor | vendor | intern
+        role:
+          type: string
+        department:
+          type: string
+        geography:
+          type: string
+          description: Country/region driving statutory items (e.g. India, USA, UK)
+        legalEntity:
+          type: string
+        managerName:
+          type: string
+        recruiterName:
+          type: string
+        joiningDate:
+          type: string
+          description: ISO date
+        urgency:
+          type: string
+          description: standard | elevated
+        lifecycleStage:
+          type: string
+          description: trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused
+        orchestrationStatus:
+          type: string
+          description: running | waiting-approval | blocked | idle | done
+        readiness:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbReadinessItem"
+        workstreams:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbWorkstream"
+        primarySkill:
+          type: ["string", "null"]
+        skillCriticality:
+          type: ["string", "null"]
+          description: standard | scarce | client-critical
+        scenarioKey:
+          type: ["string", "null"]
+          description: Demo scenario this case came from, if any
+        planSummary:
+          type: ["string", "null"]
+          description: LLM-generated onboarding plan narrative
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - workerName
+        - workerEmail
+        - workerPhone
+        - hireType
+        - workerCategory
+        - role
+        - department
+        - geography
+        - legalEntity
+        - managerName
+        - recruiterName
+        - joiningDate
+        - urgency
+        - lifecycleStage
+        - orchestrationStatus
+        - readiness
+        - workstreams
+        - primarySkill
+        - skillCriticality
+        - scenarioKey
+        - planSummary
+        - createdAt
+        - updatedAt
+    OnbCaseIntake:
+      type: object
+      description: Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.
+      properties:
+        workerName:
+          type: string
+          minLength: 1
+        workerEmail:
+          type: string
+        workerPhone:
+          type: string
+          description: Optional E.164 phone used for WhatsApp
+        hireType:
+          type: string
+        workerCategory:
+          type: string
+        role:
+          type: string
+        department:
+          type: string
+        geography:
+          type: string
+        legalEntity:
+          type: string
+        managerName:
+          type: string
+        recruiterName:
+          type: string
+        joiningDate:
+          type: string
+        primarySkill:
+          type: string
+        skillCriticality:
+          type: string
+        notes:
+          type: string
+          description: Unstructured recruiter notes; treated as evidence, not instructions
+      required:
+        - workerName
+        - workerEmail
+        - hireType
+        - workerCategory
+        - role
+        - department
+        - geography
+        - legalEntity
+        - managerName
+        - recruiterName
+        - joiningDate
+    OnbEvent:
+      type: object
+      description: One audit-trail entry; every agent decision lands here with engine type and rule reference
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: integer
+        agent:
+          type: string
+          description: intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel
+        engine:
+          type: string
+          description: llm | ldm | orchestrator | human | system
+        hitlPattern:
+          type: ["string", "null"]
+          description: notify-only | approve-before-act | act-then-review | hard-block
+        ruleRef:
+          type: ["string", "null"]
+          description: SME-spec rule reference, e.g. "4.1 Intake Rule 5"
+        title:
+          type: string
+        detail:
+          type: string
+          description: Decision rationale
+        createdAt:
+          type: string
+      required: [id, caseId, agent, engine, hitlPattern, ruleRef, title, detail, createdAt]
+    OnbApproval:
+      type: object
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: integer
+        caseWorkerName:
+          type: string
+        agent:
+          type: string
+        ruleRef:
+          type: ["string", "null"]
+        hitlPattern:
+          type: string
+          description: approve-before-act | hard-block (hard-blocks require human resolution end-to-end)
+        recommendation:
+          type: string
+        rationale:
+          type: string
+        status:
+          type: string
+          description: pending | approved | rejected
+        decidedBy:
+          type: ["string", "null"]
+        comment:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        decidedAt:
+          type: ["string", "null"]
+      required: [id, caseId, caseWorkerName, agent, ruleRef, hitlPattern, recommendation, rationale, status, decidedBy, comment, createdAt, decidedAt]
+    OnbApprovalDecision:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: approved | rejected
+        decidedBy:
+          type: string
+          minLength: 1
+        comment:
+          type: string
+      required: [decision, decidedBy]
+    OnbCommunication:
+      type: object
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: integer
+        channel:
+          type: string
+          description: email | whatsapp
+        direction:
+          type: string
+          description: outbound | inbound
+        toAddress:
+          type: string
+          description: Email address or phone number (masked for sensitive comms)
+        subject:
+          type: ["string", "null"]
+        body:
+          type: string
+        status:
+          type: string
+          description: sent | delivered | failed | logged-only | received
+        failureReason:
+          type: ["string", "null"]
+        sensitive:
+          type: boolean
+          description: Flagged for human review before/after send per ethics guardrails
+        createdAt:
+          type: string
+      required: [id, caseId, channel, direction, toAddress, subject, body, status, failureReason, sensitive, createdAt]
+    OnbInboundMessage:
+      type: object
+      properties:
+        channel:
+          type: string
+          description: email | whatsapp
+        body:
+          type: string
+          minLength: 1
+      required: [channel, body]
+    OnbConnector:
+      type: object
+      description: One pluggable HR-system adapter slot
+      properties:
+        key:
+          type: string
+          description: ats | hris | identity | payroll | lms | bgv | esignature
+        label:
+          type: string
+          description: System role, e.g. "ATS / Recruiting"
+        vendor:
+          type: string
+          description: Currently plugged-in vendor adapter
+        availableVendors:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          description: connected | disconnected
+        description:
+          type: string
+        authoritativeFor:
+          type: array
+          items:
+            type: string
+          description: Which case fields this system is the source of truth for
+        lastSyncAt:
+          type: ["string", "null"]
+      required: [key, label, vendor, availableVendors, status, description, authoritativeFor, lastSyncAt]
+    OnbConnectorUpdate:
+      type: object
+      properties:
+        vendor:
+          type: string
+        status:
+          type: string
+          description: connected | disconnected
+    OnbDashboard:
+      type: object
+      properties:
+        totalCases:
+          type: integer
+        byStage:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountBucket"
+        pendingApprovals:
+          type: integer
+        hardBlocked:
+          type: integer
+        day1AtRisk:
+          type: integer
+          description: Cases joining within 7 days with an open blocker
+        readyCases:
+          type: integer
+        recentEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbEvent"
+      required: [totalCases, byStage, pendingApprovals, hardBlocked, day1AtRisk, readyCases, recentEvents]
+    OnbScenarioDef:
+      type: object
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        specRef:
+          type: string
+          description: Which worked example in the SME document this validates
+        expectedBehaviour:
+          type: string
+      required: [key, title, description, specRef, expectedBehaviour]
+    OnbSkillInflowBucket:
+      type: object
+      properties:
+        skill:
+          type: string
+        count:
+          type: integer
+        criticality:
+          type: string
+        suppressed:
+          type: boolean
+          description: True when below the safe aggregation threshold; details hidden
+      required: [skill, count, criticality, suppressed]
+    OnbBottleneckTheme:
+      type: object
+      properties:
+        theme:
+          type: string
+          description: documentation | access | assets | payroll | manager-readiness | learning | bgv
+        occurrences:
+          type: integer
+        note:
+          type: string
+      required: [theme, occurrences, note]
+    OnbAnalytics:
+      type: object
+      properties:
+        skillInflow:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbSkillInflowBucket"
+        bottlenecks:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbBottleneckTheme"
+        cohortReadiness:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountBucket"
+          description: Case counts by readiness state
+        suppressionThreshold:
+          type: integer
+          description: Minimum population before a trend is published
+        narrative:
+          type: ["string", "null"]
+          description: LLM-written aggregated insight for HR/workforce planning
+      required: [skillInflow, bottlenecks, cohortReadiness, suppressionThreshold, narrative]
+    OnbChannelStatus:
+      type: object
+      properties:
+        email:
+          $ref: "#/components/schemas/OnbChannelInfo"
+        whatsapp:
+          $ref: "#/components/schemas/OnbChannelInfo"
+      required: [email, whatsapp]
+    OnbChannelInfo:
+      type: object
+      properties:
+        configured:
+          type: boolean
+        provider:
+          type: string
+          description: e.g. resend | twilio | logged-only
+        target:
+          type: string
+          description: Default destination (email address or phone) — masked
+        note:
+          type: string
+      required: [configured, provider, target, note]
+    OnbChannelTest:
+      type: object
+      properties:
+        channel:
+          type: string
+          description: email | whatsapp
+      required: [channel]
+    OnbChannelTestResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        detail:
+          type: string
+      required: [ok, detail]

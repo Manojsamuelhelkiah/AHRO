@@ -1241,3 +1241,473 @@ export const DeleteActualsOverlayParams = zod.object({
 export const DeleteActualsOverlayResponse = zod.void()
 
 
+/**
+ * @summary Control-tower dashboard summary (case counts by stage, pending approvals, blockers)
+ */
+export const GetOnboardingDashboardResponse = zod.object({
+  "totalCases": zod.number(),
+  "byStage": zod.array(zod.object({
+  "key": zod.string(),
+  "count": zod.number()
+})),
+  "pendingApprovals": zod.number(),
+  "hardBlocked": zod.number(),
+  "day1AtRisk": zod.number().describe('Cases joining within 7 days with an open blocker'),
+  "readyCases": zod.number(),
+  "recentEvents": zod.array(zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "agent": zod.string().describe('intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel'),
+  "engine": zod.string().describe('llm | ldm | orchestrator | human | system'),
+  "hitlPattern": zod.string().nullable().describe('notify-only | approve-before-act | act-then-review | hard-block'),
+  "ruleRef": zod.string().nullable().describe('SME-spec rule reference, e.g. \"4.1 Intake Rule 5\"'),
+  "title": zod.string(),
+  "detail": zod.string().describe('Decision rationale'),
+  "createdAt": zod.string()
+}).describe('One audit-trail entry; every agent decision lands here with engine type and rule reference'))
+})
+
+
+/**
+ * @summary List the demo scenarios (worked examples from the SME spec)
+ */
+export const ListOnboardingScenariosResponseItem = zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "specRef": zod.string().describe('Which worked example in the SME document this validates'),
+  "expectedBehaviour": zod.string()
+})
+export const ListOnboardingScenariosResponse = zod.array(ListOnboardingScenariosResponseItem)
+
+
+/**
+ * @summary Launch a demo scenario — creates the case and starts orchestration asynchronously
+ */
+export const RunOnboardingScenarioParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const RunOnboardingScenarioResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('profile | documentation | payroll | access | assets | learning | checkpoints'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional()
+}).describe('One entry of the 7-point Day-1 readiness checklist')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary List onboarding cases (newest first)
+ */
+export const ListOnboardingCasesResponseItem = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('profile | documentation | payroll | access | assets | learning | checkpoints'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional()
+}).describe('One entry of the 7-point Day-1 readiness checklist')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponseItem)
+
+
+/**
+ * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
+ */
+
+
+
+export const CreateOnboardingCaseBody = zod.object({
+  "workerName": zod.string().min(1),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().optional().describe('Optional E.164 phone used for WhatsApp'),
+  "hireType": zod.string(),
+  "workerCategory": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string(),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string(),
+  "primarySkill": zod.string().optional(),
+  "skillCriticality": zod.string().optional(),
+  "notes": zod.string().optional().describe('Unstructured recruiter notes; treated as evidence, not instructions')
+}).describe('Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.')
+
+export const CreateOnboardingCaseResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('profile | documentation | payroll | access | assets | learning | checkpoints'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional()
+}).describe('One entry of the 7-point Day-1 readiness checklist')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Get a case with workstreams, readiness checklist and blockers
+ */
+export const GetOnboardingCaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetOnboardingCaseResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('profile | documentation | payroll | access | assets | learning | checkpoints'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional()
+}).describe('One entry of the 7-point Day-1 readiness checklist')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Audit trail / live agent activity feed for a case (oldest first)
+ */
+export const ListOnboardingCaseEventsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListOnboardingCaseEventsResponseItem = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "agent": zod.string().describe('intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel'),
+  "engine": zod.string().describe('llm | ldm | orchestrator | human | system'),
+  "hitlPattern": zod.string().nullable().describe('notify-only | approve-before-act | act-then-review | hard-block'),
+  "ruleRef": zod.string().nullable().describe('SME-spec rule reference, e.g. \"4.1 Intake Rule 5\"'),
+  "title": zod.string(),
+  "detail": zod.string().describe('Decision rationale'),
+  "createdAt": zod.string()
+}).describe('One audit-trail entry; every agent decision lands here with engine type and rule reference')
+export const ListOnboardingCaseEventsResponse = zod.array(ListOnboardingCaseEventsResponseItem)
+
+
+/**
+ * @summary Email/WhatsApp timeline for a case (oldest first)
+ */
+export const ListOnboardingCaseCommunicationsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListOnboardingCaseCommunicationsResponseItem = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "channel": zod.string().describe('email | whatsapp'),
+  "direction": zod.string().describe('outbound | inbound'),
+  "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),
+  "subject": zod.string().nullable(),
+  "body": zod.string(),
+  "status": zod.string().describe('sent | delivered | failed | logged-only | received'),
+  "failureReason": zod.string().nullable(),
+  "sensitive": zod.boolean().describe('Flagged for human review before\/after send per ethics guardrails'),
+  "createdAt": zod.string()
+})
+export const ListOnboardingCaseCommunicationsResponse = zod.array(ListOnboardingCaseCommunicationsResponseItem)
+
+
+/**
+ * @summary Record an inbound message from the new hire (WhatsApp/email reply) and let the agents react
+ */
+export const ReceiveOnboardingInboundParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const ReceiveOnboardingInboundBody = zod.object({
+  "channel": zod.string().describe('email | whatsapp'),
+  "body": zod.string().min(1)
+})
+
+export const ReceiveOnboardingInboundResponse = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "channel": zod.string().describe('email | whatsapp'),
+  "direction": zod.string().describe('outbound | inbound'),
+  "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),
+  "subject": zod.string().nullable(),
+  "body": zod.string(),
+  "status": zod.string().describe('sent | delivered | failed | logged-only | received'),
+  "failureReason": zod.string().nullable(),
+  "sensitive": zod.boolean().describe('Flagged for human review before\/after send per ethics guardrails'),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Human-in-the-loop approval queue
+ */
+export const ListOnboardingApprovalsQueryParams = zod.object({
+  "status": zod.coerce.string().optional()
+})
+
+export const ListOnboardingApprovalsResponseItem = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "caseWorkerName": zod.string(),
+  "agent": zod.string(),
+  "ruleRef": zod.string().nullable(),
+  "hitlPattern": zod.string().describe('approve-before-act | hard-block (hard-blocks require human resolution end-to-end)'),
+  "recommendation": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.string().describe('pending | approved | rejected'),
+  "decidedBy": zod.string().nullable(),
+  "comment": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "decidedAt": zod.string().nullable()
+})
+export const ListOnboardingApprovalsResponse = zod.array(ListOnboardingApprovalsResponseItem)
+
+
+/**
+ * @summary Approve or reject a pending agent recommendation; orchestration resumes accordingly
+ */
+export const DecideOnboardingApprovalParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const DecideOnboardingApprovalBody = zod.object({
+  "decision": zod.string().describe('approved | rejected'),
+  "decidedBy": zod.string().min(1),
+  "comment": zod.string().optional()
+})
+
+export const DecideOnboardingApprovalResponse = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "caseWorkerName": zod.string(),
+  "agent": zod.string(),
+  "ruleRef": zod.string().nullable(),
+  "hitlPattern": zod.string().describe('approve-before-act | hard-block (hard-blocks require human resolution end-to-end)'),
+  "recommendation": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.string().describe('pending | approved | rejected'),
+  "decidedBy": zod.string().nullable(),
+  "comment": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "decidedAt": zod.string().nullable()
+})
+
+
+/**
+ * @summary Connected HR systems panel (pluggable adapter per system role)
+ */
+export const ListOnboardingConnectorsResponseItem = zod.object({
+  "key": zod.string().describe('ats | hris | identity | payroll | lms | bgv | esignature'),
+  "label": zod.string().describe('System role, e.g. \"ATS \/ Recruiting\"'),
+  "vendor": zod.string().describe('Currently plugged-in vendor adapter'),
+  "availableVendors": zod.array(zod.string()),
+  "status": zod.string().describe('connected | disconnected'),
+  "description": zod.string(),
+  "authoritativeFor": zod.array(zod.string()).describe('Which case fields this system is the source of truth for'),
+  "lastSyncAt": zod.string().nullable()
+}).describe('One pluggable HR-system adapter slot')
+export const ListOnboardingConnectorsResponse = zod.array(ListOnboardingConnectorsResponseItem)
+
+
+/**
+ * @summary Swap the vendor behind a system role or toggle connection (demonstrates any-HR-system pluggability)
+ */
+export const UpdateOnboardingConnectorParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const UpdateOnboardingConnectorBody = zod.object({
+  "vendor": zod.string().optional(),
+  "status": zod.string().optional().describe('connected | disconnected')
+})
+
+export const UpdateOnboardingConnectorResponse = zod.object({
+  "key": zod.string().describe('ats | hris | identity | payroll | lms | bgv | esignature'),
+  "label": zod.string().describe('System role, e.g. \"ATS \/ Recruiting\"'),
+  "vendor": zod.string().describe('Currently plugged-in vendor adapter'),
+  "availableVendors": zod.array(zod.string()),
+  "status": zod.string().describe('connected | disconnected'),
+  "description": zod.string(),
+  "authoritativeFor": zod.array(zod.string()).describe('Which case fields this system is the source of truth for'),
+  "lastSyncAt": zod.string().nullable()
+}).describe('One pluggable HR-system adapter slot')
+
+
+/**
+ * @summary Data & Analytics Agent aggregated insights (skill inflow, bottlenecks, cohort readiness) with small-population suppression
+ */
+export const GetOnboardingAnalyticsResponse = zod.object({
+  "skillInflow": zod.array(zod.object({
+  "skill": zod.string(),
+  "count": zod.number(),
+  "criticality": zod.string(),
+  "suppressed": zod.boolean().describe('True when below the safe aggregation threshold; details hidden')
+})),
+  "bottlenecks": zod.array(zod.object({
+  "theme": zod.string().describe('documentation | access | assets | payroll | manager-readiness | learning | bgv'),
+  "occurrences": zod.number(),
+  "note": zod.string()
+})),
+  "cohortReadiness": zod.array(zod.object({
+  "key": zod.string(),
+  "count": zod.number()
+})).describe('Case counts by readiness state'),
+  "suppressionThreshold": zod.number().describe('Minimum population before a trend is published'),
+  "narrative": zod.string().nullable().describe('LLM-written aggregated insight for HR\/workforce planning')
+})
+
+
+/**
+ * @summary Communication channel configuration status (email, WhatsApp)
+ */
+export const GetOnboardingChannelsResponse = zod.object({
+  "email": zod.object({
+  "configured": zod.boolean(),
+  "provider": zod.string().describe('e.g. resend | twilio | logged-only'),
+  "target": zod.string().describe('Default destination (email address or phone) — masked'),
+  "note": zod.string()
+}),
+  "whatsapp": zod.object({
+  "configured": zod.boolean(),
+  "provider": zod.string().describe('e.g. resend | twilio | logged-only'),
+  "target": zod.string().describe('Default destination (email address or phone) — masked'),
+  "note": zod.string()
+})
+})
+
+
+/**
+ * @summary Send a test message on a channel to verify configuration
+ */
+export const TestOnboardingChannelBody = zod.object({
+  "channel": zod.string().describe('email | whatsapp')
+})
+
+export const TestOnboardingChannelResponse = zod.object({
+  "ok": zod.boolean(),
+  "detail": zod.string()
+})
+
+

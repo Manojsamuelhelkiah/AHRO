@@ -40,7 +40,23 @@ import type {
   ImportWorkbookResult,
   Intent,
   ListCustomIntentsParams,
+  ListOnboardingApprovalsParams,
   ModelOption,
+  OnbAnalytics,
+  OnbApproval,
+  OnbApprovalDecision,
+  OnbCase,
+  OnbCaseIntake,
+  OnbChannelStatus,
+  OnbChannelTest,
+  OnbChannelTestResult,
+  OnbCommunication,
+  OnbConnector,
+  OnbConnectorUpdate,
+  OnbDashboard,
+  OnbEvent,
+  OnbInboundMessage,
+  OnbScenarioDef,
   ParseActualsLogBody,
   Rollup,
   RollupRequest,
@@ -2684,5 +2700,1211 @@ export const useDeleteActualsOverlay = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getDeleteActualsOverlayMutationOptions(options));
+    }
+
+export const getGetOnboardingDashboardUrl = () => {
+
+
+
+
+  return `/api/onboarding/dashboard`
+}
+
+/**
+ * @summary Control-tower dashboard summary (case counts by stage, pending approvals, blockers)
+ */
+export const getOnboardingDashboard = async ( options?: RequestInit): Promise<OnbDashboard> => {
+
+  return customFetch<OnbDashboard>(getGetOnboardingDashboardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingDashboardQueryKey = () => {
+    return [
+    `/api/onboarding/dashboard`
+    ] as const;
+    }
+
+
+export const getGetOnboardingDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingDashboard>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingDashboardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingDashboard>>> = ({ signal }) => getOnboardingDashboard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingDashboard>>>
+export type GetOnboardingDashboardQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Control-tower dashboard summary (case counts by stage, pending approvals, blockers)
+ */
+
+export function useGetOnboardingDashboard<TData = Awaited<ReturnType<typeof getOnboardingDashboard>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListOnboardingScenariosUrl = () => {
+
+
+
+
+  return `/api/onboarding/scenarios`
+}
+
+/**
+ * @summary List the demo scenarios (worked examples from the SME spec)
+ */
+export const listOnboardingScenarios = async ( options?: RequestInit): Promise<OnbScenarioDef[]> => {
+
+  return customFetch<OnbScenarioDef[]>(getListOnboardingScenariosUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingScenariosQueryKey = () => {
+    return [
+    `/api/onboarding/scenarios`
+    ] as const;
+    }
+
+
+export const getListOnboardingScenariosQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingScenarios>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingScenarios>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingScenariosQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingScenarios>>> = ({ signal }) => listOnboardingScenarios({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingScenarios>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingScenariosQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingScenarios>>>
+export type ListOnboardingScenariosQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the demo scenarios (worked examples from the SME spec)
+ */
+
+export function useListOnboardingScenarios<TData = Awaited<ReturnType<typeof listOnboardingScenarios>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingScenarios>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingScenariosQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunOnboardingScenarioUrl = (key: string,) => {
+
+
+
+
+  return `/api/onboarding/scenarios/${key}/run`
+}
+
+/**
+ * @summary Launch a demo scenario — creates the case and starts orchestration asynchronously
+ */
+export const runOnboardingScenario = async (key: string, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getRunOnboardingScenarioUrl(key),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRunOnboardingScenarioMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOnboardingScenario>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runOnboardingScenario>>, TError,{key: string}, TContext> => {
+
+const mutationKey = ['runOnboardingScenario'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runOnboardingScenario>>, {key: string}> = (props) => {
+          const {key} = props ?? {};
+
+          return  runOnboardingScenario(key,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunOnboardingScenarioMutationResult = NonNullable<Awaited<ReturnType<typeof runOnboardingScenario>>>
+
+    export type RunOnboardingScenarioMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Launch a demo scenario — creates the case and starts orchestration asynchronously
+ */
+export const useRunOnboardingScenario = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOnboardingScenario>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runOnboardingScenario>>,
+        TError,
+        {key: string},
+        TContext
+      > => {
+      return useMutation(getRunOnboardingScenarioMutationOptions(options));
+    }
+
+export const getListOnboardingCasesUrl = () => {
+
+
+
+
+  return `/api/onboarding/cases`
+}
+
+/**
+ * @summary List onboarding cases (newest first)
+ */
+export const listOnboardingCases = async ( options?: RequestInit): Promise<OnbCase[]> => {
+
+  return customFetch<OnbCase[]>(getListOnboardingCasesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingCasesQueryKey = () => {
+    return [
+    `/api/onboarding/cases`
+    ] as const;
+    }
+
+
+export const getListOnboardingCasesQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingCases>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingCasesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingCases>>> = ({ signal }) => listOnboardingCases({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingCasesQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingCases>>>
+export type ListOnboardingCasesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List onboarding cases (newest first)
+ */
+
+export function useListOnboardingCases<TData = Awaited<ReturnType<typeof listOnboardingCases>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingCasesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateOnboardingCaseUrl = () => {
+
+
+
+
+  return `/api/onboarding/cases`
+}
+
+/**
+ * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
+ */
+export const createOnboardingCase = async (onbCaseIntake: OnbCaseIntake, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getCreateOnboardingCaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbCaseIntake)
+  }
+);}
+
+
+
+
+
+export const getCreateOnboardingCaseMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingCase>>, TError,{data: BodyType<OnbCaseIntake>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createOnboardingCase>>, TError,{data: BodyType<OnbCaseIntake>}, TContext> => {
+
+const mutationKey = ['createOnboardingCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createOnboardingCase>>, {data: BodyType<OnbCaseIntake>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createOnboardingCase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateOnboardingCaseMutationResult = NonNullable<Awaited<ReturnType<typeof createOnboardingCase>>>
+    export type CreateOnboardingCaseMutationBody = BodyType<OnbCaseIntake>
+    export type CreateOnboardingCaseMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
+ */
+export const useCreateOnboardingCase = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingCase>>, TError,{data: BodyType<OnbCaseIntake>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createOnboardingCase>>,
+        TError,
+        {data: BodyType<OnbCaseIntake>},
+        TContext
+      > => {
+      return useMutation(getCreateOnboardingCaseMutationOptions(options));
+    }
+
+export const getGetOnboardingCaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}`
+}
+
+/**
+ * @summary Get a case with workstreams, readiness checklist and blockers
+ */
+export const getOnboardingCase = async (id: number, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getGetOnboardingCaseUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingCaseQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}`
+    ] as const;
+    }
+
+
+export const getGetOnboardingCaseQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingCase>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingCaseQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingCase>>> = ({ signal }) => getOnboardingCase(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCase>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingCaseQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingCase>>>
+export type GetOnboardingCaseQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get a case with workstreams, readiness checklist and blockers
+ */
+
+export function useGetOnboardingCase<TData = Awaited<ReturnType<typeof getOnboardingCase>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingCaseQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListOnboardingCaseEventsUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/events`
+}
+
+/**
+ * @summary Audit trail / live agent activity feed for a case (oldest first)
+ */
+export const listOnboardingCaseEvents = async (id: number, options?: RequestInit): Promise<OnbEvent[]> => {
+
+  return customFetch<OnbEvent[]>(getListOnboardingCaseEventsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingCaseEventsQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}/events`
+    ] as const;
+    }
+
+
+export const getListOnboardingCaseEventsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingCaseEvents>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingCaseEventsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingCaseEvents>>> = ({ signal }) => listOnboardingCaseEvents(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingCaseEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingCaseEvents>>>
+export type ListOnboardingCaseEventsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Audit trail / live agent activity feed for a case (oldest first)
+ */
+
+export function useListOnboardingCaseEvents<TData = Awaited<ReturnType<typeof listOnboardingCaseEvents>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingCaseEventsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListOnboardingCaseCommunicationsUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/communications`
+}
+
+/**
+ * @summary Email/WhatsApp timeline for a case (oldest first)
+ */
+export const listOnboardingCaseCommunications = async (id: number, options?: RequestInit): Promise<OnbCommunication[]> => {
+
+  return customFetch<OnbCommunication[]>(getListOnboardingCaseCommunicationsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingCaseCommunicationsQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}/communications`
+    ] as const;
+    }
+
+
+export const getListOnboardingCaseCommunicationsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingCaseCommunications>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseCommunications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingCaseCommunicationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingCaseCommunications>>> = ({ signal }) => listOnboardingCaseCommunications(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseCommunications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingCaseCommunicationsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingCaseCommunications>>>
+export type ListOnboardingCaseCommunicationsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Email/WhatsApp timeline for a case (oldest first)
+ */
+
+export function useListOnboardingCaseCommunications<TData = Awaited<ReturnType<typeof listOnboardingCaseCommunications>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseCommunications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingCaseCommunicationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReceiveOnboardingInboundUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/inbound`
+}
+
+/**
+ * @summary Record an inbound message from the new hire (WhatsApp/email reply) and let the agents react
+ */
+export const receiveOnboardingInbound = async (id: number,
+    onbInboundMessage: OnbInboundMessage, options?: RequestInit): Promise<OnbCommunication> => {
+
+  return customFetch<OnbCommunication>(getReceiveOnboardingInboundUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbInboundMessage)
+  }
+);}
+
+
+
+
+
+export const getReceiveOnboardingInboundMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receiveOnboardingInbound>>, TError,{id: number;data: BodyType<OnbInboundMessage>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof receiveOnboardingInbound>>, TError,{id: number;data: BodyType<OnbInboundMessage>}, TContext> => {
+
+const mutationKey = ['receiveOnboardingInbound'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof receiveOnboardingInbound>>, {id: number;data: BodyType<OnbInboundMessage>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  receiveOnboardingInbound(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReceiveOnboardingInboundMutationResult = NonNullable<Awaited<ReturnType<typeof receiveOnboardingInbound>>>
+    export type ReceiveOnboardingInboundMutationBody = BodyType<OnbInboundMessage>
+    export type ReceiveOnboardingInboundMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Record an inbound message from the new hire (WhatsApp/email reply) and let the agents react
+ */
+export const useReceiveOnboardingInbound = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receiveOnboardingInbound>>, TError,{id: number;data: BodyType<OnbInboundMessage>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof receiveOnboardingInbound>>,
+        TError,
+        {id: number;data: BodyType<OnbInboundMessage>},
+        TContext
+      > => {
+      return useMutation(getReceiveOnboardingInboundMutationOptions(options));
+    }
+
+export const getListOnboardingApprovalsUrl = (params?: ListOnboardingApprovalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/approvals?${stringifiedParams}` : `/api/onboarding/approvals`
+}
+
+/**
+ * @summary Human-in-the-loop approval queue
+ */
+export const listOnboardingApprovals = async (params?: ListOnboardingApprovalsParams, options?: RequestInit): Promise<OnbApproval[]> => {
+
+  return customFetch<OnbApproval[]>(getListOnboardingApprovalsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingApprovalsQueryKey = (params?: ListOnboardingApprovalsParams,) => {
+    return [
+    `/api/onboarding/approvals`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListOnboardingApprovalsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingApprovals>>, TError = ErrorType<unknown>>(params?: ListOnboardingApprovalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingApprovalsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingApprovals>>> = ({ signal }) => listOnboardingApprovals(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingApprovals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingApprovalsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingApprovals>>>
+export type ListOnboardingApprovalsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Human-in-the-loop approval queue
+ */
+
+export function useListOnboardingApprovals<TData = Awaited<ReturnType<typeof listOnboardingApprovals>>, TError = ErrorType<unknown>>(
+ params?: ListOnboardingApprovalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingApprovalsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideOnboardingApprovalUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/approvals/${id}/decide`
+}
+
+/**
+ * @summary Approve or reject a pending agent recommendation; orchestration resumes accordingly
+ */
+export const decideOnboardingApproval = async (id: number,
+    onbApprovalDecision: OnbApprovalDecision, options?: RequestInit): Promise<OnbApproval> => {
+
+  return customFetch<OnbApproval>(getDecideOnboardingApprovalUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbApprovalDecision)
+  }
+);}
+
+
+
+
+
+export const getDecideOnboardingApprovalMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingApproval>>, TError,{id: number;data: BodyType<OnbApprovalDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingApproval>>, TError,{id: number;data: BodyType<OnbApprovalDecision>}, TContext> => {
+
+const mutationKey = ['decideOnboardingApproval'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideOnboardingApproval>>, {id: number;data: BodyType<OnbApprovalDecision>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideOnboardingApproval(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideOnboardingApprovalMutationResult = NonNullable<Awaited<ReturnType<typeof decideOnboardingApproval>>>
+    export type DecideOnboardingApprovalMutationBody = BodyType<OnbApprovalDecision>
+    export type DecideOnboardingApprovalMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Approve or reject a pending agent recommendation; orchestration resumes accordingly
+ */
+export const useDecideOnboardingApproval = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingApproval>>, TError,{id: number;data: BodyType<OnbApprovalDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideOnboardingApproval>>,
+        TError,
+        {id: number;data: BodyType<OnbApprovalDecision>},
+        TContext
+      > => {
+      return useMutation(getDecideOnboardingApprovalMutationOptions(options));
+    }
+
+export const getListOnboardingConnectorsUrl = () => {
+
+
+
+
+  return `/api/onboarding/connectors`
+}
+
+/**
+ * @summary Connected HR systems panel (pluggable adapter per system role)
+ */
+export const listOnboardingConnectors = async ( options?: RequestInit): Promise<OnbConnector[]> => {
+
+  return customFetch<OnbConnector[]>(getListOnboardingConnectorsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingConnectorsQueryKey = () => {
+    return [
+    `/api/onboarding/connectors`
+    ] as const;
+    }
+
+
+export const getListOnboardingConnectorsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingConnectors>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingConnectors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingConnectorsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingConnectors>>> = ({ signal }) => listOnboardingConnectors({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingConnectors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingConnectorsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingConnectors>>>
+export type ListOnboardingConnectorsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Connected HR systems panel (pluggable adapter per system role)
+ */
+
+export function useListOnboardingConnectors<TData = Awaited<ReturnType<typeof listOnboardingConnectors>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingConnectors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingConnectorsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateOnboardingConnectorUrl = (key: string,) => {
+
+
+
+
+  return `/api/onboarding/connectors/${key}`
+}
+
+/**
+ * @summary Swap the vendor behind a system role or toggle connection (demonstrates any-HR-system pluggability)
+ */
+export const updateOnboardingConnector = async (key: string,
+    onbConnectorUpdate: OnbConnectorUpdate, options?: RequestInit): Promise<OnbConnector> => {
+
+  return customFetch<OnbConnector>(getUpdateOnboardingConnectorUrl(key),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbConnectorUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateOnboardingConnectorMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingConnector>>, TError,{key: string;data: BodyType<OnbConnectorUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingConnector>>, TError,{key: string;data: BodyType<OnbConnectorUpdate>}, TContext> => {
+
+const mutationKey = ['updateOnboardingConnector'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOnboardingConnector>>, {key: string;data: BodyType<OnbConnectorUpdate>}> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  updateOnboardingConnector(key,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOnboardingConnectorMutationResult = NonNullable<Awaited<ReturnType<typeof updateOnboardingConnector>>>
+    export type UpdateOnboardingConnectorMutationBody = BodyType<OnbConnectorUpdate>
+    export type UpdateOnboardingConnectorMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Swap the vendor behind a system role or toggle connection (demonstrates any-HR-system pluggability)
+ */
+export const useUpdateOnboardingConnector = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingConnector>>, TError,{key: string;data: BodyType<OnbConnectorUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOnboardingConnector>>,
+        TError,
+        {key: string;data: BodyType<OnbConnectorUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateOnboardingConnectorMutationOptions(options));
+    }
+
+export const getGetOnboardingAnalyticsUrl = () => {
+
+
+
+
+  return `/api/onboarding/analytics`
+}
+
+/**
+ * @summary Data & Analytics Agent aggregated insights (skill inflow, bottlenecks, cohort readiness) with small-population suppression
+ */
+export const getOnboardingAnalytics = async ( options?: RequestInit): Promise<OnbAnalytics> => {
+
+  return customFetch<OnbAnalytics>(getGetOnboardingAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingAnalyticsQueryKey = () => {
+    return [
+    `/api/onboarding/analytics`
+    ] as const;
+    }
+
+
+export const getGetOnboardingAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingAnalytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingAnalytics>>> = ({ signal }) => getOnboardingAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingAnalytics>>>
+export type GetOnboardingAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Data & Analytics Agent aggregated insights (skill inflow, bottlenecks, cohort readiness) with small-population suppression
+ */
+
+export function useGetOnboardingAnalytics<TData = Awaited<ReturnType<typeof getOnboardingAnalytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingChannelsUrl = () => {
+
+
+
+
+  return `/api/onboarding/channels`
+}
+
+/**
+ * @summary Communication channel configuration status (email, WhatsApp)
+ */
+export const getOnboardingChannels = async ( options?: RequestInit): Promise<OnbChannelStatus> => {
+
+  return customFetch<OnbChannelStatus>(getGetOnboardingChannelsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingChannelsQueryKey = () => {
+    return [
+    `/api/onboarding/channels`
+    ] as const;
+    }
+
+
+export const getGetOnboardingChannelsQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingChannels>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingChannels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingChannelsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingChannels>>> = ({ signal }) => getOnboardingChannels({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingChannels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingChannelsQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingChannels>>>
+export type GetOnboardingChannelsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Communication channel configuration status (email, WhatsApp)
+ */
+
+export function useGetOnboardingChannels<TData = Awaited<ReturnType<typeof getOnboardingChannels>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingChannels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingChannelsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTestOnboardingChannelUrl = () => {
+
+
+
+
+  return `/api/onboarding/channels/test`
+}
+
+/**
+ * @summary Send a test message on a channel to verify configuration
+ */
+export const testOnboardingChannel = async (onbChannelTest: OnbChannelTest, options?: RequestInit): Promise<OnbChannelTestResult> => {
+
+  return customFetch<OnbChannelTestResult>(getTestOnboardingChannelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbChannelTest)
+  }
+);}
+
+
+
+
+
+export const getTestOnboardingChannelMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testOnboardingChannel>>, TError,{data: BodyType<OnbChannelTest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testOnboardingChannel>>, TError,{data: BodyType<OnbChannelTest>}, TContext> => {
+
+const mutationKey = ['testOnboardingChannel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testOnboardingChannel>>, {data: BodyType<OnbChannelTest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  testOnboardingChannel(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestOnboardingChannelMutationResult = NonNullable<Awaited<ReturnType<typeof testOnboardingChannel>>>
+    export type TestOnboardingChannelMutationBody = BodyType<OnbChannelTest>
+    export type TestOnboardingChannelMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a test message on a channel to verify configuration
+ */
+export const useTestOnboardingChannel = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testOnboardingChannel>>, TError,{data: BodyType<OnbChannelTest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testOnboardingChannel>>,
+        TError,
+        {data: BodyType<OnbChannelTest>},
+        TContext
+      > => {
+      return useMutation(getTestOnboardingChannelMutationOptions(options));
     }
 

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/onboarding-agent/"
+title = "Onboarding Agent Control Tower"
+description = "Orchestrated multi-agent HR onboarding POC: 7 AI agents (LLM + deterministic LDM rule engines) coordinating documentation, access, assets, learning and analytics readiness, with a human-in-the-loop control tower UI, pluggable HR-system connectors, and real email + WhatsApp communication channels."
+version = "1.0.0"
+id = "artifacts/onboarding-agent"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/onboarding-agent/" ]
+localPort = 22888
+
+[services.development]
+run = "pnpm --filter @workspace/onboarding-agent run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/onboarding-agent", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/onboarding-agent/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22888"
+BASE_PATH = "/onboarding-agent/"

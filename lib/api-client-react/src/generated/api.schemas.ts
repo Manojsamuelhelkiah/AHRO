@@ -699,6 +699,291 @@ export interface ActualsValidationResult {
   measuredFields: string[];
 }
 
+/**
+ * One entry of the 7-point Day-1 readiness checklist
+ */
+export interface OnbReadinessItem {
+  /** profile | documentation | payroll | access | assets | learning | checkpoints */
+  key: string;
+  label: string;
+  /** pending | in-progress | ready | exception */
+  status: string;
+  note?: string;
+}
+
+/**
+ * A parallel readiness workstream owned by one agent
+ */
+export interface OnbWorkstream {
+  /** documentation | access | assets | learning | analytics */
+  key: string;
+  label: string;
+  agent: string;
+  /** pending | in-progress | blocked | ready | exception */
+  status: string;
+  /** Accountable human owner */
+  owner: string;
+  blockers: string[];
+}
+
+export interface OnbCase {
+  id: number;
+  workerName: string;
+  workerEmail: string;
+  /**
+     * E.164 phone for WhatsApp; null when not provided
+     * @nullable
+     */
+  workerPhone: string | null;
+  /** external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited */
+  hireType: string;
+  /** employee | contractor | vendor | intern */
+  workerCategory: string;
+  role: string;
+  department: string;
+  /** Country/region driving statutory items (e.g. India, USA, UK) */
+  geography: string;
+  legalEntity: string;
+  managerName: string;
+  recruiterName: string;
+  /** ISO date */
+  joiningDate: string;
+  /** standard | elevated */
+  urgency: string;
+  /** trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused */
+  lifecycleStage: string;
+  /** running | waiting-approval | blocked | idle | done */
+  orchestrationStatus: string;
+  readiness: OnbReadinessItem[];
+  workstreams: OnbWorkstream[];
+  /** @nullable */
+  primarySkill: string | null;
+  /**
+     * standard | scarce | client-critical
+     * @nullable
+     */
+  skillCriticality: string | null;
+  /**
+     * Demo scenario this case came from, if any
+     * @nullable
+     */
+  scenarioKey: string | null;
+  /**
+     * LLM-generated onboarding plan narrative
+     * @nullable
+     */
+  planSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.
+ */
+export interface OnbCaseIntake {
+  /** @minLength 1 */
+  workerName: string;
+  workerEmail: string;
+  /** Optional E.164 phone used for WhatsApp */
+  workerPhone?: string;
+  hireType: string;
+  workerCategory: string;
+  role: string;
+  department: string;
+  geography: string;
+  legalEntity: string;
+  managerName: string;
+  recruiterName: string;
+  joiningDate: string;
+  primarySkill?: string;
+  skillCriticality?: string;
+  /** Unstructured recruiter notes; treated as evidence, not instructions */
+  notes?: string;
+}
+
+/**
+ * One audit-trail entry; every agent decision lands here with engine type and rule reference
+ */
+export interface OnbEvent {
+  id: number;
+  caseId: number;
+  /** intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel */
+  agent: string;
+  /** llm | ldm | orchestrator | human | system */
+  engine: string;
+  /**
+     * notify-only | approve-before-act | act-then-review | hard-block
+     * @nullable
+     */
+  hitlPattern: string | null;
+  /**
+     * SME-spec rule reference, e.g. "4.1 Intake Rule 5"
+     * @nullable
+     */
+  ruleRef: string | null;
+  title: string;
+  /** Decision rationale */
+  detail: string;
+  createdAt: string;
+}
+
+export interface OnbApproval {
+  id: number;
+  caseId: number;
+  caseWorkerName: string;
+  agent: string;
+  /** @nullable */
+  ruleRef: string | null;
+  /** approve-before-act | hard-block (hard-blocks require human resolution end-to-end) */
+  hitlPattern: string;
+  recommendation: string;
+  rationale: string;
+  /** pending | approved | rejected */
+  status: string;
+  /** @nullable */
+  decidedBy: string | null;
+  /** @nullable */
+  comment: string | null;
+  createdAt: string;
+  /** @nullable */
+  decidedAt: string | null;
+}
+
+export interface OnbApprovalDecision {
+  /** approved | rejected */
+  decision: string;
+  /** @minLength 1 */
+  decidedBy: string;
+  comment?: string;
+}
+
+export interface OnbCommunication {
+  id: number;
+  caseId: number;
+  /** email | whatsapp */
+  channel: string;
+  /** outbound | inbound */
+  direction: string;
+  /** Email address or phone number (masked for sensitive comms) */
+  toAddress: string;
+  /** @nullable */
+  subject: string | null;
+  body: string;
+  /** sent | delivered | failed | logged-only | received */
+  status: string;
+  /** @nullable */
+  failureReason: string | null;
+  /** Flagged for human review before/after send per ethics guardrails */
+  sensitive: boolean;
+  createdAt: string;
+}
+
+export interface OnbInboundMessage {
+  /** email | whatsapp */
+  channel: string;
+  /** @minLength 1 */
+  body: string;
+}
+
+/**
+ * One pluggable HR-system adapter slot
+ */
+export interface OnbConnector {
+  /** ats | hris | identity | payroll | lms | bgv | esignature */
+  key: string;
+  /** System role, e.g. "ATS / Recruiting" */
+  label: string;
+  /** Currently plugged-in vendor adapter */
+  vendor: string;
+  availableVendors: string[];
+  /** connected | disconnected */
+  status: string;
+  description: string;
+  /** Which case fields this system is the source of truth for */
+  authoritativeFor: string[];
+  /** @nullable */
+  lastSyncAt: string | null;
+}
+
+export interface OnbConnectorUpdate {
+  vendor?: string;
+  /** connected | disconnected */
+  status?: string;
+}
+
+export interface OnbDashboard {
+  totalCases: number;
+  byStage: CountBucket[];
+  pendingApprovals: number;
+  hardBlocked: number;
+  /** Cases joining within 7 days with an open blocker */
+  day1AtRisk: number;
+  readyCases: number;
+  recentEvents: OnbEvent[];
+}
+
+export interface OnbScenarioDef {
+  key: string;
+  title: string;
+  description: string;
+  /** Which worked example in the SME document this validates */
+  specRef: string;
+  expectedBehaviour: string;
+}
+
+export interface OnbSkillInflowBucket {
+  skill: string;
+  count: number;
+  criticality: string;
+  /** True when below the safe aggregation threshold; details hidden */
+  suppressed: boolean;
+}
+
+export interface OnbBottleneckTheme {
+  /** documentation | access | assets | payroll | manager-readiness | learning | bgv */
+  theme: string;
+  occurrences: number;
+  note: string;
+}
+
+export interface OnbAnalytics {
+  skillInflow: OnbSkillInflowBucket[];
+  bottlenecks: OnbBottleneckTheme[];
+  /** Case counts by readiness state */
+  cohortReadiness: CountBucket[];
+  /** Minimum population before a trend is published */
+  suppressionThreshold: number;
+  /**
+     * LLM-written aggregated insight for HR/workforce planning
+     * @nullable
+     */
+  narrative: string | null;
+}
+
+export interface OnbChannelInfo {
+  configured: boolean;
+  /** e.g. resend | twilio | logged-only */
+  provider: string;
+  /** Default destination (email address or phone) — masked */
+  target: string;
+  note: string;
+}
+
+export interface OnbChannelStatus {
+  email: OnbChannelInfo;
+  whatsapp: OnbChannelInfo;
+}
+
+export interface OnbChannelTest {
+  /** email | whatsapp */
+  channel: string;
+}
+
+export interface OnbChannelTestResult {
+  ok: boolean;
+  detail: string;
+}
+
 export type ListCustomIntentsParams = {
 /**
  * active (default) | all
@@ -721,5 +1006,12 @@ export type ImportScenarioWorkbookBody = {
 export type ParseActualsLogBody = {
   /** Raw call-log CSV file (max 20 MB). */
   logFile: Blob;
+};
+
+export type ListOnboardingApprovalsParams = {
+/**
+ * pending (default) | all
+ */
+status?: string;
 };
 
