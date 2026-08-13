@@ -2521,7 +2521,8 @@ components:
         id:
           type: integer
         caseId:
-          type: integer
+          type: ["integer", "null"]
+          description: Null for system-level events not tied to a case (e.g. inbox-monitor outages)
         agent:
           type: string
           description: intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel

@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
-import { onbCases, onbCommunications } from "@workspace/db/schema";
+import { onbCases, onbCommunications, onbEvents } from "@workspace/db/schema";
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { handleInbound } from "./engine";
 
 /**
@@ -22,6 +22,103 @@ const SEARCH_WINDOW = "newer_than:2d";
 
 let timer: NodeJS.Timeout | null = null;
 let polling = false;
+
+/**
+ * Outage alerting: after FAILURE_ALERT_THRESHOLD consecutive poll failures,
+ * write one system-level event (caseId null) into the audit feed so the
+ * dashboard surfaces the outage; write a recovery event when polling succeeds
+ * again. Exactly one alert per outage — the flag resets only on success.
+ */
+const FAILURE_ALERT_THRESHOLD = 3;
+
+export type OutageDecision = "none" | "alert" | "recover";
+
+/** Pure outage-alert state machine (exported for tests). */
+export function createOutageTracker(threshold: number = FAILURE_ALERT_THRESHOLD) {
+  let consecutiveFailures = 0;
+  let alerted = false;
+  return {
+    recordSuccess(): OutageDecision {
+      consecutiveFailures = 0;
+      if (alerted) {
+        alerted = false;
+        return "recover";
+      }
+      return "none";
+    },
+    recordFailure(): { decision: OutageDecision; consecutiveFailures: number } {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= threshold && !alerted) {
+        alerted = true;
+        return { decision: "alert", consecutiveFailures };
+      }
+      return { decision: "none", consecutiveFailures };
+    },
+  };
+}
+
+const outageTracker = createOutageTracker();
+
+export const MONITOR_DOWN_TITLE = "Inbox monitoring is down";
+export const MONITOR_RECOVERED_TITLE = "Inbox monitoring recovered";
+
+/**
+ * Durable dedup: decide whether to write a down/recovered event given the
+ * in-process decision and the most recent monitor event already persisted.
+ * This keeps "one alert per outage" true across server restarts — a restart
+ * mid-outage must not produce a second down event, and the first success
+ * after a restart must still record the recovery. Pure, exported for tests.
+ */
+export function planMonitorEventWrite(
+  decision: OutageDecision | "startup-success",
+  latestDurableTitle: string | null,
+): "down" | "recovered" | null {
+  if (decision === "alert") {
+    return latestDurableTitle === MONITOR_DOWN_TITLE ? null : "down";
+  }
+  if (decision === "recover" || decision === "startup-success") {
+    return latestDurableTitle === MONITOR_DOWN_TITLE ? "recovered" : null;
+  }
+  return null;
+}
+
+/** Title of the most recent persisted monitor event, or null. */
+async function latestMonitorEventTitle(): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ title: onbEvents.title })
+      .from(onbEvents)
+      .where(
+        and(
+          isNull(onbEvents.caseId),
+          eq(onbEvents.engine, "system"),
+          inArray(onbEvents.title, [MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE]),
+        ),
+      )
+      .orderBy(desc(onbEvents.createdAt), desc(onbEvents.id))
+      .limit(1);
+    return row?.title ?? null;
+  } catch (err) {
+    console.error("[onboarding inbound-email] failed to read monitor events:", String(err));
+    return null;
+  }
+}
+
+async function logMonitorEvent(title: string, detail: string): Promise<void> {
+  try {
+    await db.insert(onbEvents).values({
+      caseId: null,
+      agent: "channel",
+      engine: "system",
+      hitlPattern: "notify-only",
+      title,
+      detail,
+    });
+  } catch (err) {
+    // Never let alerting break the poll loop itself.
+    console.error("[onboarding inbound-email] failed to record monitor event:", String(err));
+  }
+}
 
 /** Health telemetry for the poller, surfaced on the control tower. */
 const monitorStatus = {
@@ -195,6 +292,61 @@ export async function recordInbound(opts: InboundMessage): Promise<boolean> {
   return true;
 }
 
+export type DetailFetchResult = { ok: boolean; json: () => Promise<unknown> };
+
+export type ProcessDeps = {
+  fetchDetail: (id: string) => Promise<DetailFetchResult>;
+  alreadyRecorded: (id: string) => Promise<boolean>;
+  recordInbound: (opts: InboundMessage) => Promise<boolean>;
+};
+
+/**
+ * Process a page of Gmail message refs. Returns how many message-detail
+ * fetches failed so the caller can fail the poll — silently skipping them
+ * would leave the monitor "healthy" while replies are not being picked up.
+ * Deps are injectable for tests.
+ */
+export async function processMessageRefs(
+  refs: Array<{ id: string }>,
+  caseByEmail: Map<string, number>,
+  deps: ProcessDeps,
+): Promise<number> {
+  let detailFailures = 0;
+  for (const ref of refs) {
+    if (await deps.alreadyRecorded(ref.id)) continue;
+
+    const msgResp = await deps.fetchDetail(ref.id);
+    if (!msgResp.ok) {
+      detailFailures += 1;
+      continue;
+    }
+    const msg = (await msgResp.json()) as GmailMessage;
+
+    const fromAddress = extractAddress(header(msg, "From"));
+    const caseId = caseByEmail.get(fromAddress);
+    if (!caseId) continue;
+
+    const raw = findPlainText(msg.payload) ?? "";
+    const body = stripQuotedReply(raw);
+    if (!body) continue;
+
+    const recorded = await deps.recordInbound({
+      caseId,
+      channel: "email",
+      fromAddress,
+      subject: header(msg, "Subject") || null,
+      body: body.slice(0, 4000),
+      externalMessageId: msg.id,
+    });
+    if (recorded) {
+      console.log(
+        `[onboarding inbound-email] new reply from ${fromAddress} routed to case ${caseId} (gmail ${msg.id})`,
+      );
+    }
+  }
+  return detailFailures;
+}
+
 async function pollOnce(): Promise<void> {
   // Active cases only; map each email to its most recent active case.
   const cases = await db
@@ -224,40 +376,23 @@ async function pollOnce(): Promise<void> {
     throw new Error(`Gmail search failed: ${listResp.status} ${(await listResp.text()).slice(0, 200)}`);
   }
   const list = (await listResp.json()) as { messages?: Array<{ id: string }> };
-  for (const ref of list.messages ?? []) {
-    if (await alreadyRecorded(ref.id)) continue;
-
-    const msgResp = await connectors.proxy(
-      "google-mail",
-      `/gmail/v1/users/me/messages/${ref.id}?format=full`,
-      { method: "GET" },
+  const refs = list.messages ?? [];
+  const detailFailures = await processMessageRefs(refs, caseByEmail, {
+    fetchDetail: (id) =>
+      connectors.proxy("google-mail", `/gmail/v1/users/me/messages/${id}?format=full`, {
+        method: "GET",
+      }),
+    alreadyRecorded,
+    recordInbound,
+  });
+  if (detailFailures > 0) {
+    throw new Error(
+      `Gmail message detail fetch failed for ${detailFailures} of ${refs.length} messages`,
     );
-    if (!msgResp.ok) continue;
-    const msg = (await msgResp.json()) as GmailMessage;
-
-    const fromAddress = extractAddress(header(msg, "From"));
-    const caseId = caseByEmail.get(fromAddress);
-    if (!caseId) continue;
-
-    const raw = findPlainText(msg.payload) ?? "";
-    const body = stripQuotedReply(raw);
-    if (!body) continue;
-
-    const recorded = await recordInbound({
-      caseId,
-      channel: "email",
-      fromAddress,
-      subject: header(msg, "Subject") || null,
-      body: body.slice(0, 4000),
-      externalMessageId: msg.id,
-    });
-    if (recorded) {
-      console.log(
-        `[onboarding inbound-email] new reply from ${fromAddress} routed to case ${caseId} (gmail ${msg.id})`,
-      );
-    }
   }
 }
+
+let startupRecoveryChecked = false;
 
 export function startInboundEmailPolling(): void {
   if (timer) return;
@@ -270,10 +405,38 @@ export function startInboundEmailPolling(): void {
       monitorStatus.lastSuccessAt = new Date();
       monitorStatus.lastError = null;
       monitorStatus.lastErrorAt = null;
+      const decision = outageTracker.recordSuccess();
+      // On the first success after startup, also check durable state: if the
+      // process died mid-outage, the persisted down event still needs its
+      // recovery event even though this process never alerted.
+      if (decision === "recover" || !startupRecoveryChecked) {
+        startupRecoveryChecked = true;
+        const write = planMonitorEventWrite(
+          decision === "recover" ? "recover" : "startup-success",
+          await latestMonitorEventTitle(),
+        );
+        if (write === "recovered") {
+          await logMonitorEvent(
+            MONITOR_RECOVERED_TITLE,
+            "The Gmail reply monitor is polling successfully again. Replies from hires are being picked up.",
+          );
+        }
+      }
     } catch (err) {
       monitorStatus.lastError = String(err).slice(0, 300);
       monitorStatus.lastErrorAt = new Date();
       console.error("[onboarding inbound-email] poll failed:", monitorStatus.lastError);
+      const { decision, consecutiveFailures } = outageTracker.recordFailure();
+      if (decision === "alert") {
+        // Durable dedup: a restart mid-outage must not write a second alert.
+        const write = planMonitorEventWrite("alert", await latestMonitorEventTitle());
+        if (write === "down") {
+          await logMonitorEvent(
+            MONITOR_DOWN_TITLE,
+            `The Gmail reply monitor has failed ${consecutiveFailures} polls in a row. Replies from hires are NOT being picked up. Latest error: ${monitorStatus.lastError}`,
+          );
+        }
+      }
     } finally {
       polling = false;
     }

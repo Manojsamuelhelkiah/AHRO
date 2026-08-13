@@ -834,7 +834,11 @@ export interface OnbCaseIntake {
  */
 export interface OnbEvent {
   id: number;
-  caseId: number;
+  /**
+     * Null for system-level events not tied to a case (e.g. inbox-monitor outages)
+     * @nullable
+     */
+  caseId: number | null;
   /** intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel */
   agent: string;
   /** llm | ldm | orchestrator | human | system */

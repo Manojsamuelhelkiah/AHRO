@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { useClerk, useUser } from '@clerk/react';
+import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
 import { cn } from './ui-shared';
-import { LayoutDashboard, Users, CheckSquare, Server, BarChart3, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle } from 'lucide-react';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -43,6 +44,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <UserFooter />
       </aside>
       <main className="flex-1 flex flex-col min-w-0">
+        <MonitorAlertBanner />
         <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
           {children}
         </div>
@@ -50,6 +52,37 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+/**
+ * Persistent warning shown across every control-tower page while the Gmail
+ * reply monitor is unhealthy (broken or not running), so a dead inbox
+ * monitor can't go unnoticed. Polls the channels endpoint every 30s.
+ */
+function MonitorAlertBanner() {
+  const { data } = useGetOnboardingChannels({
+    query: { queryKey: getGetOnboardingChannelsQueryKey(), refetchInterval: 30_000 },
+  });
+  const monitor = data?.inboundEmail;
+  if (!monitor || monitor.state === 'healthy' || monitor.state === 'initializing') return null;
+
+  const message =
+    monitor.state === 'stopped'
+      ? 'Inbox monitoring is not running — email replies from hires are not being picked up.'
+      : 'Inbox monitoring is down — email replies from hires are not being picked up.';
+
+  return (
+    <div className="bg-red-600 text-white px-4 py-2.5 flex items-center gap-3 text-sm shrink-0" role="alert">
+      <AlertTriangle className="h-4 w-4 shrink-0" />
+      <p className="font-medium flex-1 min-w-0 truncate">{message}</p>
+      <Link
+        href="/systems"
+        className="shrink-0 rounded-md bg-white/15 hover:bg-white/25 transition-colors px-3 py-1 text-xs font-semibold uppercase tracking-wider"
+      >
+        View details
+      </Link>
+    </div>
+  );
+}
+
 function UserFooter() {
   const { user } = useUser();
   const { signOut } = useClerk();

@@ -55,9 +55,8 @@ export const onbCases = pgTable("onb_cases", {
 
 export const onbEvents = pgTable("onb_events", {
   id: serial("id").primaryKey(),
-  caseId: integer("case_id")
-    .notNull()
-    .references(() => onbCases.id, { onDelete: "cascade" }),
+  // Nullable: system-level events (e.g. inbox-monitor outages) are not tied to a case.
+  caseId: integer("case_id").references(() => onbCases.id, { onDelete: "cascade" }),
   agent: text("agent").notNull(),
   engine: text("engine").notNull(),
   hitlPattern: text("hitl_pattern"),

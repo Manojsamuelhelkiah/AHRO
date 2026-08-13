@@ -1,0 +1,1 @@
+ALTER TABLE "onb_events" ALTER COLUMN "case_id" DROP NOT NULL;

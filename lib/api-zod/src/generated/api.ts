@@ -1256,7 +1256,7 @@ export const GetOnboardingDashboardResponse = zod.object({
   "readyCases": zod.number(),
   "recentEvents": zod.array(zod.object({
   "id": zod.number(),
-  "caseId": zod.number(),
+  "caseId": zod.number().nullable().describe('Null for system-level events not tied to a case (e.g. inbox-monitor outages)'),
   "agent": zod.string().describe('intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel'),
   "engine": zod.string().describe('llm | ldm | orchestrator | human | system'),
   "hitlPattern": zod.string().nullable().describe('notify-only | approve-before-act | act-then-review | hard-block'),
@@ -1497,7 +1497,7 @@ export const ListOnboardingCaseEventsParams = zod.object({
 
 export const ListOnboardingCaseEventsResponseItem = zod.object({
   "id": zod.number(),
-  "caseId": zod.number(),
+  "caseId": zod.number().nullable().describe('Null for system-level events not tied to a case (e.g. inbox-monitor outages)'),
   "agent": zod.string().describe('intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel'),
   "engine": zod.string().describe('llm | ldm | orchestrator | human | system'),
   "hitlPattern": zod.string().nullable().describe('notify-only | approve-before-act | act-then-review | hard-block'),
