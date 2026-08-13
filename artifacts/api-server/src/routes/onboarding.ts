@@ -459,6 +459,68 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
   }
 });
 
+/**
+ * Twilio MessageStatus callback for outbound WhatsApp sends. Twilio POSTs
+ * here (via the StatusCallback param set when sending) as the message moves
+ * queued → sent → delivered/failed, so the communication row reflects
+ * actual delivery, not just API acceptance.
+ */
+router.post(
+  "/onboarding/webhooks/twilio/whatsapp-status",
+  async (req, res, next) => {
+    try {
+      if (!process.env.TWILIO_AUTH_TOKEN) {
+        res.status(503).json({ message: "Twilio is not configured" });
+        return;
+      }
+      if (!requestSignatureValid(req)) {
+        res.status(403).json({ message: "Invalid Twilio signature" });
+        return;
+      }
+      const messageSid = String(req.body?.MessageSid ?? "");
+      const messageStatus = String(req.body?.MessageStatus ?? "").toLowerCase();
+      if (!messageSid || !messageStatus) {
+        res.status(400).json({ message: "MessageSid and MessageStatus are required" });
+        return;
+      }
+      // Only final states change the row; intermediate ones (queued, sent)
+      // would just churn it. "read" implies delivered.
+      const finalStatus =
+        messageStatus === "delivered" || messageStatus === "read"
+          ? "delivered"
+          : messageStatus === "failed" || messageStatus === "undelivered"
+            ? "failed"
+            : null;
+      if (!finalStatus) {
+        res.status(204).end();
+        return;
+      }
+      const errorCode = String(req.body?.ErrorCode ?? "").trim();
+      const errorMessage = String(req.body?.ErrorMessage ?? "").trim();
+      const failureReason =
+        finalStatus === "failed"
+          ? [`Twilio reported ${messageStatus}`, errorCode && `error ${errorCode}`, errorMessage]
+              .filter(Boolean)
+              .join(" — ")
+              .slice(0, 300)
+          : null;
+      await db
+        .update(onbCommunications)
+        .set({ status: finalStatus, failureReason })
+        .where(
+          and(
+            eq(onbCommunications.externalMessageId, messageSid),
+            eq(onbCommunications.direction, "outbound"),
+            eq(onbCommunications.channel, "whatsapp"),
+          ),
+        );
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /* ----------------------------- approvals ----------------------------- */
 
 router.get("/onboarding/approvals", async (req, res, next) => {

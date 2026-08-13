@@ -88,6 +88,19 @@ export async function sendEmail(
   }
 }
 
+/**
+ * Public URL Twilio should POST MessageStatus callbacks to. Prefers the
+ * published domain (REPLIT_DOMAINS), falls back to the dev domain — both are
+ * publicly reachable. Returns null when no domain is available (e.g. tests).
+ */
+export function whatsappStatusCallbackUrl(): string | null {
+  const domain =
+    process.env.REPLIT_DOMAINS?.split(",")[0]?.trim() ||
+    process.env.REPLIT_DEV_DOMAIN?.trim();
+  if (!domain) return null;
+  return `https://${domain}/api/onboarding/webhooks/twilio/whatsapp-status`;
+}
+
 async function sendWhatsApp(
   toPhone: string,
   body: string,
@@ -104,6 +117,10 @@ async function sendWhatsApp(
       To: toPhone.startsWith("whatsapp:") ? toPhone : `whatsapp:${toPhone}`,
       Body: body,
     });
+    // Ask Twilio to report final delivery status back to us so the
+    // communication row can move from "sent" to "delivered"/"failed".
+    const statusCallback = whatsappStatusCallbackUrl();
+    if (statusCallback) params.set("StatusCallback", statusCallback);
     const resp = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
       {
