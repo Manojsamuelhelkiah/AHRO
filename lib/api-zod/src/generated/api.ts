@@ -1536,6 +1536,27 @@ export const ListOnboardingCaseCommunicationsResponse = zod.array(ListOnboarding
 
 
 /**
+ * @summary Document checklist (documentation pack) for a case
+ */
+export const ListOnboardingCaseDocumentsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListOnboardingCaseDocumentsResponseItem = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "key": zod.string(),
+  "label": zod.string(),
+  "category": zod.enum(['identity', 'statutory', 'contract', 'policy']),
+  "status": zod.enum(['pending', 'received', 'verified']),
+  "required": zod.boolean(),
+  "note": zod.string().nullable(),
+  "updatedAt": zod.string()
+}).describe('One item of a case\'s documentation pack (identity\/statutory\/contract\/policy)')
+export const ListOnboardingCaseDocumentsResponse = zod.array(ListOnboardingCaseDocumentsResponseItem)
+
+
+/**
  * @summary Record an inbound message from the new hire (WhatsApp/email reply) and let the agents react
  */
 export const ReceiveOnboardingInboundParams = zod.object({
@@ -1628,6 +1649,7 @@ export const ListOnboardingConnectorsResponseItem = zod.object({
   "vendor": zod.string().describe('Currently plugged-in vendor adapter'),
   "availableVendors": zod.array(zod.string()),
   "status": zod.string().describe('connected | disconnected'),
+  "trackingMode": zod.enum(['api', 'email']).describe('api = deep integration (poll\/webhook) | email = watch-mailbox tracking via status emails'),
   "description": zod.string(),
   "authoritativeFor": zod.array(zod.string()).describe('Which case fields this system is the source of truth for'),
   "lastSyncAt": zod.string().nullable()
@@ -1644,7 +1666,8 @@ export const UpdateOnboardingConnectorParams = zod.object({
 
 export const UpdateOnboardingConnectorBody = zod.object({
   "vendor": zod.string().optional(),
-  "status": zod.string().optional().describe('connected | disconnected')
+  "status": zod.string().optional().describe('connected | disconnected'),
+  "trackingMode": zod.enum(['api', 'email']).optional().describe('Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged')
 })
 
 export const UpdateOnboardingConnectorResponse = zod.object({
@@ -1653,6 +1676,7 @@ export const UpdateOnboardingConnectorResponse = zod.object({
   "vendor": zod.string().describe('Currently plugged-in vendor adapter'),
   "availableVendors": zod.array(zod.string()),
   "status": zod.string().describe('connected | disconnected'),
+  "trackingMode": zod.enum(['api', 'email']).describe('api = deep integration (poll\/webhook) | email = watch-mailbox tracking via status emails'),
   "description": zod.string(),
   "authoritativeFor": zod.array(zod.string()).describe('Which case fields this system is the source of truth for'),
   "lastSyncAt": zod.string().nullable()
@@ -1709,7 +1733,7 @@ export const GetOnboardingSystemWatcherResponse = zod.object({
   "caseWorkerName": zod.string(),
   "system": zod.string().describe('bgv | itsm | payroll'),
   "label": zod.string(),
-  "mode": zod.string().describe('push | poll'),
+  "mode": zod.string().describe('push | poll | email (watch-mailbox)'),
   "externalRef": zod.string().describe('Vendor-side reference, e.g. BGV-1042 \/ RITM-1042'),
   "status": zod.string().describe('pending | done | overdue'),
   "requestedAt": zod.string(),
@@ -1719,6 +1743,49 @@ export const GetOnboardingSystemWatcherResponse = zod.object({
   "escalatedAt": zod.string().nullable(),
   "note": zod.string().nullable()
 }).describe('One tracked external-system checklist item for a case'))
+})
+
+
+/**
+ * @summary Watch-mailbox tracker status — mailbox address, monitor health and recent matched vendor status emails
+ */
+export const GetOnboardingEmailWatchResponse = zod.object({
+  "running": zod.boolean(),
+  "state": zod.string().describe('healthy | initializing | broken | stopped'),
+  "healthy": zod.boolean(),
+  "pollIntervalSeconds": zod.number(),
+  "mailbox": zod.string().nullable().describe('The Gmail address vendors should CC status emails to; null when the mailbox is unreachable'),
+  "lastPollAt": zod.string().nullable(),
+  "lastSuccessAt": zod.string().nullable(),
+  "lastError": zod.string().nullable(),
+  "lastErrorAt": zod.string().nullable(),
+  "openChecks": zod.number().describe('Open checks currently tracked via the watch mailbox'),
+  "recent": zod.array(zod.object({
+  "id": zod.number(),
+  "caseId": zod.number().nullable(),
+  "system": zod.string(),
+  "fromAddress": zod.string(),
+  "subject": zod.string().nullable(),
+  "snippet": zod.string().nullable(),
+  "parsedStatus": zod.string().describe('completed | exception | update'),
+  "action": zod.string().describe('What the watcher did about it'),
+  "receivedAt": zod.string()
+}).describe('One vendor status email matched by the watch-mailbox tracker'))
+}).describe('Watch-mailbox tracker — status-email based tracking for systems without API\/webhook access')
+
+
+/**
+ * @summary Demo helper — inject a synthetic vendor status email through the same parse-and-apply path as a real watched email
+ */
+export const SimulateOnboardingWatchEmailBody = zod.object({
+  "caseId": zod.number(),
+  "system": zod.enum(['bgv', 'itsm', 'payroll']),
+  "outcome": zod.enum(['completed', 'exception'])
+})
+
+export const SimulateOnboardingWatchEmailResponse = zod.object({
+  "ok": zod.boolean(),
+  "message": zod.string()
 })
 
 

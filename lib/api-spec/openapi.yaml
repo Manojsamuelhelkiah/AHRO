@@ -954,6 +954,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/documents:
+    get:
+      operationId: listOnboardingCaseDocuments
+      tags: [onboarding]
+      summary: Document checklist (documentation pack) for a case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Document list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbDocument"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/cases/{id}/inbound:
     post:
       operationId: receiveOnboardingInbound
@@ -1114,6 +1140,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OnbSystemWatcher"
+  /onboarding/systems/email-watch:
+    get:
+      operationId: getOnboardingEmailWatch
+      tags: [onboarding]
+      summary: Watch-mailbox tracker status — mailbox address, monitor health and recent matched vendor status emails
+      responses:
+        "200":
+          description: Email watch status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbEmailWatch"
+  /onboarding/systems/email-watch/simulate:
+    post:
+      operationId: simulateOnboardingWatchEmail
+      tags: [onboarding]
+      summary: Demo helper — inject a synthetic vendor status email through the same parse-and-apply path as a real watched email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbWatchEmailSimulate"
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbWatchEmailSimulateResult"
+        "404":
+          description: No tracked check
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbWatchEmailSimulateResult"
   /onboarding/channels:
     get:
       operationId: getOnboardingChannels
@@ -2492,6 +2554,31 @@ components:
         - managerName
         - recruiterName
         - joiningDate
+    OnbDocument:
+      type: object
+      description: One item of a case's documentation pack (identity/statutory/contract/policy)
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: integer
+        key:
+          type: string
+        label:
+          type: string
+        category:
+          type: string
+          enum: [identity, statutory, contract, policy]
+        status:
+          type: string
+          enum: [pending, received, verified]
+        required:
+          type: boolean
+        note:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+      required: [id, caseId, key, label, category, status, required, note, updatedAt]
     OnbEvent:
       type: object
       description: One audit-trail entry; every agent decision lands here with engine type and rule reference
@@ -2623,6 +2710,10 @@ components:
         status:
           type: string
           description: connected | disconnected
+        trackingMode:
+          type: string
+          enum: [api, email]
+          description: api = deep integration (poll/webhook) | email = watch-mailbox tracking via status emails
         description:
           type: string
         authoritativeFor:
@@ -2632,7 +2723,7 @@ components:
           description: Which case fields this system is the source of truth for
         lastSyncAt:
           type: ["string", "null"]
-      required: [key, label, vendor, availableVendors, status, description, authoritativeFor, lastSyncAt]
+      required: [key, label, vendor, availableVendors, status, trackingMode, description, authoritativeFor, lastSyncAt]
     OnbConnectorUpdate:
       type: object
       properties:
@@ -2641,6 +2732,10 @@ components:
         status:
           type: string
           description: connected | disconnected
+        trackingMode:
+          type: string
+          enum: [api, email]
+          description: Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged
     OnbDashboard:
       type: object
       properties:
@@ -2819,7 +2914,7 @@ components:
           type: string
         mode:
           type: string
-          description: push | poll
+          description: push | poll | email (watch-mailbox)
         externalRef:
           type: string
           description: Vendor-side reference, e.g. BGV-1042 / RITM-1042
@@ -2852,6 +2947,83 @@ components:
           items:
             $ref: "#/components/schemas/OnbSystemCheck"
       required: [connectors, checks]
+    OnbWatchEmail:
+      type: object
+      description: One vendor status email matched by the watch-mailbox tracker
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: ["integer", "null"]
+        system:
+          type: string
+        fromAddress:
+          type: string
+        subject:
+          type: ["string", "null"]
+        snippet:
+          type: ["string", "null"]
+        parsedStatus:
+          type: string
+          description: completed | exception | update
+        action:
+          type: string
+          description: What the watcher did about it
+        receivedAt:
+          type: string
+      required: [id, caseId, system, fromAddress, subject, snippet, parsedStatus, action, receivedAt]
+    OnbEmailWatch:
+      type: object
+      description: Watch-mailbox tracker — status-email based tracking for systems without API/webhook access
+      properties:
+        running:
+          type: boolean
+        state:
+          type: string
+          description: healthy | initializing | broken | stopped
+        healthy:
+          type: boolean
+        pollIntervalSeconds:
+          type: integer
+        mailbox:
+          type: ["string", "null"]
+          description: The Gmail address vendors should CC status emails to; null when the mailbox is unreachable
+        lastPollAt:
+          type: ["string", "null"]
+        lastSuccessAt:
+          type: ["string", "null"]
+        lastError:
+          type: ["string", "null"]
+        lastErrorAt:
+          type: ["string", "null"]
+        openChecks:
+          type: integer
+          description: Open checks currently tracked via the watch mailbox
+        recent:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbWatchEmail"
+      required: [running, state, healthy, pollIntervalSeconds, mailbox, lastPollAt, lastSuccessAt, lastError, lastErrorAt, openChecks, recent]
+    OnbWatchEmailSimulate:
+      type: object
+      properties:
+        caseId:
+          type: integer
+        system:
+          type: string
+          enum: [bgv, itsm, payroll]
+        outcome:
+          type: string
+          enum: [completed, exception]
+      required: [caseId, system, outcome]
+    OnbWatchEmailSimulateResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+      required: [ok, message]
     OnbChannelInfo:
       type: object
       properties:

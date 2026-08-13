@@ -30,3 +30,32 @@ export async function llmComplete(
     return null;
   }
 }
+
+/**
+ * LLM call that must return a JSON object. Returns the parsed object or
+ * null on any failure (call error, empty output, unparseable JSON) —
+ * callers must treat null as "the AI could not handle this".
+ */
+export async function llmCompleteJson<T>(
+  system: string,
+  user: string,
+  maxTokens = 700,
+): Promise<T | null> {
+  try {
+    const resp = await openai.chat.completions.create({
+      model: MODEL,
+      max_completion_tokens: maxTokens + 2500,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+    const text = resp.choices[0]?.message?.content?.trim();
+    if (!text) return null;
+    return JSON.parse(text) as T;
+  } catch (err) {
+    console.error("[onboarding llm] json completion failed:", err);
+    return null;
+  }
+}

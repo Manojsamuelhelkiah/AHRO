@@ -857,6 +857,41 @@ export interface OnbCaseIntake {
   notes?: string;
 }
 
+export type OnbDocumentCategory = typeof OnbDocumentCategory[keyof typeof OnbDocumentCategory];
+
+
+export const OnbDocumentCategory = {
+  identity: 'identity',
+  statutory: 'statutory',
+  contract: 'contract',
+  policy: 'policy',
+} as const;
+
+export type OnbDocumentStatus = typeof OnbDocumentStatus[keyof typeof OnbDocumentStatus];
+
+
+export const OnbDocumentStatus = {
+  pending: 'pending',
+  received: 'received',
+  verified: 'verified',
+} as const;
+
+/**
+ * One item of a case's documentation pack (identity/statutory/contract/policy)
+ */
+export interface OnbDocument {
+  id: number;
+  caseId: number;
+  key: string;
+  label: string;
+  category: OnbDocumentCategory;
+  status: OnbDocumentStatus;
+  required: boolean;
+  /** @nullable */
+  note: string | null;
+  updatedAt: string;
+}
+
 /**
  * One audit-trail entry; every agent decision lands here with engine type and rule reference
  */
@@ -944,6 +979,17 @@ export interface OnbInboundMessage {
 }
 
 /**
+ * api = deep integration (poll/webhook) | email = watch-mailbox tracking via status emails
+ */
+export type OnbConnectorTrackingMode = typeof OnbConnectorTrackingMode[keyof typeof OnbConnectorTrackingMode];
+
+
+export const OnbConnectorTrackingMode = {
+  api: 'api',
+  email: 'email',
+} as const;
+
+/**
  * One pluggable HR-system adapter slot
  */
 export interface OnbConnector {
@@ -956,6 +1002,8 @@ export interface OnbConnector {
   availableVendors: string[];
   /** connected | disconnected */
   status: string;
+  /** api = deep integration (poll/webhook) | email = watch-mailbox tracking via status emails */
+  trackingMode: OnbConnectorTrackingMode;
   description: string;
   /** Which case fields this system is the source of truth for */
   authoritativeFor: string[];
@@ -963,10 +1011,23 @@ export interface OnbConnector {
   lastSyncAt: string | null;
 }
 
+/**
+ * Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged
+ */
+export type OnbConnectorUpdateTrackingMode = typeof OnbConnectorUpdateTrackingMode[keyof typeof OnbConnectorUpdateTrackingMode];
+
+
+export const OnbConnectorUpdateTrackingMode = {
+  api: 'api',
+  email: 'email',
+} as const;
+
 export interface OnbConnectorUpdate {
   vendor?: string;
   /** connected | disconnected */
   status?: string;
+  /** Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged */
+  trackingMode?: OnbConnectorUpdateTrackingMode;
 }
 
 export interface OnbDashboard {
@@ -1109,7 +1170,7 @@ export interface OnbSystemCheck {
   /** bgv | itsm | payroll */
   system: string;
   label: string;
-  /** push | poll */
+  /** push | poll | email (watch-mailbox) */
   mode: string;
   /** Vendor-side reference, e.g. BGV-1042 / RITM-1042 */
   externalRef: string;
@@ -1131,6 +1192,81 @@ export interface OnbSystemCheck {
 export interface OnbSystemWatcher {
   connectors: OnbSystemConnectorHealth[];
   checks: OnbSystemCheck[];
+}
+
+/**
+ * One vendor status email matched by the watch-mailbox tracker
+ */
+export interface OnbWatchEmail {
+  id: number;
+  /** @nullable */
+  caseId: number | null;
+  system: string;
+  fromAddress: string;
+  /** @nullable */
+  subject: string | null;
+  /** @nullable */
+  snippet: string | null;
+  /** completed | exception | update */
+  parsedStatus: string;
+  /** What the watcher did about it */
+  action: string;
+  receivedAt: string;
+}
+
+/**
+ * Watch-mailbox tracker — status-email based tracking for systems without API/webhook access
+ */
+export interface OnbEmailWatch {
+  running: boolean;
+  /** healthy | initializing | broken | stopped */
+  state: string;
+  healthy: boolean;
+  pollIntervalSeconds: number;
+  /**
+     * The Gmail address vendors should CC status emails to; null when the mailbox is unreachable
+     * @nullable
+     */
+  mailbox: string | null;
+  /** @nullable */
+  lastPollAt: string | null;
+  /** @nullable */
+  lastSuccessAt: string | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  lastErrorAt: string | null;
+  /** Open checks currently tracked via the watch mailbox */
+  openChecks: number;
+  recent: OnbWatchEmail[];
+}
+
+export type OnbWatchEmailSimulateSystem = typeof OnbWatchEmailSimulateSystem[keyof typeof OnbWatchEmailSimulateSystem];
+
+
+export const OnbWatchEmailSimulateSystem = {
+  bgv: 'bgv',
+  itsm: 'itsm',
+  payroll: 'payroll',
+} as const;
+
+export type OnbWatchEmailSimulateOutcome = typeof OnbWatchEmailSimulateOutcome[keyof typeof OnbWatchEmailSimulateOutcome];
+
+
+export const OnbWatchEmailSimulateOutcome = {
+  completed: 'completed',
+  exception: 'exception',
+} as const;
+
+export interface OnbWatchEmailSimulate {
+  caseId: number;
+  system: OnbWatchEmailSimulateSystem;
+  outcome: OnbWatchEmailSimulateOutcome;
+}
+
+export interface OnbWatchEmailSimulateResult {
+  ok: boolean;
+  message: string;
 }
 
 export interface OnbChannelTest {

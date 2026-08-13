@@ -162,10 +162,21 @@ async function logEvent(
 /** Close a check as done and update the case checklist. Idempotent. Exported for tests. */
 export async function completeCheck(
   check: typeof onbSystemChecks.$inferSelect,
-  source: "webhook push" | "scheduled poll",
+  source: "webhook push" | "scheduled poll" | "status email",
 ): Promise<void> {
   const def = systemDef(check.system);
   if (!def) return;
+
+  // Guard against tracking-mode retag races: a completion may only land
+  // through the channel the check is *currently* tracked on. If HR
+  // switched a connector between API and email tracking after this
+  // check was read, a stale poll result or already-fetched email must
+  // not close it through the old channel.
+  const expectedMode: Record<typeof source, string> = {
+    "webhook push": "push",
+    "scheduled poll": "poll",
+    "status email": "email",
+  };
 
   const noteBySystem: Record<WatchedSystem, string> = {
     bgv: `BGV cleared by vendor (${check.externalRef}) — statutory pack complete`,
@@ -193,6 +204,7 @@ export async function completeCheck(
         and(
           eq(onbSystemChecks.id, check.id),
           sql`${onbSystemChecks.status} in ('pending', 'overdue')`,
+          eq(onbSystemChecks.mode, expectedMode[source]),
         ),
       )
       .returning();
@@ -252,10 +264,11 @@ export async function completeCheck(
   });
 }
 
-/** Escalate a late/stuck check exactly once. */
-async function escalateCheck(
+/** Escalate a late/stuck check exactly once. Exported for the watch-mailbox tracker. */
+export async function escalateCheck(
   check: typeof onbSystemChecks.$inferSelect,
   reason: string,
+  expectedMode?: string,
 ): Promise<void> {
   const def = systemDef(check.system);
   if (!def) return;
@@ -263,7 +276,11 @@ async function escalateCheck(
     .update(onbSystemChecks)
     .set({ status: "overdue", escalatedAt: new Date(), note: reason })
     .where(
-      and(eq(onbSystemChecks.id, check.id), eq(onbSystemChecks.status, "pending")),
+      and(
+        eq(onbSystemChecks.id, check.id),
+        eq(onbSystemChecks.status, "pending"),
+        ...(expectedMode ? [eq(onbSystemChecks.mode, expectedMode)] : []),
+      ),
     )
     .returning();
   if (!updated) return; // already escalated
@@ -291,13 +308,16 @@ export async function trackCaseSystems(caseId: number): Promise<void> {
   if (!c) return;
   const now = new Date();
   const defs = applicableSystems(c);
+  const emailTracked = await emailTrackedConnectors();
   for (const def of defs) {
+    const useEmail = emailTracked.has(def.connectorKey);
+    const mode = useEmail ? "email" : def.mode;
     const rows = await db
       .insert(onbSystemChecks)
       .values({
         caseId,
         system: def.key,
-        mode: def.mode,
+        mode,
         externalRef: makeExternalRef(def, caseId),
         status: "pending",
         requestedAt: now,
@@ -311,7 +331,13 @@ export async function trackCaseSystems(caseId: number): Promise<void> {
       await logEvent(
         caseId,
         `Watching ${def.label.toLowerCase()}`,
-        `System Watcher is tracking ${def.label} (${makeExternalRef(def, caseId)}) via ${def.mode === "push" ? "vendor webhook push" : `scheduled polling every ${POLL_INTERVAL_MS / 1000}s`}; SLA ${def.slaSeconds}s.`,
+        `System Watcher is tracking ${def.label} (${makeExternalRef(def, caseId)}) via ${
+          mode === "email"
+            ? "the watch mailbox — vendor status emails quoting the reference"
+            : def.mode === "push"
+              ? "vendor webhook push"
+              : `scheduled polling every ${POLL_INTERVAL_MS / 1000}s`
+        }; SLA ${def.slaSeconds}s.`,
         def.completionRuleRef,
       );
     }
@@ -400,6 +426,15 @@ function schedulePush(check: typeof onbSystemChecks.$inferSelect): void {
   scheduledPushes.set(check.id, handle);
 }
 
+/** Connector keys currently switched to email (watch-mailbox) tracking. */
+export async function emailTrackedConnectors(): Promise<Set<string>> {
+  const rows = await db
+    .select({ key: onbConnectors.key })
+    .from(onbConnectors)
+    .where(eq(onbConnectors.trackingMode, "email"));
+  return new Set(rows.map((r) => r.key));
+}
+
 async function connectorConnected(connectorKey: string): Promise<boolean> {
   const [row] = await db
     .select({ status: onbConnectors.status })
@@ -445,7 +480,7 @@ async function tickOnce(): Promise<void> {
     const t = telemetry[def.key];
     t.lastPollAt = new Date();
     try {
-      const mine = checks.filter((c) => c.system === def.key);
+      const mine = checks.filter((c) => c.system === def.key && c.mode === "poll");
       const connected = await connectorConnected(def.connectorKey);
       if (!connected) {
         throw new Error(
@@ -478,6 +513,13 @@ async function tickOnce(): Promise<void> {
     if (now <= check.dueAt.getTime()) continue;
     const def = systemDef(check.system);
     if (!def) continue;
+    if (check.mode === "email") {
+      await escalateCheck(
+        check,
+        `No status email quoting ${check.externalRef} has arrived in the watch mailbox.`,
+      );
+      continue;
+    }
     const connected = await connectorConnected(def.connectorKey);
     await escalateCheck(
       check,

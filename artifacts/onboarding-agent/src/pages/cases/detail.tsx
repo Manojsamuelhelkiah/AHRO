@@ -5,6 +5,8 @@ import {
   useListOnboardingCaseEvents, 
   useListOnboardingCaseCommunications,
   useReceiveOnboardingInbound,
+  useListOnboardingCaseDocuments,
+  getListOnboardingCaseDocumentsQueryKey,
   getGetOnboardingCaseQueryKey,
   getListOnboardingCaseEventsQueryKey,
   getListOnboardingCaseCommunicationsQueryKey
@@ -12,7 +14,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, cn, Input } from '@/components/ui-shared';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
-import { CheckCircle2, Clock, AlertTriangle, XCircle, Send, MessageSquare, Mail, Smartphone } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, XCircle, Send, MessageSquare, Mail, Smartphone, FileText, FileCheck2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 export function CaseDetailPage() {
@@ -38,6 +40,13 @@ export function CaseDetailPage() {
         // use local case `c` for events polling conditionally
         return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval') ? 2500 : false;
       }
+    }
+  });
+
+  const { data: docs } = useListOnboardingCaseDocuments(caseId, {
+    query: {
+      enabled: !!caseId,
+      queryKey: getListOnboardingCaseDocumentsQueryKey(caseId),
     }
   });
 
@@ -106,6 +115,35 @@ export function CaseDetailPage() {
                   <div className="flex-1">
                     <p className="text-sm font-semibold">{r.label}</p>
                     {r.note && <p className="text-xs text-muted-foreground mt-0.5">{r.note}</p>}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Document Checklist</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-2.5">
+              {(docs ?? []).length === 0 && <p className="text-sm text-muted-foreground">Documentation pack not issued yet.</p>}
+              {(docs ?? []).map(d => (
+                <div key={d.key} className="flex items-start gap-3">
+                  <div className="mt-0.5">
+                    {d.status === 'verified' && <FileCheck2 className="w-4 h-4 text-emerald-500" />}
+                    {d.status === 'received' && <Clock className="w-4 h-4 text-blue-500" />}
+                    {d.status === 'pending' && <Clock className="w-4 h-4 text-slate-300" />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium leading-snug">
+                      {d.label}
+                      {!d.required && <span className="ml-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-bold">optional</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className={cn("font-bold uppercase tracking-wider text-[10px] mr-1.5",
+                        d.status === 'verified' ? 'text-emerald-600' : d.status === 'received' ? 'text-blue-600' : 'text-slate-400')}>{d.status}</span>
+                      {d.note}
+                    </p>
                   </div>
                 </div>
               ))}

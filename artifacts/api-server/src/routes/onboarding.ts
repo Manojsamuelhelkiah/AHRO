@@ -13,6 +13,7 @@ import {
   CreateOnboardingCaseBody,
   DecideOnboardingApprovalBody,
   ReceiveOnboardingInboundBody,
+  SimulateOnboardingWatchEmailBody,
   TestOnboardingChannelBody,
   UpdateOnboardingConnectorBody,
 } from "@workspace/api-zod";
@@ -36,11 +37,16 @@ import {
   recordInbound,
 } from "../lib/onboarding/inbound-email";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
+import { listDocuments } from "../lib/onboarding/documents";
 import {
   getSystemWatcherHealth,
   handleSystemWebhook,
 } from "../lib/onboarding/system-watcher";
-import { systemDef } from "../lib/onboarding/external-systems";
+import {
+  getEmailWatchStatus,
+  simulateVendorEmail,
+} from "../lib/onboarding/email-watch";
+import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
 
@@ -314,6 +320,36 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
   }
 });
 
+router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const [exists] = await db
+      .select({ id: onbCases.id })
+      .from(onbCases)
+      .where(eq(onbCases.id, id));
+    if (!exists) {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    const rows = await listDocuments(id);
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        caseId: r.caseId,
+        key: r.key,
+        label: r.label,
+        category: r.category,
+        status: r.status,
+        required: r.required,
+        note: r.note,
+        updatedAt: r.updatedAt.toISOString(),
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -549,15 +585,57 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
       .set({
         vendor: body.vendor ?? row.vendor,
         status: body.status ?? row.status,
+        trackingMode: body.trackingMode ?? row.trackingMode,
         lastSyncAt: new Date(),
       })
       .where(eq(onbConnectors.key, req.params.key))
       .returning();
+    // Retag open checks so a tracking-mode switch takes effect for
+    // in-flight cases too (done checks keep their historical mode).
+    if (body.trackingMode && body.trackingMode !== row.trackingMode) {
+      const def = WATCHED_SYSTEMS.find((s) => s.connectorKey === req.params.key);
+      if (def) {
+        await db
+          .update(onbSystemChecks)
+          .set({
+            mode: body.trackingMode === "email" ? "email" : def.mode,
+          })
+          .where(
+            and(
+              eq(onbSystemChecks.system, def.key),
+              sql`${onbSystemChecks.status} in ('pending', 'overdue')`,
+            ),
+          );
+      }
+    }
     res.json({ ...updated, lastSyncAt: iso(updated.lastSyncAt) });
   } catch (err) {
     next(err);
   }
 });
+
+/* ---------------------------- email watch ---------------------------- */
+
+router.get("/onboarding/systems/email-watch", async (_req, res, next) => {
+  try {
+    res.json(await getEmailWatchStatus());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post(
+  "/onboarding/systems/email-watch/simulate",
+  async (req, res, next) => {
+    try {
+      const body = SimulateOnboardingWatchEmailBody.parse(req.body);
+      const result = await simulateVendorEmail(body);
+      res.status(result.ok ? 200 : 404).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /* --------------------------- system watcher --------------------------- */
 

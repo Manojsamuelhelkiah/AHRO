@@ -122,7 +122,7 @@ export const onbSystemChecks = pgTable(
       .references(() => onbCases.id, { onDelete: "cascade" }),
     /** bgv | itsm | payroll */
     system: text("system").notNull(),
-    /** push (vendor webhook) | poll (scheduled API polling) */
+    /** push (vendor webhook) | poll (scheduled API polling) | email (watch-mailbox) */
     mode: text("mode").notNull(),
     /** Vendor-side reference, e.g. "BGV-1042" */
     externalRef: text("external_ref").notNull(),
@@ -143,7 +143,78 @@ export const onbConnectors = pgTable("onb_connectors", {
   vendor: text("vendor").notNull(),
   availableVendors: jsonb("available_vendors").$type<string[]>().notNull().default([]),
   status: text("status").notNull().default("connected"),
+  /** api (deep integration: poll/webhook) | email (watch-mailbox tracking) */
+  trackingMode: text("tracking_mode").notNull().default("api"),
   description: text("description").notNull(),
   authoritativeFor: jsonb("authoritative_for").$type<string[]>().notNull().default([]),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+});
+
+/**
+ * Status emails matched by the watch-mailbox tracker (email tracking
+ * mode). One row per processed Gmail message (or simulated demo email);
+ * the unique Gmail id makes processing idempotent across restarts.
+ */
+/**
+ * Per-case document checklist — the "documentation pack" as real records
+ * rather than just a narrative event. Seeded when a case starts (and
+ * idempotently backfilled at startup for demo data); statuses advance as
+ * the hire submits and HR verifies each item.
+ */
+export const onbDocuments = pgTable(
+  "onb_documents",
+  {
+    id: serial("id").primaryKey(),
+    caseId: integer("case_id")
+      .notNull()
+      .references(() => onbCases.id, { onDelete: "cascade" }),
+    /** stable key within a case, e.g. id-proof, tax-form */
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    /** identity | statutory | contract | policy */
+    category: text("category").notNull(),
+    /** pending | received | verified */
+    status: text("status").notNull().default("pending"),
+    required: boolean("required").notNull().default(true),
+    note: text("note"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.caseId, t.key)],
+);
+
+/**
+ * Kick-off call slot proposals. When a hire asks for a call, the agent
+ * offers concrete numbered slots by email; the hire books one by
+ * replying with the slot number. One active proposal per case.
+ */
+export const onbCallSlots = pgTable("onb_call_slots", {
+  id: serial("id").primaryKey(),
+  caseId: integer("case_id")
+    .notNull()
+    .references(() => onbCases.id, { onDelete: "cascade" }),
+  /** [{ n: 1, startIso, label }] */
+  slots: jsonb("slots").$type<Array<{ n: number; startIso: string; label: string }>>().notNull(),
+  /** proposed | booked | superseded */
+  status: text("status").notNull().default("proposed"),
+  bookedSlotN: integer("booked_slot_n"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  bookedAt: timestamp("booked_at", { withTimezone: true }),
+});
+
+export const onbWatchEmails = pgTable("onb_watch_emails", {
+  id: serial("id").primaryKey(),
+  gmailMessageId: text("gmail_message_id").notNull().unique(),
+  checkId: integer("check_id").references(() => onbSystemChecks.id, {
+    onDelete: "cascade",
+  }),
+  caseId: integer("case_id").references(() => onbCases.id, { onDelete: "cascade" }),
+  system: text("system").notNull(),
+  fromAddress: text("from_address").notNull(),
+  subject: text("subject"),
+  snippet: text("snippet"),
+  /** completed | exception | update */
+  parsedStatus: text("parsed_status").notNull(),
+  /** What the watcher did about it, human-readable */
+  action: text("action").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 });

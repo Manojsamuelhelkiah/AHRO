@@ -290,29 +290,29 @@ export function getInboundEmailMonitorStatus(): InboundEmailMonitorStatus {
 }
 
 type GmailHeader = { name: string; value: string };
-type GmailPart = {
+export type GmailPart = {
   mimeType?: string;
   body?: { data?: string };
   parts?: GmailPart[];
 };
-type GmailMessage = {
+export type GmailMessage = {
   id: string;
   payload?: GmailPart & { headers?: GmailHeader[] };
 };
 
-function header(msg: GmailMessage, name: string): string {
+export function header(msg: GmailMessage, name: string): string {
   return (
     msg.payload?.headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())
       ?.value ?? ""
   );
 }
 
-function extractAddress(fromHeader: string): string {
+export function extractAddress(fromHeader: string): string {
   const m = fromHeader.match(/<([^>]+)>/);
   return (m ? m[1] : fromHeader).trim().toLowerCase();
 }
 
-function findPlainText(part: GmailPart | undefined): string | null {
+export function findPlainText(part: GmailPart | undefined): string | null {
   if (!part) return null;
   if (part.mimeType === "text/plain" && part.body?.data) {
     return Buffer.from(part.body.data, "base64url").toString("utf8");

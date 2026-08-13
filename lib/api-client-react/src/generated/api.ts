@@ -54,10 +54,14 @@ import type {
   OnbConnector,
   OnbConnectorUpdate,
   OnbDashboard,
+  OnbDocument,
+  OnbEmailWatch,
   OnbEvent,
   OnbInboundMessage,
   OnbScenarioDef,
   OnbSystemWatcher,
+  OnbWatchEmailSimulate,
+  OnbWatchEmailSimulateResult,
   ParseActualsLogBody,
   Rollup,
   RollupRequest,
@@ -3307,6 +3311,83 @@ export function useListOnboardingCaseCommunications<TData = Awaited<ReturnType<t
 
 
 
+export const getListOnboardingCaseDocumentsUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/documents`
+}
+
+/**
+ * @summary Document checklist (documentation pack) for a case
+ */
+export const listOnboardingCaseDocuments = async (id: number, options?: RequestInit): Promise<OnbDocument[]> => {
+
+  return customFetch<OnbDocument[]>(getListOnboardingCaseDocumentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingCaseDocumentsQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}/documents`
+    ] as const;
+    }
+
+
+export const getListOnboardingCaseDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingCaseDocuments>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingCaseDocumentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingCaseDocuments>>> = ({ signal }) => listOnboardingCaseDocuments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseDocuments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingCaseDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingCaseDocuments>>>
+export type ListOnboardingCaseDocumentsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Document checklist (documentation pack) for a case
+ */
+
+export function useListOnboardingCaseDocuments<TData = Awaited<ReturnType<typeof listOnboardingCaseDocuments>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingCaseDocumentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getReceiveOnboardingInboundUrl = (id: number,) => {
 
 
@@ -3837,6 +3918,154 @@ export function useGetOnboardingSystemWatcher<TData = Awaited<ReturnType<typeof 
 
 
 
+
+export const getGetOnboardingEmailWatchUrl = () => {
+
+
+
+
+  return `/api/onboarding/systems/email-watch`
+}
+
+/**
+ * @summary Watch-mailbox tracker status — mailbox address, monitor health and recent matched vendor status emails
+ */
+export const getOnboardingEmailWatch = async ( options?: RequestInit): Promise<OnbEmailWatch> => {
+
+  return customFetch<OnbEmailWatch>(getGetOnboardingEmailWatchUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingEmailWatchQueryKey = () => {
+    return [
+    `/api/onboarding/systems/email-watch`
+    ] as const;
+    }
+
+
+export const getGetOnboardingEmailWatchQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingEmailWatch>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingEmailWatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingEmailWatchQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingEmailWatch>>> = ({ signal }) => getOnboardingEmailWatch({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingEmailWatch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingEmailWatchQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingEmailWatch>>>
+export type GetOnboardingEmailWatchQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Watch-mailbox tracker status — mailbox address, monitor health and recent matched vendor status emails
+ */
+
+export function useGetOnboardingEmailWatch<TData = Awaited<ReturnType<typeof getOnboardingEmailWatch>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingEmailWatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingEmailWatchQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSimulateOnboardingWatchEmailUrl = () => {
+
+
+
+
+  return `/api/onboarding/systems/email-watch/simulate`
+}
+
+/**
+ * @summary Demo helper — inject a synthetic vendor status email through the same parse-and-apply path as a real watched email
+ */
+export const simulateOnboardingWatchEmail = async (onbWatchEmailSimulate: OnbWatchEmailSimulate, options?: RequestInit): Promise<OnbWatchEmailSimulateResult> => {
+
+  return customFetch<OnbWatchEmailSimulateResult>(getSimulateOnboardingWatchEmailUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbWatchEmailSimulate)
+  }
+);}
+
+
+
+
+
+export const getSimulateOnboardingWatchEmailMutationOptions = <TError = ErrorType<OnbWatchEmailSimulateResult>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simulateOnboardingWatchEmail>>, TError,{data: BodyType<OnbWatchEmailSimulate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof simulateOnboardingWatchEmail>>, TError,{data: BodyType<OnbWatchEmailSimulate>}, TContext> => {
+
+const mutationKey = ['simulateOnboardingWatchEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof simulateOnboardingWatchEmail>>, {data: BodyType<OnbWatchEmailSimulate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  simulateOnboardingWatchEmail(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SimulateOnboardingWatchEmailMutationResult = NonNullable<Awaited<ReturnType<typeof simulateOnboardingWatchEmail>>>
+    export type SimulateOnboardingWatchEmailMutationBody = BodyType<OnbWatchEmailSimulate>
+    export type SimulateOnboardingWatchEmailMutationError = ErrorType<OnbWatchEmailSimulateResult>
+
+    /**
+ * @summary Demo helper — inject a synthetic vendor status email through the same parse-and-apply path as a real watched email
+ */
+export const useSimulateOnboardingWatchEmail = <TError = ErrorType<OnbWatchEmailSimulateResult>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simulateOnboardingWatchEmail>>, TError,{data: BodyType<OnbWatchEmailSimulate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof simulateOnboardingWatchEmail>>,
+        TError,
+        {data: BodyType<OnbWatchEmailSimulate>},
+        TContext
+      > => {
+      return useMutation(getSimulateOnboardingWatchEmailMutationOptions(options));
+    }
 
 export const getGetOnboardingChannelsUrl = () => {
 
