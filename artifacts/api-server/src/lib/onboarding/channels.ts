@@ -9,6 +9,10 @@ export type ChannelInfo = {
   provider: string;
   target: string;
   note: string;
+  /** WhatsApp only: the sandbox sender number hires must message (e.g. "+14155238886"). */
+  sandboxNumber?: string | null;
+  /** WhatsApp only: the sandbox join keyword hires send as "join <keyword>", when configured. */
+  sandboxJoinKeyword?: string | null;
 };
 
 function maskEmail(email: string): string {
@@ -36,6 +40,10 @@ export function whatsappChannelInfo(): ChannelInfo {
       process.env.TWILIO_AUTH_TOKEN &&
       process.env.TWILIO_WHATSAPP_FROM,
   );
+  // The sandbox sender number is what hires message to (re)join a session.
+  // It is a public Twilio number (not a credential), so it is safe to surface.
+  const from = (process.env.TWILIO_WHATSAPP_FROM ?? "").replace(/^whatsapp:/, "").trim();
+  const joinKeyword = (process.env.TWILIO_SANDBOX_JOIN_KEYWORD ?? "").trim();
   return {
     configured,
     provider: configured ? "twilio" : "logged-only",
@@ -43,6 +51,8 @@ export function whatsappChannelInfo(): ChannelInfo {
     note: configured
       ? "Outbound WhatsApp is live via Twilio."
       : "Twilio WhatsApp not connected yet — messages are composed and logged in the case timeline, not delivered.",
+    sandboxNumber: from || null,
+    sandboxJoinKeyword: joinKeyword || null,
   };
 }
 

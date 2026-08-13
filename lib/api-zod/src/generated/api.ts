@@ -1818,13 +1818,17 @@ export const GetOnboardingChannelsResponse = zod.object({
   "configured": zod.boolean(),
   "provider": zod.string().describe('e.g. resend | twilio | logged-only'),
   "target": zod.string().describe('Default destination (email address or phone) — masked'),
-  "note": zod.string()
+  "note": zod.string(),
+  "sandboxNumber": zod.string().nullish().describe('WhatsApp only — the Twilio sandbox sender number hires message to (re)join a session'),
+  "sandboxJoinKeyword": zod.string().nullish().describe('WhatsApp only — the sandbox join keyword (hires send \"join <keyword>\"), when configured')
 }),
   "whatsapp": zod.object({
   "configured": zod.boolean(),
   "provider": zod.string().describe('e.g. resend | twilio | logged-only'),
   "target": zod.string().describe('Default destination (email address or phone) — masked'),
-  "note": zod.string()
+  "note": zod.string(),
+  "sandboxNumber": zod.string().nullish().describe('WhatsApp only — the Twilio sandbox sender number hires message to (re)join a session'),
+  "sandboxJoinKeyword": zod.string().nullish().describe('WhatsApp only — the sandbox join keyword (hires send \"join <keyword>\"), when configured')
 }),
   "inboundEmail": zod.object({
   "running": zod.boolean().describe('Whether the poll loop has been started in this server process'),

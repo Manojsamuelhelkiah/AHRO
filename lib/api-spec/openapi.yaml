@@ -3104,6 +3104,12 @@ components:
           description: Default destination (email address or phone) — masked
         note:
           type: string
+        sandboxNumber:
+          type: ["string", "null"]
+          description: WhatsApp only — the Twilio sandbox sender number hires message to (re)join a session
+        sandboxJoinKeyword:
+          type: ["string", "null"]
+          description: WhatsApp only — the sandbox join keyword (hires send "join <keyword>"), when configured
       required: [configured, provider, target, note]
     OnbChannelTest:
       type: object

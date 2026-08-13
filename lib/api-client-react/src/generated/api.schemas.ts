@@ -1105,6 +1105,16 @@ export interface OnbChannelInfo {
   /** Default destination (email address or phone) — masked */
   target: string;
   note: string;
+  /**
+     * WhatsApp only — the Twilio sandbox sender number hires message to (re)join a session
+     * @nullable
+     */
+  sandboxNumber?: string | null;
+  /**
+     * WhatsApp only — the sandbox join keyword (hires send "join <keyword>"), when configured
+     * @nullable
+     */
+  sandboxJoinKeyword?: string | null;
 }
 
 /**

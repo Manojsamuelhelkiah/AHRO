@@ -9,8 +9,11 @@ import {
   getListOnboardingCaseDocumentsQueryKey,
   getGetOnboardingCaseQueryKey,
   getListOnboardingCaseEventsQueryKey,
-  getListOnboardingCaseCommunicationsQueryKey
+  getListOnboardingCaseCommunicationsQueryKey,
+  useGetOnboardingChannels,
+  getGetOnboardingChannelsQueryKey
 } from '@workspace/api-client-react';
+import { WhatsAppSandboxWarning } from '@/components/whatsapp-sandbox-warning';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, cn, Input } from '@/components/ui-shared';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
@@ -60,6 +63,11 @@ export function CaseDetailPage() {
     }
   });
 
+  // Sandbox sender number + join keyword for the expiry warning's re-join instructions.
+  const { data: channels } = useGetOnboardingChannels({
+    query: { enabled: !!caseId, queryKey: getGetOnboardingChannelsQueryKey(), staleTime: 60_000 }
+  });
+
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading case details...</div>;
   if (!c) return <div className="p-8 text-center text-destructive">Case not found.</div>;
 
@@ -95,6 +103,13 @@ export function CaseDetailPage() {
           <StatusBadge status={c.orchestrationStatus} />
         </div>
       </div>
+
+      <WhatsAppSandboxWarning
+        caseId={caseId}
+        channelPreference={c.channelPreference}
+        comms={comms}
+        sandbox={channels?.whatsapp}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT COL: Readiness & Plan */}
