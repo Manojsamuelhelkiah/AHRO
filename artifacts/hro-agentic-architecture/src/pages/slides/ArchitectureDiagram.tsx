@@ -42,8 +42,8 @@ export default function ArchitectureDiagram() {
                 <Num n="1" />
                 Experience — AI personas &amp; proactive journeys
                 <span className="font-body font-normal text-muted text-[1.1vw] ml-[0.6vw]">
-                  Teams · web · email · voice · joiner-mover-leaver event
-                  triggers
+                  Teams · web · email · WhatsApp · voice ·
+                  joiner-mover-leaver event triggers
                 </span>
               </p>
               <p className="font-body text-accent text-[1.1vw]">

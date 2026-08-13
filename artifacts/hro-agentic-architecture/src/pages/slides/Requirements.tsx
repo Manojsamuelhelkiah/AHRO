@@ -36,7 +36,7 @@ const cols: { title: string; color: string; items: [string, string][] }[] = [
     title: 'Client-Side Prerequisites',
     color: '#e08a8a',
     items: [
-      ['Channels', 'Microsoft 365 with Teams (or web portal fallback) · mail routing for the email channel'],
+      ['Channels', 'Microsoft 365 with Teams (or web portal fallback) · mail routing for the email channel · WhatsApp Business number for the messaging channel'],
       ['Identity', 'Entra ID (or SAML/OIDC IdP) for SSO · agreed role mapping for HITL approvers'],
       ['System access', 'API credentials for HCM, payroll, benefits, ticketing — least-privilege service accounts'],
       ['Data feeds', 'HR policy documents per country · org & employee master data sync'],

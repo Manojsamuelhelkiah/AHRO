@@ -40,7 +40,7 @@ export default function FunctionalView() {
                 Employee &amp; Manager Front Door
                 <span className="font-body font-normal text-muted text-[1.1vw] ml-[0.6vw]">
                   one HR assistant wherever people work — chat, portal, email,
-                  phone
+                  WhatsApp, phone
                 </span>
               </p>
               <p className="font-body text-accent text-[1.1vw] shrink-0 ml-[0.8vw]">

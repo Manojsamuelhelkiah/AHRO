@@ -17,8 +17,8 @@ export default function ExperienceIntake() {
             </h3>
             <p className="font-body text-text text-[1.75vw] leading-relaxed mt-[2vh] [text-wrap:pretty]">
               Named AI personas — "Mia" for payroll, "Leo" for onboarding —
-              meet employees in Teams, web, email and voice for instant,
-              autonomous resolution.
+              meet employees in Teams, web, email, WhatsApp and voice for
+              instant, autonomous resolution.
             </p>
             <p className="font-body text-muted text-[1.55vw] leading-relaxed mt-auto pt-[2vh]">
               Azure AI Foundry Agent Service + Copilot Studio orchestrate the
