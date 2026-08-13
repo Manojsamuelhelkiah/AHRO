@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useListOnboardingConnectors, useUpdateOnboardingConnector, useGetOnboardingChannels, useTestOnboardingChannel, getListOnboardingConnectorsQueryKey, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
+import { useListOnboardingConnectors, useUpdateOnboardingConnector, useGetOnboardingChannels, useTestOnboardingChannel, useGetOnboardingWatcher, usePollOnboardingWatcher, getListOnboardingConnectorsQueryKey, getGetOnboardingChannelsQueryKey, getGetOnboardingWatcherQueryKey } from '@workspace/api-client-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle } from 'lucide-react';
+import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle, Eye, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 
 export function SystemsPage() {
@@ -108,7 +108,126 @@ export function SystemsPage() {
           <InboundMonitorCard monitor={channels.inboundEmail} />
         ) : null}
       </div>
+
+      <div className="space-y-5 pt-8">
+        <div className="border-b pb-2">
+          <h2 className="text-xl font-semibold flex items-center gap-2"><Eye className="w-5 h-5 text-primary" /> System Watcher</h2>
+          <p className="text-sm text-muted-foreground">Dedicated monitoring agent that checks BGV, ITSM, payroll and other systems of record, closes checklist items automatically, and flags SLA breaches.</p>
+        </div>
+        <SystemWatcherCard connectorLabels={new Map((connectors ?? []).map(c => [c.key, c.label]))} />
+      </div>
     </div>
+  );
+}
+
+function SystemWatcherCard({ connectorLabels }: { connectorLabels: Map<string, string> }) {
+  const queryClient = useQueryClient();
+  const { data: watcher, isLoading } = useGetOnboardingWatcher({ query: { queryKey: getGetOnboardingWatcherQueryKey(), refetchInterval: 30_000 } });
+  const pollNow = usePollOnboardingWatcher();
+  const [pollResult, setPollResult] = useState<any>(null);
+
+  if (isLoading || !watcher) {
+    return <div className="p-8 text-muted-foreground text-center border rounded-xl border-dashed">Loading watcher status...</div>;
+  }
+
+  const healthy = watcher.state === 'healthy';
+  const initializing = watcher.state === 'initializing';
+  const badgeLabel = healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : watcher.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN';
+  const fmt = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, HH:mm:ss') : 'Never');
+
+  const doPoll = async () => {
+    setPollResult(null);
+    try {
+      const res = await pollNow.mutateAsync();
+      setPollResult(res);
+      queryClient.invalidateQueries({ queryKey: getGetOnboardingWatcherQueryKey() });
+    } catch {
+      setPollResult({ ok: false, detail: 'Request failed to reach server.' });
+    }
+  };
+
+  return (
+    <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <div className={cn("p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200")}>
+              <Eye className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-sm">System Watcher Agent</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Reconciles open checklist items against external systems every {watcher.pollIntervalSeconds}s (API polling), plus vendor webhooks (push).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none", healthy ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200" : initializing ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200" : "bg-red-100 text-red-800 hover:bg-red-100 border-red-200")}>
+              {badgeLabel}
+            </Badge>
+            <Button size="sm" variant="outline" onClick={doPoll} disabled={pollNow.isPending} className="gap-1.5 h-7 text-xs font-bold">
+              <RefreshCw className={cn("w-3 h-3", pollNow.isPending && "animate-spin")} /> Poll now
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          <div className="border rounded-md p-3 bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Poll</p>
+            <p className="text-sm font-mono mt-1">{fmt(watcher.lastPollAt)}</p>
+          </div>
+          <div className="border rounded-md p-3 bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Success</p>
+            <p className="text-sm font-mono mt-1">{fmt(watcher.lastSuccessAt)}</p>
+          </div>
+          <div className="border rounded-md p-3 bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Error</p>
+            <p className="text-sm font-mono mt-1">{watcher.lastErrorAt ? fmt(watcher.lastErrorAt) : 'None'}</p>
+          </div>
+        </div>
+
+        <div className="border rounded-md overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <th className="px-3 py-2">Watched System</th>
+                <th className="px-3 py-2">Access Mode</th>
+                <th className="px-3 py-2">Last Checked</th>
+                <th className="px-3 py-2 text-right">Items Closed</th>
+                <th className="px-3 py-2 text-right">Webhooks Received</th>
+              </tr>
+            </thead>
+            <tbody>
+              {watcher.systems.map(s => (
+                <tr key={s.key} className="border-t">
+                  <td className="px-3 py-2 font-semibold">{connectorLabels.get(s.key) ?? s.key.toUpperCase()}</td>
+                  <td className="px-3 py-2"><span className="font-mono text-xs bg-secondary px-1.5 py-0.5 rounded">API polling + webhook</span></td>
+                  <td className="px-3 py-2 font-mono text-xs">{fmt(s.lastCheckedAt)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{s.itemsCompleted}</td>
+                  <td className="px-3 py-2 text-right font-mono">{s.pushesReceived}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {watcher.lastError && (
+          <div className="p-3 mt-4 text-sm rounded-md border flex items-start gap-3 bg-red-50 border-red-200 text-red-900">
+            <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+            <div>
+              <p className="font-bold">Latest reconciliation failed</p>
+              <p className="font-mono text-xs mt-1 opacity-80 break-all">{watcher.lastError}</p>
+            </div>
+          </div>
+        )}
+        {pollResult && (
+          <div className={cn("p-3 mt-4 text-sm rounded-md border flex items-start gap-3", pollResult.ok ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-red-50 border-red-200 text-red-900")}>
+            {pollResult.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" /> : <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />}
+            <p className="font-mono text-xs mt-0.5">{pollResult.detail}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

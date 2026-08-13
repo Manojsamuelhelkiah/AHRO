@@ -11,6 +11,7 @@ import {
 import {
   CreateOnboardingCaseBody,
   DecideOnboardingApprovalBody,
+  PushOnboardingWatcherBody,
   ReceiveOnboardingInboundBody,
   TestOnboardingChannelBody,
   UpdateOnboardingConnectorBody,
@@ -35,6 +36,11 @@ import {
   recordInbound,
 } from "../lib/onboarding/inbound-email";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
+import {
+  getSystemWatcherStatus,
+  runWatcherCycleGuarded,
+  watcherPush,
+} from "../lib/onboarding/system-watcher";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
 
@@ -679,6 +685,51 @@ router.post("/onboarding/channels/test", async (req, res, next) => {
             ? `Channel not connected (${info.note}) — message was logged to case #${anyCase.id} instead.`
             : `Send failed: ${result.failureReason}`,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* --------------------------- system watcher -------------------------- */
+
+router.get("/onboarding/watcher", (_req, res) => {
+  res.json(getSystemWatcherStatus());
+});
+
+router.post("/onboarding/watcher/poll", async (_req, res, next) => {
+  try {
+    const updates = await runWatcherCycleGuarded();
+    if (updates === null) {
+      res.json({ ok: true, updates: 0, detail: "A reconciliation cycle is already running — try again shortly." });
+      return;
+    }
+    res.json({
+      ok: true,
+      updates,
+      detail:
+        updates > 0
+          ? `Reconciliation complete — ${updates} checklist update(s) applied.`
+          : "Reconciliation complete — all watched systems report no changes.",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/watcher/push", async (req, res, next) => {
+  try {
+    const body = PushOnboardingWatcherBody.parse(req.body);
+    if (body.status !== "complete" && body.status !== "exception") {
+      res.status(200).json({ ok: false, detail: "status must be 'complete' or 'exception'" });
+      return;
+    }
+    const result = await watcherPush({
+      caseId: body.caseId,
+      connector: body.connector,
+      status: body.status,
+      note: body.note,
+    });
+    res.json(result);
   } catch (err) {
     next(err);
   }

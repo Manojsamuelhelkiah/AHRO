@@ -1031,6 +1031,62 @@ export interface OnbChannelStatus {
   inboundEmail: OnbInboundEmailMonitor;
 }
 
+export interface OnbWatcherSystem {
+  key: string;
+  /** poll+push */
+  mode: string;
+  lastCheckedAt: string | null;
+  itemsCompleted: number;
+  pushesReceived: number;
+}
+
+export interface OnbWatcherStatus {
+  running: boolean;
+  pollIntervalSeconds: number;
+  lastPollAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  /** healthy | initializing | broken | stopped */
+  state: string;
+  healthy: boolean;
+  systems: OnbWatcherSystem[];
+}
+
+export interface OnbWatcherPollResult {
+  ok: boolean;
+  updates: number;
+  detail: string;
+}
+
+export type OnbWatcherPushConnector = typeof OnbWatcherPushConnector[keyof typeof OnbWatcherPushConnector];
+
+
+export const OnbWatcherPushConnector = {
+  hris: 'hris',
+  esignature: 'esignature',
+  bgv: 'bgv',
+  payroll: 'payroll',
+  identity: 'identity',
+  itsm: 'itsm',
+  lms: 'lms',
+} as const;
+
+export type OnbWatcherPushStatus = typeof OnbWatcherPushStatus[keyof typeof OnbWatcherPushStatus];
+
+
+export const OnbWatcherPushStatus = {
+  complete: 'complete',
+  exception: 'exception',
+} as const;
+
+export interface OnbWatcherPush {
+  caseId: number;
+  connector: OnbWatcherPushConnector;
+  status: OnbWatcherPushStatus;
+  note?: string;
+}
+
 export interface OnbChannelTest {
   /** email | whatsapp */
   channel: string;

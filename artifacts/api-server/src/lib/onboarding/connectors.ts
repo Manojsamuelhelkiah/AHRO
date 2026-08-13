@@ -43,6 +43,14 @@ const DEFAULTS = [
     authoritativeFor: ["learning assignments", "compliance training status"],
   },
   {
+    key: "itsm",
+    label: "ITSM / Service Desk",
+    vendor: "ServiceNow (simulated)",
+    availableVendors: ["ServiceNow (simulated)", "Jira Service Management (simulated)", "Freshservice (simulated)"],
+    description: "Access requests, security rights and asset tickets tracked to fulfilment.",
+    authoritativeFor: ["access ticket status", "asset delivery status", "security rights"],
+  },
+  {
     key: "bgv",
     label: "Background Verification",
     vendor: "HireRight (simulated)",

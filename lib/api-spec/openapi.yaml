@@ -1132,6 +1132,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OnbChannelTestResult"
+  /onboarding/watcher:
+    get:
+      operationId: getOnboardingWatcher
+      tags: [onboarding]
+      summary: System Watcher agent status (external system monitoring health)
+      responses:
+        "200":
+          description: Watcher status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbWatcherStatus"
+  /onboarding/watcher/poll:
+    post:
+      operationId: pollOnboardingWatcher
+      tags: [onboarding]
+      summary: Run one System Watcher reconciliation cycle now
+      responses:
+        "200":
+          description: Poll result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbWatcherPollResult"
+  /onboarding/watcher/push:
+    post:
+      operationId: pushOnboardingWatcher
+      tags: [onboarding]
+      summary: Simulate a vendor webhook push (status update or exception) from an external system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbWatcherPush"
+      responses:
+        "200":
+          description: Push result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChannelTestResult"
 components:
   schemas:
     HealthStatus:
@@ -2756,6 +2798,75 @@ components:
         note:
           type: string
       required: [configured, provider, target, note]
+    OnbWatcherSystem:
+      type: object
+      properties:
+        key:
+          type: string
+        mode:
+          type: string
+          description: poll+push
+        lastCheckedAt:
+          type: string
+          nullable: true
+        itemsCompleted:
+          type: number
+        pushesReceived:
+          type: number
+      required: [key, mode, lastCheckedAt, itemsCompleted, pushesReceived]
+    OnbWatcherStatus:
+      type: object
+      properties:
+        running:
+          type: boolean
+        pollIntervalSeconds:
+          type: number
+        lastPollAt:
+          type: string
+          nullable: true
+        lastSuccessAt:
+          type: string
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+        lastErrorAt:
+          type: string
+          nullable: true
+        state:
+          type: string
+          description: healthy | initializing | broken | stopped
+        healthy:
+          type: boolean
+        systems:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbWatcherSystem"
+      required: [running, pollIntervalSeconds, lastPollAt, lastSuccessAt, lastError, lastErrorAt, state, healthy, systems]
+    OnbWatcherPollResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        updates:
+          type: number
+        detail:
+          type: string
+      required: [ok, updates, detail]
+    OnbWatcherPush:
+      type: object
+      properties:
+        caseId:
+          type: number
+        connector:
+          type: string
+          enum: [hris, esignature, bgv, payroll, identity, itsm, lms]
+        status:
+          type: string
+          enum: [complete, exception]
+        note:
+          type: string
+      required: [caseId, connector, status]
     OnbChannelTest:
       type: object
       properties:
