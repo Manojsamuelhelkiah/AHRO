@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useListOnboardingApprovals, useDecideOnboardingApproval, getListOnboardingApprovalsQueryKey } from '@workspace/api-client-react';
 import { Card, Button, Badge, cn, Input, Label } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
+import { useUser } from '@clerk/react';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
 import { Check, X, ShieldAlert } from 'lucide-react';
@@ -56,12 +57,13 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
   const decide = useDecideOnboardingApproval();
   const queryClient = useQueryClient();
   const [comment, setComment] = useState('');
-  const [reviewer, setReviewer] = useState('Current User');
+  const { user } = useUser();
+  const reviewerName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'you';
 
   const handleDecide = (decision: string) => {
     decide.mutate({
       id: approval.id,
-      data: { decision, decidedBy: reviewer, comment: comment || undefined }
+      data: { decision, comment: comment || undefined }
     }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey({ status: statusParam }) });
@@ -106,15 +108,10 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
         {isPending && (
           <div className="mt-6 pt-6 border-t flex flex-col lg:flex-row items-start lg:items-end gap-6 bg-secondary/10 -mx-6 -mb-6 p-6">
             <div className="flex-1 w-full space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Reviewer Name</Label>
-                  <Input value={reviewer} onChange={(e) => setReviewer(e.target.value)} className="bg-background shadow-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Decision Comment (Optional)</Label>
-                  <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Rationale for override..." className="bg-background shadow-sm" />
-                </div>
+              <div className="space-y-1.5 max-w-xl">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Decision Comment (Optional)</Label>
+                <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Rationale for override..." className="bg-background shadow-sm" />
+                <p className="text-xs text-muted-foreground">Decision will be recorded as <strong>{reviewerName}</strong>.</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3 shrink-0 w-full lg:w-auto">

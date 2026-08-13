@@ -28,10 +28,6 @@ export function EngineBadge({ engine, className }: { engine: string, className?:
       Icon = Network;
       label = 'ORCH';
       break;
-    case 'human':
-      color = 'bg-blue-100 text-blue-700 border-blue-200';
-      Icon = User;
-      break;
     case 'system':
       color = 'bg-slate-100 text-slate-700 border-slate-200';
       Icon = Settings;

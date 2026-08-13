@@ -31,8 +31,13 @@ import {
 } from "../lib/onboarding/channels";
 import { llmComplete } from "../lib/onboarding/llm";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
+import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
 
 const router: IRouter = Router();
+
+// All onboarding endpoints expose employee PII and can trigger real
+// email/WhatsApp sends — every route requires a signed-in user.
+router.use("/onboarding", requireAuth);
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -376,13 +381,15 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       res.status(404).json({ message: "Approval not found" });
       return;
     }
+    // Record the real signed-in reviewer, never a client-supplied name.
+    const decidedBy = await resolveReviewerName(req.authUserId!);
     // Conditional update: only transitions from pending, so concurrent
     // decisions cannot both win and double-trigger orchestration.
     const [updated] = await db
       .update(onbApprovals)
       .set({
         status: body.decision,
-        decidedBy: body.decidedBy,
+        decidedBy,
         comment: body.comment ?? null,
         decidedAt: new Date(),
       })
@@ -396,7 +403,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
     resumeAfterDecision({
       caseId: a.caseId,
       approved: body.decision === "approved",
-      decidedBy: body.decidedBy,
+      decidedBy,
       comment: body.comment ?? null,
       recommendation: a.recommendation,
       hitlPattern: a.hitlPattern,

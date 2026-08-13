@@ -2538,12 +2538,9 @@ components:
         decision:
           type: string
           description: approved | rejected
-        decidedBy:
-          type: string
-          minLength: 1
         comment:
           type: string
-      required: [decision, decidedBy]
+      required: [decision]
     OnbCommunication:
       type: object
       properties:

@@ -880,8 +880,6 @@ export interface OnbApproval {
 export interface OnbApprovalDecision {
   /** approved | rejected */
   decision: string;
-  /** @minLength 1 */
-  decidedBy: string;
   comment?: string;
 }
 
@@ -1042,4 +1040,3 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
-
