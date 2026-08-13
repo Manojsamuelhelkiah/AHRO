@@ -1229,6 +1229,13 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
 
 const SUPPRESSION_THRESHOLD = 3;
 
+// In-memory cache for the analytics narrative so the endpoint never blocks on the LLM.
+const narrativeCache: { signature: string | null; text: string | null; generatingFor: string | null } = {
+  signature: null,
+  text: null,
+  generatingFor: null,
+};
+
 router.get("/onboarding/analytics", async (_req, res, next) => {
   try {
     const cases = await db.select().from(onbCases);
@@ -1284,13 +1291,42 @@ router.get("/onboarding/analytics", async (_req, res, next) => {
       readinessMap.set(key, (readinessMap.get(key) ?? 0) + 1);
     }
 
+    // Narrative generation is non-blocking: the endpoint returns chart data
+    // immediately with a cached narrative (or null on first load), and kicks
+    // off LLM generation in the background. The client refetches until the
+    // narrative for the current data signature is ready.
+    const signature = JSON.stringify({
+      n: cases.length,
+      skills: Array.from(skillMap.entries()).map(([s, v]) => [s, v.count, v.criticality]),
+      pending: approvals.filter((a) => a.status === "pending").length,
+      readiness: Array.from(readinessMap.entries()),
+    });
     let narrative: string | null = null;
     if (cases.length > 0) {
-      narrative = await llmComplete(
-        "You are the Data & Analytics Agent for an onboarding system. Write a 3-4 sentence aggregated workforce-planning insight for HR leadership. Only trend-level statements — never name or judge an individual. Plain text.",
-        `Aggregate onboarding data: ${cases.length} cases. Skill inflow: ${Array.from(skillMap.entries()).map(([s, v]) => `${s} x${v.count} (${v.criticality})`).join("; ")}. Pending human reviews: ${approvals.filter((a) => a.status === "pending").length}. Readiness: ${Array.from(readinessMap.entries()).map(([k, v]) => `${k}=${v}`).join(", ")}. Suppression threshold: groups under ${SUPPRESSION_THRESHOLD} are not reported individually.`,
-        300,
-      );
+      if (narrativeCache.signature === signature) {
+        narrative = narrativeCache.text;
+      } else {
+        // Serve the stale narrative (if any) while regenerating.
+        narrative = narrativeCache.text;
+        if (narrativeCache.generatingFor !== signature) {
+          narrativeCache.generatingFor = signature;
+          void llmComplete(
+            "You are the Data & Analytics Agent for an onboarding system. Write a 3-4 sentence aggregated workforce-planning insight for HR leadership. Only trend-level statements — never name or judge an individual. Plain text.",
+            `Aggregate onboarding data: ${cases.length} cases. Skill inflow: ${Array.from(skillMap.entries()).map(([s, v]) => `${s} x${v.count} (${v.criticality})`).join("; ")}. Pending human reviews: ${approvals.filter((a) => a.status === "pending").length}. Readiness: ${Array.from(readinessMap.entries()).map(([k, v]) => `${k}=${v}`).join(", ")}. Suppression threshold: groups under ${SUPPRESSION_THRESHOLD} are not reported individually.`,
+            300,
+          )
+            .then((text) => {
+              narrativeCache.signature = signature;
+              narrativeCache.text = text;
+            })
+            .catch((err) => {
+              console.error("[analytics] narrative generation failed:", err);
+            })
+            .finally(() => {
+              if (narrativeCache.generatingFor === signature) narrativeCache.generatingFor = null;
+            });
+        }
+      }
     }
 
     res.json({

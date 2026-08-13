@@ -1,13 +1,20 @@
 import React from 'react';
-import { useGetOnboardingAnalytics } from '@workspace/api-client-react';
+import { useGetOnboardingAnalytics, getGetOnboardingAnalyticsQueryKey } from '@workspace/api-client-react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, PageHeader, IconTile, LoadingBlock, cn } from '@/components/ui-shared';
 import { BrainCircuit, ShieldAlert, TrendingUp, AlertTriangle, Workflow, Users, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 
 export function AnalyticsPage() {
-  const { data: analytics, isLoading } = useGetOnboardingAnalytics();
+  const { data: analytics, isLoading } = useGetOnboardingAnalytics({
+    query: {
+      queryKey: getGetOnboardingAnalyticsQueryKey(),
+      // The AI narrative is generated in the background server-side;
+      // poll until it arrives, then stop.
+      refetchInterval: (query) => (query.state.data && !query.state.data.narrative ? 4000 : false),
+    },
+  });
 
-  if (isLoading) return <LoadingBlock className="mx-auto max-w-2xl mt-8">Generating analytics...</LoadingBlock>;
+  if (isLoading) return <LoadingBlock className="mx-auto max-w-2xl mt-8">Loading analytics...</LoadingBlock>;
   if (!analytics) return null;
 
   return (
@@ -21,8 +28,8 @@ export function AnalyticsPage() {
         <IconTile icon={BrainCircuit} className="bg-[var(--surface)] text-[var(--primary)] border-none shadow-[var(--shadow-sm)]" />
         <div className="space-y-1.5">
           <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Agent Narrative Insight</h3>
-          <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', fontWeight: 500, margin: 0, lineHeight: 1.5 }}>
-            {analytics.narrative}
+          <p style={{ fontSize: 'var(--text-base)', color: analytics.narrative ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: 500, margin: 0, lineHeight: 1.5 }}>
+            {analytics.narrative ?? 'The Data & Analytics Agent is writing this insight — it will appear here in a few seconds.'}
           </p>
         </div>
       </div>
