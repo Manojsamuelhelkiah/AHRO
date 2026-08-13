@@ -19,6 +19,7 @@ import { SystemsPage } from './pages/systems';
 import { AnalyticsPage } from './pages/analytics';
 import { SettingsPage } from './pages/settings';
 import { GuardrailsPage } from './pages/guardrails';
+import { LoginPage } from './pages/login';
 
 const queryClient = new QueryClient();
 
@@ -123,37 +124,6 @@ function SignUpPage() {
   );
 }
 
-function LandingPage() {
-  return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4 text-center gap-6">
-      <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center">
-        <Server className="h-8 w-8 text-white" />
-      </div>
-      <div className="space-y-2 max-w-md">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Autonomous HRO Control Tower</h1>
-        <p className="text-slate-500">
-          Monitor onboarding cases, review agent decisions, and manage system connectors.
-          Sign in to access the control tower.
-        </p>
-      </div>
-      <div className="flex gap-3">
-        <a
-          href={`${basePath}/sign-in`}
-          className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
-        >
-          Sign in
-        </a>
-        <a
-          href={`${basePath}/sign-up`}
-          className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-        >
-          Create account
-        </a>
-      </div>
-    </div>
-  );
-}
-
 function HomeRoute() {
   return (
     <>
@@ -163,7 +133,7 @@ function HomeRoute() {
         </AppShell>
       </Show>
       <Show when="signed-out">
-        <LandingPage />
+        <LoginPage />
       </Show>
     </>
   );

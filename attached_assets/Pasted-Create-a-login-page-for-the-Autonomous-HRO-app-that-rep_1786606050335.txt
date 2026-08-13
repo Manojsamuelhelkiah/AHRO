@@ -1,0 +1,47 @@
+Create a login page for the "Autonomous HRO" app that replaces the current 
+default landing route ("/") before the dashboard loads.
+
+Requirements:
+
+LAYOUT — Split screen, 65/35 columns:
+
+LEFT PANEL (65% width):
+- Deep indigo/purple background (#1e1b4b or similar dark purple)
+- Large "Autonomous HRO" wordmark at top with the existing server/stack icon
+- Tagline below: "Intelligent HR operations, autonomously delivered"
+- Below tagline: 3 animated stat pills that cycle through live-looking numbers:
+    • "13 Active Cases"
+    • "99.2% SLA Adherence"  
+    • "0 Hard Blocks Today"
+- At the bottom: a subtle scrolling live activity feed (fake, looping) showing 
+  recent agent actions like:
+    "AI Agent — Reply drafted & dispatched · just now"
+    "SYS — Background verification complete · 1m ago"
+    "AI Agent — Payroll setup initiated · 2m ago"
+  Use small monospace font, muted white, soft fade-in animation per item.
+
+RIGHT PANEL (35% width):
+- Clean white background
+- Centered login card (no card border, just content):
+    - Heading: "Welcome back" (bold, dark)
+    - Subheading: "Sign in to your HRO control tower"
+    - Email input field (pre-filled with: rajat-tiwari@hcltech.com)
+    - Password input field (pre-filled with: ••••••••)
+    - A "Role" dropdown with options: Reviewer, Admin, Agent Supervisor
+      (default selected: Reviewer)
+    - Large full-width "Sign In" button in indigo/purple matching left panel
+    - Below button: small text "Demo mode — no real credentials required"
+- On Sign In click: show a brief 1.5s loading spinner with text 
+  "Authenticating with HRO platform..." then redirect to the main dashboard
+
+TECHNICAL:
+- Use React with the existing app's styling conventions (Tailwind if already 
+  used, otherwise match existing CSS approach)
+- The login state should set a simple localStorage flag "hro_authed=true" and 
+  the role selected
+- All other routes should check this flag and redirect to "/" (login) if not set
+- The dashboard header should show the logged-in role as a badge next to the 
+  user avatar (bottom left)
+- Keep all existing dashboard functionality completely intact
+- The page should be fully responsive — on mobile, stack panels vertically 
+  (right/login panel on top, left/branding panel below)

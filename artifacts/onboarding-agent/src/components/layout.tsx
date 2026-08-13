@@ -105,7 +105,9 @@ function UserFooter() {
         </div>
         <div className="text-sm overflow-hidden flex-1">
           <p className="font-medium truncate">{name}</p>
-          <p className="text-xs text-muted-foreground truncate">Reviewer</p>
+          <span className="inline-block rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide truncate max-w-full">
+            {localStorage.getItem('hro_role') || 'Reviewer'}
+          </span>
         </div>
         <button
           type="button"
