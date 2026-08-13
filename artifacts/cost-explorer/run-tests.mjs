@@ -2,13 +2,15 @@
 import { build } from "esbuild";
 import { spawnSync } from "node:child_process";
 import { globSync } from "node:fs";
+import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const entryPoints = globSync("src/**/*.test.ts", { cwd: dir }).map((f) =>
-  path.join(dir, f),
-);
+const entryPoints = [
+  ...globSync("src/**/*.test.ts", { cwd: dir }),
+  ...globSync("src/**/*.test.tsx", { cwd: dir }),
+].map((f) => path.join(dir, f));
 
 if (entryPoints.length === 0) {
   console.error("No test files found");
@@ -23,7 +25,13 @@ await build({
   format: "esm",
   target: "node20",
   outExtension: { ".js": ".mjs" },
-  external: ["node:*"],
+  jsx: "automatic",
+  external: ["node:*", ...builtinModules],
+  // react-dom/server (cjs) does require("util") etc.; when bundled to esm the
+  // externalized require needs a real implementation.
+  banner: {
+    js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+  },
 });
 
 const result = spawnSync(
