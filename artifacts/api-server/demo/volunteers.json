@@ -1,13 +1,11 @@
 {
   "_instructions": [
-    "Fill one entry per volunteer, then ask the agent to 'seed the demo volunteers' (or run: pnpm run seed:volunteers in artifacts/api-server).",
-    "Entries whose name/email still contain 'FILL-' are skipped, so you can leave unused rows as-is.",
-    "email + phone are where the AI agent will REALLY send messages and place calls once allow-listed.",
-    "phone must be in international format, e.g. +919876543210 or +14155551234. Leave \"\" for email-only volunteers.",
-    "IMPORTANT (Twilio trial): each phone must also be verified in the Twilio console (Phone Numbers -> Verified Caller IDs) before live calls/WhatsApp work.",
-    "channelPreference: email | whatsapp | both. geography drives timezone for call slots (India, United States, UK, Europe, Singapore).",
-    "joiningDate: YYYY-MM-DD, a near-future date makes the demo most realistic (day-before call, SLA timers).",
-    "After seeding, the loader prints the exact allowlist value; the agent will set ONBOARDING_ALLOWED_RECIPIENTS so real sends/calls only reach your volunteers."
+    "OPTIONAL FILE PATH — the easiest way is now the app itself: Settings -> Demo Volunteers (edit, save & authorize, create demo cases, per-persona briefings).",
+    "This file remains as a bulk-load alternative: fill entries, then run `pnpm run seed:volunteers` in artifacts/api-server (or ask the agent). It saves the list into the app (same as the Settings screen), authorizes delivery, and creates the cases.",
+    "Entries whose name/email still contain 'FILL-' are skipped.",
+    "persona: which role this volunteer plays. One of: standard-fte (smooth hire), contractor-client, rehire, internal-transfer, bgv-exception (human-escalation showcase), critical-skill (VIP; go silent to trigger the escalation call), custom.",
+    "phone: international format like +919876543210, or \"\" for email-only. Twilio trial: phones must also be Verified Caller IDs in the Twilio console.",
+    "channelPreference: email | whatsapp | both. geography sets the timezone for call slots (India, United States, UK, Europe, Singapore). joiningDate: YYYY-MM-DD, near-future is best."
   ],
   "volunteers": [
     {
@@ -15,45 +13,27 @@
       "email": "FILL-person@example.com",
       "phone": "+91XXXXXXXXXX",
       "channelPreference": "both",
-      "role": "Software Engineer",
-      "department": "Engineering",
+      "persona": "standard-fte",
       "geography": "India",
-      "hireType": "external",
-      "workerCategory": "full-time",
-      "managerName": "FILL-Manager Name",
-      "recruiterName": "FILL-Recruiter Name",
-      "joiningDate": "2026-08-20",
-      "notes": "Demo volunteer"
+      "joiningDate": "2026-08-20"
     },
     {
       "name": "FILL-Full Name 2",
       "email": "FILL-person2@example.com",
       "phone": "",
       "channelPreference": "email",
-      "role": "HR Analyst",
-      "department": "Human Resources",
+      "persona": "bgv-exception",
       "geography": "United States",
-      "hireType": "external",
-      "workerCategory": "full-time",
-      "managerName": "FILL-Manager Name",
-      "recruiterName": "FILL-Recruiter Name",
-      "joiningDate": "2026-08-24",
-      "notes": "Demo volunteer (email only)"
+      "joiningDate": "2026-08-24"
     },
     {
       "name": "FILL-Full Name 3",
       "email": "FILL-person3@example.com",
       "phone": "+44XXXXXXXXXX",
       "channelPreference": "whatsapp",
-      "role": "Contract Designer",
-      "department": "Design",
+      "persona": "critical-skill",
       "geography": "UK",
-      "hireType": "external",
-      "workerCategory": "contractor",
-      "managerName": "FILL-Manager Name",
-      "recruiterName": "FILL-Recruiter Name",
-      "joiningDate": "2026-08-27",
-      "notes": "Demo volunteer (contractor pack: SOW instead of offer letter)"
+      "joiningDate": "2026-08-27"
     }
   ]
 }

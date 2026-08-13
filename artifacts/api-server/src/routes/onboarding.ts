@@ -139,7 +139,10 @@ async function insertCaseAndStart(values: typeof onbCases.$inferInsert) {
 router.get("/onboarding/dashboard", async (_req, res, next) => {
   try {
     const cases = await db.select().from(onbCases);
-    const approvals = await db.select().from(onbApprovals);
+    const approvals = await db
+      .select()
+      .from(onbApprovals)
+      .where(eq(onbApprovals.status, "pending"));
     const recent = await db
       .select()
       .from(onbEvents)
@@ -190,7 +193,7 @@ router.get("/onboarding/scenarios", (_req, res) => {
 
 router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
   try {
-    const scenario = req.body?.scenario === "sla-escalation" ? "sla-escalation" : "day-before";
+    const scenario = getScenario(req.params.key);
     if (!scenario) {
       res.status(404).json({ message: `Unknown scenario "${req.params.key}"` });
       return;
@@ -201,23 +204,22 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
       .toISOString()
       .slice(0, 10);
     const row = await insertCaseAndStart({
-      workerName: body.workerName,
-      workerEmail: body.workerEmail,
-      workerPhone: body.workerPhone ?? null,
-      channelPreference: normalizePreference(body.channelPreference),
-      hireType: body.hireType,
-      workerCategory: body.workerCategory,
-      role: body.role,
-      department: body.department,
-      geography: body.geography,
-      legalEntity: body.legalEntity,
-      managerName: body.managerName,
-      recruiterName: body.recruiterName,
-      joiningDate: body.joiningDate,
-      primarySkill: body.primarySkill ?? null,
-      skillCriticality: body.skillCriticality ?? null,
-      notes: body.notes ?? null,
-      scenarioKey: null,
+      workerName: scenario.intake.workerName,
+      workerEmail: scenario.intake.workerEmail,
+      workerPhone: scenario.intake.workerPhone,
+      hireType: scenario.intake.hireType,
+      workerCategory: scenario.intake.workerCategory,
+      role: scenario.intake.role,
+      department: scenario.intake.department,
+      geography: scenario.intake.geography,
+      legalEntity: scenario.intake.legalEntity,
+      managerName: scenario.intake.managerName,
+      recruiterName: scenario.intake.recruiterName,
+      joiningDate,
+      primarySkill: scenario.intake.primarySkill,
+      skillCriticality: scenario.intake.skillCriticality,
+      notes: scenario.intake.notes,
+      scenarioKey: scenario.key,
     });
     res.status(201).json(serializeCase(row));
   } catch (err) {
@@ -229,21 +231,16 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
 
 router.get("/onboarding/cases", async (_req, res, next) => {
   try {
-    const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .orderBy(desc(onbSystemChecks.id));
-    res.json(rows.map((r) => ({ ...r, lastSyncAt: iso(r.lastSyncAt) })));
+    const rows = await db.select().from(onbCases).orderBy(desc(onbCases.id));
+    res.json(rows.map(serializeCase));
   } catch (err) {
     next(err);
   }
 });
 
-router.patch("/onboarding/connectors/:key", async (req, res, next) => {
+router.post("/onboarding/cases", async (req, res, next) => {
   try {
-    await ensureConnectorsSeeded();
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = CreateOnboardingCaseBody.parse(req.body);
     // Duplicate-trigger prevention (spec §1.3): same person with an active case.
     const dupes = await db
       .select({ id: onbCases.id, stage: onbCases.lifecycleStage })
@@ -288,10 +285,7 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
 router.get("/onboarding/cases/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [row] = await db
-      .select()
-      .from(onbConnectors)
-      .where(eq(onbConnectors.key, req.params.key));
+    const [row] = await db.select().from(onbCases).where(eq(onbCases.id, id));
     if (!row) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -305,16 +299,59 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
 router.get("/onboarding/cases/:id/events", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(eq(onbCases.id, id));
+    const [exists] = await db
+      .select({ id: onbCases.id })
+      .from(onbCases)
+      .where(eq(onbCases.id, id));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
       return;
     }
     const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .orderBy(desc(onbSystemChecks.id));
+      .select()
+      .from(onbEvents)
+      .where(eq(onbEvents.caseId, id))
+      .orderBy(asc(onbEvents.createdAt), asc(onbEvents.id));
+    res.json(rows.map(serializeEvent));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const [exists] = await db
+      .select({ id: onbCases.id })
+      .from(onbCases)
+      .where(eq(onbCases.id, id));
+    if (!exists) {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(onbCommunications)
+      .where(eq(onbCommunications.caseId, id))
+      .orderBy(asc(onbCommunications.createdAt), asc(onbCommunications.id));
+    res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const [exists] = await db
+      .select({ id: onbCases.id })
+      .from(onbCases)
+      .where(eq(onbCases.id, id));
+    if (!exists) {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    const rows = await listDocuments(id);
     res.json(
       rows.map((r) => ({
         id: r.id,
@@ -336,83 +373,31 @@ router.get("/onboarding/cases/:id/events", async (req, res, next) => {
 router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(eq(onbCases.id, id));
-    if (!exists) {
-      res.status(404).json({ message: "Case not found" });
-      return;
-    }
-    const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .orderBy(desc(onbSystemChecks.id));
-    res.json(
-      rows.map((r) => ({
-        id: r.id,
-        caseId: r.caseId,
-        key: r.key,
-        label: r.label,
-        category: r.category,
-        status: r.status,
-        required: r.required,
-        note: r.note,
-        updatedAt: r.updatedAt.toISOString(),
-      })),
-    );
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(eq(onbCases.id, id));
-    if (!exists) {
-      res.status(404).json({ message: "Case not found" });
-      return;
-    }
-    const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .orderBy(desc(onbSystemChecks.id));
-    res.json(
-      rows.map((r) => ({
-        id: r.id,
-        caseId: r.caseId,
-        key: r.key,
-        label: r.label,
-        category: r.category,
-        status: r.status,
-        required: r.required,
-        note: r.note,
-        updatedAt: r.updatedAt.toISOString(),
-      })),
-    );
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = ReceiveOnboardingInboundBody.parse(req.body);
     if (body.channel !== "email" && body.channel !== "whatsapp") {
       res.status(400).json({ message: "channel must be 'email' or 'whatsapp'" });
       return;
     }
-    const [c] = await db.select().from(onbCases).where(eq(onbCases.id, a.caseId));
+    const [c] = await db.select().from(onbCases).where(eq(onbCases.id, id));
     if (!c) {
       res.status(404).json({ message: "Case not found" });
       return;
     }
-    const from = String(req.body?.From ?? "").replace(/^whatsapp:/, "");
+    const from =
+      body.channel === "whatsapp" && c.workerPhone ? c.workerPhone : c.workerEmail;
     const [row] = await db
-      .select()
-      .from(onbConnectors)
-      .where(eq(onbConnectors.key, req.params.key));
+      .insert(onbCommunications)
+      .values({
+        caseId: id,
+        channel: body.channel,
+        direction: "inbound",
+        toAddress: from,
+        subject: null,
+        body: body.body,
+        status: "received",
+        sensitive: false,
+      })
+      .returning();
     handleInbound(id, body.channel as "email" | "whatsapp", body.body);
     res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
   } catch (err) {
@@ -451,7 +436,7 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
     }
     const from = String(req.body?.From ?? "").replace(/^whatsapp:/, "");
     const text = String(req.body?.Body ?? "").trim();
-      const messageSid = String(req.body?.MessageSid ?? "");
+    const messageSid = String(req.body?.MessageSid ?? "");
     const respondEmpty = () => {
       res.type("text/xml").send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
     };
@@ -461,7 +446,11 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
     }
 
     // Match the sender's phone to the most recent active case.
-    const cases = await db.select().from(onbCases);
+    const cases = await db
+      .select({ id: onbCases.id, workerPhone: onbCases.workerPhone })
+      .from(onbCases)
+      .where(sql`${onbCases.lifecycleStage} not in ('complete')`)
+      .orderBy(desc(onbCases.id));
     const fromDigits = digitsOnly(from);
     const match = cases.find(
       (c) => c.workerPhone && digitsOnly(c.workerPhone) === fromDigits,
@@ -508,13 +497,7 @@ router.post("/onboarding/cases/:id/voice-call", async (req, res, next) => {
       });
       return;
     }
-    const result = await sendOutbound({
-      caseId: anyCase.id,
-      channel: body.channel,
-      toAddress: to,
-      subject: body.channel === "email" ? "Onboarding channel test" : null,
-      body: `This is a test message from the Onboarding Agent Control Tower (${new Date().toISOString()}).`,
-    });
+    const result = await startVoiceCall({ caseId: id, scenario });
     res.json({ status: result.status, note: result.note });
   } catch (err) {
     next(err);
@@ -654,10 +637,13 @@ router.get("/onboarding/approvals", async (req, res, next) => {
   try {
     const wantAll = req.query.status === "all";
     const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .orderBy(desc(onbSystemChecks.id));
+      .select({
+        approval: onbApprovals,
+        workerName: onbCases.workerName,
+      })
+      .from(onbApprovals)
+      .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
+      .orderBy(desc(onbApprovals.createdAt), desc(onbApprovals.id));
     const filtered = wantAll
       ? rows
       : rows.filter((r) => r.approval.status === "pending");
@@ -686,7 +672,7 @@ router.get("/onboarding/approvals", async (req, res, next) => {
 router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = DecideOnboardingApprovalBody.parse(req.body);
     if (body.decision !== "approved" && body.decision !== "rejected") {
       res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
       return;
@@ -701,14 +687,14 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
     // Conditional update: only transitions from pending, so concurrent
     // decisions cannot both win and double-trigger orchestration.
     const [updated] = await db
-      .update(onbConnectors)
+      .update(onbApprovals)
       .set({
-        vendor: body.vendor ?? row.vendor,
-        status: body.status ?? row.status,
-        trackingMode: body.trackingMode ?? row.trackingMode,
-        lastSyncAt: new Date(),
+        status: body.decision,
+        decidedBy,
+        comment: body.comment ?? null,
+        decidedAt: new Date(),
       })
-      .where(eq(onbConnectors.key, req.params.key))
+      .where(and(eq(onbApprovals.id, id), eq(onbApprovals.status, "pending")))
       .returning();
     if (!updated) {
       res.status(400).json({ message: "Approval already decided" });
@@ -749,11 +735,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
 router.get("/onboarding/connectors", async (_req, res, next) => {
   try {
     await ensureConnectorsSeeded();
-    const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .orderBy(desc(onbSystemChecks.id));
+    const rows = await db.select().from(onbConnectors);
     res.json(rows.map((r) => ({ ...r, lastSyncAt: iso(r.lastSyncAt) })));
   } catch (err) {
     next(err);
@@ -763,7 +745,7 @@ router.get("/onboarding/connectors", async (_req, res, next) => {
 router.patch("/onboarding/connectors/:key", async (req, res, next) => {
   try {
     await ensureConnectorsSeeded();
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = UpdateOnboardingConnectorBody.parse(req.body);
     const [row] = await db
       .select()
       .from(onbConnectors)
@@ -826,14 +808,8 @@ router.post(
   "/onboarding/systems/email-watch/simulate",
   async (req, res, next) => {
     try {
-    const body = TestOnboardingChannelBody.parse(req.body);
-    const result = await sendOutbound({
-      caseId: anyCase.id,
-      channel: body.channel,
-      toAddress: to,
-      subject: body.channel === "email" ? "Onboarding channel test" : null,
-      body: `This is a test message from the Onboarding Agent Control Tower (${new Date().toISOString()}).`,
-    });
+      const body = SimulateOnboardingWatchEmailBody.parse(req.body);
+      const result = await simulateVendorEmail(body);
       res.status(result.ok ? 200 : 404).json(result);
     } catch (err) {
       next(err);
@@ -867,11 +843,11 @@ router.get("/onboarding/settings", async (_req, res, next) => {
 
 router.put("/onboarding/settings", async (req, res, next) => {
   try {
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = UpdateOnboardingSettingsBody.parse(req.body);
     // Only fields present in the request are touched — a toggle-only update
     // must not clear the stored alert address (and vice versa).
     if (body.hrAlertEmail !== undefined) {
-    const raw = Array.isArray(req.body?.volunteers) ? req.body.volunteers : [];
+      const raw = (body.hrAlertEmail ?? "").trim();
       if (raw.length === 0) {
         await setSetting(HR_ALERT_EMAIL_KEY, null);
       } else {
@@ -976,12 +952,10 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
       res.status(400).json({ message: "caseId (number) and status are required" });
       return;
     }
-    const result = await sendOutbound({
-      caseId: anyCase.id,
-      channel: body.channel,
-      toAddress: to,
-      subject: body.channel === "email" ? "Onboarding channel test" : null,
-      body: `This is a test message from the Onboarding Agent Control Tower (${new Date().toISOString()}).`,
+    const result = await handleSystemWebhook({
+      system: req.params.system,
+      caseId,
+      status,
     });
     res.status(result.ok ? 200 : 404).json({ message: result.message });
   } catch (err) {
