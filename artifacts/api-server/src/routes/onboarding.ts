@@ -79,6 +79,7 @@ import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
 import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
+import { clerkClient } from "@clerk/express";
 
 const router: IRouter = Router();
 
@@ -87,11 +88,42 @@ const router: IRouter = Router();
 // The Twilio webhook is the one exception: it is called server-to-server
 // by Twilio and authenticated by its request signature instead.
 router.use("/onboarding", (req, res, next) => {
-  if (req.path.startsWith("/webhooks/")) {
+  if (req.path.startsWith("/webhooks/") || req.path === "/demo-login") {
     next();
     return;
   }
   requireAuth(req, res, next);
+});
+
+/**
+ * One-click demo sign-in. The shared demo reviewer account uses an
+ * undeliverable @example.com address, so Clerk's email-code device
+ * verification can never complete for it. This endpoint issues a one-time
+ * Clerk sign-in ticket for THAT ACCOUNT ONLY (equivalent access to the
+ * already-public demo credentials — no other account can be minted).
+ */
+const DEMO_LOGIN_EMAIL = "demo.reviewer@example.com";
+router.post("/onboarding/demo-login", async (req, res, next) => {
+  try {
+    const requested = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (requested !== DEMO_LOGIN_EMAIL) {
+      res.status(403).json({ error: "Demo login is only available for the demo reviewer account" });
+      return;
+    }
+    const users = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
+    const demoUser = users.data[0];
+    if (!demoUser) {
+      res.status(404).json({ error: "Demo account not found" });
+      return;
+    }
+    const token = await clerkClient.signInTokens.createSignInToken({
+      userId: demoUser.id,
+      expiresInSeconds: 120,
+    });
+    res.json({ ticket: token.token });
+  } catch (err) {
+    next(err);
+  }
 });
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);

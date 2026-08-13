@@ -89,9 +89,24 @@ export function LoginPage() {
     setError(null);
     const startedAt = Date.now();
     try {
-      const { error: pwError } = await signIn.password({ identifier: email.trim(), password });
-      if (pwError) {
-        throw new Error(pwError.message || 'Sign-in failed. Please check your credentials.');
+      if (email.trim().toLowerCase() === DEMO_EMAIL) {
+        // The demo account's @example.com inbox can't receive Clerk's
+        // device-verification code, so the server issues a one-time
+        // sign-in ticket for it instead.
+        const resp = await fetch('/api/onboarding/demo-login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: DEMO_EMAIL }),
+        });
+        if (!resp.ok) throw new Error('Demo sign-in is unavailable right now. Please try again.');
+        const { ticket } = (await resp.json()) as { ticket: string };
+        const { error: ticketError } = await signIn.ticket({ ticket });
+        if (ticketError) throw new Error(ticketError.message || 'Demo sign-in failed. Please try again.');
+      } else {
+        const { error: pwError } = await signIn.password({ identifier: email.trim(), password });
+        if (pwError) {
+          throw new Error(pwError.message || 'Sign-in failed. Please check your credentials.');
+        }
       }
       if (signIn.status !== 'complete') {
         throw new Error('Additional verification required — use the full sign-in page.');
