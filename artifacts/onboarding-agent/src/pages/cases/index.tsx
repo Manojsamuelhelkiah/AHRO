@@ -1,159 +1,501 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useListOnboardingCases, useCreateOnboardingCase, getListOnboardingCasesQueryKey } from '@workspace/api-client-react';
+import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
 import { format } from 'date-fns';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Bot, User, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
+type OnbCase = ApiOnbCase;
+
+/* ------------------------- HRO case model mapping ------------------------- */
+/* Existing records are onboarding cases; map them into the neutral HRO case
+   shape so additional case types can be introduced incrementally. */
+
+const CASE_TYPES = [
+  'All Cases',
+  'Onboarding',
+  'Employee Changes',
+  'Payroll',
+  'Benefits',
+  'Leave',
+  'Compliance',
+  'Offboarding',
+  'HR Helpdesk',
+] as const;
+type CaseTypeFilter = (typeof CASE_TYPES)[number];
+
+type HroStatus = 'New' | 'In Progress' | 'Waiting' | 'Human Review' | 'Blocked' | 'Completed';
+
+function caseTypeOf(c: OnbCase): Exclude<CaseTypeFilter, 'All Cases'> {
+  return c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding';
+}
+
+function caseTitleOf(c: OnbCase): string {
+  switch (c.hireType) {
+    case 'contractor': return 'Contractor Onboarding';
+    case 'rehire': return 'Rehire Onboarding';
+    case 'internal-transfer': return 'Employee Transfer';
+    default: return 'New Hire Onboarding';
+  }
+}
+
+function caseIdOf(c: OnbCase): string {
+  const year = c.createdAt ? new Date(c.createdAt).getFullYear() : new Date().getFullYear();
+  return `HRO-${year}-${String(c.id).padStart(5, '0')}`;
+}
+
+export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatus'>): HroStatus {
+  const stage = (c.lifecycleStage || '').toLowerCase();
+  const orch = (c.orchestrationStatus || '').toLowerCase();
+  if (stage === 'completed' || stage === 'complete') return 'Completed';
+  if (orch === 'blocked' || orch === 'failed' || stage === 'exception') return 'Blocked';
+  if (orch === 'waiting-approval') return 'Human Review';
+  if (stage === 'trigger-received') return 'New';
+  if (orch === 'running') return 'In Progress';
+  return 'Waiting';
+}
+
+function ownerOf(c: OnbCase): { name: string; kind: 'AI Agent' | 'Human Reviewer' } {
+  return statusOf(c) === 'Human Review'
+    ? { name: 'HR Reviewer', kind: 'Human Reviewer' }
+    : { name: 'Onboarding Agent', kind: 'AI Agent' };
+}
+
+const PAGE_CONTEXT: Record<CaseTypeFilter, { title: string; subtitle: string }> = {
+  'All Cases': { title: 'HR Operations Cases', subtitle: 'Manage and track HR operations across the employee lifecycle.' },
+  'Onboarding': { title: 'Onboarding Cases', subtitle: 'Manage and track employee onboarding cases.' },
+  'Employee Changes': { title: 'Employee Change Cases', subtitle: 'Transfers, promotions, and role or location changes.' },
+  'Payroll': { title: 'Payroll Cases', subtitle: 'Payroll setup, corrections, and missing payments.' },
+  'Benefits': { title: 'Benefits Cases', subtitle: 'Enrollment, eligibility, and life events.' },
+  'Leave': { title: 'Leave Cases', subtitle: 'Leave requests and return-to-work processes.' },
+  'Compliance': { title: 'Compliance Cases', subtitle: 'Work authorization, document expiry, and policy exceptions.' },
+  'Offboarding': { title: 'Offboarding Cases', subtitle: 'Resignations, terminations, and access removal.' },
+  'HR Helpdesk': { title: 'HR Helpdesk Cases', subtitle: 'Employee inquiries, document requests, and policy questions.' },
+};
+
+/* ------------------------------ status badge ------------------------------ */
+
+const STATUS_STYLES: Record<HroStatus, { bg: string; fg: string; dot?: boolean }> = {
+  'New': { bg: 'var(--primary-light)', fg: 'var(--primary-dark)' },
+  'In Progress': { bg: 'var(--primary-light)', fg: 'var(--primary)', dot: true },
+  'Waiting': { bg: 'var(--surface-alt)', fg: 'var(--text-muted)' },
+  'Human Review': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
+  'Blocked': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
+  'Completed': { bg: 'var(--surface-soft)', fg: 'var(--status-green)' },
+};
+
+function HroStatusBadge({ status }: { status: HroStatus }) {
+  const s = STATUS_STYLES[status];
+  return (
+    <span style={{ backgroundColor: s.bg, color: s.fg, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+      {s.dot && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--primary)' }} />}
+      {status}
+    </span>
+  );
+}
+
+function CaseTypeBadge({ type }: { type: string }) {
+  return (
+    <span style={{ backgroundColor: 'var(--surface-alt)', color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: '10px', fontWeight: 600, padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+      {type === 'Employee Changes' ? 'Employee Change' : type}
+    </span>
+  );
+}
+
+/* --------------------------------- filters -------------------------------- */
+
+type AdvancedFilters = {
+  status: '' | HroStatus;
+  agent: '' | 'AI Agent' | 'Human Reviewer';
+  priority: '' | 'normal' | 'standard' | 'high' | 'elevated' | 'critical';
+  geography: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+const EMPTY_FILTERS: AdvancedFilters = { status: '', agent: '', priority: '', geography: '', dateFrom: '', dateTo: '' };
+
 export function CasesPage() {
-  const { data: cases, isLoading } = useListOnboardingCases();
+  const { data: cases, isLoading, isError, refetch } = useListOnboardingCases();
   const [showNew, setShowNew] = useState(false);
   const [, setLocation] = useLocation();
+  const [typeFilter, setTypeFilter] = useState<CaseTypeFilter>('All Cases');
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<AdvancedFilters>(EMPTY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showFilters) return;
+    const onClick = (e: MouseEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) setShowFilters(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowFilters(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [showFilters]);
+
+  const geographies = useMemo(
+    () => Array.from(new Set((cases ?? []).map((c) => c.geography).filter(Boolean))).sort(),
+    [cases],
+  );
+
+  const filtered = useMemo(() => {
+    let rows = cases ?? [];
+    if (typeFilter !== 'All Cases') rows = rows.filter((c) => caseTypeOf(c) === typeFilter);
+    if (filters.status) rows = rows.filter((c) => statusOf(c) === filters.status);
+    if (filters.agent) rows = rows.filter((c) => ownerOf(c).kind === filters.agent);
+    if (filters.priority) rows = rows.filter((c) => (c.urgency || '').toLowerCase() === filters.priority);
+    if (filters.geography) rows = rows.filter((c) => c.geography === filters.geography);
+    if (filters.dateFrom) rows = rows.filter((c) => c.joiningDate >= filters.dateFrom);
+    if (filters.dateTo) rows = rows.filter((c) => c.joiningDate <= filters.dateTo);
+    const q = query.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((c) =>
+        [c.workerName, c.workerEmail, caseTitleOf(c), caseIdOf(c), String(c.id), c.role, c.geography]
+          .some((v) => (v || '').toLowerCase().includes(q)),
+      );
+    }
+    return rows;
+  }, [cases, typeFilter, filters, query]);
+
+  const counts = useMemo(() => {
+    const rows = cases ?? [];
+    const by = (s: HroStatus) => rows.filter((c) => statusOf(c) === s).length;
+    return {
+      all: rows.length,
+      inProgress: by('In Progress'),
+      humanReview: by('Human Review'),
+      waiting: by('Waiting'),
+      blocked: by('Blocked'),
+      completed: by('Completed'),
+    };
+  }, [cases]);
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const anyFilterActive = activeFilterCount > 0 || query.trim() !== '' || typeFilter !== 'All Cases';
+  const context = PAGE_CONTEXT[typeFilter];
+
+  const clearAll = () => { setFilters(EMPTY_FILTERS); setQuery(''); setTypeFilter('All Cases'); };
+
+  const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <PageHeader title="Onboarding Cases" subtitle="Manage and track in-flight onboardings.">
+      <PageHeader title={context.title} subtitle={context.subtitle}>
         <Button onClick={() => setShowNew(!showNew)} className="gap-2">
-          <Plus className="h-4 w-4" /> New Case Trigger
+          <Plus className="h-4 w-4" /> New Case
         </Button>
       </PageHeader>
 
       {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
 
-      <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
-        <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface)' }} className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-sm">
+      <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'visible' }}>
+        {/* search + filters row */}
+        <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4" style={{ color: 'var(--text-muted)' }} />
-            <Input className="pl-9" placeholder="Search cases..." />
+            <Input className="pl-9" placeholder="Search by case, worker, email, or ID..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+          <div className="relative" ref={filtersRef}>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters} aria-haspopup="dialog" aria-controls="cases-filters-panel">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span style={{ backgroundColor: 'var(--primary)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px', lineHeight: '14px' }}>{activeFilterCount}</span>
+              )}
+            </Button>
+            {showFilters && (
+              <div id="cases-filters-panel" role="dialog" aria-label="Case filters" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', width: '300px', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md, 0 8px 24px rgba(16,24,40,0.12))', padding: 'var(--space-lg)', zIndex: 30 }} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Filters</span>
+                  <button onClick={() => setShowFilters(false)} style={{ color: 'var(--text-muted)' }} aria-label="Close filters"><X className="h-4 w-4" /></button>
+                </div>
+                <div className="space-y-1">
+                  <Label>Case Type</Label>
+                  <select className={selectStyle} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as CaseTypeFilter)}>
+                    {CASE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Status</Label>
+                  <select className={selectStyle} value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value as AdvancedFilters['status'] })}>
+                    <option value="">Any status</option>
+                    {(['New', 'In Progress', 'Waiting', 'Human Review', 'Blocked', 'Completed'] as HroStatus[]).map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Assigned Agent</Label>
+                  <select className={selectStyle} value={filters.agent} onChange={(e) => setFilters({ ...filters, agent: e.target.value as AdvancedFilters['agent'] })}>
+                    <option value="">Any owner</option>
+                    <option value="AI Agent">AI Agent</option>
+                    <option value="Human Reviewer">Human Reviewer</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Priority</Label>
+                  <select className={selectStyle} value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value as AdvancedFilters['priority'] })}>
+                    <option value="">Any priority</option>
+                    <option value="standard">Standard</option>
+                    <option value="normal">Normal</option>
+                    <option value="elevated">Elevated</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Country / Region</Label>
+                  <select className={selectStyle} value={filters.geography} onChange={(e) => setFilters({ ...filters, geography: e.target.value })}>
+                    <option value="">Any region</option>
+                    {geographies.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label>From</Label>
+                    <Input type="date" value={filters.dateFrom} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>To</Label>
+                    <Input type="date" value={filters.dateTo} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} />
+                  </div>
+                </div>
+                <div className="flex justify-between pt-1">
+                  <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>Reset</Button>
+                  <Button size="sm" onClick={() => setShowFilters(false)}>Done</Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-        <div className="overflow-x-auto">
+
+        {/* case-type tabs */}
+        <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex items-center gap-1 overflow-x-auto">
+          {CASE_TYPES.map((t) => {
+            const active = typeFilter === t;
+            return (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className="shrink-0 transition-colors"
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: active ? 600 : 500,
+                  padding: '5px 10px',
+                  borderRadius: '999px',
+                  backgroundColor: active ? 'var(--primary-light)' : 'transparent',
+                  color: active ? 'var(--primary)' : 'var(--text-secondary)',
+                  border: active ? '1px solid var(--primary)' : '1px solid transparent',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* compact summary counts */}
+        {!isLoading && !isError && (cases?.length ?? 0) > 0 && (
+          <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex items-center gap-4 flex-wrap">
+            {([
+              ['All Cases', counts.all, '' as const],
+              ['In Progress', counts.inProgress, 'In Progress' as const],
+              ['Human Review', counts.humanReview, 'Human Review' as const],
+              ['Waiting', counts.waiting, 'Waiting' as const],
+              ['Blocked', counts.blocked, 'Blocked' as const],
+              ['Completed', counts.completed, 'Completed' as const],
+            ] as const)
+              .filter(([, n], i) => i === 0 || n > 0)
+              .map(([label, n, statusValue]) => {
+                const active = filters.status === statusValue || (statusValue === '' && !filters.status);
+                return (
+                  <button
+                    key={label}
+                    onClick={() => setFilters({ ...filters, status: statusValue })}
+                    className="flex items-center gap-1.5"
+                    style={{ fontSize: 'var(--text-xs)', fontWeight: active ? 700 : 500, color: active ? 'var(--primary)' : 'var(--text-secondary)' }}
+                  >
+                    {label}
+                    <span style={{ fontWeight: 700, color: active ? 'var(--primary)' : 'var(--text-primary)' }}>{n}</span>
+                  </button>
+                );
+              })}
+          </div>
+        )}
+
+        {/* desktop / tablet table */}
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
-                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Worker</th>
-                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Role & Geo</th>
-                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Joining Date</th>
-                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Stage</th>
-                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Orchestration</th>
-                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Action</th>
+                {['Case', 'Worker', 'Case Type', 'Effective Date', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
+                  <th
+                    key={h}
+                    className={cn((h === 'Effective Date' || h === 'Owner / Agent') && 'hidden lg:table-cell')}
+                    style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 6 ? 'right' : 'left' }}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Loading...</td></tr>
-              ) : cases?.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>No cases found.</td></tr>
-              ) : (
-                cases?.map(c => (
-                  <tr 
-                    key={c.id} 
-                    className="group transition-colors cursor-pointer"
-                    style={{ borderBottom: '1px solid var(--border)' }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--primary-light)'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                    onClick={(e) => {
-                      if (!(e.target as HTMLElement).closest('a') && !(e.target as HTMLElement).closest('button')) {
-                        setLocation(`/cases/${c.id}`);
-                      }
-                    }}
-                  >
-                    <td style={{ padding: '12px var(--space-lg)' }}>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{c.workerName}</div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{c.workerEmail}</div>
-                      <div className="flex gap-2 mt-1">
-                        <TypeBadge type={c.hireType} />
-                        {c.urgency !== 'normal' && <UrgencyBadge urgency={c.urgency} />}
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px var(--space-lg)' }}>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.role}</div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{c.geography}</div>
-                    </td>
-                    <td style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }} className="whitespace-nowrap">
-                      {format(new Date(c.joiningDate), 'MMM d, yyyy')}
-                    </td>
-                    <td style={{ padding: '12px var(--space-lg)' }}>
-                      <StageBadge stage={c.lifecycleStage} />
-                    </td>
-                    <td style={{ padding: '12px var(--space-lg)' }}>
-                      <StatusBadge status={c.orchestrationStatus} />
-                    </td>
-                    <td style={{ padding: '12px var(--space-lg)', textAlign: 'right' }}>
-                      <Link href={`/cases/${c.id}`} className="hover:underline" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--primary)' }} onClick={e => e.stopPropagation()}>
-                        View Details
-                      </Link>
-                    </td>
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <td key={j} className={cn((j === 3 || j === 5) && 'hidden lg:table-cell')} style={{ padding: '14px var(--space-lg)' }}>
+                        <div className="animate-pulse rounded" style={{ height: '12px', width: j === 0 ? '120px' : '70px', backgroundColor: 'var(--surface-alt)' }} />
+                      </td>
+                    ))}
                   </tr>
                 ))
+              ) : isError ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '40px 16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Cases couldn't be loaded</div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>Try again or contact your administrator if the issue continues.</div>
+                    <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>Retry</Button>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '40px 16px', textAlign: 'center' }}>
+                    {(cases?.length ?? 0) === 0 ? (
+                      <>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No HR operations cases yet</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>Cases created across the employee lifecycle will appear here.</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No cases found</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>No cases match the selected filters.</div>
+                        {anyFilterActive && <Button size="sm" variant="outline" className="mt-3" onClick={clearAll}>Clear filters</Button>}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((c) => {
+                  const status = statusOf(c);
+                  const owner = ownerOf(c);
+                  return (
+                    <tr
+                      key={c.id}
+                      className="group transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
+                      style={{ borderBottom: '1px solid var(--border)' }}
+                      tabIndex={0}
+                      aria-label={`Open case ${caseIdOf(c)} — ${caseTitleOf(c)} for ${c.workerName}`}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary-light)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      onKeyDown={(e) => {
+                        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                          e.preventDefault();
+                          setLocation(`/cases/${c.id}`);
+                        }
+                      }}
+                      onClick={(e) => {
+                        if (!(e.target as HTMLElement).closest('a') && !(e.target as HTMLElement).closest('button')) {
+                          setLocation(`/cases/${c.id}`);
+                        }
+                      }}
+                    >
+                      <td style={{ padding: '12px var(--space-lg)' }}>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
+                      </td>
+                      <td style={{ padding: '12px var(--space-lg)' }}>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.workerName}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{c.workerEmail}</div>
+                      </td>
+                      <td style={{ padding: '12px var(--space-lg)' }}>
+                        <CaseTypeBadge type={caseTypeOf(c)} />
+                      </td>
+                      <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+                        {format(new Date(c.joiningDate), 'MMM d, yyyy')}
+                      </td>
+                      <td style={{ padding: '12px var(--space-lg)' }}>
+                        <HroStatusBadge status={status} />
+                      </td>
+                      <td className="hidden lg:table-cell" style={{ padding: '12px var(--space-lg)' }}>
+                        <OwnerCell owner={owner} />
+                      </td>
+                      <td style={{ padding: '12px var(--space-lg)', textAlign: 'right' }}>
+                        <Link href={`/cases/${c.id}`} className="hover:underline" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--primary)' }} onClick={(e) => e.stopPropagation()}>
+                          View Details
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* mobile cards */}
+        <div className="md:hidden">
+          {isLoading ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Loading...</div>
+          ) : isError ? (
+            <div style={{ padding: '24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Cases couldn't be loaded</div>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>Retry</Button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
+              {(cases?.length ?? 0) === 0 ? 'No HR operations cases yet.' : 'No cases match the selected filters.'}
+            </div>
+          ) : (
+            filtered.map((c) => {
+              const status = statusOf(c);
+              return (
+                <button
+                  key={c.id}
+                  className="w-full text-left"
+                  style={{ padding: '12px var(--space-lg)', borderBottom: '1px solid var(--border)' }}
+                  onClick={() => setLocation(`/cases/${c.id}`)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
+                    <HroStatusBadge status={status} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{c.workerName}</span>
+                    <CaseTypeBadge type={caseTypeOf(c)} />
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
+                </button>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function TypeBadge({ type }: { type: string }) {
-  let style = {};
-  if (type === 'contractor') style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-blue)' };
-  else if (type === 'external-fte') style = { backgroundColor: 'var(--primary-light)', color: 'var(--primary-dark)' };
-  else style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-green)' };
-
+function OwnerCell({ owner }: { owner: { name: string; kind: 'AI Agent' | 'Human Reviewer' } }) {
+  const Icon = owner.kind === 'AI Agent' ? Bot : User;
   return (
-    <span style={{ ...style, fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
-      {type.replace('-', ' ')}
-    </span>
-  );
-}
-
-function UrgencyBadge({ urgency }: { urgency: string }) {
-  let style = {};
-  if (urgency === 'high' || urgency === 'critical' || urgency === 'elevated') style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-amber)' };
-  else style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
-
-  return (
-    <span style={{ ...style, fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
-      {urgency}
-    </span>
-  );
-}
-
-function StageBadge({ stage }: { stage: string }) {
-  let style = {};
-  switch (stage.toLowerCase()) {
-    case 'preboarding':
-      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-blue)' };
-      break;
-    case 'in-progress':
-      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-amber)' };
-      break;
-    case 'day1-review':
-      style = { backgroundColor: 'var(--primary-light)', color: 'var(--primary-dark)' };
-      break;
-    case 'completed':
-    case 'complete':
-      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-green)' };
-      break;
-    default:
-      style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
-  }
-  return <span style={{ ...style, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '4px 8px', borderRadius: '20px', textTransform: 'uppercase' }}>{stage}</span>;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const isRunning = status === 'running' || status === 'waiting-approval';
-  const style = isRunning
-    ? { backgroundColor: 'var(--surface-soft)', color: 'var(--status-green)' }
-    : { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
-
-  return (
-    <span style={{ ...style, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '4px 8px', borderRadius: '20px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-      {isRunning && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--status-green)' }}></span>}
-      {status === 'not-started' ? 'IDLE' : status}
-    </span>
+    <div className="flex items-center gap-2">
+      <span className="flex items-center justify-center shrink-0 rounded-full" style={{ width: '24px', height: '24px', backgroundColor: owner.kind === 'AI Agent' ? 'var(--primary-light)' : 'var(--surface-soft)', color: owner.kind === 'AI Agent' ? 'var(--primary)' : 'var(--status-amber)' }}>
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <div>
+        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{owner.name}</div>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{owner.kind}</div>
+      </div>
+    </div>
   );
 }
 
@@ -196,7 +538,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
   return (
     <Card className="mb-6 shadow-md">
       <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex justify-between items-center">
-        <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>New Intake Trigger</h3>
+        <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>New Case</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
       </div>
       <form onSubmit={handleSubmit} className="p-[var(--space-lg)] space-y-4">
@@ -289,7 +631,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex justify-end pt-4 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
           <Button type="submit" disabled={createCase.isPending}>
-            {createCase.isPending ? 'Triggering...' : 'Submit to Intake Agent'}
+            {createCase.isPending ? 'Creating...' : 'Create Case'}
           </Button>
         </div>
       </form>

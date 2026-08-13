@@ -1,0 +1,835 @@
+Update **ONLY the existing Cases page** of the Agentic HRO Suite.
+
+Do NOT modify other application pages, navigation architecture, authentication, backend APIs, database schema, agent logic, or unrelated functionality unless a very small presentation-layer adjustment is required for this page.
+
+The objective is to evolve the current **Onboarding Cases** page into an enterprise-wide **HR Operations Cases** workspace that supports the broader Agentic HRO Suite.
+
+The page should no longer appear to be an onboarding-only application.
+
+Preserve the existing Agentic HRO design system, including the approved indigo/violet brand language, light enterprise workspace surfaces, typography, borders, cards, badges, and spacing.
+
+---
+
+# 1. CHANGE THE PAGE IDENTITY
+
+Replace:
+
+**Onboarding Cases**
+
+with:
+
+# HR Operations Cases
+
+Replace:
+
+`Manage and track in-flight onboardings.`
+
+with:
+
+`Manage and track HR operations across the employee lifecycle.`
+
+The purpose of this page is to provide a unified case workspace across multiple HRO domains.
+
+Do NOT use "Onboarding" as the primary identity of the Cases module.
+
+---
+
+# 2. KEEP THE NAVIGATION ITEM AS "CASES"
+
+The left navigation should continue to show:
+
+**Cases**
+
+Do not rename the navigation item to:
+
+* Onboarding
+* HR Cases
+* Case Management
+
+Keep it simply:
+
+**Cases**
+
+The page itself provides the broader context through the title **HR Operations Cases**.
+
+---
+
+# 3. CHANGE THE PRIMARY CTA
+
+Replace:
+
+**+ New Case Trigger**
+
+with:
+
+**+ New Case**
+
+Use the existing Agentic HRO primary indigo button style.
+
+"Trigger" is orchestration terminology and should not be exposed as the primary HR-user action.
+
+The user creates a case.
+
+The Agentic HRO platform determines what workflow, agent, policy, or orchestration needs to execute behind the scenes.
+
+Do NOT change the existing backend action behind this button unless necessary.
+
+---
+
+# 4. ADD CASE-TYPE FILTERING
+
+Add a clean horizontal case-type filter directly above the case table.
+
+Use:
+
+**All Cases**
+
+**Onboarding**
+
+**Employee Changes**
+
+**Payroll**
+
+**Benefits**
+
+**Leave**
+
+**Compliance**
+
+**Offboarding**
+
+**HR Helpdesk**
+
+Default selection:
+
+**All Cases**
+
+Use the existing Agentic HRO indigo visual language for the selected state.
+
+Do NOT make every filter look like a large button.
+
+Use compact enterprise tabs/chips.
+
+If the available width is insufficient, use an appropriate responsive solution rather than allowing ugly wrapping.
+
+---
+
+# 5. FILTER BEHAVIOR
+
+Selecting a case type should filter the visible cases.
+
+Examples:
+
+### All Cases
+
+Show all HRO cases.
+
+### Onboarding
+
+New hires, rehires, contractor onboarding.
+
+### Employee Changes
+
+Transfers, promotions, manager changes, location changes.
+
+### Payroll
+
+Payroll setup, corrections, missing payments.
+
+### Benefits
+
+Enrollment, eligibility, life events.
+
+### Leave
+
+Leave requests, return-to-work processes.
+
+### Compliance
+
+Work authorization, document expiry, policy exceptions.
+
+### Offboarding
+
+Resignation, termination, access removal.
+
+### HR Helpdesk
+
+Employee inquiries, document requests, policy questions.
+
+If the current backend does not yet support these case types, implement the UI architecture cleanly without inventing fake backend functionality.
+
+Do not break the existing onboarding records.
+
+---
+
+# 6. DYNAMIC PAGE CONTEXT
+
+When **All Cases** is selected, display:
+
+# HR Operations Cases
+
+`Manage and track HR operations across the employee lifecycle.`
+
+When **Onboarding** is selected, it is acceptable to display:
+
+# Onboarding Cases
+
+`Manage and track employee onboarding cases.`
+
+Likewise, other filters may dynamically update the page context where practical.
+
+Examples:
+
+**Payroll Cases**
+
+**Compliance Cases**
+
+**Offboarding Cases**
+
+However, this dynamic title behavior is secondary.
+
+The default global experience must be:
+
+**HR Operations Cases**
+
+---
+
+# 7. UPDATE THE SEARCH EXPERIENCE
+
+Replace:
+
+`Search cases...`
+
+with a more useful placeholder:
+
+`Search by case, worker, email, or ID...`
+
+Keep the search field compact and enterprise-grade.
+
+The existing global application search at the top of the application should remain unchanged.
+
+This page-level search should search only the Cases workspace.
+
+---
+
+# 8. ADD ENTERPRISE FILTER CONTROLS
+
+Next to the page-level search, add a compact:
+
+**Filters**
+
+control.
+
+Opening Filters should allow the UI architecture to support:
+
+* Case Type
+* Status
+* Assigned Agent
+* Priority
+* Country / Region
+* Date Range
+
+Do not overcrowd the main page with all filters permanently visible.
+
+Use a clean popover/dropdown/filter panel consistent with the existing application design.
+
+If these filter fields are not supported by the backend yet, do not fake functional results.
+
+Prepare the presentation/component architecture cleanly.
+
+---
+
+# 9. UPDATE THE TABLE STRUCTURE
+
+The existing table is onboarding-specific.
+
+Replace:
+
+**WORKER | ROLE & GEO | JOINING DATE | STAGE | ORCHESTRATION | ACTION**
+
+with a broader HRO case structure:
+
+**CASE | WORKER | CASE TYPE | EFFECTIVE DATE | STATUS | OWNER / AGENT | ACTION**
+
+This should become the default **All Cases** table.
+
+---
+
+# 10. CASE COLUMN
+
+The CASE column should identify the operational work item.
+
+Display:
+
+**Case title**
+
+and underneath:
+
+`Case ID`
+
+Example:
+
+**New Hire Onboarding**
+
+`HRO-2026-00124`
+
+Other examples could eventually include:
+
+**Payroll Correction**
+
+**Employee Transfer**
+
+**Benefits Enrollment**
+
+**Work Authorization Review**
+
+**Employee Offboarding**
+
+Do not fabricate records merely for visual effect if the current data model does not contain them.
+
+Map existing data safely.
+
+---
+
+# 11. WORKER COLUMN
+
+Display:
+
+**Worker name**
+
+Secondary text:
+
+`worker email`
+
+Example:
+
+**Ananya Sharma**
+
+`helkiah@gmail.com`
+
+Keep this similar to the current presentation.
+
+Do not expose unnecessary employee information.
+
+---
+
+# 12. CASE TYPE COLUMN
+
+Introduce standardized case-type badges.
+
+Examples:
+
+`ONBOARDING`
+
+`EMPLOYEE CHANGE`
+
+`PAYROLL`
+
+`BENEFITS`
+
+`LEAVE`
+
+`COMPLIANCE`
+
+`OFFBOARDING`
+
+`HR HELPDESK`
+
+Use restrained visual differentiation.
+
+Do NOT assign random bright colors to every case type.
+
+Prefer neutral/light surfaces with subtle Agentic HRO accents.
+
+Case type is classification, not operational status.
+
+---
+
+# 13. EFFECTIVE DATE
+
+Replace the onboarding-specific:
+
+**JOINING DATE**
+
+with:
+
+**EFFECTIVE DATE**
+
+This makes the model applicable across HR operations.
+
+For onboarding, Effective Date may represent joining/start date.
+
+For other cases it may represent:
+
+* transfer effective date
+* payroll effective date
+* leave start date
+* termination date
+* benefit effective date
+
+Do not force all HRO workflows into a "joining date" model.
+
+---
+
+# 14. STATUS
+
+Replace onboarding-specific stage presentation in the global table with standardized case status.
+
+Support a reusable status model such as:
+
+**New**
+
+**In Progress**
+
+**Waiting**
+
+**Human Review**
+
+**Blocked**
+
+**Completed**
+
+Use the centralized semantic color system.
+
+Recommended semantics:
+
+New → Indigo / neutral
+
+In Progress → Indigo
+
+Waiting → Neutral / lavender
+
+Human Review → Amber
+
+Blocked → Red
+
+Completed → Emerald
+
+Do not use color alone to communicate state.
+
+---
+
+# 15. OWNER / AGENT
+
+Replace the generic:
+
+**ORCHESTRATION**
+
+column with:
+
+**OWNER / AGENT**
+
+This should communicate who or what currently owns execution.
+
+Examples:
+
+**Onboarding Agent**
+
+**Payroll Agent**
+
+**Compliance Agent**
+
+**Helpdesk Agent**
+
+or:
+
+**Priya Rao**
+
+`Human Reviewer`
+
+Where appropriate, use a small indicator to distinguish:
+
+**AI Agent**
+
+from:
+
+**Human Owner**
+
+This is an important Agentic HRO concept.
+
+Do not make the distinction flashy.
+
+---
+
+# 16. HUMAN-IN-THE-LOOP STATE
+
+If a case requires human intervention, make that immediately visible.
+
+Example:
+
+**Human Review**
+
+with restrained amber styling.
+
+The user should be able to understand:
+
+**Agent executing normally**
+
+versus
+
+**Human decision required**
+
+without opening the case.
+
+Do not expose sensitive decision details in the table.
+
+---
+
+# 17. ACTION COLUMN
+
+Keep:
+
+**View Details**
+
+as the primary row-level action.
+
+Do not clutter every row with multiple buttons.
+
+Optionally add a subtle three-dot overflow menu if the application already supports appropriate case actions.
+
+Do not invent destructive actions.
+
+---
+
+# 18. ONBOARDING-SPECIFIC DETAILS
+
+Do NOT delete useful onboarding-specific information from the system.
+
+Instead, move onboarding-specific attributes such as:
+
+* Joining Date
+* Preboarding
+* Day 1 Review
+* onboarding stage
+* employment type
+* onboarding risk
+
+into either:
+
+1. the Onboarding-filtered view, or
+2. the Case Details page.
+
+The global All Cases table should remain process-neutral.
+
+---
+
+# 19. REMOVE "EXTERNAL FTE" FROM PROMINENT GLOBAL DISPLAY IF APPROPRIATE
+
+The current worker column displays badges such as:
+
+`EXTERNAL FTE`
+
+`STANDARD`
+
+`ELEVATED`
+
+These appear to mix worker classification and risk/handling classifications.
+
+Do not automatically remove the underlying information.
+
+However, review whether these badges belong in the global Cases table.
+
+Prefer putting classifications such as employment type, risk tier, or processing tier inside the case detail view unless they are genuinely necessary for case triage.
+
+If **ELEVATED** represents risk or special handling, display it using the appropriate semantic treatment rather than treating it like an ordinary worker attribute.
+
+---
+
+# 20. TABLE DENSITY
+
+Maintain an enterprise operational table.
+
+Do not make rows excessively tall.
+
+Each row should allow users to scan:
+
+Case
+→ Worker
+→ Type
+→ Date
+→ Status
+→ Owner
+→ Action
+
+quickly.
+
+Use subtle row separators.
+
+Add a restrained hover state.
+
+Keep typography highly readable.
+
+---
+
+# 21. OPTIONAL SUMMARY BAR
+
+If it fits naturally without overcrowding the page, add a compact summary immediately above the table:
+
+**All Cases 42**
+
+**In Progress 18**
+
+**Human Review 4**
+
+**Blocked 2**
+
+**Completed 18**
+
+Do NOT create large dashboard KPI cards.
+
+These should be compact operational filters/counts.
+
+Only show real counts if the application has the corresponding data.
+
+Do not fabricate production metrics.
+
+If real counts cannot currently be derived, omit this section.
+
+---
+
+# 22. EMPTY STATES
+
+Create professional empty states.
+
+Example when a filter returns nothing:
+
+**No cases found**
+
+`No cases match the selected filters.`
+
+Provide:
+
+**Clear filters**
+
+where appropriate.
+
+For a completely empty Cases environment:
+
+**No HR operations cases yet**
+
+`Cases created across the employee lifecycle will appear here.`
+
+Do not use cartoon illustrations.
+
+---
+
+# 23. LOADING STATE
+
+Provide a professional loading state.
+
+Use table skeletons or an understated loading indicator.
+
+Do not show fake case data while loading.
+
+---
+
+# 24. ERROR STATE
+
+If case retrieval fails, show:
+
+**Cases couldn't be loaded**
+
+`Try again or contact your administrator if the issue continues.`
+
+Provide:
+
+**Retry**
+
+Do not expose:
+
+* stack traces
+* raw API errors
+* database errors
+* internal service names
+
+---
+
+# 25. RESPONSIVE BEHAVIOR
+
+Desktop:
+retain the full enterprise table.
+
+Tablet:
+prioritize:
+
+Case
+Worker
+Type
+Status
+Action
+
+Allow less-critical information to collapse appropriately.
+
+Mobile:
+use responsive case cards or a compact layout rather than forcing a desktop table horizontally.
+
+Do not introduce uncontrolled horizontal scrolling.
+
+---
+
+# 26. DESIGN SYSTEM
+
+Use the approved Agentic HRO design system.
+
+This is a **light enterprise workspace**, not the dark Control Tower.
+
+Use:
+
+* white cards
+* soft `#F8F9FC` workspace background
+* navy primary text
+* Agentic Indigo primary actions
+* lavender secondary accents
+* cool-gray borders
+* semantic emerald/amber/red only for status
+
+Do NOT make the page excessively purple.
+
+The login page, Control Tower, and Cases workspace should clearly belong to the same product while serving different purposes.
+
+---
+
+# 27. IMPORTANT AGENTIC HRO PRINCIPLE
+
+The Cases page should represent:
+
+**HR work that needs to be completed**
+
+The Agents layer represents:
+
+**Who/what autonomously executes that work**
+
+The Guardrails layer represents:
+
+**What agents are permitted to do**
+
+The Approvals layer represents:
+
+**Where human decisions are required**
+
+Do not mix these concepts unnecessarily.
+
+The Cases page should remain centered on operational work.
+
+---
+
+# 28. DESIRED USER EXPERIENCE
+
+A user opening Cases should immediately understand:
+
+**What HR work exists?**
+
+**Which employee does it concern?**
+
+**What type of HRO process is it?**
+
+**What state is it in?**
+
+**Who or which agent currently owns it?**
+
+**Does a human need to intervene?**
+
+**What should I open next?**
+
+Design the information hierarchy around these questions.
+
+---
+
+# 29. TARGET PAGE STRUCTURE
+
+Use approximately:
+
+**AGENTIC HRO SUITE / CASES**
+
+# HR Operations Cases
+
+`Manage and track HR operations across the employee lifecycle.`
+
+```
+                                     **+ New Case**
+```
+
+---
+
+`Search by case, worker, email, or ID...`    **Filters**
+
+**All Cases | Onboarding | Employee Changes | Payroll | Benefits | Leave | Compliance | Offboarding | HR Helpdesk**
+
+---
+
+| CASE | WORKER | CASE TYPE | EFFECTIVE DATE | STATUS | OWNER / AGENT | ACTION |
+
+Example conceptual row:
+
+**New Hire Onboarding**
+`HRO-2026-00124`
+
+**Ananya Sharma**
+`ananya@company.com`
+
+`ONBOARDING`
+
+`Sep 12, 2026`
+
+`IN PROGRESS`
+
+**Onboarding Agent**
+`AI Agent`
+
+**View Details**
+
+---
+
+Do not treat this example record as mandatory production data.
+
+Use existing real application data wherever possible.
+
+---
+
+# 30. IMPORTANT IMPLEMENTATION CONSTRAINT
+
+Before changing code:
+
+1. Inspect the existing Cases page.
+2. Identify its current data model.
+3. Identify existing APIs and filters.
+4. Preserve all existing case functionality.
+5. Reuse current shared components.
+6. Use existing Agentic HRO design tokens.
+7. Do not install another UI framework.
+8. Do not rewrite unrelated modules.
+9. Do not change backend schemas simply to make the screenshot look better.
+10. Where the current backend is onboarding-specific, create the frontend structure so additional HRO case types can be introduced incrementally.
+
+Do not fake functionality that does not exist.
+
+---
+
+# 31. ACCEPTANCE CRITERIA
+
+Before considering the Cases page complete, verify:
+
+* "Onboarding Cases" is no longer the default page identity.
+* Default title is "HR Operations Cases."
+* Subtitle covers the employee lifecycle.
+* Navigation remains "Cases."
+* "+ New Case Trigger" has become "+ New Case."
+* "All Cases" is the default case-type view.
+* HRO case-type filtering architecture exists.
+* Search is case-specific.
+* Filters control exists.
+* Global table is no longer onboarding-specific.
+* "Joining Date" is replaced by "Effective Date" in the global view.
+* "Stage" is represented as a reusable case Status.
+* "Orchestration" is replaced by "Owner / Agent."
+* AI ownership and human ownership can be distinguished.
+* Human Review has a clear enterprise status treatment.
+* Onboarding-specific information has not been unnecessarily destroyed.
+* Existing onboarding cases continue to work.
+* No fake operational data has been introduced.
+* Existing APIs and business logic remain intact unless genuinely necessary.
+* Page uses the approved Agentic HRO design system.
+* Responsive, loading, empty, and error states are handled.
+* Only the Cases page and its directly required reusable presentation components were modified.
+
+The finished page must make Agentic HRO feel like an **enterprise HR Operations Suite spanning the employee lifecycle**, rather than an onboarding application with additional navigation items.
