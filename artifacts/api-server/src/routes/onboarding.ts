@@ -30,6 +30,7 @@ import {
   whatsappChannelInfo,
 } from "../lib/onboarding/channels";
 import { llmComplete } from "../lib/onboarding/llm";
+import { normalizePreference } from "../lib/onboarding/channel-routing";
 
 const router: IRouter = Router();
 
@@ -41,6 +42,7 @@ function serializeCase(row: typeof onbCases.$inferSelect) {
     workerName: row.workerName,
     workerEmail: row.workerEmail,
     workerPhone: row.workerPhone,
+    channelPreference: row.channelPreference,
     hireType: row.hireType,
     workerCategory: row.workerCategory,
     role: row.role,
@@ -209,6 +211,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       workerName: body.workerName,
       workerEmail: body.workerEmail,
       workerPhone: body.workerPhone ?? null,
+      channelPreference: normalizePreference(body.channelPreference),
       hireType: body.hireType,
       workerCategory: body.workerCategory,
       role: body.role,

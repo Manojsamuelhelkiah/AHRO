@@ -1,0 +1,1 @@
+ALTER TABLE "onb_cases" ADD COLUMN "channel_preference" text DEFAULT 'both' NOT NULL;

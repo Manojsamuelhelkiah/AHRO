@@ -2335,6 +2335,10 @@ components:
         workerPhone:
           type: ["string", "null"]
           description: E.164 phone for WhatsApp; null when not provided
+        channelPreference:
+          type: string
+          enum: [email, whatsapp, both]
+          description: HR-selected contact channel(s) for this new hire
         hireType:
           type: string
           description: external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited
@@ -2394,6 +2398,7 @@ components:
         - workerName
         - workerEmail
         - workerPhone
+        - channelPreference
         - hireType
         - workerCategory
         - role
@@ -2426,6 +2431,10 @@ components:
         workerPhone:
           type: string
           description: Optional E.164 phone used for WhatsApp
+        channelPreference:
+          type: string
+          enum: [email, whatsapp, both]
+          description: How the new hire should be contacted (defaults to both)
         hireType:
           type: string
         workerCategory:

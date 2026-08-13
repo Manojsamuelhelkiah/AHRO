@@ -106,6 +106,9 @@ function StatusBadge({ status }: { status: string }) {
 function NewCaseForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const createCase = useCreateOnboardingCase();
+  const [channelPref, setChannelPref] = useState('both');
+  const [phone, setPhone] = useState('');
+  const needsPhone = channelPref !== 'email' && !phone.trim();
   
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -114,6 +117,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
       workerName: fd.get('workerName') as string,
       workerEmail: fd.get('workerEmail') as string,
       workerPhone: fd.get('workerPhone') as string || undefined,
+      channelPreference: fd.get('channelPreference') as 'email' | 'whatsapp' | 'both',
       hireType: fd.get('hireType') as string,
       workerCategory: fd.get('workerCategory') as string,
       role: fd.get('role') as string,
@@ -153,7 +157,22 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
           </div>
           <div className="space-y-1">
             <Label>Phone (E.164)</Label>
-            <Input name="workerPhone" placeholder="+1234567890" />
+            <Input name="workerPhone" placeholder="+1234567890" value={phone} onChange={(e) => setPhone(e.target.value)} required={channelPref === 'whatsapp'} />
+            {needsPhone && (
+              <p className="text-[11px] text-amber-600">
+                {channelPref === 'whatsapp'
+                  ? 'WhatsApp is selected — a phone number is required (the agent falls back to email without one).'
+                  : 'Without a phone number, WhatsApp messages are skipped and only email is used.'}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label>Contact Channel</Label>
+            <select name="channelPreference" value={channelPref} onChange={(e) => setChannelPref(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" required>
+              <option value="email">Email only</option>
+              <option value="whatsapp">WhatsApp only</option>
+              <option value="both">Email + WhatsApp</option>
+            </select>
           </div>
           <div className="space-y-1">
             <Label>Hire Type</Label>

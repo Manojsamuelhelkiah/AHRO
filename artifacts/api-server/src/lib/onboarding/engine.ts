@@ -8,6 +8,11 @@ import {
 } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { sendOutbound } from "./channels";
+import {
+  normalizePreference,
+  resolveReplyChannel,
+  resolveWelcomeChannels,
+} from "./channel-routing";
 import { llmComplete } from "./llm";
 
 type CaseRow = typeof onbCases.$inferSelect;
@@ -438,18 +443,34 @@ async function runCommunications(caseId: number) {
     draft ??
     `Welcome aboard, ${c.workerName}! Your onboarding for the ${c.role} role starting ${c.joiningDate} is underway. Your checklist is prepared — reply to this message with any question.\n— The Onboarding Team`;
 
-  const email = await sendOutbound({
-    caseId,
-    channel: "email",
-    toAddress: c.workerEmail,
-    subject: `Welcome, ${c.workerName.split(" ")[0]} — your onboarding has started`,
-    body,
-  });
-  await logEvent(caseId, "channel", draft ? "llm" : "system", "Welcome email dispatched",
-    `Pre-boarding welcome drafted by the reasoning engine and ${email.status === "sent" ? "delivered via email" : email.status === "logged-only" ? "logged (email provider not connected)" : `send failed: ${email.failureReason}`}.`,
-    { hitlPattern: "act-then-review" });
+  const routing = resolveWelcomeChannels(c.channelPreference, c.workerPhone);
+  await logEvent(caseId, "channel", "ldm", "Channel preference applied",
+    `HR channel preference for this case is "${normalizePreference(c.channelPreference)}". Welcome communications are routed accordingly.`,
+    { hitlPattern: "notify-only" });
 
-  if (c.workerPhone) {
+  if (routing.whatsappSkipped) {
+    await logEvent(caseId, "channel", "system", "WhatsApp welcome skipped",
+      routing.emailIsFallback
+        ? "Channel preference is WhatsApp but the case has no phone number — welcome sent via email as fallback."
+        : "Channel preference includes WhatsApp but the case has no phone number — email only.",
+      { hitlPattern: "notify-only" });
+  }
+
+  if (routing.channels.includes("email")) {
+    const email = await sendOutbound({
+      caseId,
+      channel: "email",
+      toAddress: c.workerEmail,
+      subject: `Welcome, ${c.workerName.split(" ")[0]} — your onboarding has started`,
+      body,
+    });
+    await logEvent(caseId, "channel", draft ? "llm" : "system",
+      routing.emailIsFallback ? "Welcome email dispatched (fallback)" : "Welcome email dispatched",
+      `Pre-boarding welcome drafted by the reasoning engine and ${email.status === "sent" ? "delivered via email" : email.status === "logged-only" ? "logged (email provider not connected)" : `send failed: ${email.failureReason}`}.`,
+      { hitlPattern: "act-then-review" });
+  }
+
+  if (routing.channels.includes("whatsapp") && c.workerPhone) {
     const wa = await sendOutbound({
       caseId,
       channel: "whatsapp",
@@ -599,8 +620,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
           `New hire message on ${channel} touches a sensitive topic (pay/legal/medical/complaint). No automated answer generated; escalated for human review.`,
           { hitlPattern: "approve-before-act", ruleRef: "4.6 Communications Rules" });
         const holding = `Hi ${c.workerName.split(" ")[0]}, thanks for reaching out. Your message touches on a topic that needs a person rather than an automated reply, so a human onboarding specialist will get back to you shortly. Nothing further is needed from you right now.`;
-        const to = channel === "whatsapp" && c.workerPhone ? c.workerPhone : c.workerEmail;
-        const sendCh = channel === "whatsapp" && c.workerPhone ? "whatsapp" as const : "email" as const;
+        const { channel: sendCh, to } = resolveReplyChannel(c.channelPreference, c.workerPhone, c.workerEmail, channel);
         const result = await sendOutbound({
           caseId,
           channel: sendCh,
@@ -634,8 +654,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
         reply ??
         "Thanks for your message! A human onboarding specialist will get back to you shortly.";
 
-      const to = channel === "whatsapp" && c.workerPhone ? c.workerPhone : c.workerEmail;
-      const sendChannel = channel === "whatsapp" && c.workerPhone ? "whatsapp" as const : "email" as const;
+      const { channel: sendChannel, to } = resolveReplyChannel(c.channelPreference, c.workerPhone, c.workerEmail, channel);
       const result = await sendOutbound({
         caseId,
         channel: sendChannel,

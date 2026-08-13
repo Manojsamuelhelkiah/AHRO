@@ -71,6 +71,12 @@ export function CaseDetailPage() {
           <div className="flex gap-4 mt-3 text-xs text-muted-foreground bg-secondary/50 inline-flex p-2 rounded-md">
             <span><strong>Email:</strong> {c.workerEmail}</span>
             {c.workerPhone && <span><strong>Phone:</strong> {c.workerPhone}</span>}
+            <span className="flex items-center gap-1">
+              <strong>Contact via:</strong>
+              {(c.channelPreference === 'email' || c.channelPreference === 'both') && <Mail className="h-3 w-3 text-blue-600" />}
+              {(c.channelPreference === 'whatsapp' || c.channelPreference === 'both') && <Smartphone className="h-3 w-3 text-emerald-600" />}
+              {c.channelPreference === 'both' ? 'Email + WhatsApp' : c.channelPreference === 'whatsapp' ? 'WhatsApp' : 'Email'}
+            </span>
             <span><strong>Manager:</strong> {c.managerName}</span>
             <span><strong>Recruiter:</strong> {c.recruiterName}</span>
           </div>

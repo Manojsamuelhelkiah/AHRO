@@ -726,6 +726,18 @@ export interface OnbWorkstream {
   blockers: string[];
 }
 
+/**
+ * HR-selected contact channel(s) for this new hire
+ */
+export type OnbCaseChannelPreference = typeof OnbCaseChannelPreference[keyof typeof OnbCaseChannelPreference];
+
+
+export const OnbCaseChannelPreference = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+  both: 'both',
+} as const;
+
 export interface OnbCase {
   id: number;
   workerName: string;
@@ -735,6 +747,8 @@ export interface OnbCase {
      * @nullable
      */
   workerPhone: string | null;
+  /** HR-selected contact channel(s) for this new hire */
+  channelPreference: OnbCaseChannelPreference;
   /** external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited */
   hireType: string;
   /** employee | contractor | vendor | intern */
@@ -778,6 +792,18 @@ export interface OnbCase {
 }
 
 /**
+ * How the new hire should be contacted (defaults to both)
+ */
+export type OnbCaseIntakeChannelPreference = typeof OnbCaseIntakeChannelPreference[keyof typeof OnbCaseIntakeChannelPreference];
+
+
+export const OnbCaseIntakeChannelPreference = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+  both: 'both',
+} as const;
+
+/**
  * Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.
  */
 export interface OnbCaseIntake {
@@ -786,6 +812,8 @@ export interface OnbCaseIntake {
   workerEmail: string;
   /** Optional E.164 phone used for WhatsApp */
   workerPhone?: string;
+  /** How the new hire should be contacted (defaults to both) */
+  channelPreference?: OnbCaseIntakeChannelPreference;
   hireType: string;
   workerCategory: string;
   role: string;

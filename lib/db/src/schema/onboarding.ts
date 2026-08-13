@@ -29,6 +29,7 @@ export const onbCases = pgTable("onb_cases", {
   workerName: text("worker_name").notNull(),
   workerEmail: text("worker_email").notNull(),
   workerPhone: text("worker_phone"),
+  channelPreference: text("channel_preference").notNull().default("both"),
   hireType: text("hire_type").notNull(),
   workerCategory: text("worker_category").notNull(),
   role: text("role").notNull(),
