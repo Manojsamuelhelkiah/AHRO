@@ -1061,6 +1061,7 @@ export interface OnbEvent {
   createdAt: string;
 }
 
+export type OnbRecordsEvidenceItemScopeKind = typeof OnbRecordsEvidenceItemScopeKind[keyof typeof OnbRecordsEvidenceItemScopeKind];
 export interface OnbApproval {
   id: number;
   caseId: number;
@@ -1072,6 +1073,11 @@ export interface OnbApproval {
   hitlPattern: string;
   recommendation: string;
   rationale: string;
+  /**
+     * Structured archive Q&A evidence with per-answer stint scope; null when the approval has no records evidence.
+     * @nullable
+     */
+  recordsEvidence: OnbRecordsEvidenceItem[] | null;
   /** pending | approved | rejected */
   status: string;
   /** @nullable */
@@ -1534,3 +1540,26 @@ export type ListOnboardingApprovalsParams = {
 status?: string;
 };
 
+
+/**
+ * Which stints the answer covers. kind "all" means the whole archived history; "yearRange" may carry from/to year bounds.
+ */
+export type OnbRecordsEvidenceItemScope = {
+  kind: OnbRecordsEvidenceItemScopeKind;
+  from?: number;
+  to?: number;
+};
+
+export interface OnbRecordsEvidenceItem {
+  question: string;
+  answer: string;
+  /** Which stints the answer covers. kind "all" means the whole archived history; "yearRange" may carry from/to year bounds. */
+  scope: OnbRecordsEvidenceItemScope;
+}
+
+export const OnbRecordsEvidenceItemScopeKind = {
+  all: 'all',
+  latest: 'latest',
+  earliest: 'earliest',
+  yearRange: 'yearRange',
+} as const;

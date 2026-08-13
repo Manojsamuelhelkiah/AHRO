@@ -18,6 +18,13 @@ export type OnbReadinessItemRow = {
   note?: string;
 };
 
+/** One archive Q&A pair attached to an escalation, with the structured stint scope. */
+export type OnbRecordsEvidenceItem = {
+  question: string;
+  answer: string;
+  scope: { kind: "all" | "latest" | "earliest" | "yearRange"; from?: number; to?: number };
+};
+
 export type OnbWorkstreamRow = {
   key: string;
   label: string;
@@ -81,6 +88,8 @@ export const onbApprovals = pgTable("onb_approvals", {
   hitlPattern: text("hitl_pattern").notNull().default("approve-before-act"),
   recommendation: text("recommendation").notNull(),
   rationale: text("rationale").notNull(),
+  /** Structured archive Q&A evidence (rehire escalations); null for approvals without records evidence. */
+  recordsEvidence: jsonb("records_evidence").$type<OnbRecordsEvidenceItem[]>(),
   status: text("status").notNull().default("pending"),
   decidedBy: text("decided_by"),
   comment: text("comment"),

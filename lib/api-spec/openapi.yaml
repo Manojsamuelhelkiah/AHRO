@@ -3078,6 +3078,11 @@ components:
           type: string
         rationale:
           type: string
+        recordsEvidence:
+          description: Structured archive Q&A evidence with per-answer stint scope; null when the approval has no records evidence.
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/OnbRecordsEvidenceItem"
         status:
           type: string
           description: pending | approved | rejected
@@ -3089,7 +3094,27 @@ components:
           type: string
         decidedAt:
           type: ["string", "null"]
-      required: [id, caseId, caseWorkerName, agent, ruleRef, hitlPattern, recommendation, rationale, status, decidedBy, comment, createdAt, decidedAt]
+      required: [id, caseId, caseWorkerName, agent, ruleRef, hitlPattern, recommendation, rationale, recordsEvidence, status, decidedBy, comment, createdAt, decidedAt]
+    OnbRecordsEvidenceItem:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        scope:
+          type: object
+          description: Which stints the answer covers. kind "all" means the whole archived history; "yearRange" may carry from/to year bounds.
+          properties:
+            kind:
+              type: string
+              enum: [all, latest, earliest, yearRange]
+            from:
+              type: integer
+            to:
+              type: integer
+          required: [kind]
+      required: [question, answer, scope]
     OnbApprovalDecision:
       type: object
       properties:

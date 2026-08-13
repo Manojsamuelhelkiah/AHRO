@@ -5,6 +5,7 @@ import {
   onbCommunications,
   onbEvents,
   type OnbReadinessItemRow,
+  type OnbRecordsEvidenceItem,
   type OnbWorkstreamRow,
 } from "@workspace/db/schema";
 import { desc, eq } from "drizzle-orm";
@@ -84,6 +85,8 @@ export async function createApproval(opts: {
   recommendation: string;
   rationale: string;
   resumeAction: string;
+  /** Structured archive Q&A evidence with per-answer stint scope (rehire escalations). */
+  recordsEvidence?: OnbRecordsEvidenceItem[];
   /** Dedupe key: a crash-resumed caller re-creating the same approval is a no-op. */
   idempotencyKey?: string;
 }) {
@@ -96,6 +99,7 @@ export async function createApproval(opts: {
       hitlPattern: opts.hitlPattern,
       recommendation: opts.recommendation,
       rationale: opts.rationale,
+      recordsEvidence: opts.recordsEvidence ?? null,
       resumeAction: opts.resumeAction,
       idempotencyKey: opts.idempotencyKey ?? null,
     })
@@ -302,6 +306,13 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
       hitlPattern: "approve-before-act",
       recommendation: "Flag prior employment record and reactivation considerations for HR review",
       rationale: `Rehire detected. ${c.notes ?? "Prior record must be validated before proceeding."} Records evidence: ${evidence || "(no interpretable answers)"}`,
+      // Structured Q&A evidence (deterministic executor output only) so the
+      // UI can show which stint(s) each answer was scoped to.
+      recordsEvidence: stintCount > 0
+        ? answers
+            .filter((a) => a.interpreted)
+            .map((a) => ({ question: a.question, answer: a.answer, scope: a.scope ?? { kind: "all" as const } }))
+        : undefined,
       resumeAction: "continue-after-intake",
       idempotencyKey: `rehire-approval:${caseId}`,
     });

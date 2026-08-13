@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { applyStintFilter, executePlan, type StintFilter, type StintRow } from "./records-agent";
+import { applyStintFilter, executePlan, executePlanScoped, type StintFilter, type StintRow } from "./records-agent";
 
 const stint = (over: Partial<StintRow>): StintRow => ({
   id: 1,
@@ -252,5 +252,46 @@ describe("LDM records agent — rating_trend", () => {
     const rows = three("3.2", "3.8", "4.3").reverse();
     const out = executePlan({ metric: "rating_trend" }, rows);
     assert.ok(out.includes("consistently improved every stint"), out);
+  });
+});
+
+describe("LDM records agent — structured scope", () => {
+  const stints = [
+    stint({ id: 1, startDate: "2016-04-11", endDate: "2018-10-31" }),
+    stint({ id: 2, startDate: "2019-06-03", endDate: "2024-02-29" }),
+  ];
+
+  test("no filter reports scope 'all'", () => {
+    const { scope } = executePlanScoped({ metric: "stint_count" }, stints);
+    assert.deepEqual(scope, { kind: "all" });
+  });
+
+  test("latest/earliest filters report their scope", () => {
+    assert.deepEqual(executePlanScoped({ metric: "stint_count", filter: { stint: "latest" } }, stints).scope, { kind: "latest" });
+    assert.deepEqual(executePlanScoped({ metric: "stint_count", filter: { stint: "earliest" } }, stints).scope, { kind: "earliest" });
+  });
+
+  test("yearRange filter reports the matched bounds", () => {
+    const { scope } = executePlanScoped(
+      { metric: "stint_count", filter: { stint: { yearRange: { from: 2019, to: 2024 } } } },
+      stints,
+    );
+    assert.deepEqual(scope, { kind: "yearRange", from: 2019, to: 2024 });
+  });
+
+  test("open-ended yearRange omits the missing bound", () => {
+    const { scope } = applyStintFilter(stints, { stint: { yearRange: { from: 2019 } } });
+    assert.deepEqual(scope, { kind: "yearRange", from: 2019 });
+  });
+
+  test("fallback-to-all cases report scope 'all'", () => {
+    assert.deepEqual(
+      executePlanScoped({ metric: "stint_count", filter: { stint: { yearRange: { from: 2001, to: 2003 } } } }, stints).scope,
+      { kind: "all" },
+    );
+    assert.deepEqual(
+      executePlanScoped({ metric: "stint_count", filter: { stint: "middle" as unknown as StintFilter } }, stints).scope,
+      { kind: "all" },
+    );
   });
 });

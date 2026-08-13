@@ -163,22 +163,32 @@ function months(a: string, b: string): number {
 }
 
 /**
+ * Structured description of which stints an answer was computed over.
+ * `kind: "all"` covers both "no filter" and every fallback-to-all case, so
+ * consumers can rely on it meaning "the whole archived history".
+ */
+export type RecordsScope =
+  | { kind: "all" }
+  | { kind: "latest" }
+  | { kind: "earliest" }
+  | { kind: "yearRange"; from?: number; to?: number };
+/**
  * Apply an optional stint filter deterministically. Unknown/unmatchable
  * filters fall back to all stints, with a note explaining the fallback.
  */
 export function applyStintFilter(
   stints: StintRow[],
   filter: QueryPlan["filter"],
-): { stints: StintRow[]; note: string | null } {
-  if (!filter || filter.stint === undefined || filter.stint === null) return { stints, note: null };
+): { stints: StintRow[]; note: string | null; scope: RecordsScope } {
+  if (!filter || filter.stint === undefined || filter.stint === null) return { stints, note: null, scope: SCOPE_ALL };
   // Rows are ordered by startDate ascending at the DB, but sort defensively.
   const sorted = [...stints].sort((a, b) => a.startDate.localeCompare(b.startDate));
   const f = filter.stint;
   if (f === "latest") {
-    return { stints: sorted.slice(-1), note: "(scoped to the most recent stint)" };
+    return { stints: sorted.slice(-1), note: "(scoped to the most recent stint)", scope: { kind: "latest" } };
   }
   if (f === "earliest") {
-    return { stints: sorted.slice(0, 1), note: "(scoped to the earliest stint)" };
+    return { stints: sorted.slice(0, 1), note: "(scoped to the earliest stint)", scope: { kind: "earliest" } };
   }
   if (typeof f === "object" && f !== null && "yearRange" in f && typeof f.yearRange === "object" && f.yearRange !== null) {
     const from = Number((f.yearRange as { from?: unknown }).from);
@@ -194,21 +204,30 @@ export function applyStintFilter(
       });
       if (matched.length > 0) {
         const label = hasFrom && hasTo ? `${from}–${to}` : hasFrom ? `from ${from}` : `to ${to}`;
-        return { stints: matched, note: `(scoped to the ${label} stint${matched.length > 1 ? "s" : ""})` };
+        const scope: RecordsScope = { kind: "yearRange", ...(hasFrom ? { from } : {}), ...(hasTo ? { to } : {}) };
+        return { stints: matched, note: `(scoped to the ${label} stint${matched.length > 1 ? "s" : ""})`, scope };
       }
-      return { stints: sorted, note: "(note: no stint matched the requested years — answering across all stints)" };
+      return { stints: sorted, note: "(note: no stint matched the requested years — answering across all stints)", scope: SCOPE_ALL };
     }
   }
-  return { stints: sorted, note: "(note: unrecognized stint filter — answering across all stints)" };
+  return { stints: sorted, note: "(note: unrecognized stint filter — answering across all stints)", scope: SCOPE_ALL };
+}
+
+/** Execute a plan and report both the answer text and the structured scope it was computed over. */
+export function executePlanScoped(plan: QueryPlan, allStints: StintRow[]): { answer: string; scope: RecordsScope } {
+  const span = (s: StintRow) => `${s.startDate}→${s.endDate} (${s.role})`;
+  // Comparisons span (at least) two stints drawn from the whole history, so
+  // their scope is the full archive rather than a single-stint filter.
+  if (plan.metric === "compare_stints") return { answer: compareStints(plan.compare, allStints, span), scope: SCOPE_ALL };
+  // Trends are computed across the whole rated history.
+  if (plan.metric === "rating_trend") return { answer: ratingTrend(allStints), scope: SCOPE_ALL };
+  const { stints, note, scope } = applyStintFilter(allStints, plan.filter);
+  const suffix = note ? ` ${note}` : "";
+  return { answer: computeMetric(plan.metric, stints, span) + suffix, scope };
 }
 
 export function executePlan(plan: QueryPlan, allStints: StintRow[]): string {
-  const span = (s: StintRow) => `${s.startDate}→${s.endDate} (${s.role})`;
-  if (plan.metric === "compare_stints") return compareStints(plan.compare, allStints, span);
-  if (plan.metric === "rating_trend") return ratingTrend(allStints);
-  const { stints, note } = applyStintFilter(allStints, plan.filter);
-  const suffix = note ? ` ${note}` : "";
-  return computeMetric(plan.metric, stints, span) + suffix;
+  return executePlanScoped(plan, allStints).answer;
 }
 
 /**
@@ -371,7 +390,13 @@ function computeMetric(
 
 /* ------------------------------ answers ------------------------------ */
 
-export type RecordsAnswer = { question: string; answer: string; interpreted: boolean };
+export type RecordsAnswer = {
+  question: string;
+  answer: string;
+  interpreted: boolean;
+  /** Which stints the answer covers; absent when the question could not be answered from data. */
+  scope?: RecordsScope;
+};
 
 export async function answerRecordsQuestions(workerEmail: string, questions: string[]): Promise<{
   stintCount: number;
@@ -394,9 +419,12 @@ export async function answerRecordsQuestions(workerEmail: string, questions: str
     if (!plan) {
       answers.push({ question: q, answer: "Could not interpret this question against the archive schema.", interpreted: false });
     } else {
-      answers.push({ question: q, answer: executePlan(plan, stints), interpreted: true });
+      const { answer, scope } = executePlanScoped(plan, stints);
+      answers.push({ question: q, answer, interpreted: true, scope });
     }
   }
   return { stintCount: stints.length, answers };
 }
 
+
+const SCOPE_ALL: RecordsScope = { kind: "all" };

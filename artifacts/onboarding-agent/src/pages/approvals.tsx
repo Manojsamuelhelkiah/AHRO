@@ -53,6 +53,22 @@ export function ApprovalsPage() {
   );
 }
 
+/** Human label for the structured stint scope on an archive answer. */
+export function scopeLabel(scope: { kind?: string; from?: number; to?: number } | null | undefined): string {
+  switch (scope?.kind) {
+    case 'latest': return 'Most recent stint';
+    case 'earliest': return 'Earliest stint';
+    case 'yearRange': {
+      const { from, to } = scope;
+      if (from != null && to != null) return `${from}–${to} stint`;
+      if (from != null) return `Stints from ${from}`;
+      if (to != null) return `Stints to ${to}`;
+      return 'Year-scoped stint';
+    }
+    default: return 'All stints';
+  }
+}
+
 function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: string }) {
   const decide = useDecideOnboardingApproval();
   const queryClient = useQueryClient();
@@ -91,6 +107,30 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
             <div className="bg-slate-50 dark:bg-slate-900 border p-4 rounded-md text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed">
               {approval.rationale}
             </div>
+            {Array.isArray(approval.recordsEvidence) && approval.recordsEvidence.length > 0 && (
+              <div className="mt-3 border rounded-md divide-y bg-background" data-testid="records-evidence">
+                <div className="px-4 py-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">Archive evidence</div>
+                {approval.recordsEvidence.map((ev: any, i: number) => (
+                  <div key={i} className="px-4 py-3 text-sm space-y-1" data-testid={`records-evidence-item-${i}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-medium text-foreground leading-snug">{ev.question}</p>
+                      <span
+                        className={cn(
+                          "shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap",
+                          ev.scope?.kind === 'all' || !ev.scope
+                            ? "bg-secondary text-secondary-foreground"
+                            : "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800",
+                        )}
+                        data-testid={`records-evidence-scope-${i}`}
+                      >
+                        {scopeLabel(ev.scope)}
+                      </span>
+                    </div>
+                    <p className="text-foreground/80 leading-relaxed">{ev.answer}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {!isPending && (
             <div className="shrink-0 md:text-right w-full md:w-auto mt-4 md:mt-0 flex md:flex-col justify-between items-center md:items-end p-4 md:p-0 bg-background md:bg-transparent rounded-md border md:border-0">
