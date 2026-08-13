@@ -375,6 +375,10 @@ export function stripQuotedReply(text: string): string {
   for (const line of lines) {
     if (/^On .{0,200}wrote:\s*$/.test(line.trim())) break;
     if (/^-{2,}\s*Original Message\s*-{2,}/i.test(line.trim())) break;
+    // Outlook (desktop & mobile) separates the quoted original with a long
+    // underscore rule, followed by "From: ..." headers.
+    if (/^_{8,}\s*$/.test(line.trim())) break;
+    if (/^From:\s.+$/.test(line.trim())) break;
     if (line.trimStart().startsWith(">")) continue;
     kept.push(line);
   }

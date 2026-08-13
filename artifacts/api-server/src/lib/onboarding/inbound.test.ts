@@ -28,6 +28,17 @@ describe("stripQuotedReply", () => {
     const text = "Reply body\n-----Original Message-----\nFrom: someone";
     assert.equal(stripQuotedReply(text), "Reply body");
   });
+
+  test("cuts at an Outlook underscore separator", () => {
+    const text =
+      "Classification: Internal\n\nAPPROVE\n\nGet Outlook for Android<https://aka.ms/x>\n________________________________\nFrom: Onboarding <x@y.com>\nSent: Monday\nTo: approver\nSubject: [AP-31] Approval needed\nReply approve or reject to decide.";
+    assert.equal(stripQuotedReply(text), "Classification: Internal\n\nAPPROVE\n\nGet Outlook for Android<https://aka.ms/x>");
+  });
+
+  test("cuts at a bare 'From:' header line", () => {
+    const text = "approve\nFrom: Onboarding <x@y.com>\nSubject: contains reject wording";
+    assert.equal(stripQuotedReply(text), "approve");
+  });
 });
 
 /* ---------------------- Twilio signature check ---------------------- */

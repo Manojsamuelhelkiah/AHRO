@@ -433,11 +433,16 @@ describe("voice session persistence (real DB)", () => {
     assert.equal(proposals.length, 1, "resumed proposeSlots must conflict on the dedupe key, not insert again");
     assert.equal(proposals[0].status, "proposed", "the original proposal must not be superseded by its own rerun");
     // The resumed email must offer the ORIGINALLY stored slots.
+    // Only the reschedule email itself must carry the stored slots — the
+    // case may also hold unrelated emails (e.g. the HR-approver
+    // notification raised when delivery is blocked).
     const comms = await db
       .select()
       .from(onbCommunications)
       .where(and(eq(onbCommunications.caseId, caseId), eq(onbCommunications.channel, "email")));
-    for (const comm of comms) {
+    const rescheduleEmails = comms.filter((c) => (c.subject ?? "").includes("New kick-off call times"));
+    assert.ok(rescheduleEmails.length > 0, "the resumed recovery must compose the reschedule email");
+    for (const comm of rescheduleEmails) {
       assert.ok(comm.body.includes("Thu 20 Aug"), "emailed slots must match the stored proposal");
     }
     const [row] = await db.select().from(onbVoiceSessions).where(eq(onbVoiceSessions.token, s.token));
