@@ -38,6 +38,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
+- **Production background pollers need a heartbeat**: the published app runs on autoscale, so the in-process pollers (system watcher, watch-mailbox tracker, Gmail reply monitor) pause when no HTTP request is in flight — health checks and outage alerts stop off-hours. `GET|POST /api/onboarding/webhooks/watcher-tick` (idempotent; DB-backed throttle of 1 tick/5s shared across instances; optionally authenticated — set the `WATCHER_TICK_TOKEN` secret and callers must send it via `x-watcher-token` header or `?token=`) runs one round of all three pollers and awaits any in-flight poll before responding. Keep it hit every 1–5 min in production: either a Replit Scheduled Deployment (or any external cron/uptime pinger) running `node scripts/watcher-heartbeat.mjs`, or republish the app as a Reserved VM (always-on) so the intervals never pause.
+
 - **Twilio WhatsApp inbound webhook**: the WhatsApp sandbox sender (`whatsapp:+14155238886`) is configured to POST incoming messages to `https://hro-agent-nexus.replit.app/api/onboarding/webhooks/twilio/whatsapp`. If the deployment domain ever changes, update the sender's webhook via the Senders API:
   ```bash
   curl -u "$TWILIO_ACCOUNT_SID:$TWILIO_AUTH_TOKEN" -X POST \

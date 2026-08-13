@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, asc, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -7,6 +7,7 @@ import {
   onbCommunications,
   onbConnectors,
   onbEvents,
+  onbSettings,
   onbSystemChecks,
 } from "@workspace/db/schema";
 import {
@@ -61,11 +62,14 @@ import {
 import {
   getSystemWatcherHealth,
   handleSystemWebhook,
+  runSystemWatcherTick,
 } from "../lib/onboarding/system-watcher";
 import {
   getEmailWatchStatus,
+  runEmailWatchTick,
   simulateVendorEmail,
 } from "../lib/onboarding/email-watch";
+import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
 import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
@@ -793,6 +797,74 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
     next(err);
   }
 });
+
+/* ------------------------- watcher tick (cron) ------------------------ */
+
+// Production heartbeat. The published app runs on autoscale, so the
+// in-process setInterval pollers pause whenever no request is in flight —
+// off-hours, health checks and SLA escalations would silently stop. An
+// external scheduler (Replit Scheduled Deployment, uptime pinger, cron)
+// hits this endpoint to drive one round of every background poller.
+//
+// It lives under /webhooks/ because it is called server-to-server without
+// a signed-in user. Protection is layered: an optional shared token
+// (WATCHER_TICK_TOKEN — when set, callers must present it), a DB-backed
+// throttle shared across all autoscale instances so public callers cannot
+// hammer the Gmail/vendor APIs, and every tick being idempotent (in-flight
+// runs are shared and completions/escalations durably deduped). The
+// response never contains case data.
+const WATCHER_TICK_AT_KEY = "watcher_last_tick_at";
+const MIN_CRON_TICK_GAP_MS = 5_000;
+
+/**
+ * Atomically claim the next tick slot in onb_settings: the row only
+ * updates when the stored ISO timestamp is older than the gap, so exactly
+ * one caller per window wins even across concurrent instances.
+ */
+async function claimWatcherTickSlot(now: Date): Promise<boolean> {
+  const cutoffIso = new Date(now.getTime() - MIN_CRON_TICK_GAP_MS).toISOString();
+  const rows = await db
+    .insert(onbSettings)
+    .values({ key: WATCHER_TICK_AT_KEY, value: now.toISOString() })
+    .onConflictDoUpdate({
+      target: onbSettings.key,
+      set: { value: now.toISOString(), updatedAt: sql`now()` },
+      setWhere: sql`${onbSettings.value} < ${cutoffIso}`,
+    })
+    .returning({ key: onbSettings.key });
+  return rows.length > 0;
+}
+
+const watcherTick = async (req: Request, res: Response) => {
+  const requiredToken = process.env.WATCHER_TICK_TOKEN;
+  if (requiredToken) {
+    const presented =
+      req.header("x-watcher-token") ?? String(req.query.token ?? "");
+    if (presented !== requiredToken) {
+      res.status(403).json({ message: "Invalid watcher tick token" });
+      return;
+    }
+  }
+  if (!(await claimWatcherTickSlot(new Date()))) {
+    res.json({ ran: false, reason: "throttled" });
+    return;
+  }
+  const [systemWatcher, emailWatch, inboundEmail] = await Promise.all([
+    runSystemWatcherTick(),
+    runEmailWatchTick(),
+    runInboundEmailTick(),
+  ]);
+  res.json({
+    ran: true,
+    ranAt: new Date().toISOString(),
+    systemWatcher,
+    emailWatch,
+    inboundEmail,
+  });
+};
+
+router.get("/onboarding/webhooks/watcher-tick", watcherTick);
+router.post("/onboarding/webhooks/watcher-tick", watcherTick);
 
 /* ---------------------------- email watch ---------------------------- */
 

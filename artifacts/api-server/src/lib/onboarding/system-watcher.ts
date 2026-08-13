@@ -19,8 +19,13 @@ import {
   type SystemDef,
   type WatchedSystem,
 } from "./external-systems";
-import { classifyMonitor, type MonitorState, type MonitorTelemetry } from "./inbound-email";
+import {
+  classifyMonitor,
+  type MonitorState,
+  type MonitorTelemetry,
+} from "./inbound-email";
 import { ensureConnectorsSeeded } from "./connectors";
+import { makeSharedTick } from "./shared-tick";
 
 /**
  * System Watcher agent.
@@ -41,7 +46,6 @@ const POLL_INTERVAL_MS = 20_000;
 export const WATCHER_AGENT = "system-watcher";
 
 let timer: NodeJS.Timeout | null = null;
-let ticking = false;
 
 type SystemTelemetry = MonitorTelemetry & {
   /** push only: when the last vendor webhook was received */
@@ -553,7 +557,9 @@ async function tickOnce(): Promise<void> {
     const t = telemetry[def.key];
     t.lastPollAt = new Date();
     try {
-      const mine = checks.filter((c) => c.system === def.key && c.mode === "poll");
+      const mine = checks.filter(
+        (c) => c.system === def.key && c.mode === "poll",
+      );
       const connected = await connectorConnected(def.connectorKey);
       if (!connected) {
         throw new Error(
@@ -565,7 +571,12 @@ async function tickOnce(): Promise<void> {
           .update(onbSystemChecks)
           .set({ lastCheckedAt: new Date() })
           .where(eq(onbSystemChecks.id, check.id));
-        const status = simulateVendorStatus(def, check.requestedAt, check.caseId, now);
+        const status = simulateVendorStatus(
+          def,
+          check.requestedAt,
+          check.caseId,
+          now,
+        );
         if (status === "completed") {
           await completeCheck(check, "scheduled poll");
         }
@@ -603,19 +614,22 @@ async function tickOnce(): Promise<void> {
   }
 }
 
+/**
+ * Run one watcher tick on demand. Safe to call from an HTTP handler:
+ * idempotent, never throws, and when a tick is already in flight the
+ * caller AWAITS it (returning false) so a completed tick has always
+ * happened by the time the promise resolves.
+ */
+export const runSystemWatcherTick = makeSharedTick(async () => {
+  try {
+    await tickOnce();
+  } catch (err) {
+    console.error("[system-watcher] tick failed:", String(err).slice(0, 300));
+  }
+});
 export function startSystemWatcher(): void {
   if (timer) return;
-  const tick = async () => {
-    if (ticking) return;
-    ticking = true;
-    try {
-      await tickOnce();
-    } catch (err) {
-      console.error("[system-watcher] tick failed:", String(err).slice(0, 300));
-    } finally {
-      ticking = false;
-    }
-  };
+  const tick = () => void runSystemWatcherTick();
   const startedAt = new Date();
   for (const def of WATCHED_SYSTEMS) {
     telemetry[def.key].running = true;

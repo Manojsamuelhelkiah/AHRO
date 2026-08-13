@@ -1,5 +1,9 @@
 import { db } from "@workspace/db";
-import { onbCases, onbSystemChecks, onbWatchEmails } from "@workspace/db/schema";
+import {
+  onbCases,
+  onbSystemChecks,
+  onbWatchEmails,
+} from "@workspace/db/schema";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { desc, eq, sql } from "drizzle-orm";
 import {
@@ -13,6 +17,7 @@ import {
   type MonitorTelemetry,
 } from "./inbound-email";
 import { completeCheck, escalateCheck } from "./system-watcher";
+import { makeSharedTick } from "./shared-tick";
 import { systemDef } from "./external-systems";
 
 /**
@@ -49,7 +54,6 @@ export const POLL_INTERVAL_MS = 30_000;
 const SEARCH_WINDOW = "newer_than:2d";
 
 let timer: NodeJS.Timeout | null = null;
-let polling = false;
 
 const telemetry: MonitorTelemetry = {
   running: false,
@@ -128,9 +132,7 @@ export function senderTrusted(
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
-    .some((entry) =>
-      entry.includes("@") ? entry === from : entry === domain,
-    );
+    .some((entry) => (entry.includes("@") ? entry === from : entry === domain));
 }
 
 /**
@@ -178,10 +180,10 @@ export async function applyWatchEmail(opts: {
     : !applicable
       ? `Ignored — ${label} is no longer tracked by email or already closed`
       : parsed === "completed"
-      ? `Marked ${label} complete — readiness item updated`
-      : parsed === "exception"
-        ? `Escalated ${label} for human review (exception reported)`
-        : `Logged as progress update — ${label} still pending`;
+        ? `Marked ${label} complete — readiness item updated`
+        : parsed === "exception"
+          ? `Escalated ${label} for human review (exception reported)`
+          : `Logged as progress update — ${label} still pending`;
 
   if (trusted && applicable) {
     if (parsed === "completed") {
@@ -313,7 +315,8 @@ export async function simulateVendorEmail(opts: {
     .where(
       sql`${onbSystemChecks.caseId} = ${opts.caseId} and ${onbSystemChecks.system} = ${opts.system}`,
     );
-  if (!check) return { ok: false, message: "No tracked check for this case/system" };
+  if (!check)
+    return { ok: false, message: "No tracked check for this case/system" };
   if (check.mode !== "email") {
     return {
       ok: false,
@@ -415,25 +418,29 @@ export async function getEmailWatchStatus(): Promise<EmailWatchStatus> {
   };
 }
 
+/**
+ * Run one watch-mailbox poll on demand (same telemetry accounting as the
+ * interval tick). Never throws; when a poll is already in flight the
+ * caller awaits it (returning false), so a completed poll has always
+ * happened by the time the promise resolves.
+ */
+export const runEmailWatchTick = makeSharedTick(async () => {
+  telemetry.lastPollAt = new Date();
+  try {
+    await pollOnce();
+    telemetry.lastSuccessAt = new Date();
+    telemetry.lastError = null;
+    telemetry.lastErrorAt = null;
+  } catch (err) {
+    telemetry.lastError = String(err).slice(0, 300);
+    telemetry.lastErrorAt = new Date();
+    console.error("[email-watch] poll failed:", telemetry.lastError);
+  }
+});
+
 export function startEmailWatch(): void {
   if (timer) return;
-  const tick = async () => {
-    if (polling) return;
-    polling = true;
-    telemetry.lastPollAt = new Date();
-    try {
-      await pollOnce();
-      telemetry.lastSuccessAt = new Date();
-      telemetry.lastError = null;
-      telemetry.lastErrorAt = null;
-    } catch (err) {
-      telemetry.lastError = String(err).slice(0, 300);
-      telemetry.lastErrorAt = new Date();
-      console.error("[email-watch] poll failed:", telemetry.lastError);
-    } finally {
-      polling = false;
-    }
-  };
+  const tick = () => void runEmailWatchTick();
   telemetry.running = true;
   telemetry.startedAt = new Date();
   timer = setInterval(tick, POLL_INTERVAL_MS);

@@ -11,4 +11,5 @@
 - [Gmail self-send echo loop](gmail-self-send-echo.md) — store outbound provider message ids in the inbound dedup column or the poller replies to its own mail forever.
 - [Task-merge file corruption](task-merge-corruption.md) — platform merges can scramble co-edited files; tsc after every merge, repair via git checkout of last good commit + re-apply merge intent.
 - [Root tsc coverage gap](root-tsc-coverage.md) — root `tsc -b` skips artifact app sources; run the per-package typecheck for each touched artifact before declaring done.
+- [Autoscale pauses in-process pollers](autoscale-background-pollers.md) — setInterval work stops without traffic; drive all pollers via the throttled heartbeat endpoint and wire new pollers into it.
 - [TSX tests in node harness](tsx-tests-node-harness.md) — renderToStaticMarkup UI tests need jsx:automatic, bare builtin externals, and a createRequire banner in the esbuild bundle.
