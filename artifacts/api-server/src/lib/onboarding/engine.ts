@@ -9,6 +9,7 @@ import {
 } from "@workspace/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { sendOutbound } from "./channels";
+import { recordGuardrailEvent } from "./guardrails";
 import {
   normalizePreference,
   resolveReplyChannel,
@@ -656,6 +657,12 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
       if (sensitive) {
         // Sensitive topics never get an automated LLM answer. Send a
         // deterministic holding acknowledgement and escalate to a human.
+        void recordGuardrailEvent({
+          caseId,
+          key: "sensitive-topic-gate",
+          action: "escalated",
+          detail: `Inbound ${channel} message touched a sensitive topic — automated reply suppressed, human review created. (Content withheld from this audit log; see the approval for details.)`,
+        });
         await logEvent(caseId, "channel", "ldm", "Inbound message flagged sensitive",
           `New hire message on ${channel} touches a sensitive topic (pay/legal/medical/complaint). No automated answer generated; escalated for human review.`,
           { hitlPattern: "approve-before-act", ruleRef: "4.6 Communications Rules" });
@@ -785,6 +792,12 @@ NEW MESSAGE FROM THE HIRE
           recommendation: "AI could not resolve this new-hire message — respond personally",
           rationale: `${reason}. Message excerpt: "${body.slice(0, 200)}". A holding reply was ${result.status === "sent" ? "delivered" : "logged"}; no unverified AI answer was sent.`,
           resumeAction: "none",
+        });
+        void recordGuardrailEvent({
+          caseId,
+          key: "inbound-injection-fence",
+          action: "escalated",
+          detail: `Reasoning engine refused to auto-resolve an inbound ${channel} message (${reason}) — routed to human review. (Content withheld from this audit log; see the approval for details.)`,
         });
         await logEvent(caseId, "channel", "orchestrator", "AI escalated to human (HITL)",
           `The reasoning engine could not resolve the inbound message (${reason}). Alert raised and a pending human review created; the new hire received a holding acknowledgement on ${sendChannel}.`,

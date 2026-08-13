@@ -1048,6 +1048,62 @@ paths:
                           type: ["integer", "null"]
                       required: [name, status, note, caseId]
                 required: [results]
+  /onboarding/guardrails:
+    get:
+      operationId: getOnboardingGuardrails
+      tags: [onboarding]
+      summary: Guardrails catalog with live activation counts
+      responses:
+        "200":
+          description: Categories and guardrails
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GuardrailCategory"
+                  guardrails:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Guardrail"
+                required: [categories, guardrails]
+  /onboarding/guardrails/{key}/events:
+    get:
+      operationId: listGuardrailEvents
+      tags: [onboarding]
+      summary: Recent activations of one guardrail (most recent first, max 50)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Activation events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GuardrailEvent"
+        "404":
+          description: Unknown guardrail
+  /onboarding/guardrails/drill:
+    post:
+      operationId: runOnboardingSecurityDrill
+      tags: [onboarding]
+      summary: Run the red-team security drill against the live enforcement code
+      responses:
+        "201":
+          description: Drill outcome per simulated attack
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityDrillResult"
   /onboarding/cases/{id}/voice-call:
     post:
       operationId: startOnboardingVoiceCall
@@ -2795,6 +2851,99 @@ components:
           items:
             $ref: "#/components/schemas/DemoVolunteer"
       required: [volunteers]
+    GuardrailCategory:
+      type: object
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        blurb:
+          type: string
+      required: [key, title, blurb]
+    GuardrailEval:
+      type: object
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          description: automated-test | live-verified | deterministic-rule
+      required: [name, kind]
+    Guardrail:
+      type: object
+      description: One enforced security/safety control, with live activation stats
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        severity:
+          type: string
+          description: low | medium | high | critical
+        threat:
+          type: string
+        mechanism:
+          type: string
+        onViolation:
+          type: string
+        enforcedAt:
+          type: array
+          items:
+            type: string
+        evals:
+          type: array
+          items:
+            $ref: "#/components/schemas/GuardrailEval"
+        activationCount:
+          type: integer
+        lastActivatedAt:
+          type: ["string", "null"]
+      required: [key, title, category, severity, threat, mechanism, onViolation, enforcedAt, evals, activationCount, lastActivatedAt]
+    GuardrailEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: ["integer", "null"]
+        action:
+          type: string
+          description: blocked | sanitized | rate-limited | escalated | rejected
+        detail:
+          type: string
+        createdAt:
+          type: string
+        workerName:
+          type: ["string", "null"]
+      required: [id, caseId, action, detail, createdAt, workerName]
+    SecurityDrillStep:
+      type: object
+      properties:
+        step:
+          type: string
+        guardrailKey:
+          type: string
+        attack:
+          type: string
+        outcome:
+          type: string
+      required: [step, guardrailKey, attack, outcome]
+    SecurityDrillResult:
+      type: object
+      properties:
+        caseId:
+          type: integer
+        created:
+          type: boolean
+          description: True when this run created the drill case (first run)
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityDrillStep"
+      required: [caseId, created, steps]
     OnbDocument:
       type: object
       description: One item of a case's documentation pack (identity/statutory/contract/policy)

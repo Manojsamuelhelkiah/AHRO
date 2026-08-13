@@ -64,6 +64,13 @@
       "when": 1786585763577,
       "tag": "0008_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786585763578,
+      "tag": "0009_guardrail_events",
+      "breakpoints": true
     }
   ]
 }

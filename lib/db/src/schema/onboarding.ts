@@ -228,3 +228,20 @@ export const onbWatchEmails = pgTable("onb_watch_emails", {
   action: text("action").notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Guardrail activation audit. One row each time a security/safety
+ * guardrail actively intervened (blocked, sanitized, rate-limited or
+ * escalated). Powers the Guardrails page drilldowns.
+ */
+export const onbGuardrailEvents = pgTable("onb_guardrail_events", {
+  id: serial("id").primaryKey(),
+  /** Nullable: some guardrails fire outside any case (e.g. forged webhooks). */
+  caseId: integer("case_id").references(() => onbCases.id, { onDelete: "cascade" }),
+  /** Key into the guardrails catalog (see api-server guardrails lib). */
+  guardrailKey: text("guardrail_key").notNull(),
+  /** blocked | sanitized | rate-limited | escalated | rejected */
+  action: text("action").notNull(),
+  detail: text("detail").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

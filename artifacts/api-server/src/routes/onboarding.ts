@@ -48,6 +48,9 @@ import {
   autoEscalationCallsEnabled,
 } from "../lib/onboarding/settings";
 import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas } from "../lib/onboarding/demo-volunteers";
+import { GUARDRAILS, GUARDRAIL_CATEGORIES, getGuardrail, recordGuardrailEvent } from "../lib/onboarding/guardrails";
+import { runSecurityDrill } from "../lib/onboarding/security-drill";
+import { onbGuardrailEvents } from "@workspace/db/schema";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { listDocuments } from "../lib/onboarding/documents";
 import {
@@ -435,6 +438,7 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
       return;
     }
     if (!requestSignatureValid(req)) {
+      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
@@ -512,6 +516,7 @@ router.post("/onboarding/cases/:id/voice-call", async (req, res, next) => {
 router.post("/onboarding/webhooks/twilio/voice-answer", async (req, res, next) => {
   try {
     if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
+      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
@@ -531,6 +536,7 @@ router.post("/onboarding/webhooks/twilio/voice-answer", async (req, res, next) =
 router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => {
   try {
     if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
+      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
@@ -560,6 +566,7 @@ router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => 
 router.post("/onboarding/webhooks/twilio/voice-status", async (req, res, next) => {
   try {
     if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
+      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
@@ -588,7 +595,8 @@ router.post(
         return;
       }
       if (!requestSignatureValid(req)) {
-        res.status(403).json({ message: "Invalid Twilio signature" });
+        void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
+      res.status(403).json({ message: "Invalid Twilio signature" });
         return;
       }
       const messageSid = String(req.body?.MessageSid ?? "");
@@ -934,6 +942,76 @@ router.put("/onboarding/settings", async (req, res, next) => {
       await setSetting(AUTO_ESCALATION_CALLS_KEY, body.autoEscalationCalls ? "on" : null);
     }
     res.json(await settingsPayload());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ----------------------------- guardrails ----------------------------- */
+
+router.get("/onboarding/guardrails", async (_req, res, next) => {
+  try {
+    const counts = await db
+      .select({
+        key: onbGuardrailEvents.guardrailKey,
+        count: sql<number>`count(*)::int`,
+        lastAt: sql<string | null>`max(${onbGuardrailEvents.createdAt})`,
+      })
+      .from(onbGuardrailEvents)
+      .groupBy(onbGuardrailEvents.guardrailKey);
+    const byKey = new Map(counts.map((c) => [c.key, c]));
+    res.json({
+      categories: Object.entries(GUARDRAIL_CATEGORIES).map(([key, v]) => ({ key, ...v })),
+      guardrails: GUARDRAILS.map((g) => ({
+        ...g,
+        activationCount: byKey.get(g.key)?.count ?? 0,
+        lastActivatedAt: byKey.get(g.key)?.lastAt ?? null,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/guardrails/:key/events", async (req, res, next) => {
+  try {
+    const guardrail = getGuardrail(req.params.key);
+    if (!guardrail) {
+      res.status(404).json({ message: `Unknown guardrail "${req.params.key}"` });
+      return;
+    }
+    const rows = await db
+      .select({
+        id: onbGuardrailEvents.id,
+        caseId: onbGuardrailEvents.caseId,
+        action: onbGuardrailEvents.action,
+        detail: onbGuardrailEvents.detail,
+        createdAt: onbGuardrailEvents.createdAt,
+        workerName: onbCases.workerName,
+      })
+      .from(onbGuardrailEvents)
+      .leftJoin(onbCases, eq(onbGuardrailEvents.caseId, onbCases.id))
+      .where(eq(onbGuardrailEvents.guardrailKey, req.params.key))
+      .orderBy(desc(onbGuardrailEvents.createdAt), desc(onbGuardrailEvents.id))
+      .limit(50);
+    res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+let lastDrillAt = 0;
+router.post("/onboarding/guardrails/drill", async (_req, res, next) => {
+  try {
+    // One drill per 2 minutes: it exercises real enforcement paths, so
+    // repeated runs should not be able to churn quotas or flood audit logs.
+    if (Date.now() - lastDrillAt < 120_000) {
+      res.status(429).json({ message: "A drill just ran — wait a couple of minutes before running another." });
+      return;
+    }
+    lastDrillAt = Date.now();
+    const result = await runSecurityDrill();
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }

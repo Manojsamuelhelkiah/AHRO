@@ -17,6 +17,7 @@ import {
   type MonitorTelemetry,
 } from "./inbound-email";
 import { completeCheck, escalateCheck } from "./system-watcher";
+import { recordGuardrailEvent } from "./guardrails";
 import { makeSharedTick } from "./shared-tick";
 import { systemDef } from "./external-systems";
 
@@ -185,6 +186,14 @@ export async function applyWatchEmail(opts: {
           ? `Escalated ${label} for human review (exception reported)`
           : `Logged as progress update — ${label} still pending`;
 
+  if (!trusted) {
+    void recordGuardrailEvent({
+      caseId: opts.check.caseId,
+      key: "trusted-vendor-sender",
+      action: "rejected",
+      detail: `Status email for ${label} from an untrusted sender was ignored — no check state changed.`,
+    });
+  }
   if (trusted && applicable) {
     if (parsed === "completed") {
       await completeCheck(opts.check, "status email");

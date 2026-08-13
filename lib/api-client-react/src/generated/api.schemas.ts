@@ -916,6 +916,63 @@ export interface DemoVolunteerList {
   volunteers: DemoVolunteer[];
 }
 
+export interface GuardrailCategory {
+  key: string;
+  title: string;
+  blurb: string;
+}
+
+export interface GuardrailEval {
+  name: string;
+  /** automated-test | live-verified | deterministic-rule */
+  kind: string;
+}
+
+/**
+ * One enforced security/safety control, with live activation stats
+ */
+export interface Guardrail {
+  key: string;
+  title: string;
+  category: string;
+  /** low | medium | high | critical */
+  severity: string;
+  threat: string;
+  mechanism: string;
+  onViolation: string;
+  enforcedAt: string[];
+  evals: GuardrailEval[];
+  activationCount: number;
+  /** @nullable */
+  lastActivatedAt: string | null;
+}
+
+export interface GuardrailEvent {
+  id: number;
+  /** @nullable */
+  caseId: number | null;
+  /** blocked | sanitized | rate-limited | escalated | rejected */
+  action: string;
+  detail: string;
+  createdAt: string;
+  /** @nullable */
+  workerName: string | null;
+}
+
+export interface SecurityDrillStep {
+  step: string;
+  guardrailKey: string;
+  attack: string;
+  outcome: string;
+}
+
+export interface SecurityDrillResult {
+  caseId: number;
+  /** True when this run created the drill case (first run) */
+  created: boolean;
+  steps: SecurityDrillStep[];
+}
+
 export type OnbDocumentCategory = typeof OnbDocumentCategory[keyof typeof OnbDocumentCategory];
 
 
@@ -1418,6 +1475,11 @@ export type SeedDemoVolunteers200 = {
   results: SeedDemoVolunteers200ResultsItem[];
 };
 
+export type GetOnboardingGuardrails200 = {
+  categories: GuardrailCategory[];
+  guardrails: Guardrail[];
+};
+
 export type StartOnboardingVoiceCallBodyScenario = typeof StartOnboardingVoiceCallBodyScenario[keyof typeof StartOnboardingVoiceCallBodyScenario];
 
 
@@ -1444,3 +1506,4 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
+

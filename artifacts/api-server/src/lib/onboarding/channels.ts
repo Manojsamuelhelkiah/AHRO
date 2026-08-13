@@ -1,5 +1,6 @@
 import { db } from "@workspace/db";
 import { onbCommunications } from "@workspace/db/schema";
+import { recordGuardrailEvent } from "./guardrails";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
 const connectors = new ReplitConnectors();
@@ -237,12 +238,24 @@ export async function sendOutbound(opts: {
         "Recipient is not on the demo allowlist — message composed and logged, not delivered (set ONBOARDING_ALLOWED_RECIPIENTS to change).",
       externalMessageId: null,
     };
+    void recordGuardrailEvent({
+      caseId: opts.caseId,
+      key: "recipient-allowlist",
+      action: "blocked",
+      detail: `Live ${opts.channel} delivery to ${opts.channel === "email" ? maskEmail(opts.toAddress) : maskPhone(opts.toAddress)} withheld — recipient not authorized. Message logged only.`,
+    });
   } else if (!withinRateLimit()) {
     result = {
       status: "logged-only",
       failureReason: "Hourly live-send limit reached — message logged, not delivered.",
       externalMessageId: null,
     };
+    void recordGuardrailEvent({
+      caseId: opts.caseId,
+      key: "send-rate-cap",
+      action: "rate-limited",
+      detail: `Hourly live-send cap (${MAX_LIVE_SENDS_PER_HOUR}/h) reached — ${opts.channel} message logged, not delivered.`,
+    });
   } else if (opts.channel === "email") {
     result = await sendEmail(opts.toAddress, opts.subject ?? "Onboarding update", opts.body);
   } else {

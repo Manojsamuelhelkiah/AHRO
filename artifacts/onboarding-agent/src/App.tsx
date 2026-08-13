@@ -18,6 +18,7 @@ import { ApprovalsPage } from './pages/approvals';
 import { SystemsPage } from './pages/systems';
 import { AnalyticsPage } from './pages/analytics';
 import { SettingsPage } from './pages/settings';
+import { GuardrailsPage } from './pages/guardrails';
 
 const queryClient = new QueryClient();
 
@@ -206,6 +207,9 @@ function Router() {
       </Route>
       <Route path="/systems">
         <Protected><SystemsPage /></Protected>
+      </Route>
+      <Route path="/guardrails">
+        <Protected><GuardrailsPage /></Protected>
       </Route>
       <Route path="/analytics">
         <Protected><AnalyticsPage /></Protected>

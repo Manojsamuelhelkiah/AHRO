@@ -17,6 +17,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { db } from "@workspace/db";
+import { recordGuardrailEvent } from "./guardrails";
 import { onbCases, onbCommunications } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { llmCompleteJson } from "./llm";
@@ -416,10 +417,6 @@ export async function startVoiceCall(opts: {
       return { status: "failed", note: "A call for this hire is already in progress." };
     }
   }
-  if (!withinCallRateLimit()) {
-    return { status: "failed", note: "Hourly live-call limit reached — try again later or use a simulated call." };
-  }
-
   const session: Session = {
     token: randomBytes(16).toString("hex"),
     caseId: opts.caseId,
@@ -447,10 +444,28 @@ export async function startVoiceCall(opts: {
     await logEvent(opts.caseId, "channel", "system", "Voice call withheld (allowlist)",
       `A ${label} call was requested, but ${maskPhone(c.workerPhone)} is not on the demo allowlist — no call placed (add the number to ONBOARDING_ALLOWED_RECIPIENTS to enable; trial Twilio also requires the number be verified). Use the simulated call to see the flow.`,
       { hitlPattern: "notify-only", ruleRef: "4.6 Communications Rules" });
+    void recordGuardrailEvent({
+      caseId: opts.caseId,
+      key: "recipient-allowlist",
+      action: "blocked",
+      detail: `A ${label} voice call to ${maskPhone(c.workerPhone)} was withheld — number not authorized. No call placed.`,
+    });
     return {
       status: "logged-only",
       note: "Number not on the demo allowlist — call logged, not placed. Try the simulated call, or add the number to the allowlist.",
     };
+  }
+
+  // Rate-cap check AFTER the allowlist so blocked (never-placed) calls
+  // cannot consume the live-call quota of legitimate calls.
+  if (!withinCallRateLimit()) {
+    void recordGuardrailEvent({
+      caseId: opts.caseId,
+      key: "call-rate-cap",
+      action: "rate-limited",
+      detail: `A ${label} call was requested but the hourly live-call cap was reached — no call placed.`,
+    });
+    return { status: "failed", note: "Hourly live-call limit reached — try again later or use a simulated call." };
   }
 
   const from = await voiceFromNumber();

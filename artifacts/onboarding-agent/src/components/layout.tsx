@@ -3,13 +3,14 @@ import { Link, useLocation } from 'wouter';
 import { useClerk, useUser } from '@clerk/react';
 import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
 import { cn } from './ui-shared';
-import { LayoutDashboard, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield } from 'lucide-react';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/cases', label: 'Cases', icon: Users },
   { path: '/approvals', label: 'Approvals', icon: CheckSquare },
   { path: '/systems', label: 'Systems', icon: Server },
+  { path: '/guardrails', label: 'Guardrails', icon: Shield },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];

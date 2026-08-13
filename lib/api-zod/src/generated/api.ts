@@ -176,6 +176,7 @@ export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const listScenariosResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -220,6 +221,7 @@ export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -254,6 +256,7 @@ export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const createScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const CreateScenarioResponse = zod.object({
@@ -303,6 +306,7 @@ export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const getScenarioResponseInputsAdoptionRampMax = 3;
 
 
+
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -350,6 +354,7 @@ export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -384,6 +389,7 @@ export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const updateScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const UpdateScenarioResponse = zod.object({
@@ -739,6 +745,7 @@ export const computeSensitivityBodyInputsAdoptionRampMin = 3;
 export const computeSensitivityBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ComputeSensitivityBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -807,6 +814,7 @@ export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
 export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ExportScenarioWorkbookBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -854,6 +862,7 @@ export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
 export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ImportScenarioWorkbookResponse = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -891,6 +900,7 @@ export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const computeRollupBodyInputsAdoptionRampMax = 3;
+
 
 
 export const ComputeRollupBody = zod.object({
@@ -1393,6 +1403,7 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
  */
 
 
+
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
   "workerEmail": zod.string(),
@@ -1652,6 +1663,67 @@ export const SeedDemoVolunteersResponse = zod.object({
 
 
 /**
+ * @summary Guardrails catalog with live activation counts
+ */
+export const GetOnboardingGuardrailsResponse = zod.object({
+  "categories": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "blurb": zod.string()
+})),
+  "guardrails": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "category": zod.string(),
+  "severity": zod.string().describe('low | medium | high | critical'),
+  "threat": zod.string(),
+  "mechanism": zod.string(),
+  "onViolation": zod.string(),
+  "enforcedAt": zod.array(zod.string()),
+  "evals": zod.array(zod.object({
+  "name": zod.string(),
+  "kind": zod.string().describe('automated-test | live-verified | deterministic-rule')
+})),
+  "activationCount": zod.number(),
+  "lastActivatedAt": zod.string().nullable()
+}).describe('One enforced security\/safety control, with live activation stats'))
+})
+
+
+/**
+ * @summary Recent activations of one guardrail (most recent first, max 50)
+ */
+export const ListGuardrailEventsParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const ListGuardrailEventsResponseItem = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number().nullable(),
+  "action": zod.string().describe('blocked | sanitized | rate-limited | escalated | rejected'),
+  "detail": zod.string(),
+  "createdAt": zod.string(),
+  "workerName": zod.string().nullable()
+})
+export const ListGuardrailEventsResponse = zod.array(ListGuardrailEventsResponseItem)
+
+
+/**
+ * @summary Run the red-team security drill against the live enforcement code
+ */
+export const RunOnboardingSecurityDrillResponse = zod.object({
+  "caseId": zod.number(),
+  "created": zod.boolean().describe('True when this run created the drill case (first run)'),
+  "steps": zod.array(zod.object({
+  "step": zod.string(),
+  "guardrailKey": zod.string(),
+  "attack": zod.string(),
+  "outcome": zod.string()
+}))
+})
+
+
+/**
  * @summary Place (or simulate) an outbound AI voice call for a case
  */
 export const StartOnboardingVoiceCallParams = zod.object({
@@ -1675,6 +1747,8 @@ export const StartOnboardingVoiceCallResponse = zod.object({
 export const ReceiveOnboardingInboundParams = zod.object({
   "id": zod.coerce.number()
 })
+
+
 
 
 export const ReceiveOnboardingInboundBody = zod.object({
@@ -1973,3 +2047,5 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "source": zod.string().nullable().describe('Where the effective address comes from (\"settings\" | \"environment\"), null when none'),
   "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet')
 })
+
+

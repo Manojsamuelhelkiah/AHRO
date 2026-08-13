@@ -36,7 +36,9 @@ import type {
   FlowOverride,
   FlowOverrideInput,
   GetDemoVolunteers200,
+  GetOnboardingGuardrails200,
   GlobalAssumption,
+  GuardrailEvent,
   HealthStatus,
   ImportScenarioWorkbookBody,
   ImportWorkbookResult,
@@ -71,6 +73,7 @@ import type {
   Scenario,
   ScenarioInput,
   ScenarioUpdate,
+  SecurityDrillResult,
   SeedDemoVolunteers200,
   SensitivityRequest,
   SensitivityResult,
@@ -3612,6 +3615,231 @@ export const useSeedDemoVolunteers = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSeedDemoVolunteersMutationOptions(options));
+    }
+
+export const getGetOnboardingGuardrailsUrl = () => {
+
+
+
+
+  return `/api/onboarding/guardrails`
+}
+
+/**
+ * @summary Guardrails catalog with live activation counts
+ */
+export const getOnboardingGuardrails = async ( options?: RequestInit): Promise<GetOnboardingGuardrails200> => {
+
+  return customFetch<GetOnboardingGuardrails200>(getGetOnboardingGuardrailsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingGuardrailsQueryKey = () => {
+    return [
+    `/api/onboarding/guardrails`
+    ] as const;
+    }
+
+
+export const getGetOnboardingGuardrailsQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingGuardrails>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingGuardrails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingGuardrailsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingGuardrails>>> = ({ signal }) => getOnboardingGuardrails({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingGuardrails>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingGuardrailsQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingGuardrails>>>
+export type GetOnboardingGuardrailsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Guardrails catalog with live activation counts
+ */
+
+export function useGetOnboardingGuardrails<TData = Awaited<ReturnType<typeof getOnboardingGuardrails>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingGuardrails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingGuardrailsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListGuardrailEventsUrl = (key: string,) => {
+
+
+
+
+  return `/api/onboarding/guardrails/${key}/events`
+}
+
+/**
+ * @summary Recent activations of one guardrail (most recent first, max 50)
+ */
+export const listGuardrailEvents = async (key: string, options?: RequestInit): Promise<GuardrailEvent[]> => {
+
+  return customFetch<GuardrailEvent[]>(getListGuardrailEventsUrl(key),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListGuardrailEventsQueryKey = (key: string,) => {
+    return [
+    `/api/onboarding/guardrails/${key}/events`
+    ] as const;
+    }
+
+
+export const getListGuardrailEventsQueryOptions = <TData = Awaited<ReturnType<typeof listGuardrailEvents>>, TError = ErrorType<void>>(key: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGuardrailEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListGuardrailEventsQueryKey(key);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listGuardrailEvents>>> = ({ signal }) => listGuardrailEvents(key, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: key !== null && key !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listGuardrailEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListGuardrailEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listGuardrailEvents>>>
+export type ListGuardrailEventsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Recent activations of one guardrail (most recent first, max 50)
+ */
+
+export function useListGuardrailEvents<TData = Awaited<ReturnType<typeof listGuardrailEvents>>, TError = ErrorType<void>>(
+ key: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGuardrailEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListGuardrailEventsQueryOptions(key,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunOnboardingSecurityDrillUrl = () => {
+
+
+
+
+  return `/api/onboarding/guardrails/drill`
+}
+
+/**
+ * @summary Run the red-team security drill against the live enforcement code
+ */
+export const runOnboardingSecurityDrill = async ( options?: RequestInit): Promise<SecurityDrillResult> => {
+
+  return customFetch<SecurityDrillResult>(getRunOnboardingSecurityDrillUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRunOnboardingSecurityDrillMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOnboardingSecurityDrill>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runOnboardingSecurityDrill>>, TError,void, TContext> => {
+
+const mutationKey = ['runOnboardingSecurityDrill'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runOnboardingSecurityDrill>>, void> = () => {
+
+
+          return  runOnboardingSecurityDrill(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunOnboardingSecurityDrillMutationResult = NonNullable<Awaited<ReturnType<typeof runOnboardingSecurityDrill>>>
+
+    export type RunOnboardingSecurityDrillMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Run the red-team security drill against the live enforcement code
+ */
+export const useRunOnboardingSecurityDrill = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOnboardingSecurityDrill>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runOnboardingSecurityDrill>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRunOnboardingSecurityDrillMutationOptions(options));
     }
 
 export const getStartOnboardingVoiceCallUrl = (id: number,) => {
