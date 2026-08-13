@@ -426,6 +426,24 @@ export interface BuildComponentCost {
   annualUsd: number;
 }
 
+/**
+ * Core vs custom cost split for commercial quoting: core platform build (amortized product cost, same for every client) vs one-time custom per-client implementation, with the configurable dials applied to this scenario listed. Amounts derive from buildBreakdown and reconcile with the scenario's total build cost.
+ */
+export interface DemarcationSplit {
+  /** Total one-time engineering cost of core platform components (maturity-scaled) */
+  coreOneTimeUsd: number;
+  /** Core platform build cost amortized into this scenario's year-1 build cost */
+  coreAnnualUsd: number;
+  /** One-time custom per-client implementation (onboarding) cost */
+  customOneTimeUsd: number;
+  /** Custom implementation cost annualized over the contract term */
+  customAnnualUsd: number;
+  /** Contract length in years used to annualize the custom implementation cost */
+  contractYears: number;
+  /** Configurable assumptions (client dials) applied to this scenario, deduped by key */
+  configurableDials: GlobalAssumption[];
+}
+
 export interface ConfidenceFactor {
   key: string;
   label: string;
@@ -490,6 +508,7 @@ export interface Rollup {
   onboardingAnnualUsd: number;
   /** Component-level decomposition of build cost; annual amounts sum to totals build cost */
   buildBreakdown: BuildComponentCost[];
+  demarcationSplit: DemarcationSplit;
   appliedAssumptions: GlobalAssumption[];
   confidence: Confidence;
   /** True when a calibration actuals overlay was applied to this rollup. */

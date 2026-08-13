@@ -1885,6 +1885,8 @@ components:
           description: Component-level decomposition of build cost; annual amounts sum to totals build cost
           items:
             $ref: "#/components/schemas/BuildComponentCost"
+        demarcationSplit:
+          $ref: "#/components/schemas/DemarcationSplit"
         appliedAssumptions:
           type: array
           items:
@@ -1907,7 +1909,7 @@ components:
           description: Intent keys present in the actuals overlay that no longer exist in the active intent registry (reference + custom). The rollup proceeded on the valid remainder; these entries were silently skipped without this field. Present only when at least one orphan is detected.
           items:
             type: string
-      required: [totals, byYear, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, appliedAssumptions, confidence, calibrated]
+      required: [totals, byYear, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, demarcationSplit, appliedAssumptions, confidence, calibrated]
     BuildComponentCost:
       type: object
       properties:
@@ -1931,6 +1933,36 @@ components:
           type: number
           description: Annualized share included in this scenario's build cost
       required: [key, name, description, kind, provisioning, oneTimeUsd, annualUsd]
+    DemarcationSplit:
+      type: object
+      description: >-
+        Core vs custom cost split for commercial quoting: core platform build
+        (amortized product cost, same for every client) vs one-time custom
+        per-client implementation, with the configurable dials applied to this
+        scenario listed. Amounts derive from buildBreakdown and reconcile with
+        the scenario's total build cost.
+      properties:
+        coreOneTimeUsd:
+          type: number
+          description: Total one-time engineering cost of core platform components (maturity-scaled)
+        coreAnnualUsd:
+          type: number
+          description: Core platform build cost amortized into this scenario's year-1 build cost
+        customOneTimeUsd:
+          type: number
+          description: One-time custom per-client implementation (onboarding) cost
+        customAnnualUsd:
+          type: number
+          description: Custom implementation cost annualized over the contract term
+        contractYears:
+          type: integer
+          description: Contract length in years used to annualize the custom implementation cost
+        configurableDials:
+          type: array
+          description: Configurable assumptions (client dials) applied to this scenario, deduped by key
+          items:
+            $ref: "#/components/schemas/GlobalAssumption"
+      required: [coreOneTimeUsd, coreAnnualUsd, customOneTimeUsd, customAnnualUsd, contractYears, configurableDials]
     ModelOption:
       type: object
       properties:

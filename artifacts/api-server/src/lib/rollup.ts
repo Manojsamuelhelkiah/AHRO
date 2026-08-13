@@ -939,6 +939,26 @@ export function computeRollup(
       : []),
   ];
 
+  // Core vs custom demarcation split — a quotable commercial summary:
+  // "$X/year core platform (amortized), $Y one-time custom implementation".
+  // Derived from buildBreakdown so the numbers reconcile with totals.buildCostUsd,
+  // plus the configurable dials actually applied to this scenario.
+  const sumBy = (
+    prov: "core" | "custom",
+    field: "oneTimeUsd" | "annualUsd",
+  ) => buildBreakdown.filter((c) => c.provisioning === prov).reduce((a, c) => a + c[field], 0);
+  const demarcationSplit = {
+    coreOneTimeUsd: sumBy("core", "oneTimeUsd"),
+    coreAnnualUsd: sumBy("core", "annualUsd"),
+    customOneTimeUsd: sumBy("custom", "oneTimeUsd"),
+    customAnnualUsd: sumBy("custom", "annualUsd"),
+    contractYears,
+    // Configurable dials applied to this scenario (deduped by key).
+    configurableDials: appliedAssumptions.filter(
+      (a, i, arr) => a.provisioning === "configurable" && arr.findIndex((b) => b.key === a.key) === i,
+    ),
+  };
+
   const fcLabels: Record<string, string> = {
     "fc1-deterministic": "Deterministic Self-Service",
     "fc2-policy":        "Grounded Policy Answer",
@@ -978,6 +998,7 @@ export function computeRollup(
     knowledgeMaintenanceUsd,
     onboardingAnnualUsd,
     buildBreakdown,
+    demarcationSplit,
     appliedAssumptions,
     confidence: computeConfidence(inputs, measuredFactorKeys),
     calibrated: !!overlay,

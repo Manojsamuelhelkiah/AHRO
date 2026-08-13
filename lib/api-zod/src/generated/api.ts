@@ -1002,6 +1002,27 @@ export const ComputeRollupResponse = zod.object({
   "oneTimeUsd": zod.number().describe('One-time build\/setup cost (maturity-scaled for platform components)'),
   "annualUsd": zod.number().describe('Annualized share included in this scenario\'s build cost')
 })).describe('Component-level decomposition of build cost; annual amounts sum to totals build cost'),
+  "demarcationSplit": zod.object({
+  "coreOneTimeUsd": zod.number().describe('Total one-time engineering cost of core platform components (maturity-scaled)'),
+  "coreAnnualUsd": zod.number().describe('Core platform build cost amortized into this scenario\'s year-1 build cost'),
+  "customOneTimeUsd": zod.number().describe('One-time custom per-client implementation (onboarding) cost'),
+  "customAnnualUsd": zod.number().describe('Custom implementation cost annualized over the contract term'),
+  "contractYears": zod.number().describe('Contract length in years used to annualize the custom implementation cost'),
+  "configurableDials": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "provisioning": zod.enum(['core', 'configurable', 'custom']).describe('Product demarcation: core = product fact identical for every client; configurable = client-set dial (no code change); custom = per-client engineering\/content effort.'),
+  "value": zod.number().describe('The canonical estimated\/modelled value from the assumptions register.'),
+  "measuredValue": zod.number().optional().describe('The value observed in production actuals. Present only when this assumption was replaced by a calibration overlay. The rollup applied measuredValue; value is retained as the pre-calibration estimate for variance display.'),
+  "unit": zod.string(),
+  "rationale": zod.string(),
+  "source": zod.object({
+  "name": zod.string().describe('e.g. \"SAP SuccessFactors service catalog (curated)\", \"Kaggle HR analytics\", \"GitHub HR intents corpus\"'),
+  "note": zod.string().optional(),
+  "confidence": zod.string().describe('measured | high | medium | low (documented-assumption). \"measured\" is the strongest tier, meaning the value came from observed production data.')
+}).describe('Attribution of a data point to its origin corpus')
+})).describe('Configurable assumptions (client dials) applied to this scenario, deduped by key')
+}).describe('Core vs custom cost split for commercial quoting: core platform build (amortized product cost, same for every client) vs one-time custom per-client implementation, with the configurable dials applied to this scenario listed. Amounts derive from buildBreakdown and reconcile with the scenario\'s total build cost.'),
   "appliedAssumptions": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),

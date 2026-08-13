@@ -914,6 +914,45 @@ export default function Scenario() {
                 <KpiTile label="FTE Saved (Yr 1)" value={rollup.totals.fteEquivalent.toFixed(1)} accent color="emerald" />
               </div>
 
+              {/* Core vs Custom demarcation split — quotable commercial summary */}
+              <div className="mt-4 bg-background/10 rounded-lg p-4 border border-sidebar-border" data-testid="demarcation-split">
+                <div className="text-xs uppercase tracking-wider text-sidebar-foreground/60 mb-3">Core vs Custom Split</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div data-testid="demarcation-core">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] uppercase">core</Badge>
+                      <span className="text-lg font-bold text-sidebar-foreground">
+                        {formatCurrencyLocal(rollup.demarcationSplit.coreAnnualUsd, true)}<span className="text-xs font-normal text-sidebar-foreground/60">/yr</span>
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-sidebar-foreground/60 mt-1">
+                      Core platform, amortized ({formatCurrencyLocal(rollup.demarcationSplit.coreOneTimeUsd, true)} one-time product build shared across clients)
+                    </p>
+                  </div>
+                  <div data-testid="demarcation-custom">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] uppercase">custom</Badge>
+                      <span className="text-lg font-bold text-sidebar-foreground">
+                        {formatCurrencyLocal(rollup.demarcationSplit.customOneTimeUsd, true)}<span className="text-xs font-normal text-sidebar-foreground/60"> one-time</span>
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-sidebar-foreground/60 mt-1">
+                      Client implementation ({formatCurrencyLocal(rollup.demarcationSplit.customAnnualUsd, true)}/yr over {rollup.demarcationSplit.contractYears}-yr contract)
+                    </p>
+                  </div>
+                  <div data-testid="demarcation-configurable">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] uppercase">configurable</Badge>
+                      <span className="text-lg font-bold text-sidebar-foreground">{rollup.demarcationSplit.configurableDials.length}<span className="text-xs font-normal text-sidebar-foreground/60"> dials</span></span>
+                    </div>
+                    <p className="text-[11px] text-sidebar-foreground/60 mt-1 line-clamp-2" title={rollup.demarcationSplit.configurableDials.map(d => d.label).join(", ")}>
+                      {rollup.demarcationSplit.configurableDials.map(d => d.label).slice(0, 4).join(", ")}
+                      {rollup.demarcationSplit.configurableDials.length > 4 ? ` +${rollup.demarcationSplit.configurableDials.length - 4} more` : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Confidence widget */}
               <div className="mt-4 bg-background/10 rounded-lg p-4 border border-sidebar-border">
                 <div className="flex items-center justify-between mb-2">

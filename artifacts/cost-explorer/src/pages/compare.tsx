@@ -181,6 +181,18 @@ const METRICS: MetricDef[] = [
     format: (v) => formatCurrency(v, true),
   },
   {
+    label: "Core Platform $/yr (amortized)",
+    get: (r) => r.demarcationSplit.coreAnnualUsd,
+    fav: "lower-is-better",
+    format: (v) => formatCurrency(v, true),
+  },
+  {
+    label: "Custom Implementation (one-time)",
+    get: (r) => r.demarcationSplit.customOneTimeUsd,
+    fav: "lower-is-better",
+    format: (v) => formatCurrency(v, true),
+  },
+  {
     label: "Cost per Transaction",
     get: (r) => r.totals.costPerTransactionUsd,
     fav: "lower-is-better",

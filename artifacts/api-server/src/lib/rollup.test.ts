@@ -333,6 +333,27 @@ test("build breakdown reconciles exactly with total build cost", () => {
   assert.ok(Math.abs(onboarding(r) - r.onboardingAnnualUsd) < 1e-6);
 });
 
+test("demarcation split reconciles with build breakdown and lists configurable dials", () => {
+  const r = computeRollup({ ...base, contractYears: 4 });
+  const ds = r.demarcationSplit;
+  const sum = (prov: string, field: "oneTimeUsd" | "annualUsd") =>
+    r.buildBreakdown.filter((c) => c.provisioning === prov).reduce((a, c) => a + c[field], 0);
+  assert.ok(Math.abs(ds.coreOneTimeUsd - sum("core", "oneTimeUsd")) < 1e-9);
+  assert.ok(Math.abs(ds.coreAnnualUsd - sum("core", "annualUsd")) < 1e-9);
+  assert.ok(Math.abs(ds.customOneTimeUsd - sum("custom", "oneTimeUsd")) < 1e-9);
+  assert.ok(Math.abs(ds.customAnnualUsd - sum("custom", "annualUsd")) < 1e-9);
+  // Core annual + custom annual = total build cost (breakdown is exhaustive).
+  assert.ok(Math.abs(ds.coreAnnualUsd + ds.customAnnualUsd - r.totals.buildCostUsd) < 1e-6);
+  // Custom annualization respects the contract term.
+  assert.equal(ds.contractYears, 4);
+  assert.ok(Math.abs(ds.customAnnualUsd - ds.customOneTimeUsd / 4) < 1e-6);
+  // Configurable dials: non-empty, deduped, and only configurable assumptions.
+  assert.ok(ds.configurableDials.length > 0);
+  const keys = ds.configurableDials.map((d) => d.key);
+  assert.equal(new Set(keys).size, keys.length, "dials deduped by key");
+  for (const d of ds.configurableDials) assert.equal(d.provisioning, "configurable");
+});
+
 test("sensitivity analysis: rows sorted by swing, nudges move net benefit consistently", async () => {
   const { computeSensitivity } = await import("./sensitivity");
   const result = computeSensitivity(base);
