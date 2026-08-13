@@ -66,6 +66,37 @@ function PersonaBrief({ persona, volunteerName }: { persona: DemoPersona | undef
   );
 }
 
+const HR_BRIEF_TEXT = `You're playing: HR / Human-in-the-loop (the escalation chair).
+
+Your part: keep the control tower open. The AI hands over to you whenever it reaches a limit it was designed to respect — watch the Approvals queue. Expect handovers when: a background check has an exception (BGV persona), a hire reports a blocker on a call, the AI can't answer a question confidently, or a promised email couldn't be delivered. Open each approval, read the AI's recommendation and rationale, then approve or reject — the agent resumes automatically. If the AI stumbles during a phone call it promises the hire "a human will call you back": that promise lands in your queue, and honoring it is your showcase moment. You're also the outage contact — the HR Alert Email above is where the system emails you if its own machinery breaks.`;
+
+function HrOperatorBrief() {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-5 p-4 rounded-lg border border-sky-200 bg-sky-50/50 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-sky-900">The seventh chair: HR / Human-in-the-loop (not a volunteer row)</p>
+          <p className="text-sky-900/80 mt-1">
+            Every demo needs one person on the HR side — the escalation human the AI is designed to defer to. They don't
+            receive hire messages; they work the <span className="font-medium">Approvals queue</span>, where the agent
+            hands over background-check exceptions, blockers reported on calls, questions it can't answer, and any
+            promise it couldn't keep (like an undeliverable email or a "human will call you back" from a voice call).
+            Approving or rejecting there is what makes the human-in-the-loop story land.
+          </p>
+        </div>
+        <Button
+          variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs"
+          onClick={() => { navigator.clipboard.writeText(HR_BRIEF_TEXT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
+        >
+          <Check className={cn('w-3.5 h-3.5', copied ? 'text-emerald-600' : 'opacity-0 w-0')} />
+          {copied ? 'Copied' : 'Copy briefing'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function DemoVolunteersCard() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useGetDemoVolunteers();
@@ -233,6 +264,8 @@ function DemoVolunteersCard() {
                 ))}
               </div>
             )}
+
+            <HrOperatorBrief />
 
             <p className="text-xs text-muted-foreground mt-4 flex items-start gap-1.5">
               <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />
