@@ -17,3 +17,10 @@ so nothing fails until the next typecheck.
 before building on top. If a file is scrambled, don't hand-fix hunk by hunk —
 restore it from the last good commit and re-apply the merge's intended
 additions, which are usually small.
+
+Corruption can RECUR after a repair: a later platform commit re-landed the
+scrambled version over an already-repaired file (fourth occurrence). The merge
+commit's own hunks may be internally scrambled too — don't copy them verbatim;
+reconstruct each feature's intent against the clean base. And never swallow
+typecheck output (`tsc -b . >/dev/null 2>&1;` hid the re-corruption); always
+inspect tsc's exit/output when re-verifying.
