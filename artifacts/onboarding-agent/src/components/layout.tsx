@@ -104,19 +104,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div style={{ padding: 'var(--space-md) var(--space-lg)', borderTop: '1px solid var(--border)' }} className="flex items-center gap-3">
-          <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center font-bold shrink-0" style={{ backgroundColor: 'var(--primary)', color: '#ffffff', fontSize: 'var(--text-sm)' }}>
-            {initials || 'U'}
-          </div>
-          <div className="overflow-hidden flex-1 flex flex-col items-start">
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="truncate max-w-full">
-              {user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Signed in'}
-            </span>
-            <span style={{ fontSize: 'var(--text-xs)', padding: '2px 6px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '999px', marginTop: '2px', lineHeight: 1 }} className="font-semibold truncate max-w-full">
-              {role}
-            </span>
-          </div>
-        </div>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 transition-colors duration-300">
