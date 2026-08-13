@@ -1,0 +1,107 @@
+Redesign the login page for "Agentic HRO Platform" completely. 
+Keep the 65/35 split layout but make it visually outstanding and 
+enterprise-grade. Here are the exact changes:
+
+═══════════════════════════════
+LEFT PANEL (65%) — Full redesign
+═══════════════════════════════
+
+Background:
+- Deep gradient from #0f0c29 → #1e1b4b → #302b63 (top to bottom)
+- Subtle dot-grid or faint hexagon pattern overlay at 5% opacity for depth
+
+Top section:
+- Icon + wordmark: "Agentic HRO" in bold white, 28px
+- Below wordmark: "Platform" in indigo-300, lighter weight, 14px — 
+  same line or just beneath
+- Tagline: "Intelligent HR operations, autonomously delivered"
+  in slate-300, 16px, italic, with a thin left border accent in indigo-400
+
+Metric cards (replace the outline pills):
+- 3 solid metric cards in a row, each with:
+    • Subtle dark card background (#ffffff10 — frosted glass effect)
+    • Rounded corners (12px)
+    • Top: small label in indigo-300 uppercase tracking-widest, 11px
+    • Middle: large number in white, bold, 32px
+    • Bottom: small trend indicator (green arrow up + "vs last week")
+  Cards:
+    Card 1 — "ACTIVE CASES" / 13 / "↑ 2 from last week"
+    Card 2 — "SLA ADHERENCE" / 99.2% / "↑ 0.3% from last week"  
+    Card 3 — "HARD BLOCKS" / 0 / "✓ Clear today"
+
+Middle section (NEW — add this):
+- A faint horizontal divider
+- Section label: "AGENT COVERAGE" in indigo-300, 11px uppercase
+- 4 horizontal agent status rows, each showing:
+    • Colored status dot (green = active)
+    • Agent name: "Onboarding Agent", "Payroll Agent", 
+      "Compliance Agent", "Helpdesk Agent"
+    • Right-aligned: "Active · 0 errors" in green-400, 12px
+  This fills the dead space and shows the platform is live
+
+Bottom section (Live activity feed — improve this):
+- Label: "LIVE AGENT ACTIVITY" in indigo-300, 11px uppercase tracked
+- 5 activity rows, each with:
+    • Left: colored type badge (AI = indigo pill, SYS = slate pill, 
+      RULES = amber pill) — small, 10px
+    • Middle: activity description in white, 13px
+    • Right: timestamp in slate-400, 12px
+- New items fade in from bottom every 4 seconds (looping animation)
+- Activities:
+    "AI Agent — Reply drafted & dispatched"
+    "SYS — Background verification complete"
+    "AI Agent — Payroll setup initiated"
+    "RULES — Rehire flagged for HR review"
+    "SYS — Employment archive queried"
+
+Very bottom:
+- "Powered by HCLTech" in slate-500, 11px, centered
+
+═══════════════════════════════
+RIGHT PANEL (35%) — Refined
+═══════════════════════════════
+
+Background: Pure white (#ffffff)
+
+Top of panel:
+- Small "Agentic HRO Platform" logo mark (icon only, indigo) centered 
+  at top with a thin bottom border separating it from the form area
+
+Login form (centered vertically):
+- Heading: "Welcome back" — bold, #0f0c29, 28px
+- Subheading: "Sign in to your control tower" — slate-500, 14px
+- Spacing: generous — 24px between each field
+
+Fields:
+- Email: pre-filled with rajat-tiwari@hcltech.com
+- Password: pre-filled with ••••••••
+- Role dropdown: Reviewer (default), Admin, Agent Supervisor
+  Style: full-width, rounded, indigo focus ring on all fields
+
+Sign In button:
+- Full width, 48px height
+- Background: linear gradient #4f46e5 → #6366f1
+- White text "Sign In →" with arrow
+- Hover: slight lift (transform: translateY(-1px)) + deeper gradient
+- NO error messages of any kind
+
+Below button:
+- Centered small text in slate-400: 
+  "Demo mode · No credentials required"
+
+Bottom of right panel:
+- Thin top border
+- Two logos side by side, centered, grayscale:
+  "Secured by" + lock icon
+  "HCLTech" wordmark
+
+═══════════════════════════════
+BEHAVIOUR
+═══════════════════════════════
+- On Sign In click: full-panel loading overlay on right side with 
+  indigo spinner + "Authenticating..." for 1.5s, then redirect to dashboard
+- Remove ALL error messages — this is a demo app, Sign In always succeeds
+- localStorage sets hro_authed=true and selected role
+- Dashboard sidebar bottom shows role badge next to user avatar
+- Browser tab title: "Agentic HRO Platform"
+- Rename app everywhere from "Autonomous HRO" to "Agentic HRO Platform"

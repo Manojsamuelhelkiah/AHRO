@@ -12,4 +12,5 @@
 - [Task-merge file corruption](task-merge-corruption.md) — platform merges can scramble co-edited files; typecheck after every merge, repair from last good commit + re-apply merge intent.
 - [Autoscale pauses in-process pollers](autoscale-background-pollers.md) — setInterval work stops without traffic; drive all pollers via the throttled heartbeat endpoint and wire new pollers into it.
 - [Webhook session durability](webhook-session-durability.md) — DB-backed call/webhook sessions need owner-fenced lease finalization, DB-boundary idempotency keys, and atomic start claims, or races/crashes duplicate or lose outcomes.
+- [Clerk demo login via sign-in tickets](clerk-demo-login.md) — undeliverable demo emails can't pass device verification; mint backend sign-in tickets; signals-based useSignIn API quirks.
 - [TSX tests in node harness](tsx-tests-node-harness.md) — renderToStaticMarkup UI tests need jsx:automatic, bare builtin externals, and a createRequire banner in the esbuild bundle.

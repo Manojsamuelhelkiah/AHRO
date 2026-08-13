@@ -24,7 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="h-14 flex items-center px-6 border-b border-border">
           <div className="flex items-center gap-2 font-bold text-lg tracking-tight text-primary">
             <Server className="h-5 w-5" />
-            <span>Autonomous HRO</span>
+            <span>Agentic HRO Platform</span>
           </div>
         </div>
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
