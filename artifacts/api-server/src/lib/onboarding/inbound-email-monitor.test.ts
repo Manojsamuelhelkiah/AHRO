@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { classifyMonitor, createOutageTracker, planMonitorEventWrite, processMessageRefs, MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE, type MonitorTelemetry, type InboundMessage } from "./inbound-email";
+import { classifyMonitor, createOutageTracker, planMonitorEventWrite, processMessageRefs, hrAlertAddress, composeMonitorAlertEmail, persistThenNotify, MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE, type MonitorTelemetry, type InboundMessage } from "./inbound-email";
 
 const INTERVAL = 60_000;
 const T0 = Date.parse("2026-08-13T10:00:00Z");
@@ -150,6 +150,75 @@ describe("planMonitorEventWrite (durable dedup across restarts)", () => {
   test("no writes when nothing happened", () => {
     assert.equal(planMonitorEventWrite("none", null), null);
     assert.equal(planMonitorEventWrite("none", MONITOR_DOWN_TITLE), null);
+  });
+});
+
+describe("HR alert email configuration & composition", () => {
+  test("no address configured => null (no email sent)", () => {
+    assert.equal(hrAlertAddress({}), null);
+    assert.equal(hrAlertAddress({ HR_ALERT_EMAIL: "   " }), null);
+  });
+
+  test("HR_ALERT_EMAIL wins, ONBOARDING_HR_ALERT_EMAIL is the fallback", () => {
+    assert.equal(hrAlertAddress({ HR_ALERT_EMAIL: "hr@corp.com" }), "hr@corp.com");
+    assert.equal(
+      hrAlertAddress({ ONBOARDING_HR_ALERT_EMAIL: "ops@corp.com" }),
+      "ops@corp.com",
+    );
+    assert.equal(
+      hrAlertAddress({ HR_ALERT_EMAIL: "hr@corp.com", ONBOARDING_HR_ALERT_EMAIL: "ops@corp.com" }),
+      "hr@corp.com",
+    );
+  });
+
+  test("down email carries the outage detail and a clear subject", () => {
+    const { subject, body } = composeMonitorAlertEmail("down", "failed 3 polls in a row");
+    assert.match(subject, /DOWN/);
+    assert.match(body, /failed 3 polls in a row/);
+    assert.match(body, /NOT being picked up/);
+  });
+
+  test("recovery email carries the recovery detail", () => {
+    const { subject, body } = composeMonitorAlertEmail("recovered", "polling successfully again");
+    assert.match(subject, /recovered/);
+    assert.match(body, /polling successfully again/);
+  });
+});
+
+describe("persistThenNotify (email only after a confirmed durable write)", () => {
+  test("sends the alert email after the event write succeeds", async () => {
+    const sent: string[] = [];
+    const result = await persistThenNotify("down", MONITOR_DOWN_TITLE, "3 failed polls", {
+      persistEvent: async () => true,
+      sendAlert: async (kind) => void sent.push(kind),
+    });
+    assert.deepEqual(result, { persisted: true, emailed: true });
+    assert.deepEqual(sent, ["down"]);
+  });
+
+  test("failed event write suppresses the email (prevents restart duplicates)", async () => {
+    const sent: string[] = [];
+    const result = await persistThenNotify("down", MONITOR_DOWN_TITLE, "3 failed polls", {
+      persistEvent: async () => false,
+      sendAlert: async (kind) => void sent.push(kind),
+    });
+    assert.deepEqual(result, { persisted: false, emailed: false });
+    assert.deepEqual(sent, []);
+  });
+
+  test("restart mid-outage: persisted down event blocks a second down write, hence a second email", () => {
+    // The email is only attempted when planMonitorEventWrite returns a write;
+    // after a restart mid-outage the persisted down event yields null.
+    assert.equal(planMonitorEventWrite("alert", MONITOR_DOWN_TITLE), null);
+  });
+
+  test("recovery email follows the recovery write", async () => {
+    const sent: string[] = [];
+    await persistThenNotify("recovered", MONITOR_RECOVERED_TITLE, "polling again", {
+      persistEvent: async () => true,
+      sendAlert: async (kind) => void sent.push(kind),
+    });
+    assert.deepEqual(sent, ["recovered"]);
   });
 });
 

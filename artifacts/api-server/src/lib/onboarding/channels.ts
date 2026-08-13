@@ -46,7 +46,12 @@ export function whatsappChannelInfo(): ChannelInfo {
   };
 }
 
-async function sendEmail(
+/**
+ * Send a plain email via the connected Gmail account. Exported so system
+ * alerting (e.g. the inbox-monitor outage notifier) can reuse the same
+ * delivery path without creating a case communication row.
+ */
+export async function sendEmail(
   to: string,
   subject: string,
   body: string,

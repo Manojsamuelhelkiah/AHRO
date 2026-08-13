@@ -3,6 +3,7 @@ import { onbCases, onbCommunications, onbEvents } from "@workspace/db/schema";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { handleInbound } from "./engine";
+import { sendEmail } from "./channels";
 
 /**
  * Gmail inbox polling — closes the loop on real email replies.
@@ -104,7 +105,13 @@ async function latestMonitorEventTitle(): Promise<string | null> {
   }
 }
 
-async function logMonitorEvent(title: string, detail: string): Promise<void> {
+/**
+ * Persist a monitor event. Returns true only when the event was durably
+ * written — callers must gate the alert email on this, because an email
+ * without a persisted event would be re-sent after a restart (the durable
+ * dedup in planMonitorEventWrite relies on the persisted event).
+ */
+async function logMonitorEvent(title: string, detail: string): Promise<boolean> {
   try {
     await db.insert(onbEvents).values({
       caseId: null,
@@ -114,10 +121,95 @@ async function logMonitorEvent(title: string, detail: string): Promise<void> {
       title,
       detail,
     });
+    return true;
   } catch (err) {
     // Never let alerting break the poll loop itself.
     console.error("[onboarding inbound-email] failed to record monitor event:", String(err));
+    return false;
   }
+}
+
+/**
+ * Outage email notifications: when the monitor transitions to broken (the
+ * durable "down" event is written) an email is sent to the configured HR
+ * alert address, and a recovery email is sent when it transitions back.
+ * Configure via HR_ALERT_EMAIL (or ONBOARDING_HR_ALERT_EMAIL); when unset,
+ * no email is sent and the dashboard banner/event remain the only signals.
+ * Because emails piggyback on the durable event writes, "one email per
+ * outage" holds even across server restarts.
+ */
+export function hrAlertAddress(env: NodeJS.ProcessEnv = process.env): string | null {
+  const raw = (env.HR_ALERT_EMAIL ?? env.ONBOARDING_HR_ALERT_EMAIL ?? "").trim();
+  return raw.length > 0 ? raw : null;
+}
+
+/** Compose the outage/recovery alert email (pure, exported for tests). */
+export function composeMonitorAlertEmail(
+  kind: "down" | "recovered",
+  detail: string,
+): { subject: string; body: string } {
+  if (kind === "down") {
+    return {
+      subject: "[Onboarding Control Tower] Inbox monitoring is DOWN",
+      body: [
+        "The Gmail reply monitor in the Onboarding Control Tower is failing.",
+        "",
+        detail,
+        "",
+        "Until this is resolved, email replies from hires are NOT being picked up automatically.",
+        "A recovery email will be sent when monitoring resumes.",
+      ].join("\n"),
+    };
+  }
+  return {
+    subject: "[Onboarding Control Tower] Inbox monitoring recovered",
+    body: [
+      "The Gmail reply monitor in the Onboarding Control Tower has recovered.",
+      "",
+      detail,
+    ].join("\n"),
+  };
+}
+
+async function sendMonitorAlertEmail(kind: "down" | "recovered", detail: string): Promise<void> {
+  const to = hrAlertAddress();
+  if (!to) return;
+  try {
+    const { subject, body } = composeMonitorAlertEmail(kind, detail);
+    const result = await sendEmail(to, subject, body);
+    if (result.status !== "sent") {
+      console.error(
+        `[onboarding inbound-email] HR alert email (${kind}) failed: ${result.failureReason ?? "unknown"}`,
+      );
+    } else {
+      console.log(`[onboarding inbound-email] HR alert email (${kind}) sent`);
+    }
+  } catch (err) {
+    // Never let alerting break the poll loop itself.
+    console.error(`[onboarding inbound-email] HR alert email (${kind}) failed:`, String(err));
+  }
+}
+
+/**
+ * Persist a monitor transition event and, only after the write is confirmed
+ * durable, send the alert email. Sending without a persisted event would
+ * break "one email per outage" across restarts, because the durable dedup in
+ * planMonitorEventWrite relies on the persisted event. Deps injectable for
+ * tests; returns what actually happened.
+ */
+export async function persistThenNotify(
+  kind: "down" | "recovered",
+  title: string,
+  detail: string,
+  deps: {
+    persistEvent: (title: string, detail: string) => Promise<boolean>;
+    sendAlert: (kind: "down" | "recovered", detail: string) => Promise<void>;
+  },
+): Promise<{ persisted: boolean; emailed: boolean }> {
+  const persisted = await deps.persistEvent(title, detail);
+  if (!persisted) return { persisted: false, emailed: false };
+  await deps.sendAlert(kind, detail);
+  return { persisted: true, emailed: true };
 }
 
 /** Health telemetry for the poller, surfaced on the control tower. */
@@ -416,10 +508,12 @@ export function startInboundEmailPolling(): void {
           await latestMonitorEventTitle(),
         );
         if (write === "recovered") {
-          await logMonitorEvent(
-            MONITOR_RECOVERED_TITLE,
-            "The Gmail reply monitor is polling successfully again. Replies from hires are being picked up.",
-          );
+          const detail =
+            "The Gmail reply monitor is polling successfully again. Replies from hires are being picked up.";
+          await persistThenNotify("recovered", MONITOR_RECOVERED_TITLE, detail, {
+            persistEvent: logMonitorEvent,
+            sendAlert: sendMonitorAlertEmail,
+          });
         }
       }
     } catch (err) {
@@ -431,10 +525,11 @@ export function startInboundEmailPolling(): void {
         // Durable dedup: a restart mid-outage must not write a second alert.
         const write = planMonitorEventWrite("alert", await latestMonitorEventTitle());
         if (write === "down") {
-          await logMonitorEvent(
-            MONITOR_DOWN_TITLE,
-            `The Gmail reply monitor has failed ${consecutiveFailures} polls in a row. Replies from hires are NOT being picked up. Latest error: ${monitorStatus.lastError}`,
-          );
+          const detail = `The Gmail reply monitor has failed ${consecutiveFailures} polls in a row. Replies from hires are NOT being picked up. Latest error: ${monitorStatus.lastError}`;
+          await persistThenNotify("down", MONITOR_DOWN_TITLE, detail, {
+            persistEvent: logMonitorEvent,
+            sendAlert: sendMonitorAlertEmail,
+          });
         }
       }
     } finally {
