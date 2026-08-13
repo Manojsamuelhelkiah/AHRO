@@ -822,6 +822,7 @@ export function computeRollup(
         name: c.name,
         description: c.description,
         kind: "platform" as const,
+        provisioning: "core" as const,
         oneTimeUsd: oneTime,
         annualUsd: annual,
       };
@@ -835,6 +836,7 @@ export function computeRollup(
       name: a.label,
       description: a.rationale,
       kind: "onboarding" as const,
+      provisioning: "custom" as const,
       oneTimeUsd: total,
       annualUsd: total / Math.max(1, contractYears),
     })),
@@ -902,6 +904,7 @@ export function computeRollup(
       return {
         key: `model-${role}`,
         label: `${role[0]!.toUpperCase()}${role.slice(1)} model: ${model.label}`,
+        provisioning: "configurable" as const,
         value: model.pricePerCallUsd,
         unit: "USD per call",
         rationale: fromTokens
@@ -924,6 +927,7 @@ export function computeRollup(
           {
             key: "hitl-sampling-rate",
             label: "HITL sampling rate (measured)",
+            provisioning: "configurable" as const,
             value: inputs.hitlSamplingRate ?? 1,
             measuredValue: overlay.measuredHitlSamplingRate,
             unit: "fraction",

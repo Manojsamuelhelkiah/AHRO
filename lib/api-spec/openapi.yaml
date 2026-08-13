@@ -1425,6 +1425,10 @@ components:
           type: string
         label:
           type: string
+        provisioning:
+          type: string
+          enum: [core, configurable, custom]
+          description: "Product demarcation: core = product fact identical for every client; configurable = client-set dial (no code change); custom = per-client engineering/content effort."
         value:
           type: number
           description: The canonical estimated/modelled value from the assumptions register.
@@ -1437,7 +1441,7 @@ components:
           type: string
         source:
           $ref: "#/components/schemas/SourceRef"
-      required: [key, label, value, unit, rationale, source]
+      required: [key, label, provisioning, value, unit, rationale, source]
     CorpusSummary:
       type: object
       properties:
@@ -1884,13 +1888,17 @@ components:
         kind:
           type: string
           description: platform | onboarding
+        provisioning:
+          type: string
+          enum: [core, configurable, custom]
+          description: "Product demarcation: core platform components vs custom per-client onboarding effort."
         oneTimeUsd:
           type: number
           description: One-time build/setup cost (maturity-scaled for platform components)
         annualUsd:
           type: number
           description: Annualized share included in this scenario's build cost
-      required: [key, name, description, kind, oneTimeUsd, annualUsd]
+      required: [key, name, description, kind, provisioning, oneTimeUsd, annualUsd]
     ModelOption:
       type: object
       properties:

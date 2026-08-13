@@ -150,9 +150,23 @@ export interface DistributionProfile {
   sizeAdjustments: DistributionProfileSizeAdjustments;
 }
 
+/**
+ * Product demarcation: core = product fact identical for every client; configurable = client-set dial (no code change); custom = per-client engineering/content effort.
+ */
+export type GlobalAssumptionProvisioning = typeof GlobalAssumptionProvisioning[keyof typeof GlobalAssumptionProvisioning];
+
+
+export const GlobalAssumptionProvisioning = {
+  core: 'core',
+  configurable: 'configurable',
+  custom: 'custom',
+} as const;
+
 export interface GlobalAssumption {
   key: string;
   label: string;
+  /** Product demarcation: core = product fact identical for every client; configurable = client-set dial (no code change); custom = per-client engineering/content effort. */
+  provisioning: GlobalAssumptionProvisioning;
   /** The canonical estimated/modelled value from the assumptions register. */
   value: number;
   /** The value observed in production actuals. Present only when this assumption was replaced by a calibration overlay. The rollup applied measuredValue; value is retained as the pre-calibration estimate for variance display. */
@@ -386,12 +400,26 @@ export interface YearSlice {
   fteEquivalent: number;
 }
 
+/**
+ * Product demarcation: core platform components vs custom per-client onboarding effort.
+ */
+export type BuildComponentCostProvisioning = typeof BuildComponentCostProvisioning[keyof typeof BuildComponentCostProvisioning];
+
+
+export const BuildComponentCostProvisioning = {
+  core: 'core',
+  configurable: 'configurable',
+  custom: 'custom',
+} as const;
+
 export interface BuildComponentCost {
   key: string;
   name: string;
   description: string;
   /** platform | onboarding */
   kind: string;
+  /** Product demarcation: core platform components vs custom per-client onboarding effort. */
+  provisioning: BuildComponentCostProvisioning;
   /** One-time build/setup cost (maturity-scaled for platform components) */
   oneTimeUsd: number;
   /** Annualized share included in this scenario's build cost */

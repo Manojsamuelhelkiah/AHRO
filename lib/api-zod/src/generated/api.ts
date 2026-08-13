@@ -131,6 +131,7 @@ export const ListDistributionProfilesResponse = zod.array(ListDistributionProfil
 export const ListAssumptionsResponseItem = zod.object({
   "key": zod.string(),
   "label": zod.string(),
+  "provisioning": zod.enum(['core', 'configurable', 'custom']).describe('Product demarcation: core = product fact identical for every client; configurable = client-set dial (no code change); custom = per-client engineering\/content effort.'),
   "value": zod.number().describe('The canonical estimated\/modelled value from the assumptions register.'),
   "measuredValue": zod.number().optional().describe('The value observed in production actuals. Present only when this assumption was replaced by a calibration overlay. The rollup applied measuredValue; value is retained as the pre-calibration estimate for variance display.'),
   "unit": zod.string(),
@@ -997,12 +998,14 @@ export const ComputeRollupResponse = zod.object({
   "name": zod.string(),
   "description": zod.string(),
   "kind": zod.string().describe('platform | onboarding'),
+  "provisioning": zod.enum(['core', 'configurable', 'custom']).describe('Product demarcation: core platform components vs custom per-client onboarding effort.'),
   "oneTimeUsd": zod.number().describe('One-time build\/setup cost (maturity-scaled for platform components)'),
   "annualUsd": zod.number().describe('Annualized share included in this scenario\'s build cost')
 })).describe('Component-level decomposition of build cost; annual amounts sum to totals build cost'),
   "appliedAssumptions": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
+  "provisioning": zod.enum(['core', 'configurable', 'custom']).describe('Product demarcation: core = product fact identical for every client; configurable = client-set dial (no code change); custom = per-client engineering\/content effort.'),
   "value": zod.number().describe('The canonical estimated\/modelled value from the assumptions register.'),
   "measuredValue": zod.number().optional().describe('The value observed in production actuals. Present only when this assumption was replaced by a calibration overlay. The rollup applied measuredValue; value is retained as the pre-calibration estimate for variance display.'),
   "unit": zod.string(),

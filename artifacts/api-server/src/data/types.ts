@@ -103,6 +103,12 @@ export interface DistributionProfile {
 export interface GlobalAssumption {
   key: string;
   label: string;
+  /**
+   * Product demarcation: "core" (product fact, same for every client),
+   * "configurable" (a dial the client sets per scenario, no code change),
+   * "custom" (per-client engineering/content effort priced individually).
+   */
+  provisioning: "core" | "configurable" | "custom";
   /** The canonical estimated/modelled value from the assumptions register. */
   value: number;
   /**

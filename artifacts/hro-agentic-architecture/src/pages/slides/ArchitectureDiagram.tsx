@@ -105,7 +105,7 @@ export default function ArchitectureDiagram() {
                   A2A protocol · Semantic Kernel / Foundry Agent Service
                 </p>
               </div>
-              <div className="grid grid-cols-4 gap-[0.7vw] mt-[0.7vh] flex-1 min-h-0">
+              <div className="grid grid-cols-5 gap-[0.7vw] mt-[0.7vh] flex-1 min-h-0">
                 <div className="bg-[#12233f]/80 border border-[#24406b] rounded-[0.4vw] px-[0.7vw] py-[0.6vh]">
                   <p className="font-display font-bold text-text text-[1.1vw]">
                     Supervisor Agent
@@ -140,6 +140,15 @@ export default function ArchitectureDiagram() {
                   <p className="font-body text-muted text-[1.05vw] leading-snug">
                     approval workbench · confidence thresholds · escalate to HR
                     ops with full context
+                  </p>
+                </div>
+                <div className="bg-[#12233f]/80 border border-[#24406b] rounded-[0.4vw] px-[0.7vw] py-[0.6vh]">
+                  <p className="font-display font-bold text-text text-[1.1vw]">
+                    System Watcher
+                  </p>
+                  <p className="font-body text-muted text-[1.05vw] leading-snug">
+                    polls BGV, ITSM &amp; payroll · vendor webhooks · closes
+                    items, flags SLA breaches
                   </p>
                 </div>
               </div>

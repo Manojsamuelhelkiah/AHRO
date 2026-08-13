@@ -5,6 +5,7 @@ import type { GlobalAssumption } from "./types";
 export const assumptions: GlobalAssumption[] = [
   {
     key: "slm-call-cost",
+    provisioning: "configurable",
     label: "Small-model (SLM) call cost",
     value: 0.002,
     unit: "USD per call",
@@ -13,6 +14,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "llm-call-cost",
+    provisioning: "configurable",
     label: "Reasoning-model (LLM) call cost",
     value: 0.02,
     unit: "USD per call",
@@ -21,6 +23,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "frontier-call-cost",
+    provisioning: "configurable",
     label: "Frontier-model call cost",
     value: 0.12,
     unit: "USD per call",
@@ -29,14 +32,16 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "data-call-cost",
+    provisioning: "configurable",
     label: "Structured data model (LDM/NL2SQL) call",
     value: 0.02,
     unit: "USD per call",
     rationale: "Schema-grounded structured-data calls (NL2SQL generation, schema mapping, entity resolution across legacy databases with poor lineage) carry large schema/catalog context (~8-15K tokens) plus validation retries.",
-    source: { name: "Azure OpenAI list pricing at structured-data call profile", confidence: "medium" },
+    source: { name: "Azure OpenAI list pricing at structured-data call profile", note: "Configured via scenario model selection (data role), not a direct rate override.", confidence: "medium" },
   },
   {
     key: "mcp-action-cost",
+    provisioning: "configurable",
     label: "MCP system action cost",
     value: 0.004,
     unit: "USD per system action",
@@ -45,6 +50,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "manual-action-minutes",
+    provisioning: "core",
     label: "Manual handling per non-integrated action",
     value: 5,
     unit: "minutes per manual action",
@@ -53,6 +59,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "infra-per-txn",
+    provisioning: "configurable",
     label: "Platform infra per transaction",
     value: 0.015,
     unit: "USD per transaction",
@@ -61,6 +68,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "hr-hourly-cost",
+    provisioning: "configurable",
     label: "Client HR specialist hourly cost (default)",
     value: 38,
     unit: "USD per hour",
@@ -69,6 +77,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "hitl-hourly-cost",
+    provisioning: "configurable",
     label: "HITL reviewer hourly cost (default)",
     value: 42,
     unit: "USD per hour",
@@ -77,6 +86,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "working-hours-year",
+    provisioning: "core",
     label: "Working hours per FTE-year",
     value: 1720,
     unit: "hours",
@@ -85,6 +95,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "tier-pooled",
+    provisioning: "configurable",
     label: "Isolation tier multiplier: pooled",
     value: 1.0,
     unit: "multiplier",
@@ -93,6 +104,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "tier-siloed",
+    provisioning: "configurable",
     label: "Isolation tier multiplier: siloed",
     value: 1.4,
     unit: "multiplier",
@@ -101,6 +113,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "tier-dedicated",
+    provisioning: "configurable",
     label: "Isolation tier multiplier: dedicated",
     value: 2.5,
     unit: "multiplier",
@@ -109,6 +122,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "landscape-fanout",
+    provisioning: "configurable",
     label: "Act fan-out per additional system",
     value: 0.35,
     unit: "multiplier per extra system",
@@ -117,6 +131,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "knowledge-maintenance-country",
+    provisioning: "custom",
     label: "Knowledge maintenance per country per year",
     value: 6000,
     unit: "USD per country per year",
@@ -125,6 +140,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "maturity-clean",
+    provisioning: "configurable",
     label: "Landscape maturity multiplier: clean",
     value: 0.8,
     unit: "multiplier",
@@ -133,6 +149,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "maturity-mixed",
+    provisioning: "configurable",
     label: "Landscape maturity multiplier: mixed",
     value: 1.0,
     unit: "multiplier",
@@ -141,6 +158,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "maturity-legacy",
+    provisioning: "configurable",
     label: "Landscape maturity multiplier: legacy",
     value: 1.4,
     unit: "multiplier",
@@ -149,6 +167,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "onboarding-base",
+    provisioning: "custom",
     label: "Client onboarding: base setup",
     value: 40000,
     unit: "USD one-time",
@@ -157,6 +176,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "onboarding-per-system",
+    provisioning: "custom",
     label: "Client onboarding: per system of record",
     value: 12000,
     unit: "USD one-time per system",
@@ -165,6 +185,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "onboarding-per-country",
+    provisioning: "custom",
     label: "Client onboarding: per country",
     value: 8000,
     unit: "USD one-time per country",
@@ -173,6 +194,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "error-reduction-share",
+    provisioning: "configurable",
     label: "Share of client rework eliminated",
     value: 0.6,
     unit: "fraction",
@@ -181,6 +203,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "country-localization",
+    provisioning: "configurable",
     label: "Localization uplift per additional country",
     value: 0.03,
     unit: "multiplier per extra country",
@@ -189,6 +212,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "company-multi-country",
+    provisioning: "configurable",
     label: "Complexity uplift: multi-country",
     value: 1.1,
     unit: "multiplier",
@@ -197,6 +221,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "company-global",
+    provisioning: "configurable",
     label: "Complexity uplift: global",
     value: 1.2,
     unit: "multiplier",
@@ -206,6 +231,7 @@ export const assumptions: GlobalAssumption[] = [
   // --- Containment rates (default per flow class) ---
   {
     key: "containment-fc1",
+    provisioning: "configurable",
     label: "Containment rate: Deterministic Self-Service (fc1)",
     value: 0.95,
     unit: "rate",
@@ -215,6 +241,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "containment-fc2",
+    provisioning: "configurable",
     label: "Containment rate: Grounded Policy Answer (fc2)",
     value: 0.88,
     unit: "rate",
@@ -224,6 +251,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "containment-fc3",
+    provisioning: "configurable",
     label: "Containment rate: Multi-Agent Transaction (fc3)",
     value: 0.80,
     unit: "rate",
@@ -233,6 +261,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "containment-fc4",
+    provisioning: "configurable",
     label: "Containment rate: Frontier Judgment Case (fc4)",
     value: 0.70,
     unit: "rate",
@@ -243,6 +272,7 @@ export const assumptions: GlobalAssumption[] = [
   // --- HITL sampling rates (default per flow class) ---
   {
     key: "hitl-sample-fc1",
+    provisioning: "configurable",
     label: "HITL sampling rate: Deterministic Self-Service (fc1)",
     value: 0.05,
     unit: "rate",
@@ -252,6 +282,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "hitl-sample-fc2",
+    provisioning: "configurable",
     label: "HITL sampling rate: Grounded Policy Answer (fc2)",
     value: 0.15,
     unit: "rate",
@@ -261,6 +292,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "hitl-sample-fc3",
+    provisioning: "configurable",
     label: "HITL sampling rate: Multi-Agent Transaction (fc3)",
     value: 0.30,
     unit: "rate",
@@ -270,6 +302,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "hitl-sample-fc4",
+    provisioning: "configurable",
     label: "HITL sampling rate: Frontier Judgment Case (fc4)",
     value: 0.60,
     unit: "rate",
@@ -280,6 +313,7 @@ export const assumptions: GlobalAssumption[] = [
   // --- Adoption ramp defaults ---
   {
     key: "ramp-y1",
+    provisioning: "configurable",
     label: "Adoption ramp: Year 1",
     value: 0.40,
     unit: "rate",
@@ -289,6 +323,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "ramp-y2",
+    provisioning: "configurable",
     label: "Adoption ramp: Year 2",
     value: 0.75,
     unit: "rate",
@@ -298,6 +333,7 @@ export const assumptions: GlobalAssumption[] = [
   },
   {
     key: "ramp-y3",
+    provisioning: "configurable",
     label: "Adoption ramp: Year 3",
     value: 1.00,
     unit: "rate",

@@ -1308,7 +1308,7 @@ export default function Scenario() {
                   {/* Build Cost Breakdown */}
                   <TabsContent value="build" className="m-0 h-full">
                     <p className="text-xs text-muted-foreground mb-3">
-                      Component-level build cost. One-time = engineering cost to stand the component up (platform components scale with landscape maturity). Annual = share amortized into this scenario — platform over expected volume, onboarding over the contract term. Annual amounts sum exactly to the scenario's total build cost.
+                      Component-level build cost. One-time = engineering cost to stand the component up (platform components scale with landscape maturity). Annual = share amortized into this scenario — platform over expected volume, onboarding over the contract term. Annual amounts sum exactly to the scenario's total build cost. Demarcation: <span className="font-medium text-emerald-600">core</span> = product platform amortized across clients; <span className="font-medium text-amber-600">custom</span> = per-client implementation effort priced individually.
                     </p>
                     <div className="rounded-md border border-border overflow-hidden">
                       <table className="w-full text-sm text-left">
@@ -1316,6 +1316,7 @@ export default function Scenario() {
                           <tr>
                             <th className="px-4 py-3">Component</th>
                             <th className="px-4 py-3">Type</th>
+                            <th className="px-4 py-3">Demarcation</th>
                             <th className="px-4 py-3 text-right">One-Time Build</th>
                             <th className="px-4 py-3 text-right">Annual (this scenario)</th>
                           </tr>
@@ -1332,6 +1333,11 @@ export default function Scenario() {
                                   {c.kind}
                                 </Badge>
                               </td>
+                              <td className="px-4 py-3">
+                                <Badge variant="outline" className={`text-[10px] uppercase tracking-wide ${c.provisioning === "core" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : c.provisioning === "custom" ? "bg-amber-500/10 text-amber-600 border-amber-500/30" : "bg-sky-500/10 text-sky-600 border-sky-500/30"}`} data-testid={`badge-provisioning-${c.key}`}>
+                                  {c.provisioning}
+                                </Badge>
+                              </td>
                               <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrencyLocal(c.oneTimeUsd, true)}</td>
                               <td className="px-4 py-3 text-right font-mono text-xs font-semibold">{formatCurrencyLocal(c.annualUsd, true)}</td>
                             </tr>
@@ -1339,7 +1345,7 @@ export default function Scenario() {
                         </tbody>
                         <tfoot className="bg-muted/50">
                           <tr>
-                            <td className="px-4 py-3 font-semibold text-xs uppercase text-muted-foreground" colSpan={2}>Total build cost in this scenario</td>
+                            <td className="px-4 py-3 font-semibold text-xs uppercase text-muted-foreground" colSpan={3}>Total build cost in this scenario</td>
                             <td className="px-4 py-3 text-right font-mono text-xs">{formatCurrencyLocal(rollup.buildBreakdown.reduce((a, c) => a + c.oneTimeUsd, 0), true)}</td>
                             <td className="px-4 py-3 text-right font-mono text-xs font-bold">{formatCurrencyLocal(rollup.totals.buildCostUsd, true)}</td>
                           </tr>

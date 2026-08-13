@@ -11,7 +11,7 @@
     "id": "6b2d3a10-7f8c-4a0b-9ce3-7e9f1b3d5a67",
     "position": 2,
     "filepath": "src/pages/slides/ArchitectureDiagram.tsx",
-    "title": "Reference Architecture — One View",
+    "title": "Reference Architecture \u2014 One View",
     "description": "Full layered architecture diagram: experience, gateway, intake, intent, orchestration, MCP services, case management, act, systems of record, and cross-cutting concerns.",
     "speakerNotes": ""
   },
@@ -19,7 +19,7 @@
     "id": "7c3e4b21-8a9d-4b1c-adf4-8f0a2c4e6b78",
     "position": 3,
     "filepath": "src/pages/slides/FunctionalView.tsx",
-    "title": "Functional View — What Each Part Does",
+    "title": "Functional View \u2014 What Each Part Does",
     "description": "Functional twin of the reference architecture: same numbered components described in business terms for a functional audience.",
     "speakerNotes": ""
   },
@@ -91,7 +91,7 @@
     "id": "cb8d9a76-dfec-4a6b-a249-de5f7b9db0c3",
     "position": 12,
     "filepath": "src/pages/slides/MultiTenant.tsx",
-    "title": "From Solution to Product — Multi-Tenant by Design",
+    "title": "From Solution to Product \u2014 Multi-Tenant by Design",
     "description": "Multi-tenant product architecture: shared control plane, isolated tenant planes per client, shared foundation, and isolation tiers.",
     "speakerNotes": ""
   },
@@ -99,29 +99,37 @@
     "id": "dc9eab87-eafd-4b7c-b35a-ef6a8cae0dd4",
     "position": 13,
     "filepath": "src/pages/slides/ProductConsiderations.tsx",
-    "title": "Running It as a Product — What Else Must Be True",
+    "title": "Running It as a Product \u2014 What Else Must Be True",
     "description": "Productization checklist: isolation, compliance and residency, commercial model, operations at scale, customization vs core, go-to-market.",
     "speakerNotes": ""
   },
   {
-    "id": "edaf0c98-fb0e-4c8d-a46b-fa7b9dbf1ee5",
+    "id": "f5d0c9fc-d624-4d91-a47b-0abe9a173201",
     "position": 14,
+    "filepath": "src/pages/slides/Demarcation.tsx",
+    "title": "Core vs Configurable vs Custom \u2014 Product Demarcation",
+    "description": "Three-layer demarcation of the offering: core platform amortized across clients, configurable per-tenant dials, and custom per-client engineering \u2014 mirrored by badges in the cost-benefit explorer.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "edaf0c98-fb0e-4c8d-a46b-fa7b9dbf1ee5",
+    "position": 15,
     "filepath": "src/pages/slides/IsolationTiers.tsx",
-    "title": "Choosing an Isolation Tier — Cost vs Control",
+    "title": "Choosing an Isolation Tier \u2014 Cost vs Control",
     "description": "Comparison of pooled, siloed-database, and fully dedicated deployment tiers across sharing, security, compliance, cost, speed, and typical client.",
     "speakerNotes": ""
   },
   {
     "id": "fe1b0da9-ac1f-4d9e-b57c-ab8cae0a2ff6",
-    "position": 15,
+    "position": 16,
     "filepath": "src/pages/slides/DeliveryModel.tsx",
-    "title": "SaaS or On-Prem? — Operated as SaaS in Every Tier",
+    "title": "SaaS or On-Prem? \u2014 Operated as SaaS in Every Tier",
     "description": "Delivery-model position: why the platform is operated as SaaS, how dedicated in-your-cloud answers on-prem demands, and the split data-plane hybrid.",
     "speakerNotes": ""
   },
   {
     "id": "0f2c1eba-bd2a-4eaf-c68d-bc9dbf1b3aa7",
-    "position": 16,
+    "position": 17,
     "filepath": "src/pages/slides/Requirements.tsx",
     "title": "Hardware, Software & Infrastructure Requirements",
     "description": "Hardware and capacity, software stack, infrastructure and network, and client-side prerequisites for running the product.",
@@ -129,7 +137,7 @@
   },
   {
     "id": "1a3d2fcb-ce3b-4fba-d79e-cdaec02c4bb8",
-    "position": 17,
+    "position": 18,
     "filepath": "src/pages/slides/Pricing.tsx",
     "title": "Pricing Models & Options",
     "description": "Three pricing models (PEPM, per resolved case, platform + usage), tier multipliers and add-ons, and commercial guardrails.",
@@ -137,23 +145,23 @@
   },
   {
     "id": "2b4e30dc-df4c-40cb-e8af-debfd13d5cc9",
-    "position": 18,
+    "position": 19,
     "filepath": "src/pages/slides/Timeline.tsx",
-    "title": "Implementation Plan — ~26 Weeks to Full Rollout",
+    "title": "Implementation Plan \u2014 ~26 Weeks to Full Rollout",
     "description": "Gantt-style implementation timeline: discover, foundation, build, assure, launch phases with milestones and go/no-go gates.",
     "speakerNotes": ""
   },
   {
     "id": "3c5f41ed-ea5d-41dc-a9b0-efc0e24e6dd0",
-    "position": 19,
+    "position": 20,
     "filepath": "src/pages/slides/LegalDocs.tsx",
-    "title": "Legal & Product Documentation — Post-Release",
+    "title": "Legal & Product Documentation \u2014 Post-Release",
     "description": "Legal and product documents by lifecycle stage: contract & onboard, live operations, change & update, incident & exit.",
     "speakerNotes": ""
   },
   {
     "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
-    "position": 20,
+    "position": 21,
     "filepath": "src/pages/slides/InsightImpact.tsx",
     "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
     "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",

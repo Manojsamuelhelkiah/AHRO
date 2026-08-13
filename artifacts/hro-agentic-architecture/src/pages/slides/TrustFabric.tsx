@@ -38,7 +38,9 @@ export default function TrustFabric() {
             <p className="font-body text-text text-[1.6vw] leading-relaxed mt-[1.5vh] [text-wrap:pretty]">
               End-to-end tracing of every agent step in Azure Monitor and
               Application Insights; AgentOps evaluation and drift detection in
-              AI Foundry.
+              AI Foundry. A System Watcher agent monitors external systems
+              (BGV, ITSM, payroll) and the platform self-alerts HR by email
+              when a channel goes down.
             </p>
           </div>
         </div>

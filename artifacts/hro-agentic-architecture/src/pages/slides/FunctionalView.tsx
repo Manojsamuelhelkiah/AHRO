@@ -93,7 +93,7 @@ export default function FunctionalView() {
                   escalation path
                 </p>
               </div>
-              <div className="grid grid-cols-4 gap-[0.7vw] mt-[0.7vh] flex-1 min-h-0">
+              <div className="grid grid-cols-5 gap-[0.7vw] mt-[0.7vh] flex-1 min-h-0">
                 <div className="bg-[#12233f]/80 border border-[#24406b] rounded-[0.4vw] px-[0.7vw] py-[0.6vh]">
                   <p className="font-display font-bold text-text text-[1.1vw]">
                     Case Lead
@@ -128,6 +128,15 @@ export default function FunctionalView() {
                   <p className="font-body text-muted text-[1.05vw] leading-snug">
                     unsure or sensitive? hands the case to HR ops with the full
                     story attached
+                  </p>
+                </div>
+                <div className="bg-[#12233f]/80 border border-[#24406b] rounded-[0.4vw] px-[0.7vw] py-[0.6vh]">
+                  <p className="font-display font-bold text-text text-[1.1vw]">
+                    Keeps Watch
+                  </p>
+                  <p className="font-body text-muted text-[1.05vw] leading-snug">
+                    chases background checks, IT tickets &amp; payroll · closes
+                    items itself · raises overdue flags
                   </p>
                 </div>
               </div>
