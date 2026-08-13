@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGetOnboardingDashboard, useListOnboardingScenarios, useRunOnboardingScenario, getGetOnboardingDashboardQueryKey, getListOnboardingCasesQueryKey } from '@workspace/api-client-react';
-import { Card, CardHeader, CardTitle, CardContent, Button, cn } from '@/components/ui-shared';
+import { Card, CardHeader, CardTitle, CardContent, Button, PageHeader, cn } from '@/components/ui-shared';
 import { useLocation } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, AlertCircle, Clock, CheckCircle2, AlertTriangle, Users } from 'lucide-react';
@@ -24,68 +24,88 @@ export function DashboardPage() {
     });
   };
 
-  if (isLoadingDash || isLoadingScenarios) return <div className="p-8 text-center text-muted-foreground">Loading dashboard...</div>;
+  if (isLoadingDash || isLoadingScenarios) return <div className="p-8 text-center text-[var(--text-muted)]">Loading dashboard...</div>;
   if (!dashboard) return null;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Control Tower Overview</h1>
-        <p className="text-muted-foreground mt-1">Real-time status of agentic onboarding operations.</p>
-      </div>
+      <PageHeader 
+        title="Control Tower Overview" 
+        subtitle="Real-time status of agentic onboarding operations." 
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <KpiCard title="Total Cases" value={dashboard.totalCases} icon={Users} color="text-blue-600" bg="bg-blue-100" />
-        <KpiCard title="Pending Approvals" value={dashboard.pendingApprovals} icon={Clock} color="text-amber-600" bg="bg-amber-100" />
-        <KpiCard title="Hard Blocked" value={dashboard.hardBlocked} icon={AlertCircle} color="text-red-600" bg="bg-red-100" />
-        <KpiCard title="Day-1 at Risk" value={dashboard.day1AtRisk} icon={AlertTriangle} color="text-orange-600" bg="bg-orange-100" />
-        <KpiCard title="Ready for Day 1" value={dashboard.readyCases} icon={CheckCircle2} color="text-emerald-600" bg="bg-emerald-100" />
+        <KpiCard title="Total Cases" value={dashboard.totalCases} icon={Users} color="var(--primary)" />
+        <KpiCard title="Pending Approvals" value={dashboard.pendingApprovals} icon={Clock} color="var(--status-amber)" />
+        <KpiCard title="Hard Blocked" value={dashboard.hardBlocked} icon={AlertCircle} color="var(--status-red)" />
+        <KpiCard title="Day-1 at Risk" value={dashboard.day1AtRisk} icon={AlertTriangle} color="var(--status-amber)" />
+        <KpiCard title="Ready for Day 1" value={dashboard.readyCases} icon={CheckCircle2} color="var(--status-green)" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Recent Agent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {dashboard.recentEvents?.map((event) => (
-                <div key={event.id} className="flex gap-4 p-3 rounded-lg border border-border/50 bg-secondary/30">
-                  <div className="shrink-0 mt-1">
-                    <EngineBadge engine={event.engine} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
+        <Card className="lg:col-span-2 overflow-hidden flex flex-col p-0">
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Recent Agent Activity</h3>
+          </div>
+          <div className="flex-1 flex flex-col">
+            {dashboard.recentEvents?.map((event, i) => (
+              <div 
+                key={event.id} 
+                className="flex items-start transition-colors"
+                style={{ 
+                  padding: '14px 20px', 
+                  borderBottom: i < dashboard.recentEvents!.length - 1 ? '1px solid var(--border)' : 'none',
+                  backgroundColor: 'var(--surface)'
+                }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#fafafa'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--surface)'}
+              >
+                <div className="shrink-0 mt-0.5">
+                  <EngineBadge engine={event.engine} />
+                </div>
+                <div className="min-w-0 flex-1 ml-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }} className="truncate">
+                      {event.title}
+                    </p>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }} className="whitespace-nowrap shrink-0">
+                      {format(new Date(event.createdAt), 'HH:mm:ss')}
+                    </span>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium truncate">{event.title}</p>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">{format(new Date(event.createdAt), 'HH:mm:ss')}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{event.detail}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">{event.agent}</span>
-                      {event.ruleRef && <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">{event.ruleRef}</span>}
-                    </div>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }} className="line-clamp-2">
+                    {event.detail}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span style={{ fontSize: '11px', backgroundColor: '#f3f4f6', color: 'var(--text-muted)', padding: '2px 6px', borderRadius: '999px' }}>
+                      {event.agent}
+                    </span>
+                    {event.ruleRef && (
+                      <span style={{ fontSize: '11px', backgroundColor: '#f3f4f6', color: 'var(--text-muted)', padding: '2px 6px', borderRadius: '999px' }}>
+                        {event.ruleRef}
+                      </span>
+                    )}
                   </div>
                 </div>
-              ))}
-              {!dashboard.recentEvents?.length && (
-                <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
-              )}
-            </div>
-          </CardContent>
+              </div>
+            ))}
+            {!dashboard.recentEvents?.length && (
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '20px', textAlign: 'center' }}>No recent activity</p>
+            )}
+          </div>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Demo Scenarios</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Demo Scenarios</h3>
+          </div>
+          <CardContent className="space-y-4 pt-4">
             {scenarios?.map(s => (
-              <div key={s.key} className="p-4 rounded-lg border bg-card flex flex-col gap-3">
+              <div key={s.key} className="p-4 rounded-lg border bg-[var(--surface-alt)] flex flex-col gap-3">
                 <div>
-                  <h4 className="font-semibold text-sm">{s.title}</h4>
-                  <p className="text-xs text-muted-foreground mt-1">{s.description}</p>
+                  <h4 className="font-semibold text-[13px]">{s.title}</h4>
+                  <p className="text-[12px] text-[var(--text-secondary)] mt-1">{s.description}</p>
                 </div>
-                <div className="bg-secondary/50 rounded p-2 text-xs font-mono text-muted-foreground">
+                <div className="bg-white border rounded p-2 text-[11px] font-mono text-[var(--text-muted)]">
                   Expected: {s.expectedBehaviour}
                 </div>
                 <Button size="sm" onClick={() => handleRun(s.key)} disabled={runScenario.isPending} className="w-full gap-2">
@@ -101,18 +121,19 @@ export function DashboardPage() {
   );
 }
 
-function KpiCard({ title, value, icon: Icon, color, bg }: any) {
+function KpiCard({ title, value, icon: Icon, color }: any) {
   return (
-    <Card>
-      <CardContent className="p-5 flex items-center gap-4">
-        <div className={cn("w-10 h-10 rounded-full flex items-center justify-center shrink-0", bg, color)}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-2xl font-bold">{value}</p>
-        </div>
-      </CardContent>
+    <Card 
+      style={{ padding: '20px 24px', height: '96px', transition: 'all 150ms ease' }} 
+      className="flex flex-col justify-between group hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-md)]"
+    >
+      <div className="flex items-center gap-2">
+        <Icon style={{ width: '24px', height: '24px', color }} />
+        <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>{title}</span>
+      </div>
+      <div className="flex items-end justify-between">
+        <span style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{value}</span>
+      </div>
     </Card>
   );
 }

@@ -1,0 +1,304 @@
+Perform a global UI/UX overhaul across every page of the Agentic HRO Platform 
+app. Do NOT change any data, logic, routing, or functionality. 
+Only fix visual design, spacing, typography, and consistency.
+
+═══════════════════════════════
+1. DESIGN TOKENS — Apply globally
+═══════════════════════════════
+
+Define and apply these CSS variables across the entire app:
+
+Colors:
+  --primary:        #4f46e5   (indigo-600)
+  --primary-dark:   #3730a3   (indigo-800)
+  --primary-light:  #e0e7ff   (indigo-100)
+  --surface:        #ffffff
+  --surface-alt:    #f8f7ff   (page background — very light indigo tint)
+  --border:         #e5e7eb
+  --border-strong:  #c7d2fe
+  --text-primary:   #0f0c29
+  --text-secondary: #6b7280
+  --text-muted:     #9ca3af
+
+Status colors (use ONLY these — no random colors):
+  --status-green:   #059669  (active, complete, approved)
+  --status-amber:   #d97706  (pending, in-progress, at risk)
+  --status-red:     #dc2626  (blocked, rejected, breached)
+  --status-blue:    #2563eb  (info, review)
+  --status-gray:    #6b7280  (idle, neutral)
+
+Typography:
+  Font: Inter or existing font stack
+  --text-xs:   11px  line-height 1.4
+  --text-sm:   13px  line-height 1.5
+  --text-base: 14px  line-height 1.6
+  --text-lg:   16px  line-height 1.6
+  --text-xl:   20px  line-height 1.4
+  --text-2xl:  24px  line-height 1.3
+  --text-3xl:  30px  line-height 1.2
+
+Spacing:
+  --space-xs:  4px
+  --space-sm:  8px
+  --space-md:  16px
+  --space-lg:  24px
+  --space-xl:  32px
+  --space-2xl: 48px
+
+Radius:
+  --radius-sm:  6px
+  --radius-md:  10px
+  --radius-lg:  14px
+  --radius-xl:  20px
+
+Shadows:
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)
+  --shadow-md:  0 4px 12px rgba(79,70,229,0.08), 0 2px 4px rgba(0,0,0,0.04)
+  --shadow-lg:  0 8px 24px rgba(79,70,229,0.12), 0 4px 8px rgba(0,0,0,0.06)
+
+═══════════════════════════════
+2. SIDEBAR — Fix globally
+═══════════════════════════════
+
+- Width: 240px fixed
+- Background: #ffffff
+- Right border: 1px solid var(--border)
+- No shadow
+
+Wordmark at top:
+  - Icon + "Agentic HRO" bold 16px var(--primary) on one line
+  - "Platform" on next line, 11px var(--text-muted) uppercase tracking-widest
+  - Padding: 20px 20px 16px
+  - Bottom border: 1px solid var(--border)
+
+Nav items:
+  - Height: 40px per item
+  - Padding: 0 16px
+  - Icon size: 16px, color: var(--text-muted) when inactive
+  - Text: 14px var(--text-secondary) when inactive
+  - Active state:
+      background: var(--primary-light)
+      text: var(--primary) font-weight 500
+      icon: var(--primary)
+      left border: 3px solid var(--primary)
+      border-radius: 0 8px 8px 0 on the right
+  - Hover: background #f5f3ff, text var(--primary)
+  - Gap between icon and text: 10px
+  - Section spacing: 4px between items
+
+Bottom user block:
+  - Avatar: 32px circle, indigo background, white initials, 13px
+  - Name: 13px var(--text-primary) font-weight 500
+  - Role: badge — small pill, var(--primary-light) background, 
+    var(--primary) text, 11px, 4px 8px padding
+  - Logout icon: 16px var(--text-muted) on the right
+  - Top border: 1px solid var(--border)
+  - Padding: 16px 20px
+
+═══════════════════════════════
+3. TOP BAR — Add globally to all pages
+═══════════════════════════════
+
+Add a sticky top bar above every page's content (below any existing header):
+- Height: 56px
+- Background: white
+- Bottom border: 1px solid var(--border)
+- Contents (left to right):
+    LEFT: Page breadcrumb — "Agentic HRO Platform / [Page Name]" 
+          in 12px var(--text-muted), with "/" separator
+    CENTER: Global search bar — 320px wide, 36px height, 
+            placeholder "Search cases, workers, events...",
+            border: 1px solid var(--border), radius: var(--radius-md)
+            focus: border var(--primary), shadow var(--shadow-sm)
+    RIGHT: 
+      - Bell icon (notification) with amber dot if alerts exist
+      - Avatar circle (same as sidebar) 28px
+      - Role badge pill
+
+═══════════════════════════════
+4. PAGE HEADERS — Fix globally
+═══════════════════════════════
+
+Every page header (Dashboard, Cases, Approvals, etc.):
+- Title: 24px (NOT 36px), font-weight 600, var(--text-primary)
+- Subtitle: 13px var(--text-muted), margin-top 2px
+- Padding: 24px 32px 20px
+- Bottom border: 1px solid var(--border)
+- Any action buttons (like "+ New Case Trigger") aligned right:
+    height 36px, padding 0 16px, font-size 13px, font-weight 500
+    background var(--primary), color white, radius var(--radius-md)
+    hover: var(--primary-dark)
+
+═══════════════════════════════
+5. DASHBOARD — Metric cards fix
+═══════════════════════════════
+
+Metric cards row:
+- Each card: white background, border 1px solid var(--border), 
+  radius var(--radius-lg), shadow var(--shadow-sm)
+- Padding: 20px 24px
+- Height: 96px
+- Hover: shadow var(--shadow-md), border var(--border-strong)
+
+Card anatomy:
+  TOP ROW: Icon (24px, colored per status) + Label (12px uppercase 
+           tracking-wide var(--text-muted)) aligned left
+  BOTTOM ROW: Large number (32px font-weight 700 var(--text-primary)) 
+              left, small trend text (11px) right-aligned bottom
+
+Icon colors per card:
+  Total Cases → var(--primary)
+  Pending Approvals → var(--status-amber)
+  Hard Blocked → var(--status-red)
+  Day-1 at Risk → var(--status-amber)
+  Ready for Day 1 → var(--status-green)
+
+═══════════════════════════════
+6. RECENT AGENT ACTIVITY — Fix
+═══════════════════════════════
+
+Activity feed panel:
+- White background, border 1px solid var(--border), 
+  radius var(--radius-lg), shadow var(--shadow-sm)
+- Header: "Recent Agent Activity" 14px font-weight 600, 
+  padding 16px 20px, bottom border 1px solid var(--border)
+
+Each activity row:
+- Padding: 14px 20px
+- Bottom border: 1px solid var(--border) (except last)
+- Hover: background #fafafa
+- Left: type badge (SYS / AI / ORCH / RULES) as colored pill:
+    SYS   → gray bg + gray text
+    AI    → indigo-100 bg + indigo text
+    ORCH  → purple-100 bg + purple text
+    RULES → amber-100 bg + amber text
+  Badge: 10px uppercase, font-weight 600, 6px 8px padding, radius 4px
+- Title: 13px font-weight 500 var(--text-primary), margin-left 10px
+- Description: 12px var(--text-secondary), margin-top 2px
+- Tags: 11px pill, #f3f4f6 bg, var(--text-muted), 2px 6px
+- Timestamp: 11px var(--text-muted) right-aligned
+
+═══════════════════════════════
+7. CASES TABLE — Fix
+═══════════════════════════════
+
+Table container:
+- White bg, border 1px solid var(--border), radius var(--radius-lg), 
+  shadow var(--shadow-sm), overflow hidden
+
+Column headers:
+- Background: #f9fafb
+- Text: 11px uppercase tracking-wider var(--text-muted) font-weight 600
+- Padding: 10px 16px
+- Bottom border: 2px solid var(--border)
+
+Table rows:
+- Padding: 14px 16px
+- Border-bottom: 1px solid var(--border)
+- Hover: background #f5f3ff (light indigo tint)
+- Cursor: pointer
+
+Worker cell:
+- Name: 14px font-weight 500 var(--text-primary)
+- Email: 12px var(--text-muted) margin-top 2px
+- Type badge + level badge on same row, margin-top 4px
+  contractor → blue-100/blue text
+  external-fte → purple-100/purple text
+  standard → green-100/green text
+  elevated → amber-100/amber text
+
+Stage pill (fix inconsistency):
+  PREBOARDING → blue-100 bg, blue-700 text
+  IN-PROGRESS → amber-100 bg, amber-700 text
+  DAY1-REVIEW → purple-100 bg, purple-700 text
+  COMPLETE    → green-100 bg, green-700 text
+  All pills: 11px uppercase font-weight 600, 4px 10px, radius 20px
+
+Orchestration badge:
+  IDLE    → gray-100 bg, gray-500 text
+  RUNNING → green-100 bg, green-600 text + pulsing green dot
+  All: 11px font-weight 600, same pill style
+
+"View Details" link:
+- 12px var(--primary) font-weight 500
+- Hover: underline
+
+═══════════════════════════════
+8. APPROVALS — Fix
+═══════════════════════════════
+
+Page layout:
+- Content area background: var(--surface-alt)
+- Cards spaced with 16px gap
+
+Each approval card:
+- White bg, border 1px solid var(--border), radius var(--radius-lg), 
+  shadow var(--shadow-sm)
+- Padding: 20px 24px
+- Hover: shadow var(--shadow-md)
+
+Card header row:
+- Case number: 12px font-weight 600 var(--primary) 
+  in a pill (primary-light bg)
+- Dot separator: var(--text-muted)
+- Type badge (CHANNEL etc): gray-100 bg, 11px uppercase font-weight 600
+- "APPROVE BEFORE ACT" badge: 
+    amber-100 bg, amber-700 text, 11px uppercase font-weight 600
+- Rule tag: 11px var(--text-muted)
+- Timestamp: 11px var(--text-muted) right-aligned
+
+Card title:
+- 15px font-weight 600 var(--text-primary), margin-top 12px
+
+Card body (message excerpt):
+- Background: #f8f7ff
+- Border: 1px solid var(--border-strong)
+- Border-left: 3px solid var(--primary)
+- Radius: var(--radius-md)
+- Padding: 12px 16px
+- Text: 13px var(--text-secondary) line-height 1.6
+
+Decision section:
+- Top border: 1px solid var(--border), margin-top 16px, padding-top 16px
+- Comment label: 11px uppercase tracking-wider var(--text-muted)
+- Textarea: full width, 36px min-height, border var(--border), 
+  radius var(--radius-md), 13px
+- "Decision will be recorded as [Role]" — 12px var(--text-muted) italic
+
+Action buttons:
+- "Reject Action": 
+    border 1px solid var(--status-red), color var(--status-red), 
+    bg white, hover: bg red-50
+    height 36px, radius var(--radius-md), 13px font-weight 500
+- "Approve Action": 
+    bg var(--status-green), color white, 
+    hover: bg green-700
+    height 36px, radius var(--radius-md), 13px font-weight 500
+
+Card footer:
+- "Open Full Case Context →": 12px var(--primary) font-weight 500
+- ID tag: 11px var(--text-muted) right-aligned
+
+═══════════════════════════════
+9. GLOBAL MICRO-DETAILS
+═══════════════════════════════
+
+- Page background everywhere: var(--surface-alt) #f8f7ff
+- Main content area padding: 0 32px 32px
+- All white panels/cards: shadow var(--shadow-sm), 
+  radius var(--radius-lg), border 1px solid var(--border)
+- All buttons: no uppercase, sentence case, font-weight 500
+- All form inputs: height 36px, border var(--border), 
+  radius var(--radius-md), 13px, focus ring var(--primary)
+- Scrollbars: thin, indigo tint (webkit-scrollbar width 4px)
+- No raw black (#000) anywhere — use var(--text-primary) #0f0c29
+- Transitions: all interactive elements 150ms ease on 
+  background, border, shadow, color
+
+═══════════════════════════════
+10. DO NOT CHANGE
+═══════════════════════════════
+- All data, numbers, case IDs, names
+- All routing and navigation
+- All agent logic and demo scenario functionality
+- Login page (already redesigned separately)

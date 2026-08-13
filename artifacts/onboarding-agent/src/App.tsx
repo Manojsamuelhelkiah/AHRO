@@ -101,7 +101,7 @@ function AuthScreenShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4 py-10 gap-8">
       <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-primary">
         <Server className="h-6 w-6" />
-        <span>Agentic HRO Platform</span>
+        <span>Agentic HRO Suite</span>
       </div>
       {children}
     </div>

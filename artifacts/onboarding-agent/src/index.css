@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @layer theme, base, clerk, components, utilities;
 @import 'tailwindcss';
@@ -7,71 +8,117 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-background: var(--surface-alt);
+  --color-foreground: var(--text-primary);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text-primary);
+  --color-primary: var(--primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--surface-alt);
+  --color-secondary-foreground: var(--text-secondary);
+  --color-muted: #f3f4f6;
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--primary-light);
+  --color-accent-foreground: var(--primary);
+  --color-destructive: var(--status-red);
+  --color-destructive-foreground: #ffffff;
 
-  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-sans: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  --radius: 0.5rem;
+  --radius: var(--radius-md);
+
+  --text-xs: 11px;
+  --text-xs--line-height: 1.4;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.5;
+  --text-base: 14px;
+  --text-base--line-height: 1.6;
+  --text-lg: 16px;
+  --text-lg--line-height: 1.6;
+  --text-xl: 20px;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 1.2;
 }
 
 :root {
-  --background: 220 33% 98%;
-  --foreground: 224 71% 4%;
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
-  --ring: 243 75% 59%;
-  --card: 0 0% 100%;
-  --card-foreground: 224 71% 4%;
-  --primary: 243 75% 59%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 220 14% 20%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 8% 46%;
-  --accent: 220 14% 96%;
-  --accent-foreground: 220 14% 20%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  --radius: 0.5rem;
+  --primary:        #4f46e5;
+  --primary-dark:   #3730a3;
+  --primary-light:  #e0e7ff;
+  --surface:        #ffffff;
+  --surface-alt:    #f8f7ff;
+  --border:         #e5e7eb;
+  --border-strong:  #c7d2fe;
+  --text-primary:   #0f0c29;
+  --text-secondary: #6b7280;
+  --text-muted:     #9ca3af;
+  
+  --status-green:   #059669;
+  --status-amber:   #d97706;
+  --status-red:     #dc2626;
+  --status-blue:    #2563eb;
+  --status-gray:    #6b7280;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-lg:   16px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  30px;
+
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-2xl: 48px;
+
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(79,70,229,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg:  0 8px 24px rgba(79,70,229,0.12), 0 4px 8px rgba(0,0,0,0.06);
 }
 
 .dark {
-  --background: 224 71% 4%;
-  --foreground: 210 40% 98%;
-  --border: 216 34% 17%;
-  --input: 216 34% 17%;
-  --ring: 243 75% 59%;
-  --card: 224 71% 4%;
-  --card-foreground: 210 40% 98%;
-  --primary: 243 75% 59%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 216 34% 17%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 216 34% 17%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 216 34% 17%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  /* Fallback */
 }
 
 @layer base {
   * { @apply border-border; }
-  body { @apply font-sans antialiased bg-background text-foreground; }
+  body { 
+    @apply font-sans antialiased bg-background text-foreground; 
+    background-color: var(--surface-alt);
+    color: var(--text-primary);
+  }
+  
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--primary-light);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+  }
+
+  button, a, input, select, textarea, div {
+    transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
 }

@@ -79,16 +79,24 @@ export function CaseDetailPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 rounded-xl border shadow-sm">
+      <div 
+        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+        style={{ 
+          padding: '24px 32px 20px', 
+          borderBottom: '1px solid var(--border)', 
+          margin: '0 -32px 24px -32px',
+          backgroundColor: '#ffffff'
+        }}
+      >
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{c.workerName}</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2, margin: 0 }}>{c.workerName}</h1>
             <Badge variant="outline">{c.hireType}</Badge>
             {c.urgency !== 'normal' && <Badge variant="destructive">{c.urgency}</Badge>}
             {isLive && <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 shadow-sm"><span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse" /> LIVE</span>}
           </div>
-          <p className="text-muted-foreground mt-1 text-sm font-medium">{c.role} • {c.geography} • Joining {format(new Date(c.joiningDate), 'MMM d, yyyy')}</p>
-          <div className="flex gap-4 mt-3 text-xs text-muted-foreground bg-secondary/50 inline-flex p-2 rounded-md">
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 500 }}>{c.role} • {c.geography} • Joining {format(new Date(c.joiningDate), 'MMM d, yyyy')}</p>
+          <div className="flex gap-4 mt-3" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
             <span><strong>Email:</strong> {c.workerEmail}</span>
             {c.workerPhone && <span><strong>Phone:</strong> {c.workerPhone}</span>}
             <span className="flex items-center gap-1">
@@ -101,9 +109,9 @@ export function CaseDetailPage() {
             <span><strong>Recruiter:</strong> {c.recruiterName}</span>
           </div>
         </div>
-        <div className="text-right flex flex-col items-end gap-2">
-          <div>
-            <div className="text-xs font-bold text-muted-foreground mb-1 tracking-wider">STAGE: {c.lifecycleStage.toUpperCase()}</div>
+        <div className="text-right flex flex-col items-end gap-3">
+          <div className="flex items-center gap-3">
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>STAGE: {c.lifecycleStage.toUpperCase()}</div>
             <StatusBadge status={c.orchestrationStatus} />
           </div>
           <VoiceCallButtons caseId={caseId} hasPhone={!!c.workerPhone} />
@@ -421,12 +429,15 @@ function ReplyComposer({ caseId }: { caseId: number }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    'not-started': 'bg-slate-100 text-slate-700 border-slate-200',
-    'running': 'bg-blue-100 text-blue-700 border-blue-200 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse',
-    'waiting-approval': 'bg-amber-100 text-amber-700 border-amber-200 shadow-[0_0_10px_rgba(245,158,11,0.2)]',
-    'blocked': 'bg-red-100 text-red-700 border-red-200',
-    'completed': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  };
-  return <span className={cn("px-4 py-1.5 rounded-md text-sm font-bold border tracking-wide", colors[status] || 'bg-gray-100')}>{status.toUpperCase()}</span>;
+  const isRunning = status === 'running' || status === 'waiting-approval';
+  const style = isRunning
+    ? { backgroundColor: '#d1fae5', color: '#059669' } // green-100, green-600
+    : { backgroundColor: '#f3f4f6', color: '#6b7280' }; // gray-100, gray-500
+
+  return (
+    <span style={{ ...style, fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+      {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse"></span>}
+      {status === 'not-started' ? 'IDLE' : status}
+    </span>
+  );
 }

@@ -12,7 +12,7 @@ import {
   type DemoPersona,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, Button, Badge, Label, cn } from '@/components/ui-shared';
+import { Card, CardContent, Button, Badge, Label, cn, PageHeader } from '@/components/ui-shared';
 import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall } from 'lucide-react';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -458,13 +458,13 @@ export function SettingsPage() {
         : 'Not configured';
 
   return (
-    <div className="space-y-8 max-w-3xl mx-auto pb-12">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-1">Application-level configuration for the control tower.</p>
-      </div>
+    <div className="space-y-6 max-w-3xl mx-auto pb-12">
+      <PageHeader 
+        title="Settings" 
+        subtitle="Application-level configuration for the control tower." 
+      />
 
-      <Card className="shadow-sm">
+      <Card className="shadow-sm mt-2">
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-5">
             <div className="flex items-center gap-4">

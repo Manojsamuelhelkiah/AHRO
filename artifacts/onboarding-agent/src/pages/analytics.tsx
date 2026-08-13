@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGetOnboardingAnalytics } from '@workspace/api-client-react';
-import { Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui-shared';
+import { Card, CardHeader, CardTitle, CardContent, Badge, PageHeader } from '@/components/ui-shared';
 import { BrainCircuit, ShieldAlert, TrendingUp, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -11,13 +11,13 @@ export function AnalyticsPage() {
   if (!analytics) return null;
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Data & Analytics Agent</h1>
-        <p className="text-muted-foreground mt-1">Pattern detection and predictive readiness insights for onboarding cohorts.</p>
-      </div>
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+      <PageHeader 
+        title="Data & Analytics Agent" 
+        subtitle="Pattern detection and predictive readiness insights for onboarding cohorts." 
+      />
 
-      <Card className="bg-indigo-50/80 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900/50 shadow-sm">
+      <Card className="bg-[var(--primary-light)] border-[var(--border-strong)] shadow-sm">
         <CardContent className="p-6 flex flex-col md:flex-row gap-5 items-start">
           <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl shrink-0">
             <BrainCircuit className="w-8 h-8 text-indigo-700 dark:text-indigo-400" />

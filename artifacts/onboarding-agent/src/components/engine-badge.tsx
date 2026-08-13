@@ -1,51 +1,51 @@
 import React from 'react';
 import { cn } from './ui-shared';
-import { Cpu, BrainCircuit, Network, User, Settings, Database } from 'lucide-react';
 
 export function EngineBadge({ engine, className }: { engine: string, className?: string }) {
-  let color = '';
-  let Icon = Cpu;
+  let style = {};
   let label = engine.toUpperCase();
 
   switch (engine.toLowerCase()) {
+    case 'system':
+      style = { backgroundColor: '#f3f4f6', color: '#6b7280' };
+      label = 'SYS';
+      break;
     case 'llm':
-      color = 'bg-purple-100 text-purple-700 border-purple-200';
-      Icon = BrainCircuit;
+      style = { backgroundColor: 'var(--primary-light)', color: 'var(--primary)' };
       label = 'AI';
       break;
+    case 'orchestrator':
+      style = { backgroundColor: '#f3e8ff', color: '#7e22ce' }; // purple-100, purple-700
+      label = 'ORCH';
+      break;
     case 'rules':
-    case 'ldm-legacy':
-      color = 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      Icon = Cpu;
+      style = { backgroundColor: '#fef3c7', color: '#b45309' }; // amber-100, amber-700
       label = 'RULES';
       break;
     case 'ldm':
-      color = 'bg-cyan-100 text-cyan-700 border-cyan-200';
-      Icon = Database;
+      style = { backgroundColor: '#cffafe', color: '#0e7490' }; // cyan-100, cyan-700
       label = 'LDM';
       break;
     case 'human':
-      color = 'bg-blue-100 text-blue-700 border-blue-200';
-      Icon = User;
+      style = { backgroundColor: '#dbeafe', color: '#1d4ed8' }; // blue-100, blue-700
       label = 'HUMAN';
       break;
-    case 'orchestrator':
-      color = 'bg-amber-100 text-amber-700 border-amber-200';
-      Icon = Network;
-      label = 'ORCH';
-      break;
-    case 'system':
-      color = 'bg-slate-100 text-slate-700 border-slate-200';
-      Icon = Settings;
-      label = 'SYS';
-      break;
     default:
-      color = 'bg-gray-100 text-gray-700 border-gray-200';
+      style = { backgroundColor: '#f3f4f6', color: '#6b7280' };
   }
 
   return (
-    <div className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider border", color, className)}>
-      <Icon className="h-3 w-3" />
+    <div 
+      className={cn("inline-flex items-center justify-center font-semibold tracking-wider", className)}
+      style={{
+        ...style,
+        fontSize: '10px',
+        padding: '6px 8px',
+        borderRadius: '4px',
+        textTransform: 'uppercase',
+        lineHeight: 1
+      }}
+    >
       {label}
     </div>
   );
@@ -54,19 +54,38 @@ export function EngineBadge({ engine, className }: { engine: string, className?:
 export function HitlBadge({ pattern, className }: { pattern?: string, className?: string }) {
   if (!pattern) return null;
   
-  let color = '';
   let label = pattern.replace(/-/g, ' ').toUpperCase();
+  let style = {};
 
   switch (pattern) {
-    case 'notify-only': color = 'bg-slate-100 text-slate-600 border border-slate-200'; break;
-    case 'approve-before-act': color = 'bg-amber-100 text-amber-700 border border-amber-200'; break;
-    case 'act-then-review': color = 'bg-blue-100 text-blue-700 border border-blue-200'; break;
-    case 'hard-block': color = 'bg-red-100 text-red-700 border border-red-200'; break;
-    default: color = 'bg-gray-100 text-gray-600 border border-gray-200';
+    case 'notify-only': 
+      style = { backgroundColor: '#f3f4f6', color: '#4b5563' }; 
+      break;
+    case 'approve-before-act': 
+      style = { backgroundColor: '#fef3c7', color: '#b45309' }; 
+      break;
+    case 'act-then-review': 
+      style = { backgroundColor: '#dbeafe', color: '#1d4ed8' }; 
+      break;
+    case 'hard-block': 
+      style = { backgroundColor: '#fee2e2', color: '#b91c1c' }; 
+      break;
+    default: 
+      style = { backgroundColor: '#f3f4f6', color: '#4b5563' };
   }
 
   return (
-    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider", color, className)}>
+    <span 
+      className={cn("inline-flex items-center font-bold tracking-wider", className)}
+      style={{
+        ...style,
+        fontSize: '10px',
+        padding: '6px 8px',
+        borderRadius: '4px',
+        textTransform: 'uppercase',
+        lineHeight: 1
+      }}
+    >
       {label}
     </span>
   );

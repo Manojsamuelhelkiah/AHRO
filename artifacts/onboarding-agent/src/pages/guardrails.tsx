@@ -8,7 +8,7 @@ import {
   type Guardrail,
   type SecurityDrillResult,
 } from '@workspace/api-client-react';
-import { Card, Button, Badge, cn } from '@/components/ui-shared';
+import { Card, Button, Badge, cn, PageHeader } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Link } from 'wouter';
@@ -45,17 +45,10 @@ export function GuardrailsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Shield className="w-7 h-7 text-primary" /> Guardrails
-          </h1>
-          <p className="text-muted-foreground mt-1 max-w-2xl">
-            Every safety control enforced on AI email, WhatsApp and voice communications — with live
-            evidence of each time one intervened. Nothing here is aspirational: each control links to
-            where it runs and how it is tested.
-          </p>
-        </div>
+      <PageHeader 
+        title="Guardrails" 
+        subtitle="Every safety control enforced on AI communications — with live evidence of each intervention."
+      >
         <Button
           onClick={() =>
             drill.mutate(undefined as never, {
@@ -71,7 +64,7 @@ export function GuardrailsPage() {
           <Swords className="w-4 h-4" />
           {drill.isPending ? 'Running attacks…' : 'Run security drill'}
         </Button>
-      </div>
+      </PageHeader>
 
       {drillResult && <DrillResultCard result={drillResult} onDismiss={() => setDrillResult(null)} />}
       {drill.isError && (

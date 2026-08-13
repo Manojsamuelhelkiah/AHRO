@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useListOnboardingConnectors, useUpdateOnboardingConnector, useGetOnboardingChannels, useTestOnboardingChannel, useGetOnboardingSystemWatcher, useGetOnboardingEmailWatch, useSimulateOnboardingWatchEmail, getListOnboardingConnectorsQueryKey, getGetOnboardingChannelsQueryKey, getGetOnboardingSystemWatcherQueryKey, getGetOnboardingEmailWatchQueryKey } from '@workspace/api-client-react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn } from '@/components/ui-shared';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn, PageHeader } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle, Eye, Webhook, RefreshCw, Clock, Inbox, FlaskConical } from 'lucide-react';
 import { format } from 'date-fns';
@@ -40,14 +40,14 @@ export function SystemsPage() {
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Systems & Integrations</h1>
-        <p className="text-muted-foreground mt-1">Manage system-of-record adapters and outbound communication channels.</p>
-      </div>
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+      <PageHeader 
+        title="Systems & Integrations" 
+        subtitle="Manage system-of-record adapters and outbound communication channels." 
+      />
 
-      <div className="space-y-5">
-        <div className="border-b pb-2">
+      <div className="space-y-5 mt-2">
+        <div className="border-b pb-2" style={{ borderColor: 'var(--border)' }}>
           <h2 className="text-xl font-semibold flex items-center gap-2"><Server className="w-5 h-5 text-primary" /> System Adapters</h2>
           <p className="text-sm text-muted-foreground">Source systems that agents read from and write to via MCP.</p>
         </div>
