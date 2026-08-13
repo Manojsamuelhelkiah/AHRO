@@ -44,6 +44,7 @@ import {
   isValidEmail,
   HR_ALERT_EMAIL_KEY,
 } from "../lib/onboarding/settings";
+import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas } from "../lib/onboarding/demo-volunteers";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { listDocuments } from "../lib/onboarding/documents";
 import {
@@ -851,6 +852,34 @@ router.put("/onboarding/settings", async (req, res, next) => {
       await setSetting(HR_ALERT_EMAIL_KEY, raw);
     }
     res.json(await settingsPayload());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* --------------------------- demo volunteers --------------------------- */
+
+router.get("/onboarding/demo/volunteers", async (_req, res, next) => {
+  try {
+    res.json({ volunteers: await loadVolunteers(), personas: listPersonas() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put("/onboarding/demo/volunteers", async (req, res, next) => {
+  try {
+    const raw = Array.isArray(req.body?.volunteers) ? req.body.volunteers : [];
+    const volunteers = await saveVolunteers(raw);
+    res.json({ volunteers });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/demo/volunteers/seed", async (_req, res, next) => {
+  try {
+    res.json({ results: await seedVolunteerCases() });
   } catch (err) {
     next(err);
   }

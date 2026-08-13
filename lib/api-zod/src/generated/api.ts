@@ -1578,6 +1578,91 @@ export const ListOnboardingCaseDocumentsResponse = zod.array(ListOnboardingCaseD
 
 
 /**
+ * @summary Admin list of demo volunteers (real contacts used for live demos)
+ */
+export const GetDemoVolunteersResponse = zod.object({
+  "volunteers": zod.array(zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().describe('International format (+919876543210) or empty for email-only'),
+  "channelPreference": zod.string().describe('email | whatsapp | both'),
+  "persona": zod.string().describe('Scenario key the volunteer role-plays, or \"custom\"'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string(),
+  "hireType": zod.string(),
+  "workerCategory": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('YYYY-MM-DD'),
+  "notes": zod.string()
+}).describe('One demo participant; email\/phone become live-delivery targets when valid')),
+  "personas": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "expectedBehaviour": zod.string(),
+  "volunteerBrief": zod.string().describe('What the volunteer should do and which messages to expect')
+}).describe('A demo role a volunteer can play, with a plain-language briefing'))
+})
+
+
+/**
+ * @summary Replace the demo volunteer list and refresh the live-delivery allowlist
+ */
+export const UpdateDemoVolunteersBody = zod.object({
+  "volunteers": zod.array(zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().describe('International format (+919876543210) or empty for email-only'),
+  "channelPreference": zod.string().describe('email | whatsapp | both'),
+  "persona": zod.string().describe('Scenario key the volunteer role-plays, or \"custom\"'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string(),
+  "hireType": zod.string(),
+  "workerCategory": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('YYYY-MM-DD'),
+  "notes": zod.string()
+}).describe('One demo participant; email\/phone become live-delivery targets when valid'))
+})
+
+export const UpdateDemoVolunteersResponse = zod.object({
+  "volunteers": zod.array(zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().describe('International format (+919876543210) or empty for email-only'),
+  "channelPreference": zod.string().describe('email | whatsapp | both'),
+  "persona": zod.string().describe('Scenario key the volunteer role-plays, or \"custom\"'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string(),
+  "hireType": zod.string(),
+  "workerCategory": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('YYYY-MM-DD'),
+  "notes": zod.string()
+}).describe('One demo participant; email\/phone become live-delivery targets when valid'))
+})
+
+
+/**
+ * @summary Create a full onboarding case for each valid volunteer (skips existing)
+ */
+export const SeedDemoVolunteersResponse = zod.object({
+  "results": zod.array(zod.object({
+  "name": zod.string(),
+  "status": zod.enum(['seeded', 'skipped', 'invalid']),
+  "note": zod.string(),
+  "caseId": zod.number().nullable()
+}))
+})
+
+
+/**
  * @summary Place (or simulate) an outbound AI voice call for a case
  */
 export const StartOnboardingVoiceCallParams = zod.object({

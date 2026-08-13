@@ -28,12 +28,14 @@ import type {
   CustomIntent,
   CustomIntentInput,
   CustomIntentUpdate,
+  DemoVolunteerList,
   DistributionProfile,
   ErrorMessage,
   ExportScenarioWorkbookLinkParams,
   FlowClass,
   FlowOverride,
   FlowOverrideInput,
+  GetDemoVolunteers200,
   GlobalAssumption,
   HealthStatus,
   ImportScenarioWorkbookBody,
@@ -69,6 +71,7 @@ import type {
   Scenario,
   ScenarioInput,
   ScenarioUpdate,
+  SeedDemoVolunteers200,
   SensitivityRequest,
   SensitivityResult,
   StartOnboardingVoiceCall200,
@@ -3391,6 +3394,225 @@ export function useListOnboardingCaseDocuments<TData = Awaited<ReturnType<typeof
 
 
 
+
+export const getGetDemoVolunteersUrl = () => {
+
+
+
+
+  return `/api/onboarding/demo/volunteers`
+}
+
+/**
+ * @summary Admin list of demo volunteers (real contacts used for live demos)
+ */
+export const getDemoVolunteers = async ( options?: RequestInit): Promise<GetDemoVolunteers200> => {
+
+  return customFetch<GetDemoVolunteers200>(getGetDemoVolunteersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDemoVolunteersQueryKey = () => {
+    return [
+    `/api/onboarding/demo/volunteers`
+    ] as const;
+    }
+
+
+export const getGetDemoVolunteersQueryOptions = <TData = Awaited<ReturnType<typeof getDemoVolunteers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDemoVolunteers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDemoVolunteersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDemoVolunteers>>> = ({ signal }) => getDemoVolunteers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDemoVolunteers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDemoVolunteersQueryResult = NonNullable<Awaited<ReturnType<typeof getDemoVolunteers>>>
+export type GetDemoVolunteersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin list of demo volunteers (real contacts used for live demos)
+ */
+
+export function useGetDemoVolunteers<TData = Awaited<ReturnType<typeof getDemoVolunteers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDemoVolunteers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDemoVolunteersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateDemoVolunteersUrl = () => {
+
+
+
+
+  return `/api/onboarding/demo/volunteers`
+}
+
+/**
+ * @summary Replace the demo volunteer list and refresh the live-delivery allowlist
+ */
+export const updateDemoVolunteers = async (demoVolunteerList: DemoVolunteerList, options?: RequestInit): Promise<DemoVolunteerList> => {
+
+  return customFetch<DemoVolunteerList>(getUpdateDemoVolunteersUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(demoVolunteerList)
+  }
+);}
+
+
+
+
+
+export const getUpdateDemoVolunteersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDemoVolunteers>>, TError,{data: BodyType<DemoVolunteerList>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDemoVolunteers>>, TError,{data: BodyType<DemoVolunteerList>}, TContext> => {
+
+const mutationKey = ['updateDemoVolunteers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDemoVolunteers>>, {data: BodyType<DemoVolunteerList>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateDemoVolunteers(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDemoVolunteersMutationResult = NonNullable<Awaited<ReturnType<typeof updateDemoVolunteers>>>
+    export type UpdateDemoVolunteersMutationBody = BodyType<DemoVolunteerList>
+    export type UpdateDemoVolunteersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Replace the demo volunteer list and refresh the live-delivery allowlist
+ */
+export const useUpdateDemoVolunteers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDemoVolunteers>>, TError,{data: BodyType<DemoVolunteerList>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDemoVolunteers>>,
+        TError,
+        {data: BodyType<DemoVolunteerList>},
+        TContext
+      > => {
+      return useMutation(getUpdateDemoVolunteersMutationOptions(options));
+    }
+
+export const getSeedDemoVolunteersUrl = () => {
+
+
+
+
+  return `/api/onboarding/demo/volunteers/seed`
+}
+
+/**
+ * @summary Create a full onboarding case for each valid volunteer (skips existing)
+ */
+export const seedDemoVolunteers = async ( options?: RequestInit): Promise<SeedDemoVolunteers200> => {
+
+  return customFetch<SeedDemoVolunteers200>(getSeedDemoVolunteersUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSeedDemoVolunteersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedDemoVolunteers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof seedDemoVolunteers>>, TError,void, TContext> => {
+
+const mutationKey = ['seedDemoVolunteers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof seedDemoVolunteers>>, void> = () => {
+
+
+          return  seedDemoVolunteers(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SeedDemoVolunteersMutationResult = NonNullable<Awaited<ReturnType<typeof seedDemoVolunteers>>>
+
+    export type SeedDemoVolunteersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a full onboarding case for each valid volunteer (skips existing)
+ */
+export const useSeedDemoVolunteers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedDemoVolunteers>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof seedDemoVolunteers>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSeedDemoVolunteersMutationOptions(options));
+    }
 
 export const getStartOnboardingVoiceCallUrl = (id: number,) => {
 

@@ -30,7 +30,7 @@ import {
   timezoneLabelFor,
 } from "./scheduling";
 import { logEvent, createApproval } from "./engine";
-import { maskPhone } from "./channels";
+import { maskPhone, addressAllowed } from "./channels";
 
 export type VoiceScenario = "day-before" | "sla-escalation";
 
@@ -378,12 +378,7 @@ function withinCallRateLimit(): boolean {
 }
 
 function phoneAllowed(phone: string): boolean {
-  const configured = (process.env.ONBOARDING_ALLOWED_RECIPIENTS ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  const normalized = phone.trim().toLowerCase().replace(/^whatsapp:/, "").replace(/[\s-]/g, "");
-  return configured.some((a) => a.replace(/[\s-]/g, "") === normalized);
+  return addressAllowed(phone);
 }
 
 async function voiceFromNumber(): Promise<string | null> {
@@ -442,6 +437,12 @@ export async function startVoiceCall(opts: {
     lastResponse: null,
   };
 
+  try {
+    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    await refreshDemoAllowlist();
+  } catch (err) {
+    console.error("[voice] demo allowlist refresh failed:", err);
+  }
   if (!phoneAllowed(c.workerPhone)) {
     await logEvent(opts.caseId, "channel", "system", "Voice call withheld (allowlist)",
       `A ${label} call was requested, but ${maskPhone(c.workerPhone)} is not on the demo allowlist — no call placed (add the number to ONBOARDING_ALLOWED_RECIPIENTS to enable; trial Twilio also requires the number be verified). Use the simulated call to see the flow.`,

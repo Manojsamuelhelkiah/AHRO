@@ -980,6 +980,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/demo/volunteers:
+    get:
+      operationId: getDemoVolunteers
+      tags: [onboarding]
+      summary: Admin list of demo volunteers (real contacts used for live demos)
+      responses:
+        "200":
+          description: Volunteer list plus available demo personas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  volunteers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DemoVolunteer"
+                  personas:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DemoPersona"
+                required: [volunteers, personas]
+    put:
+      operationId: updateDemoVolunteers
+      tags: [onboarding]
+      summary: Replace the demo volunteer list and refresh the live-delivery allowlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoVolunteerList"
+      responses:
+        "200":
+          description: Saved list (normalized)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoVolunteerList"
+  /onboarding/demo/volunteers/seed:
+    post:
+      operationId: seedDemoVolunteers
+      tags: [onboarding]
+      summary: Create a full onboarding case for each valid volunteer (skips existing)
+      responses:
+        "200":
+          description: Per-volunteer outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        status:
+                          type: string
+                          enum: [seeded, skipped, invalid]
+                        note:
+                          type: string
+                        caseId:
+                          type: ["integer", "null"]
+                      required: [name, status, note, caseId]
+                required: [results]
   /onboarding/cases/{id}/voice-call:
     post:
       operationId: startOnboardingVoiceCall
@@ -2666,6 +2734,67 @@ components:
         - managerName
         - recruiterName
         - joiningDate
+    DemoVolunteer:
+      type: object
+      description: One demo participant; email/phone become live-delivery targets when valid
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          description: International format (+919876543210) or empty for email-only
+        channelPreference:
+          type: string
+          description: email | whatsapp | both
+        persona:
+          type: string
+          description: Scenario key the volunteer role-plays, or "custom"
+        role:
+          type: string
+        department:
+          type: string
+        geography:
+          type: string
+        hireType:
+          type: string
+        workerCategory:
+          type: string
+        managerName:
+          type: string
+        recruiterName:
+          type: string
+        joiningDate:
+          type: string
+          description: YYYY-MM-DD
+        notes:
+          type: string
+      required: [name, email, phone, channelPreference, persona, role, department, geography, hireType, workerCategory, managerName, recruiterName, joiningDate, notes]
+    DemoPersona:
+      type: object
+      description: A demo role a volunteer can play, with a plain-language briefing
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        expectedBehaviour:
+          type: string
+        volunteerBrief:
+          type: string
+          description: What the volunteer should do and which messages to expect
+      required: [key, title, description, expectedBehaviour, volunteerBrief]
+    DemoVolunteerList:
+      type: object
+      properties:
+        volunteers:
+          type: array
+          items:
+            $ref: "#/components/schemas/DemoVolunteer"
+      required: [volunteers]
     OnbDocument:
       type: object
       description: One item of a case's documentation pack (identity/statutory/contract/policy)

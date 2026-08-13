@@ -168,14 +168,35 @@ const MAX_LIVE_SENDS_PER_HOUR = 30;
 let sendWindowStart = Date.now();
 let sendWindowCount = 0;
 
-function recipientAllowed(address: string): boolean {
+/** Admin-managed demo-volunteer addresses (set from the Settings screen). */
+let demoAllowed = new Set<string>();
+
+function normalizeAddress(address: string): string {
+  const base = address.trim().toLowerCase().replace(/^whatsapp:/, "");
+  // Only phone-like values lose separators; emails keep hyphens/dots intact
+  // (stripping them would make first-last@x.com match firstlast@x.com).
+  const compact = base.replace(/[\s-]/g, "");
+  return /^\+?\d+$/.test(compact) ? compact : base;
+}
+
+/** Replace the demo-volunteer allowlist (emails + phone numbers). */
+export function setDemoAllowlist(addresses: string[]): void {
+  demoAllowed = new Set(addresses.map(normalizeAddress).filter(Boolean));
+}
+
+/** True when live delivery to this email/phone is permitted. */
+export function addressAllowed(address: string): boolean {
   const configured = (process.env.ONBOARDING_ALLOWED_RECIPIENTS ?? "")
     .split(",")
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => normalizeAddress(s))
     .filter(Boolean);
   const allowed = configured.length > 0 ? configured : DEFAULT_ALLOWED_RECIPIENTS;
-  const normalized = address.trim().toLowerCase().replace(/^whatsapp:/, "");
-  return allowed.includes(normalized);
+  const normalized = normalizeAddress(address);
+  return allowed.includes(normalized) || demoAllowed.has(normalized);
+}
+
+function recipientAllowed(address: string): boolean {
+  return addressAllowed(address);
 }
 
 function withinRateLimit(): boolean {
@@ -202,6 +223,13 @@ export async function sendOutbound(opts: {
   sensitive?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
+  // Pick up any allowlist change saved on another process instance.
+  try {
+    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    await refreshDemoAllowlist();
+  } catch (err) {
+    console.error("[channels] demo allowlist refresh failed:", err);
+  }
   if (!recipientAllowed(opts.toAddress)) {
     result = {
       status: "logged-only",

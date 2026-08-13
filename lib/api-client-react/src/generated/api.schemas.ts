@@ -876,6 +876,46 @@ export interface OnbCaseIntake {
   notes?: string;
 }
 
+/**
+ * One demo participant; email/phone become live-delivery targets when valid
+ */
+export interface DemoVolunteer {
+  name: string;
+  email: string;
+  /** International format (+919876543210) or empty for email-only */
+  phone: string;
+  /** email | whatsapp | both */
+  channelPreference: string;
+  /** Scenario key the volunteer role-plays, or "custom" */
+  persona: string;
+  role: string;
+  department: string;
+  geography: string;
+  hireType: string;
+  workerCategory: string;
+  managerName: string;
+  recruiterName: string;
+  /** YYYY-MM-DD */
+  joiningDate: string;
+  notes: string;
+}
+
+/**
+ * A demo role a volunteer can play, with a plain-language briefing
+ */
+export interface DemoPersona {
+  key: string;
+  title: string;
+  description: string;
+  expectedBehaviour: string;
+  /** What the volunteer should do and which messages to expect */
+  volunteerBrief: string;
+}
+
+export interface DemoVolunteerList {
+  volunteers: DemoVolunteer[];
+}
+
 export type OnbDocumentCategory = typeof OnbDocumentCategory[keyof typeof OnbDocumentCategory];
 
 
@@ -1346,6 +1386,32 @@ export type ImportScenarioWorkbookBody = {
 export type ParseActualsLogBody = {
   /** Raw call-log CSV file (max 20 MB). */
   logFile: Blob;
+};
+
+export type GetDemoVolunteers200 = {
+  volunteers: DemoVolunteer[];
+  personas: DemoPersona[];
+};
+
+export type SeedDemoVolunteers200ResultsItemStatus = typeof SeedDemoVolunteers200ResultsItemStatus[keyof typeof SeedDemoVolunteers200ResultsItemStatus];
+
+
+export const SeedDemoVolunteers200ResultsItemStatus = {
+  seeded: 'seeded',
+  skipped: 'skipped',
+  invalid: 'invalid',
+} as const;
+
+export type SeedDemoVolunteers200ResultsItem = {
+  name: string;
+  status: SeedDemoVolunteers200ResultsItemStatus;
+  note: string;
+  /** @nullable */
+  caseId: number | null;
+};
+
+export type SeedDemoVolunteers200 = {
+  results: SeedDemoVolunteers200ResultsItem[];
 };
 
 export type StartOnboardingVoiceCallBodyScenario = typeof StartOnboardingVoiceCallBodyScenario[keyof typeof StartOnboardingVoiceCallBodyScenario];

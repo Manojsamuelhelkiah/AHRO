@@ -4,6 +4,7 @@ import { startInboundEmailPolling } from "./lib/onboarding/inbound-email";
 import { startSystemWatcher } from "./lib/onboarding/system-watcher";
 import { startEmailWatch } from "./lib/onboarding/email-watch";
 import { backfillDocumentPacks } from "./lib/onboarding/documents";
+import { initDemoAllowlist } from "./lib/onboarding/demo-volunteers";
 
 const rawPort = process.env["PORT"];
 
@@ -31,5 +32,8 @@ app.listen(port, (err) => {
   startEmailWatch();
   backfillDocumentPacks().catch((err) =>
     logger.error({ err }, "document pack backfill failed"),
+  );
+  initDemoAllowlist().catch((err) =>
+    logger.error({ err }, "demo allowlist init failed"),
   );
 });
