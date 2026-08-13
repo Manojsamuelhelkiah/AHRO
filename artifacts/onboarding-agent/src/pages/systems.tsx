@@ -280,6 +280,18 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
             </div>
           </div>
         )}
+        {monitor.alertEmailConfigured === false && (
+          <div className="p-3 mt-4 text-sm rounded-md border flex items-start gap-3 bg-amber-50 border-amber-200 text-amber-900">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+            <div>
+              <p className="font-bold">Alert emails are not configured</p>
+              <p className="text-xs mt-1 opacity-90">
+                If inbox monitoring goes down, no one will be emailed — the outage will only be visible here.
+                Set the <span className="font-mono">HR_ALERT_EMAIL</span> environment variable on the API server to enable outage alert emails.
+              </p>
+            </div>
+          </div>
+        )}
         {!monitor.lastError && !healthy && (
           <p className="text-sm text-muted-foreground mt-4">
             {initializing

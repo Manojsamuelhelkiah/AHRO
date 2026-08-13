@@ -235,6 +235,11 @@ export type InboundEmailMonitorStatus = {
   lastErrorAt: string | null;
   state: MonitorState;
   healthy: boolean;
+  /**
+   * Whether an HR alert email address is configured (HR_ALERT_EMAIL /
+   * ONBOARDING_HR_ALERT_EMAIL). Never exposes the address itself.
+   */
+  alertEmailConfigured: boolean;
 };
 
 /**
@@ -280,6 +285,7 @@ export function getInboundEmailMonitorStatus(): InboundEmailMonitorStatus {
     lastErrorAt: iso(monitorStatus.lastErrorAt),
     state,
     healthy: state === "healthy",
+    alertEmailConfigured: hrAlertAddress() !== null,
   };
 }
 
