@@ -117,3 +117,72 @@ describe("LDM records agent — stint filter", () => {
     assert.equal(out, "2 archived stints.");
   });
 });
+
+describe("LDM records agent — compare_stints", () => {
+  const stints = [
+    stint({ id: 1, startDate: "2016-04-11", endDate: "2018-10-31", role: "Business Analyst", noticeRequiredDays: 60, noticeServedDays: 60, performanceRating: "3.8" }),
+    stint({ id: 2, startDate: "2019-06-03", endDate: "2024-02-29", role: "Senior Business Analyst", noticeRequiredDays: 90, noticeServedDays: 62, performanceRating: "4.3" }),
+  ];
+
+  test("default comparison (no selectors) compares earliest vs latest with rating delta, notice, tenure", () => {
+    const out = executePlan({ metric: "compare_stints" }, stints);
+    assert.ok(out.includes("Comparing 2016-04-11→2018-10-31"), out);
+    assert.ok(out.includes("vs 2019-06-03→2024-02-29"), out);
+    assert.ok(out.includes("Rating: 3.8 → 4.3 (improved by 0.50)"), out);
+    assert.ok(out.includes("Notice: full notice → shortfall of 28 days (62/90)"), out);
+    assert.match(out, /Tenure: ≈\d+ months → ≈\d+ months \(second stint longer\)/);
+  });
+
+  test("explicit selectors (earliest/latest) work the same", () => {
+    const out = executePlan({ metric: "compare_stints", compare: { a: "earliest", b: "latest" } }, stints);
+    assert.ok(out.includes("improved by 0.50"), out);
+  });
+
+  test("yearRange selectors resolve to the matching stints", () => {
+    const out = executePlan(
+      { metric: "compare_stints", compare: { a: { yearRange: { from: 2016, to: 2018 } }, b: { yearRange: { from: 2019 } } } },
+      stints,
+    );
+    assert.ok(out.includes("Rating: 3.8 → 4.3"), out);
+  });
+
+  test("declining rating is reported as a decline", () => {
+    const rows = [
+      stint({ id: 1, startDate: "2016-04-11", endDate: "2018-10-31", performanceRating: "4.5" }),
+      stint({ id: 2, startDate: "2019-06-03", endDate: "2024-02-29", performanceRating: "3.9" }),
+    ];
+    const out = executePlan({ metric: "compare_stints" }, rows);
+    assert.ok(out.includes("declined by 0.60"), out);
+  });
+
+  test("missing numeric rating is called out instead of fabricated", () => {
+    const rows = [stints[0], stint({ id: 2, performanceRating: "n/a" })];
+    const out = executePlan({ metric: "compare_stints" }, rows);
+    assert.ok(out.includes("Rating: not comparable"), out);
+  });
+
+  test("fewer than two stints cannot be compared", () => {
+    const out = executePlan({ metric: "compare_stints" }, [stints[0]]);
+    assert.match(out, /^Cannot compare stints — only 1 archived stint/);
+  });
+
+  test("non-matching selector falls back with a note", () => {
+    const out = executePlan(
+      { metric: "compare_stints", compare: { a: { yearRange: { from: 2001, to: 2003 } }, b: "latest" } },
+      stints,
+    );
+    assert.ok(out.includes("first selector did not match — using the earliest stint"), out);
+    assert.ok(out.includes("Rating: 3.8 → 4.3"), out);
+  });
+
+  test("selectors resolving to the same stint fall back to earliest vs latest", () => {
+    const out = executePlan({ metric: "compare_stints", compare: { a: "latest", b: "latest" } }, stints);
+    assert.ok(out.includes("both selectors resolved to the same stint"), out);
+    assert.ok(out.includes("Rating: 3.8 → 4.3"), out);
+  });
+
+  test("out-of-order selectors are presented chronologically", () => {
+    const out = executePlan({ metric: "compare_stints", compare: { a: "latest", b: "earliest" } }, stints);
+    assert.ok(out.startsWith("Comparing 2016-04-11→2018-10-31"), out);
+  });
+});

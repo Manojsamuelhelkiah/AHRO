@@ -112,9 +112,12 @@ export type QueryPlan = {
     | "exit_reasons"
     | "total_tenure_months"
     | "stint_count"
-    | "list_stints";
+    | "list_stints"
+    | "compare_stints";
   /** When present, the metric is computed over just the matching stint(s). */
   filter?: { stint: StintFilter };
+  /** Only for "compare_stints": the two stints to compare (defaults to earliest vs latest). */
+  compare?: { a?: StintFilter; b?: StintFilter };
 };
 
 const METRICS: QueryPlan["metric"][] = [
@@ -127,19 +130,26 @@ const METRICS: QueryPlan["metric"][] = [
   "total_tenure_months",
   "stint_count",
   "list_stints",
+  "compare_stints",
 ];
 
 async function interpretQuestion(question: string): Promise<QueryPlan | null> {
-  const out = await llmCompleteJson<{ metric: string; filter?: { stint?: unknown } }>(
-    `You are a large-database-model agent. Map the analyst's question to EXACTLY ONE metric from this list (return JSON {"metric":"..."}):\n${METRICS.join("\n")}\nPick the closest match; if nothing fits, use "list_stints".\nIf the question is about ONE specific past stint (not the whole history), also add a filter:\n- most recent / last stint: {"filter":{"stint":"latest"}}\n- first / earliest stint: {"filter":{"stint":"earliest"}}\n- a stint identified by years, e.g. "the 2019-2024 stint": {"filter":{"stint":{"yearRange":{"from":2019,"to":2024}}}} (either bound may be omitted).\nOmit the filter entirely when the question covers all stints.`,
+  const out = await llmCompleteJson<{ metric: string; filter?: { stint?: unknown }; compare?: { a?: unknown; b?: unknown } }>(
+    `You are a large-database-model agent. Map the analyst's question to EXACTLY ONE metric from this list (return JSON {"metric":"..."}):\n${METRICS.join("\n")}\nPick the closest match; if nothing fits, use "list_stints".\nIf the question is about ONE specific past stint (not the whole history), also add a filter:\n- most recent / last stint: {"filter":{"stint":"latest"}}\n- first / earliest stint: {"filter":{"stint":"earliest"}}\n- a stint identified by years, e.g. "the 2019-2024 stint": {"filter":{"stint":{"yearRange":{"from":2019,"to":2024}}}} (either bound may be omitted).\nOmit the filter entirely when the question covers all stints.\nIf the question COMPARES two stints (e.g. "did performance improve between the two stints?", "was notice compliance better the second time?", "which stint was longer?"), use metric "compare_stints" and add {"compare":{"a":<selector>,"b":<selector>}} where each selector uses the same shapes as the stint filter ("earliest", "latest", or {"yearRange":{...}}). When the question just compares first vs last, use a="earliest", b="latest" (or omit "compare" — that is the default).`,
     question,
-    300,
+    400,
   );
   const metric = METRICS.find((m) => m === out?.metric);
   if (!metric) return null;
   const plan: QueryPlan = { metric };
   const rawStint = out?.filter?.stint;
   if (rawStint !== undefined) plan.filter = { stint: rawStint as StintFilter };
+  if (metric === "compare_stints" && out?.compare && typeof out.compare === "object") {
+    plan.compare = {
+      a: out.compare.a as StintFilter | undefined,
+      b: out.compare.b as StintFilter | undefined,
+    };
+  }
   return plan;
 }
 
@@ -191,14 +201,89 @@ export function applyStintFilter(
 }
 
 export function executePlan(plan: QueryPlan, allStints: StintRow[]): string {
+  const span = (s: StintRow) => `${s.startDate}→${s.endDate} (${s.role})`;
+  if (plan.metric === "compare_stints") return compareStints(plan.compare, allStints, span);
   const { stints, note } = applyStintFilter(allStints, plan.filter);
   const suffix = note ? ` ${note}` : "";
-  const span = (s: StintRow) => `${s.startDate}→${s.endDate} (${s.role})`;
   return computeMetric(plan.metric, stints, span) + suffix;
 }
 
+/**
+ * Resolve one comparison selector to a single stint. Falls back to the
+ * provided default (earliest/latest) when the selector is missing, does not
+ * match, or is ambiguous; notes explain any fallback.
+ */
+function resolveCompareSelector(
+  selector: StintFilter | undefined,
+  sorted: StintRow[],
+  fallback: "earliest" | "latest",
+  label: string,
+  notes: string[],
+): StintRow {
+  const dflt = fallback === "earliest" ? sorted[0] : sorted[sorted.length - 1];
+  if (selector === undefined || selector === null) return dflt;
+  const { stints: matched, note } = applyStintFilter(sorted, { stint: selector });
+  // applyStintFilter falls back to ALL stints on no-match/unrecognized — treat that as a failed selector.
+  if (matched.length === sorted.length && note && note.includes("all stints")) {
+    notes.push(`(${label} selector did not match — using the ${fallback} stint)`);
+    return dflt;
+  }
+  if (matched.length > 1) {
+    notes.push(`(${label} selector matched ${matched.length} stints — using the ${fallback} of them)`);
+    return fallback === "earliest" ? matched[0] : matched[matched.length - 1];
+  }
+  return matched[0];
+}
+
+/** Deterministic two-stint comparison: rating, notice compliance, tenure. */
+function compareStints(
+  compare: QueryPlan["compare"],
+  allStints: StintRow[],
+  span: (s: StintRow) => string,
+): string {
+  if (allStints.length < 2) {
+    return `Cannot compare stints — only ${allStints.length} archived stint${allStints.length === 1 ? "" : "s"} on record.`;
+  }
+  const sorted = [...allStints].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const notes: string[] = [];
+  let a = resolveCompareSelector(compare?.a, sorted, "earliest", "first", notes);
+  let b = resolveCompareSelector(compare?.b, sorted, "latest", "second", notes);
+  if (a.id === b.id) {
+    notes.push("(both selectors resolved to the same stint — comparing earliest vs latest instead)");
+    a = sorted[0];
+    b = sorted[sorted.length - 1];
+  }
+  // Present chronologically: a = earlier of the two.
+  if (a.startDate.localeCompare(b.startDate) > 0) [a, b] = [b, a];
+
+  const parts: string[] = [`Comparing ${span(a)} vs ${span(b)}.`];
+
+  const ra = Number(a.performanceRating);
+  const rb = Number(b.performanceRating);
+  if (Number.isFinite(ra) && Number.isFinite(rb)) {
+    const delta = rb - ra;
+    const dir = delta > 0 ? `improved by ${delta.toFixed(2)}` : delta < 0 ? `declined by ${Math.abs(delta).toFixed(2)}` : "was unchanged";
+    parts.push(`Rating: ${ra.toFixed(1)} → ${rb.toFixed(1)} (${dir}).`);
+  } else {
+    parts.push("Rating: not comparable — a numeric rating is missing on at least one stint.");
+  }
+
+  const compliance = (s: StintRow) =>
+    s.noticeServedDays >= s.noticeRequiredDays
+      ? "full notice"
+      : `shortfall of ${s.noticeRequiredDays - s.noticeServedDays} days (${s.noticeServedDays}/${s.noticeRequiredDays})`;
+  parts.push(`Notice: ${compliance(a)} → ${compliance(b)}.`);
+
+  const ma = months(a.startDate, a.endDate);
+  const mb = months(b.startDate, b.endDate);
+  const tdir = mb > ma ? "longer" : mb < ma ? "shorter" : "the same length";
+  parts.push(`Tenure: ≈${ma} months → ≈${mb} months (second stint ${tdir}).`);
+
+  return parts.join(" ") + (notes.length ? " " + notes.join(" ") : "");
+}
+
 function computeMetric(
-  metric: QueryPlan["metric"],
+  metric: Exclude<QueryPlan["metric"], "compare_stints">,
   stints: StintRow[],
   span: (s: StintRow) => string,
 ): string {
