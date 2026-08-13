@@ -37,18 +37,23 @@ export function SystemsPage() {
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader 
         title="Systems & Integrations" 
         subtitle="Manage system-of-record adapters and outbound communication channels." 
       />
 
-      <div className="space-y-4">
-        <SectionHeading icon={Server} title="System Adapters" description="Source systems that agents read from and write to via MCP." />
+      <div className="space-y-4 pt-4">
+        <div>
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Server className="w-5 h-5 text-[var(--primary)]" /> System Adapters
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Source systems that agents read from and write to via MCP.</p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {loadingConn ? <LoadingBlock className="col-span-full">Loading adapters...</LoadingBlock> : connectors?.map(conn => (
-            <Card key={conn.key} className={cn("transition-all duration-300 border-none shadow-[var(--shadow-md)]", conn.status !== 'connected' && "opacity-75 bg-[var(--surface-soft)] shadow-none")}>
-              <CardContent className="p-[var(--space-lg)]">
+            <div key={conn.key} style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: conn.status === 'connected' ? 'var(--shadow-sm)' : 'none', opacity: conn.status === 'connected' ? 1 : 0.75, transition: 'all 300ms' }}>
+              <div className="p-[var(--space-lg)]">
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-4">
                     <IconTile icon={Server} className={cn("border-none shadow-sm", conn.status === 'connected' ? "bg-[var(--status-info-bg)] text-[var(--primary)]" : "bg-[var(--surface-alt)] text-[var(--text-muted)]")} />
@@ -97,14 +102,19 @@ export function SystemsPage() {
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
       <div className="space-y-4 pt-4">
-        <SectionHeading icon={Eye} title="System Watcher" description="Monitoring agent tracking BGV, ITSM access and payroll status — webhook push where the vendor supports it, scheduled polling otherwise." />
+        <div>
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Eye className="w-5 h-5 text-[var(--primary)]" /> System Watcher
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Monitoring agent tracking BGV, ITSM access and payroll status — webhook push where the vendor supports it, scheduled polling otherwise.</p>
+        </div>
         {loadingWatcher ? (
           <LoadingBlock>Loading watcher status...</LoadingBlock>
         ) : watcher ? (
@@ -120,7 +130,12 @@ export function SystemsPage() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <SectionHeading icon={Inbox} title="Email Watch" description="Shallow-integration fallback: when a system offers no API or webhook, vendors simply CC status emails to the watch mailbox — the System Watcher reads them as status changes." />
+        <div>
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Inbox className="w-5 h-5 text-[var(--primary)]" /> Email Watch
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Shallow-integration fallback: when a system offers no API or webhook, vendors simply CC status emails to the watch mailbox — the System Watcher reads them as status changes.</p>
+        </div>
         {loadingEmailWatch ? (
           <LoadingBlock>Loading email watch status...</LoadingBlock>
         ) : emailWatch ? (
@@ -133,7 +148,12 @@ export function SystemsPage() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <SectionHeading icon={Zap} title="Messaging Channels" description="Outbound communication targets used by agents to contact hires." />
+        <div>
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Zap className="w-5 h-5 text-[var(--primary)]" /> Messaging Channels
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Outbound communication targets used by agents to contact hires.</p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {loadingChan ? <LoadingBlock className="col-span-full">Loading channels...</LoadingBlock> : (
             <>
@@ -145,7 +165,12 @@ export function SystemsPage() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <SectionHeading icon={Radio} title="Live Inbox Monitoring" description="Background Gmail polling that picks up real email replies from hires." />
+        <div>
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Radio className="w-5 h-5 text-[var(--primary)]" /> Live Inbox Monitoring
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Background Gmail polling that picks up real email replies from hires.</p>
+        </div>
         {loadingChan ? (
           <LoadingBlock>Loading monitor status...</LoadingBlock>
         ) : channels?.inboundEmail ? (
@@ -181,8 +206,8 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
 
   return (
     <div className="space-y-6">
-      <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
-        <CardContent className="p-[var(--space-lg)]">
+      <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+        <div className="p-[var(--space-lg)]">
           <div className="flex items-start justify-between mb-6">
             <div className="flex items-center gap-4">
               <IconTile icon={Inbox} className={cn("border-none shadow-sm", getBadgeColor())} />
@@ -252,12 +277,12 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
               No open checks are on email watch. Switch a system adapter above to <span className="font-bold text-[var(--text-primary)]">Email watch (no API)</span> and its open checks will be tracked through the mailbox instead.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {watch.recent.length > 0 && (
-        <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
-          <CardContent className="p-0 overflow-x-auto">
+        <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+          <div className="p-0 overflow-x-auto">
             <table className="w-full text-[var(--text-sm)]">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)] text-left">
@@ -287,8 +312,8 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
                 ))}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -307,8 +332,8 @@ function WatcherConnectorCard({ conn }: { conn: any }) {
   };
 
   return (
-    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
-      <CardContent className="p-[var(--space-lg)]">
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+      <div className="p-[var(--space-lg)]">
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-3">
             <IconTile icon={isPush ? Webhook : RefreshCw} className={cn("border-none shadow-sm", getBadgeColor())} />
@@ -354,8 +379,8 @@ function WatcherConnectorCard({ conn }: { conn: any }) {
             <p className="font-mono break-all">{conn.lastError}</p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -372,8 +397,8 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
   };
 
   return (
-    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
-      <CardContent className="p-[var(--space-lg)]">
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+      <div className="p-[var(--space-lg)]">
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
             <IconTile icon={healthy || initializing ? Radio : AlertTriangle} className={cn("border-none shadow-sm", getBadgeColor())} />
@@ -434,8 +459,8 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
                 : 'The polling loop has not been started in this server process.'}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -457,8 +482,8 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
   };
 
   return (
-    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)] overflow-hidden">
-      <CardContent className="p-[var(--space-lg)] pb-0">
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+      <div className="p-[var(--space-lg)] pb-0">
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-4">
             <IconTile icon={channelKey === 'whatsapp' ? Smartphone : Mail} className={cn("border-none shadow-sm", channel.configured ? (channelKey === 'whatsapp' ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-info-bg)] text-[var(--status-info-fg)]") : "bg-[var(--surface-soft)] text-[var(--text-muted)]")} />
@@ -473,7 +498,7 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
         </div>
         
         {channel.note && <p className="text-[var(--text-sm)] bg-[var(--surface-alt)] border border-[var(--border)] p-3 rounded-[var(--radius-md)] mb-5 text-[var(--text-secondary)] font-medium leading-relaxed">{channel.note}</p>}
-      </CardContent>
+      </div>
 
       <div className="bg-[var(--surface-alt)] p-[var(--space-lg)] mt-2">
         <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block mb-3">Send Test Message</Label>
@@ -492,7 +517,7 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -505,52 +530,52 @@ function WatcherChecksTable({ checks }: { checks: any[] }) {
     return <LoadingBlock>No tracked checks yet — run a scenario or create a case and the watcher will start tracking BGV, ITSM and payroll automatically.</LoadingBlock>;
   }
   return (
-    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
-      <CardContent className="p-0 overflow-x-auto">
-        <table className="w-full text-[var(--text-sm)]">
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+      <div className="p-0 overflow-x-auto">
+        <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
           <thead>
-            <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)] text-left">
-              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Check</th>
-              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Case / Hire</th>
-              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">System</th>
-              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Status</th>
-              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">SLA Due</th>
-              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Completed</th>
+            <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
+              {['Check', 'Case / Hire', 'System', 'Status', 'SLA Due', 'Completed'].map((h) => (
+                <th key={h} style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.map(c => (
-              <tr key={c.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-soft)] transition-colors">
-                <td className="px-[var(--space-lg)] py-[var(--space-md)]">
-                  <div className="font-semibold text-[var(--text-primary)]">{c.label}</div>
-                  <div className="font-mono text-[var(--text-xs)] text-[var(--text-muted)] mt-1 font-medium">{c.externalRef}</div>
+              <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }} className="last:border-0 hover:bg-[var(--surface-soft)] transition-colors">
+                <td style={{ padding: '12px var(--space-lg)' }}>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{c.label}</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{c.externalRef}</div>
                 </td>
-                <td className="px-[var(--space-lg)] py-[var(--space-md)]">
-                  <div className="font-semibold text-[var(--text-primary)]">#{c.caseId} {c.caseWorkerName}</div>
+                <td style={{ padding: '12px var(--space-lg)' }}>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>#{c.caseId} {c.caseWorkerName}</div>
                 </td>
-                <td className="px-[var(--space-lg)] py-[var(--space-md)] uppercase tracking-wider text-[var(--text-xs)] font-bold text-[var(--text-secondary)]">
+                <td style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                   {c.system}
-                  <span className="ml-2 font-mono text-[10px] bg-[var(--surface-alt)] text-[var(--text-muted)] px-1.5 py-0.5 rounded">{c.mode}</span>
+                  <span style={{ marginLeft: '8px', fontSize: '10px', backgroundColor: 'var(--surface-alt)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>{c.mode}</span>
                 </td>
-                <td className="px-[var(--space-lg)] py-[var(--space-md)]">
-                  <Badge className={cn("uppercase tracking-wider text-[10px] font-bold shadow-none border-none", 
-                    c.status === 'done' ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]"
-                    : c.status === 'failed' ? "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]" 
-                    : "bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]")}>
+                <td style={{ padding: '12px var(--space-lg)' }}>
+                  <span style={{ 
+                    backgroundColor: c.status === 'done' ? 'var(--status-green-bg)' : c.status === 'failed' ? 'var(--status-red-bg)' : 'var(--status-amber-bg)', 
+                    color: c.status === 'done' ? 'var(--status-green-fg)' : c.status === 'failed' ? 'var(--status-red-fg)' : 'var(--status-amber-fg)', 
+                    fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' 
+                  }}>
                     {c.status}
-                  </Badge>
+                  </span>
                 </td>
-                <td className="px-[var(--space-lg)] py-[var(--space-md)] font-mono text-[var(--text-sm)] text-[var(--text-secondary)] font-medium whitespace-nowrap">
+                <td style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
                   {fmt(c.dueAt)}
                 </td>
-                <td className="px-[var(--space-lg)] py-[var(--space-md)] font-mono text-[var(--text-sm)] text-[var(--text-secondary)] font-medium whitespace-nowrap">
+                <td style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
                   {fmt(c.completedAt)}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

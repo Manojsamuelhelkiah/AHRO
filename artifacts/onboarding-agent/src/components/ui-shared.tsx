@@ -17,7 +17,7 @@ export function PageHeader({ title, subtitle, children }: { title: string, subti
       }}
     >
       <div>
-        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2, margin: 0 }}>{title}</h1>
+        <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2, margin: 0, letterSpacing: '-0.01em' }}>{title}</h1>
         {subtitle && <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '4px', marginBottom: 0 }}>{subtitle}</p>}
       </div>
       {children && (

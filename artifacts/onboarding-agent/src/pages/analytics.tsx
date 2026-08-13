@@ -11,42 +11,43 @@ export function AnalyticsPage() {
   if (!analytics) return null;
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader 
         title="Data & Analytics Agent" 
         subtitle="Pattern detection and predictive readiness insights for onboarding cohorts." 
       />
 
-      <div className="bg-[var(--status-info-bg)] rounded-[var(--radius-lg)] p-[var(--space-lg)] flex flex-col md:flex-row gap-4 items-start shadow-[var(--shadow-sm)]">
+      <div style={{ backgroundColor: 'var(--status-info-bg)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-lg)' }} className="flex flex-col md:flex-row gap-4 items-start">
         <IconTile icon={BrainCircuit} className="bg-[var(--surface)] text-[var(--primary)] border-none shadow-[var(--shadow-sm)]" />
         <div className="space-y-1.5">
-          <h3 className="font-bold tracking-wide text-[var(--text-sm)] uppercase text-[var(--primary)]">Agent Narrative Insight</h3>
-          <p className="text-[var(--text-primary)] leading-relaxed text-[var(--text-base)] font-medium">
+          <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Agent Narrative Insight</h3>
+          <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', fontWeight: 500, margin: 0, lineHeight: 1.5 }}>
             {analytics.narrative}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        <Card className="border-none shadow-[var(--shadow-md)] bg-[var(--surface)] overflow-hidden flex flex-col">
-          <CardHeader className="pb-4 bg-[var(--surface-alt)] border-b border-[var(--border)]">
-            <div className="flex justify-between items-start gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="text-[var(--text-lg)] text-[var(--text-primary)] flex items-center gap-2">
+                <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Activity className="w-5 h-5 text-[var(--primary)]" />
                   Skill Inflow Forecast
-                </CardTitle>
-                <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">Next 30 days based on active cases</p>
+                </h2>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Next 30 days based on active cases</p>
               </div>
-              <Badge className="gap-1.5 bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none shadow-none shrink-0 text-[var(--text-xs)] font-bold">
-                <ShieldAlert className="w-4 h-4" /> Privacy Guard Active
-              </Badge>
+              <span style={{ backgroundColor: 'var(--status-amber-bg)', color: 'var(--status-amber-fg)', fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                <ShieldAlert className="w-3.5 h-3.5" /> Privacy Guard Active
+              </span>
             </div>
-            <p className="text-[var(--text-xs)] uppercase tracking-wider font-bold text-[var(--primary)] mt-4 bg-[var(--status-info-bg)] p-2.5 rounded-[var(--radius-md)] inline-block">
+            <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, color: 'var(--primary)', backgroundColor: 'var(--status-info-bg)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block', marginTop: '12px' }}>
               Privacy threshold is set to K={analytics.suppressionThreshold}
             </p>
-          </CardHeader>
-          <CardContent className="pt-6 flex-1 flex flex-col">
+          </div>
+
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', padding: 'var(--space-lg)' }} className="flex flex-col">
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={analytics.skillInflow} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -65,21 +66,21 @@ export function AnalyticsPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-6 text-[var(--text-xs)] text-[var(--text-muted)] text-center font-semibold">
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'center', marginTop: '24px' }}>
               Greyed bars indicate categories suppressed below K-anonymity threshold.
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <div className="space-y-8">
-          <Card className="border-none shadow-[var(--shadow-md)] bg-[var(--surface)]">
-            <CardHeader className="pb-4 bg-[var(--surface-alt)] border-b border-[var(--border)]">
-              <CardTitle className="flex items-center gap-2 text-[var(--text-lg)] text-[var(--text-primary)]">
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <div>
+              <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users className="w-5 h-5 text-[var(--status-green-fg)]" /> 
                 Cohort Readiness
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
+              </h2>
+            </div>
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', padding: 'var(--space-lg)' }}>
               <div className="space-y-5">
                 {(() => {
                   const total = analytics.cohortReadiness.reduce((sum: number, b: any) => sum + b.count, 0) || 1;
@@ -87,44 +88,44 @@ export function AnalyticsPage() {
                     const percentage = Math.round((b.count / total) * 100);
                     return (
                       <div key={b.key}>
-                        <div className="flex justify-between text-[var(--text-sm)] mb-2 font-semibold">
-                          <span className="text-[var(--text-secondary)] capitalize tracking-wide">{b.key.replace(/-/g, ' ')}</span>
-                          <span className="text-[var(--primary)] font-bold">{percentage}% <span className="text-[var(--text-muted)] font-medium">({b.count})</span></span>
+                        <div className="flex justify-between mb-2">
+                          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'capitalize', letterSpacing: '0.02em' }}>{b.key.replace(/-/g, ' ')}</span>
+                          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--primary)', fontWeight: 700 }}>{percentage}% <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({b.count})</span></span>
                         </div>
-                        <div className="h-2.5 w-full bg-[var(--surface-soft)] rounded-full overflow-hidden">
-                          <div className="h-full bg-[var(--primary)] transition-all duration-500 ease-out" style={{ width: `${percentage}%` }} />
+                        <div style={{ height: '10px', width: '100%', backgroundColor: 'var(--surface-soft)', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', backgroundColor: 'var(--primary)', width: `${percentage}%`, transition: 'width 500ms ease-out' }} />
                         </div>
                       </div>
                     );
                   });
                 })()}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card className="border-none shadow-[var(--shadow-md)] bg-[var(--surface)]">
-            <CardHeader className="pb-4 bg-[var(--surface-alt)] border-b border-[var(--border)]">
-              <CardTitle className="flex items-center gap-2 text-[var(--text-lg)] text-[var(--text-primary)]">
+          <div className="space-y-4">
+            <div>
+              <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Workflow className="w-5 h-5 text-[var(--status-amber-fg)]" /> 
                 Bottleneck Themes
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
+              </h2>
+            </div>
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', padding: 'var(--space-lg)' }}>
               <ul className="space-y-4">
                 {analytics.bottlenecks.map((b: any, i: number) => (
-                  <li key={i} className="flex gap-4 items-start text-[var(--text-sm)] bg-[var(--surface-soft)] p-[var(--space-md)] rounded-[var(--radius-md)]">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] font-bold shrink-0 text-[var(--text-xs)] shadow-sm">
+                  <li key={i} className="flex gap-4 items-start" style={{ padding: 'var(--space-md)', backgroundColor: 'var(--surface-soft)', borderRadius: 'var(--radius-md)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '999px', backgroundColor: 'var(--status-amber-bg)', color: 'var(--status-amber-fg)', fontWeight: 700, fontSize: 'var(--text-xs)', flexShrink: 0, boxShadow: 'var(--shadow-sm)' }}>
                       {b.occurrences}
                     </span>
                     <div>
-                      <span className="text-[var(--text-primary)] font-bold capitalize text-[var(--text-sm)] tracking-wide">{b.theme.replace(/-/g, ' ')}</span>
-                      <p className="text-[var(--text-secondary)] text-[var(--text-sm)] mt-1 font-medium leading-relaxed">{b.note}</p>
+                      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', fontWeight: 700, textTransform: 'capitalize', letterSpacing: '0.02em' }}>{b.theme.replace(/-/g, ' ')}</span>
+                      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: '4px', fontWeight: 500, lineHeight: 1.5, marginBottom: 0 }}>{b.note}</p>
                     </div>
                   </li>
                 ))}
               </ul>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     </div>

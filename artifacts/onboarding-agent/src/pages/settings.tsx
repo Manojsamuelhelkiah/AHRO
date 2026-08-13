@@ -250,14 +250,14 @@ function DemoVolunteersCard() {
   };
 
   return (
-    <Card className="shadow-sm border-[var(--border)] overflow-hidden">
-      <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+      <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <IconTile icon={Users} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
             <div>
-              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">Demo Volunteers</h3>
-              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
+              <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Demo Volunteers</h3>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
                 Real people for live demos. Saving authorizes their email/phone for real messages and calls — no one else
                 can be contacted. "Create demo cases" runs each volunteer through the full agent pipeline.
               </p>
@@ -265,7 +265,7 @@ function DemoVolunteersCard() {
           </div>
         </div>
       </div>
-      <CardContent className="p-[var(--space-lg)] bg-[var(--surface)]">
+      <div className="p-[var(--space-lg)] bg-[var(--surface)]">
         {isLoading ? (
           <LoadingBlock>Loading volunteers...</LoadingBlock>
         ) : (
@@ -370,8 +370,8 @@ function DemoVolunteersCard() {
             </p>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -456,39 +456,36 @@ export function SettingsPage() {
         : 'Not configured';
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader 
         title="Settings" 
         subtitle="Application-level configuration for the control tower." 
       />
 
-      <Card className="shadow-sm border-[var(--border)] overflow-hidden mt-2">
-        <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
+      <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }} className="mt-2">
+        <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <IconTile icon={Mail} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
               <div>
-                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">HR Alert Email</h3>
-                <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
+                <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>HR Alert Email</h3>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
                   Where outage alerts go when the Gmail reply monitor breaks (and recovery notices when it resumes).
                 </p>
               </div>
             </div>
             {!isLoading && (
-              <Badge
-                className={cn(
-                  'uppercase tracking-wider text-[10px] shadow-none shrink-0',
-                  settings?.effective
-                    ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
-                    : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
-                )}
-              >
+              <span style={{ 
+                backgroundColor: settings?.effective ? 'var(--status-green-bg)' : 'var(--status-gray-bg)', 
+                color: settings?.effective ? 'var(--status-green-fg)' : 'var(--status-gray-fg)', 
+                fontSize: 'var(--text-xs)', fontWeight: 700, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
+              }}>
                 {settings?.effective ? 'ACTIVE' : 'NOT SET'}
-              </Badge>
+              </span>
             )}
           </div>
         </div>
-        <CardContent className="p-[var(--space-lg)] bg-[var(--surface)]">
+        <div className="p-[var(--space-lg)] bg-[var(--surface)]">
 
           {isLoading ? (
             <LoadingBlock>Loading settings...</LoadingBlock>
@@ -573,37 +570,34 @@ export function SettingsPage() {
               )}
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card className="shadow-sm border-[var(--border)] overflow-hidden">
-        <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
+      <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <IconTile icon={PhoneCall} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
               <div>
-                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">Automatic Escalation Calls</h3>
-                <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
+                <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Automatic Escalation Calls</h3>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
                   On SLA breach with no reply from the hire, the System Watcher places the escalation call itself —
                   allowlist and hourly limit still apply; each call is recorded on the case timeline.
                 </p>
               </div>
             </div>
             {!isLoading && (
-              <Badge
-                className={cn(
-                  'uppercase tracking-wider text-[10px] shadow-none shrink-0',
-                  settings?.autoEscalationCalls
-                    ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
-                    : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
-                )}
-              >
+              <span style={{ 
+                backgroundColor: settings?.autoEscalationCalls ? 'var(--status-green-bg)' : 'var(--status-gray-bg)', 
+                color: settings?.autoEscalationCalls ? 'var(--status-green-fg)' : 'var(--status-gray-fg)', 
+                fontSize: 'var(--text-xs)', fontWeight: 700, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
+              }}>
                 {settings?.autoEscalationCalls ? 'ON' : 'OFF'}
-              </Badge>
+              </span>
             )}
           </div>
         </div>
-        <CardContent className="p-[var(--space-lg)] bg-[var(--surface)]">
+        <div className="p-[var(--space-lg)] bg-[var(--surface)]">
 
           {!isLoading && (
             <div className="mt-2 flex items-center gap-3">
@@ -649,8 +643,8 @@ export function SettingsPage() {
               <p className="mt-0.5">{callsResult.message}</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <DemoVolunteersCard />
 
@@ -678,19 +672,19 @@ function ScenarioTestingCard() {
   };
 
   return (
-    <Card className="shadow-sm border-[var(--border)] overflow-hidden">
-      <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+      <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
         <div className="flex items-center gap-3">
           <IconTile icon={Play} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
           <div>
-            <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">Scenario Testing</h3>
-            <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
+            <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Scenario Testing</h3>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
               Development tooling — launches a pre-configured case to exercise the autonomous agents end to end.
             </p>
           </div>
         </div>
       </div>
-      <CardContent className="p-[var(--space-lg)] bg-[var(--surface-soft)]/30">
+      <div className="p-[var(--space-lg)] bg-[var(--surface-soft)]/30">
         {isLoading ? (
           <LoadingBlock>Loading scenarios...</LoadingBlock>
         ) : !scenarios?.length ? (
@@ -713,7 +707,7 @@ function ScenarioTestingCard() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

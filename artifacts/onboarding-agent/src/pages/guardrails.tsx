@@ -17,20 +17,28 @@ import {
   FlaskConical, MapPin, CircleCheck, Clock, ExternalLink,
 } from 'lucide-react';
 
-const SEVERITY_STYLE: Record<string, string> = {
-  critical: 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)] border-none',
-  high: 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
-  medium: 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
-  low: 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)] border-none',
+const SEVERITY_STYLE: Record<string, {bg: string, fg: string}> = {
+  critical: { bg: 'var(--status-red-bg)', fg: 'var(--status-red-fg)' },
+  high: { bg: 'var(--status-amber-bg)', fg: 'var(--status-amber-fg)' },
+  medium: { bg: 'var(--status-amber-bg)', fg: 'var(--status-amber-fg)' },
+  low: { bg: 'var(--status-gray-bg)', fg: 'var(--status-gray-fg)' },
 };
 
-const ACTION_STYLE: Record<string, string> = {
-  blocked: 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)] border-none',
-  rejected: 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)] border-none',
-  'rate-limited': 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
-  sanitized: 'bg-[var(--status-info-bg)] text-[var(--status-info-fg)] border-none',
-  escalated: 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
+const ACTION_STYLE: Record<string, {bg: string, fg: string}> = {
+  blocked: { bg: 'var(--status-red-bg)', fg: 'var(--status-red-fg)' },
+  rejected: { bg: 'var(--status-red-bg)', fg: 'var(--status-red-fg)' },
+  'rate-limited': { bg: 'var(--status-amber-bg)', fg: 'var(--status-amber-fg)' },
+  sanitized: { bg: 'var(--status-info-bg)', fg: 'var(--status-info-fg)' },
+  escalated: { bg: 'var(--status-amber-bg)', fg: 'var(--status-amber-fg)' },
 };
+
+function CompactBadge({ bg, fg, children }: { bg: string; fg: string; children: React.ReactNode }) {
+  return (
+    <span style={{ backgroundColor: bg, color: fg, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
+  );
+}
 
 export function GuardrailsPage() {
   const { data, isLoading } = useGetOnboardingGuardrails({
@@ -44,7 +52,7 @@ export function GuardrailsPage() {
   const totalActivations = guardrails.reduce((s, g) => s + g.activationCount, 0);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader 
         title="Guardrails" 
         subtitle="Every safety control enforced on AI communications — with live evidence of each intervention."
@@ -59,7 +67,7 @@ export function GuardrailsPage() {
             })
           }
           disabled={drill.isPending}
-          className="gap-2 shadow-[var(--shadow-sm)]"
+          className="gap-2"
         >
           <Swords className="w-4 h-4" />
           {drill.isPending ? 'Running attacks…' : 'Run security drill'}
@@ -68,18 +76,20 @@ export function GuardrailsPage() {
 
       {drillResult && <DrillResultCard result={drillResult} onDismiss={() => setDrillResult(null)} />}
       {drill.isError && (
-        <Card className="p-[var(--space-lg)] border-none shadow-[var(--shadow-sm)] bg-[var(--status-red-bg)] text-[var(--status-red-fg)] text-[var(--text-sm)] font-medium">
+        <div style={{ backgroundColor: 'var(--status-red-bg)', color: 'var(--status-red-fg)', padding: 'var(--space-lg)', borderRadius: 'var(--radius-lg)', fontSize: 'var(--text-sm)', fontWeight: 500 }}>
           The drill could not be completed. Check the server logs and try again.
-        </Card>
+        </div>
       )}
 
-      <div className="flex gap-3 flex-wrap text-[var(--text-sm)] mt-2">
-        <Badge className="gap-1.5 py-[4px] px-[12px] bg-[var(--surface)] text-[var(--text-secondary)] shadow-[var(--shadow-sm)] border-none font-semibold">
-          <ShieldCheck className="w-4 h-4 text-[var(--status-green-fg)]" /> {guardrails.length} controls enforced
-        </Badge>
-        <Badge className="gap-1.5 py-[4px] px-[12px] bg-[var(--surface)] text-[var(--text-secondary)] shadow-[var(--shadow-sm)] border-none font-semibold">
-          <ShieldAlert className="w-4 h-4 text-[var(--status-red-fg)]" /> {totalActivations} recorded interventions
-        </Badge>
+      <div style={{ padding: '8px var(--space-lg)', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }} className="flex items-center gap-4 flex-wrap text-[var(--text-sm)] mt-2">
+        <div className="flex items-center gap-1.5" style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-secondary)' }}>
+          <ShieldCheck className="w-4 h-4 text-[var(--status-green-fg)]" /> 
+          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{guardrails.length}</span> controls enforced
+        </div>
+        <div className="flex items-center gap-1.5" style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-secondary)' }}>
+          <ShieldAlert className="w-4 h-4 text-[var(--status-red-fg)]" /> 
+          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{totalActivations}</span> recorded interventions
+        </div>
       </div>
 
       {isLoading ? (
@@ -90,8 +100,11 @@ export function GuardrailsPage() {
           if (items.length === 0) return null;
           return (
             <section key={cat.key} className="space-y-4 pt-4">
-              <SectionHeading title={cat.title} description={cat.blurb} />
-              <div className="space-y-3">
+              <div>
+                <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{cat.title}</h2>
+                {cat.blurb && <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>{cat.blurb}</p>}
+              </div>
+              <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
                 {items.map((g) => (
                   <GuardrailCard key={g.key} guardrail={g} />
                 ))}
@@ -140,21 +153,26 @@ function DrillResultCard({ result, onDismiss }: { result: SecurityDrillResult; o
 
 function GuardrailCard({ guardrail: g }: { guardrail: Guardrail }) {
   const [open, setOpen] = useState(false);
+  const sevStyle = SEVERITY_STYLE[g.severity] ?? { bg: 'var(--status-gray-bg)', fg: 'var(--status-gray-fg)' };
+
   return (
-    <div className="bg-[var(--surface)] shadow-[var(--shadow-sm)] rounded-[var(--radius-md)] overflow-hidden transition-all duration-200 hover:shadow-[var(--shadow-md)]">
+    <div style={{ borderBottom: '1px solid var(--border)' }} className="group transition-colors last:border-0 bg-[var(--surface)]">
       <button
-        className="w-full text-left px-[var(--space-lg)] py-[var(--space-md)] flex items-center gap-4 transition-colors hover:bg-[var(--surface-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset"
+        className="w-full text-left flex items-center gap-4 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
+        style={{ padding: '12px var(--space-lg)' }}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-soft)')}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
         onClick={() => setOpen((v) => !v)}
       >
         <ShieldCheck className="w-5 h-5 text-[var(--status-green-fg)] shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-[var(--text-base)] text-[var(--text-primary)]">{g.title}</div>
-          <div className="text-[var(--text-sm)] text-[var(--text-muted)] truncate mt-0.5 font-medium">{g.threat}</div>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{g.title}</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }} className="truncate font-medium">{g.threat}</div>
         </div>
-        <Badge className={cn('capitalize text-[var(--text-xs)] shadow-none font-bold', SEVERITY_STYLE[g.severity] ?? '')}>{g.severity}</Badge>
-        <Badge className={cn('text-[var(--text-xs)] shadow-none border-none font-bold', g.activationCount > 0 ? 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]' : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]')}>
+        <CompactBadge bg={sevStyle.bg} fg={sevStyle.fg}>{g.severity}</CompactBadge>
+        <CompactBadge bg={g.activationCount > 0 ? 'var(--status-red-bg)' : 'var(--status-gray-bg)'} fg={g.activationCount > 0 ? 'var(--status-red-fg)' : 'var(--status-gray-fg)'}>
           {g.activationCount > 0 ? `${g.activationCount}× intervened` : 'No interventions'}
-        </Badge>
+        </CompactBadge>
         {open ? <ChevronUp className="w-5 h-5 shrink-0 text-[var(--text-muted)]" /> : <ChevronDown className="w-5 h-5 shrink-0 text-[var(--text-muted)]" />}
       </button>
       {open && <GuardrailDetail guardrail={g} />}
@@ -198,17 +216,17 @@ function GuardrailDetail({ guardrail: g }: { guardrail: Guardrail }) {
           <FlaskConical className="w-3.5 h-3.5" /> How it's evaluated
         </div>
         <div className="flex flex-wrap gap-2">
-          {g.evals.map((e, i) => (
-            <Badge key={i} className={cn(
-              'gap-1.5 py-[2px] px-[10px] border-none shadow-none font-bold',
-              e.kind === 'live-verified' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
-                : e.kind === 'automated-test' ? 'bg-[var(--status-info-bg)] text-[var(--status-info-fg)]'
-                : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
-            )}>
-              {e.kind === 'automated-test' ? <FlaskConical className="w-3 h-3" /> : <CircleCheck className="w-3 h-3" />}
-              {e.name}
-            </Badge>
-          ))}
+          {g.evals.map((e, i) => {
+            let bg = 'var(--status-gray-bg)', fg = 'var(--status-gray-fg)';
+            if (e.kind === 'live-verified') { bg = 'var(--status-green-bg)'; fg = 'var(--status-green-fg)'; }
+            else if (e.kind === 'automated-test') { bg = 'var(--status-info-bg)'; fg = 'var(--status-info-fg)'; }
+            return (
+              <CompactBadge key={i} bg={bg} fg={fg}>
+                {e.kind === 'automated-test' ? <FlaskConical className="w-3 h-3" /> : <CircleCheck className="w-3 h-3" />}
+                {e.name}
+              </CompactBadge>
+            );
+          })}
         </div>
       </div>
 
@@ -227,7 +245,9 @@ function GuardrailDetail({ guardrail: g }: { guardrail: Guardrail }) {
           <ul className="space-y-3 mt-3">
             {events.map((ev) => (
               <li key={ev.id} className="flex gap-4 items-start bg-[var(--surface)] p-[var(--space-md)] rounded-[var(--radius-md)] shadow-[var(--shadow-sm)] border border-[var(--border)]">
-                <Badge className={cn('capitalize shrink-0 mt-0.5 text-[10px] shadow-none font-bold', ACTION_STYLE[ev.action] ?? 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)] border-none')}>{ev.action}</Badge>
+                <div className="shrink-0 mt-0.5">
+                  <CompactBadge bg={ACTION_STYLE[ev.action]?.bg ?? 'var(--status-gray-bg)'} fg={ACTION_STYLE[ev.action]?.fg ?? 'var(--status-gray-fg)'}>{ev.action}</CompactBadge>
+                </div>
                 <div className="min-w-0">
                   <p className="break-words font-semibold leading-relaxed text-[var(--text-sm)] text-[var(--text-primary)]">{ev.detail}</p>
                   <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1.5 font-medium">
