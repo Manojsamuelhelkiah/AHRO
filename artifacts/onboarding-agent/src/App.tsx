@@ -100,7 +100,7 @@ function AuthScreenShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4 py-10 gap-8">
       <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-primary">
         <Server className="h-6 w-6" />
-        <span>Onboard OS</span>
+        <span>Autonomous HRO</span>
       </div>
       {children}
     </div>
@@ -130,7 +130,7 @@ function LandingPage() {
         <Server className="h-8 w-8 text-white" />
       </div>
       <div className="space-y-2 max-w-md">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Onboard OS Control Tower</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Autonomous HRO Control Tower</h1>
         <p className="text-slate-500">
           Monitor onboarding cases, review agent decisions, and manage system connectors.
           Sign in to access the control tower.

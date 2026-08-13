@@ -1,5 +1,5 @@
 kind = "slides"
-previewPath = "/"
+previewPath = "/hro-agentic-architecture/"
 title = "Autonomous HRO Agentic Architecture"
 version = "1.0.0"
 id = "artifacts/hro-agentic-architecture"
@@ -7,7 +7,7 @@ router = "path"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/hro-agentic-architecture/" ]
 localPort = 24953
 
 [services.development]
@@ -24,4 +24,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "24953"
-BASE_PATH = "/"
+BASE_PATH = "/hro-agentic-architecture/"
