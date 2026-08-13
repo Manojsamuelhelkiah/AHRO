@@ -1,0 +1,530 @@
+Update **ONLY the LEFT SIDE of the existing Agentic HRO Suite login page**.
+
+Do NOT modify the right-side authentication/login panel.
+
+Do NOT change authentication logic, routing, APIs, backend, database, SSO behavior, or any unrelated components.
+
+The goal is to transform the left side from a pseudo-live operational dashboard into a **premium, production-grade enterprise product introduction panel**.
+
+The left panel must feel like the secure entry point to a serious **Agentic HRO enterprise platform**, not like a demo dashboard.
+
+---
+
+# 1. REMOVE OPERATIONAL DATA FROM THE LOGIN PAGE
+
+Remove these completely from the left side:
+
+* Active Cases KPI
+* SLA Adherence KPI
+* Hard Blocks KPI
+* Autonomously Resolved KPI
+* Agent Coverage / Agent Operations live counts
+* "Active" agent counts
+* "0 errors"
+* Live Agent Activity
+* timestamps such as "1m ago", "2m ago", etc.
+* any simulated operational activity
+* any case counts
+* any customer/employee/process activity data
+* anything that could be interpreted as real HR operational information before authentication
+
+IMPORTANT:
+
+The login page must NOT appear to expose real or simulated HR operations before the user signs in.
+
+Move this type of content to the authenticated **Agentic HRO Control Tower** later.
+
+---
+
+# 2. KEEP THE BRAND IDENTITY
+
+Preserve the existing:
+
+**Agentic HRO**
+
+**SUITE**
+
+and the positioning statement:
+
+*Intelligent HR operations, autonomously delivered*
+
+Keep the:
+
+* dark midnight navy / indigo background
+* subtle dot/grid pattern
+* existing HRO/server-style logo
+* white typography
+* lavender/indigo accents
+* restrained green semantic accents
+* premium enterprise visual language
+
+Do not redesign the branding.
+
+---
+
+# 3. CREATE A STRONG ENTERPRISE HERO AREA
+
+The top portion of the left panel should become a refined product-introduction area.
+
+Keep:
+
+### Agentic HRO
+
+### SUITE
+
+and:
+
+*Intelligent HR operations, autonomously delivered*
+
+Then add a concise supporting statement:
+
+**AI-powered HR operations, orchestrated with control, governance, and human oversight.**
+
+Keep this sentence relatively compact.
+
+Do NOT turn this into a large marketing paragraph.
+
+The tone should be:
+
+* enterprise
+* confident
+* intelligent
+* operational
+* trustworthy
+
+Avoid exaggerated AI language such as:
+
+* revolutionary
+* magical
+* next-generation
+* fully autonomous workforce
+* AI that does everything
+
+---
+
+# 4. REPLACE THE KPI CARDS WITH THREE CAPABILITY CARDS
+
+Instead of metrics, create three compact capability cards.
+
+## CARD 1
+
+### AUTONOMOUS OPERATIONS
+
+**AI agents execute HR workflows across the employee lifecycle.**
+
+Small visual treatment:
+subtle agent/automation icon or abstract workflow glyph.
+
+---
+
+## CARD 2
+
+### GOVERNED EXECUTION
+
+**Policies, rules, permissions, and controls guide every automated action.**
+
+Small visual treatment:
+subtle shield / governance icon.
+
+---
+
+## CARD 3
+
+### HUMAN OVERSIGHT
+
+**Exceptions, approvals, and sensitive decisions are routed to the right people.**
+
+Small visual treatment:
+subtle human/approval icon.
+
+These should NOT look like dashboard KPI cards.
+
+They should feel like premium product capabilities.
+
+---
+
+# 5. VISUAL HIERARCHY OF CAPABILITY CARDS
+
+Use the same overall visual language as the existing cards so the redesign remains consistent.
+
+However:
+
+* reduce the visual heaviness
+* avoid large numbers
+* avoid fake metrics
+* avoid excessive borders
+* avoid bright glows
+* avoid unnecessary animation
+
+Each card should have:
+
+Icon
+↓
+Small uppercase capability title
+↓
+One concise explanatory sentence
+
+The cards should form a clear narrative:
+
+**Agents execute**
+→
+**Governance controls**
+→
+**Humans oversee**
+
+This is the core Agentic HRO proposition.
+
+---
+
+# 6. ADD A SUBTLE "CONTROL MODEL" SECTION
+
+Below the capability cards, create a compact visual flow:
+
+**AGENTS** → **POLICIES** → **HUMANS**
+
+Under each:
+
+### AGENTS
+
+Execute workflows
+
+### POLICIES
+
+Govern decisions
+
+### HUMANS
+
+Handle exceptions
+
+Use simple visual connectors/arrows.
+
+This should look like an elegant enterprise operating model, not a technical architecture diagram.
+
+Do not make it large.
+
+It should reinforce the platform concept within seconds.
+
+---
+
+# 7. ADD A TRUST / ENTERPRISE STATEMENT
+
+Near the lower part of the left panel, add a subtle trust-oriented message:
+
+**Designed for enterprise HR operations**
+
+Then a small supporting line:
+
+`Secure workflows • governed automation • human-in-the-loop`
+
+Do NOT make unsupported security/compliance claims.
+
+Do not mention:
+
+* SOC 2
+* ISO 27001
+* HIPAA
+* GDPR certification
+* encryption certifications
+* compliance certifications
+
+unless they already exist and are explicitly supported by the product.
+
+---
+
+# 8. REMOVE ANYTHING THAT LOOKS LIKE A DEMO
+
+The entire left panel must be reviewed for language or visuals that suggest:
+
+* demo
+* sample
+* simulation
+* test environment
+* fake activity
+* placeholder data
+* live mock data
+
+Remove all such cues.
+
+The page should look like a real enterprise production application.
+
+---
+
+# 9. REMOVE "LIVE" LANGUAGE
+
+Do not use:
+
+* Live Agent Activity
+* Agents Online
+* Active Cases
+* Real-time HR operations
+* Live processing
+* Live metrics
+
+The user has not authenticated yet.
+
+The left panel is a **product introduction**, not an operational workspace.
+
+---
+
+# 10. FOOTER
+
+Keep:
+
+**Powered by HCLTech**
+
+Position it cleanly near the bottom-left area.
+
+Keep it subtle but readable.
+
+Do not add unnecessary links or marketing copy.
+
+---
+
+# 11. COMPOSITION
+
+The left panel should now have this structure:
+
+### TOP
+
+Agentic HRO
+SUITE
+
+*Intelligent HR operations, autonomously delivered*
+
+Supporting statement:
+
+**AI-powered HR operations, orchestrated with control, governance, and human oversight.**
+
+↓
+
+### MIDDLE
+
+AUTONOMOUS OPERATIONS
+
+Short explanation
+
+GOVERNED EXECUTION
+
+Short explanation
+
+HUMAN OVERSIGHT
+
+Short explanation
+
+↓
+
+### LOWER MIDDLE
+
+**AGENTS → POLICIES → HUMANS**
+
+Execute workflows → Govern decisions → Handle exceptions
+
+↓
+
+### LOWER AREA
+
+**Designed for enterprise HR operations**
+
+Secure workflows • governed automation • human-in-the-loop
+
+↓
+
+### FOOTER
+
+Powered by HCLTech
+
+---
+
+# 12. USE THE EXISTING SPACE INTENTIONALLY
+
+The previous dashboard used a lot of the panel for metrics and activity.
+
+Do NOT simply leave a large empty area after removing them.
+
+Use whitespace intentionally.
+
+The new composition should feel balanced vertically:
+
+Brand
+↓
+Positioning
+↓
+Product statement
+↓
+Capability cards
+↓
+Operating model
+↓
+Enterprise trust statement
+↓
+Footer
+
+Use generous spacing but maintain visual density appropriate for an enterprise login page.
+
+---
+
+# 13. RESPONSIVE DESIGN
+
+Desktop:
+
+Keep the left panel visually dominant and spacious.
+
+Tablet:
+
+Reduce card spacing and typography slightly.
+
+Mobile:
+
+The left panel should collapse into a concise branded section.
+
+Prioritize:
+
+Agentic HRO
+↓
+Positioning
+↓
+Short product statement
+↓
+Three capabilities
+
+Do not allow the left panel to overpower the authentication experience on small screens.
+
+No horizontal scrolling.
+
+---
+
+# 14. MICRO-INTERACTIONS
+
+Use subtle interaction only where it improves polish.
+
+Examples:
+
+* capability cards can have a very subtle hover lift/border shift
+* icons can have subtle opacity/transform changes
+* connectors can have restrained transitions
+
+Do NOT use:
+
+* pulsing AI dots
+* flashing statuses
+* animated fake activity
+* rotating dashboards
+* excessive gradients
+* glowing neon effects
+* particle animations
+* futuristic sci-fi effects
+
+The design should feel mature and enterprise-grade.
+
+---
+
+# 15. ACCESSIBILITY
+
+Ensure:
+
+* strong contrast
+* readable body text
+* semantic structure
+* keyboard accessibility
+* accessible icons
+* no information conveyed through color alone
+
+Do not reduce text opacity so aggressively that important content becomes difficult to read.
+
+---
+
+# 16. IMPLEMENTATION GUIDANCE
+
+Before modifying the component:
+
+1. Inspect the current left login panel implementation.
+2. Reuse the existing styling system.
+3. Reuse the existing brand/logo assets.
+4. Reuse existing card/icon components where appropriate.
+5. Remove only the dashboard-specific content.
+6. Do not rewrite unrelated application code.
+7. Do not install a new framework.
+8. Keep the new capability content data-driven/reusable where practical.
+
+---
+
+# 17. IMPORTANT PRODUCT PRINCIPLE
+
+The login page should answer:
+
+**What is Agentic HRO?**
+
+Not:
+
+**What is Agentic HRO doing right now?**
+
+The authenticated Control Tower will answer the second question.
+
+The login page should communicate the product model:
+
+**Agents execute.**
+
+**Policies govern.**
+
+**Humans oversee.**
+
+That is the core message.
+
+---
+
+# 18. FINAL QUALITY BAR
+
+The final left panel should feel comparable in polish to a premium enterprise SaaS platform.
+
+Target characteristics:
+
+* minimal
+* sophisticated
+* calm
+* trustworthy
+* AI-native
+* enterprise-grade
+* executive-friendly
+* modern without being flashy
+
+It should NOT look like:
+
+* a Replit prototype
+* a hackathon project
+* a generic AI startup landing page
+* a dashboard
+* a chatbot
+* a marketing-heavy landing page
+
+It should look like the **secure front door of an enterprise Agentic HRO platform**.
+
+---
+
+# 19. ACCEPTANCE CRITERIA
+
+Before completing the implementation verify:
+
+* No KPI metrics remain on the left login panel.
+* No HR operational data is displayed.
+* No live activity feed remains.
+* No activity timestamps remain.
+* No simulated agent activity remains.
+* No fake case counts remain.
+* Agentic HRO branding is preserved.
+* "Intelligent HR operations, autonomously delivered" is preserved.
+* Three capability cards are present:
+
+  * Autonomous Operations
+  * Governed Execution
+  * Human Oversight
+* Agents → Policies → Humans operating model is present.
+* Enterprise HR operations trust statement is present.
+* Powered by HCLTech remains present.
+* No demo/prototype/test/simulation language remains.
+* The panel feels premium and production-ready.
+* The right-side login panel is completely unchanged.
+* Existing application functionality remains intact.
+
+Do not merely remove the old dashboard elements.
+
+Rebalance the entire left-panel composition so the result looks intentionally designed from the beginning as an **enterprise Agentic HRO authentication experience**.

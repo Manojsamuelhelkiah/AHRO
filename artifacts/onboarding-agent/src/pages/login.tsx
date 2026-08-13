@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSignIn } from '@clerk/react';
-import { Server, Loader2, Lock, ArrowRight } from 'lucide-react';
+import { Server, Loader2, Lock, ArrowRight, Workflow, ShieldCheck, UserCheck } from 'lucide-react';
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -8,54 +8,29 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 const DEMO_EMAIL = 'demo.reviewer@example.com';
 const DEMO_PASSWORD = 'OnboardOS-Demo-2026!';
 
-const METRICS = [
-  { label: 'ACTIVE CASES', value: '13', trend: '↑ 2 from last week', trendClass: 'text-green-400' },
-  { label: 'SLA ADHERENCE', value: '99.2%', trend: '↑ 0.3% from last week', trendClass: 'text-green-400' },
-  { label: 'HARD BLOCKS', value: '0', trend: '✓ Clear today', trendClass: 'text-green-400' },
+const CAPABILITIES = [
+  {
+    icon: Workflow,
+    title: 'Autonomous Operations',
+    text: 'AI agents execute HR workflows across the employee lifecycle.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Governed Execution',
+    text: 'Policies, rules, permissions, and controls guide every automated action.',
+  },
+  {
+    icon: UserCheck,
+    title: 'Human Oversight',
+    text: 'Exceptions, approvals, and sensitive decisions are routed to the right people.',
+  },
 ];
 
-const AGENTS = ['Onboarding Agent', 'Payroll Agent', 'Compliance Agent', 'Helpdesk Agent'];
-
-const FEED_ITEMS: { badge: 'AI' | 'SYS' | 'RULES'; text: string; time: string }[] = [
-  { badge: 'AI', text: 'Reply drafted & dispatched', time: 'just now' },
-  { badge: 'SYS', text: 'Background verification complete', time: '1m ago' },
-  { badge: 'AI', text: 'Payroll setup initiated', time: '2m ago' },
-  { badge: 'RULES', text: 'Rehire flagged for HR review', time: '4m ago' },
-  { badge: 'SYS', text: 'Employment archive queried', time: '5m ago' },
+const OPERATING_MODEL = [
+  { title: 'Agents', text: 'Execute workflows' },
+  { title: 'Policies', text: 'Govern decisions' },
+  { title: 'Humans', text: 'Handle exceptions' },
 ];
-
-const BADGE_STYLES: Record<string, string> = {
-  AI: 'bg-indigo-500/30 text-indigo-200 border border-indigo-400/30',
-  SYS: 'bg-slate-500/30 text-slate-200 border border-slate-400/30',
-  RULES: 'bg-amber-500/25 text-amber-200 border border-amber-400/30',
-};
-
-function ActivityFeed() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 4000);
-    return () => clearInterval(t);
-  }, []);
-  const rows = Array.from({ length: 5 }, (_, i) => FEED_ITEMS[(tick + i) % FEED_ITEMS.length]);
-  return (
-    <div className="space-y-2.5" aria-hidden="true">
-      <p className="text-[11px] uppercase tracking-[0.25em] text-indigo-300 font-semibold">Live agent activity</p>
-      {rows.map((item, i) => (
-        <div
-          key={`${tick}-${i}`}
-          className="flex items-center gap-3 animate-in fade-in slide-in-from-bottom-1 duration-700"
-          style={{ opacity: 1 - i * 0.13 }}
-        >
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ${BADGE_STYLES[item.badge]}`}>
-            {item.badge}
-          </span>
-          <span className="text-[13px] text-white/90 flex-1 truncate">{item.text}</span>
-          <span className="text-xs text-slate-400 shrink-0">{item.time}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function LoginPage() {
   const { signIn } = useSignIn();
@@ -116,7 +91,7 @@ export function LoginPage() {
             opacity: 0.05,
           }}
         />
-        <div className="relative flex flex-col flex-1 gap-6 lg:gap-[clamp(12px,2.5vh,32px)] lg:min-h-0">
+        <div className="relative flex flex-col flex-1 gap-6 lg:gap-[clamp(16px,3vh,40px)] lg:justify-evenly lg:pb-[4vh] lg:min-h-0">
           {/* wordmark */}
           <div>
             <div className="flex items-center gap-3">
@@ -131,39 +106,51 @@ export function LoginPage() {
             <p className="mt-4 border-l-2 border-indigo-400 pl-3 text-base italic text-slate-300 max-w-md">
               Intelligent HR operations, autonomously delivered
             </p>
+            <p className="mt-4 text-[15px] font-medium text-white/90 max-w-lg">
+              AI-powered HR operations, orchestrated with control, governance, and human oversight.
+            </p>
           </div>
 
-          {/* metric cards */}
+          {/* capability cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl">
-            {METRICS.map((m) => (
-              <div key={m.label} className="rounded-xl bg-white/[0.06] border border-white/10 backdrop-blur px-5 py-4">
-                <p className="text-[11px] uppercase tracking-widest text-indigo-300 font-semibold">{m.label}</p>
-                <p className="text-[32px] font-bold text-white leading-tight mt-1">{m.value}</p>
-                <p className={`text-xs mt-1 ${m.trendClass}`}>{m.trend}</p>
+            {CAPABILITIES.map((c) => (
+              <div
+                key={c.title}
+                className="rounded-xl bg-white/[0.05] border border-white/10 px-5 py-5 transition-all duration-200 hover:bg-white/[0.08] hover:border-indigo-300/30 hover:-translate-y-0.5"
+              >
+                <c.icon className="h-5 w-5 text-indigo-300" aria-hidden="true" />
+                <p className="mt-3 text-[11px] uppercase tracking-widest text-indigo-300 font-semibold">{c.title}</p>
+                <p className="mt-2 text-[13px] leading-relaxed text-white/85">{c.text}</p>
               </div>
             ))}
           </div>
 
-          {/* agent coverage */}
+          {/* operating model */}
           <div className="max-w-2xl">
-            <div className="border-t border-white/10 pt-4">
-              <p className="text-[11px] uppercase tracking-[0.25em] text-indigo-300 font-semibold mb-3">Agent coverage</p>
-              <div className="space-y-2.5">
-                {AGENTS.map((a) => (
-                  <div key={a} className="flex items-center gap-3">
-                    <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                    <span className="text-sm text-white/90 flex-1">{a}</span>
-                    <span className="text-xs text-green-400">Active · 0 errors</span>
+            <div className="border-t border-white/10 pt-5">
+              <div className="flex items-start justify-between gap-2 max-w-lg">
+                {OPERATING_MODEL.map((step, i) => (
+                  <div key={step.title} className="flex items-start flex-1 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] uppercase tracking-widest text-white font-semibold">{step.title}</p>
+                      <p className="mt-1 text-xs text-slate-300">{step.text}</p>
+                    </div>
+                    {i < OPERATING_MODEL.length - 1 && (
+                      <ArrowRight className="h-4 w-4 text-indigo-300/70 shrink-0 mx-3 mt-0.5" aria-hidden="true" />
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* live feed pinned toward bottom */}
-          <div className="mt-auto max-w-2xl space-y-4 lg:overflow-hidden">
-            <ActivityFeed />
-            <p className="text-center text-[11px] text-slate-500">Powered by HCLTech</p>
+          {/* trust statement + footer pinned toward bottom */}
+          <div className="mt-auto lg:mt-0 max-w-2xl space-y-4 lg:overflow-hidden">
+            <div>
+              <p className="text-sm font-semibold text-white/90">Designed for enterprise HR operations</p>
+              <p className="mt-1 text-xs text-slate-400">Secure workflows · governed automation · human-in-the-loop</p>
+            </div>
+            <p className="text-[11px] text-slate-500">Powered by HCLTech</p>
           </div>
         </div>
       </div>
