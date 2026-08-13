@@ -98,6 +98,11 @@ export const onbCommunications = pgTable("onb_communications", {
   status: text("status").notNull(),
   failureReason: text("failure_reason"),
   sensitive: boolean("sensitive").notNull().default(false),
+  /**
+   * Provider-side id for inbound messages (Gmail message id, Twilio
+   * MessageSid). Used to deduplicate polling / webhook retries.
+   */
+  externalMessageId: text("external_message_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

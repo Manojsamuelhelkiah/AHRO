@@ -23,7 +23,7 @@ await build({
   format: "esm",
   target: "node20",
   outExtension: { ".js": ".mjs" },
-  external: ["node:*", "exceljs"],
+  external: ["node:*", "exceljs", "pg", "@replit/connectors-sdk"],
 });
 
 const result = spawnSync(

@@ -50,7 +50,7 @@ async function sendEmail(
   to: string,
   subject: string,
   body: string,
-): Promise<{ status: string; failureReason: string | null }> {
+): Promise<{ status: string; failureReason: string | null; externalMessageId: string | null }> {
   try {
     const rfc2822 = [
       `To: ${to}`,
@@ -71,23 +71,27 @@ async function sendEmail(
     );
     if (!resp.ok) {
       const detail = await resp.text();
-      return { status: "failed", failureReason: `Gmail ${resp.status}: ${detail.slice(0, 300)}` };
+      return { status: "failed", failureReason: `Gmail ${resp.status}: ${detail.slice(0, 300)}`, externalMessageId: null };
     }
-    return { status: "sent", failureReason: null };
+    // Store the Gmail message id so the inbound poller can recognise (and
+    // skip) our own outbound messages when the demo recipient is the same
+    // Gmail account — otherwise self-sent mail would echo back as "inbound".
+    const sent = (await resp.json().catch(() => null)) as { id?: string } | null;
+    return { status: "sent", failureReason: null, externalMessageId: sent?.id ?? null };
   } catch (err) {
-    return { status: "failed", failureReason: String(err).slice(0, 300) };
+    return { status: "failed", failureReason: String(err).slice(0, 300), externalMessageId: null };
   }
 }
 
 async function sendWhatsApp(
   toPhone: string,
   body: string,
-): Promise<{ status: string; failureReason: string | null }> {
+): Promise<{ status: string; failureReason: string | null; externalMessageId: string | null }> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_WHATSAPP_FROM;
   if (!sid || !token || !from) {
-    return { status: "logged-only", failureReason: null };
+    return { status: "logged-only", failureReason: null, externalMessageId: null };
   }
   try {
     const params = new URLSearchParams({
@@ -108,11 +112,12 @@ async function sendWhatsApp(
     );
     if (!resp.ok) {
       const detail = await resp.text();
-      return { status: "failed", failureReason: `Twilio ${resp.status}: ${detail.slice(0, 300)}` };
+      return { status: "failed", failureReason: `Twilio ${resp.status}: ${detail.slice(0, 300)}`, externalMessageId: null };
     }
-    return { status: "sent", failureReason: null };
+    const sent = (await resp.json().catch(() => null)) as { sid?: string } | null;
+    return { status: "sent", failureReason: null, externalMessageId: sent?.sid ?? null };
   } catch (err) {
-    return { status: "failed", failureReason: String(err).slice(0, 300) };
+    return { status: "failed", failureReason: String(err).slice(0, 300), externalMessageId: null };
   }
 }
 
@@ -164,17 +169,19 @@ export async function sendOutbound(opts: {
   body: string;
   sensitive?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
-  let result: { status: string; failureReason: string | null };
+  let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   if (!recipientAllowed(opts.toAddress)) {
     result = {
       status: "logged-only",
       failureReason:
         "Recipient is not on the demo allowlist — message composed and logged, not delivered (set ONBOARDING_ALLOWED_RECIPIENTS to change).",
+      externalMessageId: null,
     };
   } else if (!withinRateLimit()) {
     result = {
       status: "logged-only",
       failureReason: "Hourly live-send limit reached — message logged, not delivered.",
+      externalMessageId: null,
     };
   } else if (opts.channel === "email") {
     result = await sendEmail(opts.toAddress, opts.subject ?? "Onboarding update", opts.body);
@@ -195,7 +202,8 @@ export async function sendOutbound(opts: {
       status: result.status,
       failureReason: result.failureReason,
       sensitive: opts.sensitive ?? false,
+      externalMessageId: result.externalMessageId,
     })
     .returning({ id: onbCommunications.id });
-  return { id: row.id, ...result };
+  return { id: row.id, status: result.status, failureReason: result.failureReason };
 }

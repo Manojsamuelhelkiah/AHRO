@@ -30,6 +30,8 @@ import {
   whatsappChannelInfo,
 } from "../lib/onboarding/channels";
 import { llmComplete } from "../lib/onboarding/llm";
+import { recordInbound } from "../lib/onboarding/inbound-email";
+import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
 
@@ -37,7 +39,15 @@ const router: IRouter = Router();
 
 // All onboarding endpoints expose employee PII and can trigger real
 // email/WhatsApp sends — every route requires a signed-in user.
-router.use("/onboarding", requireAuth);
+// The Twilio webhook is the one exception: it is called server-to-server
+// by Twilio and authenticated by its request signature instead.
+router.use("/onboarding", (req, res, next) => {
+  if (req.path.startsWith("/webhooks/")) {
+    next();
+    return;
+  }
+  requireAuth(req, res, next);
+});
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -325,6 +335,72 @@ router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
       .returning();
     handleInbound(id, body.channel as "email" | "whatsapp", body.body);
     res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ------------------- Twilio WhatsApp inbound webhook ------------------ */
+
+/**
+ * Rejecting invalid X-Twilio-Signature headers keeps this public endpoint
+ * from being used to inject fake "new hire" messages.
+ */
+function requestSignatureValid(req: Parameters<Parameters<IRouter["post"]>[1]>[0]): boolean {
+  const proto = req.header("x-forwarded-proto")?.split(",")[0]?.trim() || req.protocol;
+  const host = req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.header("host");
+  return twilioSignatureValid({
+    token: process.env.TWILIO_AUTH_TOKEN,
+    signature: req.header("x-twilio-signature"),
+    url: `${proto}://${host}${req.originalUrl}`,
+    params: req.body as Record<string, string>,
+  });
+}
+
+const digitsOnly = (s: string) => s.replace(/\D/g, "");
+
+router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
+  try {
+    if (!process.env.TWILIO_AUTH_TOKEN) {
+      res.status(503).json({ message: "Twilio is not configured" });
+      return;
+    }
+    if (!requestSignatureValid(req)) {
+      res.status(403).json({ message: "Invalid Twilio signature" });
+      return;
+    }
+    const from = String(req.body?.From ?? "").replace(/^whatsapp:/, "");
+    const text = String(req.body?.Body ?? "").trim();
+    const messageSid = String(req.body?.MessageSid ?? "");
+    const respondEmpty = () => {
+      res.type("text/xml").send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
+    };
+    if (!from || !text || !messageSid) {
+      respondEmpty();
+      return;
+    }
+
+    // Match the sender's phone to the most recent active case.
+    const cases = await db
+      .select({ id: onbCases.id, workerPhone: onbCases.workerPhone })
+      .from(onbCases)
+      .where(sql`${onbCases.lifecycleStage} not in ('complete')`)
+      .orderBy(desc(onbCases.id));
+    const fromDigits = digitsOnly(from);
+    const match = cases.find(
+      (c) => c.workerPhone && digitsOnly(c.workerPhone) === fromDigits,
+    );
+    if (match) {
+      await recordInbound({
+        caseId: match.id,
+        channel: "whatsapp",
+        fromAddress: from,
+        subject: null,
+        body: text.slice(0, 4000),
+        externalMessageId: messageSid,
+      });
+    }
+    respondEmpty();
   } catch (err) {
     next(err);
   }

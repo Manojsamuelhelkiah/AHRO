@@ -4,3 +4,4 @@
 - [Scenario form/API mapping](scenario-form-mapping.md) — use the canonical mapper pair in `scenario-form.ts`; never spread raw API inputs into form state or stale overrides survive resets.
 - [Orval codegen max-constraint TDZ](orval-codegen-max-tdz.md) — `maximum` on additionalProperties in the OpenAPI spec breaks the generated zod module at import; validate ranges app-side.
 - [Reasoning model token budget](reasoning-model-token-budget.md) — gpt-5 models return empty content when max_completion_tokens is too small; add ~+2500 buffer.
+- [Gmail self-send echo loop](gmail-self-send-echo.md) — store outbound provider message ids in the inbound dedup column or the poller replies to its own mail forever.

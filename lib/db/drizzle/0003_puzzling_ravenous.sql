@@ -1,0 +1,2 @@
+ALTER TABLE "onb_communications" ADD COLUMN "external_message_id" text;--> statement-breakpoint
+ALTER TABLE "onb_communications" ADD CONSTRAINT "onb_communications_external_message_id_unique" UNIQUE("external_message_id");
