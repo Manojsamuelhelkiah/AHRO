@@ -95,8 +95,14 @@ export async function formulateRecordsQuestions(caseContext: string): Promise<{ 
 
 /* ---------------- LDM: interpret question -> query plan -------------- */
 
+/** Optional stint filter: scope a metric to one specific past stint. */
+export type StintFilter =
+  | "latest"
+  | "earliest"
+  | { yearRange: { from?: number; to?: number } };
+
 /** Constrained query-plan vocabulary the model may emit. Execution is code, not the model. */
-type QueryPlan = {
+export type QueryPlan = {
   metric:
     | "notice_served_in_full_all_stints"
     | "notice_shortfall_by_stint"
@@ -107,6 +113,8 @@ type QueryPlan = {
     | "total_tenure_months"
     | "stint_count"
     | "list_stints";
+  /** When present, the metric is computed over just the matching stint(s). */
+  filter?: { stint: StintFilter };
 };
 
 const METRICS: QueryPlan["metric"][] = [
@@ -122,13 +130,17 @@ const METRICS: QueryPlan["metric"][] = [
 ];
 
 async function interpretQuestion(question: string): Promise<QueryPlan | null> {
-  const out = await llmCompleteJson<{ metric: string }>(
-    `You are a large-database-model agent. Map the analyst's question to EXACTLY ONE metric from this list (return JSON {"metric":"..."}):\n${METRICS.join("\n")}\nPick the closest match; if nothing fits, use "list_stints".`,
+  const out = await llmCompleteJson<{ metric: string; filter?: { stint?: unknown } }>(
+    `You are a large-database-model agent. Map the analyst's question to EXACTLY ONE metric from this list (return JSON {"metric":"..."}):\n${METRICS.join("\n")}\nPick the closest match; if nothing fits, use "list_stints".\nIf the question is about ONE specific past stint (not the whole history), also add a filter:\n- most recent / last stint: {"filter":{"stint":"latest"}}\n- first / earliest stint: {"filter":{"stint":"earliest"}}\n- a stint identified by years, e.g. "the 2019-2024 stint": {"filter":{"stint":{"yearRange":{"from":2019,"to":2024}}}} (either bound may be omitted).\nOmit the filter entirely when the question covers all stints.`,
     question,
-    200,
+    300,
   );
   const metric = METRICS.find((m) => m === out?.metric);
-  return metric ? { metric } : null;
+  if (!metric) return null;
+  const plan: QueryPlan = { metric };
+  const rawStint = out?.filter?.stint;
+  if (rawStint !== undefined) plan.filter = { stint: rawStint as StintFilter };
+  return plan;
 }
 
 /* --------------------- deterministic plan execution ------------------ */
@@ -138,9 +150,59 @@ function months(a: string, b: string): number {
   return Math.max(0, Math.round((e.getTime() - s.getTime()) / (30.44 * 24 * 3600 * 1000)));
 }
 
-export function executePlan(plan: QueryPlan, stints: StintRow[]): string {
+/**
+ * Apply an optional stint filter deterministically. Unknown/unmatchable
+ * filters fall back to all stints, with a note explaining the fallback.
+ */
+export function applyStintFilter(
+  stints: StintRow[],
+  filter: QueryPlan["filter"],
+): { stints: StintRow[]; note: string | null } {
+  if (!filter || filter.stint === undefined || filter.stint === null) return { stints, note: null };
+  // Rows are ordered by startDate ascending at the DB, but sort defensively.
+  const sorted = [...stints].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const f = filter.stint;
+  if (f === "latest") {
+    return { stints: sorted.slice(-1), note: "(scoped to the most recent stint)" };
+  }
+  if (f === "earliest") {
+    return { stints: sorted.slice(0, 1), note: "(scoped to the earliest stint)" };
+  }
+  if (typeof f === "object" && f !== null && "yearRange" in f && typeof f.yearRange === "object" && f.yearRange !== null) {
+    const from = Number((f.yearRange as { from?: unknown }).from);
+    const to = Number((f.yearRange as { to?: unknown }).to);
+    const hasFrom = Number.isFinite(from);
+    const hasTo = Number.isFinite(to);
+    if (hasFrom || hasTo) {
+      const matched = sorted.filter((s) => {
+        const startYear = Number(s.startDate.slice(0, 4));
+        const endYear = Number(s.endDate.slice(0, 4));
+        // Stint overlaps the requested year window.
+        return (!hasTo || startYear <= to) && (!hasFrom || endYear >= from);
+      });
+      if (matched.length > 0) {
+        const label = hasFrom && hasTo ? `${from}–${to}` : hasFrom ? `from ${from}` : `to ${to}`;
+        return { stints: matched, note: `(scoped to the ${label} stint${matched.length > 1 ? "s" : ""})` };
+      }
+      return { stints: sorted, note: "(note: no stint matched the requested years — answering across all stints)" };
+    }
+  }
+  return { stints: sorted, note: "(note: unrecognized stint filter — answering across all stints)" };
+}
+
+export function executePlan(plan: QueryPlan, allStints: StintRow[]): string {
+  const { stints, note } = applyStintFilter(allStints, plan.filter);
+  const suffix = note ? ` ${note}` : "";
   const span = (s: StintRow) => `${s.startDate}→${s.endDate} (${s.role})`;
-  switch (plan.metric) {
+  return computeMetric(plan.metric, stints, span) + suffix;
+}
+
+function computeMetric(
+  metric: QueryPlan["metric"],
+  stints: StintRow[],
+  span: (s: StintRow) => string,
+): string {
+  switch (metric) {
     case "notice_served_in_full_all_stints": {
       const short = stints.filter((s) => s.noticeServedDays < s.noticeRequiredDays);
       return short.length === 0
