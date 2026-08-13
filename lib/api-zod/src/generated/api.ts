@@ -1684,6 +1684,45 @@ export const GetOnboardingAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary System Watcher agent status — per-connector polling/webhook health and tracked external-system checks
+ */
+export const GetOnboardingSystemWatcherResponse = zod.object({
+  "connectors": zod.array(zod.object({
+  "key": zod.string().describe('bgv | itsm | payroll'),
+  "label": zod.string(),
+  "mode": zod.string().describe('push (vendor webhook) | poll (scheduled API polling)'),
+  "connectorKey": zod.string().describe('onb_connectors row this health is tied to'),
+  "pollIntervalSeconds": zod.number().nullable().describe('Null for push-mode systems'),
+  "running": zod.boolean(),
+  "state": zod.string().describe('healthy | initializing | broken | stopped'),
+  "healthy": zod.boolean(),
+  "lastPollAt": zod.string().nullable(),
+  "lastSuccessAt": zod.string().nullable(),
+  "lastEventAt": zod.string().nullable().describe('Push mode — when the last vendor webhook arrived'),
+  "eventsReceived": zod.number(),
+  "lastError": zod.string().nullable(),
+  "lastErrorAt": zod.string().nullable()
+}).describe('Health of one watched external-system integration (push webhook or scheduled polling)')),
+  "checks": zod.array(zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "caseWorkerName": zod.string(),
+  "system": zod.string().describe('bgv | itsm | payroll'),
+  "label": zod.string(),
+  "mode": zod.string().describe('push | poll'),
+  "externalRef": zod.string().describe('Vendor-side reference, e.g. BGV-1042 \/ RITM-1042'),
+  "status": zod.string().describe('pending | done | overdue'),
+  "requestedAt": zod.string(),
+  "dueAt": zod.string().describe('SLA deadline — past this the watcher escalates once'),
+  "completedAt": zod.string().nullable(),
+  "lastCheckedAt": zod.string().nullable(),
+  "escalatedAt": zod.string().nullable(),
+  "note": zod.string().nullable()
+}).describe('One tracked external-system checklist item for a case'))
+})
+
+
+/**
  * @summary Communication channel configuration status (email, WhatsApp)
  */
 export const GetOnboardingChannelsResponse = zod.object({
@@ -1720,54 +1759,6 @@ export const TestOnboardingChannelBody = zod.object({
 })
 
 export const TestOnboardingChannelResponse = zod.object({
-  "ok": zod.boolean(),
-  "detail": zod.string()
-})
-
-
-/**
- * @summary System Watcher agent status (external system monitoring health)
- */
-export const GetOnboardingWatcherResponse = zod.object({
-  "running": zod.boolean(),
-  "pollIntervalSeconds": zod.number(),
-  "lastPollAt": zod.string().nullable(),
-  "lastSuccessAt": zod.string().nullable(),
-  "lastError": zod.string().nullable(),
-  "lastErrorAt": zod.string().nullable(),
-  "state": zod.string().describe('healthy | initializing | broken | stopped'),
-  "healthy": zod.boolean(),
-  "systems": zod.array(zod.object({
-  "key": zod.string(),
-  "mode": zod.string().describe('poll+push'),
-  "lastCheckedAt": zod.string().nullable(),
-  "itemsCompleted": zod.number(),
-  "pushesReceived": zod.number()
-}))
-})
-
-
-/**
- * @summary Run one System Watcher reconciliation cycle now
- */
-export const PollOnboardingWatcherResponse = zod.object({
-  "ok": zod.boolean(),
-  "updates": zod.number(),
-  "detail": zod.string()
-})
-
-
-/**
- * @summary Simulate a vendor webhook push (status update or exception) from an external system
- */
-export const PushOnboardingWatcherBody = zod.object({
-  "caseId": zod.number(),
-  "connector": zod.enum(['hris', 'esignature', 'bgv', 'payroll', 'identity', 'itsm', 'lms']),
-  "status": zod.enum(['complete', 'exception']),
-  "note": zod.string().optional()
-})
-
-export const PushOnboardingWatcherResponse = zod.object({
   "ok": zod.boolean(),
   "detail": zod.string()
 })

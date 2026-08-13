@@ -1063,60 +1063,74 @@ export interface OnbChannelStatus {
   inboundEmail: OnbInboundEmailMonitor;
 }
 
-export interface OnbWatcherSystem {
+/**
+ * Health of one watched external-system integration (push webhook or scheduled polling)
+ */
+export interface OnbSystemConnectorHealth {
+  /** bgv | itsm | payroll */
   key: string;
-  /** poll+push */
+  label: string;
+  /** push (vendor webhook) | poll (scheduled API polling) */
   mode: string;
-  lastCheckedAt: string | null;
-  itemsCompleted: number;
-  pushesReceived: number;
-}
-
-export interface OnbWatcherStatus {
+  /** onb_connectors row this health is tied to */
+  connectorKey: string;
+  /**
+     * Null for push-mode systems
+     * @nullable
+     */
+  pollIntervalSeconds: number | null;
   running: boolean;
-  pollIntervalSeconds: number;
-  lastPollAt: string | null;
-  lastSuccessAt: string | null;
-  lastError: string | null;
-  lastErrorAt: string | null;
   /** healthy | initializing | broken | stopped */
   state: string;
   healthy: boolean;
-  systems: OnbWatcherSystem[];
+  /** @nullable */
+  lastPollAt: string | null;
+  /** @nullable */
+  lastSuccessAt: string | null;
+  /**
+     * Push mode — when the last vendor webhook arrived
+     * @nullable
+     */
+  lastEventAt: string | null;
+  eventsReceived: number;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  lastErrorAt: string | null;
 }
 
-export interface OnbWatcherPollResult {
-  ok: boolean;
-  updates: number;
-  detail: string;
-}
-
-export type OnbWatcherPushConnector = typeof OnbWatcherPushConnector[keyof typeof OnbWatcherPushConnector];
-
-
-export const OnbWatcherPushConnector = {
-  hris: 'hris',
-  esignature: 'esignature',
-  bgv: 'bgv',
-  payroll: 'payroll',
-  identity: 'identity',
-  itsm: 'itsm',
-  lms: 'lms',
-} as const;
-
-export type OnbWatcherPushStatus = typeof OnbWatcherPushStatus[keyof typeof OnbWatcherPushStatus];
-
-
-export const OnbWatcherPushStatus = {
-  complete: 'complete',
-  exception: 'exception',
-} as const;
-
-export interface OnbWatcherPush {
+/**
+ * One tracked external-system checklist item for a case
+ */
+export interface OnbSystemCheck {
+  id: number;
   caseId: number;
-  connector: OnbWatcherPushConnector;
-  status: OnbWatcherPushStatus;
-  note?: string;
+  caseWorkerName: string;
+  /** bgv | itsm | payroll */
+  system: string;
+  label: string;
+  /** push | poll */
+  mode: string;
+  /** Vendor-side reference, e.g. BGV-1042 / RITM-1042 */
+  externalRef: string;
+  /** pending | done | overdue */
+  status: string;
+  requestedAt: string;
+  /** SLA deadline — past this the watcher escalates once */
+  dueAt: string;
+  /** @nullable */
+  completedAt: string | null;
+  /** @nullable */
+  lastCheckedAt: string | null;
+  /** @nullable */
+  escalatedAt: string | null;
+  /** @nullable */
+  note: string | null;
+}
+
+export interface OnbSystemWatcher {
+  connectors: OnbSystemConnectorHealth[];
+  checks: OnbSystemCheck[];
 }
 
 export interface OnbChannelTest {

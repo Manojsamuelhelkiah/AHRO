@@ -14,6 +14,8 @@ import {
   resolveWelcomeChannels,
 } from "./channel-routing";
 import { llmComplete } from "./llm";
+import { trackCaseSystems } from "./system-watcher";
+import { isNonEmployee } from "./external-systems";
 
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -384,11 +386,24 @@ async function runWorkstreams(caseId: number) {
   const ws = (c.workstreams.length ? c.workstreams : defaultWorkstreams()) as OnbWorkstreamRow[];
   const readiness = c.readiness as OnbReadinessItemRow[];
 
-  // Documentation & Compliance
+  // Documentation & Compliance — statutory pack is issued immediately, but
+  // for external hires the item stays open until the BGV vendor's status
+  // feed confirms clearance (tracked by the System Watcher).
+  const bgvTracked = c.hireType !== "internal-transfer";
   setWorkstream(ws, "documentation", "ready");
-  setReadiness(readiness, "documentation", "ready", `Statutory pack for ${c.geography} issued and tracked`);
-  setReadiness(readiness, "payroll", c.workerCategory === "contractor" ? "ready" : "in-progress",
-    c.workerCategory === "contractor" ? "Not applicable — non-employee pathway" : "Awaiting bank & tax inputs from new hire");
+  setReadiness(
+    readiness,
+    "documentation",
+    bgvTracked ? "in-progress" : "ready",
+    bgvTracked
+      ? `Statutory pack for ${c.geography} issued — awaiting BGV clearance from the vendor feed`
+      : `Statutory pack for ${c.geography} issued and tracked`,
+  );
+  // Payroll: non-employees (contractor/vendor) are outside payroll — must
+  // match applicableSystems() so every in-progress item has a tracker.
+  const nonEmployee = isNonEmployee(c.workerCategory);
+  setReadiness(readiness, "payroll", nonEmployee ? "ready" : "in-progress",
+    nonEmployee ? "Not applicable — non-employee pathway" : "Awaiting bank & tax inputs from new hire");
   await logEvent(caseId, "documentation", "ldm", "Documentation pack issued",
     `Mandatory identity/statutory documents for ${c.geography} requested; completion tracked with owner notification on gaps.`,
     { hitlPattern: "notify-only", ruleRef: "4.3 Documentation Rule 1" });
@@ -403,7 +418,12 @@ async function runWorkstreams(caseId: number) {
           ? "Limited-duration access provisioned with automatic expiry at contract end."
           : "Corporate identity, email/collaboration and role-based application access coordinated.";
   setWorkstream(ws, "access", "ready");
-  setReadiness(readiness, "access", "ready", accessDetail);
+  setReadiness(
+    readiness,
+    "access",
+    "in-progress",
+    `${accessDetail} Provisioning ticket raised in ITSM — awaiting completion confirmation.`,
+  );
   await logEvent(caseId, "access", "ldm", "Access readiness coordinated", accessDetail, {
     hitlPattern: "act-then-review",
     ruleRef: "4.4 Access Rules",
@@ -425,6 +445,11 @@ async function runWorkstreams(caseId: number) {
     { hitlPattern: "notify-only", ruleRef: "4.6 Learning Rules" });
 
   await updateCase(caseId, { readiness, workstreams: ws, lifecycleStage: "preboarding" });
+
+  // Hand the externally-owned items (BGV, ITSM access, payroll) to the
+  // System Watcher: it registers webhook/polling trackers per system and
+  // closes the readiness items when the source systems confirm.
+  await trackCaseSystems(caseId);
 }
 
 /* ------------------------------------------------------------------ */

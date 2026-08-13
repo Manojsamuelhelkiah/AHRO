@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { onbConnectors } from "@workspace/db/schema";
 
-const DEFAULTS = [
+export const CONNECTOR_DEFAULTS = [
   {
     key: "ats",
     label: "ATS / Recruiting",
@@ -35,20 +35,20 @@ const DEFAULTS = [
     authoritativeFor: ["payroll readiness", "bank & tax inputs", "benefits enrolment"],
   },
   {
+    key: "itsm",
+    label: "ITSM / Ticketing",
+    vendor: "ServiceNow (simulated)",
+    availableVendors: ["ServiceNow (simulated)", "Jira Service Management (simulated)", "BMC Helix (simulated)"],
+    description: "Access provisioning tickets; System Watcher polls request status on a schedule.",
+    authoritativeFor: ["access provisioning status", "ticket state"],
+  },
+  {
     key: "lms",
     label: "Learning (LMS)",
     vendor: "Cornerstone (simulated)",
     availableVendors: ["Cornerstone (simulated)", "SAP Litmos (simulated)", "Docebo (simulated)"],
     description: "Induction, compliance learning and role-readiness path assignment.",
     authoritativeFor: ["learning assignments", "compliance training status"],
-  },
-  {
-    key: "itsm",
-    label: "ITSM / Service Desk",
-    vendor: "ServiceNow (simulated)",
-    availableVendors: ["ServiceNow (simulated)", "Jira Service Management (simulated)", "Freshservice (simulated)"],
-    description: "Access requests, security rights and asset tickets tracked to fulfilment.",
-    authoritativeFor: ["access ticket status", "asset delivery status", "security rights"],
   },
   {
     key: "bgv",
@@ -75,7 +75,7 @@ export async function ensureConnectorsSeeded() {
   if (seeded) return;
   const existing = await db.select({ key: onbConnectors.key }).from(onbConnectors);
   const have = new Set(existing.map((r) => r.key));
-  const missing = DEFAULTS.filter((d) => !have.has(d.key));
+  const missing = CONNECTOR_DEFAULTS.filter((d) => !have.has(d.key));
   if (missing.length > 0) {
     await db.insert(onbConnectors).values(
       missing.map((d) => ({

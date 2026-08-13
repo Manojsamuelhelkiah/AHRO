@@ -57,9 +57,7 @@ import type {
   OnbEvent,
   OnbInboundMessage,
   OnbScenarioDef,
-  OnbWatcherPollResult,
-  OnbWatcherPush,
-  OnbWatcherStatus,
+  OnbSystemWatcher,
   ParseActualsLogBody,
   Rollup,
   RollupRequest,
@@ -3763,6 +3761,83 @@ export function useGetOnboardingAnalytics<TData = Awaited<ReturnType<typeof getO
 
 
 
+export const getGetOnboardingSystemWatcherUrl = () => {
+
+
+
+
+  return `/api/onboarding/systems/watcher`
+}
+
+/**
+ * @summary System Watcher agent status — per-connector polling/webhook health and tracked external-system checks
+ */
+export const getOnboardingSystemWatcher = async ( options?: RequestInit): Promise<OnbSystemWatcher> => {
+
+  return customFetch<OnbSystemWatcher>(getGetOnboardingSystemWatcherUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingSystemWatcherQueryKey = () => {
+    return [
+    `/api/onboarding/systems/watcher`
+    ] as const;
+    }
+
+
+export const getGetOnboardingSystemWatcherQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingSystemWatcher>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingSystemWatcher>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingSystemWatcherQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingSystemWatcher>>> = ({ signal }) => getOnboardingSystemWatcher({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingSystemWatcher>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingSystemWatcherQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingSystemWatcher>>>
+export type GetOnboardingSystemWatcherQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary System Watcher agent status — per-connector polling/webhook health and tracked external-system checks
+ */
+
+export function useGetOnboardingSystemWatcher<TData = Awaited<ReturnType<typeof getOnboardingSystemWatcher>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingSystemWatcher>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingSystemWatcherQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetOnboardingChannelsUrl = () => {
 
 
@@ -3909,224 +3984,5 @@ export const useTestOnboardingChannel = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getTestOnboardingChannelMutationOptions(options));
-    }
-
-export const getGetOnboardingWatcherUrl = () => {
-
-
-
-
-  return `/api/onboarding/watcher`
-}
-
-/**
- * @summary System Watcher agent status (external system monitoring health)
- */
-export const getOnboardingWatcher = async ( options?: RequestInit): Promise<OnbWatcherStatus> => {
-
-  return customFetch<OnbWatcherStatus>(getGetOnboardingWatcherUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetOnboardingWatcherQueryKey = () => {
-    return [
-    `/api/onboarding/watcher`
-    ] as const;
-    }
-
-
-export const getGetOnboardingWatcherQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingWatcher>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingWatcher>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingWatcherQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingWatcher>>> = ({ signal }) => getOnboardingWatcher({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingWatcher>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetOnboardingWatcherQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingWatcher>>>
-export type GetOnboardingWatcherQueryError = ErrorType<unknown>
-
-
-/**
- * @summary System Watcher agent status (external system monitoring health)
- */
-
-export function useGetOnboardingWatcher<TData = Awaited<ReturnType<typeof getOnboardingWatcher>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingWatcher>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetOnboardingWatcherQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getPollOnboardingWatcherUrl = () => {
-
-
-
-
-  return `/api/onboarding/watcher/poll`
-}
-
-/**
- * @summary Run one System Watcher reconciliation cycle now
- */
-export const pollOnboardingWatcher = async ( options?: RequestInit): Promise<OnbWatcherPollResult> => {
-
-  return customFetch<OnbWatcherPollResult>(getPollOnboardingWatcherUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getPollOnboardingWatcherMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pollOnboardingWatcher>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof pollOnboardingWatcher>>, TError,void, TContext> => {
-
-const mutationKey = ['pollOnboardingWatcher'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pollOnboardingWatcher>>, void> = () => {
-
-
-          return  pollOnboardingWatcher(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PollOnboardingWatcherMutationResult = NonNullable<Awaited<ReturnType<typeof pollOnboardingWatcher>>>
-
-    export type PollOnboardingWatcherMutationError = ErrorType<unknown>
-
-    /**
- * @summary Run one System Watcher reconciliation cycle now
- */
-export const usePollOnboardingWatcher = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pollOnboardingWatcher>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof pollOnboardingWatcher>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getPollOnboardingWatcherMutationOptions(options));
-    }
-
-export const getPushOnboardingWatcherUrl = () => {
-
-
-
-
-  return `/api/onboarding/watcher/push`
-}
-
-/**
- * @summary Simulate a vendor webhook push (status update or exception) from an external system
- */
-export const pushOnboardingWatcher = async (onbWatcherPush: OnbWatcherPush, options?: RequestInit): Promise<OnbChannelTestResult> => {
-
-  return customFetch<OnbChannelTestResult>(getPushOnboardingWatcherUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(onbWatcherPush)
-  }
-);}
-
-
-
-
-
-export const getPushOnboardingWatcherMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pushOnboardingWatcher>>, TError,{data: BodyType<OnbWatcherPush>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof pushOnboardingWatcher>>, TError,{data: BodyType<OnbWatcherPush>}, TContext> => {
-
-const mutationKey = ['pushOnboardingWatcher'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pushOnboardingWatcher>>, {data: BodyType<OnbWatcherPush>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  pushOnboardingWatcher(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PushOnboardingWatcherMutationResult = NonNullable<Awaited<ReturnType<typeof pushOnboardingWatcher>>>
-    export type PushOnboardingWatcherMutationBody = BodyType<OnbWatcherPush>
-    export type PushOnboardingWatcherMutationError = ErrorType<unknown>
-
-    /**
- * @summary Simulate a vendor webhook push (status update or exception) from an external system
- */
-export const usePushOnboardingWatcher = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pushOnboardingWatcher>>, TError,{data: BodyType<OnbWatcherPush>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof pushOnboardingWatcher>>,
-        TError,
-        {data: BodyType<OnbWatcherPush>},
-        TContext
-      > => {
-      return useMutation(getPushOnboardingWatcherMutationOptions(options));
     }
 

@@ -7,11 +7,11 @@ import {
   onbCommunications,
   onbConnectors,
   onbEvents,
+  onbSystemChecks,
 } from "@workspace/db/schema";
 import {
   CreateOnboardingCaseBody,
   DecideOnboardingApprovalBody,
-  PushOnboardingWatcherBody,
   ReceiveOnboardingInboundBody,
   TestOnboardingChannelBody,
   UpdateOnboardingConnectorBody,
@@ -37,10 +37,10 @@ import {
 } from "../lib/onboarding/inbound-email";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import {
-  getSystemWatcherStatus,
-  runWatcherCycleGuarded,
-  watcherPush,
+  getSystemWatcherHealth,
+  handleSystemWebhook,
 } from "../lib/onboarding/system-watcher";
+import { systemDef } from "../lib/onboarding/external-systems";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
 
@@ -559,6 +559,74 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
   }
 });
 
+/* --------------------------- system watcher --------------------------- */
+
+router.get("/onboarding/systems/watcher", async (_req, res, next) => {
+  try {
+    await ensureConnectorsSeeded();
+    const rows = await db
+      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
+      .from(onbSystemChecks)
+      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
+      .orderBy(desc(onbSystemChecks.id));
+    res.json({
+      connectors: getSystemWatcherHealth(),
+      checks: rows.map(({ check: c, workerName }) => ({
+        id: c.id,
+        caseId: c.caseId,
+        caseWorkerName: workerName,
+        system: c.system,
+        label: systemDef(c.system)?.label ?? c.system,
+        mode: c.mode,
+        externalRef: c.externalRef,
+        status: c.status,
+        requestedAt: c.requestedAt.toISOString(),
+        dueAt: c.dueAt.toISOString(),
+        completedAt: iso(c.completedAt),
+        lastCheckedAt: iso(c.lastCheckedAt),
+        escalatedAt: iso(c.escalatedAt),
+        note: c.note,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Vendor status webhook (push pattern, e.g. BGV clearance). Public
+ * server-to-server endpoint authenticated by a shared token; the
+ * in-process simulated vendor uses the same handleSystemWebhook code
+ * path directly.
+ */
+router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
+  try {
+    const token = process.env.ONB_SYSTEM_WEBHOOK_TOKEN;
+    if (!token) {
+      res.status(503).json({ message: "System webhook token is not configured" });
+      return;
+    }
+    if (req.header("x-webhook-token") !== token) {
+      res.status(403).json({ message: "Invalid webhook token" });
+      return;
+    }
+    const caseId = Number(req.body?.caseId);
+    const status = String(req.body?.status ?? "");
+    if (!Number.isInteger(caseId) || !status) {
+      res.status(400).json({ message: "caseId (number) and status are required" });
+      return;
+    }
+    const result = await handleSystemWebhook({
+      system: req.params.system,
+      caseId,
+      status,
+    });
+    res.status(result.ok ? 200 : 404).json({ message: result.message });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* ----------------------------- analytics ----------------------------- */
 
 const SUPPRESSION_THRESHOLD = 3;
@@ -685,51 +753,6 @@ router.post("/onboarding/channels/test", async (req, res, next) => {
             ? `Channel not connected (${info.note}) — message was logged to case #${anyCase.id} instead.`
             : `Send failed: ${result.failureReason}`,
     });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/* --------------------------- system watcher -------------------------- */
-
-router.get("/onboarding/watcher", (_req, res) => {
-  res.json(getSystemWatcherStatus());
-});
-
-router.post("/onboarding/watcher/poll", async (_req, res, next) => {
-  try {
-    const updates = await runWatcherCycleGuarded();
-    if (updates === null) {
-      res.json({ ok: true, updates: 0, detail: "A reconciliation cycle is already running — try again shortly." });
-      return;
-    }
-    res.json({
-      ok: true,
-      updates,
-      detail:
-        updates > 0
-          ? `Reconciliation complete — ${updates} checklist update(s) applied.`
-          : "Reconciliation complete — all watched systems report no changes.",
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/onboarding/watcher/push", async (req, res, next) => {
-  try {
-    const body = PushOnboardingWatcherBody.parse(req.body);
-    if (body.status !== "complete" && body.status !== "exception") {
-      res.status(200).json({ ok: false, detail: "status must be 'complete' or 'exception'" });
-      return;
-    }
-    const result = await watcherPush({
-      caseId: body.caseId,
-      connector: body.connector,
-      status: body.status,
-      note: body.note,
-    });
-    res.json(result);
   } catch (err) {
     next(err);
   }

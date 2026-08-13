@@ -6,6 +6,7 @@ import {
   serial,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export type OnbReadinessItemRow = {
@@ -105,6 +106,37 @@ export const onbCommunications = pgTable("onb_communications", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * One tracked external-system checklist item per case (BGV clearance,
+ * ITSM access provisioning, payroll setup). The System Watcher agent
+ * creates these when workstreams start, closes them when the external
+ * system reports done (webhook push or scheduled poll), and escalates
+ * with a rules-tagged event when a check blows past its SLA.
+ */
+export const onbSystemChecks = pgTable(
+  "onb_system_checks",
+  {
+    id: serial("id").primaryKey(),
+    caseId: integer("case_id")
+      .notNull()
+      .references(() => onbCases.id, { onDelete: "cascade" }),
+    /** bgv | itsm | payroll */
+    system: text("system").notNull(),
+    /** push (vendor webhook) | poll (scheduled API polling) */
+    mode: text("mode").notNull(),
+    /** Vendor-side reference, e.g. "BGV-1042" */
+    externalRef: text("external_ref").notNull(),
+    /** pending | done | overdue */
+    status: text("status").notNull().default("pending"),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    escalatedAt: timestamp("escalated_at", { withTimezone: true }),
+    note: text("note"),
+  },
+  (t) => [unique("onb_system_checks_case_system").on(t.caseId, t.system)],
+);
 export const onbConnectors = pgTable("onb_connectors", {
   key: text("key").primaryKey(),
   label: text("label").notNull(),
