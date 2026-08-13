@@ -7,7 +7,9 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export type OnbReadinessItemRow = {
   key: string;
@@ -64,6 +66,8 @@ export const onbEvents = pgTable("onb_events", {
   ruleRef: text("rule_ref"),
   title: text("title").notNull(),
   detail: text("detail").notNull(),
+  /** Optional dedupe key: a crash-resumed writer inserting the same key is a no-op. */
+  idempotencyKey: text("idempotency_key").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -81,6 +85,8 @@ export const onbApprovals = pgTable("onb_approvals", {
   decidedBy: text("decided_by"),
   comment: text("comment"),
   resumeAction: text("resume_action"),
+  /** Optional dedupe key: a crash-resumed writer inserting the same key is a no-op. */
+  idempotencyKey: text("idempotency_key").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
 });
@@ -206,11 +212,60 @@ export const onbCallSlots = pgTable("onb_call_slots", {
   slots: jsonb("slots").$type<Array<{ n: number; startIso: string; label: string }>>().notNull(),
   /** proposed | booked | superseded */
   status: text("status").notNull().default("proposed"),
+  /** Optional dedupe key: a crash-resumed proposer re-inserting the same key is a no-op. */
+  dedupeKey: text("dedupe_key").unique(),
   bookedSlotN: integer("booked_slot_n"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   bookedAt: timestamp("booked_at", { withTimezone: true }),
 });
 
+/**
+ * Live AI voice-call sessions, keyed by our per-call token and bound to the
+ * Twilio CallSid on the first webhook. Turns and decisions accumulate here
+ * as the call progresses, so a server restart mid-call (or a late Twilio
+ * callback) can still finalize the call: persist the transcript to the
+ * communications timeline and execute/flag the decisions reached.
+ * Simulated calls run in-process and are not stored here.
+ */
+export const onbVoiceSessions = pgTable("onb_voice_sessions", {
+  token: text("token").primaryKey(),
+  caseId: integer("case_id")
+    .notNull()
+    .references(() => onbCases.id, { onDelete: "cascade" }),
+  /** day-before | sla-escalation */
+  scenario: text("scenario").notNull(),
+  reason: text("reason"),
+  /** Twilio CallSid, bound on the first webhook; later callbacks must match. */
+  callSid: text("call_sid").unique(),
+  turns: jsonb("turns")
+    .$type<Array<{ role: "agent" | "hire"; text: string }>>()
+    .notNull()
+    .default([]),
+  decisions: jsonb("decisions")
+    .$type<Array<{ decision: string; note: string }>>()
+    .notNull()
+    .default([]),
+  /** Terminal: set only after the transcript + all decision side effects are durably persisted. */
+  finalized: boolean("finalized").notNull().default(false),
+  /**
+   * Finalization lease: a finalizer stamps this before running outcome side
+   * effects. If it crashes mid-way, the lease expires and startup recovery
+   * (or a later callback) reclaims the row and resumes from outcomeProgress.
+   */
+  finalizeLeaseAt: timestamp("finalize_lease_at", { withTimezone: true }),
+  /** Fencing token: identifies the finalizer holding the lease; every progress/terminal write is conditioned on it. */
+  finalizeOwner: text("finalize_owner"),
+  /** Idempotency markers for completed outcome steps (transcript, decision:*, summary). */
+  outcomeProgress: jsonb("outcome_progress").$type<Record<string, boolean>>().notNull().default({}),
+  /** Last hire utterance + the answer given — Twilio retries replay identically. */
+  lastSpeech: text("last_speech"),
+  lastResponse: jsonb("last_response").$type<{ say: string; done: boolean }>(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+}, (t) => [
+  /** At most one live (unfinalized) call session per case — the call-start claim is atomic at the DB. */
+  uniqueIndex("onb_voice_sessions_live_case_idx").on(t.caseId).where(sql`${t.finalized} = false`),
+]);
 export const onbWatchEmails = pgTable("onb_watch_emails", {
   id: serial("id").primaryKey(),
   gmailMessageId: text("gmail_message_id").notNull().unique(),

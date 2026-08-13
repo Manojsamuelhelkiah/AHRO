@@ -44,17 +44,23 @@ export async function logEvent(
   engine: "llm" | "ldm" | "orchestrator" | "human" | "system",
   title: string,
   detail: string,
-  opts?: { hitlPattern?: string; ruleRef?: string },
+  opts?: { hitlPattern?: string; ruleRef?: string; idempotencyKey?: string },
 ) {
-  await db.insert(onbEvents).values({
-    caseId,
-    agent,
-    engine,
-    hitlPattern: opts?.hitlPattern ?? null,
-    ruleRef: opts?.ruleRef ?? null,
-    title,
-    detail,
-  });
+  await db
+    .insert(onbEvents)
+    .values({
+      caseId,
+      agent,
+      engine,
+      hitlPattern: opts?.hitlPattern ?? null,
+      ruleRef: opts?.ruleRef ?? null,
+      title,
+      detail,
+      idempotencyKey: opts?.idempotencyKey ?? null,
+    })
+    // With an idempotency key, a crash-resumed writer re-inserting the
+    // same event is a no-op at the DB boundary instead of a duplicate.
+    .onConflictDoNothing({ target: onbEvents.idempotencyKey });
 }
 
 async function updateCase(caseId: number, patch: Partial<typeof onbCases.$inferInsert>) {
@@ -78,23 +84,36 @@ export async function createApproval(opts: {
   recommendation: string;
   rationale: string;
   resumeAction: string;
+  /** Dedupe key: a crash-resumed caller re-creating the same approval is a no-op. */
+  idempotencyKey?: string;
 }) {
-  await db.insert(onbApprovals).values({
-    caseId: opts.caseId,
-    agent: opts.agent,
-    ruleRef: opts.ruleRef,
-    hitlPattern: opts.hitlPattern,
-    recommendation: opts.recommendation,
-    rationale: opts.rationale,
-    resumeAction: opts.resumeAction,
-  });
+  const inserted = await db
+    .insert(onbApprovals)
+    .values({
+      caseId: opts.caseId,
+      agent: opts.agent,
+      ruleRef: opts.ruleRef,
+      hitlPattern: opts.hitlPattern,
+      recommendation: opts.recommendation,
+      rationale: opts.rationale,
+      resumeAction: opts.resumeAction,
+      idempotencyKey: opts.idempotencyKey ?? null,
+    })
+    .onConflictDoNothing({ target: onbApprovals.idempotencyKey })
+    .returning({ id: onbApprovals.id });
+  // If the keyed approval already existed, its companion event does too.
+  if (opts.idempotencyKey && inserted.length === 0) return;
   await logEvent(
     opts.caseId,
     opts.agent,
     "ldm",
     opts.hitlPattern === "hard-block" ? "Hard-block raised" : "Approval requested",
     `${opts.recommendation} — ${opts.rationale}`,
-    { hitlPattern: opts.hitlPattern, ruleRef: opts.ruleRef },
+    {
+      hitlPattern: opts.hitlPattern,
+      ruleRef: opts.ruleRef,
+      idempotencyKey: opts.idempotencyKey ? `${opts.idempotencyKey}:event` : undefined,
+    },
   );
 }
 

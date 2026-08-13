@@ -5,6 +5,7 @@ import { startSystemWatcher } from "./lib/onboarding/system-watcher";
 import { startEmailWatch } from "./lib/onboarding/email-watch";
 import { backfillDocumentPacks } from "./lib/onboarding/documents";
 import { initDemoAllowlist } from "./lib/onboarding/demo-volunteers";
+import { recoverStaleVoiceSessions } from "./lib/onboarding/voice";
 
 const rawPort = process.env["PORT"];
 
@@ -36,4 +37,9 @@ app.listen(port, (err) => {
   initDemoAllowlist().catch((err) =>
     logger.error({ err }, "demo allowlist init failed"),
   );
+  recoverStaleVoiceSessions()
+    .then((n) => {
+      if (n > 0) logger.info({ recovered: n }, "finalized interrupted voice calls");
+    })
+    .catch((err) => logger.error({ err }, "voice session recovery failed"));
 });

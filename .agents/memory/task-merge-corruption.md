@@ -13,9 +13,7 @@ each other's bodies, undefined identifiers, duplicated routes).
 regions it can interleave hunks into nonsense — and it lands as a normal commit,
 so nothing fails until the next typecheck.
 
-**How to apply:** after any `[MERGED]` task notification touching files you also
-edited, run the per-package `tsc -b` before building on top. If a file is
-scrambled, don't hand-fix hunk by hunk: `git checkout <last-good-commit> -- <file>`
-(find it by grepping candidate commits for a marker string you added), then
-re-apply the merge's *intended* additions, which are usually small and visible in
-the merge commit's stat/diff of other files.
+**How to apply:** after any merge touching files you also edited, typecheck
+before building on top. If a file is scrambled, don't hand-fix hunk by hunk —
+restore it from the last good commit and re-apply the merge's intended
+additions, which are usually small.

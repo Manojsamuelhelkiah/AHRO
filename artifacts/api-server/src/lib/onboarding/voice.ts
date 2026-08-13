@@ -15,11 +15,11 @@
  * A simulate mode runs the identical turn engine over scripted hire replies
  * so the flow can be demonstrated without a phone.
  */
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import { recordGuardrailEvent } from "./guardrails";
-import { onbCases, onbCommunications } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { onbCases, onbCommunications, onbVoiceSessions } from "@workspace/db/schema";
+import { and, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { llmCompleteJson } from "./llm";
 import { listDocuments, documentsSummary } from "./documents";
 import {
@@ -43,7 +43,7 @@ type Decision =
   | "flag-blocker"
   | "needs-human";
 
-type Session = {
+export type Session = {
   token: string;
   caseId: number;
   scenario: VoiceScenario;
@@ -51,48 +51,103 @@ type Session = {
   turns: Turn[];
   decisions: { decision: Decision; note: string }[];
   finalized: boolean;
-  finalizing: boolean;
   simulated: boolean;
   startedAt: number;
   /** Twilio CallSid, bound on the first webhook; later callbacks must match. */
   callSid: string | null;
-  /** Serializes turns: Twilio retries or overlapping callbacks must not double-run the LLM. */
-  busy: boolean;
   /** Last hire utterance + the answer we gave — replayed identical requests get the same answer. */
   lastSpeech: string | null;
   lastResponse: { say: string; done: boolean } | null;
+  /** Fencing token held while THIS finalizer owns the finalize lease. */
+  finalizeOwner?: string;
 };
 
+/** Thrown when a finalizer lost its lease to a newer claimant — abort immediately. */
+export class FencedFinalizationError extends Error {
+  constructor(token: string) {
+    super(`finalization fenced out for voice session ${token}: lease taken over by another finalizer`);
+    this.name = "FencedFinalizationError";
+  }
+}
 const MAX_TURNS = 8;
 const SESSION_TTL_MS = 30 * 60_000;
-const sessions = new Map<string, Session>();
 
-function pruneSessions() {
-  const cutoff = Date.now() - SESSION_TTL_MS;
-  for (const [k, s] of sessions) if (s.startedAt < cutoff) sessions.delete(k);
-}
-
+/** How long a finalizer may hold the finalize lease before a crash is assumed. */
+const FINALIZE_LEASE_MS = 2 * 60_000;
 /**
- * Look up a live session, binding/enforcing the Twilio CallSid: the first
- * webhook stamps the SID onto the session, and every later callback must
- * carry the same SID. A signed-request replay from a different call, or a
- * callback for an already-finalized call, returns undefined.
+ * Per-process reentrancy guards. The durable state (turns, decisions,
+ * finalized) lives in the DB; these only serialize concurrent callbacks
+ * hitting THIS process — Twilio never fans a single call's webhooks out
+ * to two servers at once, so a process-local guard is sufficient.
  */
-export function getVoiceSession(token: string, callSid?: string): Session | undefined {
-  pruneSessions();
-  const s = sessions.get(token);
-  if (!s || s.finalized) return undefined;
+const busyTokens = new Set<string>();
+/**
+ * Look up a live session from the DB (so it survives server restarts),
+ * binding/enforcing the Twilio CallSid: the first webhook stamps the SID
+ * onto the session, and every later callback must carry the same SID. A
+ * signed-request replay from a different call, or a callback for an
+ * already-finalized call, returns undefined.
+ *
+ * A callback arriving after the session TTL no longer loses the call:
+ * whatever transcript and decisions accumulated are finalized first, so
+ * the record still lands on the case timeline.
+ */
+export async function getVoiceSession(token: string, callSid?: string): Promise<Session | undefined> {
+  if (!token) return undefined;
+  const [row] = await db.select().from(onbVoiceSessions).where(eq(onbVoiceSessions.token, token));
+  if (!row || row.finalized) return undefined;
+  const s = rowToSession(row);
+  if (s.startedAt < Date.now() - SESSION_TTL_MS) {
+    await finalizeVoiceCall(s, "expired");
+    return undefined;
+  }
   if (callSid) {
-    if (s.callSid === null) s.callSid = callSid;
-    else if (s.callSid !== callSid) return undefined;
+    if (s.callSid === null) {
+      s.callSid = callSid;
+      await db
+        .update(onbVoiceSessions)
+        .set({ callSid })
+        .where(eq(onbVoiceSessions.token, token));
+    } else if (s.callSid !== callSid) return undefined;
   }
   return s;
 }
 
-/* ------------------------------------------------------------------ */
-/* TwiML helpers                                                       */
-/* ------------------------------------------------------------------ */
-
+/**
+ * Finalize any live sessions left unfinalized past their TTL — e.g. the
+ * server restarted mid-call and Twilio's status callback never found us.
+ * Called at startup so transcripts/decisions from interrupted calls still
+ * land on the case timeline. Errors are contained per-session.
+ */
+export async function recoverStaleVoiceSessions(): Promise<number> {
+  const cutoff = new Date(Date.now() - SESSION_TTL_MS);
+  const leaseCutoff = new Date(Date.now() - FINALIZE_LEASE_MS);
+  // Two shapes of interrupted call: (a) the whole session went stale
+  // without a status callback, (b) a finalizer claimed the lease and then
+  // crashed mid-way — its lease expired with `finalized` still false.
+  const rows = await db
+    .select()
+    .from(onbVoiceSessions)
+    .where(
+      and(
+        eq(onbVoiceSessions.finalized, false),
+        or(
+          lt(onbVoiceSessions.startedAt, cutoff),
+          lt(onbVoiceSessions.finalizeLeaseAt, leaseCutoff),
+        ),
+      ),
+    );
+  let recovered = 0;
+  for (const row of rows) {
+    try {
+      await finalizeVoiceCall(rowToSession(row), "interrupted");
+      recovered += 1;
+    } catch (err) {
+      console.error(`[voice] stale-session recovery failed for token ${row.token}:`, err);
+    }
+  }
+  return recovered;
+}
 export function xmlEscape(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -172,17 +227,28 @@ export async function voiceTurn(
     return session.lastResponse;
   }
   // Overlapping callback while a turn is mid-flight: hold, don't double-run.
-  if (session.busy) {
+  if (busyTokens.has(session.token)) {
     return { say: "One moment please.", done: false };
   }
-  session.busy = true;
+  busyTokens.add(session.token);
   try {
     const out = await runVoiceTurn(session, speech);
     session.lastSpeech = speech;
     session.lastResponse = out;
+    const saved = await saveSession(session);
+    if (!saved) {
+      // The row was finalized (or a finalizer claimed the lease) while this
+      // turn was reasoning: our hire turn, decision, and reply were all
+      // rejected and will NOT be in the recorded transcript. Never speak an
+      // unrecorded response — end the call cleanly instead.
+      return {
+        say: "Thank you for your time — the onboarding team has everything recorded and will follow up if anything else is needed. Goodbye.",
+        done: true,
+      };
+    }
     return out;
   } finally {
-    session.busy = false;
+    busyTokens.delete(session.token);
   }
 }
 
@@ -254,12 +320,67 @@ ${transcript}
  * a persistent failure still raises a human alert.
  */
 export async function finalizeVoiceCall(session: Session, callOutcome: string): Promise<void> {
-  if (session.finalized || session.finalizing) return;
-  session.finalizing = true;
+  if (session.finalized || finalizingTokens.has(session.token)) return;
+  finalizingTokens.add(session.token);
   try {
-    await persistCallOutcome(session, callOutcome);
+    let progress: Record<string, boolean> = {};
+    if (!session.simulated) {
+      // Atomically claim a finalization LEASE at the DB level: exactly one
+      // caller (status callback, expiry path, startup recovery — on any
+      // instance) may run outcome side effects at a time. The terminal
+      // `finalized` flag is only set AFTER everything persisted, so a crash
+      // mid-finalization leaves an expired lease that recovery reclaims and
+      // resumes from the per-step outcomeProgress markers — nothing is lost
+      // and nothing is duplicated. The claimed row is the freshest state —
+      // a turn that saved while our snapshot was in flight is picked up
+      // here, not lost.
+      const leaseCutoff = new Date(Date.now() - FINALIZE_LEASE_MS);
+      const owner = randomUUID();
+      const [claimed] = await db
+        .update(onbVoiceSessions)
+        .set({ finalizeLeaseAt: new Date(), finalizeOwner: owner })
+        .where(
+          and(
+            eq(onbVoiceSessions.token, session.token),
+            eq(onbVoiceSessions.finalized, false),
+            or(isNull(onbVoiceSessions.finalizeLeaseAt), lt(onbVoiceSessions.finalizeLeaseAt, leaseCutoff)),
+          ),
+        )
+        .returning();
+      if (!claimed) {
+        // Already finalized, or another finalizer holds a live lease.
+        return;
+      }
+      session.finalizeOwner = owner;
+      session.turns = claimed.turns as Turn[];
+      session.decisions = claimed.decisions as { decision: Decision; note: string }[];
+      progress = claimed.outcomeProgress ?? {};
+    }
+    await persistCallOutcome(session, callOutcome, progress);
+    if (!session.simulated) {
+      // Terminal flag is owner-fenced: if a slow finalizer outlived its
+      // lease and someone else reclaimed it, this write is a no-op and we
+      // must NOT run (or re-run) anything further.
+      const done = await db
+        .update(onbVoiceSessions)
+        .set({ finalized: true, finalizedAt: new Date() })
+        .where(
+          and(
+            eq(onbVoiceSessions.token, session.token),
+            eq(onbVoiceSessions.finalized, false),
+            eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
+          ),
+        )
+        .returning({ token: onbVoiceSessions.token });
+      if (done.length === 0) throw new FencedFinalizationError(session.token);
+    }
     session.finalized = true;
   } catch (err) {
+    if (err instanceof FencedFinalizationError) {
+      // Another finalizer took over; it owns all remaining side effects.
+      console.warn(`[voice] ${err.message}`);
+      return;
+    }
     console.error(`[voice] finalize failed for case ${session.caseId}:`, err);
     try {
       await createApproval({
@@ -270,70 +391,177 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
         recommendation: "Voice call outcome could not be recorded — review manually",
         rationale: `Persisting the ${session.scenario} call outcome failed (${String(err).slice(0, 200)}). Decisions reached on the call may not have been executed.`,
         resumeAction: "none",
+        idempotencyKey: session.simulated ? undefined : `voice:${session.token}:finalize-failed`,
       });
       session.finalized = true; // alert raised; don't loop
+      if (!session.simulated) {
+        await db
+          .update(onbVoiceSessions)
+          .set({ finalized: true, finalizedAt: new Date() })
+          .where(
+            and(
+              eq(onbVoiceSessions.token, session.token),
+              eq(onbVoiceSessions.finalized, false),
+              eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
+            ),
+          );
+      }
     } catch (alertErr) {
       console.error(`[voice] failed to raise finalize alert for case ${session.caseId}:`, alertErr);
+      if (!session.simulated) {
+        // Nothing was recorded and no human was alerted — release the
+        // lease (owner-fenced) so the startup recovery sweep retries.
+        try {
+          await db
+            .update(onbVoiceSessions)
+            .set({ finalizeLeaseAt: null, finalizeOwner: null })
+            .where(
+              and(
+                eq(onbVoiceSessions.token, session.token),
+                eq(onbVoiceSessions.finalized, false),
+                eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
+              ),
+            );
+        } catch (releaseErr) {
+          console.error(`[voice] failed to release finalize lease for token ${session.token}:`, releaseErr);
+        }
+      }
     }
   } finally {
-    session.finalizing = false;
+    finalizingTokens.delete(session.token);
   }
 }
 
-async function persistCallOutcome(session: Session, callOutcome: string): Promise<void> {
+/**
+ * Durably mark an outcome step done so a crash-resumed finalizer skips it.
+ * Owner-fenced AND lease-renewing: a slow finalizer that lost its lease to
+ * a newer claimant gets a zero-row update and must abort immediately, while
+ * a healthy one keeps its lease fresh between steps so it cannot be
+ * reclaimed mid-run. Exported for the crash/fencing tests.
+ */
+export async function markOutcomeStep(
+  session: Session,
+  progress: Record<string, boolean>,
+  step: string,
+): Promise<void> {
+  progress[step] = true;
+  if (session.simulated) return;
+  const updated = await db
+    .update(onbVoiceSessions)
+    .set({ outcomeProgress: progress, finalizeLeaseAt: new Date() })
+    .where(
+      and(
+        eq(onbVoiceSessions.token, session.token),
+        eq(onbVoiceSessions.finalized, false),
+        eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
+      ),
+    )
+    .returning({ token: onbVoiceSessions.token });
+  if (updated.length === 0) throw new FencedFinalizationError(session.token);
+}
+/**
+ * Persist the transcript and execute decisions, step by step, skipping any
+ * step already recorded in `progress` — so a finalizer resumed after a
+ * crash completes the remaining work without duplicating side effects.
+ */
+async function persistCallOutcome(
+  session: Session,
+  callOutcome: string,
+  progress: Record<string, boolean> = {},
+): Promise<void> {
   const { c } = await caseFacts(session.caseId);
   const transcript = session.turns
     .map((t) => `${t.role === "agent" ? "Assistant" : c.workerName.split(" ")[0]}: ${t.text}`)
     .join("\n");
   const label = session.scenario === "day-before" ? "Day-before check-in call" : "SLA escalation call";
 
-  await db.insert(onbCommunications).values({
-    caseId: session.caseId,
-    channel: "voice",
-    direction: "outbound",
-    toAddress: c.workerPhone ? maskPhone(c.workerPhone) : "unknown",
-    subject: `${label}${session.simulated ? " (simulated)" : ""}`,
-    body: transcript || "(call not answered)",
-    status: callOutcome,
-    failureReason: null,
-    sensitive: false,
-    externalMessageId: null,
-  });
+  if (!progress["transcript"]) {
+    await db
+      .insert(onbCommunications)
+      .values({
+        caseId: session.caseId,
+        channel: "voice",
+        direction: "outbound",
+        toAddress: c.workerPhone ? maskPhone(c.workerPhone) : "unknown",
+        subject: `${label}${session.simulated ? " (simulated)" : ""}`,
+        body: transcript || "(call not answered)",
+        status: callOutcome,
+        failureReason: null,
+        sensitive: false,
+        // Unique per call: even if the progress write below is lost in a
+        // crash, a retried insert conflicts here instead of duplicating.
+        externalMessageId: session.simulated ? null : `voice-call:${session.token}`,
+      })
+      .onConflictDoNothing({ target: onbCommunications.externalMessageId });
+    await markOutcomeStep(session, progress, "transcript");
+  }
 
   const deduped = new Map(session.decisions.map((d) => [d.decision, d]));
   for (const { decision, note } of deduped.values()) {
+    const stepKey = `decision:${decision}`;
+    if (progress[stepKey]) continue;
+    // Every side effect below is idempotent at the DB boundary via a
+    // per-session/per-step key, so a crash between the effect and its
+    // progress marker cannot duplicate it on resume.
+    const idem = (suffix: string) => (session.simulated ? undefined : `voice:${session.token}:${suffix}`);
     if (decision === "confirmed-ready") {
       await logEvent(session.caseId, "channel", "llm", "Hire confirmed ready on call",
         `During the ${label.toLowerCase()}, the hire verbally confirmed they are set. ${note}`.trim(),
-        { hitlPattern: "act-then-review", ruleRef: "4.6 Communications Rules" });
+        { hitlPattern: "act-then-review", ruleRef: "4.6 Communications Rules", idempotencyKey: idem("confirmed-ready") });
     } else if (decision === "reschedule-kickoff") {
-      const slots = generateSlots(new Date(), timezoneLabelFor(c.geography), ianaZoneFor(c.geography));
-      await proposeSlots(session.caseId, slots);
-      const { sendOutbound } = await import("./channels");
-      const emailResult = await sendOutbound({
-        caseId: session.caseId,
-        channel: "email",
-        toAddress: c.workerEmail,
-        subject: "New kick-off call times, as discussed on our call",
-        body: `Hi ${c.workerName.split(" ")[0]},\n\nAs discussed on the phone just now, here are new times for your onboarding kick-off call.\n\n${formatSlotOffer(slots)}\n\nBest,\nThe onboarding team`,
-      });
-      const emailed = emailResult.status === "sent";
-      await logEvent(session.caseId, "channel", "ldm", "Kick-off reschedule agreed on call",
-        `The hire asked to move the kick-off call during the ${label.toLowerCase()}; fresh bookable slots were ${
-          emailed ? "emailed" : `composed but NOT delivered (${emailResult.status}${emailResult.failureReason ? `: ${emailResult.failureReason}` : ""})`
-        }. ${note}`.trim(),
-        { hitlPattern: emailed ? "notify-only" : "approve-before-act", ruleRef: "4.6 Communications Rules" });
-      if (!emailed) {
-        // The agent promised new times on the phone — a human must make good on it.
+      const intentStep = "decision:reschedule-kickoff:email-intent";
+      if (progress[intentStep]) {
+        // We crashed after committing to send the reschedule email but
+        // before confirming the result. The email may or may not have gone
+        // out — never resend (a duplicate promise email is worse than a
+        // human double-check). Idempotent approval + event instead.
         await createApproval({
           caseId: session.caseId,
           agent: "channel",
           ruleRef: "4.6 Communications Rules",
           hitlPattern: "approve-before-act",
-          recommendation: "Send the promised kick-off reschedule times manually",
-          rationale: `On the ${label.toLowerCase()}, the hire was told new kick-off times would arrive by email, but the email was not delivered (${emailResult.status}${emailResult.failureReason ? `: ${emailResult.failureReason}` : ""}). Slots are already proposed on the case.`,
+          recommendation: "Verify the promised kick-off reschedule email reached the hire",
+          rationale: `The ${label.toLowerCase()} was interrupted while emailing new kick-off times; the email may or may not have been delivered. Slots are already proposed on the case — check the hire's inbox status and resend manually if needed.`,
           resumeAction: "none",
+          idempotencyKey: idem("reschedule-verify"),
         });
+      } else {
+        const generated = generateSlots(new Date(), timezoneLabelFor(c.geography), ianaZoneFor(c.geography));
+        // Session-keyed proposal: a crash-resumed rerun conflicts on the
+        // dedupe key (no second proposal, nothing superseded) and reuses
+        // the ORIGINAL stored slots, so the email matches what's on file.
+        const slots = await proposeSlots(session.caseId, generated, idem("reschedule-slots"));
+        // Commit the send intent BEFORE the external send: the email is
+        // at-most-once across crashes, with the human-verify branch above
+        // covering the uncertain window.
+        await markOutcomeStep(session, progress, intentStep);
+        const { sendOutbound } = await import("./channels");
+        const emailResult = await sendOutbound({
+          caseId: session.caseId,
+          channel: "email",
+          toAddress: c.workerEmail,
+          subject: "New kick-off call times, as discussed on our call",
+          body: `Hi ${c.workerName.split(" ")[0]},\n\nAs discussed on the phone just now, here are new times for your onboarding kick-off call.\n\n${formatSlotOffer(slots)}\n\nBest,\nThe onboarding team`,
+        });
+        const emailed = emailResult.status === "sent";
+        await logEvent(session.caseId, "channel", "ldm", "Kick-off reschedule agreed on call",
+          `The hire asked to move the kick-off call during the ${label.toLowerCase()}; fresh bookable slots were ${
+            emailed ? "emailed" : `composed but NOT delivered (${emailResult.status}${emailResult.failureReason ? `: ${emailResult.failureReason}` : ""})`
+          }. ${note}`.trim(),
+          { hitlPattern: emailed ? "notify-only" : "approve-before-act", ruleRef: "4.6 Communications Rules", idempotencyKey: idem("reschedule-event") });
+        if (!emailed) {
+          // The agent promised new times on the phone — a human must make good on it.
+          await createApproval({
+            caseId: session.caseId,
+            agent: "channel",
+            ruleRef: "4.6 Communications Rules",
+            hitlPattern: "approve-before-act",
+            recommendation: "Send the promised kick-off reschedule times manually",
+            rationale: `On the ${label.toLowerCase()}, the hire was told new kick-off times would arrive by email, but the email was not delivered (${emailResult.status}${emailResult.failureReason ? `: ${emailResult.failureReason}` : ""}). Slots are already proposed on the case.`,
+            resumeAction: "none",
+            idempotencyKey: idem("reschedule-manual"),
+          });
+        }
       }
     } else if (decision === "flag-blocker" || decision === "needs-human") {
       await createApproval({
@@ -347,16 +575,24 @@ async function persistCallOutcome(session: Session, callOutcome: string): Promis
             : "Voice call needs a human follow-up",
         rationale: `${note || "See call transcript on the case timeline."} (from the ${label.toLowerCase()}${session.simulated ? ", simulated" : ""})`,
         resumeAction: "none",
+        idempotencyKey: idem(decision),
       });
     }
+    await markOutcomeStep(session, progress, stepKey);
   }
 
+  if (progress["summary"]) return;
   await logEvent(session.caseId, "channel", "llm",
     `${label} completed${session.simulated ? " (simulated)" : ""}`,
     `Outcome: ${callOutcome}. ${session.turns.length} conversation turns; decisions: ${
       deduped.size ? [...deduped.values()].map((d) => d.decision).join(", ") : "none"
     }. Full transcript recorded on the communications timeline.`,
-    { hitlPattern: "act-then-review", ruleRef: "4.6 Communications Rules" });
+    {
+      hitlPattern: "act-then-review",
+      ruleRef: "4.6 Communications Rules",
+      idempotencyKey: session.simulated ? undefined : `voice:${session.token}:summary`,
+    });
+  await markOutcomeStep(session, progress, "summary");
 }
 
 /* ------------------------------------------------------------------ */
@@ -399,6 +635,28 @@ async function voiceFromNumber(): Promise<string | null> {
   }
 }
 
+/**
+ * Atomically claim the one-live-call-per-case slot by inserting the session
+ * row against the partial unique index on (case_id) WHERE finalized = false.
+ * Exactly one concurrent caller gets `true`; everyone else conflicts and
+ * must not dial. Exported for the concurrency tests.
+ */
+export async function claimCallStart(session: Session): Promise<boolean> {
+  const inserted = await db
+    .insert(onbVoiceSessions)
+    .values({
+      token: session.token,
+      caseId: session.caseId,
+      scenario: session.scenario,
+      reason: session.reason,
+      turns: session.turns,
+      decisions: session.decisions,
+      startedAt: new Date(session.startedAt),
+    })
+    .onConflictDoNothing()
+    .returning({ token: onbVoiceSessions.token });
+  return inserted.length > 0;
+}
 export async function startVoiceCall(opts: {
   caseId: number;
   scenario: VoiceScenario;
@@ -411,12 +669,6 @@ export async function startVoiceCall(opts: {
     return { status: "failed", note: "This hire has no phone number on file." };
   }
 
-  // One live call at a time per case, and a global hourly cap.
-  for (const s of sessions.values()) {
-    if (!s.simulated && !s.finalized && s.caseId === opts.caseId) {
-      return { status: "failed", note: "A call for this hire is already in progress." };
-    }
-  }
   const session: Session = {
     token: randomBytes(16).toString("hex"),
     caseId: opts.caseId,
@@ -425,11 +677,9 @@ export async function startVoiceCall(opts: {
     turns: [],
     decisions: [],
     finalized: false,
-    finalizing: false,
     simulated: false,
     startedAt: Date.now(),
     callSid: null,
-    busy: false,
     lastSpeech: null,
     lastResponse: null,
   };
@@ -476,9 +726,33 @@ export async function startVoiceCall(opts: {
     return { status: "failed", note: "Twilio voice is not fully configured (no voice-capable number or public URL)." };
   }
 
-  sessions.set(session.token, session);
   const greeting = voiceGreeting(opts.scenario, c.workerName.split(" ")[0] ?? "there");
   session.turns.push({ role: "agent", text: greeting });
+  // Atomic call-start claim, persisted before dialing: the partial unique
+  // index (one unfinalized session per case) makes exactly ONE concurrent
+  // start win — a lost claim means another call is already live. It also
+  // means the very first webhook finds the session even if this process
+  // dies right after the Twilio API call.
+  let claimed = await claimCallStart(session);
+  if (!claimed) {
+    // The blocker may be a stale leftover from a crash (past TTL): finalize
+    // it as interrupted (recovery would eventually do this) and retry once.
+    const [blocking] = await db
+      .select()
+      .from(onbVoiceSessions)
+      .where(and(eq(onbVoiceSessions.caseId, opts.caseId), eq(onbVoiceSessions.finalized, false)));
+    if (blocking && blocking.startedAt.getTime() < Date.now() - SESSION_TTL_MS) {
+      try {
+        await finalizeVoiceCall(rowToSession(blocking), "interrupted");
+      } catch (err) {
+        console.error(`[voice] failed to finalize stale blocking session for case ${opts.caseId}:`, err);
+      }
+      claimed = await claimCallStart(session);
+    }
+    if (!claimed) {
+      return { status: "failed", note: "A call for this hire is already in progress." };
+    }
+  }
 
   try {
     const params = new URLSearchParams({
@@ -499,7 +773,7 @@ export async function startVoiceCall(opts: {
     });
     if (!resp.ok) {
       const detail = await resp.text();
-      sessions.delete(session.token);
+      await db.delete(onbVoiceSessions).where(eq(onbVoiceSessions.token, session.token));
       return { status: "failed", note: `Twilio rejected the call (${resp.status}): ${detail.slice(0, 200)}` };
     }
     await logEvent(opts.caseId, "channel", "orchestrator", `Voice call placed (${label})`,
@@ -507,7 +781,7 @@ export async function startVoiceCall(opts: {
       { hitlPattern: "act-then-review", ruleRef: "4.6 Communications Rules" });
     return { status: "calling", note: "Dialing now — transcript will appear on the case timeline when the call ends.", token: session.token };
   } catch (err) {
-    sessions.delete(session.token);
+    await db.delete(onbVoiceSessions).where(eq(onbVoiceSessions.token, session.token));
     return { status: "failed", note: `Call failed: ${String(err).slice(0, 200)}` };
   }
 }
@@ -543,11 +817,9 @@ export async function simulateVoiceCall(
     turns: [{ role: "agent", text: voiceGreeting(scenario, c.workerName.split(" ")[0] ?? "there") }],
     decisions: [],
     finalized: false,
-    finalizing: false,
     simulated: true,
     startedAt: Date.now(),
     callSid: null,
-    busy: false,
     lastSpeech: null,
     lastResponse: null,
   };
@@ -557,4 +829,56 @@ export async function simulateVoiceCall(
   }
   await finalizeVoiceCall(session, "completed");
   return { transcript: session.turns, decisions: session.decisions };
+}
+
+/**
+ * Write the mutable conversation state back to the DB (live calls only).
+ * Guarded on `finalized = false` so a turn that was in flight while another
+ * callback finalized the call can never flip the row back to unfinalized
+ * (or mutate an already-persisted transcript). Returns false when the row
+ * was already finalized and the save was skipped.
+ */
+export async function saveSession(s: Session): Promise<boolean> {
+  if (s.simulated) return true;
+  const leaseCutoff = new Date(Date.now() - FINALIZE_LEASE_MS);
+  const updated = await db
+    .update(onbVoiceSessions)
+    .set({
+      callSid: s.callSid,
+      turns: s.turns,
+      decisions: s.decisions,
+      lastSpeech: s.lastSpeech,
+      lastResponse: s.lastResponse,
+    })
+    .where(
+      and(
+        eq(onbVoiceSessions.token, s.token),
+        eq(onbVoiceSessions.finalized, false),
+        // Once a finalizer claims the lease, turn writes are blocked: a
+        // late turn can no longer slip in behind the finalizer's snapshot
+        // and be silently missing from the recorded transcript.
+        or(isNull(onbVoiceSessions.finalizeLeaseAt), lt(onbVoiceSessions.finalizeLeaseAt, leaseCutoff)),
+      ),
+    )
+    .returning({ token: onbVoiceSessions.token });
+  return updated.length > 0;
+}
+
+const finalizingTokens = new Set<string>();
+
+function rowToSession(row: typeof onbVoiceSessions.$inferSelect): Session {
+  return {
+    token: row.token,
+    caseId: row.caseId,
+    scenario: row.scenario as VoiceScenario,
+    reason: row.reason,
+    turns: row.turns as Turn[],
+    decisions: row.decisions as { decision: Decision; note: string }[],
+    finalized: row.finalized,
+    simulated: false,
+    startedAt: row.startedAt.getTime(),
+    callSid: row.callSid,
+    lastSpeech: row.lastSpeech,
+    lastResponse: row.lastResponse,
+  };
 }

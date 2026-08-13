@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { onbCallSlots, onbCases } from "@workspace/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 
 /**
  * Kick-off call scheduling. No external calendar is connected, so the
@@ -108,14 +108,48 @@ export function formatSlotOffer(slots: Slot[]): string {
   ].join("\n");
 }
 
-/** Store a proposal, superseding any earlier un-booked one (atomic). */
-export async function proposeSlots(caseId: number, slots: Slot[]): Promise<void> {
-  await db.transaction(async (tx) => {
+/**
+ * Store a proposal, superseding any earlier un-booked one (atomic).
+ *
+ * With a `dedupeKey`, the proposal is idempotent at the DB boundary: a
+ * crash-resumed caller re-proposing under the same key is a no-op (nothing
+ * inserted, nothing superseded), and the ORIGINAL proposal's slots are
+ * returned so downstream messaging always matches what was stored.
+ */
+export async function proposeSlots(caseId: number, slots: Slot[], dedupeKey?: string): Promise<Slot[]> {
+  return await db.transaction(async (tx) => {
+    if (dedupeKey) {
+      const inserted = await tx
+        .insert(onbCallSlots)
+        .values({ caseId, slots, status: "proposed", dedupeKey })
+        .onConflictDoNothing({ target: onbCallSlots.dedupeKey })
+        .returning({ id: onbCallSlots.id });
+      if (inserted.length === 0) {
+        // Already proposed by an earlier (crashed) attempt — reuse its slots.
+        const [existing] = await tx
+          .select({ slots: onbCallSlots.slots })
+          .from(onbCallSlots)
+          .where(eq(onbCallSlots.dedupeKey, dedupeKey));
+        return (existing?.slots ?? slots) as Slot[];
+      }
+      await tx
+        .update(onbCallSlots)
+        .set({ status: "superseded" })
+        .where(
+          and(
+            eq(onbCallSlots.caseId, caseId),
+            eq(onbCallSlots.status, "proposed"),
+            ne(onbCallSlots.id, inserted[0].id),
+          ),
+        );
+      return slots;
+    }
     await tx
       .update(onbCallSlots)
       .set({ status: "superseded" })
       .where(and(eq(onbCallSlots.caseId, caseId), eq(onbCallSlots.status, "proposed")));
     await tx.insert(onbCallSlots).values({ caseId, slots, status: "proposed" });
+    return slots;
   });
 }
 

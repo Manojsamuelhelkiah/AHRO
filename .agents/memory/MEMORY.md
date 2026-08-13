@@ -9,7 +9,7 @@
 - [Stale composite declarations](stale-composite-decls.md) — `tsc --noEmit` reads workspace libs' built dist d.ts; use `tsc -b` or phantom type errors contradict the source.
 - [Email as a status channel](email-status-channel.md) — inbound email must pass a sender allowlist before changing state; apply first then record the message id; guard on current status+mode.
 - [Gmail self-send echo loop](gmail-self-send-echo.md) — store outbound provider message ids in the inbound dedup column or the poller replies to its own mail forever.
-- [Task-merge file corruption](task-merge-corruption.md) — platform merges can scramble co-edited files; tsc after every merge, repair via git checkout of last good commit + re-apply merge intent.
-- [Root tsc coverage gap](root-tsc-coverage.md) — root `tsc -b` skips artifact app sources; run the per-package typecheck for each touched artifact before declaring done.
+- [Task-merge file corruption](task-merge-corruption.md) — platform merges can scramble co-edited files; typecheck after every merge, repair from last good commit + re-apply merge intent.
 - [Autoscale pauses in-process pollers](autoscale-background-pollers.md) — setInterval work stops without traffic; drive all pollers via the throttled heartbeat endpoint and wire new pollers into it.
+- [Webhook session durability](webhook-session-durability.md) — DB-backed call/webhook sessions need owner-fenced lease finalization, DB-boundary idempotency keys, and atomic start claims, or races/crashes duplicate or lose outcomes.
 - [TSX tests in node harness](tsx-tests-node-harness.md) — renderToStaticMarkup UI tests need jsx:automatic, bare builtin externals, and a createRequire banner in the esbuild bundle.

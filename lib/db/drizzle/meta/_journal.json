@@ -71,6 +71,20 @@
       "when": 1786585763578,
       "tag": "0009_guardrail_events",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786585763579,
+      "tag": "0010_voice_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786585763579,
+      "tag": "0010_voice_idempotency",
+      "breakpoints": true
     }
   ]
 }
