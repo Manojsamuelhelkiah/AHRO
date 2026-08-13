@@ -2712,7 +2712,36 @@ components:
           $ref: "#/components/schemas/OnbChannelInfo"
         whatsapp:
           $ref: "#/components/schemas/OnbChannelInfo"
-      required: [email, whatsapp]
+        inboundEmail:
+          $ref: "#/components/schemas/OnbInboundEmailMonitor"
+      required: [email, whatsapp, inboundEmail]
+    OnbInboundEmailMonitor:
+      type: object
+      description: Health of the background Gmail inbox poller that ingests real email replies
+      properties:
+        running:
+          type: boolean
+          description: Whether the poll loop has been started in this server process
+        healthy:
+          type: boolean
+          description: True only when state is "healthy" — a poll succeeded recently and nothing failed since
+        state:
+          type: string
+          description: healthy | initializing | broken | stopped
+        pollIntervalSeconds:
+          type: integer
+        lastPollAt:
+          type: ["string", "null"]
+          description: When the most recent poll attempt started (ISO)
+        lastSuccessAt:
+          type: ["string", "null"]
+          description: When the most recent poll completed successfully (ISO)
+        lastError:
+          type: ["string", "null"]
+          description: Error message from the most recent failed poll, cleared on success
+        lastErrorAt:
+          type: ["string", "null"]
+      required: [running, healthy, state, pollIntervalSeconds, lastPollAt, lastSuccessAt, lastError, lastErrorAt]
     OnbChannelInfo:
       type: object
       properties:

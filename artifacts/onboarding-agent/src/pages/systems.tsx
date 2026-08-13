@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { useListOnboardingConnectors, useUpdateOnboardingConnector, useGetOnboardingChannels, useTestOnboardingChannel, getListOnboardingConnectorsQueryKey, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft } from 'lucide-react';
+import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 
 export function SystemsPage() {
   const queryClient = useQueryClient();
   const { data: connectors, isLoading: loadingConn } = useListOnboardingConnectors();
-  const { data: channels, isLoading: loadingChan } = useGetOnboardingChannels();
+  // Refetch periodically so the inbox-monitor health tracks the background
+  // poller instead of freezing at whatever it was on page load.
+  const { data: channels, isLoading: loadingChan } = useGetOnboardingChannels({ query: { queryKey: getGetOnboardingChannelsQueryKey(), refetchInterval: 30_000 } });
   const updateConnector = useUpdateOnboardingConnector();
   const testChannel = useTestOnboardingChannel();
 
@@ -94,7 +96,82 @@ export function SystemsPage() {
           )}
         </div>
       </div>
+
+      <div className="space-y-5 pt-8">
+        <div className="border-b pb-2">
+          <h2 className="text-xl font-semibold flex items-center gap-2"><Radio className="w-5 h-5 text-primary" /> Live Inbox Monitoring</h2>
+          <p className="text-sm text-muted-foreground">Background Gmail polling that picks up real email replies from hires.</p>
+        </div>
+        {loadingChan ? (
+          <div className="p-8 text-muted-foreground text-center border rounded-xl border-dashed">Loading monitor status...</div>
+        ) : channels?.inboundEmail ? (
+          <InboundMonitorCard monitor={channels.inboundEmail} />
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function InboundMonitorCard({ monitor }: { monitor: any }) {
+  const healthy = monitor.state === 'healthy';
+  const initializing = monitor.state === 'initializing';
+  const badgeLabel = healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : monitor.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN';
+  const fmt = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, HH:mm:ss') : 'Never');
+  return (
+    <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <div className={cn("p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200")}>
+              {healthy || initializing ? <Radio className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
+            </div>
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-sm">Gmail Reply Monitor</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Checks the inbox every {monitor.pollIntervalSeconds}s for replies from active hires.
+              </p>
+            </div>
+          </div>
+          <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none", healthy ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200" : initializing ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200" : "bg-red-100 text-red-800 hover:bg-red-100 border-red-200")}>
+            {badgeLabel}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="border rounded-md p-3 bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Poll</p>
+            <p className="text-sm font-mono mt-1">{fmt(monitor.lastPollAt)}</p>
+          </div>
+          <div className="border rounded-md p-3 bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Success</p>
+            <p className="text-sm font-mono mt-1">{fmt(monitor.lastSuccessAt)}</p>
+          </div>
+          <div className="border rounded-md p-3 bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Error</p>
+            <p className="text-sm font-mono mt-1">{monitor.lastErrorAt ? fmt(monitor.lastErrorAt) : 'None'}</p>
+          </div>
+        </div>
+
+        {monitor.lastError && (
+          <div className="p-3 mt-4 text-sm rounded-md border flex items-start gap-3 bg-red-50 border-red-200 text-red-900">
+            <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+            <div>
+              <p className="font-bold">Latest poll failed</p>
+              <p className="font-mono text-xs mt-1 opacity-80 break-all">{monitor.lastError}</p>
+            </div>
+          </div>
+        )}
+        {!monitor.lastError && !healthy && (
+          <p className="text-sm text-muted-foreground mt-4">
+            {initializing
+              ? 'Started recently — waiting for the first poll to complete.'
+              : monitor.running
+                ? 'No successful poll recently — the loop may be stalled. Check the server logs.'
+                : 'The polling loop has not been started in this server process.'}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

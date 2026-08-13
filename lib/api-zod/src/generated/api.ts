@@ -175,6 +175,7 @@ export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const listScenariosResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -219,6 +220,7 @@ export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -253,6 +255,7 @@ export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const createScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const CreateScenarioResponse = zod.object({
@@ -302,6 +305,7 @@ export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const getScenarioResponseInputsAdoptionRampMax = 3;
 
 
+
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -349,6 +353,7 @@ export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -383,6 +388,7 @@ export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const updateScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const UpdateScenarioResponse = zod.object({
@@ -738,6 +744,7 @@ export const computeSensitivityBodyInputsAdoptionRampMin = 3;
 export const computeSensitivityBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ComputeSensitivityBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -806,6 +813,7 @@ export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
 export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ExportScenarioWorkbookBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -853,6 +861,7 @@ export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
 export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ImportScenarioWorkbookResponse = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -890,6 +899,7 @@ export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const computeRollupBodyInputsAdoptionRampMax = 3;
+
 
 
 export const ComputeRollupBody = zod.object({
@@ -1369,6 +1379,7 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
  */
 
 
+
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
   "workerEmail": zod.string(),
@@ -1529,6 +1540,8 @@ export const ReceiveOnboardingInboundParams = zod.object({
 })
 
 
+
+
 export const ReceiveOnboardingInboundBody = zod.object({
   "channel": zod.string().describe('email | whatsapp'),
   "body": zod.string().min(1)
@@ -1682,7 +1695,17 @@ export const GetOnboardingChannelsResponse = zod.object({
   "provider": zod.string().describe('e.g. resend | twilio | logged-only'),
   "target": zod.string().describe('Default destination (email address or phone) — masked'),
   "note": zod.string()
-})
+}),
+  "inboundEmail": zod.object({
+  "running": zod.boolean().describe('Whether the poll loop has been started in this server process'),
+  "healthy": zod.boolean().describe('True only when state is \"healthy\" — a poll succeeded recently and nothing failed since'),
+  "state": zod.string().describe('healthy | initializing | broken | stopped'),
+  "pollIntervalSeconds": zod.number(),
+  "lastPollAt": zod.string().nullable().describe('When the most recent poll attempt started (ISO)'),
+  "lastSuccessAt": zod.string().nullable().describe('When the most recent poll completed successfully (ISO)'),
+  "lastError": zod.string().nullable().describe('Error message from the most recent failed poll, cleared on success'),
+  "lastErrorAt": zod.string().nullable()
+}).describe('Health of the background Gmail inbox poller that ingests real email replies')
 })
 
 
@@ -1697,4 +1720,5 @@ export const TestOnboardingChannelResponse = zod.object({
   "ok": zod.boolean(),
   "detail": zod.string()
 })
+
 

@@ -23,6 +23,77 @@ const SEARCH_WINDOW = "newer_than:2d";
 let timer: NodeJS.Timeout | null = null;
 let polling = false;
 
+/** Health telemetry for the poller, surfaced on the control tower. */
+const monitorStatus = {
+  running: false,
+  startedAt: null as Date | null,
+  lastPollAt: null as Date | null,
+  lastSuccessAt: null as Date | null,
+  lastError: null as string | null,
+  lastErrorAt: null as Date | null,
+};
+
+export type MonitorTelemetry = typeof monitorStatus;
+
+export type MonitorState = "healthy" | "initializing" | "broken" | "stopped";
+
+export type InboundEmailMonitorStatus = {
+  running: boolean;
+  pollIntervalSeconds: number;
+  lastPollAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  state: MonitorState;
+  healthy: boolean;
+};
+
+/**
+ * Pure health classification (exported for tests):
+ * - stopped: the loop was never started in this process
+ * - broken: the most recent completed poll failed, or no poll has
+ *   succeeded within three intervals (stalled loop / hung first poll)
+ * - initializing: started recently, no poll has completed yet
+ * - healthy: a poll succeeded recently and nothing failed since
+ * A poller that has never proven itself with a successful poll is never
+ * reported healthy.
+ */
+export function classifyMonitor(
+  s: MonitorTelemetry,
+  now: number,
+  intervalMs: number = POLL_INTERVAL_MS,
+): MonitorState {
+  if (!s.running) return "stopped";
+  const staleMs = intervalMs * 3;
+  const failedLast =
+    s.lastErrorAt !== null &&
+    (s.lastSuccessAt === null || s.lastErrorAt > s.lastSuccessAt);
+  if (failedLast) return "broken";
+  if (s.lastSuccessAt !== null) {
+    return now - s.lastSuccessAt.getTime() > staleMs ? "broken" : "healthy";
+  }
+  // Never succeeded: still initializing within the staleness window
+  // (measured from start), broken once that window is exceeded — this
+  // catches a first poll that hangs forever.
+  const since = s.startedAt ? now - s.startedAt.getTime() : Infinity;
+  return since > staleMs ? "broken" : "initializing";
+}
+
+export function getInboundEmailMonitorStatus(): InboundEmailMonitorStatus {
+  const iso = (d: Date | null) => (d ? d.toISOString() : null);
+  const state = classifyMonitor(monitorStatus, Date.now());
+  return {
+    running: monitorStatus.running,
+    pollIntervalSeconds: POLL_INTERVAL_MS / 1000,
+    lastPollAt: iso(monitorStatus.lastPollAt),
+    lastSuccessAt: iso(monitorStatus.lastSuccessAt),
+    lastError: monitorStatus.lastError,
+    lastErrorAt: iso(monitorStatus.lastErrorAt),
+    state,
+    healthy: state === "healthy",
+  };
+}
+
 type GmailHeader = { name: string; value: string };
 type GmailPart = {
   mimeType?: string;
@@ -193,14 +264,22 @@ export function startInboundEmailPolling(): void {
   const tick = async () => {
     if (polling) return;
     polling = true;
+    monitorStatus.lastPollAt = new Date();
     try {
       await pollOnce();
+      monitorStatus.lastSuccessAt = new Date();
+      monitorStatus.lastError = null;
+      monitorStatus.lastErrorAt = null;
     } catch (err) {
-      console.error("[onboarding inbound-email] poll failed:", String(err).slice(0, 300));
+      monitorStatus.lastError = String(err).slice(0, 300);
+      monitorStatus.lastErrorAt = new Date();
+      console.error("[onboarding inbound-email] poll failed:", monitorStatus.lastError);
     } finally {
       polling = false;
     }
   };
+  monitorStatus.running = true;
+  monitorStatus.startedAt = new Date();
   timer = setInterval(tick, POLL_INTERVAL_MS);
   timer.unref?.();
   void tick();

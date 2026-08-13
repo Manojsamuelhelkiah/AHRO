@@ -995,9 +995,40 @@ export interface OnbChannelInfo {
   note: string;
 }
 
+/**
+ * Health of the background Gmail inbox poller that ingests real email replies
+ */
+export interface OnbInboundEmailMonitor {
+  /** Whether the poll loop has been started in this server process */
+  running: boolean;
+  /** True only when state is "healthy" — a poll succeeded recently and nothing failed since */
+  healthy: boolean;
+  /** healthy | initializing | broken | stopped */
+  state: string;
+  pollIntervalSeconds: number;
+  /**
+     * When the most recent poll attempt started (ISO)
+     * @nullable
+     */
+  lastPollAt: string | null;
+  /**
+     * When the most recent poll completed successfully (ISO)
+     * @nullable
+     */
+  lastSuccessAt: string | null;
+  /**
+     * Error message from the most recent failed poll, cleared on success
+     * @nullable
+     */
+  lastError: string | null;
+  /** @nullable */
+  lastErrorAt: string | null;
+}
+
 export interface OnbChannelStatus {
   email: OnbChannelInfo;
   whatsapp: OnbChannelInfo;
+  inboundEmail: OnbInboundEmailMonitor;
 }
 
 export interface OnbChannelTest {
@@ -1040,3 +1071,4 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
+

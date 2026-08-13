@@ -30,7 +30,10 @@ import {
   whatsappChannelInfo,
 } from "../lib/onboarding/channels";
 import { llmComplete } from "../lib/onboarding/llm";
-import { recordInbound } from "../lib/onboarding/inbound-email";
+import {
+  getInboundEmailMonitorStatus,
+  recordInbound,
+} from "../lib/onboarding/inbound-email";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
@@ -633,7 +636,11 @@ router.get("/onboarding/analytics", async (_req, res, next) => {
 /* ------------------------------ channels ----------------------------- */
 
 router.get("/onboarding/channels", (_req, res) => {
-  res.json({ email: emailChannelInfo(), whatsapp: whatsappChannelInfo() });
+  res.json({
+    email: emailChannelInfo(),
+    whatsapp: whatsappChannelInfo(),
+    inboundEmail: getInboundEmailMonitorStatus(),
+  });
 });
 
 router.post("/onboarding/channels/test", async (req, res, next) => {
