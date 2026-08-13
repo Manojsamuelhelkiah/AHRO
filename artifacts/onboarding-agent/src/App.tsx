@@ -17,6 +17,7 @@ import { CaseDetailPage } from './pages/cases/detail';
 import { ApprovalsPage } from './pages/approvals';
 import { SystemsPage } from './pages/systems';
 import { AnalyticsPage } from './pages/analytics';
+import { SettingsPage } from './pages/settings';
 
 const queryClient = new QueryClient();
 
@@ -208,6 +209,9 @@ function Router() {
       </Route>
       <Route path="/analytics">
         <Protected><AnalyticsPage /></Protected>
+      </Route>
+      <Route path="/settings">
+        <Protected><SettingsPage /></Protected>
       </Route>
       <Route component={NotFound} />
     </Switch>

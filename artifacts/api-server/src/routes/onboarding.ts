@@ -16,6 +16,7 @@ import {
   SimulateOnboardingWatchEmailBody,
   TestOnboardingChannelBody,
   UpdateOnboardingConnectorBody,
+  UpdateOnboardingSettingsBody,
 } from "@workspace/api-zod";
 import {
   defaultReadiness,
@@ -35,7 +36,14 @@ import { llmComplete } from "../lib/onboarding/llm";
 import {
   getInboundEmailMonitorStatus,
   recordInbound,
+  resolveHrAlertAddress,
 } from "../lib/onboarding/inbound-email";
+import {
+  getSetting,
+  setSetting,
+  isValidEmail,
+  HR_ALERT_EMAIL_KEY,
+} from "../lib/onboarding/settings";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { listDocuments } from "../lib/onboarding/documents";
 import {
@@ -637,6 +645,48 @@ router.post(
   },
 );
 
+/* ------------------------------ settings ----------------------------- */
+
+async function settingsPayload() {
+  const stored = await getSetting(HR_ALERT_EMAIL_KEY);
+  const hrAlertEmail = stored && stored.trim().length > 0 ? stored.trim() : null;
+  const envFallback = resolveHrAlertAddress(null);
+  const effective = hrAlertEmail ?? envFallback;
+  return {
+    hrAlertEmail,
+    envFallback,
+    effective,
+    source: hrAlertEmail ? "settings" : envFallback ? "environment" : null,
+  };
+}
+
+router.get("/onboarding/settings", async (_req, res, next) => {
+  try {
+    res.json(await settingsPayload());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put("/onboarding/settings", async (req, res, next) => {
+  try {
+    const body = UpdateOnboardingSettingsBody.parse(req.body);
+    const raw = (body.hrAlertEmail ?? "").trim();
+    if (raw.length === 0) {
+      await setSetting(HR_ALERT_EMAIL_KEY, null);
+    } else {
+      if (!isValidEmail(raw)) {
+        res.status(400).json({ error: "Enter a valid email address (e.g. hr@company.com)." });
+        return;
+      }
+      await setSetting(HR_ALERT_EMAIL_KEY, raw);
+    }
+    res.json(await settingsPayload());
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* --------------------------- system watcher --------------------------- */
 
 router.get("/onboarding/systems/watcher", async (_req, res, next) => {
@@ -787,12 +837,16 @@ router.get("/onboarding/analytics", async (_req, res, next) => {
 
 /* ------------------------------ channels ----------------------------- */
 
-router.get("/onboarding/channels", (_req, res) => {
-  res.json({
-    email: emailChannelInfo(),
-    whatsapp: whatsappChannelInfo(),
-    inboundEmail: getInboundEmailMonitorStatus(),
-  });
+router.get("/onboarding/channels", async (_req, res, next) => {
+  try {
+    res.json({
+      email: emailChannelInfo(),
+      whatsapp: whatsappChannelInfo(),
+      inboundEmail: await getInboundEmailMonitorStatus(),
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.post("/onboarding/channels/test", async (req, res, next) => {

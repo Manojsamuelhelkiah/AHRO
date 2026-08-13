@@ -1852,3 +1852,29 @@ export const TestOnboardingChannelResponse = zod.object({
 })
 
 
+/**
+ * @summary App settings (HR alert email address and its effective resolution)
+ */
+export const GetOnboardingSettingsResponse = zod.object({
+  "hrAlertEmail": zod.string().nullable().describe('Address stored via the settings screen, or null when not set'),
+  "envFallback": zod.string().nullable().describe('Address from HR_ALERT_EMAIL \/ ONBOARDING_HR_ALERT_EMAIL, or null'),
+  "effective": zod.string().nullable().describe('Address outage alerts will actually be sent to, or null when none'),
+  "source": zod.string().nullable().describe('Where the effective address comes from (\"settings\" | \"environment\"), null when none')
+})
+
+
+/**
+ * @summary Update app settings (set or clear the HR alert email address)
+ */
+export const UpdateOnboardingSettingsBody = zod.object({
+  "hrAlertEmail": zod.string().nullable().describe('New HR alert address; null or empty string clears the stored value')
+})
+
+export const UpdateOnboardingSettingsResponse = zod.object({
+  "hrAlertEmail": zod.string().nullable().describe('Address stored via the settings screen, or null when not set'),
+  "envFallback": zod.string().nullable().describe('Address from HR_ALERT_EMAIL \/ ONBOARDING_HR_ALERT_EMAIL, or null'),
+  "effective": zod.string().nullable().describe('Address outage alerts will actually be sent to, or null when none'),
+  "source": zod.string().nullable().describe('Where the effective address comes from (\"settings\" | \"environment\"), null when none')
+})
+
+

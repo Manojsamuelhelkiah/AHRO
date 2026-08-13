@@ -43,6 +43,27 @@
       "when": 1786585763574,
       "tag": "0005_system_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786585763575,
+      "tag": "0006_email_watch",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786585763576,
+      "tag": "0007_documents_call_slots",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786585763577,
+      "tag": "0008_settings",
+      "breakpoints": true
     }
   ]
 }

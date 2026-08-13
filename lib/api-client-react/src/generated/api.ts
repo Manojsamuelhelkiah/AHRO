@@ -59,6 +59,7 @@ import type {
   OnbEvent,
   OnbInboundMessage,
   OnbScenarioDef,
+  OnbSettings,
   OnbSystemWatcher,
   OnbWatchEmailSimulate,
   OnbWatchEmailSimulateResult,
@@ -70,7 +71,8 @@ import type {
   ScenarioUpdate,
   SensitivityRequest,
   SensitivityResult,
-  SystemInfo
+  SystemInfo,
+  UpdateOnbSettings
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -4213,5 +4215,153 @@ export const useTestOnboardingChannel = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getTestOnboardingChannelMutationOptions(options));
+    }
+
+export const getGetOnboardingSettingsUrl = () => {
+
+
+
+
+  return `/api/onboarding/settings`
+}
+
+/**
+ * @summary App settings (HR alert email address and its effective resolution)
+ */
+export const getOnboardingSettings = async ( options?: RequestInit): Promise<OnbSettings> => {
+
+  return customFetch<OnbSettings>(getGetOnboardingSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingSettingsQueryKey = () => {
+    return [
+    `/api/onboarding/settings`
+    ] as const;
+    }
+
+
+export const getGetOnboardingSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingSettings>>> = ({ signal }) => getOnboardingSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingSettings>>>
+export type GetOnboardingSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary App settings (HR alert email address and its effective resolution)
+ */
+
+export function useGetOnboardingSettings<TData = Awaited<ReturnType<typeof getOnboardingSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateOnboardingSettingsUrl = () => {
+
+
+
+
+  return `/api/onboarding/settings`
+}
+
+/**
+ * @summary Update app settings (set or clear the HR alert email address)
+ */
+export const updateOnboardingSettings = async (updateOnbSettings: UpdateOnbSettings, options?: RequestInit): Promise<OnbSettings> => {
+
+  return customFetch<OnbSettings>(getUpdateOnboardingSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateOnbSettings)
+  }
+);}
+
+
+
+
+
+export const getUpdateOnboardingSettingsMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingSettings>>, TError,{data: BodyType<UpdateOnbSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingSettings>>, TError,{data: BodyType<UpdateOnbSettings>}, TContext> => {
+
+const mutationKey = ['updateOnboardingSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOnboardingSettings>>, {data: BodyType<UpdateOnbSettings>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateOnboardingSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOnboardingSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateOnboardingSettings>>>
+    export type UpdateOnboardingSettingsMutationBody = BodyType<UpdateOnbSettings>
+    export type UpdateOnboardingSettingsMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Update app settings (set or clear the HR alert email address)
+ */
+export const useUpdateOnboardingSettings = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingSettings>>, TError,{data: BodyType<UpdateOnbSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOnboardingSettings>>,
+        TError,
+        {data: BodyType<UpdateOnbSettings>},
+        TContext
+      > => {
+      return useMutation(getUpdateOnboardingSettingsMutationOptions(options));
     }
 

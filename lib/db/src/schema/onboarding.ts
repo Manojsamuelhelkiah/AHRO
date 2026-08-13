@@ -107,6 +107,16 @@ export const onbCommunications = pgTable("onb_communications", {
 });
 
 /**
+ * App-level key/value settings editable from the control tower UI
+ * (e.g. the HR outage-alert email address). Values are plain text;
+ * interpretation is up to the reader.
+ */
+export const onbSettings = pgTable("onb_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+/**
  * One tracked external-system checklist item per case (BGV clearance,
  * ITSM access provisioning, payroll setup). The System Watcher agent
  * creates these when workstreams start, closes them when the external

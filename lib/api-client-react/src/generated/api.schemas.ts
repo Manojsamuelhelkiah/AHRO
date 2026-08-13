@@ -1298,6 +1298,22 @@ export interface OnbChannelTestResult {
   detail: string;
 }
 
+export interface OnbSettings {
+  /** Address stored via the settings screen, or null when not set */
+  hrAlertEmail: string | null;
+  /** Address from HR_ALERT_EMAIL / ONBOARDING_HR_ALERT_EMAIL, or null */
+  envFallback: string | null;
+  /** Address outage alerts will actually be sent to, or null when none */
+  effective: string | null;
+  /** Where the effective address comes from ("settings" | "environment"), null when none */
+  source: string | null;
+}
+
+export interface UpdateOnbSettings {
+  /** New HR alert address; null or empty string clears the stored value */
+  hrAlertEmail: string | null;
+}
+
 export type ListCustomIntentsParams = {
 /**
  * active (default) | all

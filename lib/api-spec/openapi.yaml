@@ -1206,6 +1206,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OnbChannelTestResult"
+  /onboarding/settings:
+    get:
+      operationId: getOnboardingSettings
+      tags: [onboarding]
+      summary: App settings (HR alert email address and its effective resolution)
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbSettings"
+    put:
+      operationId: updateOnboardingSettings
+      tags: [onboarding]
+      summary: Update app settings (set or clear the HR alert email address)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOnbSettings"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbSettings"
+        "400":
+          description: Invalid email address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 components:
   schemas:
     HealthStatus:
@@ -3085,3 +3120,31 @@ components:
         detail:
           type: string
       required: [ok, detail]
+    OnbSettings:
+      type: object
+      properties:
+        hrAlertEmail:
+          type: string
+          nullable: true
+          description: Address stored via the settings screen, or null when not set
+        envFallback:
+          type: string
+          nullable: true
+          description: Address from HR_ALERT_EMAIL / ONBOARDING_HR_ALERT_EMAIL, or null
+        effective:
+          type: string
+          nullable: true
+          description: Address outage alerts will actually be sent to, or null when none
+        source:
+          type: string
+          nullable: true
+          description: Where the effective address comes from ("settings" | "environment"), null when none
+      required: [hrAlertEmail, envFallback, effective, source]
+    UpdateOnbSettings:
+      type: object
+      properties:
+        hrAlertEmail:
+          type: string
+          nullable: true
+          description: New HR alert address; null or empty string clears the stored value
+      required: [hrAlertEmail]

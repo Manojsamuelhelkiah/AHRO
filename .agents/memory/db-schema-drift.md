@@ -8,3 +8,5 @@ Schema columns added in `lib/db` are not automatically applied to the dev databa
 **Why:** `pnpm run push` (drizzle-kit) requires a TTY for its confirmation prompts and errors out in agent shells, so drift silently accumulates.
 
 **How to apply:** when a query fails on a column that exists in the schema, compare `information_schema.columns` with the Drizzle schema and apply the missing DDL via `executeSql` (matching the schema exactly, e.g. `unique` constraints), or use `push-force` only when confident nothing destructive is pending.
+
+Also: applying DDL to the dev DB is not enough for task completion — the completion review requires a forward SQL migration in `lib/db/drizzle/` (IF NOT EXISTS style, matching later files) AND a matching entry in `meta/_journal.json`; parallel tasks sometimes add SQL files without journal entries, so append any missing entries in sequence.

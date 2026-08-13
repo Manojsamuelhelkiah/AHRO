@@ -4,6 +4,7 @@ import { ReplitConnectors } from "@replit/connectors-sdk";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { handleInbound } from "./engine";
 import { sendEmail } from "./channels";
+import { getSetting, HR_ALERT_EMAIL_KEY } from "./settings";
 
 /**
  * Gmail inbox polling — closes the loop on real email replies.
@@ -129,18 +130,28 @@ async function logMonitorEvent(title: string, detail: string): Promise<boolean> 
   }
 }
 
-/**
- * Outage email notifications: when the monitor transitions to broken (the
- * durable "down" event is written) an email is sent to the configured HR
- * alert address, and a recovery email is sent when it transitions back.
- * Configure via HR_ALERT_EMAIL (or ONBOARDING_HR_ALERT_EMAIL); when unset,
- * no email is sent and the dashboard banner/event remain the only signals.
- * Because emails piggyback on the durable event writes, "one email per
- * outage" holds even across server restarts.
- */
-export function hrAlertAddress(env: NodeJS.ProcessEnv = process.env): string | null {
+/** Pure resolution: stored (DB) value wins over env vars (exported for tests). */
+export function resolveHrAlertAddress(
+  stored: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const fromDb = (stored ?? "").trim();
+  if (fromDb.length > 0) return fromDb;
   const raw = (env.HR_ALERT_EMAIL ?? env.ONBOARDING_HR_ALERT_EMAIL ?? "").trim();
   return raw.length > 0 ? raw : null;
+}
+/** Effective HR alert address: DB setting first, env var fallback. */
+export async function hrAlertAddress(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | null> {
+  let stored: string | null = null;
+  try {
+    stored = await getSetting(HR_ALERT_EMAIL_KEY);
+  } catch (err) {
+    // Never let a settings read break alerting — fall back to the env var.
+    console.error("[onboarding inbound-email] failed to read HR alert setting:", String(err));
+  }
+  return resolveHrAlertAddress(stored, env);
 }
 
 /** Compose the outage/recovery alert email (pure, exported for tests). */
@@ -172,7 +183,7 @@ export function composeMonitorAlertEmail(
 }
 
 async function sendMonitorAlertEmail(kind: "down" | "recovered", detail: string): Promise<void> {
-  const to = hrAlertAddress();
+  const to = await hrAlertAddress();
   if (!to) return;
   try {
     const { subject, body } = composeMonitorAlertEmail(kind, detail);
@@ -236,8 +247,9 @@ export type InboundEmailMonitorStatus = {
   state: MonitorState;
   healthy: boolean;
   /**
-   * Whether an HR alert email address is configured (HR_ALERT_EMAIL /
-   * ONBOARDING_HR_ALERT_EMAIL). Never exposes the address itself.
+   * Whether an HR alert email address is configured (settings screen,
+   * HR_ALERT_EMAIL, or ONBOARDING_HR_ALERT_EMAIL). Never exposes the
+   * address itself.
    */
   alertEmailConfigured: boolean;
 };
@@ -273,7 +285,7 @@ export function classifyMonitor(
   return since > staleMs ? "broken" : "initializing";
 }
 
-export function getInboundEmailMonitorStatus(): InboundEmailMonitorStatus {
+export async function getInboundEmailMonitorStatus(): Promise<InboundEmailMonitorStatus> {
   const iso = (d: Date | null) => (d ? d.toISOString() : null);
   const state = classifyMonitor(monitorStatus, Date.now());
   return {
@@ -285,7 +297,7 @@ export function getInboundEmailMonitorStatus(): InboundEmailMonitorStatus {
     lastErrorAt: iso(monitorStatus.lastErrorAt),
     state,
     healthy: state === "healthy",
-    alertEmailConfigured: hrAlertAddress() !== null,
+    alertEmailConfigured: (await hrAlertAddress()) !== null,
   };
 }
 

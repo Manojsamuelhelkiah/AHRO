@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { classifyMonitor, createOutageTracker, planMonitorEventWrite, processMessageRefs, hrAlertAddress, composeMonitorAlertEmail, persistThenNotify, MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE, type MonitorTelemetry, type InboundMessage } from "./inbound-email";
+import { classifyMonitor, createOutageTracker, planMonitorEventWrite, processMessageRefs, resolveHrAlertAddress, composeMonitorAlertEmail, persistThenNotify, MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE, type MonitorTelemetry, type InboundMessage } from "./inbound-email";
 
 const INTERVAL = 60_000;
 const T0 = Date.parse("2026-08-13T10:00:00Z");
@@ -155,18 +155,33 @@ describe("planMonitorEventWrite (durable dedup across restarts)", () => {
 
 describe("HR alert email configuration & composition", () => {
   test("no address configured => null (no email sent)", () => {
-    assert.equal(hrAlertAddress({}), null);
-    assert.equal(hrAlertAddress({ HR_ALERT_EMAIL: "   " }), null);
+    assert.equal(resolveHrAlertAddress(null, {}), null);
+    assert.equal(resolveHrAlertAddress("   ", { HR_ALERT_EMAIL: "   " }), null);
   });
 
   test("HR_ALERT_EMAIL wins, ONBOARDING_HR_ALERT_EMAIL is the fallback", () => {
-    assert.equal(hrAlertAddress({ HR_ALERT_EMAIL: "hr@corp.com" }), "hr@corp.com");
+    assert.equal(resolveHrAlertAddress(null, { HR_ALERT_EMAIL: "hr@corp.com" }), "hr@corp.com");
     assert.equal(
-      hrAlertAddress({ ONBOARDING_HR_ALERT_EMAIL: "ops@corp.com" }),
+      resolveHrAlertAddress(null, { ONBOARDING_HR_ALERT_EMAIL: "ops@corp.com" }),
       "ops@corp.com",
     );
     assert.equal(
-      hrAlertAddress({ HR_ALERT_EMAIL: "hr@corp.com", ONBOARDING_HR_ALERT_EMAIL: "ops@corp.com" }),
+      resolveHrAlertAddress(null, { HR_ALERT_EMAIL: "hr@corp.com", ONBOARDING_HR_ALERT_EMAIL: "ops@corp.com" }),
+      "hr@corp.com",
+    );
+  });
+
+  test("stored settings value beats both env vars", () => {
+    assert.equal(
+      resolveHrAlertAddress("settings@corp.com", {
+        HR_ALERT_EMAIL: "hr@corp.com",
+        ONBOARDING_HR_ALERT_EMAIL: "ops@corp.com",
+      }),
+      "settings@corp.com",
+    );
+    // Whitespace-only stored value is ignored (env fallback applies).
+    assert.equal(
+      resolveHrAlertAddress("  ", { HR_ALERT_EMAIL: "hr@corp.com" }),
       "hr@corp.com",
     );
   });
