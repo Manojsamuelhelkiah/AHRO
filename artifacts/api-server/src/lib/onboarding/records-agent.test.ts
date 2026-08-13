@@ -186,3 +186,71 @@ describe("LDM records agent — compare_stints", () => {
     assert.ok(out.startsWith("Comparing 2016-04-11→2018-10-31"), out);
   });
 });
+
+describe("LDM records agent — rating_trend", () => {
+  const three = (r1: string, r2: string, r3: string) => [
+    stint({ id: 1, startDate: "2012-01-02", endDate: "2014-06-30", performanceRating: r1 }),
+    stint({ id: 2, startDate: "2016-04-11", endDate: "2018-10-31", performanceRating: r2 }),
+    stint({ id: 3, startDate: "2019-06-03", endDate: "2024-02-29", performanceRating: r3 }),
+  ];
+
+  test("consistent improvement across 3 stints", () => {
+    const out = executePlan({ metric: "rating_trend" }, three("3.2", "3.8", "4.3"));
+    assert.ok(out.includes("consistently improved every stint"), out);
+    assert.ok(out.includes("2014: 3.2 → 2018: 3.8 → 2024: 4.3"), out);
+    assert.ok(out.includes("net +1.10"), out);
+  });
+
+  test("consistent decline across 3 stints", () => {
+    const out = executePlan({ metric: "rating_trend" }, three("4.5", "4.0", "3.2"));
+    assert.ok(out.includes("consistently declined every stint"), out);
+    assert.ok(out.includes("net -1.30"), out);
+  });
+
+  test("mixed direction reports up/down counts", () => {
+    const out = executePlan({ metric: "rating_trend" }, three("3.5", "4.2", "3.8"));
+    assert.ok(out.includes("was mixed (1 up, 1 down)"), out);
+  });
+
+  test("ties: all-equal ratings are flat", () => {
+    const out = executePlan({ metric: "rating_trend" }, three("4.0", "4.0", "4.0"));
+    assert.ok(out.includes("stayed flat across all stints"), out);
+    assert.ok(out.includes("net unchanged"), out);
+  });
+
+  test("tie plus improvement is improved-with-ties, not consistent", () => {
+    const out = executePlan({ metric: "rating_trend" }, three("3.8", "3.8", "4.3"));
+    assert.ok(out.includes("improved overall (never declined, with some ties)"), out);
+  });
+
+  test("tie plus decline is declined-with-ties", () => {
+    const out = executePlan({ metric: "rating_trend" }, three("4.3", "4.3", "3.8"));
+    assert.ok(out.includes("declined overall (never improved, with some ties)"), out);
+  });
+
+  test("missing rating stints are excluded and noted", () => {
+    const rows = three("3.2", "n/a", "4.3");
+    const out = executePlan({ metric: "rating_trend" }, rows);
+    assert.ok(out.includes("across 2 rated stints"), out);
+    assert.ok(out.includes("1 stint without a numeric rating excluded"), out);
+    assert.ok(out.includes("2014: 3.2 → 2024: 4.3"), out);
+  });
+
+  test("no numeric ratings at all is called out", () => {
+    const rows = three("n/a", "n/a", "n/a");
+    const out = executePlan({ metric: "rating_trend" }, rows);
+    assert.match(out, /^Cannot assess rating trend — no numeric performance ratings/);
+  });
+
+  test("a single rated stint cannot form a trend", () => {
+    const out = executePlan({ metric: "rating_trend" }, three("n/a", "n/a", "4.1").slice(0, 3));
+    assert.ok(out.includes("Cannot assess a trend from a single rated stint"), out);
+    assert.ok(out.includes("2 stints without a numeric rating excluded"), out);
+  });
+
+  test("stints are ordered chronologically regardless of input order", () => {
+    const rows = three("3.2", "3.8", "4.3").reverse();
+    const out = executePlan({ metric: "rating_trend" }, rows);
+    assert.ok(out.includes("consistently improved every stint"), out);
+  });
+});

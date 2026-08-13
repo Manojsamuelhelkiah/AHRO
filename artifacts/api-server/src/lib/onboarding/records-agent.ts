@@ -113,7 +113,8 @@ export type QueryPlan = {
     | "total_tenure_months"
     | "stint_count"
     | "list_stints"
-    | "compare_stints";
+    | "compare_stints"
+    | "rating_trend";
   /** When present, the metric is computed over just the matching stint(s). */
   filter?: { stint: StintFilter };
   /** Only for "compare_stints": the two stints to compare (defaults to earliest vs latest). */
@@ -131,11 +132,12 @@ const METRICS: QueryPlan["metric"][] = [
   "stint_count",
   "list_stints",
   "compare_stints",
+  "rating_trend",
 ];
 
 async function interpretQuestion(question: string): Promise<QueryPlan | null> {
   const out = await llmCompleteJson<{ metric: string; filter?: { stint?: unknown }; compare?: { a?: unknown; b?: unknown } }>(
-    `You are a large-database-model agent. Map the analyst's question to EXACTLY ONE metric from this list (return JSON {"metric":"..."}):\n${METRICS.join("\n")}\nPick the closest match; if nothing fits, use "list_stints".\nIf the question is about ONE specific past stint (not the whole history), also add a filter:\n- most recent / last stint: {"filter":{"stint":"latest"}}\n- first / earliest stint: {"filter":{"stint":"earliest"}}\n- a stint identified by years, e.g. "the 2019-2024 stint": {"filter":{"stint":{"yearRange":{"from":2019,"to":2024}}}} (either bound may be omitted).\nOmit the filter entirely when the question covers all stints.\nIf the question COMPARES two stints (e.g. "did performance improve between the two stints?", "was notice compliance better the second time?", "which stint was longer?"), use metric "compare_stints" and add {"compare":{"a":<selector>,"b":<selector>}} where each selector uses the same shapes as the stint filter ("earliest", "latest", or {"yearRange":{...}}). When the question just compares first vs last, use a="earliest", b="latest" (or omit "compare" — that is the default).`,
+    `You are a large-database-model agent. Map the analyst's question to EXACTLY ONE metric from this list (return JSON {"metric":"..."}):\n${METRICS.join("\n")}\nPick the closest match; if nothing fits, use "list_stints".\nIf the question is about ONE specific past stint (not the whole history), also add a filter:\n- most recent / last stint: {"filter":{"stint":"latest"}}\n- first / earliest stint: {"filter":{"stint":"earliest"}}\n- a stint identified by years, e.g. "the 2019-2024 stint": {"filter":{"stint":{"yearRange":{"from":2019,"to":2024}}}} (either bound may be omitted).\nOmit the filter entirely when the question covers all stints.\nIf the question COMPARES two stints (e.g. "did performance improve between the two stints?", "was notice compliance better the second time?", "which stint was longer?"), use metric "compare_stints" and add {"compare":{"a":<selector>,"b":<selector>}} where each selector uses the same shapes as the stint filter ("earliest", "latest", or {"yearRange":{...}}). When the question just compares first vs last, use a="earliest", b="latest" (or omit "compare" — that is the default).\nIf the question asks about the DIRECTION of performance across the WHOLE history (e.g. "has performance improved consistently?", "is the rating trending up or down?", "did ratings keep getting better each time?"), use metric "rating_trend" instead of "compare_stints" — compare_stints is only for pitting exactly two specific stints against each other.`,
     question,
     400,
   );
@@ -203,6 +205,7 @@ export function applyStintFilter(
 export function executePlan(plan: QueryPlan, allStints: StintRow[]): string {
   const span = (s: StintRow) => `${s.startDate}→${s.endDate} (${s.role})`;
   if (plan.metric === "compare_stints") return compareStints(plan.compare, allStints, span);
+  if (plan.metric === "rating_trend") return ratingTrend(allStints);
   const { stints, note } = applyStintFilter(allStints, plan.filter);
   const suffix = note ? ` ${note}` : "";
   return computeMetric(plan.metric, stints, span) + suffix;
@@ -282,8 +285,45 @@ function compareStints(
   return parts.join(" ") + (notes.length ? " " + notes.join(" ") : "");
 }
 
+/**
+ * Deterministic rating trend across ALL stints in chronological order.
+ * Summarizes the direction ("consistently improved", "declined", "mixed",
+ * "flat") from pairwise deltas between consecutive rated stints; stints
+ * without a numeric rating are excluded and called out rather than guessed.
+ */
+export function ratingTrend(allStints: StintRow[]): string {
+  const sorted = [...allStints].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const rated = sorted.filter((s) => Number.isFinite(Number(s.performanceRating)));
+  const missing = sorted.length - rated.length;
+  const missingNote = missing > 0 ? ` (${missing} stint${missing === 1 ? "" : "s"} without a numeric rating excluded)` : "";
+  if (rated.length === 0) {
+    return "Cannot assess rating trend — no numeric performance ratings on record.";
+  }
+  const series = rated.map((s) => `${s.endDate.slice(0, 4)}: ${Number(s.performanceRating).toFixed(1)}`).join(" → ");
+  if (rated.length === 1) {
+    return `Cannot assess a trend from a single rated stint — only ${series}.${missingNote}`;
+  }
+  const deltas: number[] = [];
+  for (let i = 1; i < rated.length; i++) {
+    deltas.push(Number(rated[i].performanceRating) - Number(rated[i - 1].performanceRating));
+  }
+  const ups = deltas.filter((d) => d > 0).length;
+  const downs = deltas.filter((d) => d < 0).length;
+  const flats = deltas.length - ups - downs;
+  const net = Number(rated[rated.length - 1].performanceRating) - Number(rated[0].performanceRating);
+  let direction: string;
+  if (downs === 0 && ups > 0 && flats === 0) direction = "consistently improved every stint";
+  else if (ups === 0 && downs > 0 && flats === 0) direction = "consistently declined every stint";
+  else if (ups === 0 && downs === 0) direction = "stayed flat across all stints";
+  else if (downs === 0 && ups > 0) direction = "improved overall (never declined, with some ties)";
+  else if (ups === 0 && downs > 0) direction = "declined overall (never improved, with some ties)";
+  else direction = `was mixed (${ups} up, ${downs} down${flats ? `, ${flats} unchanged` : ""})`;
+  const netStr = net > 0 ? `net +${net.toFixed(2)}` : net < 0 ? `net ${net.toFixed(2)}` : "net unchanged";
+  return `Rating trend across ${rated.length} rated stints: ${direction} — ${series} (${netStr}).${missingNote}`;
+}
+
 function computeMetric(
-  metric: Exclude<QueryPlan["metric"], "compare_stints">,
+  metric: Exclude<QueryPlan["metric"], "compare_stints" | "rating_trend">,
   stints: StintRow[],
   span: (s: StintRow) => string,
 ): string {
