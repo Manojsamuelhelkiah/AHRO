@@ -18,18 +18,18 @@ import {
 } from 'lucide-react';
 
 const SEVERITY_STYLE: Record<string, string> = {
-  critical: 'bg-red-100 text-red-800 border-red-200',
-  high: 'bg-orange-100 text-orange-800 border-orange-200',
-  medium: 'bg-amber-100 text-amber-800 border-amber-200',
-  low: 'bg-slate-100 text-slate-700 border-slate-200',
+  critical: 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)] border-none',
+  high: 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
+  medium: 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
+  low: 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)] border-none',
 };
 
 const ACTION_STYLE: Record<string, string> = {
-  blocked: 'bg-red-100 text-red-800',
-  rejected: 'bg-red-100 text-red-800',
-  'rate-limited': 'bg-orange-100 text-orange-800',
-  sanitized: 'bg-amber-100 text-amber-800',
-  escalated: 'bg-violet-100 text-violet-800',
+  blocked: 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)] border-none',
+  rejected: 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)] border-none',
+  'rate-limited': 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
+  sanitized: 'bg-[var(--status-info-bg)] text-[var(--status-info-fg)] border-none',
+  escalated: 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-none',
 };
 
 export function GuardrailsPage() {
@@ -44,7 +44,7 @@ export function GuardrailsPage() {
   const totalActivations = guardrails.reduce((s, g) => s + g.activationCount, 0);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <PageHeader 
         title="Guardrails" 
         subtitle="Every safety control enforced on AI communications — with live evidence of each intervention."
@@ -59,7 +59,7 @@ export function GuardrailsPage() {
             })
           }
           disabled={drill.isPending}
-          className="gap-2"
+          className="gap-2 shadow-[var(--shadow-sm)]"
         >
           <Swords className="w-4 h-4" />
           {drill.isPending ? 'Running attacks…' : 'Run security drill'}
@@ -68,17 +68,17 @@ export function GuardrailsPage() {
 
       {drillResult && <DrillResultCard result={drillResult} onDismiss={() => setDrillResult(null)} />}
       {drill.isError && (
-        <Card className="p-4 border-red-200 bg-red-50 text-sm text-red-800">
+        <Card className="p-[var(--space-lg)] border-none shadow-[var(--shadow-sm)] bg-[var(--status-red-bg)] text-[var(--status-red-fg)] text-[var(--text-sm)] font-medium">
           The drill could not be completed. Check the server logs and try again.
         </Card>
       )}
 
-      <div className="flex gap-2 flex-wrap text-[var(--text-sm)] mt-2">
-        <Badge variant="outline" className="gap-1.5 py-[2px] px-[8px] bg-white">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> {guardrails.length} controls enforced
+      <div className="flex gap-3 flex-wrap text-[var(--text-sm)] mt-2">
+        <Badge className="gap-1.5 py-[4px] px-[12px] bg-[var(--surface)] text-[var(--text-secondary)] shadow-[var(--shadow-sm)] border-none font-semibold">
+          <ShieldCheck className="w-4 h-4 text-[var(--status-green-fg)]" /> {guardrails.length} controls enforced
         </Badge>
-        <Badge variant="outline" className="gap-1.5 py-[2px] px-[8px] bg-white">
-          <ShieldAlert className="w-3.5 h-3.5 text-red-600" /> {totalActivations} recorded interventions
+        <Badge className="gap-1.5 py-[4px] px-[12px] bg-[var(--surface)] text-[var(--text-secondary)] shadow-[var(--shadow-sm)] border-none font-semibold">
+          <ShieldAlert className="w-4 h-4 text-[var(--status-red-fg)]" /> {totalActivations} recorded interventions
         </Badge>
       </div>
 
@@ -89,9 +89,9 @@ export function GuardrailsPage() {
           const items = guardrails.filter((g) => g.category === cat.key);
           if (items.length === 0) return null;
           return (
-            <section key={cat.key} className="space-y-3 pt-2">
+            <section key={cat.key} className="space-y-4 pt-4">
               <SectionHeading title={cat.title} description={cat.blurb} />
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {items.map((g) => (
                   <GuardrailCard key={g.key} guardrail={g} />
                 ))}
@@ -106,30 +106,30 @@ export function GuardrailsPage() {
 
 function DrillResultCard({ result, onDismiss }: { result: SecurityDrillResult; onDismiss: () => void }) {
   return (
-    <Card className="p-5 border-emerald-200 bg-emerald-50/60 mt-4">
+    <Card className="p-[var(--space-lg)] bg-[var(--surface)] border-none shadow-[var(--shadow-md)] mt-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold flex items-center gap-2 text-[var(--text-base)]">
-            <Swords className="w-4 h-4 text-emerald-700" />
+          <h3 className="font-semibold flex items-center gap-2 text-[var(--text-lg)] text-[var(--text-primary)]">
+            <Swords className="w-5 h-5 text-[var(--status-green-fg)]" />
             Security drill complete — {result.steps.length} simulated attacks, all handled
           </h3>
-          <p className="text-[var(--text-sm)] text-muted-foreground mt-0.5">
+          <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">
             Each attack ran through the live enforcement code, not a mock. The full story is on the{' '}
-            <Link href={`/cases/${result.caseId}`} className="text-primary underline inline-flex items-center gap-0.5">
-              drill case timeline <ExternalLink className="w-3 h-3" />
+            <Link href={`/cases/${result.caseId}`} className="text-[var(--primary)] font-semibold hover:underline inline-flex items-center gap-0.5">
+              drill case timeline <ExternalLink className="w-3.5 h-3.5" />
             </Link>.
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={onDismiss}>Dismiss</Button>
+        <Button variant="ghost" size="sm" onClick={onDismiss} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">Dismiss</Button>
       </div>
-      <ul className="mt-3 space-y-2">
+      <ul className="mt-5 space-y-3 bg-[var(--surface-alt)] p-[var(--space-md)] rounded-[var(--radius-md)]">
         {result.steps.map((s, i) => (
-          <li key={i} className="text-[var(--text-sm)] flex gap-2">
-            <CircleCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <li key={i} className="text-[var(--text-sm)] flex gap-3 items-start">
+            <CircleCheck className="w-4 h-4 text-[var(--status-green-fg)] shrink-0 mt-0.5" />
             <div>
-              <span className="font-medium">{s.step}:</span>{' '}
-              <span className="text-muted-foreground">{s.attack}</span>
-              <div className="text-emerald-800">{s.outcome}</div>
+              <span className="font-semibold text-[var(--text-primary)]">{s.step}:</span>{' '}
+              <span className="text-[var(--text-secondary)] font-medium">{s.attack}</span>
+              <div className="text-[var(--status-green-fg)] font-bold mt-0.5">{s.outcome}</div>
             </div>
           </li>
         ))}
@@ -141,24 +141,24 @@ function DrillResultCard({ result, onDismiss }: { result: SecurityDrillResult; o
 function GuardrailCard({ guardrail: g }: { guardrail: Guardrail }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card className="p-0 overflow-hidden">
+    <div className="bg-[var(--surface)] shadow-[var(--shadow-sm)] rounded-[var(--radius-md)] overflow-hidden transition-all duration-200 hover:shadow-[var(--shadow-md)]">
       <button
-        className="w-full text-left px-[var(--space-lg)] py-[var(--space-md)] flex items-center gap-3 hover:bg-secondary/40 transition-colors"
+        className="w-full text-left px-[var(--space-lg)] py-[var(--space-md)] flex items-center gap-4 transition-colors hover:bg-[var(--surface-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-inset"
         onClick={() => setOpen((v) => !v)}
       >
-        <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+        <ShieldCheck className="w-5 h-5 text-[var(--status-green-fg)] shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-[var(--text-sm)]">{g.title}</div>
-          <div className="text-[var(--text-xs)] text-muted-foreground truncate">{g.threat}</div>
+          <div className="font-semibold text-[var(--text-base)] text-[var(--text-primary)]">{g.title}</div>
+          <div className="text-[var(--text-sm)] text-[var(--text-muted)] truncate mt-0.5 font-medium">{g.threat}</div>
         </div>
-        <Badge variant="outline" className={cn('capitalize text-[10px] uppercase tracking-wider', SEVERITY_STYLE[g.severity] ?? '')}>{g.severity}</Badge>
-        <Badge variant="outline" className={cn('text-[10px] uppercase tracking-wider', g.activationCount > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'text-muted-foreground')}>
-          {g.activationCount > 0 ? `${g.activationCount}× intervened` : 'no interventions yet'}
+        <Badge className={cn('capitalize text-[var(--text-xs)] shadow-none font-bold', SEVERITY_STYLE[g.severity] ?? '')}>{g.severity}</Badge>
+        <Badge className={cn('text-[var(--text-xs)] shadow-none border-none font-bold', g.activationCount > 0 ? 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]' : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]')}>
+          {g.activationCount > 0 ? `${g.activationCount}× intervened` : 'No interventions'}
         </Badge>
-        {open ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+        {open ? <ChevronUp className="w-5 h-5 shrink-0 text-[var(--text-muted)]" /> : <ChevronDown className="w-5 h-5 shrink-0 text-[var(--text-muted)]" />}
       </button>
       {open && <GuardrailDetail guardrail={g} />}
-    </Card>
+    </div>
   );
 }
 
@@ -167,43 +167,43 @@ function GuardrailDetail({ guardrail: g }: { guardrail: Guardrail }) {
     query: { queryKey: getListGuardrailEventsQueryKey(g.key) },
   });
   return (
-    <div className="border-t px-[var(--space-lg)] py-[var(--space-md)] space-y-3 text-[var(--text-sm)] bg-secondary/20">
-      <div className="grid md:grid-cols-2 gap-3">
+    <div className="px-[var(--space-lg)] py-[var(--space-lg)] space-y-6 text-[var(--text-sm)] bg-[var(--surface-alt)] border-t border-[var(--border)]">
+      <div className="grid md:grid-cols-2 gap-6">
         <div>
-          <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-1">What it prevents</div>
-          <p className="text-[var(--text-sm)]">{g.threat}</p>
+          <div className="font-semibold text-[var(--text-xs)] uppercase tracking-wider text-[var(--text-muted)] mb-1.5">What it prevents</div>
+          <p className="text-[var(--text-sm)] text-[var(--text-secondary)] font-medium leading-relaxed">{g.threat}</p>
         </div>
         <div>
-          <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-1">How it works</div>
-          <p className="text-[var(--text-sm)]">{g.mechanism}</p>
+          <div className="font-semibold text-[var(--text-xs)] uppercase tracking-wider text-[var(--text-muted)] mb-1.5">How it works</div>
+          <p className="text-[var(--text-sm)] text-[var(--text-secondary)] font-medium leading-relaxed">{g.mechanism}</p>
         </div>
         <div>
-          <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-1">When it triggers</div>
-          <p className="text-[var(--text-sm)]">{g.onViolation}</p>
+          <div className="font-semibold text-[var(--text-xs)] uppercase tracking-wider text-[var(--text-muted)] mb-1.5">When it triggers</div>
+          <p className="text-[var(--text-sm)] text-[var(--text-secondary)] font-medium leading-relaxed">{g.onViolation}</p>
         </div>
         <div>
-          <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
-            <MapPin className="w-3 h-3" /> Enforced at
+          <div className="font-semibold text-[var(--text-xs)] uppercase tracking-wider text-[var(--text-muted)] mb-1.5 flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5" /> Enforced at
           </div>
-          <ul className="space-y-0.5">
+          <div className="flex flex-wrap gap-1.5">
             {g.enforcedAt.map((e, i) => (
-              <li key={i} className="font-mono text-[10px] bg-secondary rounded px-1.5 py-0.5 inline-block mr-1 mb-1">{e}</li>
+              <span key={i} className="font-mono text-[11px] bg-[var(--surface-soft)] text-[var(--text-secondary)] rounded-[var(--radius-sm)] px-2 py-1 font-semibold inline-block">{e}</span>
             ))}
-          </ul>
+          </div>
         </div>
       </div>
 
       <div>
-        <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
-          <FlaskConical className="w-3 h-3" /> How it's evaluated
+        <div className="font-semibold text-[var(--text-xs)] uppercase tracking-wider text-[var(--text-muted)] mb-2.5 flex items-center gap-1.5">
+          <FlaskConical className="w-3.5 h-3.5" /> How it's evaluated
         </div>
-        <div className="flex flex-wrap gap-1.5 mt-2">
+        <div className="flex flex-wrap gap-2">
           {g.evals.map((e, i) => (
-            <Badge key={i} variant="outline" className={cn(
-              'gap-1 py-[2px] px-[8px]',
-              e.kind === 'live-verified' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : e.kind === 'automated-test' ? 'bg-sky-50 text-sky-800 border-sky-200'
-                : 'bg-slate-50 text-slate-700 border-slate-200',
+            <Badge key={i} className={cn(
+              'gap-1.5 py-[2px] px-[10px] border-none shadow-none font-bold',
+              e.kind === 'live-verified' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
+                : e.kind === 'automated-test' ? 'bg-[var(--status-info-bg)] text-[var(--status-info-fg)]'
+                : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
             )}>
               {e.kind === 'automated-test' ? <FlaskConical className="w-3 h-3" /> : <CircleCheck className="w-3 h-3" />}
               {e.name}
@@ -212,25 +212,33 @@ function GuardrailDetail({ guardrail: g }: { guardrail: Guardrail }) {
         </div>
       </div>
 
-      <div className="pt-2">
-        <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
-          <Clock className="w-3 h-3" /> Recent interventions
+      <div className="pt-3 border-t border-[var(--border)]">
+        <div className="font-semibold text-[var(--text-xs)] uppercase tracking-wider text-[var(--text-muted)] mb-3 flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5" /> Recent interventions
         </div>
         {isLoading ? (
-          <p className="text-muted-foreground">Loading…</p>
+          <p className="text-[var(--text-muted)] text-[var(--text-sm)] font-medium">Loading…</p>
         ) : !events || events.length === 0 ? (
-          <p className="text-[var(--text-sm)] text-muted-foreground">This guardrail has not needed to intervene yet. Run the security drill to see it in action.</p>
+          <div className="bg-[var(--surface-soft)] p-[var(--space-md)] rounded-[var(--radius-md)] text-[var(--text-secondary)] text-[var(--text-sm)] flex items-center gap-2.5 font-medium">
+            <Shield className="w-4 h-4 text-[var(--text-muted)]" />
+            This guardrail has not needed to intervene yet. Run the security drill to see it in action.
+          </div>
         ) : (
-          <ul className="space-y-2.5 mt-2">
+          <ul className="space-y-3 mt-3">
             {events.map((ev) => (
-              <li key={ev.id} className="flex gap-3 items-start border-l-2 pl-3 border-muted">
-                <Badge className={cn('capitalize shrink-0 mt-0.5 text-[10px] uppercase tracking-wider', ACTION_STYLE[ev.action] ?? 'bg-slate-100 text-slate-700')}>{ev.action}</Badge>
+              <li key={ev.id} className="flex gap-4 items-start bg-[var(--surface)] p-[var(--space-md)] rounded-[var(--radius-md)] shadow-[var(--shadow-sm)] border border-[var(--border)]">
+                <Badge className={cn('capitalize shrink-0 mt-0.5 text-[10px] shadow-none font-bold', ACTION_STYLE[ev.action] ?? 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)] border-none')}>{ev.action}</Badge>
                 <div className="min-w-0">
-                  <p className="break-words font-medium leading-snug text-[var(--text-sm)]">{ev.detail}</p>
-                  <p className="text-[var(--text-xs)] text-muted-foreground mt-1">
-                    {format(new Date(ev.createdAt), 'MMM d, HH:mm:ss')}
+                  <p className="break-words font-semibold leading-relaxed text-[var(--text-sm)] text-[var(--text-primary)]">{ev.detail}</p>
+                  <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1.5 font-medium">
+                    {format(new Date(ev.createdAt), 'MMM d, yyyy HH:mm:ss')}
                     {ev.caseId != null && (
-                      <> · <Link href={`/cases/${ev.caseId}`} className="text-primary hover:underline">{ev.workerName ?? `case #${ev.caseId}`}</Link></>
+                      <>
+                        <span className="mx-2 text-[var(--border-strong)]">•</span>
+                        <Link href={`/cases/${ev.caseId}`} className="text-[var(--primary)] hover:underline inline-flex items-center gap-1 font-semibold">
+                          {ev.workerName ?? `case #${ev.caseId}`}
+                        </Link>
+                      </>
                     )}
                   </p>
                 </div>

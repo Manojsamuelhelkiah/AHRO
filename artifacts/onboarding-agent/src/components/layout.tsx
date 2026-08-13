@@ -5,15 +5,32 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { cn } from './ui-shared';
 import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon } from 'lucide-react';
 
-const NAV_ITEMS = [
-  { path: '/', label: 'Control Tower', icon: TowerControl },
-  { path: '/cases', label: 'Cases', icon: Users },
-  { path: '/approvals', label: 'Approvals', icon: CheckSquare },
-  { path: '/systems', label: 'Systems', icon: Server },
-  { path: '/guardrails', label: 'Guardrails', icon: Shield },
-  { path: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { path: '/settings', label: 'Settings', icon: Settings },
+const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
+  {
+    label: 'Operations',
+    items: [
+      { path: '/', label: 'Control Tower', icon: TowerControl },
+      { path: '/cases', label: 'Cases', icon: Users },
+      { path: '/approvals', label: 'Approvals', icon: CheckSquare },
+    ],
+  },
+  {
+    label: 'Intelligence',
+    items: [
+      { path: '/guardrails', label: 'Guardrails', icon: Shield },
+      { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [
+      { path: '/systems', label: 'Systems', icon: Server },
+      { path: '/settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 function getPageName(path: string) {
   if (path === '/') return 'Control Tower';
@@ -53,55 +70,55 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         
-        <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
-            const isActive = location === item.path || (item.path !== '/' && location.startsWith(item.path));
-            return (
-              <Link key={item.path} href={item.path} 
-                className="flex items-center group transition-colors block"
+        <nav className="flex-1 overflow-y-auto" style={{ padding: 'var(--space-lg) var(--space-md)' }}>
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} style={{ marginBottom: 'var(--space-lg)' }}>
+              <div
                 style={{
-                  height: '36px',
-                  padding: '0 var(--space-lg)',
-                  marginBottom: '2px',
-                  outline: 'none'
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-muted)',
+                  padding: '0 var(--space-sm)',
+                  marginBottom: '6px',
                 }}
               >
-                <div className={cn("flex items-center w-full h-full transition-colors", isActive && "rounded-r-[var(--radius-sm)]")}
-                  style={{
-                    backgroundColor: isActive ? 'var(--primary-light)' : 'transparent',
-                    borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent',
-                    color: isActive ? 'var(--primary)' : 'var(--text-secondary)'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'var(--surface-soft)';
-                      e.currentTarget.style.color = 'var(--primary)';
-                      const icon = e.currentTarget.querySelector('svg');
-                      if (icon) icon.style.color = 'var(--primary)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.color = 'var(--text-secondary)';
-                      const icon = e.currentTarget.querySelector('svg');
-                      if (icon) icon.style.color = 'var(--text-muted)';
-                    }
-                  }}
-                >
-                  <item.icon 
-                    className="h-4 w-4 shrink-0 transition-colors" 
-                    style={{ 
-                      color: isActive ? 'var(--primary)' : 'var(--text-muted)',
-                      marginLeft: isActive ? '13px' : '16px',
-                      marginRight: '10px'
-                    }} 
-                  />
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: isActive ? 600 : 500 }}>{item.label}</span>
-                </div>
-              </Link>
-            );
-          })}
+                {group.label}
+              </div>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = location === item.path || (item.path !== '/' && location.startsWith(item.path));
+                  return (
+                    <Link
+                      key={item.path}
+                      href={item.path}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={cn(
+                        'flex items-center gap-2.5 rounded-[var(--radius-sm)] transition-colors outline-none',
+                        'focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-1',
+                        !isActive && 'hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
+                      )}
+                      style={{
+                        height: '34px',
+                        padding: '0 var(--space-sm)',
+                        backgroundColor: isActive ? 'var(--surface-selected)' : 'transparent',
+                        color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: isActive ? 600 : 500,
+                      }}
+                    >
+                      <item.icon
+                        className="h-4 w-4 shrink-0 transition-colors"
+                        style={{ color: isActive ? 'var(--primary)' : 'var(--text-muted)' }}
+                      />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
       </aside>

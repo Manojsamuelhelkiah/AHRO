@@ -94,6 +94,17 @@ export function DashboardPage() {
         subtitle="Real-time visibility across autonomous HR operations, exceptions, and human interventions."
       />
 
+      {/* Operations briefing */}
+      <OpsBriefing
+        loading={kpisLoading}
+        unavailable={casesQ.isError || approvalsQ.isError}
+        active={metrics.active.length}
+        blocked={metrics.blocked.length}
+        atRisk={metrics.atRisk.length}
+        interventions={interventionCount}
+        autonomousPct={metrics.autonomousPct}
+      />
+
       {/* KPIs */}
       {casesQ.isError ? (
         <SectionError label="Operational metrics unavailable" onRetry={() => casesQ.refetch()} />
@@ -305,6 +316,64 @@ const TONE_COLOR: Record<Tone, string> = {
   green: 'var(--status-green)',
   neutral: 'var(--text-muted)',
 };
+
+function OpsBriefing({ loading, unavailable, active, blocked, atRisk, interventions, autonomousPct }: {
+  loading?: boolean;
+  unavailable?: boolean;
+  active: number;
+  blocked: number;
+  atRisk: number;
+  interventions: number;
+  autonomousPct: number | null;
+}) {
+  const healthy = !unavailable && blocked === 0 && atRisk === 0;
+  const headline = unavailable
+    ? 'Operations status unavailable'
+    : loading
+      ? 'Assessing operations…'
+      : healthy
+        ? 'Operations are healthy'
+        : blocked > 0
+          ? 'Operations require attention'
+          : 'Operations are progressing with items to watch';
+
+  let body: string;
+  if (unavailable) {
+    body = 'Live operational data could not be loaded. Metrics will resume once the connection is restored.';
+  } else if (loading) {
+    body = 'Gathering live case, agent, and intervention data…';
+  } else {
+    const parts: string[] = [];
+    parts.push(`${active} active ${active === 1 ? 'case is' : 'cases are'} being handled across the agent workforce.`);
+    if (autonomousPct !== null) parts.push(`${autonomousPct}% of eligible work has completed autonomously.`);
+    if (interventions > 0) parts.push(`${interventions} ${interventions === 1 ? 'case requires' : 'cases require'} human attention.`);
+    if (atRisk > 0) parts.push(`${atRisk} ${atRisk === 1 ? 'SLA is' : 'SLAs are'} at risk.`);
+    if (blocked > 0) parts.push(`${blocked} ${blocked === 1 ? 'case is' : 'cases are'} blocked.`);
+    if (interventions === 0 && atRisk === 0 && blocked === 0) parts.push('No human interventions are currently required.');
+    body = parts.join(' ');
+  }
+
+  const dotColor = unavailable || loading ? 'var(--status-gray)' : healthy ? 'var(--status-green)' : blocked > 0 ? 'var(--status-red)' : 'var(--status-amber)';
+
+  return (
+    <div
+      className="flex items-start gap-3"
+      style={{
+        backgroundColor: 'var(--surface)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-lg) var(--space-xl)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+      role="status"
+    >
+      <span aria-hidden className="mt-1.5 h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+      <div className="min-w-0">
+        <p style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>{headline}</p>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: '2px' }}>{body}</p>
+      </div>
+    </div>
+  );
+}
 
 function KpiCard({ title, value, context, icon: Icon, tone, loading }: { title: string; value: React.ReactNode; context: string; icon: React.ComponentType<any>; tone: Tone; loading?: boolean }) {
   return (

@@ -8,10 +8,7 @@ import { format } from 'date-fns';
 export function SystemsPage() {
   const queryClient = useQueryClient();
   const { data: connectors, isLoading: loadingConn } = useListOnboardingConnectors();
-  // Refetch periodically so the inbox-monitor health tracks the background
-  // poller instead of freezing at whatever it was on page load.
   const { data: channels, isLoading: loadingChan } = useGetOnboardingChannels({ query: { queryKey: getGetOnboardingChannelsQueryKey(), refetchInterval: 30_000 } });
-  // Watcher health refetches on a short interval so polling telemetry stays live.
   const { data: watcher, isLoading: loadingWatcher } = useGetOnboardingSystemWatcher({ query: { queryKey: getGetOnboardingSystemWatcherQueryKey(), refetchInterval: 15_000 } });
   const { data: emailWatch, isLoading: loadingEmailWatch } = useGetOnboardingEmailWatch({ query: { queryKey: getGetOnboardingEmailWatchQueryKey(), refetchInterval: 15_000 } });
   const updateConnector = useUpdateOnboardingConnector();
@@ -40,42 +37,42 @@ export function SystemsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+    <div className="space-y-8 max-w-6xl mx-auto pb-12">
       <PageHeader 
         title="Systems & Integrations" 
         subtitle="Manage system-of-record adapters and outbound communication channels." 
       />
 
-      <div className="space-y-4 mt-2">
+      <div className="space-y-4">
         <SectionHeading icon={Server} title="System Adapters" description="Source systems that agents read from and write to via MCP." />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {loadingConn ? <LoadingBlock className="col-span-full">Loading adapters...</LoadingBlock> : connectors?.map(conn => (
-            <Card key={conn.key} className={cn("transition-all duration-300 shadow-sm", conn.status !== 'connected' && "opacity-75 bg-muted/10")}>
+            <Card key={conn.key} className={cn("transition-all duration-300 border-none shadow-[var(--shadow-md)]", conn.status !== 'connected' && "opacity-75 bg-[var(--surface-soft)] shadow-none")}>
               <CardContent className="p-[var(--space-lg)]">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-3">
-                    <IconTile icon={Server} className={conn.status === 'connected' ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border"} />
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-center gap-4">
+                    <IconTile icon={Server} className={cn("border-none shadow-sm", conn.status === 'connected' ? "bg-[var(--status-info-bg)] text-[var(--primary)]" : "bg-[var(--surface-alt)] text-[var(--text-muted)]")} />
                     <div>
-                      <h3 className="font-semibold text-[var(--text-sm)] leading-tight">{conn.label}</h3>
-                      <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">{conn.description}</p>
+                      <h3 className="font-semibold text-[var(--text-base)] text-[var(--text-primary)] leading-tight">{conn.label}</h3>
+                      <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">{conn.description}</p>
                     </div>
                   </div>
                   <label className="flex items-center cursor-pointer shrink-0 mt-1">
                     <div className="relative">
                       <input type="checkbox" className="sr-only" checked={conn.status === 'connected'} onChange={(e) => handleToggle(conn.key, e.target.checked)} disabled={updateConnector.isPending} />
-                      <div className={cn("block w-12 h-7 rounded-full transition-colors shadow-inner", conn.status === 'connected' ? "bg-emerald-500" : "bg-slate-300")}></div>
-                      <div className={cn("dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform shadow-sm", conn.status === 'connected' && "transform translate-x-5")}></div>
+                      <div className={cn("block w-12 h-7 rounded-full transition-colors shadow-inner", conn.status === 'connected' ? "bg-[var(--status-green-fg)]" : "bg-[var(--border-strong)]")}></div>
+                      <div className={cn("dot absolute left-1 top-1 bg-[var(--surface)] w-5 h-5 rounded-full transition-transform shadow-sm", conn.status === 'connected' && "transform translate-x-5")}></div>
                     </div>
                   </label>
                 </div>
                 
-                <div className="flex items-end justify-between gap-4 mt-4 pt-4 border-t border-border">
-                  <div className="space-y-1.5 flex-1 max-w-[200px]">
-                    <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                      <ArrowRightLeft className="w-3 h-3" /> Active Vendor
+                <div className="flex items-end justify-between gap-4 mt-6 pt-5 border-t border-[var(--border)]">
+                  <div className="space-y-2 flex-1 max-w-[200px]">
+                    <Label className="text-[var(--text-xs)] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
+                      <ArrowRightLeft className="w-3.5 h-3.5" /> Active Vendor
                     </Label>
                     <select 
-                      className={cn("block w-full text-[var(--text-sm)] font-semibold rounded-[var(--radius-md)] border-input shadow-sm h-[32px] px-3 border outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors", conn.status !== 'connected' ? "bg-muted text-muted-foreground opacity-50" : "bg-background")}
+                      className={cn("block w-full text-[var(--text-sm)] font-semibold rounded-[var(--radius-md)] shadow-sm h-[36px] px-3 border outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors cursor-pointer", conn.status !== 'connected' ? "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)] opacity-60" : "bg-[var(--surface)] text-[var(--text-primary)] border-[var(--border)]")}
                       value={conn.vendor}
                       onChange={(e) => handleSwap(conn.key, e.target.value)}
                       disabled={conn.status !== 'connected' || updateConnector.isPending}
@@ -84,12 +81,12 @@ export function SystemsPage() {
                     </select>
                   </div>
                   {WATCHED_KEYS.includes(conn.key) && (
-                    <div className="space-y-1.5 flex-1 max-w-[200px]">
-                      <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                        <Eye className="w-3 h-3" /> Status Tracking
+                    <div className="space-y-2 flex-1 max-w-[200px]">
+                      <Label className="text-[var(--text-xs)] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5" /> Status Tracking
                       </Label>
                       <select
-                        className="block w-full text-[var(--text-sm)] font-semibold rounded-[var(--radius-md)] border-input shadow-sm h-[32px] px-3 border outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors bg-background"
+                        className="block w-full text-[var(--text-sm)] font-semibold rounded-[var(--radius-md)] border-[var(--border)] shadow-sm h-[36px] px-3 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors bg-[var(--surface)] text-[var(--text-primary)] cursor-pointer"
                         value={conn.trackingMode}
                         onChange={(e) => handleTrackingMode(conn.key, e.target.value as 'api' | 'email')}
                         disabled={updateConnector.isPending}
@@ -106,21 +103,23 @@ export function SystemsPage() {
         </div>
       </div>
 
-      <div className="space-y-4 pt-2">
+      <div className="space-y-4 pt-4">
         <SectionHeading icon={Eye} title="System Watcher" description="Monitoring agent tracking BGV, ITSM access and payroll status — webhook push where the vendor supports it, scheduled polling otherwise." />
         {loadingWatcher ? (
           <LoadingBlock>Loading watcher status...</LoadingBlock>
         ) : watcher ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {watcher.connectors.map((c: any) => <WatcherConnectorCard key={c.key} conn={c} />)}
             </div>
-            <WatcherChecksTable checks={watcher.checks} />
+            <div className="mt-6">
+              <WatcherChecksTable checks={watcher.checks} />
+            </div>
           </>
         ) : null}
       </div>
 
-      <div className="space-y-4 pt-2">
+      <div className="space-y-4 pt-4">
         <SectionHeading icon={Inbox} title="Email Watch" description="Shallow-integration fallback: when a system offers no API or webhook, vendors simply CC status emails to the watch mailbox — the System Watcher reads them as status changes." />
         {loadingEmailWatch ? (
           <LoadingBlock>Loading email watch status...</LoadingBlock>
@@ -133,9 +132,9 @@ export function SystemsPage() {
         ) : null}
       </div>
 
-      <div className="space-y-4 pt-2">
+      <div className="space-y-4 pt-4">
         <SectionHeading icon={Zap} title="Messaging Channels" description="Outbound communication targets used by agents to contact hires." />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {loadingChan ? <LoadingBlock className="col-span-full">Loading channels...</LoadingBlock> : (
             <>
               {channels?.email && <ChannelCard key="email" channelKey="email" channel={channels.email} onTest={() => testChannel.mutateAsync({ data: { channel: 'email' } })} />}
@@ -145,7 +144,7 @@ export function SystemsPage() {
         </div>
       </div>
 
-      <div className="space-y-4 pt-2">
+      <div className="space-y-4 pt-4">
         <SectionHeading icon={Radio} title="Live Inbox Monitoring" description="Background Gmail polling that picks up real email replies from hires." />
         {loadingChan ? (
           <LoadingBlock>Loading monitor status...</LoadingBlock>
@@ -174,110 +173,116 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
     });
   };
 
+  const getBadgeColor = () => {
+    if (healthy) return 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]';
+    if (initializing) return 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]';
+    return 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]';
+  };
+
   return (
-    <div className="space-y-5">
-      <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
+    <div className="space-y-6">
+      <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
         <CardContent className="p-[var(--space-lg)]">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <IconTile icon={Inbox} className={healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200"} />
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <IconTile icon={Inbox} className={cn("border-none shadow-sm", getBadgeColor())} />
               <div>
-                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Watch Mailbox</h3>
-                <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-sm)] text-[var(--text-primary)]">Watch Mailbox</h3>
+                <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">
                   Vendors CC status emails quoting the tracking reference to{' '}
-                  {watch.mailbox ? <span className="font-mono text-xs bg-secondary px-1 rounded">{watch.mailbox}</span> : <span className="italic">the connected Gmail account</span>}
+                  {watch.mailbox ? <span className="font-mono text-[var(--text-xs)] bg-[var(--surface-soft)] px-1.5 py-0.5 rounded text-[var(--text-primary)]">{watch.mailbox}</span> : <span className="italic">the connected Gmail account</span>}
                   {' '}— scanned every {watch.pollIntervalSeconds}s.
                 </p>
               </div>
             </div>
-            <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none shrink-0", healthy ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200" : initializing ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200" : "bg-red-100 text-red-800 hover:bg-red-100 border-red-200")}>
+            <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none shrink-0 border-none font-bold", getBadgeColor())}>
               {healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : watch.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN'}
             </Badge>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="border rounded-md p-2.5 bg-muted/20">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Scan</p>
-              <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(watch.lastPollAt)}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)] border border-transparent">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Scan</p>
+              <p className="text-[var(--text-sm)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(watch.lastPollAt)}</p>
             </div>
-            <div className="border rounded-md p-2.5 bg-muted/20">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Success</p>
-              <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(watch.lastSuccessAt)}</p>
+            <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)] border border-transparent">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
+              <p className="text-[var(--text-sm)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(watch.lastSuccessAt)}</p>
             </div>
-            <div className="border rounded-md p-2.5 bg-muted/20">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Checks On Email Watch</p>
-              <p className="text-[var(--text-xs)] font-mono mt-1">{watch.openChecks}</p>
+            <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)] border border-transparent">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Checks On Email Watch</p>
+              <p className="text-[var(--text-sm)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{watch.openChecks}</p>
             </div>
           </div>
           {watch.lastError && (
-            <div className="p-3 mt-4 text-sm rounded-md border flex items-start gap-3 bg-red-50 border-red-200 text-red-900">
-              <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
-              <p className="font-mono text-xs break-all opacity-90">{watch.lastError}</p>
+            <div className="p-4 mt-5 rounded-[var(--radius-md)] flex items-start gap-3 bg-[var(--status-red-bg)] text-[var(--status-red-fg)]">
+              <X className="w-5 h-5 shrink-0 mt-0.5" />
+              <p className="font-mono text-[var(--text-xs)] font-medium break-all">{watch.lastError}</p>
             </div>
           )}
 
           {checks.length > 0 && (
-            <div className="pt-4 mt-4 border-t space-y-3">
-              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <FlaskConical className="w-3.5 h-3.5" /> Demo: simulate a vendor status email
+            <div className="pt-6 mt-6 border-t border-[var(--border)] space-y-4">
+              <Label className="text-[var(--text-xs)] font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-2">
+                <FlaskConical className="w-4 h-4 text-[var(--primary)]" /> Demo: simulate a vendor status email
               </Label>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {checks.map((c: any) => (
-                  <div key={c.id} className="flex items-center justify-between gap-3 border rounded-md p-2.5 bg-muted/10">
-                    <p className="text-[var(--text-sm)] font-medium">
-                      #{c.caseId} {c.caseWorkerName} — {c.label} <span className="font-mono text-xs text-muted-foreground">({c.externalRef})</span>
+                  <div key={c.id} className="flex items-center justify-between gap-4 rounded-[var(--radius-md)] p-3 bg-[var(--surface-alt)] shadow-[var(--shadow-sm)] border border-[var(--border)]">
+                    <p className="text-[var(--text-sm)] font-semibold text-[var(--text-primary)]">
+                      #{c.caseId} {c.caseWorkerName} — {c.label} <span className="font-mono text-[var(--text-xs)] text-[var(--text-muted)] ml-1">({c.externalRef})</span>
                     </p>
                     <div className="flex gap-2 shrink-0">
-                      <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50" disabled={simulate.isPending} onClick={() => doSimulate(c, 'completed')}>
-                        <Check className="w-3.5 h-3.5" /> Completed
+                      <Button size="sm" className="h-8 gap-1.5 bg-[var(--status-green-bg)] text-[var(--status-green-fg)] hover:opacity-80 shadow-none border-none font-bold" disabled={simulate.isPending} onClick={() => doSimulate(c, 'completed')}>
+                        <Check className="w-4 h-4" /> Completed
                       </Button>
-                      <Button size="sm" variant="outline" className="h-8 gap-1 text-red-700 border-red-200 hover:bg-red-50" disabled={simulate.isPending} onClick={() => doSimulate(c, 'exception')}>
-                        <AlertTriangle className="w-3.5 h-3.5" /> Exception
+                      <Button size="sm" className="h-8 gap-1.5 bg-[var(--status-red-bg)] text-[var(--status-red-fg)] hover:opacity-80 shadow-none border-none font-bold" disabled={simulate.isPending} onClick={() => doSimulate(c, 'exception')}>
+                        <AlertTriangle className="w-4 h-4" /> Exception
                       </Button>
                     </div>
                   </div>
                 ))}
               </div>
               {lastResult && (
-                <div className="p-2.5 text-xs rounded-md border bg-secondary/50 font-medium">{lastResult}</div>
+                <div className="p-3 text-[var(--text-sm)] rounded-[var(--radius-md)] bg-[var(--surface-soft)] font-medium text-[var(--text-primary)] mt-3 border border-[var(--border)]">{lastResult}</div>
               )}
             </div>
           )}
           {checks.length === 0 && (
-            <p className="text-[var(--text-sm)] text-muted-foreground mt-4 pt-4 border-t">
-              No open checks are on email watch. Switch a system adapter above to <span className="font-semibold">Email watch (no API)</span> and its open checks will be tracked through the mailbox instead.
+            <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-5 pt-5 border-t border-[var(--border)] font-medium">
+              No open checks are on email watch. Switch a system adapter above to <span className="font-bold text-[var(--text-primary)]">Email watch (no API)</span> and its open checks will be tracked through the mailbox instead.
             </p>
           )}
         </CardContent>
       </Card>
 
       {watch.recent.length > 0 && (
-        <Card className="shadow-sm">
+        <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
           <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-[var(--text-sm)]">
               <thead>
-                <tr className="border-b bg-muted/30 text-left">
-                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Received</th>
-                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">From</th>
-                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Subject</th>
-                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Read As</th>
-                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Watcher Action</th>
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)] text-left">
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Received</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">From</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Subject</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Read As</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Watcher Action</th>
                 </tr>
               </thead>
               <tbody>
                 {watch.recent.map((e: any) => (
-                  <tr key={e.id} className="border-b last:border-0 hover:bg-muted/10 transition-colors">
-                    <td className="px-[var(--space-md)] py-[var(--space-sm)] font-mono text-[var(--text-xs)] whitespace-nowrap">{fmt(e.receivedAt)}</td>
-                    <td className="px-[var(--space-md)] py-[var(--space-sm)] font-mono text-[var(--text-xs)]">{e.fromAddress}</td>
-                    <td className="px-[var(--space-md)] py-[var(--space-sm)] max-w-[280px] truncate text-[var(--text-xs)]" title={e.subject ?? ''}>{e.subject ?? '—'}</td>
-                    <td className="px-[var(--space-md)] py-[var(--space-sm)]">
-                      <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none",
-                        e.parsedStatus === 'completed' ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200"
-                          : e.parsedStatus === 'exception' ? "bg-red-100 text-red-800 hover:bg-red-100 border-red-200"
-                            : "bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200")}>
+                  <tr key={e.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-soft)] transition-colors">
+                    <td className="px-[var(--space-lg)] py-[var(--space-md)] font-mono text-[var(--text-xs)] whitespace-nowrap text-[var(--text-secondary)] font-medium">{fmt(e.receivedAt)}</td>
+                    <td className="px-[var(--space-lg)] py-[var(--space-md)] font-mono text-[var(--text-xs)] text-[var(--text-secondary)] font-medium">{e.fromAddress}</td>
+                    <td className="px-[var(--space-lg)] py-[var(--space-md)] max-w-[280px] truncate text-[var(--text-sm)] text-[var(--text-primary)] font-medium" title={e.subject ?? ''}>{e.subject ?? '—'}</td>
+                    <td className="px-[var(--space-lg)] py-[var(--space-md)]">
+                      <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none border-none font-bold",
+                        e.parsedStatus === 'completed' ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]"
+                          : e.parsedStatus === 'exception' ? "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]"
+                            : "bg-[var(--status-info-bg)] text-[var(--status-info-fg)]")}>
                         {e.parsedStatus}
                       </Badge>
                     </td>
-                    <td className="px-[var(--space-md)] py-[var(--space-sm)] text-[var(--text-xs)] text-muted-foreground max-w-[300px] truncate" title={e.action}>{e.action}</td>
+                    <td className="px-[var(--space-lg)] py-[var(--space-md)] text-[var(--text-sm)] text-[var(--text-secondary)] max-w-[300px] truncate font-medium" title={e.action}>{e.action}</td>
                   </tr>
                 ))}
               </tbody>
@@ -294,52 +299,59 @@ function WatcherConnectorCard({ conn }: { conn: any }) {
   const initializing = conn.state === 'initializing';
   const isPush = conn.mode === 'push';
   const fmt = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, HH:mm:ss') : 'Never');
+
+  const getBadgeColor = () => {
+    if (healthy) return 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]';
+    if (initializing) return 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]';
+    return 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]';
+  };
+
   return (
-    <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
+    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
       <CardContent className="p-[var(--space-lg)]">
-        <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-3">
-            <IconTile icon={isPush ? Webhook : RefreshCw} className={healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200"} />
+            <IconTile icon={isPush ? Webhook : RefreshCw} className={cn("border-none shadow-sm", getBadgeColor())} />
             <div>
-              <h3 className="font-semibold text-[var(--text-sm)] leading-tight">{conn.label}</h3>
-              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+              <h3 className="font-semibold text-[var(--text-base)] text-[var(--text-primary)] leading-tight">{conn.label}</h3>
+              <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">
                 {isPush ? 'Webhook push from vendor' : `Polled every ${conn.pollIntervalSeconds}s`}
               </p>
             </div>
           </div>
-          <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none shrink-0", healthy ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200" : initializing ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200" : "bg-red-100 text-red-800 hover:bg-red-100 border-red-200")}>
+          <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none shrink-0 border-none font-bold", getBadgeColor())}>
             {healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : conn.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN'}
           </Badge>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="grid grid-cols-2 gap-3 text-[var(--text-sm)]">
           {isPush ? (
             <>
-              <div className="border rounded-md p-2 bg-muted/20">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Event</p>
-                <p className="font-mono mt-0.5">{fmt(conn.lastEventAt)}</p>
+              <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Event</p>
+                <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{fmt(conn.lastEventAt)}</p>
               </div>
-              <div className="border rounded-md p-2 bg-muted/20">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Events Received</p>
-                <p className="font-mono mt-0.5">{conn.eventsReceived}</p>
+              <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Events Received</p>
+                <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{conn.eventsReceived}</p>
               </div>
             </>
           ) : (
             <>
-              <div className="border rounded-md p-2 bg-muted/20">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Poll</p>
-                <p className="font-mono mt-0.5">{fmt(conn.lastPollAt)}</p>
+              <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Poll</p>
+                <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{fmt(conn.lastPollAt)}</p>
               </div>
-              <div className="border rounded-md p-2 bg-muted/20">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Success</p>
-                <p className="font-mono mt-0.5">{fmt(conn.lastSuccessAt)}</p>
+              <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
+                <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{fmt(conn.lastSuccessAt)}</p>
               </div>
             </>
           )}
         </div>
         {conn.lastError && (
-          <div className="p-2 mt-3 text-xs rounded-md border flex items-start gap-2 bg-red-50 border-red-200 text-red-900">
-            <X className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
-            <p className="font-mono break-all opacity-90">{conn.lastError}</p>
+          <div className="p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-2.5 bg-[var(--status-red-bg)] text-[var(--status-red-fg)] font-medium">
+            <X className="w-4 h-4 shrink-0 mt-0.5" />
+            <p className="font-mono break-all">{conn.lastError}</p>
           </div>
         )}
       </CardContent>
@@ -352,62 +364,69 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
   const initializing = monitor.state === 'initializing';
   const badgeLabel = healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : monitor.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN';
   const fmt = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, HH:mm:ss') : 'Never');
+
+  const getBadgeColor = () => {
+    if (healthy) return 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]';
+    if (initializing) return 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]';
+    return 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]';
+  };
+
   return (
-    <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
+    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
       <CardContent className="p-[var(--space-lg)]">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <IconTile icon={healthy || initializing ? Radio : AlertTriangle} className={healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200"} />
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <IconTile icon={healthy || initializing ? Radio : AlertTriangle} className={cn("border-none shadow-sm", getBadgeColor())} />
             <div>
-              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Gmail Reply Monitor</h3>
-              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-sm)] text-[var(--text-primary)]">Gmail Reply Monitor</h3>
+              <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">
                 Checks the inbox every {monitor.pollIntervalSeconds}s for replies from active hires.
               </p>
             </div>
           </div>
-          <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none", healthy ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200" : initializing ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200" : "bg-red-100 text-red-800 hover:bg-red-100 border-red-200")}>
+          <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none border-none font-bold", getBadgeColor())}>
             {badgeLabel}
           </Badge>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="border rounded-md p-2.5 bg-muted/20">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Poll</p>
-            <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(monitor.lastPollAt)}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Poll</p>
+            <p className="text-[var(--text-xs)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(monitor.lastPollAt)}</p>
           </div>
-          <div className="border rounded-md p-2.5 bg-muted/20">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Success</p>
-            <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(monitor.lastSuccessAt)}</p>
+          <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
+            <p className="text-[var(--text-xs)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(monitor.lastSuccessAt)}</p>
           </div>
-          <div className="border rounded-md p-2.5 bg-muted/20">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Error</p>
-            <p className="text-[var(--text-xs)] font-mono mt-1">{monitor.lastErrorAt ? fmt(monitor.lastErrorAt) : 'None'}</p>
+          <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Error</p>
+            <p className="text-[var(--text-xs)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{monitor.lastErrorAt ? fmt(monitor.lastErrorAt) : 'None'}</p>
           </div>
         </div>
 
         {monitor.lastError && (
-          <div className="p-3 mt-4 text-sm rounded-md border flex items-start gap-3 bg-red-50 border-red-200 text-red-900">
-            <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+          <div className="p-4 mt-5 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3 bg-[var(--status-red-bg)] text-[var(--status-red-fg)]">
+            <X className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
               <p className="font-bold">Latest poll failed</p>
-              <p className="font-mono text-xs mt-1 opacity-80 break-all">{monitor.lastError}</p>
+              <p className="font-mono text-[var(--text-xs)] font-medium mt-1.5 opacity-90 break-all">{monitor.lastError}</p>
             </div>
           </div>
         )}
         {monitor.alertEmailConfigured === false && (
-          <div className="p-3 mt-4 text-sm rounded-md border flex items-start gap-3 bg-amber-50 border-amber-200 text-amber-900">
-            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+          <div className="p-4 mt-5 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3 bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
               <p className="font-bold">Alert emails are not configured</p>
-              <p className="text-xs mt-1 opacity-90">
+              <p className="text-[var(--text-xs)] font-medium mt-1.5 opacity-90 leading-relaxed">
                 If inbox monitoring goes down, no one will be emailed — the outage will only be visible here.
-                Set the <span className="font-mono">HR_ALERT_EMAIL</span> environment variable on the API server to enable outage alert emails.
+                Set the <span className="font-mono bg-[var(--surface)] text-[var(--text-primary)] px-1.5 py-0.5 rounded shadow-sm border border-[var(--border)]">HR_ALERT_EMAIL</span> environment variable on the API server to enable outage alert emails.
               </p>
             </div>
           </div>
         )}
         {!monitor.lastError && !healthy && (
-          <p className="text-sm text-muted-foreground mt-4">
+          <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-5 font-medium border-t border-[var(--border)] pt-5">
             {initializing
               ? 'Started recently — waiting for the first poll to complete.'
               : monitor.running
@@ -438,41 +457,41 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
   };
 
   return (
-    <Card className="shadow-sm">
-      <CardContent className="p-[var(--space-lg)]">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <IconTile icon={channelKey === 'whatsapp' ? Smartphone : Mail} className={channel.configured ? (channelKey === 'whatsapp' ? "bg-emerald-100 text-emerald-600 border-emerald-200" : "bg-blue-100 text-blue-600 border-blue-200") : "bg-muted text-muted-foreground border-border"} />
+    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)] overflow-hidden">
+      <CardContent className="p-[var(--space-lg)] pb-0">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <IconTile icon={channelKey === 'whatsapp' ? Smartphone : Mail} className={cn("border-none shadow-sm", channel.configured ? (channelKey === 'whatsapp' ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-info-bg)] text-[var(--status-info-fg)]") : "bg-[var(--surface-soft)] text-[var(--text-muted)]")} />
             <div>
-              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">{channelKey}</h3>
-              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">{channel.provider} {channel.target && <span className="font-mono text-xs ml-1 bg-secondary px-1 rounded">{channel.target}</span>}</p>
+              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-sm)] text-[var(--text-primary)]">{channelKey}</h3>
+              <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">{channel.provider} {channel.target && <span className="font-mono text-[var(--text-xs)] ml-1 bg-[var(--surface-soft)] px-1.5 py-0.5 rounded text-[var(--text-primary)]">{channel.target}</span>}</p>
             </div>
           </div>
-          <Badge variant={channel.configured ? 'default' : 'secondary'} className={cn("uppercase tracking-wider text-[10px]", channel.configured ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200 shadow-none' : '')}>
+          <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none border-none font-bold", channel.configured ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--surface-soft)] text-[var(--text-muted)]')}>
             {channel.configured ? 'CONFIGURED' : 'UNCONFIGURED'}
           </Badge>
         </div>
         
-        {channel.note && <p className="text-[var(--text-xs)] bg-secondary/50 border p-2.5 rounded-md mb-4 text-secondary-foreground leading-relaxed">{channel.note}</p>}
-        
-        <div className="pt-4 border-t space-y-2 bg-muted/10 -mx-[var(--space-lg)] -mb-[var(--space-lg)] p-[var(--space-lg)]">
-          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Send Test Message</Label>
-          <div className="flex gap-2">
-            <Button onClick={doTest} disabled={testing} className="w-full gap-2">
-              <Zap className="w-4 h-4" /> TEST {channelKey.toUpperCase()}
-            </Button>
-          </div>
-          {result && (
-            <div className={cn("p-3 mt-3 text-sm rounded-md border flex items-start gap-3 shadow-sm", result.ok ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-red-50 border-red-200 text-red-900")}>
-              {result.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" /> : <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />}
-              <div>
-                <p className="font-bold">{result.ok ? 'Test Successful' : 'Test Failed'}</p>
-                <p className="font-mono text-xs mt-1 opacity-80">{result.detail}</p>
-              </div>
-            </div>
-          )}
-        </div>
+        {channel.note && <p className="text-[var(--text-sm)] bg-[var(--surface-alt)] border border-[var(--border)] p-3 rounded-[var(--radius-md)] mb-5 text-[var(--text-secondary)] font-medium leading-relaxed">{channel.note}</p>}
       </CardContent>
+
+      <div className="bg-[var(--surface-alt)] p-[var(--space-lg)] mt-2">
+        <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block mb-3">Send Test Message</Label>
+        <div className="flex gap-3">
+          <Button onClick={doTest} disabled={testing} variant="secondary" className="w-full gap-2 font-bold tracking-wide uppercase text-[var(--text-xs)] h-10 shadow-sm border-[var(--border)] hover:bg-[var(--surface-soft)]">
+            <Zap className="w-4 h-4" /> TEST {channelKey.toUpperCase()}
+          </Button>
+        </div>
+        {result && (
+          <div className={cn("p-4 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3 shadow-sm", result.ok ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]")}>
+            {result.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5" /> : <X className="w-5 h-5 shrink-0 mt-0.5" />}
+            <div>
+              <p className="font-bold">{result.ok ? 'Test Successful' : 'Test Failed'}</p>
+              <p className="font-mono text-[var(--text-xs)] font-medium mt-1.5 opacity-90">{result.detail}</p>
+            </div>
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
@@ -486,44 +505,47 @@ function WatcherChecksTable({ checks }: { checks: any[] }) {
     return <LoadingBlock>No tracked checks yet — run a scenario or create a case and the watcher will start tracking BGV, ITSM and payroll automatically.</LoadingBlock>;
   }
   return (
-    <Card className="shadow-sm">
+    <Card className="shadow-[var(--shadow-md)] border-none bg-[var(--surface)]">
       <CardContent className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-[var(--text-sm)]">
           <thead>
-            <tr className="border-b bg-muted/30 text-left">
-              <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Case</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">System</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ref</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Mode</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">SLA Due</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Completed</th>
+            <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)] text-left">
+              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Check</th>
+              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Case / Hire</th>
+              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">System</th>
+              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Status</th>
+              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">SLA Due</th>
+              <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Completed</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(c => (
-              <tr key={c.id} className="border-b last:border-0">
-                <td className="px-4 py-2.5 font-medium whitespace-nowrap">#{c.caseId} {c.caseWorkerName}</td>
-                <td className="px-4 py-2.5 whitespace-nowrap">{c.label}</td>
-                <td className="px-4 py-2.5 font-mono text-xs">{c.externalRef}</td>
-                <td className="px-4 py-2.5">
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    {c.mode === 'push' ? <Webhook className="w-3.5 h-3.5" /> : c.mode === 'email' ? <Inbox className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    {c.mode}
-                  </span>
+              <tr key={c.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-soft)] transition-colors">
+                <td className="px-[var(--space-lg)] py-[var(--space-md)]">
+                  <div className="font-semibold text-[var(--text-primary)]">{c.label}</div>
+                  <div className="font-mono text-[var(--text-xs)] text-[var(--text-muted)] mt-1 font-medium">{c.externalRef}</div>
                 </td>
-                <td className="px-4 py-2.5">
-                  <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none",
-                    c.status === 'done' ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200"
-                      : c.status === 'overdue' ? "bg-red-100 text-red-800 hover:bg-red-100 border-red-200"
-                        : "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200")}>
-                    {c.status === 'overdue' && <AlertTriangle className="w-3 h-3 mr-1" />}
-                    {c.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                <td className="px-[var(--space-lg)] py-[var(--space-md)]">
+                  <div className="font-semibold text-[var(--text-primary)]">#{c.caseId} {c.caseWorkerName}</div>
+                </td>
+                <td className="px-[var(--space-lg)] py-[var(--space-md)] uppercase tracking-wider text-[var(--text-xs)] font-bold text-[var(--text-secondary)]">
+                  {c.system}
+                  <span className="ml-2 font-mono text-[10px] bg-[var(--surface-alt)] text-[var(--text-muted)] px-1.5 py-0.5 rounded">{c.mode}</span>
+                </td>
+                <td className="px-[var(--space-lg)] py-[var(--space-md)]">
+                  <Badge className={cn("uppercase tracking-wider text-[10px] font-bold shadow-none border-none", 
+                    c.status === 'done' ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]"
+                    : c.status === 'failed' ? "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]" 
+                    : "bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]")}>
                     {c.status}
                   </Badge>
                 </td>
-                <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap">{fmt(c.dueAt)}</td>
-                <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap">{fmt(c.completedAt)}</td>
+                <td className="px-[var(--space-lg)] py-[var(--space-md)] font-mono text-[var(--text-sm)] text-[var(--text-secondary)] font-medium whitespace-nowrap">
+                  {fmt(c.dueAt)}
+                </td>
+                <td className="px-[var(--space-lg)] py-[var(--space-md)] font-mono text-[var(--text-sm)] text-[var(--text-secondary)] font-medium whitespace-nowrap">
+                  {fmt(c.completedAt)}
+                </td>
               </tr>
             ))}
           </tbody>

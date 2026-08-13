@@ -1,0 +1,1442 @@
+Perform a **system-wide visual redesign of the existing Agentic HRO Suite**.
+
+This is NOT a request to redesign one page.
+
+The objective is to take the current application from a competent internal enterprise tool to a **premium, commercial-grade enterprise SaaS platform** with a distinctive **Agentic Operations** identity.
+
+Use the approved Agentic HRO login-page direction as the visual starting point, but evolve the entire product beyond it.
+
+The final product should feel:
+
+**Premium enterprise SaaS + AI-native operations platform + governed automation + human-in-the-loop**
+
+Benchmark the quality and restraint of products such as Linear, Stripe, ServiceNow, modern AI operations platforms, and leading enterprise SaaS products, but DO NOT copy their designs.
+
+The goal is to establish an original **Agentic HRO design language**.
+
+---
+
+# 1. IMPORTANT: REDESIGN THE SYSTEM, NOT INDIVIDUAL SCREENS
+
+Do NOT make small cosmetic changes to each page independently.
+
+First establish a reusable **Agentic HRO Design System V2**.
+
+Then migrate the existing application to that design system.
+
+The most important outcome is:
+
+> Every screen should look like it belongs to the same intentional product.
+
+Avoid the current situation where each page looks like a slightly different enterprise admin screen.
+
+Do not add more widgets merely to make pages look richer.
+
+Improve:
+
+* hierarchy
+* typography
+* information architecture
+* whitespace
+* surface depth
+* interaction design
+* consistency
+* agent-centric visual language
+* enterprise polish
+
+---
+
+# 2. FIRST: INSPECT THE EXISTING APPLICATION
+
+Before changing UI:
+
+1. Inspect the entire frontend structure.
+2. Identify the current routing.
+3. Identify the current component library/shared components.
+4. Identify global CSS/theme files.
+5. Identify duplicated color values.
+6. Identify duplicated card/button/input styles.
+7. Identify navigation components.
+8. Identify dashboard components.
+9. Identify cases components.
+10. Identify agent/approval/guardrail/system components.
+11. Identify any existing dark/light theme implementation.
+
+Do NOT immediately rewrite pages.
+
+First understand the current architecture.
+
+Preserve business logic.
+
+Preserve existing data flows.
+
+Preserve authentication.
+
+Preserve routes.
+
+Preserve APIs.
+
+Preserve database behavior.
+
+---
+
+# 3. CREATE AGENTIC HRO DESIGN SYSTEM V2
+
+Create a centralized design language covering:
+
+* Color
+* Typography
+* Spacing
+* Radius
+* Surfaces
+* Elevation
+* Borders
+* Icons
+* Buttons
+* Inputs
+* Tables
+* Navigation
+* Badges
+* Status
+* Agents
+* Human interventions
+* Policies
+* Cases
+* Charts
+* Modals
+* Drawers
+* Empty states
+* Loading states
+* Error states
+* Motion
+
+Do not scatter visual constants throughout the application.
+
+Use the existing technology stack's best theme/token mechanism.
+
+Prefer:
+
+* CSS variables
+* centralized theme configuration
+* reusable components
+* shared tokens
+
+Do NOT install a completely new UI framework unless absolutely necessary.
+
+---
+
+# 4. CORE DESIGN PHILOSOPHY
+
+The product should visually communicate four ideas:
+
+### INTELLIGENCE
+
+Indigo / Violet
+
+### TRUST
+
+Midnight Navy / White / Neutral surfaces
+
+### GOVERNANCE
+
+Structured controls, shields, policy states
+
+### HUMAN OVERSIGHT
+
+Amber / deliberate attention states
+
+And:
+
+### OPERATIONAL HEALTH
+
+Emerald
+
+### CRITICAL EXCEPTION
+
+Red
+
+Do not use these colors decoratively.
+
+Color must communicate meaning.
+
+---
+
+# 5. COLOR SYSTEM
+
+Use the approved Agentic HRO palette as the foundation.
+
+## Brand
+
+Primary Indigo:
+`#4C42EE`
+
+Deep Indigo:
+`#3730C9`
+
+Secondary Violet:
+`#655BF3`
+
+Lavender:
+`#B9B4FF`
+
+Soft Lavender:
+`#8F89FF`
+
+## Dark surfaces
+
+Midnight:
+`#080626`
+
+Deep Navy:
+`#100D3E`
+
+Control Tower:
+`#15134F`
+
+Dark elevated surface:
+`rgba(255,255,255,.055)`
+
+Dark border:
+`rgba(180,175,255,.18)`
+
+## Light surfaces
+
+Primary:
+`#FFFFFF`
+
+Workspace:
+`#F8F9FC`
+
+Secondary:
+`#F3F4F8`
+
+Border:
+`#E4E7EF`
+
+## Text
+
+Dark primary:
+`#0B1230`
+
+Dark secondary:
+`#30364F`
+
+Dark muted:
+`#68708D`
+
+Light primary:
+`#F7F7FF`
+
+Light secondary:
+`#D5D2ED`
+
+Light muted:
+`#AAA7C7`
+
+## Semantic
+
+Success / operational:
+`#20E58A`
+
+Warning / human attention:
+Use restrained amber
+
+Error / blocked:
+Use restrained enterprise red
+
+Info:
+Use controlled blue/lavender
+
+Do NOT turn the application into a purple-heavy interface.
+
+Indigo is the brand.
+
+Neutral surfaces carry the majority of enterprise UI.
+
+---
+
+# 6. TYPOGRAPHY REDESIGN
+
+Typography should become significantly more sophisticated.
+
+Create consistent levels.
+
+### Display
+
+Large hero/product statements.
+
+### H1
+
+Page titles.
+
+Target approximately:
+`30–36px`
+
+### H2
+
+Major section headings.
+
+Approximately:
+`20–24px`
+
+### H3
+
+Card/subsection titles.
+
+Approximately:
+`16–18px`
+
+### UI body
+
+Approximately:
+`14–15px`
+
+### Metadata
+
+Approximately:
+`12–13px`
+
+### Micro labels
+
+Approximately:
+`11–12px`
+
+Use carefully controlled font weights.
+
+Do not bold everything.
+
+Do not uppercase large amounts of body text.
+
+Use letter spacing primarily for small operational labels.
+
+Typography should establish hierarchy instead of relying heavily on borders or colors.
+
+---
+
+# 7. REMOVE THE "BOXED ADMIN PANEL" FEEL
+
+This is one of the most important redesign requirements.
+
+The current application relies too heavily on:
+
+* borders
+* cards
+* bordered sections
+* boxed navigation
+* repeated rectangular containers
+
+Reduce visible borders significantly.
+
+Target roughly **30–40% fewer visible borders**.
+
+Create hierarchy using:
+
+* whitespace
+* typography
+* surface contrast
+* subtle elevation
+* alignment
+* grouping
+
+Use borders only where they improve comprehension.
+
+Do not place every piece of information inside a card.
+
+---
+
+# 8. SURFACE SYSTEM
+
+Establish a clear surface hierarchy.
+
+## Light workspace
+
+Background:
+`#F8F9FC`
+
+Raised surface:
+`#FFFFFF`
+
+Selected surface:
+very subtle indigo tint
+
+## Dark Control Tower
+
+Base:
+Midnight / Deep Navy
+
+Raised surface:
+translucent light overlay
+
+Secondary surface:
+slightly brighter navy/indigo
+
+Selected surface:
+subtle indigo
+
+Dark surfaces should have extremely subtle depth.
+
+Do not use heavy glassmorphism.
+
+Do not use neon glow.
+
+---
+
+# 9. ELEVATION SYSTEM
+
+Create 3–4 levels of elevation.
+
+### Level 0
+
+Flat page surface
+
+### Level 1
+
+Standard card
+
+### Level 2
+
+Raised interactive panel
+
+### Level 3
+
+Modal / drawer
+
+Use very soft shadows.
+
+Dark surfaces may use extremely subtle black/indigo shadows.
+
+Do not make everything float.
+
+---
+
+# 10. BORDER SYSTEM
+
+Light UI:
+very subtle cool-gray borders.
+
+Dark UI:
+low-opacity lavender/indigo borders.
+
+Selected:
+subtle Indigo.
+
+Focus:
+Indigo focus ring.
+
+Error:
+semantic red.
+
+Avoid thick borders.
+
+---
+
+# 11. NAVIGATION REDESIGN
+
+The sidebar should stop looking like a generic admin menu.
+
+Create clearer conceptual groups.
+
+Use approximately:
+
+### OPERATIONS
+
+Control Tower
+Cases
+Approvals
+
+### INTELLIGENCE
+
+Agents
+Guardrails
+Analytics
+
+### PLATFORM
+
+Systems
+Administration
+
+Keep Settings/profile at the bottom if appropriate.
+
+Do not add routes that do not exist.
+
+Use small section labels with restrained typography.
+
+The selected item should have a sophisticated active treatment:
+
+* subtle background
+* indigo accent
+* indigo icon
+* stronger text
+
+Do not use oversized purple blocks.
+
+Only one item can be active at a time.
+
+---
+
+# 12. BRAND HEADER
+
+Refine the Agentic HRO branding.
+
+Maintain:
+
+**Agentic HRO**
+**SUITE**
+
+Keep the existing logo concept.
+
+Make the brand feel like a serious enterprise product rather than a prototype.
+
+Do not enlarge the logo excessively.
+
+---
+
+# 13. CREATE A DISTINCTIVE AGENT VISUAL LANGUAGE
+
+This is critical.
+
+The application must visually communicate that this is an **agentic platform**, not a normal HR workflow system.
+
+Create a reusable Agent component/card.
+
+Every agent presentation should have:
+
+* Agent name
+* Agent type/icon
+* operational state
+* workload
+* optional performance/autonomy information
+* optional human-intervention count
+
+Example:
+
+**ONBOARDING AGENT**
+
+Operational
+
+`18 active`
+
+`2 human reviews`
+
+Agent identity should consistently use Agentic Indigo/Lavender.
+
+---
+
+# 14. STANDARD AGENT STATES
+
+Create standardized states:
+
+**Operational**
+Emerald
+
+**Waiting**
+Neutral
+
+**Human Review**
+Amber
+
+**Degraded**
+Amber
+
+**Blocked**
+Red
+
+**Offline**
+Neutral gray
+
+Always display state text.
+
+Never communicate state through color alone.
+
+Do NOT use "0 errors" as the standard health metric.
+
+---
+
+# 15. CREATE A HUMAN-IN-THE-LOOP VISUAL LANGUAGE
+
+Human intervention is a core product behavior, not an error.
+
+Create reusable representations for:
+
+* Human Review
+* Approval Required
+* Decision Required
+* Exception Review
+* Human Handoff
+
+Use restrained amber.
+
+The visual language should make it obvious when:
+
+**Agent can continue autonomously**
+
+versus:
+
+**Human judgment is required**
+
+---
+
+# 16. CREATE A GOVERNANCE / POLICY VISUAL LANGUAGE
+
+Create reusable representations for:
+
+* Policy Pass
+* Policy Review
+* Policy Exception
+* Policy Block
+* Guardrail Decision
+
+Use shield/rules visual language.
+
+Governance should visually feel different from normal system activity.
+
+---
+
+# 17. REDESIGN CASES AS "WORK OBJECTS"
+
+Cases should stop looking like simple database rows.
+
+A case should feel like an operational work object.
+
+A case representation should support:
+
+**Case**
+**Worker**
+**Case Type**
+**Status**
+**Owner / Agent**
+**Effective Date**
+**Progress**
+**Human Attention**
+**Actions**
+
+The case should have a clear hierarchy.
+
+The case itself is more important than its surrounding metadata.
+
+Use this approach across:
+
+* Cases table
+* Case details
+* Case cards
+* Search results
+* Dashboard references
+* Approval references
+
+---
+
+# 18. TABLE REDESIGN
+
+Tables should feel premium and highly scannable.
+
+Use:
+
+* fewer vertical borders
+* subtle row separators
+* stronger primary text
+* smaller metadata
+* intelligent spacing
+* meaningful status badges
+* concise secondary information
+
+Avoid making every row look like a spreadsheet.
+
+Where appropriate, visually group related information inside the row.
+
+Use hover states sparingly.
+
+---
+
+# 19. CONTROL TOWER REDESIGN
+
+Transform the Dashboard into:
+
+# HRO Control Tower
+
+Subtitle:
+
+`Real-time visibility across autonomous HR operations, exceptions, and human interventions.`
+
+Do not make it onboarding-specific.
+
+---
+
+# 20. CONTROL TOWER HERO INTELLIGENCE
+
+Do not start the page with five equal KPI cards alone.
+
+Introduce a compact intelligent summary area.
+
+Conceptually:
+
+**Operations are healthy**
+
+`38 active cases are being handled across 4 agents. 91% of eligible work is progressing autonomously. 3 cases require human attention and 1 SLA is at risk.`
+
+Use real data.
+
+Do NOT hard-code these values.
+
+If data is unavailable, gracefully show a neutral state.
+
+This area should feel like an operations briefing rather than another metric card.
+
+---
+
+# 21. CONTROL TOWER KPIs
+
+Use suite-wide metrics:
+
+**Active Cases**
+
+**Autonomously Resolved**
+
+**Human Interventions**
+
+**SLA At Risk**
+
+**Blocked Cases**
+
+Do not use onboarding-specific metrics in the global Control Tower.
+
+Examples such as:
+
+Day-1 At Risk
+Ready for Day 1
+
+belong inside Onboarding views.
+
+---
+
+# 22. CONTROL TOWER MAIN CONTENT
+
+Use:
+
+### LEFT
+
+Agent Activity
+
+### RIGHT
+
+Human Attention Required
+
+This creates the most important enterprise relationship:
+
+**What agents are doing**
+
+versus
+
+**Where humans need to act**
+
+That distinction should become a signature of the platform.
+
+---
+
+# 23. CONTROL TOWER AGENT ACTIVITY
+
+Do not show raw reasoning/debug logs.
+
+Show concise activity:
+
+**Compliance Agent requested human review**
+
+`Rehire policy exception requires approval`
+
+`Compliance · Human Review · 2m ago`
+
+Or:
+
+**Payroll Agent initiated payroll setup**
+
+`Employee payroll profile submitted`
+
+`Payroll · In Progress · 6m ago`
+
+Keep detailed reasoning in deeper views.
+
+---
+
+# 24. REMOVE DEVELOPMENT / DEMO UI FROM PRODUCTION WORKSPACES
+
+Remove visible:
+
+* Demo Scenarios
+* simulated scenarios
+* Expected Behaviour
+* Run Scenario
+* sample/test language
+* developer-oriented debug text
+
+from normal production workspace screens.
+
+Preserve functionality in the code where needed, but move it to appropriate restricted areas.
+
+Never make the main product look like a demo.
+
+---
+
+# 25. HUMAN ATTENTION PANEL
+
+Create:
+
+# Human Attention Required
+
+Show:
+
+* case
+* reason
+* domain
+* priority
+* waiting duration if available
+
+Example:
+
+**Payroll exception**
+
+Bank details require verification
+
+`Payroll · High priority · 18m`
+
+Use amber for attention.
+
+When no intervention exists:
+
+**No interventions required**
+
+`Autonomous operations are proceeding within configured guardrails.`
+
+---
+
+# 26. ADD CASE DOMAIN VISUALIZATION
+
+Provide a clean workload view:
+
+**Cases by HRO Domain**
+
+Possible domains:
+
+Onboarding
+Employee Changes
+Payroll
+Benefits
+Leave
+Compliance
+Offboarding
+HR Helpdesk
+
+Use understated horizontal bars or compact distributions.
+
+Do NOT use rainbow colors.
+
+Do NOT fabricate values.
+
+---
+
+# 27. LOGIN PAGE
+
+Preserve the approved login-page direction.
+
+The login page should be:
+
+* premium
+* quiet
+* confident
+* enterprise
+* minimal
+
+Left side:
+
+Agentic HRO
+Suite
+positioning
+three capabilities
+Agents → Policies → Humans
+enterprise statement
+
+Right side:
+
+secure authentication
+
+No:
+
+* demo credentials
+* live HR data
+* simulated agent activity
+* role selection
+* demo scenarios
+
+---
+
+# 28. CASES PAGE
+
+The Cases workspace should become:
+
+# HR Operations Cases
+
+Subtitle:
+
+`Manage and track HR operations across the employee lifecycle.`
+
+Default case types:
+
+All Cases
+Onboarding
+Employee Changes
+Payroll
+Benefits
+Leave
+Compliance
+Offboarding
+HR Helpdesk
+
+Use:
+
+**+ New Case**
+
+not:
+
+**+ New Case Trigger**
+
+The table should use:
+
+Case
+Worker
+Case Type
+Effective Date
+Status
+Owner / Agent
+Action
+
+Do not force every case into an onboarding model.
+
+---
+
+# 29. APPROVALS PAGE
+
+Redesign approvals to emphasize human-in-the-loop governance.
+
+Create clear distinction between:
+
+* Approval Required
+* Waiting
+* Approved
+* Rejected
+* Expired
+
+Users should immediately see:
+
+**What needs my decision?**
+**Why?**
+**How urgent is it?**
+**What agent is waiting on me?**
+
+This page should feel tightly integrated with Agentic HRO's agentic model.
+
+---
+
+# 30. GUARDRAILS PAGE
+
+Make Guardrails feel like the policy control plane.
+
+Users should understand:
+
+**What are agents allowed to do?**
+
+**What requires approval?**
+
+**What is blocked?**
+
+Use policy objects with:
+
+* name
+* domain
+* status
+* scope
+* enforcement level
+* exception handling
+
+Visual language should be structured and trustworthy.
+
+---
+
+# 31. AGENTS PAGE
+
+Where an Agents page exists, make it a major product differentiator.
+
+Show agent cards with:
+
+* identity
+* purpose
+* operational state
+* workloads
+* active tasks
+* interventions
+* performance
+* recent actions
+
+The page should make the concept of an autonomous HR workforce visually tangible.
+
+---
+
+# 32. SYSTEMS PAGE
+
+Make connected HR systems feel like enterprise infrastructure.
+
+Use integration objects with:
+
+* system name
+* connection state
+* last sync
+* data direction
+* health
+* recent errors
+
+Keep them visually clean.
+
+---
+
+# 33. ANALYTICS PAGE
+
+Analytics should use the same Agentic HRO language.
+
+Focus on:
+
+* autonomous resolution
+* human intervention rate
+* SLA performance
+* case volume
+* exception rate
+* agent performance
+* workflow efficiency
+
+Avoid generic business dashboards disconnected from the agentic model.
+
+---
+
+# 34. SETTINGS / ADMINISTRATION
+
+Keep administrative pages visually quiet.
+
+Use:
+
+* neutral surfaces
+* strong hierarchy
+* fewer decorative elements
+
+Do not over-apply purple.
+
+---
+
+# 35. ICONOGRAPHY
+
+Standardize on one icon family.
+
+Icons should be:
+
+* clean
+* medium/thin weight
+* enterprise
+* non-cartoonish
+
+Use semantic icon families:
+
+Agent → automation/workflow
+
+Governance → shield/rules
+
+Human → person/approval
+
+Case → document/work item
+
+System → infrastructure/integration
+
+Analytics → chart
+
+Do not randomly mix icon styles.
+
+---
+
+# 36. BUTTONS
+
+Standardize:
+
+Primary
+Agentic Indigo
+
+Secondary
+Neutral outlined
+
+Tertiary
+Text
+
+Danger
+Restrained red
+
+Success
+Restrained green where meaningful
+
+All buttons need:
+
+* hover
+* focus
+* pressed
+* disabled
+* loading
+
+Do not use huge gradient buttons everywhere.
+
+---
+
+# 37. FORMS
+
+Standardize:
+
+Inputs
+Dropdowns
+Search
+Date fields
+Text areas
+Checkboxes
+Radio controls
+Toggles
+
+All must share:
+
+* height
+* radius
+* typography
+* border
+* focus treatment
+* error state
+* helper text
+
+---
+
+# 38. BADGES
+
+Create reusable status badge components.
+
+Examples:
+
+Operational
+Completed
+In Progress
+Waiting
+Human Review
+Blocked
+Exception
+Pending
+
+Keep badges compact.
+
+Use semantic color only.
+
+---
+
+# 39. SPACING SYSTEM
+
+Create a consistent spacing scale.
+
+For example:
+
+4
+8
+12
+16
+20
+24
+32
+40
+48
+64
+
+Do not use random spacing values throughout the app unless genuinely necessary.
+
+Whitespace should become one of the primary sources of polish.
+
+---
+
+# 40. RADIUS SYSTEM
+
+Use:
+
+8px
+12px
+16px
+20px
+
+Avoid random corner radii.
+
+Not every element needs the largest radius.
+
+---
+
+# 41. MOTION SYSTEM
+
+Use restrained motion.
+
+Approximately 150–220ms transitions.
+
+Use motion for:
+
+* hover
+* selected states
+* opening panels
+* drawers
+* navigation
+* loading
+
+Avoid:
+
+* pulsing AI dots everywhere
+* flashing
+* constant animations
+* fake live updates
+* excessive parallax
+
+The product should feel intelligent and calm.
+
+---
+
+# 42. RESPONSIVE DESIGN
+
+The entire design system must work on:
+
+* desktop
+* laptop
+* tablet
+* mobile
+
+Do not create a separate visual identity for mobile.
+
+Use consistent spacing and reflow behavior.
+
+For tables, use responsive layouts rather than forcing horizontal scrolling where possible.
+
+---
+
+# 43. ACCESSIBILITY
+
+Ensure:
+
+* WCAG-conscious contrast
+* visible focus states
+* semantic headings
+* keyboard navigation
+* accessible controls
+* color not used as the sole status indicator
+* readable metadata
+* chart textual equivalents
+
+---
+
+# 44. DATA TRUSTWORTHINESS
+
+This is an enterprise product.
+
+NEVER fabricate metrics or operational activity merely to make the UI look impressive.
+
+If a real metric cannot currently be calculated:
+
+Show:
+
+`—`
+
+or:
+
+`No data`
+
+with a concise explanatory state.
+
+Do not invent:
+
+* agent performance
+* case counts
+* autonomy percentages
+* SLA metrics
+* operational activity
+* approvals
+* employee events
+
+Visual credibility is more important than filling every card.
+
+---
+
+# 45. SECURITY / PRIVACY UX
+
+Do not expose sensitive employee operational data on unauthenticated screens.
+
+The login screen must remain product-oriented.
+
+Detailed HR activity should appear only after authentication and appropriate authorization.
+
+Do not expose secrets.
+
+Do not log passwords.
+
+Do not expose raw backend errors.
+
+---
+
+# 46. IMPLEMENTATION APPROACH
+
+Implement in this order:
+
+### PHASE 1
+
+Create design tokens and global theme.
+
+### PHASE 2
+
+Upgrade shared primitives:
+
+* typography
+* buttons
+* inputs
+* cards
+* badges
+* navigation
+* status components
+
+### PHASE 3
+
+Create distinctive Agentic HRO objects:
+
+* Agent
+* Case
+* Human Intervention
+* Policy / Guardrail
+* System Integration
+
+### PHASE 4
+
+Redesign:
+
+* Control Tower
+* Cases
+* Approvals
+* Agents
+* Guardrails
+* Systems
+* Analytics
+
+### PHASE 5
+
+Polish secondary pages:
+
+* Settings
+* Administration
+* detail pages
+* drawers
+* modals
+
+### PHASE 6
+
+Perform a full visual consistency audit.
+
+Do not skip directly to page-by-page styling.
+
+---
+
+# 47. VISUAL CONSISTENCY AUDIT
+
+After implementation, inspect every major screen and look for:
+
+* inconsistent purple shades
+* inconsistent gray shades
+* inconsistent border radii
+* inconsistent card padding
+* inconsistent button dimensions
+* inconsistent labels
+* duplicate component styles
+* unnecessary borders
+* excessive cards
+* excessive badges
+* weak typography hierarchy
+* mismatched icons
+* onboarding terminology appearing globally
+* development/demo terminology
+* screens that look visually unrelated
+
+Fix these systematically.
+
+---
+
+# 48. THE "10/10 ENTERPRISE SaaS" TEST
+
+Before completing the work, review the application with this question:
+
+> If I removed the Agentic HRO logo, would this still look like a premium commercial enterprise platform?
+
+The answer should be yes.
+
+Then ask:
+
+> If I removed the word "Agentic", would the interface still visually communicate that autonomous agents execute work under governance with human oversight?
+
+The answer should also increasingly be yes.
+
+The interface itself should communicate the product model.
+
+---
+
+# 49. FINAL PRODUCT PERSONALITY
+
+The finished Agentic HRO Suite should feel:
+
+**Precise like Linear**
+
+**Polished like Stripe**
+
+**Operationally serious like ServiceNow**
+
+**Enterprise-ready like Workday**
+
+**AI-native without being gimmicky**
+
+but clearly have its own identity:
+
+# Agentic HRO
+
+### Autonomous HR operations, governed by design.
+
+Do NOT place this exact tagline throughout the product.
+
+This is the design philosophy, not necessarily visible marketing copy.
+
+---
+
+# 50. FINAL ACCEPTANCE CRITERIA
+
+The redesign is complete only when:
+
+* The application has a centralized visual design system.
+* Pages no longer look like independent admin screens.
+* Visual hierarchy is significantly stronger.
+* Borders have been reduced.
+* Typography feels premium.
+* Spacing is consistent.
+* Surfaces have controlled depth.
+* Indigo is used as a deliberate brand language.
+* Neutral surfaces dominate operational workspaces.
+* Agent states are visually distinct.
+* Human interventions are first-class.
+* Governance/policies have their own visual language.
+* Cases feel like operational work objects.
+* Control Tower feels like a real command center.
+* Login feels like a secure enterprise entry point.
+* Demo/testing language is removed from production experiences.
+* No fake metrics or activity have been introduced.
+* Existing business functionality still works.
+* Existing routes still work.
+* Existing authentication still works.
+* The application is responsive.
+* The entire suite visually feels like ONE premium commercial product.
+
+Do NOT simply recolor the current UI.
+
+This is a **visual architecture and product-experience upgrade**.
+
+The goal is to make a user opening Agentic HRO for the first time think:
+
+> **“This looks like a serious enterprise product built around autonomous HR operations.”**

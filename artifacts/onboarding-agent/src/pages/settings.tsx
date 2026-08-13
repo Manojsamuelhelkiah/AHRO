@@ -51,18 +51,18 @@ function PersonaBrief({ persona, volunteerName }: { persona: DemoPersona | undef
   if (!persona) return null;
   const briefText = `Hi${volunteerName ? ` ${volunteerName.split(' ')[0]}` : ''}! You're playing: ${persona.title}.\n\n${persona.description}\n\nYour part: ${persona.volunteerBrief}`;
   return (
-    <div className="mt-2.5 p-2.5 rounded-md border border-violet-200 bg-violet-50/50 text-[var(--text-xs)]">
+    <div className="mt-2.5 p-2.5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] text-[var(--text-xs)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-violet-900 text-[var(--text-sm)]">{persona.title}</p>
-          <p className="text-violet-900/80 mt-1"><span className="font-medium">Their part:</span> {persona.volunteerBrief}</p>
-          <p className="text-violet-900/60 mt-1"><span className="font-medium">What the agent should do:</span> {persona.expectedBehaviour}</p>
+          <p className="font-semibold text-[var(--text-primary)] text-[var(--text-sm)]">{persona.title}</p>
+          <p className="text-[var(--text-muted)] mt-1"><span className="font-medium text-[var(--text-secondary)]">Their part:</span> {persona.volunteerBrief}</p>
+          <p className="text-[var(--text-muted)] mt-1"><span className="font-medium text-[var(--text-secondary)]">What the agent should do:</span> {persona.expectedBehaviour}</p>
         </div>
         <Button
-          variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs"
+          variant="secondary" size="sm" className="shrink-0 gap-1.5 text-[var(--text-xs)]"
           onClick={() => { navigator.clipboard.writeText(briefText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
         >
-          <Check className={cn('w-3.5 h-3.5', copied ? 'text-emerald-600' : 'opacity-0 w-0')} />
+          <Check className={cn('w-3.5 h-3.5', copied ? 'text-[var(--status-green)]' : 'opacity-0 w-0')} />
           {copied ? 'Copied' : 'Copy briefing'}
         </Button>
       </div>
@@ -77,21 +77,21 @@ Your part: keep the control tower open. The AI hands over to you whenever it rea
 function HrOperatorBrief() {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-4 p-3 rounded-[var(--radius-md)] border border-sky-200 bg-sky-50/50 text-[var(--text-xs)]">
+    <div className="mt-4 p-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] text-[var(--text-xs)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-sky-900 text-[var(--text-sm)]">The seventh chair: HR / Human-in-the-loop (not a volunteer row)</p>
-          <p className="text-sky-900/80 mt-1">
-            Every demo needs one person working the <span className="font-medium">Approvals queue</span> — the escalation
+          <p className="font-semibold text-[var(--text-primary)] text-[var(--text-sm)]">The seventh chair: HR / Human-in-the-loop (not a volunteer row)</p>
+          <p className="text-[var(--text-muted)] mt-1">
+            Every demo needs one person working the <span className="font-medium text-[var(--text-secondary)]">Approvals queue</span> — the escalation
             human the AI defers to for background-check exceptions, call blockers, unanswerable questions, and broken
             promises. Approving or rejecting there is what makes the human-in-the-loop story land.
           </p>
         </div>
         <Button
-          variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs"
+          variant="secondary" size="sm" className="shrink-0 gap-1.5 text-[var(--text-xs)]"
           onClick={() => { navigator.clipboard.writeText(HR_BRIEF_TEXT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
         >
-          <Check className={cn('w-3.5 h-3.5', copied ? 'text-emerald-600' : 'opacity-0 w-0')} />
+          <Check className={cn('w-3.5 h-3.5', copied ? 'text-[var(--status-green)]' : 'opacity-0 w-0')} />
           {copied ? 'Copied' : 'Copy briefing'}
         </Button>
       </div>
@@ -139,13 +139,13 @@ function RemoteApproverSettings() {
 
   if (isLoading) return null;
   return (
-    <div className="mt-4 p-3 rounded-[var(--radius-md)] border border-sky-200 bg-sky-50/30">
+    <div className="mt-4 p-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-[var(--text-sm)] text-sky-900">Remote HR approver (optional)</p>
-          <p className="text-[var(--text-xs)] text-sky-900/80 mt-1">
+          <p className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">Remote HR approver (optional)</p>
+          <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">
             When the AI escalates, this address gets an email with the recommendation and decides it by replying{' '}
-            <span className="font-medium">approve</span> or <span className="font-medium">reject</span>. Only replies
+            <span className="font-medium text-[var(--text-secondary)]">approve</span> or <span className="font-medium text-[var(--text-secondary)]">reject</span>. Only replies
             from this exact address are honored; each decision is recorded in the audit trail.
           </p>
         </div>
@@ -153,8 +153,8 @@ function RemoteApproverSettings() {
           className={cn(
             'uppercase tracking-wider text-[10px] shadow-none shrink-0',
             settings?.hrApproverEmail
-              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
-              : 'bg-muted text-muted-foreground hover:bg-muted',
+              ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
+              : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
           )}
         >
           {settings?.hrApproverEmail ? 'ACTIVE' : 'NOT SET'}
@@ -166,27 +166,27 @@ function RemoteApproverSettings() {
           placeholder="approver@example.com"
           value={draft}
           onChange={(e) => { setTouched(true); setDraft(e.target.value); setResult(null); }}
-          className={cn(inputCls, 'max-w-sm', invalid && 'border-red-400 focus:border-red-500 focus:ring-red-500')}
+          className={cn(inputCls, 'max-w-sm', invalid && 'border-[var(--status-red)] focus:border-[var(--status-red)] focus:ring-[var(--status-red)]')}
           aria-label="HR approver email"
         />
-        <Button onClick={() => save(trimmed.length > 0 ? trimmed : null)} disabled={update.isPending || invalid || !dirty} className="gap-2">
+        <Button onClick={() => save(trimmed.length > 0 ? trimmed : null)} disabled={update.isPending || invalid || !dirty} className="gap-2 bg-[var(--surface-alt)] text-[var(--text-primary)] border-[var(--border)] hover:bg-[var(--surface-soft)]">
           <Check className="w-4 h-4" /> Save
         </Button>
         {settings?.hrApproverEmail && (
-          <Button variant="outline" onClick={() => save(null)} disabled={update.isPending} className="gap-2">
+          <Button variant="ghost" onClick={() => save(null)} disabled={update.isPending} className="gap-2 text-[var(--status-red)] hover:text-[var(--status-red)] hover:bg-[var(--status-red-bg)]">
             <Trash2 className="w-4 h-4" /> Clear
           </Button>
         )}
       </div>
       {invalid && (
-        <p className="text-xs text-red-600 flex items-center gap-1 mt-2">
+        <p className="text-[var(--text-xs)] text-[var(--status-red)] flex items-center gap-1 mt-2">
           <AlertTriangle className="w-3 h-3" /> Enter a valid email address.
         </p>
       )}
       {result && (
-        <div className={cn('p-3 mt-3 text-sm rounded-md border flex items-start gap-3',
-          result.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900')}>
-          {result.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" /> : <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />}
+        <div className={cn('p-3 mt-3 text-[var(--text-sm)] rounded-[var(--radius-md)] border flex items-start gap-3',
+          result.ok ? 'bg-[var(--status-green-bg)] border-transparent text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] border-transparent text-[var(--status-red-fg)]')}>
+          {result.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5" /> : <X className="w-5 h-5 shrink-0 mt-0.5" />}
           <p className="mt-0.5">{result.message}</p>
         </div>
       )}
@@ -250,21 +250,22 @@ function DemoVolunteersCard() {
   };
 
   return (
-    <Card className="shadow-sm">
-      <CardContent className="p-[var(--space-lg)]">
-        <div className="flex items-start justify-between mb-4">
+    <Card className="shadow-sm border-[var(--border)] overflow-hidden">
+      <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
+        <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <IconTile icon={Users} className="bg-violet-100 text-violet-700 border-violet-200" />
+            <IconTile icon={Users} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
             <div>
-              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Demo Volunteers</h3>
-              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">Demo Volunteers</h3>
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
                 Real people for live demos. Saving authorizes their email/phone for real messages and calls — no one else
                 can be contacted. "Create demo cases" runs each volunteer through the full agent pipeline.
               </p>
             </div>
           </div>
         </div>
-
+      </div>
+      <CardContent className="p-[var(--space-lg)] bg-[var(--surface)]">
         {isLoading ? (
           <LoadingBlock>Loading volunteers...</LoadingBlock>
         ) : (
@@ -273,7 +274,7 @@ function DemoVolunteersCard() {
               {rows.map((v, i) => {
                 const problem = problems[i];
                 return (
-                  <div key={i} className={cn('border rounded-[var(--radius-md)] p-3', problem && (v.name || v.email) ? 'border-amber-300 bg-amber-50/40' : 'bg-muted/10')}>
+                  <div key={i} className={cn('border rounded-[var(--radius-md)] p-3 transition-colors', problem && (v.name || v.email) ? 'border-[var(--status-amber)] bg-[var(--status-amber-bg)]/30' : 'border-[var(--border)] bg-[var(--surface)]')}>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <input placeholder="Full name" value={v.name} onChange={(e) => edit(i, { name: e.target.value })} className={inputCls} />
                       <input placeholder="email@example.com" type="email" value={v.email} onChange={(e) => edit(i, { email: e.target.value })} className={inputCls} />
@@ -295,14 +296,14 @@ function DemoVolunteersCard() {
                           <option value="full-time">Full-time</option>
                           <option value="contractor">Contractor</option>
                         </select>
-                        <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-red-600" title="Remove volunteer"
+                        <Button variant="ghost" size="icon" className="shrink-0 text-[var(--text-muted)] hover:text-[var(--status-red)] hover:bg-[var(--status-red-bg)]" title="Remove volunteer"
                           onClick={() => { setTouched(true); setNotice(null); setRows((prev) => prev.filter((_, idx) => idx !== i)); }}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                     {problem && (v.name || v.email) && (
-                      <p className="text-xs text-amber-700 flex items-center gap-1 mt-2">
+                      <p className="text-[var(--text-xs)] text-[var(--status-amber-fg)] flex items-center gap-1 mt-2">
                         <AlertTriangle className="w-3 h-3" /> {problem}
                       </p>
                     )}
@@ -316,42 +317,42 @@ function DemoVolunteersCard() {
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2 mt-4">
-              <Button variant="outline" className="gap-2" onClick={() => { setTouched(true); setRows((prev) => [...prev, blankVolunteer()]); }}>
+            <div className="flex flex-wrap gap-2 mt-4 pt-2 border-t border-[var(--border)]">
+              <Button variant="secondary" className="gap-2" onClick={() => { setTouched(true); setRows((prev) => [...prev, blankVolunteer()]); }}>
                 <Plus className="w-4 h-4" /> Add volunteer
               </Button>
               <Button onClick={save} disabled={update.isPending || !touched || anyInvalid} className="gap-2">
                 <Check className="w-4 h-4" /> Save & authorize
               </Button>
-              <Button variant="secondary" onClick={runSeed} disabled={seed.isPending || touched || (data?.volunteers.length ?? 0) === 0}
-                className="gap-2" title={touched ? 'Save first, then create cases' : undefined}>
+              <Button variant="outline" onClick={runSeed} disabled={seed.isPending || touched || (data?.volunteers.length ?? 0) === 0}
+                className="gap-2 ml-auto" title={touched ? 'Save first, then create cases' : undefined}>
                 <Rocket className="w-4 h-4" /> {seed.isPending ? 'Creating cases…' : 'Create demo cases'}
               </Button>
             </div>
-            {touched && <p className="text-xs text-muted-foreground mt-2">Unsaved changes — save before creating demo cases.</p>}
+            {touched && <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-2">Unsaved changes — save before creating demo cases.</p>}
 
             {notice && (
-              <div className={cn('p-3 mt-4 text-sm rounded-md border flex items-start gap-3',
-                notice.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900')}>
-                {notice.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" /> : <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />}
+              <div className={cn('p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] border flex items-start gap-3',
+                notice.ok ? 'bg-[var(--status-green-bg)] border-transparent text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] border-transparent text-[var(--status-red-fg)]')}>
+                {notice.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5" /> : <X className="w-5 h-5 shrink-0 mt-0.5" />}
                 <p className="mt-0.5">{notice.message}</p>
               </div>
             )}
 
             {seedResults && (
-              <div className="mt-4 border rounded-md divide-y">
+              <div className="mt-4 border border-[var(--border)] rounded-[var(--radius-md)] divide-y divide-[var(--border)] overflow-hidden">
                 {seedResults.map((r, i) => (
-                  <div key={i} className="p-2.5 text-[var(--text-sm)] flex items-center gap-3">
+                  <div key={i} className="p-2.5 bg-[var(--surface)] text-[var(--text-sm)] flex items-center gap-3">
                     <Badge className={cn('uppercase tracking-wider text-[10px] shadow-none shrink-0',
-                      r.status === 'seeded' ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
-                        : r.status === 'skipped' ? 'bg-slate-100 text-slate-700 hover:bg-slate-100 border-slate-200'
-                          : 'bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200')}>
+                      r.status === 'seeded' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
+                        : r.status === 'skipped' ? 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]'
+                          : 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]')}>
                       {r.status}
                     </Badge>
-                    <span className="font-medium">{r.name}</span>
-                    <span className="text-muted-foreground">{r.note}</span>
+                    <span className="font-medium text-[var(--text-primary)]">{r.name}</span>
+                    <span className="text-[var(--text-muted)]">{r.note}</span>
                     {r.caseId !== null && (
-                      <a href={`cases/${r.caseId}`} className="ml-auto text-primary font-medium hover:underline shrink-0">Open case #{r.caseId}</a>
+                      <a href={`cases/${r.caseId}`} className="ml-auto text-[var(--primary)] font-medium hover:underline shrink-0">Open case #{r.caseId}</a>
                     )}
                   </div>
                 ))}
@@ -362,7 +363,7 @@ function DemoVolunteersCard() {
 
             <RemoteApproverSettings />
 
-            <p className="text-xs text-muted-foreground mt-4 flex items-start gap-1.5">
+            <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-4 flex items-start gap-1.5">
               <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               Twilio trial note: phone numbers must also be added as Verified Caller IDs in the Twilio console before live
               calls or WhatsApp will connect. WhatsApp volunteers must send the sandbox join message once.
@@ -461,14 +462,14 @@ export function SettingsPage() {
         subtitle="Application-level configuration for the control tower." 
       />
 
-      <Card className="shadow-sm mt-2">
-        <CardContent className="p-[var(--space-lg)]">
-          <div className="flex items-start justify-between mb-4">
+      <Card className="shadow-sm border-[var(--border)] overflow-hidden mt-2">
+        <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
+          <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <IconTile icon={Mail} className="bg-primary/10 text-primary border-primary/20" />
+              <IconTile icon={Mail} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
               <div>
-                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">HR Alert Email</h3>
-                <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">HR Alert Email</h3>
+                <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
                   Where outage alerts go when the Gmail reply monitor breaks (and recovery notices when it resumes).
                 </p>
               </div>
@@ -478,32 +479,34 @@ export function SettingsPage() {
                 className={cn(
                   'uppercase tracking-wider text-[10px] shadow-none shrink-0',
                   settings?.effective
-                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
-                    : 'bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200',
+                    ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
+                    : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
                 )}
               >
                 {settings?.effective ? 'ACTIVE' : 'NOT SET'}
               </Badge>
             )}
           </div>
+        </div>
+        <CardContent className="p-[var(--space-lg)] bg-[var(--surface)]">
 
           {isLoading ? (
             <LoadingBlock>Loading settings...</LoadingBlock>
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                <div className="border rounded-md p-2.5 bg-muted/20">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Alerts currently go to</p>
-                  <p className="text-[var(--text-xs)] font-mono mt-1 break-all">{settings?.effective ?? 'Nobody — alerts disabled'}</p>
+                <div className="border border-[var(--border)] rounded-[var(--radius-md)] p-2.5 bg-[var(--surface-alt)]">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Alerts currently go to</p>
+                  <p className="text-[var(--text-xs)] font-mono mt-1 break-all text-[var(--text-primary)]">{settings?.effective ?? 'Nobody — alerts disabled'}</p>
                 </div>
-                <div className="border rounded-md p-2.5 bg-muted/20">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Source</p>
-                  <p className="text-[var(--text-xs)] mt-1">{sourceLabel}</p>
+                <div className="border border-[var(--border)] rounded-[var(--radius-md)] p-2.5 bg-[var(--surface-alt)]">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Source</p>
+                  <p className="text-[var(--text-xs)] mt-1 text-[var(--text-primary)]">{sourceLabel}</p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="hr-alert-email" className="text-[var(--text-xs)] font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-2 max-w-sm">
+                <Label htmlFor="hr-alert-email" className="text-[var(--text-xs)] font-bold uppercase tracking-wider text-[var(--text-muted)]">
                   Alert email address
                 </Label>
                 <input
@@ -517,23 +520,23 @@ export function SettingsPage() {
                     setResult(null);
                   }}
                   className={cn(
-                    'block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-3 border outline-none transition-colors bg-background shadow-sm',
-                    invalid ? 'border-red-400 focus:border-red-500' : 'border-input focus:border-primary focus:ring-1 focus:ring-primary',
+                    'block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-3 border outline-none transition-colors bg-[var(--surface)] shadow-sm text-[var(--text-primary)]',
+                    invalid ? 'border-[var(--status-red)] focus:border-[var(--status-red)]' : 'border-[var(--border)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]',
                   )}
                 />
                 {invalid && (
-                  <p className="text-[var(--text-xs)] text-red-600 flex items-center gap-1">
+                  <p className="text-[var(--text-xs)] text-[var(--status-red)] flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> Enter a valid email address (e.g. hr@company.com).
                   </p>
                 )}
                 {settings?.envFallback && (
-                  <p className="text-[var(--text-xs)] text-muted-foreground">
+                  <p className="text-[var(--text-xs)] text-[var(--text-muted)]">
                     Leaving this empty falls back to the server-configured address ({settings.envFallback}).
                   </p>
                 )}
               </div>
 
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 mt-4 pt-2 border-t border-[var(--border)]">
                 <Button
                   onClick={() => save(trimmed.length > 0 ? trimmed : null)}
                   disabled={update.isPending || invalid || !dirty || trimmed.length === 0 && !settings?.hrAlertEmail}
@@ -543,10 +546,10 @@ export function SettingsPage() {
                 </Button>
                 {settings?.hrAlertEmail && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     onClick={() => save(null)}
                     disabled={update.isPending}
-                    className="gap-2"
+                    className="gap-2 text-[var(--status-red)] hover:text-[var(--status-red)] hover:bg-[var(--status-red-bg)]"
                   >
                     <Trash2 className="w-4 h-4" /> Clear stored address
                   </Button>
@@ -556,14 +559,14 @@ export function SettingsPage() {
               {result && (
                 <div
                   className={cn(
-                    'p-3 mt-4 text-sm rounded-md border flex items-start gap-3',
-                    result.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900',
+                    'p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] border flex items-start gap-3',
+                    result.ok ? 'bg-[var(--status-green-bg)] border-transparent text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] border-transparent text-[var(--status-red-fg)]',
                   )}
                 >
                   {result.ok ? (
-                    <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
+                    <Check className="w-5 h-5 shrink-0 mt-0.5" />
                   ) : (
-                    <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+                    <X className="w-5 h-5 shrink-0 mt-0.5" />
                   )}
                   <p className="mt-0.5">{result.message}</p>
                 </div>
@@ -573,14 +576,14 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm">
-        <CardContent className="p-[var(--space-lg)]">
+      <Card className="shadow-sm border-[var(--border)] overflow-hidden">
+        <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <IconTile icon={PhoneCall} className="bg-primary/10 text-primary border-primary/20" />
+              <IconTile icon={PhoneCall} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
               <div>
-                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Automatic Escalation Calls</h3>
-                <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">Automatic Escalation Calls</h3>
+                <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
                   On SLA breach with no reply from the hire, the System Watcher places the escalation call itself —
                   allowlist and hourly limit still apply; each call is recorded on the case timeline.
                 </p>
@@ -591,17 +594,19 @@ export function SettingsPage() {
                 className={cn(
                   'uppercase tracking-wider text-[10px] shadow-none shrink-0',
                   settings?.autoEscalationCalls
-                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
-                    : 'bg-muted text-muted-foreground hover:bg-muted',
+                    ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
+                    : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
                 )}
               >
                 {settings?.autoEscalationCalls ? 'ON' : 'OFF'}
               </Badge>
             )}
           </div>
+        </div>
+        <CardContent className="p-[var(--space-lg)] bg-[var(--surface)]">
 
           {!isLoading && (
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-2 flex items-center gap-3">
               <button
                 type="button"
                 role="switch"
@@ -610,18 +615,18 @@ export function SettingsPage() {
                 disabled={toggleCalls.isPending}
                 onClick={() => saveAutoCalls(!settings?.autoEscalationCalls)}
                 className={cn(
-                  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50',
-                  settings?.autoEscalationCalls ? 'bg-primary border-primary' : 'bg-muted border-input',
+                  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:opacity-50 border-2 border-transparent',
+                  settings?.autoEscalationCalls ? 'bg-[var(--status-green)]' : 'bg-[var(--border)]',
                 )}
               >
                 <span
                   className={cn(
-                    'inline-block h-5 w-5 rounded-full bg-background shadow transition-transform',
-                    settings?.autoEscalationCalls ? 'translate-x-5' : 'translate-x-0.5',
+                    'inline-block h-5 w-5 rounded-full bg-[var(--surface)] shadow-sm transition-transform',
+                    settings?.autoEscalationCalls ? 'translate-x-5' : 'translate-x-0',
                   )}
                 />
               </button>
-              <span className="text-[var(--text-sm)]">
+              <span className="text-[var(--text-sm)] text-[var(--text-primary)]">
                 {settings?.autoEscalationCalls
                   ? 'On — overdue, unresponsive hires get an automatic escalation call.'
                   : 'Off — escalation calls are only placed manually from the case page.'}
@@ -632,14 +637,14 @@ export function SettingsPage() {
           {callsResult && (
             <div
               className={cn(
-                'p-3 mt-4 text-sm rounded-md border flex items-start gap-3',
-                callsResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900',
+                'p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] border flex items-start gap-3',
+                callsResult.ok ? 'bg-[var(--status-green-bg)] border-transparent text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] border-transparent text-[var(--status-red-fg)]',
               )}
             >
               {callsResult.ok ? (
-                <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
+                <Check className="w-5 h-5 shrink-0 mt-0.5" />
               ) : (
-                <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+                <X className="w-5 h-5 shrink-0 mt-0.5" />
               )}
               <p className="mt-0.5">{callsResult.message}</p>
             </div>
@@ -673,33 +678,37 @@ function ScenarioTestingCard() {
   };
 
   return (
-    <Card className="shadow-sm">
-      <CardContent className="p-[var(--space-lg)]">
-        <div className="flex items-center gap-3 mb-4">
-          <IconTile icon={Play} className="bg-primary/10 text-primary border-primary/20" />
+    <Card className="shadow-sm border-[var(--border)] overflow-hidden">
+      <div className="bg-[var(--surface-alt)] border-b border-[var(--border)] px-[var(--space-lg)] py-[var(--space-md)]">
+        <div className="flex items-center gap-3">
+          <IconTile icon={Play} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
           <div>
-            <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Scenario Testing</h3>
-            <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+            <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)] text-[var(--text-primary)]">Scenario Testing</h3>
+            <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
               Development tooling — launches a pre-configured case to exercise the autonomous agents end to end.
             </p>
           </div>
         </div>
+      </div>
+      <CardContent className="p-[var(--space-lg)] bg-[var(--surface-soft)]/30">
         {isLoading ? (
           <LoadingBlock>Loading scenarios...</LoadingBlock>
         ) : !scenarios?.length ? (
-          <p className="text-[var(--text-sm)] text-muted-foreground">No scenarios configured.</p>
+          <p className="text-[var(--text-sm)] text-[var(--text-muted)]">No scenarios configured.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {scenarios.map((s) => (
-              <div key={s.key} className="p-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] shadow-sm flex flex-col gap-2">
+              <div key={s.key} className="p-[var(--space-md)] rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] shadow-sm flex flex-col gap-2 transition-shadow hover:shadow-[var(--shadow-sm)]">
                 <div>
-                  <h4 className="font-semibold text-[var(--text-sm)]">{s.title}</h4>
-                  <p className="text-[var(--text-xs)] text-muted-foreground mt-1 leading-relaxed">{s.description}</p>
+                  <h4 className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">{s.title}</h4>
+                  <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1 leading-relaxed">{s.description}</p>
                 </div>
-                <p className="text-[var(--text-xs)] text-muted-foreground"><span className="font-semibold">Expected behaviour:</span> {s.expectedBehaviour}</p>
-                <Button size="sm" variant="outline" onClick={() => handleRun(s.key)} disabled={runScenario.isPending} className="gap-2 self-start">
-                  <Play className="h-3.5 w-3.5" /> Run scenario
-                </Button>
+                <p className="text-[var(--text-xs)] text-[var(--text-muted)]"><span className="font-medium text-[var(--text-secondary)]">Expected behaviour:</span> {s.expectedBehaviour}</p>
+                <div className="mt-auto pt-2">
+                  <Button size="sm" variant="secondary" onClick={() => handleRun(s.key)} disabled={runScenario.isPending} className="gap-2 w-full sm:w-auto">
+                    <Play className="h-3.5 w-3.5" /> {runScenario.isPending ? 'Running...' : 'Run scenario'}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
