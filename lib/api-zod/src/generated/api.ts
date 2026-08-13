@@ -176,6 +176,7 @@ export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const listScenariosResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -220,6 +221,7 @@ export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -254,6 +256,7 @@ export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const createScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const CreateScenarioResponse = zod.object({
@@ -303,6 +306,7 @@ export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const getScenarioResponseInputsAdoptionRampMax = 3;
 
 
+
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -350,6 +354,7 @@ export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -384,6 +389,7 @@ export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const updateScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const UpdateScenarioResponse = zod.object({
@@ -739,6 +745,7 @@ export const computeSensitivityBodyInputsAdoptionRampMin = 3;
 export const computeSensitivityBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ComputeSensitivityBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -807,6 +814,7 @@ export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
 export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ExportScenarioWorkbookBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -854,6 +862,7 @@ export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
 export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ImportScenarioWorkbookResponse = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -891,6 +900,7 @@ export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const computeRollupBodyInputsAdoptionRampMax = 3;
+
 
 
 export const ComputeRollupBody = zod.object({
@@ -1272,7 +1282,7 @@ export const GetOnboardingDashboardResponse = zod.object({
   "id": zod.number(),
   "caseId": zod.number().nullable().describe('Null for system-level events not tied to a case (e.g. inbox-monitor outages)'),
   "agent": zod.string().describe('intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel'),
-  "engine": zod.string().describe('llm | ldm | orchestrator | human | system'),
+  "engine": zod.string().describe('llm | rules | ldm | orchestrator | human | system'),
   "hitlPattern": zod.string().nullable().describe('notify-only | approve-before-act | act-then-review | hard-block'),
   "ruleRef": zod.string().nullable().describe('SME-spec rule reference, e.g. \"4.1 Intake Rule 5\"'),
   "title": zod.string(),
@@ -1391,6 +1401,7 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
 /**
  * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
  */
+
 
 
 export const CreateOnboardingCaseBody = zod.object({
@@ -1512,7 +1523,7 @@ export const ListOnboardingCaseEventsResponseItem = zod.object({
   "id": zod.number(),
   "caseId": zod.number().nullable().describe('Null for system-level events not tied to a case (e.g. inbox-monitor outages)'),
   "agent": zod.string().describe('intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel'),
-  "engine": zod.string().describe('llm | ldm | orchestrator | human | system'),
+  "engine": zod.string().describe('llm | rules | ldm | orchestrator | human | system'),
   "hitlPattern": zod.string().nullable().describe('notify-only | approve-before-act | act-then-review | hard-block'),
   "ruleRef": zod.string().nullable().describe('SME-spec rule reference, e.g. \"4.1 Intake Rule 5\"'),
   "title": zod.string(),
@@ -1564,6 +1575,31 @@ export const ListOnboardingCaseDocumentsResponseItem = zod.object({
   "updatedAt": zod.string()
 }).describe('One item of a case\'s documentation pack (identity\/statutory\/contract\/policy)')
 export const ListOnboardingCaseDocumentsResponse = zod.array(ListOnboardingCaseDocumentsResponseItem)
+
+
+/**
+ * @summary Archived past-employment stints matched by the case's worker email (rehire evidence)
+ */
+export const ListOnboardingCaseRecordsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListOnboardingCaseRecordsResponseItem = zod.object({
+  "id": zod.number(),
+  "workerEmail": zod.string(),
+  "workerName": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "startDate": zod.string().describe('YYYY-MM-DD'),
+  "endDate": zod.string().describe('YYYY-MM-DD'),
+  "exitReason": zod.string(),
+  "noticeRequiredDays": zod.number(),
+  "noticeServedDays": zod.number(),
+  "performanceRating": zod.string().describe('Final rating for the stint on a 1.0–5.0 scale'),
+  "rehireEligible": zod.boolean(),
+  "notes": zod.string().nullable()
+}).describe('One archived past-employment stint from the employee-records archive (rehire evidence)')
+export const ListOnboardingCaseRecordsResponse = zod.array(ListOnboardingCaseRecordsResponseItem)
 
 
 /**
@@ -1736,6 +1772,8 @@ export const StartOnboardingVoiceCallResponse = zod.object({
 export const ReceiveOnboardingInboundParams = zod.object({
   "id": zod.coerce.number()
 })
+
+
 
 
 export const ReceiveOnboardingInboundBody = zod.object({
@@ -2037,4 +2075,5 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet'),
   "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them')
 })
+
 

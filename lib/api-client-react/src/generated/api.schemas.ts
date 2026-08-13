@@ -1009,6 +1009,29 @@ export interface OnbDocument {
 }
 
 /**
+ * One archived past-employment stint from the employee-records archive (rehire evidence)
+ */
+export interface OnbEmployeeRecord {
+  id: number;
+  workerEmail: string;
+  workerName: string;
+  role: string;
+  department: string;
+  /** YYYY-MM-DD */
+  startDate: string;
+  /** YYYY-MM-DD */
+  endDate: string;
+  exitReason: string;
+  noticeRequiredDays: number;
+  noticeServedDays: number;
+  /** Final rating for the stint on a 1.0–5.0 scale */
+  performanceRating: string;
+  rehireEligible: boolean;
+  /** @nullable */
+  notes: string | null;
+}
+
+/**
  * One audit-trail entry; every agent decision lands here with engine type and rule reference
  */
 export interface OnbEvent {
@@ -1020,7 +1043,7 @@ export interface OnbEvent {
   caseId: number | null;
   /** intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel */
   agent: string;
-  /** llm | ldm | orchestrator | human | system */
+  /** llm | rules | ldm | orchestrator | human | system */
   engine: string;
   /**
      * notify-only | approve-before-act | act-then-review | hard-block
@@ -1510,3 +1533,4 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
+

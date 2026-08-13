@@ -12,13 +12,15 @@ import {
   getListOnboardingCaseEventsQueryKey,
   getListOnboardingCaseCommunicationsQueryKey,
   useGetOnboardingChannels,
-  getGetOnboardingChannelsQueryKey
+  getGetOnboardingChannelsQueryKey,
+  useListOnboardingCaseRecords,
+  getListOnboardingCaseRecordsQueryKey
 } from '@workspace/api-client-react';
 import { WhatsAppSandboxWarning } from '@/components/whatsapp-sandbox-warning';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, cn, Input } from '@/components/ui-shared';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
-import { CheckCircle2, Clock, AlertTriangle, XCircle, Send, MessageSquare, Mail, Smartphone, FileText, FileCheck2, Phone, PhoneCall } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, XCircle, Send, MessageSquare, Mail, Smartphone, FileText, FileCheck2, Phone, PhoneCall, Archive, Star } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 export function CaseDetailPage() {
@@ -180,6 +182,8 @@ export function CaseDetailPage() {
             </CardContent>
           </Card>
 
+          {c.hireType === 'rehire' && <PastEmploymentCard caseId={caseId} />}
+
           <Card>
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-base">Workstreams</CardTitle>
@@ -290,6 +294,54 @@ export function CaseDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function PastEmploymentCard({ caseId }: { caseId: number }) {
+  const { data: records, isLoading } = useListOnboardingCaseRecords(caseId, {
+    query: { enabled: !!caseId, queryKey: getListOnboardingCaseRecordsQueryKey(caseId) }
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 border-b">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Archive className="w-4 h-4 text-primary" /> Past Employment Records
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-4 space-y-3">
+        {isLoading && <p className="text-sm text-muted-foreground">Loading archive…</p>}
+        {!isLoading && (records ?? []).length === 0 && (
+          <p className="text-sm text-muted-foreground">No archived records found for this worker.</p>
+        )}
+        {(records ?? []).map((r) => {
+          const noticeShortfall = r.noticeServedDays < r.noticeRequiredDays;
+          return (
+            <div key={r.id} className="p-3 rounded-lg border bg-secondary/20 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold leading-snug">{r.role}</p>
+                  <p className="text-xs text-muted-foreground">{r.department} • {r.startDate} → {r.endDate}</p>
+                </div>
+                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border shrink-0",
+                  r.rehireEligible ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : 'text-red-700 bg-red-100 border-red-200'
+                )}>{r.rehireEligible ? 'Rehire-eligible' : 'Not eligible'}</span>
+              </div>
+              <p className="text-xs text-muted-foreground"><strong>Exit:</strong> {r.exitReason}</p>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className={cn("font-medium", noticeShortfall ? 'text-amber-700' : 'text-muted-foreground')}>
+                  Notice: {r.noticeServedDays}/{r.noticeRequiredDays} days{noticeShortfall ? ' (shortfall)' : ''}
+                </span>
+                <span className="flex items-center gap-1 text-muted-foreground font-medium">
+                  <Star className="w-3 h-3 text-amber-500" /> {r.performanceRating}/5
+                </span>
+              </div>
+              {r.notes && <p className="text-xs text-muted-foreground italic">{r.notes}</p>}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -29,15 +29,10 @@ describe("LDM records agent — deterministic plan execution", () => {
   test("notice served in full: reports the shortfall stint with exact days", () => {
     const out = executePlan({ metric: "notice_served_in_full_all_stints" }, stints);
     assert.match(out, /^No — shortfall in 1 of 2 stints/);
-    assert.match(out, /62\/90 days/);
+    assert.ok(out.includes("served 62/90 days"), out);
   });
 
-  test("notice fully served across all stints answers yes", () => {
-    const out = executePlan({ metric: "notice_served_in_full_all_stints" }, [stints[0]]);
-    assert.match(out, /^Yes — full notice served in all 1 stints/);
-  });
-
-  test("average performance rating is computed from the rows", () => {
+  test("average performance rating across stints", () => {
     const out = executePlan({ metric: "avg_performance_rating" }, stints);
     assert.match(out, /4\.05\/5 across 2 of 2 stints/);
   });

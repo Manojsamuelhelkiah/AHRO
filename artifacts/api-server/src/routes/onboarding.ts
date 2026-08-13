@@ -55,6 +55,7 @@ import { runSecurityDrill } from "../lib/onboarding/security-drill";
 import { onbGuardrailEvents } from "@workspace/db/schema";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { listDocuments } from "../lib/onboarding/documents";
+import { getArchivedStints } from "../lib/onboarding/records-agent";
 import {
   startVoiceCall,
   simulateVoiceCall,
@@ -372,6 +373,40 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
         required: r.required,
         note: r.note,
         updatedAt: r.updatedAt.toISOString(),
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/cases/:id/records", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const [c] = await db
+      .select({ id: onbCases.id, workerEmail: onbCases.workerEmail })
+      .from(onbCases)
+      .where(eq(onbCases.id, id));
+    if (!c) {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    const stints = await getArchivedStints(c.workerEmail);
+    res.json(
+      stints.map((s) => ({
+        id: s.id,
+        workerEmail: s.workerEmail,
+        workerName: s.workerName,
+        role: s.role,
+        department: s.department,
+        startDate: s.startDate,
+        endDate: s.endDate,
+        exitReason: s.exitReason,
+        noticeRequiredDays: s.noticeRequiredDays,
+        noticeServedDays: s.noticeServedDays,
+        performanceRating: s.performanceRating,
+        rehireEligible: s.rehireEligible,
+        notes: s.notes,
       })),
     );
   } catch (err) {

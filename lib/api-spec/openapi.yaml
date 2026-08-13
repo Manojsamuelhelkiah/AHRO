@@ -980,6 +980,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/records:
+    get:
+      operationId: listOnboardingCaseRecords
+      tags: [onboarding]
+      summary: Archived past-employment stints matched by the case's worker email (rehire evidence)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Archived stints, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbEmployeeRecord"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/demo/volunteers:
     get:
       operationId: getDemoVolunteers
@@ -2969,6 +2995,40 @@ components:
         updatedAt:
           type: string
       required: [id, caseId, key, label, category, status, required, note, updatedAt]
+    OnbEmployeeRecord:
+      type: object
+      description: One archived past-employment stint from the employee-records archive (rehire evidence)
+      properties:
+        id:
+          type: integer
+        workerEmail:
+          type: string
+        workerName:
+          type: string
+        role:
+          type: string
+        department:
+          type: string
+        startDate:
+          type: string
+          description: YYYY-MM-DD
+        endDate:
+          type: string
+          description: YYYY-MM-DD
+        exitReason:
+          type: string
+        noticeRequiredDays:
+          type: integer
+        noticeServedDays:
+          type: integer
+        performanceRating:
+          type: string
+          description: Final rating for the stint on a 1.0–5.0 scale
+        rehireEligible:
+          type: boolean
+        notes:
+          type: ["string", "null"]
+      required: [id, workerEmail, workerName, role, department, startDate, endDate, exitReason, noticeRequiredDays, noticeServedDays, performanceRating, rehireEligible, notes]
     OnbEvent:
       type: object
       description: One audit-trail entry; every agent decision lands here with engine type and rule reference

@@ -60,6 +60,7 @@ import type {
   OnbDashboard,
   OnbDocument,
   OnbEmailWatch,
+  OnbEmployeeRecord,
   OnbEvent,
   OnbInboundMessage,
   OnbScenarioDef,
@@ -3386,6 +3387,83 @@ export function useListOnboardingCaseDocuments<TData = Awaited<ReturnType<typeof
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListOnboardingCaseDocumentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListOnboardingCaseRecordsUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/records`
+}
+
+/**
+ * @summary Archived past-employment stints matched by the case's worker email (rehire evidence)
+ */
+export const listOnboardingCaseRecords = async (id: number, options?: RequestInit): Promise<OnbEmployeeRecord[]> => {
+
+  return customFetch<OnbEmployeeRecord[]>(getListOnboardingCaseRecordsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingCaseRecordsQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}/records`
+    ] as const;
+    }
+
+
+export const getListOnboardingCaseRecordsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingCaseRecords>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingCaseRecordsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingCaseRecords>>> = ({ signal }) => listOnboardingCaseRecords(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseRecords>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingCaseRecordsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingCaseRecords>>>
+export type ListOnboardingCaseRecordsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Archived past-employment stints matched by the case's worker email (rehire evidence)
+ */
+
+export function useListOnboardingCaseRecords<TData = Awaited<ReturnType<typeof listOnboardingCaseRecords>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingCaseRecordsQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
