@@ -980,6 +980,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/voice-call:
+    post:
+      operationId: startOnboardingVoiceCall
+      tags: [onboarding]
+      summary: Place (or simulate) an outbound AI voice call for a case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scenario:
+                  type: string
+                  enum: [day-before, sla-escalation]
+                simulate:
+                  type: boolean
+                  description: Run the identical conversation engine over a scripted hire instead of dialing
+              required: [scenario]
+      responses:
+        "200":
+          description: Call outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: calling | simulated | logged-only | failed
+                  note:
+                    type: string
+                required: [status, note]
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/cases/{id}/inbound:
     post:
       operationId: receiveOnboardingInbound

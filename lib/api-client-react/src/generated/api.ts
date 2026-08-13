@@ -71,6 +71,8 @@ import type {
   ScenarioUpdate,
   SensitivityRequest,
   SensitivityResult,
+  StartOnboardingVoiceCall200,
+  StartOnboardingVoiceCallBody,
   SystemInfo,
   UpdateOnbSettings
 } from './api.schemas';
@@ -3389,6 +3391,78 @@ export function useListOnboardingCaseDocuments<TData = Awaited<ReturnType<typeof
 
 
 
+
+export const getStartOnboardingVoiceCallUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/voice-call`
+}
+
+/**
+ * @summary Place (or simulate) an outbound AI voice call for a case
+ */
+export const startOnboardingVoiceCall = async (id: number,
+    startOnboardingVoiceCallBody: StartOnboardingVoiceCallBody, options?: RequestInit): Promise<StartOnboardingVoiceCall200> => {
+
+  return customFetch<StartOnboardingVoiceCall200>(getStartOnboardingVoiceCallUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(startOnboardingVoiceCallBody)
+  }
+);}
+
+
+
+
+
+export const getStartOnboardingVoiceCallMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startOnboardingVoiceCall>>, TError,{id: number;data: BodyType<StartOnboardingVoiceCallBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startOnboardingVoiceCall>>, TError,{id: number;data: BodyType<StartOnboardingVoiceCallBody>}, TContext> => {
+
+const mutationKey = ['startOnboardingVoiceCall'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startOnboardingVoiceCall>>, {id: number;data: BodyType<StartOnboardingVoiceCallBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startOnboardingVoiceCall(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartOnboardingVoiceCallMutationResult = NonNullable<Awaited<ReturnType<typeof startOnboardingVoiceCall>>>
+    export type StartOnboardingVoiceCallMutationBody = BodyType<StartOnboardingVoiceCallBody>
+    export type StartOnboardingVoiceCallMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Place (or simulate) an outbound AI voice call for a case
+ */
+export const useStartOnboardingVoiceCall = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startOnboardingVoiceCall>>, TError,{id: number;data: BodyType<StartOnboardingVoiceCallBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startOnboardingVoiceCall>>,
+        TError,
+        {id: number;data: BodyType<StartOnboardingVoiceCallBody>},
+        TContext
+      > => {
+      return useMutation(getStartOnboardingVoiceCallMutationOptions(options));
+    }
 
 export const getReceiveOnboardingInboundUrl = (id: number,) => {
 

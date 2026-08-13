@@ -47,6 +47,15 @@ import {
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { listDocuments } from "../lib/onboarding/documents";
 import {
+  startVoiceCall,
+  simulateVoiceCall,
+  getVoiceSession,
+  voiceTurn,
+  finalizeVoiceCall,
+  gatherTwiml,
+  hangupTwiml,
+} from "../lib/onboarding/voice";
+import {
   getSystemWatcherHealth,
   handleSystemWebhook,
 } from "../lib/onboarding/system-watcher";
@@ -454,6 +463,104 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
       });
     }
     respondEmpty();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* --------------------- Twilio Voice (AI phone calls) ------------------ */
+
+/**
+ * Start an outbound AI voice call for a case (day-before check-in or SLA
+ * escalation), or run a simulated call through the identical conversation
+ * engine when no verified phone is available.
+ */
+router.post("/onboarding/cases/:id/voice-call", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(eq(onbCases.id, id));
+    if (!exists) {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    const scenario = req.body?.scenario === "sla-escalation" ? "sla-escalation" : "day-before";
+    if (req.body?.simulate === true) {
+      const sim = await simulateVoiceCall(id, scenario);
+      res.json({
+        status: "simulated",
+        note: `Simulated call complete — ${sim.transcript.length} turns, decisions: ${
+          sim.decisions.length ? sim.decisions.map((d) => d.decision).join(", ") : "none"
+        }. Transcript is on the case timeline.`,
+      });
+      return;
+    }
+    const result = await startVoiceCall({ caseId: id, scenario });
+    res.json({ status: result.status, note: result.note });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Twilio fetches this when the hire answers: greet + listen. */
+router.post("/onboarding/webhooks/twilio/voice-answer", async (req, res, next) => {
+  try {
+    if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
+      res.status(403).json({ message: "Invalid Twilio signature" });
+      return;
+    }
+    const session = getVoiceSession(String(req.query.token ?? ""), String(req.body?.CallSid ?? "") || undefined);
+    if (!session) {
+      res.type("text/xml").send(hangupTwiml("Sorry, this call session has expired. Goodbye."));
+      return;
+    }
+    const greeting = session.turns[0]?.text ?? "Hello from the onboarding team.";
+    res.type("text/xml").send(gatherTwiml(greeting, session.token));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Each spoken reply from the hire lands here as a speech transcription. */
+router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => {
+  try {
+    if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
+      res.status(403).json({ message: "Invalid Twilio signature" });
+      return;
+    }
+    const session = getVoiceSession(String(req.query.token ?? ""), String(req.body?.CallSid ?? "") || undefined);
+    if (!session) {
+      res.type("text/xml").send(hangupTwiml("Sorry, this call session has expired. Goodbye."));
+      return;
+    }
+    const speech = String(req.body?.SpeechResult ?? "").trim();
+    if (!speech) {
+      res.type("text/xml").send(gatherTwiml("Sorry, I didn't catch that — could you say it again?", session.token));
+      return;
+    }
+    const { say, done } = await voiceTurn(session, speech);
+    if (done) {
+      await finalizeVoiceCall(session, "completed");
+      res.type("text/xml").send(hangupTwiml(say));
+    } else {
+      res.type("text/xml").send(gatherTwiml(say, session.token));
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Call ended (hangup/no-answer/failed): make sure the transcript lands. */
+router.post("/onboarding/webhooks/twilio/voice-status", async (req, res, next) => {
+  try {
+    if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
+      res.status(403).json({ message: "Invalid Twilio signature" });
+      return;
+    }
+    const session = getVoiceSession(String(req.query.token ?? ""), String(req.body?.CallSid ?? "") || undefined);
+    if (session && !session.finalized) {
+      await finalizeVoiceCall(session, String(req.body?.CallStatus ?? "completed"));
+    }
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

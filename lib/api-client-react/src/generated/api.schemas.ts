@@ -1348,6 +1348,26 @@ export type ParseActualsLogBody = {
   logFile: Blob;
 };
 
+export type StartOnboardingVoiceCallBodyScenario = typeof StartOnboardingVoiceCallBodyScenario[keyof typeof StartOnboardingVoiceCallBodyScenario];
+
+
+export const StartOnboardingVoiceCallBodyScenario = {
+  'day-before': 'day-before',
+  'sla-escalation': 'sla-escalation',
+} as const;
+
+export type StartOnboardingVoiceCallBody = {
+  scenario: StartOnboardingVoiceCallBodyScenario;
+  /** Run the identical conversation engine over a scripted hire instead of dialing */
+  simulate?: boolean;
+};
+
+export type StartOnboardingVoiceCall200 = {
+  /** calling | simulated | logged-only | failed */
+  status: string;
+  note: string;
+};
+
 export type ListOnboardingApprovalsParams = {
 /**
  * pending (default) | all

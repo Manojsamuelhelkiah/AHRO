@@ -21,7 +21,7 @@ function maskEmail(email: string): string {
   return `${local.slice(0, 2)}***@${domain}`;
 }
 
-function maskPhone(phone: string): string {
+export function maskPhone(phone: string): string {
   return phone.length > 4 ? `${phone.slice(0, 4)}•••${phone.slice(-2)}` : "•••";
 }
 

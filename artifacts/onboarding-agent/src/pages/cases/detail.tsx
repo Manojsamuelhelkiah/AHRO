@@ -5,6 +5,7 @@ import {
   useListOnboardingCaseEvents, 
   useListOnboardingCaseCommunications,
   useReceiveOnboardingInbound,
+  useStartOnboardingVoiceCall,
   useListOnboardingCaseDocuments,
   getListOnboardingCaseDocumentsQueryKey,
   getGetOnboardingCaseQueryKey,
@@ -17,7 +18,7 @@ import { WhatsAppSandboxWarning } from '@/components/whatsapp-sandbox-warning';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, cn, Input } from '@/components/ui-shared';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
-import { CheckCircle2, Clock, AlertTriangle, XCircle, Send, MessageSquare, Mail, Smartphone, FileText, FileCheck2 } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, XCircle, Send, MessageSquare, Mail, Smartphone, FileText, FileCheck2, Phone, PhoneCall } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 export function CaseDetailPage() {
@@ -98,9 +99,12 @@ export function CaseDetailPage() {
             <span><strong>Recruiter:</strong> {c.recruiterName}</span>
           </div>
         </div>
-        <div className="text-right flex flex-col items-end">
-          <div className="text-xs font-bold text-muted-foreground mb-1 tracking-wider">STAGE: {c.lifecycleStage.toUpperCase()}</div>
-          <StatusBadge status={c.orchestrationStatus} />
+        <div className="text-right flex flex-col items-end gap-2">
+          <div>
+            <div className="text-xs font-bold text-muted-foreground mb-1 tracking-wider">STAGE: {c.lifecycleStage.toUpperCase()}</div>
+            <StatusBadge status={c.orchestrationStatus} />
+          </div>
+          <VoiceCallButtons caseId={caseId} hasPhone={!!c.workerPhone} />
         </div>
       </div>
 
@@ -251,13 +255,17 @@ export function CaseDetailPage() {
                 {comms?.map(msg => (
                   <div key={msg.id} className={cn("flex flex-col max-w-[90%]", msg.direction === 'inbound' ? "items-start mr-auto" : "items-end ml-auto")}>
                     <div className="flex items-center gap-1 mb-1 px-1">
-                      {msg.channel === 'whatsapp' ? <Smartphone className="h-3 w-3 text-emerald-600" /> : <Mail className="h-3 w-3 text-blue-600" />}
+                      {msg.channel === 'voice' ? <Phone className="h-3 w-3 text-violet-600" /> : msg.channel === 'whatsapp' ? <Smartphone className="h-3 w-3 text-emerald-600" /> : <Mail className="h-3 w-3 text-blue-600" />}
                       <span className="text-[10px] text-muted-foreground uppercase font-bold">{msg.channel}</span>
                       <span className="text-[10px] text-muted-foreground ml-1 font-mono">{format(new Date(msg.createdAt), 'HH:mm')}</span>
                     </div>
                     <div className={cn("px-3 py-2.5 rounded-2xl text-sm shadow-sm", 
+                      msg.channel === 'voice' ? "bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-foreground rounded-tr-sm w-full" :
                       msg.direction === 'inbound' ? "bg-white border text-foreground rounded-tl-sm" : "bg-primary text-primary-foreground rounded-tr-sm shadow-primary/20"
                     )}>
+                      {msg.channel === 'voice' && msg.subject && (
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-1.5 flex items-center gap-1"><PhoneCall className="h-3 w-3" /> {msg.subject}</p>
+                      )}
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.body}</p>
                     </div>
                     {msg.direction === 'outbound' && (
@@ -281,6 +289,46 @@ export function CaseDetailPage() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+function VoiceCallButtons({ caseId, hasPhone }: { caseId: number; hasPhone: boolean }) {
+  const startCall = useStartOnboardingVoiceCall();
+  const queryClient = useQueryClient();
+  const [note, setNote] = useState<string | null>(null);
+
+  const place = (scenario: 'day-before' | 'sla-escalation', simulate: boolean) => {
+    setNote(null);
+    startCall.mutate({ id: caseId, data: { scenario, simulate } }, {
+      onSuccess: (res) => {
+        setNote(res.note);
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId) });
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEventsQueryKey(caseId) });
+      },
+      onError: () => setNote('Call request failed — see the activity feed.'),
+    });
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={startCall.isPending || !hasPhone}
+          title={hasPhone ? 'AI voice call: day-before-joining check-in' : 'No phone number on file'}
+          onClick={() => place('day-before', false)}>
+          <PhoneCall className="h-3.5 w-3.5 text-violet-600" /> Day-before call
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={startCall.isPending || !hasPhone}
+          title={hasPhone ? 'AI voice call: chase an overdue onboarding item' : 'No phone number on file'}
+          onClick={() => place('sla-escalation', false)}>
+          <Phone className="h-3.5 w-3.5 text-amber-600" /> Escalation call
+        </Button>
+      </div>
+      <button type="button" className="text-[10px] text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50" disabled={startCall.isPending}
+        onClick={() => place('day-before', true)}>
+        {startCall.isPending ? 'Working…' : 'Run a simulated call instead'}
+      </button>
+      {note && <p className="text-[10px] text-muted-foreground max-w-[240px] text-right leading-snug">{note}</p>}
     </div>
   );
 }

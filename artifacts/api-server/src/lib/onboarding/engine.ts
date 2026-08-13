@@ -37,7 +37,7 @@ type CaseRow = typeof onbCases.$inferSelect;
 /* Audit helpers                                                       */
 /* ------------------------------------------------------------------ */
 
-async function logEvent(
+export async function logEvent(
   caseId: number,
   agent: string,
   engine: "llm" | "ldm" | "orchestrator" | "human" | "system",
@@ -69,7 +69,7 @@ async function getCase(caseId: number): Promise<CaseRow> {
   return row;
 }
 
-async function createApproval(opts: {
+export async function createApproval(opts: {
   caseId: number;
   agent: string;
   ruleRef: string;

@@ -1578,6 +1578,24 @@ export const ListOnboardingCaseDocumentsResponse = zod.array(ListOnboardingCaseD
 
 
 /**
+ * @summary Place (or simulate) an outbound AI voice call for a case
+ */
+export const StartOnboardingVoiceCallParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const StartOnboardingVoiceCallBody = zod.object({
+  "scenario": zod.enum(['day-before', 'sla-escalation']),
+  "simulate": zod.boolean().optional().describe('Run the identical conversation engine over a scripted hire instead of dialing')
+})
+
+export const StartOnboardingVoiceCallResponse = zod.object({
+  "status": zod.string().describe('calling | simulated | logged-only | failed'),
+  "note": zod.string()
+})
+
+
+/**
  * @summary Record an inbound message from the new hire (WhatsApp/email reply) and let the agents react
  */
 export const ReceiveOnboardingInboundParams = zod.object({
