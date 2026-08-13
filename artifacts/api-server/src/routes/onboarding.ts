@@ -103,6 +103,34 @@ router.use("/onboarding", (req, res, next) => {
  * already-public demo credentials — no other account can be minted).
  */
 const DEMO_LOGIN_EMAIL = "demo.reviewer@example.com";
+// Publicly documented demo credential (also prefilled on the login page).
+const DEMO_LOGIN_PASSWORD = "OnboardOS-Demo-2026!";
+
+/**
+ * Finds the demo reviewer account, creating it if it does not exist yet.
+ * Production runs against a separate Clerk instance from development, so the
+ * account must be self-healing — otherwise a fresh publish has no demo user.
+ * Handles the create/create race by re-fetching on a creation conflict.
+ */
+async function ensureDemoUser() {
+  const found = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
+  if (found.data[0]) return found.data[0];
+  try {
+    return await clerkClient.users.createUser({
+      emailAddress: [DEMO_LOGIN_EMAIL],
+      password: DEMO_LOGIN_PASSWORD,
+      firstName: "Demo",
+      lastName: "Reviewer",
+      skipPasswordChecks: true,
+    });
+  } catch (err) {
+    // Another request may have created it concurrently — re-fetch before failing.
+    const refetched = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
+    if (refetched.data[0]) return refetched.data[0];
+    throw err;
+  }
+}
+
 router.post("/onboarding/demo-login", async (req, res, next) => {
   try {
     const requested = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
@@ -110,12 +138,7 @@ router.post("/onboarding/demo-login", async (req, res, next) => {
       res.status(403).json({ error: "Demo login is only available for the demo reviewer account" });
       return;
     }
-    const users = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
-    const demoUser = users.data[0];
-    if (!demoUser) {
-      res.status(404).json({ error: "Demo account not found" });
-      return;
-    }
+    const demoUser = await ensureDemoUser();
     const token = await clerkClient.signInTokens.createSignInToken({
       userId: demoUser.id,
       expiresInSeconds: 120,

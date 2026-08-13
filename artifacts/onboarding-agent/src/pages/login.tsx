@@ -37,18 +37,20 @@ export function LoginPage() {
   const [email, setEmail] = useState(DEMO_EMAIL);
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [authing, setAuthing] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!signIn || authing) return;
     setAuthing(true);
+    setLoginError(null);
     const startedAt = Date.now();
     try {
       if (email.trim().toLowerCase() === DEMO_EMAIL) {
         // The demo account's @example.com inbox can't receive Clerk's
         // device-verification code, so the server issues a one-time
         // sign-in ticket for it instead.
-        const resp = await fetch('/api/onboarding/demo-login', {
+        const resp = await fetch(`${basePath}/api/onboarding/demo-login`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ email: DEMO_EMAIL }),
@@ -69,8 +71,12 @@ export function LoginPage() {
       if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
       const { error: finalizeError } = await signIn.finalize();
       if (finalizeError) throw new Error(finalizeError.message);
-    } catch {
-      // Demo spec: no visible error messages — quietly return to the form.
+    } catch (err) {
+      setLoginError(
+        err instanceof Error && err.message === 'demo-login unavailable'
+          ? 'Sign-in service is temporarily unavailable. Please try again in a moment.'
+          : 'Sign-in failed. Please check your credentials and try again.',
+      );
       setAuthing(false);
     }
   }
@@ -197,6 +203,15 @@ export function LoginPage() {
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
               />
             </div>
+            {loginError && (
+              <div
+                role="alert"
+                className="rounded-lg border px-3 py-2.5 text-sm"
+                style={{ borderColor: 'rgba(239, 68, 68, 0.35)', backgroundColor: 'rgba(239, 68, 68, 0.06)', color: '#B91C1C' }}
+              >
+                {loginError}
+              </div>
+            )}
             <button
               type="submit"
               disabled={!signIn}
