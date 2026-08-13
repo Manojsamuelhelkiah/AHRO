@@ -1,12 +1,14 @@
 import { db } from "@workspace/db";
 import {
   onbCases,
+  onbCommunications,
   onbConnectors,
   onbEvents,
   onbSystemChecks,
   type OnbReadinessItemRow,
 } from "@workspace/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, ne, sql } from "drizzle-orm";
+import { autoEscalationCallsEnabled } from "./settings";
 import {
   applicableSystems,
   completionAt,
@@ -291,6 +293,77 @@ export async function escalateCheck(
     `${def.label} (${check.externalRef}) has not reported completion within its ${def.slaSeconds}s SLA. ${reason} Owner notified; the checklist item stays open until the source system confirms.`,
     def.slaRuleRef,
   );
+
+  // Opt-in follow-through: place the escalation voice call automatically
+  // when the hire has also gone quiet. Never allowed to break escalation
+  // itself — the SLA event above must land even if calling fails.
+  try {
+    await maybeAutoEscalationCall(updated, def, reason);
+  } catch (err) {
+    console.error(
+      `[system-watcher] auto escalation call failed for case ${check.caseId}:`,
+      String(err).slice(0, 300),
+    );
+  }
+}
+
+/**
+ * If the auto-call setting is on AND the hire has not sent any inbound
+ * message (email/WhatsApp) since this check started tracking, place the
+ * SLA escalation voice call. The voice module's own guardrails still
+ * apply unchanged: recipient allowlist, one live call per case, and the
+ * hourly live-call rate limit. Exported for tests.
+ */
+export async function maybeAutoEscalationCall(
+  check: typeof onbSystemChecks.$inferSelect,
+  def: SystemDef,
+  reason: string,
+): Promise<void> {
+  if (!(await autoEscalationCallsEnabled())) return;
+
+  // Has the hire replied on any messaging channel since we started
+  // tracking this check? If so they're responsive — no surprise call.
+  const [reply] = await db
+    .select({ id: onbCommunications.id })
+    .from(onbCommunications)
+    .where(
+      and(
+        eq(onbCommunications.caseId, check.caseId),
+        eq(onbCommunications.direction, "inbound"),
+        ne(onbCommunications.channel, "voice"),
+        gt(onbCommunications.createdAt, check.requestedAt),
+      ),
+    )
+    .limit(1);
+  if (reply) return;
+
+  // Audit trail: record why the watcher is placing this call before dialing.
+  await logEvent(
+    check.caseId,
+    "Automatic escalation call triggered",
+    `${def.label} (${check.externalRef}) breached its SLA and the hire has not replied to any message since tracking began — auto escalation calls are enabled in Settings, so the System Watcher is placing the SLA escalation voice call. ${reason}`,
+    def.slaRuleRef,
+  );
+
+  // Dynamic import keeps the watcher testable without pulling in the
+  // voice/LLM stack, mirroring the channels import pattern in voice.ts.
+  const { startVoiceCall } = await import("./voice");
+  const result = await startVoiceCall({
+    caseId: check.caseId,
+    scenario: "sla-escalation",
+    reason: `${def.label} (${check.externalRef}) is overdue: ${reason} The hire has not replied to recent messages, and automatic escalation calls are enabled.`,
+  });
+
+  // startVoiceCall logs its own events for "calling" and allowlist
+  // withholds; record the outcome for the remaining failure paths.
+  if (result.status === "failed") {
+    await logEvent(
+      check.caseId,
+      "Automatic escalation call not placed",
+      `The System Watcher tried to place the SLA escalation call but it was not placed: ${result.note}`,
+      def.slaRuleRef,
+    );
+  }
 }
 
 /* ------------------------------------------------------------------ */

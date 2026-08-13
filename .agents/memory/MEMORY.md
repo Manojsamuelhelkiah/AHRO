@@ -9,4 +9,5 @@
 - [Stale composite declarations](stale-composite-decls.md) — `tsc --noEmit` reads workspace libs' built dist d.ts; use `tsc -b` or phantom type errors contradict the source.
 - [Email as a status channel](email-status-channel.md) — inbound email must pass a sender allowlist before changing state; apply first then record the message id; guard on current status+mode.
 - [Gmail self-send echo loop](gmail-self-send-echo.md) — store outbound provider message ids in the inbound dedup column or the poller replies to its own mail forever.
+- [Root tsc coverage gap](root-tsc-coverage.md) — root `tsc -b` skips artifact app sources; run the per-package typecheck for each touched artifact before declaring done.
 - [TSX tests in node harness](tsx-tests-node-harness.md) — renderToStaticMarkup UI tests need jsx:automatic, bare builtin externals, and a createRequire banner in the esbuild bundle.

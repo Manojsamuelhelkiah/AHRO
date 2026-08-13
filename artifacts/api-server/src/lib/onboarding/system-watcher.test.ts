@@ -1,6 +1,8 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { classifySystem, completeCheck, handleSystemWebhook } from "./system-watcher";
+import { classifySystem, completeCheck, escalateCheck, handleSystemWebhook } from "./system-watcher";
+import { setSetting, AUTO_ESCALATION_CALLS_KEY } from "./settings";
+import { onbCommunications } from "@workspace/db/schema";
 import { CONNECTOR_DEFAULTS } from "./connectors";
 import { db } from "@workspace/db";
 import { onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
@@ -256,6 +258,109 @@ describe("concurrent completions (real DB)", () => {
       .where(eq(onbEvents.caseId, c.id));
     const completions = events.filter((e) => e.title.includes("reported complete"));
     assert.equal(completions.length, 1);
+  });
+});
+
+describe("automatic escalation calls (real DB)", () => {
+  const created: number[] = [];
+  after(async () => {
+    for (const id of created) await db.delete(onbCases).where(eq(onbCases.id, id));
+    await setSetting(AUTO_ESCALATION_CALLS_KEY, null);
+  });
+
+  async function makeCase(quietHire: boolean) {
+    const [c] = await db
+      .insert(onbCases)
+      .values({
+        workerName: `Auto Call Test ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        workerEmail: "auto-call@example.com",
+        // No workerPhone: startVoiceCall bails out with "failed" before any
+        // Twilio interaction, so the trigger path is exercised safely.
+        hireType: "new-hire",
+        workerCategory: "employee",
+        role: "Engineer",
+        department: "R&D",
+        geography: "US",
+        legalEntity: "Test Co",
+        managerName: "M",
+        recruiterName: "R",
+        joiningDate: "2026-09-01",
+        lifecycleStage: "preboarding",
+        readiness: [{ key: "access", label: "Access", status: "in-progress" }],
+        workstreams: [],
+      })
+      .returning();
+    created.push(c.id);
+    const requestedAt = new Date(Date.now() - 60_000);
+    const [check] = await db
+      .insert(onbSystemChecks)
+      .values({
+        caseId: c.id,
+        system: "itsm",
+        mode: "poll",
+        externalRef: `RITM-${c.id}`,
+        requestedAt,
+        dueAt: new Date(Date.now() - 1_000),
+      })
+      .returning();
+    if (!quietHire) {
+      await db.insert(onbCommunications).values({
+        caseId: c.id,
+        channel: "email",
+        direction: "inbound",
+        toAddress: "onboarding@example.com",
+        subject: "Re: onboarding",
+        body: "On it, sorry for the delay!",
+        status: "received",
+      });
+    }
+    return { c, check };
+  }
+
+  async function eventTitles(caseId: number) {
+    const events = await db.select().from(onbEvents).where(eq(onbEvents.caseId, caseId));
+    return events.map((e) => e.title);
+  }
+
+  test("setting off: escalation never triggers a call", async () => {
+    await setSetting(AUTO_ESCALATION_CALLS_KEY, null);
+    const { check } = await makeCase(true);
+    await escalateCheck(check, "Vendor still in progress.");
+    const titles = await eventTitles(check.caseId);
+    assert.ok(titles.some((t) => t.includes("SLA breached")));
+    assert.ok(!titles.some((t) => t.includes("Automatic escalation call")));
+  });
+
+  test("setting on + quiet hire: call is triggered and audit-trailed", async () => {
+    await setSetting(AUTO_ESCALATION_CALLS_KEY, "on");
+    const { check } = await makeCase(true);
+    await escalateCheck(check, "Vendor still in progress.");
+    const titles = await eventTitles(check.caseId);
+    assert.ok(titles.some((t) => t === "Automatic escalation call triggered"));
+    // No phone number on the case → the attempt is recorded as not placed.
+    assert.ok(titles.some((t) => t === "Automatic escalation call not placed"));
+  });
+
+  test("setting on but hire replied since tracking began: no call", async () => {
+    await setSetting(AUTO_ESCALATION_CALLS_KEY, "on");
+    const { check } = await makeCase(false);
+    await escalateCheck(check, "Vendor still in progress.");
+    const titles = await eventTitles(check.caseId);
+    assert.ok(titles.some((t) => t.includes("SLA breached")));
+    assert.ok(!titles.some((t) => t.includes("Automatic escalation call")));
+  });
+
+  test("already-escalated check does not re-trigger a call", async () => {
+    await setSetting(AUTO_ESCALATION_CALLS_KEY, "on");
+    const { check } = await makeCase(true);
+    await escalateCheck(check, "Vendor still in progress.");
+    const [escalated] = await db
+      .select()
+      .from(onbSystemChecks)
+      .where(eq(onbSystemChecks.id, check.id));
+    await escalateCheck(escalated, "Vendor still in progress.");
+    const titles = await eventTitles(check.caseId);
+    assert.equal(titles.filter((t) => t === "Automatic escalation call triggered").length, 1);
   });
 });
 

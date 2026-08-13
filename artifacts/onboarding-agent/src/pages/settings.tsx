@@ -13,7 +13,7 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn } from '@/components/ui-shared';
-import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone } from 'lucide-react';
+import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall } from 'lucide-react';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -254,6 +254,32 @@ export function SettingsPage() {
   const [draft, setDraft] = useState('');
   const [touched, setTouched] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const toggleCalls = useUpdateOnboardingSettings();
+  const [callsResult, setCallsResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const saveAutoCalls = (enabled: boolean) => {
+    setCallsResult(null);
+    toggleCalls.mutate(
+      { data: { autoEscalationCalls: enabled } },
+      {
+        onSuccess: (updated) => {
+          setCallsResult({
+            ok: true,
+            message: updated.autoEscalationCalls
+              ? 'Automatic escalation calls are ON. Calls still respect the allowlist and hourly limit.'
+              : 'Automatic escalation calls are OFF. Escalation calls must be placed manually from the case page.',
+          });
+          queryClient.invalidateQueries({ queryKey: getGetOnboardingSettingsQueryKey() });
+        },
+        onError: (err: any) => {
+          setCallsResult({
+            ok: false,
+            message: err?.error ?? err?.message ?? 'Saving failed — please try again.',
+          });
+        },
+      },
+    );
+  };
 
   // Seed the input from the stored value once it loads.
   useEffect(() => {
@@ -417,6 +443,83 @@ export function SettingsPage() {
                 </div>
               )}
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-sm">
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm bg-primary/10 text-primary border-primary/20">
+                <PhoneCall className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold uppercase tracking-wider text-sm">Automatic Escalation Calls</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  When an onboarding check breaches its SLA and the hire hasn't replied to any message, the System
+                  Watcher places the escalation voice call itself. The recipient allowlist and hourly call limit
+                  still apply, and the reason for each call is recorded on the case timeline.
+                </p>
+              </div>
+            </div>
+            {!isLoading && (
+              <Badge
+                className={cn(
+                  'uppercase tracking-wider text-[10px] shadow-none shrink-0',
+                  settings?.autoEscalationCalls
+                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
+                    : 'bg-muted text-muted-foreground hover:bg-muted',
+                )}
+              >
+                {settings?.autoEscalationCalls ? 'ON' : 'OFF'}
+              </Badge>
+            )}
+          </div>
+
+          {!isLoading && (
+            <div className="mt-5 flex items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!settings?.autoEscalationCalls}
+                aria-label="Automatic escalation calls"
+                disabled={toggleCalls.isPending}
+                onClick={() => saveAutoCalls(!settings?.autoEscalationCalls)}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50',
+                  settings?.autoEscalationCalls ? 'bg-primary border-primary' : 'bg-muted border-input',
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-5 w-5 rounded-full bg-background shadow transition-transform',
+                    settings?.autoEscalationCalls ? 'translate-x-5' : 'translate-x-0.5',
+                  )}
+                />
+              </button>
+              <span className="text-sm">
+                {settings?.autoEscalationCalls
+                  ? 'On — overdue, unresponsive hires get an automatic escalation call.'
+                  : 'Off — escalation calls are only placed manually from the case page.'}
+              </span>
+            </div>
+          )}
+
+          {callsResult && (
+            <div
+              className={cn(
+                'p-3 mt-4 text-sm rounded-md border flex items-start gap-3',
+                callsResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900',
+              )}
+            >
+              {callsResult.ok ? (
+                <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
+              ) : (
+                <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+              )}
+              <p className="mt-0.5">{callsResult.message}</p>
+            </div>
           )}
         </CardContent>
       </Card>

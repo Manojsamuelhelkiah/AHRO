@@ -1357,11 +1357,15 @@ export interface OnbSettings {
   effective: string | null;
   /** Where the effective address comes from ("settings" | "environment"), null when none */
   source: string | null;
+  /** When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet */
+  autoEscalationCalls: boolean;
 }
 
 export interface UpdateOnbSettings {
-  /** New HR alert address; null or empty string clears the stored value */
-  hrAlertEmail: string | null;
+  /** New HR alert address; null or empty string clears the stored value. Omit to leave unchanged. */
+  hrAlertEmail?: string | null;
+  /** Turn automatic SLA escalation voice calls on or off. Omit to leave unchanged. */
+  autoEscalationCalls?: boolean;
 }
 
 export type ListCustomIntentsParams = {
@@ -1440,4 +1444,3 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
-

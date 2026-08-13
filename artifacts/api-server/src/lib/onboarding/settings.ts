@@ -10,6 +10,18 @@ import { eq, sql } from "drizzle-orm";
 
 export const HR_ALERT_EMAIL_KEY = "hr_alert_email";
 
+/**
+ * Opt-in switch for automatic SLA escalation voice calls: when set to "on",
+ * the System Watcher places the escalation call itself (allowlist and rate
+ * limits still apply) when a check goes overdue and the hire has gone quiet.
+ * Absent/any other value means off — calls must never surprise anyone.
+ */
+export const AUTO_ESCALATION_CALLS_KEY = "auto_escalation_calls";
+
+export async function autoEscalationCallsEnabled(): Promise<boolean> {
+  return (await getSetting(AUTO_ESCALATION_CALLS_KEY)) === "on";
+}
+
 /** Lenient-but-sane email shape check: one @, no spaces, a dot in the domain. */
 export function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
