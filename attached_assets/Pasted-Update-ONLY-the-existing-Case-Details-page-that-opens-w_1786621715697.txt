@@ -1,0 +1,1075 @@
+Update **ONLY the existing Case Details page** that opens when a user clicks **View Details** from the Cases page.
+
+The goal is to transform the current long, scroll-heavy Case Details screen into a **premium enterprise HRO case workspace** with strong information hierarchy, minimal scrolling, clear human-in-the-loop actions, and a professional SaaS experience.
+
+Do NOT modify the Cases list page, Control Tower, Analytics, login page, authentication, database schema, or unrelated pages.
+
+Do NOT break existing case functionality.
+
+---
+
+# 1. CORE DESIGN PRINCIPLE
+
+The current Case Details page combines too much information at the same time:
+
+* readiness
+* documents
+* agent activity
+* communications
+* AI plan
+* technical rules
+* approvals
+
+This creates excessive scrolling and makes it difficult to understand what requires attention.
+
+Redesign the page around:
+
+**Who / What → Current State → Health → Human Attention → Next Actions → Recent Activity → Deep Detail**
+
+The Case Overview should be a **decision workspace**, not an audit log.
+
+---
+
+# 2. PAGE STRUCTURE
+
+The new Case Details page should follow this structure:
+
+### Sticky Case Header
+
+↓
+
+### Case Health Summary
+
+↓
+
+### Tabs
+
+`Overview | Tasks | Documents | Activity | Communications | Audit`
+
+↓
+
+### Overview
+
+Main workspace:
+
+**Left ~70%**
+
+* Case Readiness
+* Next Actions
+* Recent Activity
+
+**Right ~30%**
+
+* Attention Required
+* Case Owner
+* Latest Communication
+* Documents summary
+
+The right rail should remain sticky on desktop.
+
+This structure is the primary redesign requirement.
+
+---
+
+# 3. STICKY CASE HEADER
+
+Create a compact sticky header.
+
+Display:
+
+**HRO-2026-00154**
+
+# Rajat
+
+`NEW HIRE ONBOARDING`
+
+`Director · India · Effective Aug 13, 2026`
+
+Then a compact metadata line:
+
+**Owner** Onboarding Agent
+
+**Priority** Elevated
+
+**Stage** Preboarding
+
+**Status** Human Review
+
+**Manager** Manoj
+
+Do NOT display all contact information in the main header.
+
+Move secondary worker information behind:
+
+**Worker Details ▾**
+
+This can expose:
+
+* email
+* phone
+* manager
+* recruiter
+* contact methods
+* other relevant worker metadata
+
+The header should remain visually compact.
+
+---
+
+# 4. HEADER ACTIONS
+
+Use:
+
+**Worker Details ▾**
+
+**Contact ▾**
+
+**Take Action**
+
+**•••**
+
+The primary action should be **Take Action**.
+
+Do NOT put multiple large call-to-action buttons in the header.
+
+Existing business actions must remain functional.
+
+---
+
+# 5. REMOVE THESE FROM THE PRIMARY HEADER
+
+Do NOT keep these as visually dominant header elements:
+
+* long email addresses
+* long phone numbers
+* WhatsApp contact strings
+* recruiter details
+* full communication methods
+* duplicated stage/status indicators
+* simulated call buttons
+
+The current:
+
+`Day-before call`
+
+`Escalation call`
+
+and:
+
+`Run a simulated call instead`
+
+should NOT appear on the primary production case screen.
+
+If simulation functionality is required elsewhere, preserve the code and move it to an appropriate restricted testing/simulation area.
+
+---
+
+# 6. CASE HEALTH STRIP
+
+Immediately below the header, create a compact four-column summary.
+
+### CASE HEALTH
+
+`Attention required`
+
+Supporting text:
+
+`1 decision requires review`
+
+### PROGRESS
+
+`6 / 8 complete`
+
+Supporting text:
+
+`75% of workflow complete`
+
+### SLA
+
+`4h 18m remaining`
+
+Supporting text:
+
+`Within target`
+
+### NEXT MILESTONE
+
+`Day-1 Readiness`
+
+Supporting text:
+
+`Due Aug 13, 9:00 AM`
+
+Use real application data.
+
+Do NOT hard-code these values.
+
+If a value cannot be calculated from the current data model, display:
+
+`—`
+
+rather than inventing a value.
+
+---
+
+# 7. STANDARD STATUS SEMANTICS
+
+Use the global Agentic HRO design system.
+
+### Emerald
+
+Completed / Healthy
+
+### Indigo
+
+Agent / Active / In Progress
+
+### Amber
+
+Human Review / Waiting / Attention
+
+### Red
+
+Blocked / Critical
+
+### Neutral
+
+Inactive / Not Started / Metadata
+
+Do not use color alone to communicate status.
+
+Always display the status label.
+
+---
+
+# 8. ADD TABBED CASE NAVIGATION
+
+Implement:
+
+**Overview**
+
+**Tasks**
+
+**Documents**
+
+**Activity**
+
+**Communications**
+
+**Audit**
+
+Overview is the default tab.
+
+The purpose of the tabs is to stop the Overview page from becoming a giant vertical document.
+
+---
+
+# 9. OVERVIEW TAB
+
+The Overview must contain only the most decision-relevant information.
+
+Desktop structure:
+
+```text
+LEFT ~70%                      RIGHT ~30%
+
+Case Readiness                 Attention Required
+Next Actions                   Case Owner
+Recent Activity                Latest Communication
+                               Documents
+```
+
+Do not use three equally sized scroll columns.
+
+Do not put the entire activity feed, full communication history, and full document checklist on the Overview.
+
+---
+
+# 10. CASE READINESS
+
+Replace the current large vertical checklist with a condensed workstream summary.
+
+Display approximately:
+
+### Identity & Employment
+
+`Complete`
+
+Role, manager and effective date confirmed.
+
+### Documents & Work Authorization
+
+`Complete`
+
+BGV cleared; statutory pack verified.
+
+### Payroll, Bank & Tax
+
+`Waiting`
+
+Bank and tax inputs still required.
+
+### Access & Applications
+
+`Complete`
+
+Corporate access provisioning completed.
+
+### Equipment & Workspace
+
+`Complete`
+
+Laptop, ID card and workspace scheduled.
+
+### Induction & Compliance
+
+`Complete`
+
+Required learning and manager connect scheduled.
+
+Use compact rows.
+
+Do not show very long descriptions.
+
+At the bottom show a compact summary:
+
+`5 complete · 1 waiting · 1 human review`
+
+Add:
+
+**View tasks →**
+
+This should open the Tasks tab.
+
+---
+
+# 11. NEXT ACTIONS
+
+Replace the long **AI Plan Summary** on the Overview page with:
+
+# Next Actions
+
+Show only the immediate actions required to move the case forward.
+
+Example structure:
+
+### 1. Complete priority decision
+
+`Required before accelerated handling begins`
+Owner: `HR Reviewer`
+
+### 2. Collect bank and tax information
+
+`Worker input is still outstanding`
+Owner: `Worker`
+
+### 3. Validate payroll documentation
+
+`Begins automatically after submission`
+Owner: `Payroll Agent`
+
+### 4. Confirm Day-1 readiness
+
+`Final cross-workstream readiness check`
+Owner: `Onboarding Agent`
+
+Add:
+
+**Execution plan →**
+
+This should open a detailed execution-plan/task view.
+
+Do NOT show a long AI-generated paragraph by default.
+
+---
+
+# 12. AI PLAN / AGENT PLAN
+
+Do NOT delete the underlying AI plan functionality.
+
+Move the detailed plan into:
+
+**Tasks**
+
+or an expandable:
+
+**Execution Plan**
+
+drawer/panel.
+
+The default Overview should show only actionable next steps.
+
+If the full AI plan is available, allow:
+
+**View execution plan →**
+
+This keeps AI intelligence accessible without overwhelming the main page.
+
+---
+
+# 13. ATTENTION REQUIRED PANEL
+
+This should become the most important element on the right side when human action is needed.
+
+Create:
+
+# Attention Required
+
+Subtitle:
+
+`Human decision blocking the next step`
+
+Then:
+
+**APPROVAL REQUIRED**
+
+### Approve elevated processing priority
+
+The Onboarding Agent recommends accelerated handling because the effective date is approaching and payroll inputs remain incomplete.
+
+Then:
+
+**Why this matters**
+
+`Without accelerated processing, Day-1 readiness may be affected.`
+
+Then:
+
+**Agent recommendation**
+
+`Approve elevated priority and continue fast-track readiness checks.`
+
+Buttons:
+
+**Approve**
+
+**Reject**
+
+Then:
+
+**View decision context →**
+
+This is critical.
+
+The user must immediately understand:
+
+* what requires action
+* why
+* what the agent recommends
+* what happens if they approve
+* what happens if they reject
+
+---
+
+# 14. HUMAN-IN-THE-LOOP DESIGN
+
+Human intervention must be represented as **normal enterprise governance**, not as an error.
+
+Use terminology:
+
+* Human Review
+* Approval Required
+* Decision Required
+* Exception Review
+* Human Handoff
+
+Do not imply:
+
+`Agent failed`
+
+unless it actually failed.
+
+An agent escalating a decision because a policy requires human authorization is normal behavior.
+
+---
+
+# 15. CASE OWNER
+
+Create a compact card:
+
+# Case Owner
+
+**Onboarding Agent**
+
+`Autonomous case owner`
+
+Status:
+
+**Operational**
+
+Show:
+
+**Actions completed** `7`
+
+**Human interventions** `1`
+
+**Last action** `2 min ago`
+
+Only use real application data.
+
+Do not invent metrics.
+
+---
+
+# 16. RECENT ACTIVITY
+
+Do NOT show the complete technical activity feed on Overview.
+
+Show only the most recent 3–4 meaningful events.
+
+Examples:
+
+### HUMAN
+
+**Approval requested**
+
+`Elevated priority requires reviewer authorization.`
+
+`2m ago`
+
+### AI
+
+**Onboarding Agent classified the case**
+
+`External FTE path selected using configured intake rules.`
+
+`4m ago`
+
+### SYS
+
+**Background verification completed**
+
+`Vendor verification completed successfully.`
+
+`18m ago`
+
+### RULES
+
+**Priority guardrail evaluated**
+
+`Approval-before-act policy applied.`
+
+`21m ago`
+
+Use compact event badges:
+
+**AI**
+
+**HUMAN**
+
+**SYS**
+
+**RULES**
+
+The detailed event stream belongs in the **Activity** or **Audit** tab.
+
+---
+
+# 17. ACTIVITY TAB
+
+The Activity tab should contain the complete operational timeline.
+
+Here it is acceptable to expose:
+
+* timestamps
+* orchestration events
+* agent actions
+* rules decisions
+* system events
+* human interventions
+
+Keep the presentation readable.
+
+Do not expose raw developer logs unnecessarily.
+
+---
+
+# 18. AUDIT TAB
+
+The Audit tab can expose deeper technical information appropriate for reviewers/auditors.
+
+Examples:
+
+* orchestration IDs
+* rule IDs
+* execution timestamps
+* policy evaluations
+* action decisions
+* evidence
+* execution traces
+
+This is where technical terminology such as:
+
+`ORCH`
+
+`RULES`
+
+`SYS`
+
+`4.1 Intake Rule 1`
+
+can appear.
+
+Do NOT expose this technical detail prominently on Overview.
+
+---
+
+# 19. COMMUNICATIONS TAB
+
+Move the full email/communications interface here.
+
+The current large purple communication block should NOT dominate the Overview page.
+
+In Overview, display only:
+
+# Latest Communication
+
+**Email sent to HR Reviewer**
+
+`Approval requested for elevated onboarding priority.`
+
+`10:40 AM · Delivered`
+
+Then:
+
+**Conversation →**
+
+The full conversation, message composer, reply simulation, etc. belong inside the Communications tab.
+
+---
+
+# 20. REMOVE SIMULATION LANGUAGE FROM PRODUCTION UX
+
+Remove from the normal case workspace:
+
+* Run a simulated call instead
+* Simulate hire reply
+* demo call
+* simulated activity
+* test workflow language
+
+If these capabilities are required for development/testing:
+
+Move them to:
+
+**Administration → Simulation Lab**
+
+or another permission-controlled test environment.
+
+Do not expose them as normal HR operator functionality.
+
+---
+
+# 21. DOCUMENTS SUMMARY
+
+Do NOT show the entire document checklist on Overview.
+
+Instead use:
+
+# Documents
+
+**8 required**
+
+**5 Verified**
+
+**2 Received**
+
+**1 Pending**
+
+Then:
+
+**View documents →**
+
+The full document checklist belongs in the Documents tab.
+
+---
+
+# 22. DOCUMENTS TAB
+
+The Documents tab should provide:
+
+* document name
+* required/optional
+* status
+* verification state
+* received date
+* source/evidence
+* reviewer if relevant
+
+Use compact rows rather than enormous paragraphs.
+
+---
+
+# 23. TASKS TAB
+
+The Tasks tab should provide the full workflow.
+
+Each task should support:
+
+* task name
+* owner
+* agent/human
+* status
+* due date
+* dependency
+* action
+* completion evidence
+
+Tasks should be scannable.
+
+Avoid long prose.
+
+---
+
+# 24. CASE DATA HIERARCHY
+
+The Case Details page should clearly distinguish:
+
+### Case State
+
+What is happening now?
+
+### Readiness
+
+What is complete or incomplete?
+
+### Human Attention
+
+What requires my decision?
+
+### Next Actions
+
+What happens next?
+
+### Activity
+
+What has happened?
+
+### Communications
+
+What was communicated?
+
+### Audit
+
+Why did the system/agent make those decisions?
+
+This separation is essential.
+
+---
+
+# 25. RESPONSIVE LAYOUT
+
+Desktop:
+
+Use approximately:
+
+**70% main workspace + 30% right rail**
+
+Keep the right rail sticky.
+
+Tablet:
+
+Stack the right rail beneath the primary workspace.
+
+Mobile:
+
+Show:
+
+1. Case identity
+2. Case health
+3. Attention Required
+4. Next Actions
+5. Tabs
+
+Do not attempt to force the desktop three-column experience onto mobile.
+
+Do not allow uncontrolled horizontal scrolling.
+
+---
+
+# 26. REDUCE SCROLLING
+
+The primary Overview should fit substantially more information into the initial viewport.
+
+At a typical enterprise laptop/desktop resolution, users should be able to see:
+
+* case identity
+* health summary
+* navigation tabs
+* case readiness
+* attention required
+* next actions
+
+without having to scroll through multiple full-height sections.
+
+Recent activity can begin below that.
+
+The full detail remains accessible via tabs.
+
+This is the main UX objective.
+
+---
+
+# 27. VISUAL DESIGN
+
+Use the approved Agentic HRO Design System V2.
+
+This is a **light enterprise operational workspace**.
+
+Use:
+
+* `#F7F8FC` workspace background
+* white surfaces
+* navy typography
+* Agentic Indigo primary actions
+* lavender secondary accents
+* emerald for completed/healthy
+* amber for human review
+* red for blocked/critical
+* subtle cool-gray borders
+
+Reduce visible borders where possible.
+
+Do not turn every element into a heavy card.
+
+Use typography, alignment, whitespace and subtle elevation for hierarchy.
+
+---
+
+# 28. CASE HEADER VISUAL STYLE
+
+The header should feel like a premium enterprise SaaS case workspace.
+
+Use:
+
+* strong case title
+* concise metadata
+* compact badges
+* restrained buttons
+* clear primary action
+
+Do not use giant worker contact blocks.
+
+Do not make the header visually noisy.
+
+---
+
+# 29. NO LONG-FORM AI TEXT ON OVERVIEW
+
+AI-generated explanations are useful, but they must be concise.
+
+If a long explanation exists, summarize it into:
+
+**What happened**
+
+**Why**
+
+**Recommendation**
+
+Then allow:
+
+**View full agent reasoning →**
+
+This can open a drawer or detailed execution view.
+
+Do NOT delete the underlying AI reasoning capability.
+
+---
+
+# 30. PROFESSIONAL LANGUAGE
+
+Replace technical implementation language in the main view with enterprise HR operational language.
+
+Instead of:
+
+`reasoning engine could not resolve inbound message`
+
+Use:
+
+**Human decision required**
+
+Instead of:
+
+`approval-before-act`
+
+Use:
+
+**Approval required before execution**
+
+Instead of:
+
+`deterministic intake rule`
+
+Use:
+
+**Case classified using intake policy**
+
+Technical detail remains available in Audit.
+
+---
+
+# 31. CASE TYPE EXTENSIBILITY
+
+Although the example case is onboarding, the new Case Details architecture must support all HRO case types.
+
+The same structure should work for:
+
+* Onboarding
+* Employee Changes
+* Payroll
+* Benefits
+* Leave
+* Compliance
+* Offboarding
+* HR Helpdesk
+
+Do NOT make the page architecture dependent on Day-1 onboarding.
+
+For different case types, adapt:
+
+* readiness workstreams
+* milestones
+* next actions
+* statuses
+* owner/agent
+* attention panel
+
+The overall interaction pattern should remain consistent.
+
+---
+
+# 32. EXISTING FUNCTIONALITY
+
+Preserve:
+
+* existing case data
+* agent actions
+* approvals
+* communications
+* document data
+* readiness logic
+* AI planning
+* audit information
+* routing
+* permissions
+* action handlers
+
+This is primarily an information-architecture and presentation redesign.
+
+Do not rewrite working business logic unnecessarily.
+
+---
+
+# 33. IMPLEMENTATION STRATEGY
+
+Before coding:
+
+1. Inspect the current Case Details route/component.
+2. Identify all existing data sources.
+3. Identify current case actions.
+4. Identify readiness data.
+5. Identify document data.
+6. Identify activity/audit data.
+7. Identify communication data.
+8. Identify approval/human-review state.
+9. Reuse existing global design tokens.
+10. Reuse existing shared components where possible.
+
+Implement the redesign through reusable components such as:
+
+* CaseHeader
+* CaseHealthStrip
+* CaseTabs
+* ReadinessSummary
+* NextActions
+* AttentionPanel
+* AgentOwner
+* ActivitySummary
+* DocumentsSummary
+* CommunicationSummary
+
+Do not create duplicated page-specific styles unnecessarily.
+
+---
+
+# 34. IMPORTANT: DO NOT FABRICATE DATA
+
+Never hard-code:
+
+* SLA time
+* progress
+* case counts
+* actions completed
+* intervention counts
+* timestamps
+* approval states
+* agent activity
+
+Use real application data.
+
+Where unavailable:
+
+`—`
+
+or:
+
+`No data`
+
+The concept HTML may contain example values for visualization, but those values must NOT be blindly copied into production.
+
+---
+
+# 35. ACCEPTANCE CRITERIA
+
+The Case Details redesign is complete only when:
+
+* The page uses the approved case-details HTML concept as the visual reference.
+* Case header is compact and sticky.
+* Worker/contact information is no longer overloaded into the header.
+* Case health is summarized immediately below the header.
+* Tabs exist:
+
+  * Overview
+  * Tasks
+  * Documents
+  * Activity
+  * Communications
+  * Audit
+* Overview is the default tab.
+* Overview prioritizes decisions and current state.
+* Readiness is condensed.
+* Next Actions replaces the long AI Plan Summary on Overview.
+* Attention Required is prominent when human action is required.
+* Recent Activity is concise.
+* Full activity exists in Activity.
+* Technical trace exists in Audit.
+* Full communications exist in Communications.
+* Full document checklist exists in Documents.
+* Full workflow exists in Tasks.
+* Simulation controls are removed from the normal production case workspace.
+* Long raw AI reasoning is not shown on Overview.
+* Human-in-the-loop is represented as governance, not failure.
+* Right rail is sticky on desktop.
+* Primary Overview requires substantially less scrolling.
+* Desktop layout is approximately 70/30.
+* Mobile/tablet layout is responsive.
+* The page works for HRO case types beyond onboarding.
+* Existing functionality remains intact.
+* No fake operational data is introduced.
+* The page visually matches the Agentic HRO Design System V2.
+
+The final result should feel like a **real enterprise case-management workspace for autonomous HR operations**, not a developer console, simulation screen, or collection of stacked dashboards.
+
+The user should be able to open a case and understand within seconds:
+
+**Who is this case about?**
+
+**What is its current state?**
+
+**Is anything at risk?**
+
+**Does a human need to act?**
+
+**What should happen next?**
+
+**Where can I inspect the detailed evidence?**
