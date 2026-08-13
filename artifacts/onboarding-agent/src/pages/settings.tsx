@@ -151,13 +151,13 @@ function RemoteApproverSettings() {
         </div>
         <Badge
           className={cn(
-            'uppercase tracking-wider text-[10px] shadow-none shrink-0',
+            'text-[var(--text-xs)] shadow-none shrink-0',
             settings?.hrApproverEmail
               ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
               : 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]',
           )}
         >
-          {settings?.hrApproverEmail ? 'ACTIVE' : 'NOT SET'}
+          {settings?.hrApproverEmail ? 'Active' : 'Not set'}
         </Badge>
       </div>
       <div className="flex flex-wrap gap-2 mt-3">
@@ -256,7 +256,7 @@ function DemoVolunteersCard() {
           <div className="flex items-center gap-3">
             <IconTile icon={Users} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
             <div>
-              <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Demo Volunteers</h3>
+              <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Demo Volunteers</h3>
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
                 Real people for live demos. Saving authorizes their email/phone for real messages and calls — no one else
                 can be contacted. "Create demo cases" runs each volunteer through the full agent pipeline.
@@ -343,7 +343,7 @@ function DemoVolunteersCard() {
               <div className="mt-4 border border-[var(--border)] rounded-[var(--radius-md)] divide-y divide-[var(--border)] overflow-hidden">
                 {seedResults.map((r, i) => (
                   <div key={i} className="p-2.5 bg-[var(--surface)] text-[var(--text-sm)] flex items-center gap-3">
-                    <Badge className={cn('uppercase tracking-wider text-[10px] shadow-none shrink-0',
+                    <Badge className={cn('text-[var(--text-xs)] shadow-none shrink-0',
                       r.status === 'seeded' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
                         : r.status === 'skipped' ? 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]'
                           : 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]')}>
@@ -468,7 +468,7 @@ export function SettingsPage() {
             <div className="flex items-center gap-3">
               <IconTile icon={Mail} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
               <div>
-                <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>HR Alert Email</h3>
+                <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>HR Alert Email</h3>
                 <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
                   Where outage alerts go when the Gmail reply monitor breaks (and recovery notices when it resumes).
                 </p>
@@ -478,9 +478,9 @@ export function SettingsPage() {
               <span style={{ 
                 backgroundColor: settings?.effective ? 'var(--status-green-bg)' : 'var(--status-gray-bg)', 
                 color: settings?.effective ? 'var(--status-green-fg)' : 'var(--status-gray-fg)', 
-                fontSize: 'var(--text-xs)', fontWeight: 700, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
+                fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
               }}>
-                {settings?.effective ? 'ACTIVE' : 'NOT SET'}
+                {settings?.effective ? 'Active' : 'Not set'}
               </span>
             )}
           </div>
@@ -493,17 +493,17 @@ export function SettingsPage() {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 <div className="border border-[var(--border)] rounded-[var(--radius-md)] p-2.5 bg-[var(--surface-alt)]">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Alerts currently go to</p>
+                  <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Alerts currently go to</p>
                   <p className="text-[var(--text-xs)] font-mono mt-1 break-all text-[var(--text-primary)]">{settings?.effective ?? 'Nobody — alerts disabled'}</p>
                 </div>
                 <div className="border border-[var(--border)] rounded-[var(--radius-md)] p-2.5 bg-[var(--surface-alt)]">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Source</p>
+                  <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Source</p>
                   <p className="text-[var(--text-xs)] mt-1 text-[var(--text-primary)]">{sourceLabel}</p>
                 </div>
               </div>
 
               <div className="space-y-2 max-w-sm">
-                <Label htmlFor="hr-alert-email" className="text-[var(--text-xs)] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                <Label htmlFor="hr-alert-email" className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                   Alert email address
                 </Label>
                 <input
@@ -537,7 +537,7 @@ export function SettingsPage() {
                 <Button
                   onClick={() => save(trimmed.length > 0 ? trimmed : null)}
                   disabled={update.isPending || invalid || !dirty || trimmed.length === 0 && !settings?.hrAlertEmail}
-                  className="gap-2 font-bold"
+                  className="gap-2 font-semibold"
                 >
                   <Check className="w-4 h-4" /> Save
                 </Button>
@@ -579,7 +579,7 @@ export function SettingsPage() {
             <div className="flex items-center gap-3">
               <IconTile icon={PhoneCall} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
               <div>
-                <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Automatic Escalation Calls</h3>
+                <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Automatic Escalation Calls</h3>
                 <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
                   On SLA breach with no reply from the hire, the System Watcher places the escalation call itself —
                   allowlist and hourly limit still apply; each call is recorded on the case timeline.
@@ -590,7 +590,7 @@ export function SettingsPage() {
               <span style={{ 
                 backgroundColor: settings?.autoEscalationCalls ? 'var(--status-green-bg)' : 'var(--status-gray-bg)', 
                 color: settings?.autoEscalationCalls ? 'var(--status-green-fg)' : 'var(--status-gray-fg)', 
-                fontSize: 'var(--text-xs)', fontWeight: 700, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
+                fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
               }}>
                 {settings?.autoEscalationCalls ? 'ON' : 'OFF'}
               </span>
@@ -677,7 +677,7 @@ function ScenarioTestingCard() {
         <div className="flex items-center gap-3">
           <IconTile icon={Play} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
           <div>
-            <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Scenario Testing</h3>
+            <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Scenario Testing</h3>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
               Development tooling — launches a pre-configured case to exercise the autonomous agents end to end.
             </p>

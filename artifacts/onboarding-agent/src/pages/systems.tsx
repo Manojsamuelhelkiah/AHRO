@@ -46,7 +46,7 @@ export function SystemsPage() {
       <div className="space-y-4 pt-4">
         <div>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Server className="w-5 h-5 text-[var(--primary)]" /> System Adapters
+            <Server className="w-4 h-4 text-[var(--primary)]" /> System Adapters
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Source systems that agents read from and write to via MCP.</p>
         </div>
@@ -73,7 +73,7 @@ export function SystemsPage() {
                 
                 <div className="flex items-end justify-between gap-4 mt-6 pt-5 border-t border-[var(--border)]">
                   <div className="space-y-2 flex-1 max-w-[200px]">
-                    <Label className="text-[var(--text-xs)] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
+                    <Label className="text-[var(--text-xs)] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
                       <ArrowRightLeft className="w-3.5 h-3.5" /> Active Vendor
                     </Label>
                     <select 
@@ -87,7 +87,7 @@ export function SystemsPage() {
                   </div>
                   {WATCHED_KEYS.includes(conn.key) && (
                     <div className="space-y-2 flex-1 max-w-[200px]">
-                      <Label className="text-[var(--text-xs)] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
+                      <Label className="text-[var(--text-xs)] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
                         <Eye className="w-3.5 h-3.5" /> Status Tracking
                       </Label>
                       <select
@@ -111,7 +111,7 @@ export function SystemsPage() {
       <div className="space-y-4 pt-4">
         <div>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Eye className="w-5 h-5 text-[var(--primary)]" /> System Watcher
+            <Eye className="w-4 h-4 text-[var(--primary)]" /> System Watcher
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Monitoring agent tracking BGV, ITSM access and payroll status — webhook push where the vendor supports it, scheduled polling otherwise.</p>
         </div>
@@ -132,7 +132,7 @@ export function SystemsPage() {
       <div className="space-y-4 pt-4">
         <div>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Inbox className="w-5 h-5 text-[var(--primary)]" /> Email Watch
+            <Inbox className="w-4 h-4 text-[var(--primary)]" /> Email Watch
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Shallow-integration fallback: when a system offers no API or webhook, vendors simply CC status emails to the watch mailbox — the System Watcher reads them as status changes.</p>
         </div>
@@ -150,7 +150,7 @@ export function SystemsPage() {
       <div className="space-y-4 pt-4">
         <div>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Zap className="w-5 h-5 text-[var(--primary)]" /> Messaging Channels
+            <Zap className="w-4 h-4 text-[var(--primary)]" /> Messaging Channels
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Outbound communication targets used by agents to contact hires.</p>
         </div>
@@ -167,7 +167,7 @@ export function SystemsPage() {
       <div className="space-y-4 pt-4">
         <div>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Radio className="w-5 h-5 text-[var(--primary)]" /> Live Inbox Monitoring
+            <Radio className="w-4 h-4 text-[var(--primary)]" /> Live Inbox Monitoring
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Background Gmail polling that picks up real email replies from hires.</p>
         </div>
@@ -212,7 +212,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
             <div className="flex items-center gap-4">
               <IconTile icon={Inbox} className={cn("border-none shadow-sm", getBadgeColor())} />
               <div>
-                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-sm)] text-[var(--text-primary)]">Watch Mailbox</h3>
+                <h3 className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">Watch Mailbox</h3>
                 <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">
                   Vendors CC status emails quoting the tracking reference to{' '}
                   {watch.mailbox ? <span className="font-mono text-[var(--text-xs)] bg-[var(--surface-soft)] px-1.5 py-0.5 rounded text-[var(--text-primary)]">{watch.mailbox}</span> : <span className="italic">the connected Gmail account</span>}
@@ -220,21 +220,21 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
                 </p>
               </div>
             </div>
-            <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none shrink-0 border-none font-bold", getBadgeColor())}>
+            <Badge className={cn("text-[var(--text-xs)] shadow-none shrink-0 border-none font-semibold", getBadgeColor())}>
               {healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : watch.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN'}
             </Badge>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)] border border-transparent">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Scan</p>
+              <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Scan</p>
               <p className="text-[var(--text-sm)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(watch.lastPollAt)}</p>
             </div>
             <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)] border border-transparent">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
+              <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
               <p className="text-[var(--text-sm)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(watch.lastSuccessAt)}</p>
             </div>
             <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)] border border-transparent">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Checks On Email Watch</p>
+              <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Checks On Email Watch</p>
               <p className="text-[var(--text-sm)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{watch.openChecks}</p>
             </div>
           </div>
@@ -247,7 +247,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
 
           {checks.length > 0 && (
             <div className="pt-6 mt-6 border-t border-[var(--border)] space-y-4">
-              <Label className="text-[var(--text-xs)] font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-2">
+              <Label className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-2">
                 <FlaskConical className="w-4 h-4 text-[var(--primary)]" /> Demo: simulate a vendor status email
               </Label>
               <div className="space-y-3">
@@ -257,10 +257,10 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
                       #{c.caseId} {c.caseWorkerName} — {c.label} <span className="font-mono text-[var(--text-xs)] text-[var(--text-muted)] ml-1">({c.externalRef})</span>
                     </p>
                     <div className="flex gap-2 shrink-0">
-                      <Button size="sm" className="h-8 gap-1.5 bg-[var(--status-green-bg)] text-[var(--status-green-fg)] hover:opacity-80 shadow-none border-none font-bold" disabled={simulate.isPending} onClick={() => doSimulate(c, 'completed')}>
+                      <Button size="sm" className="h-8 gap-1.5 bg-[var(--status-green-bg)] text-[var(--status-green-fg)] hover:opacity-80 shadow-none border-none font-semibold" disabled={simulate.isPending} onClick={() => doSimulate(c, 'completed')}>
                         <Check className="w-4 h-4" /> Completed
                       </Button>
-                      <Button size="sm" className="h-8 gap-1.5 bg-[var(--status-red-bg)] text-[var(--status-red-fg)] hover:opacity-80 shadow-none border-none font-bold" disabled={simulate.isPending} onClick={() => doSimulate(c, 'exception')}>
+                      <Button size="sm" className="h-8 gap-1.5 bg-[var(--status-red-bg)] text-[var(--status-red-fg)] hover:opacity-80 shadow-none border-none font-semibold" disabled={simulate.isPending} onClick={() => doSimulate(c, 'exception')}>
                         <AlertTriangle className="w-4 h-4" /> Exception
                       </Button>
                     </div>
@@ -274,7 +274,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
           )}
           {checks.length === 0 && (
             <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-5 pt-5 border-t border-[var(--border)] font-medium">
-              No open checks are on email watch. Switch a system adapter above to <span className="font-bold text-[var(--text-primary)]">Email watch (no API)</span> and its open checks will be tracked through the mailbox instead.
+              No open checks are on email watch. Switch a system adapter above to <span className="font-semibold text-[var(--text-primary)]">Email watch (no API)</span> and its open checks will be tracked through the mailbox instead.
             </p>
           )}
         </div>
@@ -286,11 +286,11 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
             <table className="w-full text-[var(--text-sm)]">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)] text-left">
-                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Received</th>
-                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">From</th>
-                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Subject</th>
-                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Read As</th>
-                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Watcher Action</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Received</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">From</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Subject</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Read As</th>
+                  <th className="px-[var(--space-lg)] py-[var(--space-md)] text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Watcher Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -300,7 +300,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
                     <td className="px-[var(--space-lg)] py-[var(--space-md)] font-mono text-[var(--text-xs)] text-[var(--text-secondary)] font-medium">{e.fromAddress}</td>
                     <td className="px-[var(--space-lg)] py-[var(--space-md)] max-w-[280px] truncate text-[var(--text-sm)] text-[var(--text-primary)] font-medium" title={e.subject ?? ''}>{e.subject ?? '—'}</td>
                     <td className="px-[var(--space-lg)] py-[var(--space-md)]">
-                      <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none border-none font-bold",
+                      <Badge className={cn("text-[var(--text-xs)] shadow-none border-none font-semibold",
                         e.parsedStatus === 'completed' ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]"
                           : e.parsedStatus === 'exception' ? "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]"
                             : "bg-[var(--status-info-bg)] text-[var(--status-info-fg)]")}>
@@ -344,7 +344,7 @@ function WatcherConnectorCard({ conn }: { conn: any }) {
               </p>
             </div>
           </div>
-          <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none shrink-0 border-none font-bold", getBadgeColor())}>
+          <Badge className={cn("text-[var(--text-xs)] shadow-none shrink-0 border-none font-semibold", getBadgeColor())}>
             {healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : conn.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN'}
           </Badge>
         </div>
@@ -352,22 +352,22 @@ function WatcherConnectorCard({ conn }: { conn: any }) {
           {isPush ? (
             <>
               <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Event</p>
+                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Event</p>
                 <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{fmt(conn.lastEventAt)}</p>
               </div>
               <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Events Received</p>
+                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Events Received</p>
                 <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{conn.eventsReceived}</p>
               </div>
             </>
           ) : (
             <>
               <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Poll</p>
+                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Poll</p>
                 <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{fmt(conn.lastPollAt)}</p>
               </div>
               <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
+                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
                 <p className="font-mono mt-1 text-[var(--text-primary)] font-medium text-[var(--text-xs)]">{fmt(conn.lastSuccessAt)}</p>
               </div>
             </>
@@ -403,28 +403,28 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
           <div className="flex items-center gap-4">
             <IconTile icon={healthy || initializing ? Radio : AlertTriangle} className={cn("border-none shadow-sm", getBadgeColor())} />
             <div>
-              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-sm)] text-[var(--text-primary)]">Gmail Reply Monitor</h3>
+              <h3 className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">Gmail Reply Monitor</h3>
               <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">
                 Checks the inbox every {monitor.pollIntervalSeconds}s for replies from active hires.
               </p>
             </div>
           </div>
-          <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none border-none font-bold", getBadgeColor())}>
+          <Badge className={cn("text-[var(--text-xs)] shadow-none border-none font-semibold", getBadgeColor())}>
             {badgeLabel}
           </Badge>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Poll</p>
+            <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Poll</p>
             <p className="text-[var(--text-xs)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(monitor.lastPollAt)}</p>
           </div>
           <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
+            <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Success</p>
             <p className="text-[var(--text-xs)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{fmt(monitor.lastSuccessAt)}</p>
           </div>
           <div className="rounded-[var(--radius-md)] p-3 bg-[var(--surface-soft)]">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Last Error</p>
+            <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Error</p>
             <p className="text-[var(--text-xs)] font-mono font-medium mt-1.5 text-[var(--text-primary)]">{monitor.lastErrorAt ? fmt(monitor.lastErrorAt) : 'None'}</p>
           </div>
         </div>
@@ -433,7 +433,7 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
           <div className="p-4 mt-5 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3 bg-[var(--status-red-bg)] text-[var(--status-red-fg)]">
             <X className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
-              <p className="font-bold">Latest poll failed</p>
+              <p className="font-semibold">Latest poll failed</p>
               <p className="font-mono text-[var(--text-xs)] font-medium mt-1.5 opacity-90 break-all">{monitor.lastError}</p>
             </div>
           </div>
@@ -442,7 +442,7 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
           <div className="p-4 mt-5 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3 bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
-              <p className="font-bold">Alert emails are not configured</p>
+              <p className="font-semibold">Alert emails are not configured</p>
               <p className="text-[var(--text-xs)] font-medium mt-1.5 opacity-90 leading-relaxed">
                 If inbox monitoring goes down, no one will be emailed — the outage will only be visible here.
                 Set the <span className="font-mono bg-[var(--surface)] text-[var(--text-primary)] px-1.5 py-0.5 rounded shadow-sm border border-[var(--border)]">HR_ALERT_EMAIL</span> environment variable on the API server to enable outage alert emails.
@@ -488,12 +488,12 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
           <div className="flex items-center gap-4">
             <IconTile icon={channelKey === 'whatsapp' ? Smartphone : Mail} className={cn("border-none shadow-sm", channel.configured ? (channelKey === 'whatsapp' ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-info-bg)] text-[var(--status-info-fg)]") : "bg-[var(--surface-soft)] text-[var(--text-muted)]")} />
             <div>
-              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-sm)] text-[var(--text-primary)]">{channelKey}</h3>
+              <h3 className="font-semibold capitalize text-[var(--text-sm)] text-[var(--text-primary)]">{channelKey}</h3>
               <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">{channel.provider} {channel.target && <span className="font-mono text-[var(--text-xs)] ml-1 bg-[var(--surface-soft)] px-1.5 py-0.5 rounded text-[var(--text-primary)]">{channel.target}</span>}</p>
             </div>
           </div>
-          <Badge className={cn("uppercase tracking-wider text-[var(--text-xs)] shadow-none border-none font-bold", channel.configured ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--surface-soft)] text-[var(--text-muted)]')}>
-            {channel.configured ? 'CONFIGURED' : 'UNCONFIGURED'}
+          <Badge className={cn("text-[var(--text-xs)] shadow-none border-none font-semibold", channel.configured ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--surface-soft)] text-[var(--text-muted)]')}>
+            {channel.configured ? 'Configured' : 'Unconfigured'}
           </Badge>
         </div>
         
@@ -501,9 +501,9 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
       </div>
 
       <div className="bg-[var(--surface-alt)] p-[var(--space-lg)] mt-2">
-        <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block mb-3">Send Test Message</Label>
+        <Label className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)] block mb-3">Send Test Message</Label>
         <div className="flex gap-3">
-          <Button onClick={doTest} disabled={testing} variant="secondary" className="w-full gap-2 font-bold tracking-wide uppercase text-[var(--text-xs)] h-10 shadow-sm border-[var(--border)] hover:bg-[var(--surface-soft)]">
+          <Button onClick={doTest} disabled={testing} variant="secondary" className="w-full gap-2 font-semibold tracking-wide uppercase text-[var(--text-xs)] h-10 shadow-sm border-[var(--border)] hover:bg-[var(--surface-soft)]">
             <Zap className="w-4 h-4" /> TEST {channelKey.toUpperCase()}
           </Button>
         </div>
@@ -511,7 +511,7 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
           <div className={cn("p-4 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3 shadow-sm", result.ok ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]")}>
             {result.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5" /> : <X className="w-5 h-5 shrink-0 mt-0.5" />}
             <div>
-              <p className="font-bold">{result.ok ? 'Test Successful' : 'Test Failed'}</p>
+              <p className="font-semibold">{result.ok ? 'Test Successful' : 'Test Failed'}</p>
               <p className="font-mono text-[var(--text-xs)] font-medium mt-1.5 opacity-90">{result.detail}</p>
             </div>
           </div>
