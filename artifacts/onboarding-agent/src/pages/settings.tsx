@@ -5,6 +5,9 @@ import {
   useGetDemoVolunteers,
   useUpdateDemoVolunteers,
   useSeedDemoVolunteers,
+  useListOnboardingScenarios,
+  useRunOnboardingScenario,
+  getListOnboardingCasesQueryKey,
   getGetDemoVolunteersQueryKey,
   getGetOnboardingSettingsQueryKey,
   getGetOnboardingDashboardQueryKey,
@@ -13,7 +16,8 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
-import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall } from 'lucide-react';
+import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play } from 'lucide-react';
+import { useLocation } from 'wouter';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -644,6 +648,63 @@ export function SettingsPage() {
       </Card>
 
       <DemoVolunteersCard />
+
+      <ScenarioTestingCard />
     </div>
+  );
+}
+
+/** Scenario testing moved here from the Control Tower — development/demo tooling
+ *  does not belong on the production operations dashboard. */
+function ScenarioTestingCard() {
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const { data: scenarios, isLoading } = useListOnboardingScenarios();
+  const runScenario = useRunOnboardingScenario();
+
+  const handleRun = (key: string) => {
+    runScenario.mutate({ key }, {
+      onSuccess: (caseData) => {
+        queryClient.invalidateQueries({ queryKey: getGetOnboardingDashboardQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
+        setLocation(`/cases/${caseData.id}`);
+      },
+    });
+  };
+
+  return (
+    <Card className="shadow-sm">
+      <CardContent className="p-[var(--space-lg)]">
+        <div className="flex items-center gap-3 mb-4">
+          <IconTile icon={Play} className="bg-primary/10 text-primary border-primary/20" />
+          <div>
+            <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Scenario Testing</h3>
+            <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+              Development tooling — launches a pre-configured case to exercise the autonomous agents end to end.
+            </p>
+          </div>
+        </div>
+        {isLoading ? (
+          <LoadingBlock>Loading scenarios...</LoadingBlock>
+        ) : !scenarios?.length ? (
+          <p className="text-[var(--text-sm)] text-muted-foreground">No scenarios configured.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {scenarios.map((s) => (
+              <div key={s.key} className="p-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] shadow-sm flex flex-col gap-2">
+                <div>
+                  <h4 className="font-semibold text-[var(--text-sm)]">{s.title}</h4>
+                  <p className="text-[var(--text-xs)] text-muted-foreground mt-1 leading-relaxed">{s.description}</p>
+                </div>
+                <p className="text-[var(--text-xs)] text-muted-foreground"><span className="font-semibold">Expected behaviour:</span> {s.expectedBehaviour}</p>
+                <Button size="sm" variant="outline" onClick={() => handleRun(s.key)} disabled={runScenario.isPending} className="gap-2 self-start">
+                  <Play className="h-3.5 w-3.5" /> Run scenario
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

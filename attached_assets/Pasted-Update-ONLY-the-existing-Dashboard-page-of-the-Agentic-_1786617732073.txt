@@ -1,0 +1,1169 @@
+Update **ONLY the existing Dashboard page** of the Agentic HRO Suite.
+
+The objective is to transform the current onboarding-centric dashboard into a production-grade **HRO Control Tower** for the entire Agentic HRO Suite.
+
+This page should become the executive and operational command center for:
+
+**Autonomous HR Operations + Agent Operations + Human Intervention + SLA/Risk + Governance**
+
+Preserve the approved Agentic HRO design system and app-wide color pattern.
+
+Do NOT redesign unrelated pages.
+
+Do NOT change backend APIs, database schemas, authentication, agent execution logic, or business rules unless absolutely necessary to support existing data presentation.
+
+Most importantly:
+
+**Do not fabricate operational data simply to make the dashboard look populated.**
+
+Use real existing application data wherever available.
+
+---
+
+# 1. RENAME DASHBOARD TO CONTROL TOWER
+
+In the left navigation, replace:
+
+**Dashboard**
+
+with:
+
+**Control Tower**
+
+Update breadcrumb:
+
+`AGENTIC HRO SUITE / DASHBOARD`
+
+to:
+
+`AGENTIC HRO SUITE / CONTROL TOWER`
+
+Replace page title:
+
+**Control Tower Overview**
+
+with:
+
+# HRO Control Tower
+
+Replace subtitle:
+
+`Real-time status of agentic onboarding operations.`
+
+with:
+
+`Real-time visibility across autonomous HR operations, exceptions, and human interventions.`
+
+The page must represent the entire Agentic HRO Suite, not just onboarding.
+
+---
+
+# 2. REMOVE ONBOARDING-SPECIFIC KPI MODEL
+
+Remove these suite-level KPIs:
+
+* TOTAL CASES
+* PENDING APPROVALS
+* HARD BLOCKED
+* DAY-1 AT RISK
+* READY FOR DAY 1
+
+Some of these concepts may remain available inside the Onboarding domain later, but they should not define the global Control Tower.
+
+Replace them with five suite-wide operational KPIs.
+
+---
+
+# 3. NEW CONTROL TOWER KPIs
+
+Use:
+
+### ACTIVE CASES
+
+Display the number of currently active HR Operations cases.
+
+Supporting context where real data exists:
+
+`Across all HRO domains`
+
+---
+
+### AUTONOMOUSLY RESOLVED
+
+Display the percentage of eligible cases completed without human intervention.
+
+Example conceptual presentation:
+
+`94%`
+
+Supporting context:
+
+`Eligible cases completed autonomously`
+
+IMPORTANT:
+
+Only calculate/display this percentage if the existing application contains sufficient data to calculate it accurately.
+
+Do not hard-code 94%.
+
+If unavailable, show an appropriate unavailable state such as:
+
+`—`
+
+---
+
+### HUMAN INTERVENTIONS
+
+Display the number of cases currently requiring human judgment, approval, or exception handling.
+
+Supporting context:
+
+`Requires attention`
+
+Use restrained amber semantics when the value is greater than zero.
+
+---
+
+### SLA AT RISK
+
+Display active cases approaching or exceeding an SLA threshold.
+
+Supporting context:
+
+`Needs attention`
+
+Use amber for at-risk cases.
+
+Use red only for genuinely breached/critical states.
+
+---
+
+### BLOCKED CASES
+
+Display cases that cannot continue because of a hard dependency, policy block, system failure, or unresolved prerequisite.
+
+Supporting context:
+
+`Unable to proceed`
+
+Use red only when blocked cases actually exist.
+
+If zero, use a healthy neutral/green state.
+
+---
+
+# 4. KPI VISUAL DESIGN
+
+Keep the KPI row compact and executive-friendly.
+
+Use the approved Agentic HRO light enterprise workspace design:
+
+* white/light cards
+* subtle cool-gray border
+* navy text
+* Agentic Indigo icons/accents
+* restrained semantic colors
+* consistent radius
+* subtle elevation
+
+Do NOT make every KPI a different bright color.
+
+Semantic colors should mean something:
+
+Indigo → normal Agentic HRO operations
+
+Emerald → healthy/completed
+
+Amber → attention/human review/SLA risk
+
+Red → blocked/critical
+
+The numerical value should remain the strongest element.
+
+---
+
+# 5. ADD AGENT OPERATIONS SECTION
+
+Introduce a new dashboard section:
+
+# Agent Operations
+
+Subtitle:
+
+`Operational status and workload across the autonomous HR workforce.`
+
+This section should make it immediately obvious that Agentic HRO is operated by specialized autonomous agents.
+
+Display the currently available agents.
+
+At minimum, prepare the UI for:
+
+### Onboarding Agent
+
+`Operational`
+
+Active workload/count if real data exists.
+
+### Payroll Agent
+
+`Operational`
+
+Active workload/count if real data exists.
+
+### Compliance Agent
+
+`Operational`
+
+Active workload/count if real data exists.
+
+### Helpdesk Agent
+
+`Operational`
+
+Active workload/count if real data exists.
+
+Future agents should be easy to add.
+
+---
+
+# 6. AGENT STATUS MODEL
+
+Create a reusable agent-state component supporting:
+
+### Operational
+
+Emerald
+
+### Waiting
+
+Neutral/lavender
+
+### Human Review
+
+Amber
+
+### Degraded
+
+Amber
+
+### Blocked
+
+Red
+
+### Offline
+
+Neutral gray
+
+Do not use color alone.
+
+Always display the state text.
+
+Do not show:
+
+`0 errors`
+
+as the primary definition of agent health.
+
+Prefer operational language.
+
+---
+
+# 7. AGENT CARDS SHOULD SHOW USEFUL INFORMATION
+
+Each compact Agent Operations card/row should support:
+
+**Agent name**
+
+**Operational state**
+
+**Active workload**
+
+Optional secondary information where available:
+
+`18 active cases`
+
+or:
+
+`4 actions in progress`
+
+or:
+
+`2 awaiting human review`
+
+Do not fabricate workload counts.
+
+The UI should gracefully display:
+
+`No active work`
+
+or:
+
+`—`
+
+when appropriate.
+
+---
+
+# 8. UPGRADE "RECENT AGENT ACTIVITY"
+
+Keep the concept but redesign it.
+
+Rename:
+
+**Recent Agent Activity**
+
+to:
+
+# Agent Activity
+
+Subtitle if appropriate:
+
+`Recent autonomous actions, policy decisions, and human handoffs.`
+
+The Control Tower should provide a concise operational summary.
+
+Do NOT show long reasoning-engine paragraphs directly in the dashboard feed.
+
+---
+
+# 9. SIMPLIFY ACTIVITY CONTENT
+
+Current entries contain too much technical/debug detail.
+
+For the dashboard, convert activity into concise summaries.
+
+Example:
+
+### HUMAN
+
+**Compliance Agent requested human review**
+
+`Rehire policy exception requires approval`
+
+`Compliance · Human Review · 2m ago`
+
+---
+
+### AI
+
+**Onboarding Agent completed verification**
+
+`Background verification completed successfully`
+
+`Onboarding · Completed · 4m ago`
+
+---
+
+### AI
+
+**Payroll Agent initiated payroll setup**
+
+`Employee payroll profile submitted`
+
+`Payroll · In Progress · 6m ago`
+
+---
+
+### RULES
+
+**Policy exception detected**
+
+`Additional approval required before execution`
+
+`Compliance · Policy Exception · 8m ago`
+
+---
+
+### SYS
+
+**Employee record synchronized**
+
+`Worker profile successfully updated`
+
+`HRIS · Completed · 10m ago`
+
+These are conceptual examples.
+
+Use existing application events wherever possible.
+
+---
+
+# 10. KEEP DETAILED REASONING OUT OF THE CONTROL TOWER
+
+Do not permanently show long text such as:
+
+`The reasoning engine could not resolve the inbound message because...`
+
+That belongs in:
+
+* Case Details
+* Agent Execution Details
+* Audit Trail
+* Decision Trace
+
+The Control Tower should answer:
+
+**What happened?**
+
+Detailed views should answer:
+
+**Why did it happen?**
+
+If existing detailed reasoning is available, preserve it and make it accessible through:
+
+**View Details**
+
+or by opening the corresponding case/activity.
+
+Do not delete audit information.
+
+---
+
+# 11. ACTIVITY EVENT TAXONOMY
+
+Standardize activity badges:
+
+### AI
+
+Autonomous agent action
+
+### RULES
+
+Policy/rules decision
+
+### SYS
+
+Enterprise system/integration event
+
+### HUMAN
+
+Human review/approval/handoff
+
+Use the existing Agentic HRO semantic visual language.
+
+Keep badges compact and professional.
+
+---
+
+# 12. REMOVE "DEMO SCENARIOS" FROM CONTROL TOWER
+
+Completely remove the current:
+
+**Demo Scenarios**
+
+panel from the normal Control Tower.
+
+Remove:
+
+* Standard external FTE
+* Contractor for client project
+* Expected Behaviour
+* Run Scenario
+* other simulation/testing controls
+
+These do not belong on a production enterprise Control Tower.
+
+Do NOT necessarily delete the underlying scenario functionality.
+
+If the application currently requires it, preserve the code/functionality so it can later be moved to an appropriate permission-controlled area such as:
+
+**Administration → Simulation Lab**
+
+or:
+
+**Developer Tools → Scenario Testing**
+
+But it must not appear on the production Control Tower.
+
+---
+
+# 13. REPLACE DEMO SCENARIOS WITH "HUMAN ATTENTION REQUIRED"
+
+Use the right-side dashboard space for:
+
+# Human Attention Required
+
+Subtitle:
+
+`Cases requiring judgment, approval, or exception handling.`
+
+This should be one of the most important areas of the Control Tower.
+
+Display only real cases requiring human attention.
+
+Each item should contain:
+
+**Case / issue title**
+
+Short reason
+
+HRO domain
+
+Priority
+
+Age / waiting time where available
+
+Example conceptual presentation:
+
+**Payroll exception**
+
+Bank details require verification
+
+`Payroll · High priority · 18m`
+
+---
+
+**Policy exception**
+
+Rehire eligibility requires approval
+
+`Compliance · Medium priority · 42m`
+
+---
+
+**Access approval**
+
+Privileged access requires authorization
+
+`Onboarding · High priority · 1h`
+
+Do not fabricate these records.
+
+---
+
+# 14. HUMAN ATTENTION EMPTY STATE
+
+If nothing requires human intervention, show a positive enterprise empty state:
+
+**No interventions required**
+
+`Autonomous operations are proceeding within configured guardrails.`
+
+Use a restrained success indicator.
+
+Do not use celebratory animation.
+
+---
+
+# 15. HUMAN ATTENTION CTA
+
+At the bottom of the panel, provide:
+
+**View all interventions →**
+
+This should navigate to the appropriate Approvals/Interventions workspace if existing routing supports it.
+
+Do not create broken navigation.
+
+---
+
+# 16. ADD "CASES BY HRO DOMAIN"
+
+Below the primary operational area, add:
+
+# Cases by HRO Domain
+
+This section should provide a concise view of workload across the HR lifecycle.
+
+Prepare categories such as:
+
+* Onboarding
+* Employee Changes
+* Payroll
+* Benefits
+* Leave
+* Compliance
+* Offboarding
+* HR Helpdesk
+
+Only show categories/counts supported by actual data.
+
+Do not fabricate counts.
+
+---
+
+# 17. DOMAIN VISUALIZATION
+
+Use a clean enterprise visualization.
+
+Preferred:
+
+Horizontal bars or compact distribution bars.
+
+Avoid:
+
+* 3D charts
+* donut charts with excessive colors
+* rainbow palettes
+* decorative visualization
+* unnecessary animation
+
+Use variations of the Agentic HRO indigo/lavender system.
+
+Semantic colors should remain reserved for operational status.
+
+---
+
+# 18. OPTIONAL AUTONOMY BREAKDOWN
+
+If the current application contains enough data to derive this accurately, add a compact visualization:
+
+# Execution Model
+
+Show:
+
+**Autonomous**
+
+**Human Assisted**
+
+**Human Owned**
+
+This provides an important enterprise-level view of how much HR work is actually being handled autonomously.
+
+Do NOT add this section if the data cannot currently be calculated correctly.
+
+Do not fabricate percentages.
+
+---
+
+# 19. CONTROL TOWER INFORMATION HIERARCHY
+
+The page should answer these questions in order:
+
+### 1
+
+How much HR work is currently happening?
+
+→ Active Cases
+
+### 2
+
+How much work is being resolved autonomously?
+
+→ Autonomously Resolved
+
+### 3
+
+Where do humans need to intervene?
+
+→ Human Interventions
+
+### 4
+
+What is at operational risk?
+
+→ SLA At Risk / Blocked Cases
+
+### 5
+
+Are the autonomous agents healthy?
+
+→ Agent Operations
+
+### 6
+
+What are agents currently doing?
+
+→ Agent Activity
+
+### 7
+
+What needs my attention right now?
+
+→ Human Attention Required
+
+### 8
+
+Where is the workload occurring?
+
+→ Cases by HRO Domain
+
+Design the page around this hierarchy.
+
+---
+
+# 20. TARGET DESKTOP LAYOUT
+
+Use approximately:
+
+**AGENTIC HRO SUITE / CONTROL TOWER**
+
+# HRO Control Tower
+
+`Real-time visibility across autonomous HR operations, exceptions, and human interventions.`
+
+---
+
+**ACTIVE CASES**
+
+**AUTONOMOUSLY RESOLVED**
+
+**HUMAN INTERVENTIONS**
+
+**SLA AT RISK**
+
+**BLOCKED CASES**
+
+---
+
+## Agent Operations
+
+Compact agent cards/status rows:
+
+Onboarding Agent
+Payroll Agent
+Compliance Agent
+Helpdesk Agent
+
+---
+
+Main two-column operational section:
+
+### LEFT — approximately 65–70%
+
+**Agent Activity**
+
+Recent concise activity events.
+
+### RIGHT — approximately 30–35%
+
+**Human Attention Required**
+
+Cases requiring human judgment.
+
+---
+
+Bottom:
+
+**Cases by HRO Domain**
+
+Optional:
+
+**Execution Model**
+
+---
+
+Do not make the page excessively long.
+
+Prioritize operational information above the fold.
+
+---
+
+# 21. NAVIGATION UPDATE
+
+For this page, change the left navigation label:
+
+**Dashboard**
+
+to:
+
+**Control Tower**
+
+Use an appropriate control-tower/dashboard icon.
+
+Only one navigation item must appear selected.
+
+IMPORTANT:
+
+The current screenshot appears to show inconsistent selection styling between Dashboard and Systems.
+
+Fix this.
+
+When the user is on the Control Tower:
+
+**Control Tower must be the ONLY active navigation item.**
+
+Remove active/highlighted styling from Systems.
+
+Do not alter unrelated navigation behavior.
+
+---
+
+# 22. ADD "AGENTS" TO NAVIGATION ONLY IF APPROPRIATE
+
+If the application already has or is actively implementing an agent-management workspace, add:
+
+**Agents**
+
+to the navigation.
+
+Suggested order:
+
+Control Tower
+
+Cases
+
+Approvals
+
+Agents
+
+Systems
+
+Guardrails
+
+Analytics
+
+Settings
+
+However:
+
+If there is currently no Agents page or route, do NOT create a broken navigation item simply for appearance.
+
+In that case, leave it out until the module exists.
+
+---
+
+# 23. TOP GLOBAL SEARCH
+
+Keep the existing global search.
+
+Current placeholder:
+
+`Search cases, workers, events...`
+
+Improve slightly if appropriate:
+
+`Search cases, workers, agents, events...`
+
+Only include "agents" if the existing search actually supports it.
+
+Do not advertise unsupported search behavior.
+
+---
+
+# 24. REMOVE DEVELOPMENT LANGUAGE
+
+Review the entire Control Tower for production-inappropriate terminology.
+
+Remove visible references such as:
+
+* Demo
+* Scenario
+* Simulated
+* Test
+* Expected Behaviour
+* Run Scenario
+* reasoning-engine debug messages
+
+unless they are genuinely required operational terminology.
+
+The page should look like a real production enterprise environment.
+
+---
+
+# 25. DESIGN SYSTEM
+
+Use the approved Agentic HRO design system.
+
+This is primarily a **light enterprise operational workspace**.
+
+Use:
+
+* `#F8F9FC` workspace background
+* white raised surfaces
+* navy primary text
+* Agentic Indigo primary accents
+* subtle lavender secondary accents
+* cool-gray borders
+* emerald for operational/healthy
+* amber for attention/human review
+* red for blocked/critical
+
+Do NOT make the whole dashboard purple.
+
+---
+
+# 26. VISUAL CONNECTION TO LOGIN PAGE
+
+The authenticated application should clearly belong to the same product as the approved login page.
+
+Carry forward:
+
+* Agentic Indigo
+* Midnight Navy
+* controlled Violet
+* Lavender
+* typography hierarchy
+* card radius
+* border language
+* icon style
+* semantic colors
+
+However, the login page can remain visually dramatic while the Control Tower prioritizes operational readability.
+
+---
+
+# 27. CARD DESIGN
+
+Refine dashboard cards.
+
+Use:
+
+* consistent radius
+* subtle borders
+* subtle elevation
+* clear titles
+* strong numbers
+* compact supporting text
+
+Avoid oversized decorative watermark icons like the current KPI cards if they reduce clarity.
+
+Icons should support information rather than decorate empty space.
+
+---
+
+# 28. DENSITY
+
+This is an enterprise operations product.
+
+Keep information density moderately high.
+
+Do not create huge cards with excessive whitespace.
+
+Users should be able to see:
+
+KPIs + agent health + activity + interventions
+
+without excessive scrolling on a typical desktop/laptop.
+
+---
+
+# 29. HUMAN-IN-THE-LOOP MUST BE FIRST-CLASS
+
+Human intervention is NOT an error condition.
+
+Represent it as a normal governance mechanism.
+
+Use terminology such as:
+
+**Human Review**
+
+**Approval Required**
+
+**Human Intervention**
+
+**Decision Required**
+
+Do not imply that agent escalation automatically means agent failure.
+
+This is central to the Agentic HRO product philosophy.
+
+---
+
+# 30. GUARDRAIL / POLICY EVENTS
+
+When a policy prevents an autonomous action, distinguish between:
+
+**Human Review**
+
+and:
+
+**Blocked**
+
+Example:
+
+Policy requires manager approval
+→ Human Review
+
+Required payroll system unavailable
+→ Blocked
+
+Do not classify every escalation as a hard block.
+
+---
+
+# 31. LOADING STATES
+
+Add professional loading states for:
+
+* KPI metrics
+* Agent Operations
+* Agent Activity
+* Human Attention Required
+* Domain workload
+
+Use subtle skeletons.
+
+Do not display fake data while loading.
+
+---
+
+# 32. ERROR STATES
+
+If dashboard data cannot load:
+
+Show a localized error for the affected section rather than crashing the entire Control Tower.
+
+Example:
+
+**Agent activity unavailable**
+
+`Activity couldn't be loaded. Try again.`
+
+Provide:
+
+**Retry**
+
+Do not expose raw API errors, stack traces, internal service names, or database details.
+
+---
+
+# 33. EMPTY STATES
+
+Provide meaningful empty states.
+
+Agent Activity:
+
+**No recent agent activity**
+
+Human Attention:
+
+**No interventions required**
+
+Cases by Domain:
+
+**No active cases**
+
+Agent Operations:
+
+**No agents configured**
+
+Do not use cartoon illustrations.
+
+---
+
+# 34. RESPONSIVE DESIGN
+
+Desktop:
+
+Use the full Control Tower layout.
+
+Tablet:
+
+Allow KPI cards and agent cards to reflow.
+
+Stack activity/intervention panels where necessary.
+
+Mobile:
+
+Prioritize:
+
+1. Human Attention Required
+2. Active Cases
+3. SLA/Blocked
+4. Agent Operations
+5. Agent Activity
+
+Do not force wide desktop dashboards into horizontal scrolling.
+
+---
+
+# 35. ACCESSIBILITY
+
+Ensure:
+
+* semantic headings
+* accessible status labels
+* keyboard navigation
+* visible focus states
+* adequate contrast
+* accessible icons
+* charts have textual equivalents
+* color is not the only status indicator
+
+---
+
+# 36. IMPLEMENTATION STRATEGY
+
+Before modifying code:
+
+1. Inspect the existing Dashboard component.
+2. Identify all existing dashboard data sources.
+3. Determine which metrics can be accurately derived.
+4. Identify the current agent activity/event data.
+5. Identify current approvals/intervention data.
+6. Reuse existing shared components.
+7. Reuse Agentic HRO global design tokens.
+8. Preserve existing functionality.
+9. Remove demo UI without unnecessarily deleting useful underlying development functionality.
+10. Do not rewrite unrelated modules.
+11. Do not install another UI framework.
+12. Keep components reusable and data-driven.
+
+---
+
+# 37. IMPORTANT DATA RULE
+
+Do NOT hard-code impressive numbers such as:
+
+`94% autonomous`
+
+`42 active cases`
+
+`99.8% SLA`
+
+unless those values are genuinely derived from application data.
+
+For unavailable metrics:
+
+Use:
+
+`—`
+
+with an appropriate tooltip or secondary label such as:
+
+`Insufficient data`
+
+A trustworthy enterprise dashboard is more important than a visually populated dashboard.
+
+---
+
+# 38. ACCEPTANCE CRITERIA
+
+Before completing the upgrade, verify:
+
+* Dashboard navigation has become Control Tower.
+* Breadcrumb says CONTROL TOWER.
+* Page title says HRO Control Tower.
+* Onboarding-specific dashboard subtitle is removed.
+* Day-1 At Risk is removed from the global Control Tower.
+* Ready for Day 1 is removed from the global Control Tower.
+* Suite-wide KPIs are used.
+* Active Cases exists.
+* Autonomously Resolved is supported without fabricated values.
+* Human Interventions exists.
+* SLA At Risk exists.
+* Blocked Cases exists.
+* Agent Operations section exists.
+* Agent states use standardized semantics.
+* Recent activity is concise and executive-readable.
+* Long reasoning/debug text is removed from dashboard-level presentation.
+* Detailed audit information remains accessible elsewhere where currently supported.
+* Demo Scenarios is removed from the Control Tower.
+* Human Attention Required replaces the demo panel.
+* Human-in-the-loop is represented as governance, not failure.
+* Cases by HRO Domain is supported where data permits.
+* No fake operational metrics were introduced.
+* Only one sidebar navigation item is selected.
+* Systems is not incorrectly highlighted.
+* Approved Agentic HRO design system is used.
+* Loading, empty, and error states exist.
+* Responsive behavior works.
+* Existing business logic remains intact.
+* No unrelated pages were redesigned.
+
+The finished page should make an enterprise user understand within approximately five seconds:
+
+**How much HR work is happening?**
+
+**How much is autonomous?**
+
+**Are the agents operating normally?**
+
+**Where is human intervention required?**
+
+**What is at risk or blocked?**
+
+**What are the agents doing right now?**
+
+The final result should feel like an **enterprise Agentic HRO command center**, not an onboarding dashboard and not a developer/demo console.

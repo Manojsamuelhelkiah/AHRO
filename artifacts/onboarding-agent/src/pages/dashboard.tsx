@@ -1,147 +1,460 @@
-import React from 'react';
-import { useGetOnboardingDashboard, useListOnboardingScenarios, useRunOnboardingScenario, getGetOnboardingDashboardQueryKey, getListOnboardingCasesQueryKey } from '@workspace/api-client-react';
-import { Card, CardHeader, CardTitle, CardContent, Button, PageHeader, cn } from '@/components/ui-shared';
-import { useLocation } from 'wouter';
-import { useQueryClient } from '@tanstack/react-query';
-import { Play, AlertCircle, Clock, CheckCircle2, AlertTriangle, Users, Activity } from 'lucide-react';
+import React, { useMemo } from 'react';
+import {
+  useGetOnboardingDashboard,
+  useListOnboardingCases,
+  useListOnboardingApprovals,
+} from '@workspace/api-client-react';
+import type { OnbCase, OnbApproval, OnbEvent } from '@workspace/api-client-react';
+import { Card, PageHeader, Button, cn } from '@/components/ui-shared';
+import { Link } from 'wouter';
+import { Activity, Bot, CheckCircle2, ShieldAlert, UserCheck, Layers, AlertOctagon, Timer } from 'lucide-react';
 import { EngineBadge } from '@/components/engine-badge';
-import { format } from 'date-fns';
+import { formatDistanceToNowStrict } from 'date-fns';
+import { statusOf, caseTypeOf, caseTitleOf } from './cases/index';
+
+/* ----------------------------- derived metrics ---------------------------- */
+
+function isActive(c: OnbCase) {
+  return statusOf(c) !== 'Completed';
+}
+
+/** Mirrors the backend's day-1-risk derivation: the effective date is inside the
+ *  next 7 days while the case is blocked, awaiting approval, or has open
+ *  workstream blockers. Past effective dates are excluded, matching the backend. */
+function slaAtRisk(c: OnbCase): boolean {
+  if (!isActive(c)) return false;
+  const days = (new Date(c.joiningDate).getTime() - Date.now()) / 86400000;
+  if (days < 0 || days > 7) return false;
+  return (
+    c.orchestrationStatus === 'blocked' ||
+    c.orchestrationStatus === 'waiting-approval' ||
+    (c.workstreams ?? []).some((w) => (w.blockers ?? []).length > 0)
+  );
+}
+
+function ago(iso: string): string {
+  try { return formatDistanceToNowStrict(new Date(iso), { addSuffix: false }); } catch { return ''; }
+}
+
+/* --------------------------------- page ---------------------------------- */
 
 export function DashboardPage() {
-  const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
-  const { data: dashboard, isLoading: isLoadingDash } = useGetOnboardingDashboard();
-  const { data: scenarios, isLoading: isLoadingScenarios } = useListOnboardingScenarios();
-  const runScenario = useRunOnboardingScenario();
+  const dash = useGetOnboardingDashboard();
+  const casesQ = useListOnboardingCases();
+  const approvalsQ = useListOnboardingApprovals({ status: 'all' });
 
-  const handleRun = (key: string) => {
-    runScenario.mutate({ key }, {
-      onSuccess: (caseData) => {
-        queryClient.invalidateQueries({ queryKey: getGetOnboardingDashboardQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
-        setLocation(`/cases/${caseData.id}`);
-      }
-    });
-  };
+  const cases = casesQ.data ?? [];
+  const approvals = approvalsQ.data ?? [];
+  const pendingApprovals = useMemo(() => approvals.filter((a) => a.status === 'pending'), [approvals]);
 
-  if (isLoadingDash || isLoadingScenarios) return <div className="p-8 text-center text-[var(--text-muted)]">Loading dashboard...</div>;
-  if (!dashboard) return null;
+  const metrics = useMemo(() => {
+    const active = cases.filter(isActive);
+    const completed = cases.filter((c) => statusOf(c) === 'Completed');
+    const blocked = cases.filter((c) => statusOf(c) === 'Blocked');
+    const humanReview = cases.filter((c) => statusOf(c) === 'Human Review');
+    const atRisk = cases.filter(slaAtRisk);
+
+    // Autonomously resolved: completed cases that never raised a human approval.
+    // Only computable when approvals history (status=all) has loaded.
+    let autonomousPct: number | null = null;
+    let autonomousSplit: { autonomous: number; assisted: number } | null = null;
+    if (completed.length > 0 && approvalsQ.isSuccess) {
+      const caseIdsWithApproval = new Set(approvals.map((a) => a.caseId));
+      const autonomous = completed.filter((c) => !caseIdsWithApproval.has(c.id)).length;
+      autonomousPct = Math.round((autonomous / completed.length) * 100);
+      autonomousSplit = { autonomous, assisted: completed.length - autonomous };
+    }
+
+    return { active, completed, blocked, humanReview, atRisk, autonomousPct, autonomousSplit };
+  }, [cases, approvals, approvalsQ.isSuccess]);
+
+  // Unique cases needing human judgment: union of cases with pending approvals
+  // and cases currently in Human Review.
+  const interventionCount = useMemo(() => {
+    const ids = new Set<number>(pendingApprovals.map((a) => a.caseId));
+    for (const c of metrics.humanReview) ids.add(c.id);
+    return ids.size;
+  }, [pendingApprovals, metrics.humanReview]);
+
+  const domains = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of metrics.active) {
+      const d = caseTypeOf(c) === 'Employee Changes' ? 'Employee Changes' : 'Onboarding';
+      map.set(d, (map.get(d) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [metrics.active]);
+
+  const kpisLoading = casesQ.isLoading || approvalsQ.isLoading;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <PageHeader 
-        title="Control Tower Overview" 
-        subtitle="Real-time status of agentic onboarding operations." 
+      <PageHeader
+        title="HRO Control Tower"
+        subtitle="Real-time visibility across autonomous HR operations, exceptions, and human interventions."
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <KpiCard title="Total Cases" value={dashboard.totalCases} icon={Users} color="var(--primary)" bg="bg-[var(--surface-soft)]" />
-        <KpiCard title="Pending Approvals" value={dashboard.pendingApprovals} icon={Clock} color="var(--status-amber)" bg="bg-[var(--surface-soft)]" />
-        <KpiCard title="Hard Blocked" value={dashboard.hardBlocked} icon={AlertCircle} color="var(--status-red)" bg="bg-[var(--surface-soft)]" />
-        <KpiCard title="Day-1 at Risk" value={dashboard.day1AtRisk} icon={AlertTriangle} color="var(--status-amber)" bg="bg-[var(--surface-soft)]" />
-        <KpiCard title="Ready for Day 1" value={dashboard.readyCases} icon={CheckCircle2} color="var(--status-green)" bg="bg-[var(--surface-soft)]" />
+      {/* KPIs */}
+      {casesQ.isError ? (
+        <SectionError label="Operational metrics unavailable" onRetry={() => casesQ.refetch()} />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <KpiCard loading={kpisLoading} title="Active Cases" value={metrics.active.length} context="Across all HRO domains" icon={Layers} tone="indigo" />
+          <KpiCard
+            loading={kpisLoading}
+            title="Autonomously Resolved"
+            value={metrics.autonomousPct === null ? '—' : `${metrics.autonomousPct}%`}
+            context={metrics.autonomousPct === null ? 'Insufficient data' : 'Eligible cases completed autonomously'}
+            icon={Bot}
+            tone="indigo"
+          />
+          <KpiCard
+            loading={kpisLoading}
+            title="Human Interventions"
+            value={interventionCount}
+            context="Requires attention"
+            icon={UserCheck}
+            tone={interventionCount > 0 ? 'amber' : 'neutral'}
+          />
+          <KpiCard
+            loading={kpisLoading}
+            title="SLA At Risk"
+            value={metrics.atRisk.length}
+            context="Effective date within 7 days while held up"
+            icon={Timer}
+            tone={metrics.atRisk.length > 0 ? 'amber' : 'neutral'}
+          />
+          <KpiCard
+            loading={kpisLoading}
+            title="Blocked Cases"
+            value={metrics.blocked.length}
+            context={metrics.blocked.length > 0 ? 'Unable to proceed' : 'None blocked'}
+            icon={AlertOctagon}
+            tone={metrics.blocked.length > 0 ? 'red' : 'green'}
+          />
+        </div>
+      )}
+
+      {/* Agent Operations */}
+      <section aria-labelledby="agent-ops-heading">
+        <SectionHeading id="agent-ops-heading" title="Agent Operations" subtitle="Operational status and workload across the autonomous HR workforce." />
+        {casesQ.isError ? (
+          <div className="mt-3"><SectionError label="Agent status unavailable" onRetry={() => casesQ.refetch()} /></div>
+        ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+          {casesQ.isLoading ? (
+            Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} height={88} />)
+          ) : (
+            <>
+              <AgentCard
+                name="Onboarding Agent"
+                state={metrics.blocked.length > 0 ? 'Degraded' : 'Operational'}
+                workload={agentWorkload(metrics.active.filter((c) => caseTypeOf(c) === 'Onboarding').length, metrics.humanReview.length)}
+              />
+              <AgentCard name="Payroll Agent" state="Operational" workload="No active work" />
+              <AgentCard name="Compliance Agent" state="Operational" workload="No active work" />
+              <AgentCard name="Helpdesk Agent" state="Operational" workload="No active work" />
+            </>
+          )}
+        </div>
+        )}
+      </section>
+
+      {/* Activity + Human Attention */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 overflow-hidden p-0 shadow-sm order-2 lg:order-1">
+          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-[var(--primary)]" /> Agent Activity
+            </h2>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Recent autonomous actions, policy decisions, and human handoffs.
+            </p>
+          </div>
+          {dash.isLoading ? (
+            <SkeletonRows rows={6} />
+          ) : dash.isError ? (
+            <div style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>
+              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Agent activity unavailable</p>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>Activity couldn't be loaded. Try again.</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => dash.refetch()}>Retry</Button>
+            </div>
+          ) : !dash.data?.recentEvents?.length ? (
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', padding: 'var(--space-xl)', textAlign: 'center' }}>No recent agent activity</p>
+          ) : (
+            <ul className="list-none m-0 p-0">
+              {dash.data.recentEvents.slice(0, 8).map((event, i, arr) => (
+                <ActivityRow key={event.id} event={event} last={i === arr.length - 1} />
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="overflow-hidden p-0 shadow-sm order-1 lg:order-2">
+          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
+              <UserCheck className="w-4 h-4" style={{ color: 'var(--status-amber)' }} /> Human Attention Required
+            </h2>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Cases requiring judgment, approval, or exception handling.
+            </p>
+          </div>
+          {approvalsQ.isLoading ? (
+            <SkeletonRows rows={3} />
+          ) : approvalsQ.isError ? (
+            <div style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>
+              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Interventions unavailable</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => approvalsQ.refetch()}>Retry</Button>
+            </div>
+          ) : pendingApprovals.length === 0 ? (
+            <div style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>
+              <CheckCircle2 className="w-5 h-5 mx-auto" style={{ color: 'var(--status-green)' }} aria-hidden />
+              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '8px' }}>No interventions required</p>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Autonomous operations are proceeding within configured guardrails.
+              </p>
+            </div>
+          ) : (
+            <ul className="list-none m-0 p-0">
+              {pendingApprovals.slice(0, 5).map((a, i, arr) => (
+                <AttentionRow key={a.id} approval={a} last={i === arr.length - 1} />
+              ))}
+            </ul>
+          )}
+          <div style={{ borderTop: '1px solid var(--border)', padding: '10px var(--space-lg)' }}>
+            <Link href="/approvals" className="hover:underline" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--primary)' }}>
+              View all interventions →
+            </Link>
+          </div>
+        </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
-        <Card className="lg:col-span-2 overflow-hidden flex flex-col p-0 shadow-sm border-[var(--border-strong)]">
-          <div style={{ padding: 'var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="bg-[var(--surface-alt)] flex items-center justify-between">
-            <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-[var(--primary)]" /> Recent Agent Activity
-            </h3>
+      {/* Cases by domain + execution model */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 p-0 overflow-hidden shadow-sm">
+          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Cases by HRO Domain</h2>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>Active workload across the HR lifecycle.</p>
           </div>
-          <div className="flex-1 flex flex-col">
-            {dashboard.recentEvents?.map((event, i) => (
-              <div 
-                key={event.id} 
-                className="flex items-start transition-colors group"
-                style={{ 
-                  padding: 'var(--space-md) var(--space-lg)', 
-                  borderBottom: i < dashboard.recentEvents!.length - 1 ? '1px solid var(--border)' : 'none',
-                  backgroundColor: 'var(--surface)'
-                }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-alt)'}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--surface)'}
-              >
-                <div className="shrink-0 mt-0.5">
-                  <EngineBadge engine={event.engine} />
-                </div>
-                <div className="min-w-0 flex-1 ml-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="truncate group-hover:text-[var(--primary)] transition-colors">
-                      {event.title}
-                    </p>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }} className="whitespace-nowrap shrink-0 font-medium">
-                      {format(new Date(event.createdAt), 'HH:mm:ss')}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.5 }} className="line-clamp-2">
-                    {event.detail}
-                  </p>
-                  <div className="flex items-center gap-2 mt-3">
-                    <span style={{ fontSize: '10px', backgroundColor: 'var(--surface-alt)', color: 'var(--text-secondary)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      {event.agent}
-                    </span>
-                    {event.ruleRef && (
-                      <span style={{ fontSize: '10px', backgroundColor: 'var(--surface-alt)', color: 'var(--text-secondary)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {event.ruleRef}
-                      </span>
-                    )}
-                  </div>
-                </div>
+          <div style={{ padding: 'var(--space-lg)' }}>
+            {casesQ.isLoading ? (
+              <SkeletonRows rows={2} />
+            ) : casesQ.isError ? (
+              <div style={{ textAlign: 'center', padding: 'var(--space-md)' }}>
+                <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Domain workload unavailable</p>
+                <Button size="sm" variant="outline" className="mt-3" onClick={() => casesQ.refetch()}>Retry</Button>
               </div>
-            ))}
-            {!dashboard.recentEvents?.length && (
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', padding: 'var(--space-xl)', textAlign: 'center' }}>No recent activity</p>
+            ) : domains.length === 0 ? (
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-md)' }}>No active cases</p>
+            ) : (
+              <div className="space-y-3" role="img" aria-label={`Active cases by domain: ${domains.map(([d, n]) => `${d} ${n}`).join(', ')}`}>
+                {domains.map(([domain, count]) => {
+                  const max = domains[0][1];
+                  return (
+                    <div key={domain} className="flex items-center gap-3">
+                      <span style={{ width: '150px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 500 }} className="shrink-0">{domain}</span>
+                      <div className="flex-1 rounded-full overflow-hidden" style={{ height: '8px', backgroundColor: 'var(--surface-alt)' }}>
+                        <div style={{ width: `${(count / max) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', opacity: 0.85, borderRadius: '999px' }} />
+                      </div>
+                      <span style={{ width: '32px', textAlign: 'right', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-primary)' }}>{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </Card>
 
-        <Card className="shadow-sm">
-          <div style={{ padding: 'var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="bg-[var(--surface-alt)]">
-            <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
-              <Play className="w-4 h-4 text-[var(--primary)]" /> Demo Scenarios
-            </h3>
+        <Card className="p-0 overflow-hidden shadow-sm">
+          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Execution Model</h2>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>How completed work was resolved.</p>
           </div>
-          <CardContent className="space-y-4 pt-4">
-            {scenarios?.map(s => (
-              <div key={s.key} className="p-4 rounded-[var(--radius-md)] border-[var(--border)] border bg-[var(--surface)] shadow-sm hover:border-[var(--primary)] hover:shadow-md transition-all group flex flex-col gap-3">
-                <div>
-                  <h4 className="font-semibold text-[var(--text-sm)] group-hover:text-[var(--primary)] transition-colors">{s.title}</h4>
-                  <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1.5 leading-relaxed">{s.description}</p>
-                </div>
-                <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-[var(--radius-sm)] p-2.5 text-[10px] uppercase tracking-wider font-semibold text-[var(--text-muted)] flex flex-col gap-1">
-                  <span className="text-[var(--primary)] opacity-80">Expected Behaviour</span>
-                  <span className="normal-case tracking-normal font-medium text-[var(--text-xs)]">{s.expectedBehaviour}</span>
-                </div>
-                <Button size="sm" onClick={() => handleRun(s.key)} disabled={runScenario.isPending} className="w-full gap-2 font-bold shadow-none mt-1">
-                  <Play className="h-3.5 w-3.5" />
-                  Run Scenario
-                </Button>
+          <div style={{ padding: 'var(--space-lg)' }}>
+            {casesQ.isLoading || approvalsQ.isLoading ? (
+              <SkeletonRows rows={2} />
+            ) : casesQ.isError || approvalsQ.isError ? (
+              <div style={{ textAlign: 'center', padding: 'var(--space-md)' }}>
+                <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Execution data unavailable</p>
+                <Button size="sm" variant="outline" className="mt-3" onClick={() => { casesQ.refetch(); approvalsQ.refetch(); }}>Retry</Button>
               </div>
-            ))}
-          </CardContent>
+            ) : !metrics.autonomousSplit ? (
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-md)' }}>
+                — <span style={{ display: 'block', fontSize: 'var(--text-xs)', marginTop: '4px' }}>Insufficient data</span>
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <ExecRow label="Autonomous" count={metrics.autonomousSplit.autonomous} total={metrics.completed.length} color="var(--primary)" />
+                <ExecRow label="Human Assisted" count={metrics.autonomousSplit.assisted} total={metrics.completed.length} color="var(--status-amber)" />
+              </div>
+            )}
+          </div>
         </Card>
       </div>
     </div>
   );
 }
 
-function KpiCard({ title, value, icon: Icon, color, bg }: any) {
+/* ------------------------------- components ------------------------------- */
+
+type Tone = 'indigo' | 'amber' | 'red' | 'green' | 'neutral';
+const TONE_COLOR: Record<Tone, string> = {
+  indigo: 'var(--primary)',
+  amber: 'var(--status-amber)',
+  red: 'var(--status-red)',
+  green: 'var(--status-green)',
+  neutral: 'var(--text-muted)',
+};
+
+function KpiCard({ title, value, context, icon: Icon, tone, loading }: { title: string; value: React.ReactNode; context: string; icon: React.ComponentType<any>; tone: Tone; loading?: boolean }) {
   return (
-    <Card 
-      style={{ padding: 'var(--space-lg)', height: '96px', transition: 'all 150ms ease' }} 
-      className={cn("flex flex-col justify-between group hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-md)] relative overflow-hidden border-transparent", bg)}
-    >
-      <div className="absolute top-0 right-0 p-4 opacity-[0.05] group-hover:opacity-[0.1] transition-opacity">
-        <Icon style={{ width: '48px', height: '48px', color }} />
+    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="shadow-sm hover:border-[var(--border-strong)] transition-colors">
+      <div className="flex items-center gap-1.5">
+        <Icon style={{ width: '14px', height: '14px', color: TONE_COLOR[tone] }} aria-hidden />
+        <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-secondary)', fontWeight: 700 }}>{title}</span>
       </div>
-      <div className="flex items-center gap-2 relative z-10">
-        <Icon style={{ width: '18px', height: '18px', color }} />
-        <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontWeight: 700 }}>{title}</span>
+      {loading ? (
+        <div className="animate-pulse rounded mt-2" style={{ height: '24px', width: '56px', backgroundColor: 'var(--surface-alt)' }} />
+      ) : (
+        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginTop: '6px', letterSpacing: '-0.02em' }}>{value}</div>
+      )}
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>{context}</div>
+    </Card>
+  );
+}
+
+type AgentState = 'Operational' | 'Waiting' | 'Human Review' | 'Degraded' | 'Blocked' | 'Offline';
+const AGENT_STATE_STYLE: Record<AgentState, { bg: string; fg: string }> = {
+  'Operational': { bg: 'var(--surface-soft)', fg: 'var(--status-green)' },
+  'Waiting': { bg: 'var(--surface-alt)', fg: 'var(--text-secondary)' },
+  'Human Review': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
+  'Degraded': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
+  'Blocked': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
+  'Offline': { bg: 'var(--surface-alt)', fg: 'var(--text-muted)' },
+};
+
+export function AgentStateBadge({ state }: { state: AgentState }) {
+  const s = AGENT_STATE_STYLE[state];
+  return (
+    <span style={{ backgroundColor: s.bg, color: s.fg, fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+      {state}
+    </span>
+  );
+}
+
+function agentWorkload(activeCount: number, reviewCount: number): string {
+  if (activeCount === 0) return 'No active work';
+  const parts = [`${activeCount} active case${activeCount === 1 ? '' : 's'}`];
+  if (reviewCount > 0) parts.push(`${reviewCount} awaiting human review`);
+  return parts.join(' · ');
+}
+
+function AgentCard({ name, state, workload }: { name: string; state: AgentState; workload: string }) {
+  return (
+    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="shadow-sm flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="flex items-center justify-center shrink-0 rounded-md" style={{ width: '26px', height: '26px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
+            <Bot className="h-4 w-4" aria-hidden />
+          </span>
+          <span className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{name}</span>
+        </span>
+        <AgentStateBadge state={state} />
       </div>
-      <div className="flex items-end justify-between relative z-10">
-        <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, letterSpacing: '-0.02em' }}>{value}</span>
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{workload}</div>
+    </Card>
+  );
+}
+
+function ActivityRow({ event, last }: { event: OnbEvent; last: boolean }) {
+  const domain = 'Onboarding';
+  const inner = (
+    <div className="flex items-start gap-3" style={{ padding: '10px var(--space-lg)', borderBottom: last ? 'none' : '1px solid var(--border)' }}>
+      <div className="shrink-0 mt-0.5"><EngineBadge engine={event.engine} /></div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{event.title}</p>
+        <p className="line-clamp-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{event.detail}</p>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
+          {domain} · {event.agent} · {ago(event.createdAt)} ago
+        </p>
       </div>
+      {event.caseId != null && (
+        <span className="shrink-0 self-center" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)' }}>View details</span>
+      )}
+    </div>
+  );
+  return (
+    <li>
+      {event.caseId != null ? (
+        <Link href={`/cases/${event.caseId}`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open case ${event.caseId}: ${event.title}`}>
+          {inner}
+        </Link>
+      ) : inner}
+    </li>
+  );
+}
+
+function AttentionRow({ approval, last }: { approval: OnbApproval; last: boolean }) {
+  const priority = approval.hitlPattern === 'hard-block' ? 'High priority' : 'Medium priority';
+  return (
+    <li>
+      <Link href={`/approvals`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open intervention for ${approval.caseWorkerName}`}>
+        <div style={{ padding: '10px var(--space-lg)', borderBottom: last ? 'none' : '1px solid var(--border)' }}>
+          <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
+            {approval.hitlPattern === 'hard-block' ? 'Decision required' : 'Approval required'} — {approval.caseWorkerName}
+          </p>
+          <p className="line-clamp-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{approval.recommendation}</p>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
+            Onboarding · <span style={{ color: approval.hitlPattern === 'hard-block' ? 'var(--status-red)' : 'var(--status-amber)', fontWeight: 600 }}>{priority}</span> · {ago(approval.createdAt)}
+          </p>
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function ExecRow({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span style={{ width: '110px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 500 }} className="shrink-0">{label}</span>
+      <div className="flex-1 rounded-full overflow-hidden" style={{ height: '8px', backgroundColor: 'var(--surface-alt)' }}>
+        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: color, opacity: 0.85, borderRadius: '999px' }} />
+      </div>
+      <span style={{ width: '64px', textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)' }}>{count} · {pct}%</span>
+    </div>
+  );
+}
+
+function SectionHeading({ id, title, subtitle }: { id: string; title: string; subtitle: string }) {
+  return (
+    <div>
+      <h2 id={id} style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
+      <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{subtitle}</p>
+    </div>
+  );
+}
+
+function SkeletonCard({ height }: { height: number }) {
+  return <Card className="animate-pulse" style={{ height: `${height}px`, backgroundColor: 'var(--surface-alt)' }} />;
+}
+
+function SkeletonRows({ rows }: { rows: number }) {
+  return (
+    <div style={{ padding: 'var(--space-lg)' }} className="space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="animate-pulse rounded" style={{ height: '14px', width: `${85 - i * 10}%`, backgroundColor: 'var(--surface-alt)' }} />
+      ))}
+    </div>
+  );
+}
+
+function SectionError({ label, onRetry }: { label: string; onRetry: () => void }) {
+  return (
+    <Card style={{ padding: 'var(--space-xl)', textAlign: 'center' }} className="shadow-sm">
+      <ShieldAlert className="w-5 h-5 mx-auto" style={{ color: 'var(--text-muted)' }} aria-hidden />
+      <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '8px' }}>{label}</p>
+      <Button size="sm" variant="outline" className="mt-3" onClick={onRetry}>Retry</Button>
     </Card>
   );
 }

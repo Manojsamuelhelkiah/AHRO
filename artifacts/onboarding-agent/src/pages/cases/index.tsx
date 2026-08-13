@@ -28,11 +28,11 @@ type CaseTypeFilter = (typeof CASE_TYPES)[number];
 
 type HroStatus = 'New' | 'In Progress' | 'Waiting' | 'Human Review' | 'Blocked' | 'Completed';
 
-function caseTypeOf(c: OnbCase): Exclude<CaseTypeFilter, 'All Cases'> {
+export function caseTypeOf(c: OnbCase): Exclude<CaseTypeFilter, 'All Cases'> {
   return c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding';
 }
 
-function caseTitleOf(c: OnbCase): string {
+export function caseTitleOf(c: OnbCase): string {
   switch (c.hireType) {
     case 'contractor': return 'Contractor Onboarding';
     case 'rehire': return 'Rehire Onboarding';

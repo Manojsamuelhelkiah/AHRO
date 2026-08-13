@@ -3,10 +3,10 @@ import { Link, useLocation } from 'wouter';
 import { useClerk, useUser } from '@clerk/react';
 import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
 import { cn } from './ui-shared';
-import { LayoutDashboard, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon } from 'lucide-react';
+import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/', label: 'Control Tower', icon: TowerControl },
   { path: '/cases', label: 'Cases', icon: Users },
   { path: '/approvals', label: 'Approvals', icon: CheckSquare },
   { path: '/systems', label: 'Systems', icon: Server },
@@ -16,7 +16,7 @@ const NAV_ITEMS = [
 ];
 
 function getPageName(path: string) {
-  if (path === '/') return 'Dashboard';
+  if (path === '/') return 'Control Tower';
   const item = NAV_ITEMS.find(n => path.startsWith(n.path) && n.path !== '/');
   if (item) return item.label;
   if (path.startsWith('/cases/')) return 'Case Details';
