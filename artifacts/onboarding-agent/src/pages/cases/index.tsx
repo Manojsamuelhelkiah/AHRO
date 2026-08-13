@@ -504,6 +504,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
   const createCase = useCreateOnboardingCase();
   const [channelPref, setChannelPref] = useState('both');
   const [phone, setPhone] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const needsPhone = channelPref !== 'email' && !phone.trim();
   
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -527,11 +528,16 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
       notes: fd.get('notes') as string || undefined,
     };
     
+    setSubmitError(null);
     createCase.mutate({ data }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
         onClose();
-      }
+      },
+      onError: (error: any) => {
+        const serverMessage = error?.response?.data?.message || error?.message;
+        setSubmitError(serverMessage || 'The case could not be created. Please try again.');
+      },
     });
   };
 
@@ -629,7 +635,12 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
             <Input name="notes" placeholder="Free text recruiter notes..." />
           </div>
         </div>
-        <div className="flex justify-end pt-4 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-end gap-4 pt-4 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
+          {submitError && (
+            <p className="text-[12px] font-medium m-0" style={{ color: 'var(--status-red)' }} role="alert">
+              {submitError}
+            </p>
+          )}
           <Button type="submit" disabled={createCase.isPending}>
             {createCase.isPending ? 'Creating...' : 'Create Case'}
           </Button>
