@@ -176,7 +176,6 @@ export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const listScenariosResponseInputsAdoptionRampMax = 3;
 
 
-
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -221,7 +220,6 @@ export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
-
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -256,7 +254,6 @@ export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const createScenarioResponseInputsAdoptionRampMax = 3;
-
 
 
 export const CreateScenarioResponse = zod.object({
@@ -306,7 +303,6 @@ export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const getScenarioResponseInputsAdoptionRampMax = 3;
 
 
-
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -354,7 +350,6 @@ export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
-
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -389,7 +384,6 @@ export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const updateScenarioResponseInputsAdoptionRampMax = 3;
-
 
 
 export const UpdateScenarioResponse = zod.object({
@@ -745,7 +739,6 @@ export const computeSensitivityBodyInputsAdoptionRampMin = 3;
 export const computeSensitivityBodyInputsAdoptionRampMax = 3;
 
 
-
 export const ComputeSensitivityBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -814,7 +807,6 @@ export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
 export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
 
 
-
 export const ExportScenarioWorkbookBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -862,7 +854,6 @@ export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
 export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
 
 
-
 export const ImportScenarioWorkbookResponse = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -900,7 +891,6 @@ export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const computeRollupBodyInputsAdoptionRampMax = 3;
-
 
 
 export const ComputeRollupBody = zod.object({
@@ -1403,7 +1393,6 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
  */
 
 
-
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
   "workerEmail": zod.string(),
@@ -1749,8 +1738,6 @@ export const ReceiveOnboardingInboundParams = zod.object({
 })
 
 
-
-
 export const ReceiveOnboardingInboundBody = zod.object({
   "channel": zod.string().describe('email | whatsapp'),
   "body": zod.string().min(1)
@@ -2028,7 +2015,8 @@ export const GetOnboardingSettingsResponse = zod.object({
   "envFallback": zod.string().nullable().describe('Address from HR_ALERT_EMAIL \/ ONBOARDING_HR_ALERT_EMAIL, or null'),
   "effective": zod.string().nullable().describe('Address outage alerts will actually be sent to, or null when none'),
   "source": zod.string().nullable().describe('Where the effective address comes from (\"settings\" | \"environment\"), null when none'),
-  "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet')
+  "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet'),
+  "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them')
 })
 
 
@@ -2037,7 +2025,8 @@ export const GetOnboardingSettingsResponse = zod.object({
  */
 export const UpdateOnboardingSettingsBody = zod.object({
   "hrAlertEmail": zod.string().nullish().describe('New HR alert address; null or empty string clears the stored value. Omit to leave unchanged.'),
-  "autoEscalationCalls": zod.boolean().optional().describe('Turn automatic SLA escalation voice calls on or off. Omit to leave unchanged.')
+  "autoEscalationCalls": zod.boolean().optional().describe('Turn automatic SLA escalation voice calls on or off. Omit to leave unchanged.'),
+  "hrApproverEmail": zod.string().nullish().describe('New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged.')
 })
 
 export const UpdateOnboardingSettingsResponse = zod.object({
@@ -2045,7 +2034,7 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "envFallback": zod.string().nullable().describe('Address from HR_ALERT_EMAIL \/ ONBOARDING_HR_ALERT_EMAIL, or null'),
   "effective": zod.string().nullable().describe('Address outage alerts will actually be sent to, or null when none'),
   "source": zod.string().nullable().describe('Where the effective address comes from (\"settings\" | \"environment\"), null when none'),
-  "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet')
+  "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet'),
+  "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them')
 })
-
 

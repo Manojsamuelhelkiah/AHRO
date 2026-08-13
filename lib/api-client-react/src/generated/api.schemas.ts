@@ -1416,6 +1416,8 @@ export interface OnbSettings {
   source: string | null;
   /** When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet */
   autoEscalationCalls: boolean;
+  /** Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve/reject from that exact sender decides them */
+  hrApproverEmail: string | null;
 }
 
 export interface UpdateOnbSettings {
@@ -1423,6 +1425,8 @@ export interface UpdateOnbSettings {
   hrAlertEmail?: string | null;
   /** Turn automatic SLA escalation voice calls on or off. Omit to leave unchanged. */
   autoEscalationCalls?: boolean;
+  /** New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged. */
+  hrApproverEmail?: string | null;
 }
 
 export type ListCustomIntentsParams = {
@@ -1506,4 +1510,3 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
-

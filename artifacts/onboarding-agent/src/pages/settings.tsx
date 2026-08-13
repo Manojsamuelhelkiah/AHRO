@@ -97,6 +97,102 @@ function HrOperatorBrief() {
   );
 }
 
+function RemoteApproverSettings() {
+  const queryClient = useQueryClient();
+  const { data: settings, isLoading } = useGetOnboardingSettings();
+  const update = useUpdateOnboardingSettings();
+
+  const [draft, setDraft] = useState('');
+  const [touched, setTouched] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    if (settings && !touched) setDraft(settings.hrApproverEmail ?? '');
+  }, [settings, touched]);
+
+  const trimmed = draft.trim();
+  const invalid = touched && trimmed.length > 0 && !EMAIL_RE.test(trimmed);
+  const dirty = settings ? trimmed !== (settings.hrApproverEmail ?? '') : false;
+
+  const save = (value: string | null) => {
+    setResult(null);
+    update.mutate(
+      { data: { hrApproverEmail: value } },
+      {
+        onSuccess: (updated) => {
+          setTouched(false);
+          setDraft(updated.hrApproverEmail ?? '');
+          setResult({
+            ok: true,
+            message: updated.hrApproverEmail
+              ? `New pending approvals will be emailed to ${updated.hrApproverEmail}. A reply containing "approve" or "reject" from that exact address decides them.`
+              : 'Cleared — approvals are decided only from the in-app Approvals queue.',
+          });
+          queryClient.invalidateQueries({ queryKey: getGetOnboardingSettingsQueryKey() });
+        },
+        onError: (err: any) => setResult({ ok: false, message: err?.error ?? err?.message ?? 'Saving failed — please try again.' }),
+      },
+    );
+  };
+
+  if (isLoading) return null;
+  return (
+    <div className="mt-5 p-4 rounded-lg border border-sky-200 bg-sky-50/30">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-sm text-sky-900">Remote HR approver (optional)</p>
+          <p className="text-sm text-sky-900/80 mt-1">
+            Let a second volunteer play the HR approver from their own inbox: when the AI escalates, they get an email
+            with the recommendation and can decide it by replying <span className="font-medium">approve</span> or{' '}
+            <span className="font-medium">reject</span>. Only replies from this exact address are honored, and each
+            decision is recorded in the audit trail under their name.
+          </p>
+        </div>
+        <Badge
+          className={cn(
+            'uppercase tracking-wider text-[10px] shadow-none shrink-0',
+            settings?.hrApproverEmail
+              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
+              : 'bg-muted text-muted-foreground hover:bg-muted',
+          )}
+        >
+          {settings?.hrApproverEmail ? 'ACTIVE' : 'NOT SET'}
+        </Badge>
+      </div>
+      <div className="flex flex-wrap gap-2 mt-3">
+        <input
+          type="email"
+          placeholder="approver@example.com"
+          value={draft}
+          onChange={(e) => { setTouched(true); setDraft(e.target.value); setResult(null); }}
+          className={cn(inputCls, 'max-w-sm', invalid && 'border-red-400 focus:border-red-500')}
+          aria-label="HR approver email"
+        />
+        <Button onClick={() => save(trimmed.length > 0 ? trimmed : null)} disabled={update.isPending || invalid || !dirty} className="gap-2 font-bold">
+          <Check className="w-4 h-4" /> Save
+        </Button>
+        {settings?.hrApproverEmail && (
+          <Button variant="outline" onClick={() => save(null)} disabled={update.isPending} className="gap-2">
+            <Trash2 className="w-4 h-4" /> Clear
+          </Button>
+        )}
+      </div>
+      {invalid && (
+        <p className="text-xs text-red-600 flex items-center gap-1 mt-2">
+          <AlertTriangle className="w-3 h-3" /> Enter a valid email address.
+        </p>
+      )}
+      {result && (
+        <div className={cn('p-3 mt-3 text-sm rounded-md border flex items-start gap-3',
+          result.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900')}>
+          {result.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" /> : <X className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />}
+          <p className="mt-0.5">{result.message}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DemoVolunteersCard() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useGetDemoVolunteers();
@@ -266,6 +362,8 @@ function DemoVolunteersCard() {
             )}
 
             <HrOperatorBrief />
+
+            <RemoteApproverSettings />
 
             <p className="text-xs text-muted-foreground mt-4 flex items-start gap-1.5">
               <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />

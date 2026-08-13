@@ -100,9 +100,11 @@ export async function createApproval(opts: {
       idempotencyKey: opts.idempotencyKey ?? null,
     })
     .onConflictDoNothing({ target: onbApprovals.idempotencyKey })
-    .returning({ id: onbApprovals.id });
-  // If the keyed approval already existed, its companion event does too.
+    .returning();
+  // If the keyed approval already existed, its companion event (and the
+  // approver notification) already happened too.
   if (opts.idempotencyKey && inserted.length === 0) return;
+  const row = inserted[0];
   await logEvent(
     opts.caseId,
     opts.agent,
@@ -115,6 +117,18 @@ export async function createApproval(opts: {
       idempotencyKey: opts.idempotencyKey ? `${opts.idempotencyKey}:event` : undefined,
     },
   );
+  // Email the configured remote HR approver (if any) so they can decide by
+  // replying approve/reject from their own inbox. Awaited: on autoscale the
+  // process may freeze the moment the owning request completes, so a
+  // detached send could be lost. notifyApproverOfApproval never throws, and
+  // a delivery failure leaves the approval in the in-app queue as usual.
+  // Dynamic import avoids a static engine <-> approver-email cycle.
+  try {
+    const m = await import("./approver-email");
+    await m.notifyApproverOfApproval(row);
+  } catch (err) {
+    console.error(`[onboarding engine] approver notification failed:`, String(err));
+  }
 }
 
 /* ------------------------------------------------------------------ */

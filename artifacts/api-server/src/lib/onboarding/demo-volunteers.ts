@@ -10,7 +10,7 @@
 import { db } from "@workspace/db";
 import { onbCases } from "@workspace/db/schema";
 import { and, sql } from "drizzle-orm";
-import { getSetting, setSetting } from "./settings";
+import { getSetting, setSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { setDemoAllowlist } from "./channels";
 import { defaultReadiness, defaultWorkstreams, startOrchestration } from "./engine";
 import { SCENARIOS, getScenario } from "./scenarios";
@@ -87,18 +87,8 @@ export async function loadVolunteers(): Promise<DemoVolunteer[]> {
 export async function saveVolunteers(raw: Partial<DemoVolunteer>[]): Promise<DemoVolunteer[]> {
   const volunteers = raw.slice(0, 20).map(normalizeVolunteer);
   await setSetting(DEMO_VOLUNTEERS_KEY, JSON.stringify(volunteers));
-  applyAllowlist(volunteers);
+  await initDemoAllowlist();
   return volunteers;
-}
-
-function applyAllowlist(volunteers: DemoVolunteer[]) {
-  const addresses: string[] = [];
-  for (const v of volunteers) {
-    if (volunteerProblems(v)) continue; // only valid rows get live delivery
-    addresses.push(v.email);
-    if (v.phone) addresses.push(v.phone);
-  }
-  setDemoAllowlist(addresses);
 }
 
 /**
@@ -106,9 +96,22 @@ function applyAllowlist(volunteers: DemoVolunteer[]) {
  * again right before any live send/call, so a save (or revocation) made on
  * another process instance takes effect immediately rather than after a
  * restart.
+ *
+ * The allowlist is composed of the valid demo volunteers plus the optional
+ * remote HR approver address — saving that address in Settings is the
+ * explicit, audited act that authorizes live delivery to it, and clearing
+ * it revokes that authorization.
  */
 export async function initDemoAllowlist(): Promise<void> {
-  applyAllowlist(await loadVolunteers());
+  const addresses: string[] = [];
+  for (const v of await loadVolunteers()) {
+    if (volunteerProblems(v)) continue; // only valid rows get live delivery
+    addresses.push(v.email);
+    if (v.phone) addresses.push(v.phone);
+  }
+  const approver = (await getSetting(HR_APPROVER_EMAIL_KEY))?.trim();
+  if (approver && isValidEmail(approver)) addresses.push(approver);
+  setDemoAllowlist(addresses);
 }
 export const refreshDemoAllowlist = initDemoAllowlist;
 

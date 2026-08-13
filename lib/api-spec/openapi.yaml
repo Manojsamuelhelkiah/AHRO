@@ -3471,7 +3471,11 @@ components:
         autoEscalationCalls:
           type: boolean
           description: When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet
-      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls]
+        hrApproverEmail:
+          type: string
+          nullable: true
+          description: Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve/reject from that exact sender decides them
+      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail]
     UpdateOnbSettings:
       type: object
       properties:
@@ -3482,3 +3486,7 @@ components:
         autoEscalationCalls:
           type: boolean
           description: Turn automatic SLA escalation voice calls on or off. Omit to leave unchanged.
+        hrApproverEmail:
+          type: string
+          nullable: true
+          description: New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged.

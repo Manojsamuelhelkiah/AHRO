@@ -44,10 +44,11 @@ import {
   setSetting,
   isValidEmail,
   HR_ALERT_EMAIL_KEY,
+  HR_APPROVER_EMAIL_KEY,
   AUTO_ESCALATION_CALLS_KEY,
   autoEscalationCallsEnabled,
 } from "../lib/onboarding/settings";
-import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas } from "../lib/onboarding/demo-volunteers";
+import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas, refreshDemoAllowlist } from "../lib/onboarding/demo-volunteers";
 import { GUARDRAILS, GUARDRAIL_CATEGORIES, getGuardrail, recordGuardrailEvent } from "../lib/onboarding/guardrails";
 import { runSecurityDrill } from "../lib/onboarding/security-drill";
 import { onbGuardrailEvents } from "@workspace/db/schema";
@@ -73,6 +74,7 @@ import {
   simulateVendorEmail,
 } from "../lib/onboarding/email-watch";
 import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
+import { runApproverInboxTick } from "../lib/onboarding/approver-email";
 import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
@@ -875,10 +877,11 @@ const watcherTick = async (req: Request, res: Response) => {
     res.json({ ran: false, reason: "throttled" });
     return;
   }
-  const [systemWatcher, emailWatch, inboundEmail] = await Promise.all([
+  const [systemWatcher, emailWatch, inboundEmail, approverInbox] = await Promise.all([
     runSystemWatcherTick(),
     runEmailWatchTick(),
     runInboundEmailTick(),
+    runApproverInboxTick(),
   ]);
   res.json({
     ran: true,
@@ -886,6 +889,7 @@ const watcherTick = async (req: Request, res: Response) => {
     systemWatcher,
     emailWatch,
     inboundEmail,
+    approverInbox,
   });
 };
 
@@ -934,6 +938,7 @@ async function settingsPayload() {
     effective,
     source: hrAlertEmail ? "settings" : envFallback ? "environment" : null,
     autoEscalationCalls: await autoEscalationCallsEnabled(),
+    hrApproverEmail: await getSetting(HR_APPROVER_EMAIL_KEY),
   };
 }
 
@@ -953,17 +958,17 @@ router.put("/onboarding/settings", async (req, res, next) => {
     if (body.hrAlertEmail !== undefined) {
     const raw = Array.isArray(req.body?.volunteers) ? req.body.volunteers : [];
       if (raw.length === 0) {
-        await setSetting(HR_ALERT_EMAIL_KEY, null);
+        await setSetting(HR_APPROVER_EMAIL_KEY, null);
       } else {
         if (!isValidEmail(raw)) {
-          res.status(400).json({ error: "Enter a valid email address (e.g. hr@company.com)." });
+          res.status(400).json({ error: "Enter a valid email address for the HR approver." });
           return;
         }
-        await setSetting(HR_ALERT_EMAIL_KEY, raw);
+        await setSetting(HR_APPROVER_EMAIL_KEY, raw);
       }
-    }
-    if (body.autoEscalationCalls !== undefined) {
-      await setSetting(AUTO_ESCALATION_CALLS_KEY, body.autoEscalationCalls ? "on" : null);
+      // The approver address doubles as a live-delivery authorization —
+      // apply the change to the in-process allowlist immediately.
+      await refreshDemoAllowlist();
     }
     res.json(await settingsPayload());
   } catch (err) {

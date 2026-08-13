@@ -11,6 +11,14 @@ import { eq, sql } from "drizzle-orm";
 export const HR_ALERT_EMAIL_KEY = "hr_alert_email";
 
 /**
+ * Optional remote HR approver for demos: when set, every new pending
+ * approval is emailed to this address and a reply containing
+ * approve/reject from this exact sender decides it. Email is an
+ * unauthenticated channel, so ONLY this address is ever trusted.
+ */
+export const HR_APPROVER_EMAIL_KEY = "hr_approver_email";
+
+/**
  * Opt-in switch for automatic SLA escalation voice calls: when set to "on",
  * the System Watcher places the escalation call itself (allowlist and rate
  * limits still apply) when a check goes overdue and the hire has gone quiet.

@@ -6,6 +6,7 @@ import { startEmailWatch } from "./lib/onboarding/email-watch";
 import { backfillDocumentPacks } from "./lib/onboarding/documents";
 import { initDemoAllowlist } from "./lib/onboarding/demo-volunteers";
 import { recoverStaleVoiceSessions } from "./lib/onboarding/voice";
+import { startApproverInboxPolling } from "./lib/onboarding/approver-email";
 
 const rawPort = process.env["PORT"];
 
@@ -31,6 +32,7 @@ app.listen(port, (err) => {
   startInboundEmailPolling();
   startSystemWatcher();
   startEmailWatch();
+  startApproverInboxPolling();
   backfillDocumentPacks().catch((err) =>
     logger.error({ err }, "document pack backfill failed"),
   );
