@@ -40,7 +40,7 @@ function volunteerProblem(v: DemoVolunteer): string | null {
   return null;
 }
 
-const inputCls = 'block w-full text-sm rounded-md h-9 px-2.5 border border-input outline-none focus:border-primary bg-background';
+const inputCls = 'block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] py-[6px] border border-input outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] bg-background shadow-sm';
 
 function PersonaBrief({ persona, volunteerName }: { persona: DemoPersona | undefined; volunteerName: string }) {
   const [copied, setCopied] = useState(false);
@@ -165,7 +165,7 @@ function RemoteApproverSettings() {
           placeholder="approver@example.com"
           value={draft}
           onChange={(e) => { setTouched(true); setDraft(e.target.value); setResult(null); }}
-          className={cn(inputCls, 'max-w-sm', invalid && 'border-red-400 focus:border-red-500')}
+          className={cn(inputCls, 'max-w-sm', invalid && 'border-red-400 focus:border-red-500 focus:ring-red-500')}
           aria-label="HR approver email"
         />
         <Button onClick={() => save(trimmed.length > 0 ? trimmed : null)} disabled={update.isPending || invalid || !dirty} className="gap-2 font-bold">
@@ -472,8 +472,8 @@ export function SettingsPage() {
                 <Mail className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-bold uppercase tracking-wider text-sm">HR Alert Email</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">
+                <h3 className="font-bold uppercase tracking-wider text-[var(--text-xs)]">HR Alert Email</h3>
+                <p className="text-[var(--text-sm)] text-muted-foreground mt-0.5">
                   Where outage alerts go when the Gmail reply monitor breaks (and recovery notices when it resumes).
                 </p>
               </div>
@@ -508,7 +508,7 @@ export function SettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="hr-alert-email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <Label htmlFor="hr-alert-email" className="text-[var(--text-xs)] font-bold uppercase tracking-wider text-muted-foreground">
                   Alert email address
                 </Label>
                 <input
@@ -522,17 +522,17 @@ export function SettingsPage() {
                     setResult(null);
                   }}
                   className={cn(
-                    'block w-full text-sm rounded-md h-10 px-3 border outline-none transition-colors bg-background shadow-sm',
-                    invalid ? 'border-red-400 focus:border-red-500' : 'border-input focus:border-primary',
+                    'block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-3 border outline-none transition-colors bg-background shadow-sm',
+                    invalid ? 'border-red-400 focus:border-red-500' : 'border-input focus:border-primary focus:ring-1 focus:ring-primary',
                   )}
                 />
                 {invalid && (
-                  <p className="text-xs text-red-600 flex items-center gap-1">
+                  <p className="text-[var(--text-xs)] text-red-600 flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> Enter a valid email address (e.g. hr@company.com).
                   </p>
                 )}
                 {settings?.envFallback && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[var(--text-xs)] text-muted-foreground">
                     Leaving this empty falls back to the server-configured address ({settings.envFallback}).
                   </p>
                 )}

@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 export function AnalyticsPage() {
   const { data: analytics, isLoading } = useGetOnboardingAnalytics();
 
-  if (isLoading) return <div className="p-12 text-center text-muted-foreground border-dashed border rounded-xl mx-auto max-w-2xl mt-8">Generating analytics...</div>;
+  if (isLoading) return <div className="p-12 text-center text-[var(--text-muted)] border-dashed border rounded-xl mx-auto max-w-2xl mt-8">Generating analytics...</div>;
   if (!analytics) return null;
 
   return (
@@ -23,8 +23,8 @@ export function AnalyticsPage() {
             <BrainCircuit className="w-8 h-8 text-indigo-700 dark:text-indigo-400" />
           </div>
           <div className="space-y-2">
-            <h3 className="font-bold text-lg text-indigo-950 dark:text-indigo-300">Agent Narrative Insight</h3>
-            <p className="text-indigo-900 dark:text-indigo-200/80 leading-relaxed text-sm">
+            <h3 className="font-bold text-[var(--text-lg)] text-indigo-950 dark:text-indigo-300">Agent Narrative Insight</h3>
+            <p className="text-indigo-900 dark:text-indigo-200/80 leading-relaxed text-[var(--text-sm)]">
               {analytics.narrative}
             </p>
           </div>
@@ -36,14 +36,14 @@ export function AnalyticsPage() {
           <CardHeader className="pb-2">
             <div className="flex justify-between items-start gap-4">
               <div>
-                <CardTitle className="text-lg">Skill Inflow Forecast</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">Next 30 days based on active cases</p>
+                <CardTitle className="text-[var(--text-lg)]">Skill Inflow Forecast</CardTitle>
+                <p className="text-[var(--text-xs)] text-muted-foreground mt-1">Next 30 days based on active cases</p>
               </div>
               <Badge variant="outline" className="gap-1.5 bg-amber-50 text-amber-700 border-amber-200 px-2 py-1 shadow-sm shrink-0">
                 <ShieldAlert className="w-3.5 h-3.5" /> Privacy Guard Active
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-4 bg-muted/40 p-2 rounded border border-dashed">Privacy threshold is set to K={analytics.suppressionThreshold}</p>
+            <p className="text-[10px] text-muted-foreground mt-4 bg-muted/40 p-2 rounded border border-dashed">Privacy threshold is set to K={analytics.suppressionThreshold}</p>
           </CardHeader>
           <CardContent>
             <div className="h-[280px] mt-6">
@@ -72,7 +72,7 @@ export function AnalyticsPage() {
         <div className="space-y-6">
           <Card className="shadow-sm">
             <CardHeader className="pb-4 border-b bg-muted/10">
-              <CardTitle className="flex items-center gap-2 text-lg">
+              <CardTitle className="flex items-center gap-2 text-[var(--text-lg)]">
                 <TrendingUp className="w-5 h-5 text-emerald-500" /> Cohort Readiness
               </CardTitle>
             </CardHeader>
@@ -84,11 +84,11 @@ export function AnalyticsPage() {
                     const percentage = Math.round((b.count / total) * 100);
                     return (
                       <div key={b.key}>
-                        <div className="flex justify-between text-sm mb-1.5">
+                        <div className="flex justify-between text-[var(--text-sm)] mb-1.5">
                           <span className="font-semibold text-foreground capitalize tracking-wide">{b.key.replace(/-/g, ' ')}</span>
                           <span className="font-bold text-primary">{percentage}% ({b.count})</span>
                         </div>
-                        <div className="h-2.5 w-full bg-secondary rounded-full overflow-hidden border">
+                        <div className="h-2 w-full bg-secondary rounded-full overflow-hidden border">
                           <div className="h-full bg-primary transition-all duration-500 ease-out" style={{ width: `${percentage}%` }} />
                         </div>
                       </div>
@@ -101,20 +101,20 @@ export function AnalyticsPage() {
 
           <Card className="shadow-sm">
             <CardHeader className="pb-4 border-b bg-muted/10">
-              <CardTitle className="flex items-center gap-2 text-lg">
+              <CardTitle className="flex items-center gap-2 text-[var(--text-lg)]">
                 <AlertTriangle className="w-5 h-5 text-amber-500" /> Bottleneck Themes
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
               <ul className="space-y-4">
                 {analytics.bottlenecks.map((b: any, i: number) => (
-                  <li key={i} className="flex gap-4 items-start text-sm">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 font-bold shrink-0 text-xs shadow-sm">
+                  <li key={i} className="flex gap-4 items-start text-[var(--text-sm)]">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 font-bold shrink-0 text-[10px] shadow-sm">
                       {b.occurrences}
                     </span>
                     <div>
                       <span className="text-foreground/90 font-bold leading-relaxed mt-0.5 capitalize">{b.theme.replace(/-/g, ' ')}</span>
-                      <p className="text-muted-foreground text-xs mt-1">{b.note}</p>
+                      <p className="text-muted-foreground text-[var(--text-xs)] mt-1">{b.note}</p>
                     </div>
                   </li>
                 ))}

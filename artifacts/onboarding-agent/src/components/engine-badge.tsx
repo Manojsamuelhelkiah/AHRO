@@ -7,31 +7,31 @@ export function EngineBadge({ engine, className }: { engine: string, className?:
 
   switch (engine.toLowerCase()) {
     case 'system':
-      style = { backgroundColor: '#f3f4f6', color: '#6b7280' };
+      style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
       label = 'SYS';
       break;
     case 'llm':
-      style = { backgroundColor: 'var(--primary-light)', color: 'var(--primary)' };
+      style = { backgroundColor: 'var(--primary-light-bg)', color: 'var(--primary)' };
       label = 'AI';
       break;
     case 'orchestrator':
-      style = { backgroundColor: '#f3e8ff', color: '#7e22ce' }; // purple-100, purple-700
+      style = { backgroundColor: 'var(--violet-light-bg)', color: 'var(--violet-fg)' };
       label = 'ORCH';
       break;
     case 'rules':
-      style = { backgroundColor: '#fef3c7', color: '#b45309' }; // amber-100, amber-700
+      style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-primary)', border: '1px solid var(--border)' };
       label = 'RULES';
       break;
     case 'ldm':
-      style = { backgroundColor: '#cffafe', color: '#0e7490' }; // cyan-100, cyan-700
+      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-blue)' };
       label = 'LDM';
       break;
     case 'human':
-      style = { backgroundColor: '#dbeafe', color: '#1d4ed8' }; // blue-100, blue-700
+      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-amber)' };
       label = 'HUMAN';
       break;
     default:
-      style = { backgroundColor: '#f3f4f6', color: '#6b7280' };
+      style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
   }
 
   return (
@@ -41,7 +41,7 @@ export function EngineBadge({ engine, className }: { engine: string, className?:
         ...style,
         fontSize: '10px',
         padding: '6px 8px',
-        borderRadius: '4px',
+        borderRadius: 'var(--radius-sm)',
         textTransform: 'uppercase',
         lineHeight: 1
       }}
@@ -59,19 +59,19 @@ export function HitlBadge({ pattern, className }: { pattern?: string, className?
 
   switch (pattern) {
     case 'notify-only': 
-      style = { backgroundColor: '#f3f4f6', color: '#4b5563' }; 
+      style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' }; 
       break;
     case 'approve-before-act': 
-      style = { backgroundColor: '#fef3c7', color: '#b45309' }; 
+      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-amber)' }; 
       break;
     case 'act-then-review': 
-      style = { backgroundColor: '#dbeafe', color: '#1d4ed8' }; 
+      style = { backgroundColor: 'var(--primary-light-bg)', color: 'var(--primary)' }; 
       break;
     case 'hard-block': 
-      style = { backgroundColor: '#fee2e2', color: '#b91c1c' }; 
+      style = { backgroundColor: 'var(--surface)', color: 'var(--status-red)', border: '1px solid var(--status-red)' }; 
       break;
     default: 
-      style = { backgroundColor: '#f3f4f6', color: '#4b5563' };
+      style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
   }
 
   return (
@@ -81,7 +81,7 @@ export function HitlBadge({ pattern, className }: { pattern?: string, className?
         ...style,
         fontSize: '10px',
         padding: '6px 8px',
-        borderRadius: '4px',
+        borderRadius: 'var(--radius-sm)',
         textTransform: 'uppercase',
         lineHeight: 1
       }}

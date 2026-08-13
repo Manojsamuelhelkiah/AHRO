@@ -48,21 +48,21 @@ export function SystemsPage() {
 
       <div className="space-y-5 mt-2">
         <div className="border-b pb-2" style={{ borderColor: 'var(--border)' }}>
-          <h2 className="text-xl font-semibold flex items-center gap-2"><Server className="w-5 h-5 text-primary" /> System Adapters</h2>
-          <p className="text-sm text-muted-foreground">Source systems that agents read from and write to via MCP.</p>
+          <h2 className="text-[var(--text-lg)] font-semibold flex items-center gap-2"><Server className="w-5 h-5 text-primary" /> System Adapters</h2>
+          <p className="text-[var(--text-sm)] text-muted-foreground mt-1">Source systems that agents read from and write to via MCP.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {loadingConn ? <div className="p-8 text-muted-foreground col-span-full text-center border rounded-xl border-dashed">Loading adapters...</div> : connectors?.map(conn => (
+          {loadingConn ? <div className="p-[var(--space-2xl)] text-[var(--text-muted)] col-span-full text-center border rounded-[var(--radius-lg)] border-dashed">Loading adapters...</div> : connectors?.map(conn => (
             <Card key={conn.key} className={cn("transition-all duration-300 shadow-sm", conn.status !== 'connected' && "opacity-75 bg-muted/10")}>
-              <CardContent className="p-6">
+              <CardContent className="p-[var(--space-xl)]">
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-4">
                     <div className={cn("p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", conn.status === 'connected' ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border")}>
                       <Server className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-lg leading-tight">{conn.label}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">{conn.description}</p>
+                      <h3 className="font-bold text-[var(--text-base)] leading-tight">{conn.label}</h3>
+                      <p className="text-[var(--text-sm)] text-muted-foreground mt-1">{conn.description}</p>
                     </div>
                   </div>
                   <label className="flex items-center cursor-pointer shrink-0 mt-1">
@@ -80,12 +80,12 @@ export function SystemsPage() {
                       <ArrowRightLeft className="w-3 h-3" /> Active Vendor
                     </Label>
                     <select 
-                      className={cn("block w-full text-sm font-semibold rounded-md border-input shadow-sm h-9 px-3 border outline-none focus:border-primary transition-colors", conn.status !== 'connected' ? "bg-muted text-muted-foreground opacity-50" : "bg-background")}
+                      className={cn("block w-full text-[var(--text-sm)] font-semibold rounded-[var(--radius-md)] border-input shadow-sm h-[32px] px-3 border outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors", conn.status !== 'connected' ? "bg-muted text-muted-foreground opacity-50" : "bg-background")}
                       value={conn.vendor}
                       onChange={(e) => handleSwap(conn.key, e.target.value)}
                       disabled={conn.status !== 'connected' || updateConnector.isPending}
                     >
-                      {conn.availableVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                      {conn.availableVendors.map((v: string) => <option key={v} value={v}>{v}</option>)}
                     </select>
                   </div>
                   {WATCHED_KEYS.includes(conn.key) && (
@@ -94,7 +94,7 @@ export function SystemsPage() {
                         <Eye className="w-3 h-3" /> Status Tracking
                       </Label>
                       <select
-                        className="block w-full text-sm font-semibold rounded-md border-input shadow-sm h-9 px-3 border outline-none focus:border-primary transition-colors bg-background"
+                        className="block w-full text-[var(--text-sm)] font-semibold rounded-[var(--radius-md)] border-input shadow-sm h-[32px] px-3 border outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors bg-background"
                         value={conn.trackingMode}
                         onChange={(e) => handleTrackingMode(conn.key, e.target.value as 'api' | 'email')}
                         disabled={updateConnector.isPending}
@@ -275,20 +275,20 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30 text-left">
-                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Received</th>
-                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">From</th>
-                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Subject</th>
-                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Read As</th>
-                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Watcher Action</th>
+                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Received</th>
+                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">From</th>
+                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Subject</th>
+                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Read As</th>
+                  <th className="px-[var(--space-md)] py-[var(--space-sm)] text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Watcher Action</th>
                 </tr>
               </thead>
               <tbody>
                 {watch.recent.map((e: any) => (
-                  <tr key={e.id} className="border-b last:border-0">
-                    <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap">{fmt(e.receivedAt)}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{e.fromAddress}</td>
-                    <td className="px-4 py-2.5 max-w-[280px] truncate" title={e.subject ?? ''}>{e.subject ?? '—'}</td>
-                    <td className="px-4 py-2.5">
+                  <tr key={e.id} className="border-b last:border-0 hover:bg-muted/10 transition-colors">
+                    <td className="px-[var(--space-md)] py-[var(--space-sm)] font-mono text-[var(--text-xs)] whitespace-nowrap">{fmt(e.receivedAt)}</td>
+                    <td className="px-[var(--space-md)] py-[var(--space-sm)] font-mono text-[var(--text-xs)]">{e.fromAddress}</td>
+                    <td className="px-[var(--space-md)] py-[var(--space-sm)] max-w-[280px] truncate text-[var(--text-xs)]" title={e.subject ?? ''}>{e.subject ?? '—'}</td>
+                    <td className="px-[var(--space-md)] py-[var(--space-sm)]">
                       <Badge className={cn("uppercase tracking-wider text-[10px] shadow-none",
                         e.parsedStatus === 'completed' ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200"
                           : e.parsedStatus === 'exception' ? "bg-red-100 text-red-800 hover:bg-red-100 border-red-200"
@@ -296,7 +296,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
                         {e.parsedStatus}
                       </Badge>
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[300px] truncate" title={e.action}>{e.action}</td>
+                    <td className="px-[var(--space-md)] py-[var(--space-sm)] text-[var(--text-xs)] text-muted-foreground max-w-[300px] truncate" title={e.action}>{e.action}</td>
                   </tr>
                 ))}
               </tbody>

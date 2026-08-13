@@ -80,30 +80,30 @@ export function LoginPage() {
       {/* LEFT — branding panel (65%) */}
       <div
         className="lg:w-[65%] lg:h-full lg:overflow-hidden text-white flex flex-col px-8 py-10 lg:px-12 lg:py-8 min-h-[50dvh] relative"
-        style={{ background: 'linear-gradient(to bottom, #0f0c29, #1e1b4b, #302b63)' }}
+        style={{ background: 'linear-gradient(to bottom, #080626, #100D3E, #15134F)' }}
       >
         {/* dot-grid overlay */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)',
+            backgroundImage: 'radial-gradient(circle, rgba(180,175,255,0.15) 1px, transparent 1px)',
             backgroundSize: '22px 22px',
-            opacity: 0.05,
+            opacity: 0.15,
           }}
         />
         <div className="relative flex flex-col flex-1 gap-6 lg:gap-[clamp(16px,3vh,40px)] lg:justify-evenly lg:pb-[4vh] lg:min-h-0">
           {/* wordmark */}
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-indigo-500/30 border border-indigo-300/30 flex items-center justify-center shrink-0">
-                <Server className="h-6 w-6 text-indigo-200" />
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border" style={{ backgroundColor: 'rgba(101, 91, 243, 0.2)', borderColor: 'rgba(180, 175, 255, 0.18)' }}>
+                <Server className="h-6 w-6 text-[#B9B4FF]" />
               </div>
               <div>
                 <p className="text-[28px] leading-tight font-bold tracking-tight">Agentic HRO</p>
-                <p className="text-[13px] font-light text-indigo-300 uppercase tracking-widest">Suite</p>
+                <p className="text-[13px] font-light uppercase tracking-widest" style={{ color: '#B9B4FF' }}>Suite</p>
               </div>
             </div>
-            <p className="mt-4 border-l-2 border-indigo-400 pl-3 text-base italic text-slate-300 max-w-md">
+            <p className="mt-4 border-l-2 pl-3 text-base italic text-slate-300 max-w-md" style={{ borderColor: '#655BF3' }}>
               Intelligent HR operations, autonomously delivered
             </p>
             <p className="mt-4 text-[15px] font-medium text-white/90 max-w-lg">
@@ -116,10 +116,11 @@ export function LoginPage() {
             {CAPABILITIES.map((c) => (
               <div
                 key={c.title}
-                className="rounded-xl bg-white/[0.05] border border-white/10 px-5 py-5 transition-all duration-200 hover:bg-white/[0.08] hover:border-indigo-300/30 hover:-translate-y-0.5"
+                className="rounded-xl px-5 py-5 transition-all duration-200 hover:-translate-y-0.5"
+                style={{ backgroundColor: 'rgba(255,255,255,0.055)', border: '1px solid rgba(180, 175, 255, 0.18)' }}
               >
-                <c.icon className="h-5 w-5 text-indigo-300" aria-hidden="true" />
-                <p className="mt-3 text-[11px] uppercase tracking-widest text-indigo-300 font-semibold">{c.title}</p>
+                <c.icon className="h-5 w-5" style={{ color: '#B9B4FF' }} aria-hidden="true" />
+                <p className="mt-3 text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#B9B4FF' }}>{c.title}</p>
                 <p className="mt-2 text-[13px] leading-relaxed text-white/85">{c.text}</p>
               </div>
             ))}
@@ -127,7 +128,7 @@ export function LoginPage() {
 
           {/* operating model */}
           <div className="max-w-2xl">
-            <div className="border-t border-white/10 pt-5">
+            <div className="border-t pt-5" style={{ borderColor: 'rgba(180, 175, 255, 0.18)' }}>
               <div className="flex items-start justify-between gap-2 max-w-lg">
                 {OPERATING_MODEL.map((step, i) => (
                   <div key={step.title} className="flex items-start flex-1 min-w-0">
@@ -136,7 +137,7 @@ export function LoginPage() {
                       <p className="mt-1 text-xs text-slate-300">{step.text}</p>
                     </div>
                     {i < OPERATING_MODEL.length - 1 && (
-                      <ArrowRight className="h-4 w-4 text-indigo-300/70 shrink-0 mx-3 mt-0.5" aria-hidden="true" />
+                      <ArrowRight className="h-4 w-4 shrink-0 mx-3 mt-0.5" style={{ color: '#B9B4FF' }} aria-hidden="true" />
                     )}
                   </div>
                 ))}
@@ -158,8 +159,8 @@ export function LoginPage() {
       {/* RIGHT — login panel (35%) */}
       <div className="lg:w-[35%] lg:h-full lg:overflow-y-auto bg-white flex flex-col relative">
         {/* top logo mark */}
-        <div className="flex justify-center py-4 border-b border-slate-100 shrink-0">
-          <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center">
+        <div className="flex justify-center py-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--primary)' }}>
             <Server className="h-5 w-5 text-white" />
           </div>
         </div>
@@ -167,11 +168,11 @@ export function LoginPage() {
         <div className="flex-1 flex items-center justify-center px-6 py-8">
           <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5 lg:space-y-[clamp(10px,2vh,24px)]">
             <div className="space-y-1">
-              <h1 className="text-[28px] font-bold" style={{ color: '#0f0c29' }}>Welcome back</h1>
-              <p className="text-sm text-slate-500">Sign in to your control tower</p>
+              <h1 className="text-[28px] font-bold text-[var(--text-primary)]">Welcome back</h1>
+              <p className="text-sm text-[var(--text-secondary)]">Sign in to your control tower</p>
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="login-email" className="text-sm font-medium text-slate-700">Email</label>
+              <label htmlFor="login-email" className="text-sm font-medium text-[var(--text-primary)]">Email</label>
               <input
                 id="login-email"
                 type="email"
@@ -179,11 +180,12 @@ export function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
                 required
-                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25"
+                className="w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="login-password" className="text-sm font-medium text-slate-700">Password</label>
+              <label htmlFor="login-password" className="text-sm font-medium text-[var(--text-primary)]">Password</label>
               <input
                 id="login-password"
                 type="password"
@@ -191,39 +193,39 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
-                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25"
+                className="w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
               />
             </div>
             <button
               type="submit"
               disabled={!signIn}
               className="w-full h-12 rounded-lg text-white font-semibold text-sm transition-all hover:-translate-y-px flex items-center justify-center gap-2 disabled:opacity-60"
-              style={{ background: 'linear-gradient(to right, #4f46e5, #6366f1)' }}
+              style={{ background: 'linear-gradient(to right, #4C42EE, #655BF3)' }}
             >
               Sign In <ArrowRight className="h-4 w-4" />
             </button>
-            <p className="text-xs text-slate-400 text-center">Demo mode · No credentials required</p>
-            <p className="text-xs text-slate-400 text-center">
-              <a href={`${basePath}/sign-up`} className="text-indigo-500 hover:text-indigo-600 font-medium">Sign up</a>
+            <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>
+              <a href={`${basePath}/sign-up`} className="font-medium hover:underline" style={{ color: 'var(--primary)' }}>Sign up</a>
               {' · '}
-              <a href={`${basePath}/sign-in`} className="text-indigo-500 hover:text-indigo-600 font-medium">Full sign-in</a>
+              <a href={`${basePath}/sign-in`} className="font-medium hover:underline" style={{ color: 'var(--primary)' }}>Full sign-in</a>
             </p>
           </form>
         </div>
 
         {/* bottom trust bar */}
-        <div className="border-t border-slate-100 py-4 flex items-center justify-center gap-5 grayscale">
-          <span className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+        <div className="border-t py-4 flex items-center justify-center gap-5 grayscale" style={{ borderColor: 'var(--border)' }}>
+          <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
             <Lock className="h-3.5 w-3.5" /> Secured by
           </span>
-          <span className="text-sm font-bold text-slate-500 tracking-tight">HCLTech</span>
+          <span className="text-sm font-bold tracking-tight" style={{ color: 'var(--text-secondary)' }}>HCLTech</span>
         </div>
 
         {/* authenticating overlay */}
         {authing && (
           <div className="absolute inset-0 bg-white/95 z-10 flex flex-col items-center justify-center gap-4">
-            <Loader2 className="h-9 w-9 animate-spin text-indigo-600" />
-            <p className="text-sm font-medium text-slate-600">Authenticating...</p>
+            <Loader2 className="h-9 w-9 animate-spin" style={{ color: 'var(--primary)' }} />
+            <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Authenticating...</p>
           </div>
         )}
       </div>

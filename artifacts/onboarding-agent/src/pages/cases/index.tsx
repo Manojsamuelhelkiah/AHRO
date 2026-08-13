@@ -22,7 +22,7 @@ export function CasesPage() {
       {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
 
       <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', backgroundColor: '#ffffff' }} className="flex items-center gap-4">
+        <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface)' }} className="flex items-center gap-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4" style={{ color: 'var(--text-muted)' }} />
             <Input className="pl-9" placeholder="Search cases..." />
@@ -31,27 +31,27 @@ export function CasesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid var(--border)' }}>
-                <th style={{ padding: '10px 16px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Worker</th>
-                <th style={{ padding: '10px 16px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Role & Geo</th>
-                <th style={{ padding: '10px 16px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Joining Date</th>
-                <th style={{ padding: '10px 16px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Stage</th>
-                <th style={{ padding: '10px 16px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Orchestration</th>
-                <th style={{ padding: '10px 16px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Action</th>
+              <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
+                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Worker</th>
+                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Role & Geo</th>
+                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Joining Date</th>
+                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Stage</th>
+                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>Orchestration</th>
+                <th style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Loading...</td></tr>
+                <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Loading...</td></tr>
               ) : cases?.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No cases found.</td></tr>
+                <tr><td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>No cases found.</td></tr>
               ) : (
                 cases?.map(c => (
                   <tr 
                     key={c.id} 
                     className="group transition-colors cursor-pointer"
                     style={{ borderBottom: '1px solid var(--border)' }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f5f3ff'}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--primary-light)'}
                     onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                     onClick={(e) => {
                       if (!(e.target as HTMLElement).closest('a') && !(e.target as HTMLElement).closest('button')) {
@@ -59,29 +59,29 @@ export function CasesPage() {
                       }
                     }}
                   >
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{c.workerName}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{c.workerEmail}</div>
+                    <td style={{ padding: '12px var(--space-lg)' }}>
+                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{c.workerName}</div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{c.workerEmail}</div>
                       <div className="flex gap-2 mt-1">
                         <TypeBadge type={c.hireType} />
                         {c.urgency !== 'normal' && <UrgencyBadge urgency={c.urgency} />}
                       </div>
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{c.role}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{c.geography}</div>
+                    <td style={{ padding: '12px var(--space-lg)' }}>
+                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.role}</div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{c.geography}</div>
                     </td>
-                    <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--text-secondary)' }} className="whitespace-nowrap">
+                    <td style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }} className="whitespace-nowrap">
                       {format(new Date(c.joiningDate), 'MMM d, yyyy')}
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
+                    <td style={{ padding: '12px var(--space-lg)' }}>
                       <StageBadge stage={c.lifecycleStage} />
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
+                    <td style={{ padding: '12px var(--space-lg)' }}>
                       <StatusBadge status={c.orchestrationStatus} />
                     </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                      <Link href={`/cases/${c.id}`} className="hover:underline" style={{ fontSize: '12px', fontWeight: 500, color: 'var(--primary)' }} onClick={e => e.stopPropagation()}>
+                    <td style={{ padding: '12px var(--space-lg)', textAlign: 'right' }}>
+                      <Link href={`/cases/${c.id}`} className="hover:underline" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--primary)' }} onClick={e => e.stopPropagation()}>
                         View Details
                       </Link>
                     </td>
@@ -98,9 +98,9 @@ export function CasesPage() {
 
 function TypeBadge({ type }: { type: string }) {
   let style = {};
-  if (type === 'contractor') style = { backgroundColor: '#dbeafe', color: '#1d4ed8' };
-  else if (type === 'external-fte') style = { backgroundColor: '#f3e8ff', color: '#7e22ce' };
-  else style = { backgroundColor: '#d1fae5', color: '#047857' };
+  if (type === 'contractor') style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-blue)' };
+  else if (type === 'external-fte') style = { backgroundColor: 'var(--primary-light)', color: 'var(--primary-dark)' };
+  else style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-green)' };
 
   return (
     <span style={{ ...style, fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
@@ -111,8 +111,8 @@ function TypeBadge({ type }: { type: string }) {
 
 function UrgencyBadge({ urgency }: { urgency: string }) {
   let style = {};
-  if (urgency === 'high' || urgency === 'critical' || urgency === 'elevated') style = { backgroundColor: '#fef3c7', color: '#b45309' };
-  else style = { backgroundColor: '#f3f4f6', color: '#4b5563' };
+  if (urgency === 'high' || urgency === 'critical' || urgency === 'elevated') style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-amber)' };
+  else style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
 
   return (
     <span style={{ ...style, fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
@@ -125,33 +125,33 @@ function StageBadge({ stage }: { stage: string }) {
   let style = {};
   switch (stage.toLowerCase()) {
     case 'preboarding':
-      style = { backgroundColor: '#dbeafe', color: '#1d4ed8' };
+      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-blue)' };
       break;
     case 'in-progress':
-      style = { backgroundColor: '#fef3c7', color: '#b45309' };
+      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-amber)' };
       break;
     case 'day1-review':
-      style = { backgroundColor: '#f3e8ff', color: '#7e22ce' };
+      style = { backgroundColor: 'var(--primary-light)', color: 'var(--primary-dark)' };
       break;
     case 'completed':
     case 'complete':
-      style = { backgroundColor: '#d1fae5', color: '#047857' };
+      style = { backgroundColor: 'var(--surface-soft)', color: 'var(--status-green)' };
       break;
     default:
-      style = { backgroundColor: '#f3f4f6', color: '#4b5563' };
+      style = { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
   }
-  return <span style={{ ...style, fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', textTransform: 'uppercase' }}>{stage}</span>;
+  return <span style={{ ...style, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '4px 8px', borderRadius: '20px', textTransform: 'uppercase' }}>{stage}</span>;
 }
 
 function StatusBadge({ status }: { status: string }) {
   const isRunning = status === 'running' || status === 'waiting-approval';
   const style = isRunning
-    ? { backgroundColor: '#d1fae5', color: '#059669' }
-    : { backgroundColor: '#f3f4f6', color: '#6b7280' };
+    ? { backgroundColor: 'var(--surface-soft)', color: 'var(--status-green)' }
+    : { backgroundColor: 'var(--surface-alt)', color: 'var(--text-muted)' };
 
   return (
-    <span style={{ ...style, fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-      {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse"></span>}
+    <span style={{ ...style, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '4px 8px', borderRadius: '20px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+      {isRunning && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--status-green)' }}></span>}
       {status === 'not-started' ? 'IDLE' : status}
     </span>
   );
@@ -195,11 +195,11 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
 
   return (
     <Card className="mb-6 shadow-md">
-      <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', backgroundColor: '#f9fafb' }} className="flex justify-between items-center">
-        <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>New Intake Trigger</h3>
+      <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex justify-between items-center">
+        <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>New Intake Trigger</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
       </div>
-      <form onSubmit={handleSubmit} className="p-4 space-y-4">
+      <form onSubmit={handleSubmit} className="p-[var(--space-lg)] space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <Label>Worker Name</Label>
@@ -213,7 +213,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
             <Label>Phone (E.164)</Label>
             <Input name="workerPhone" placeholder="+1234567890" value={phone} onChange={(e) => setPhone(e.target.value)} required={channelPref === 'whatsapp'} />
             {needsPhone && (
-              <p className="text-[11px] text-amber-600 leading-snug">
+              <p className="text-[11px] leading-snug" style={{ color: 'var(--status-amber)' }}>
                 {channelPref === 'whatsapp'
                   ? 'WhatsApp is selected — a phone number is required (the agent falls back to email without one).'
                   : 'Without a phone number, WhatsApp messages are skipped and only email is used.'}
@@ -222,7 +222,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
           </div>
           <div className="space-y-1">
             <Label>Contact Channel</Label>
-            <select name="channelPreference" value={channelPref} onChange={(e) => setChannelPref(e.target.value)} className="flex h-[36px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[12px] py-[8px] text-[13px] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
+            <select name="channelPreference" value={channelPref} onChange={(e) => setChannelPref(e.target.value)} className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="email">Email only</option>
               <option value="whatsapp">WhatsApp only</option>
               <option value="both">Email + WhatsApp</option>
@@ -230,7 +230,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
           </div>
           <div className="space-y-1">
             <Label>Hire Type</Label>
-            <select name="hireType" className="flex h-[36px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[12px] py-[8px] text-[13px] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
+            <select name="hireType" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="external-fte">External FTE</option>
               <option value="contractor">Contractor</option>
               <option value="rehire">Rehire</option>
@@ -239,7 +239,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
           </div>
           <div className="space-y-1">
             <Label>Worker Category</Label>
-            <select name="workerCategory" className="flex h-[36px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[12px] py-[8px] text-[13px] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
+            <select name="workerCategory" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="employee">Employee</option>
               <option value="contractor">Contractor</option>
               <option value="vendor">Vendor</option>
@@ -276,7 +276,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
           </div>
           <div className="space-y-1">
             <Label>Urgency</Label>
-            <select name="urgency" className="flex h-[36px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[12px] py-[8px] text-[13px] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]">
+            <select name="urgency" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]">
               <option value="normal">Normal</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>

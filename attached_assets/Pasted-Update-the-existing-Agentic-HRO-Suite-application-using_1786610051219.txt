@@ -1,0 +1,972 @@
+Update the existing **Agentic HRO Suite** application using the attached/approved login-page visual concept as the **design reference and source of truth**.
+
+The objective is to:
+
+1. Implement the approved login-page visual direction.
+2. Establish a reusable **Agentic HRO design system**.
+3. Apply the same color, typography, spacing, surface, border, icon, and interaction language consistently across the ENTIRE application.
+4. Ensure future screens can reuse the same theme without independently choosing colors.
+
+Do NOT treat this as a one-page styling exercise.
+
+This should become the application's **global visual language**.
+
+---
+
+# 1. SOURCE OF TRUTH
+
+Use the approved Agentic HRO login-page concept as the visual reference.
+
+The target style is:
+
+**Premium enterprise SaaS + AI operations control tower + governed automation**
+
+Characteristics:
+
+* sophisticated
+* calm
+* intelligent
+* operational
+* trustworthy
+* AI-native
+* enterprise-grade
+* modern but restrained
+
+Do NOT copy the interface of another vendor.
+
+The goal is to create a distinctive Agentic HRO identity.
+
+---
+
+# 2. ESTABLISH GLOBAL DESIGN TOKENS
+
+Before modifying individual screens, inspect the current application and create or consolidate a centralized design-token/theme system.
+
+Do NOT hard-code colors repeatedly across components.
+
+Create reusable tokens for:
+
+### Brand colors
+
+Primary Agentic Indigo:
+`#4C42EE`
+
+Primary Indigo Deep:
+`#3730C9`
+
+Secondary Violet:
+`#655BF3`
+
+Accent Lavender:
+`#B9B4FF`
+
+Soft Lavender:
+`#8F89FF`
+
+### Dark surfaces
+
+Midnight:
+`#080626`
+
+Deep Navy:
+`#100D3E`
+
+Control Tower:
+`#15134F`
+
+Raised Dark Surface:
+`rgba(255,255,255,0.055)`
+
+Dark Surface Border:
+`rgba(180,175,255,0.18)`
+
+### Light surfaces
+
+Primary Background:
+`#FFFFFF`
+
+Secondary Background:
+`#F8F9FC`
+
+Soft Surface:
+`#F3F4F8`
+
+Border:
+`#E4E7EF`
+
+### Text
+
+Primary Dark:
+`#0B1230`
+
+Secondary Dark:
+`#30364F`
+
+Muted Dark:
+`#68708D`
+
+Primary Light:
+`#F7F7FF`
+
+Secondary Light:
+`#D5D2ED`
+
+Muted Light:
+`#AAA7C7`
+
+### Semantic colors
+
+Success / Operational:
+`#20E58A`
+
+Warning:
+Use a restrained amber/gold rather than bright yellow.
+
+Error:
+Use a restrained enterprise red rather than saturated bright red.
+
+Info:
+Use a controlled blue/lavender tone.
+
+Do not use semantic colors decoratively.
+
+Use them only where their meaning is relevant.
+
+---
+
+# 3. DARK CONTROL-TOWER THEME
+
+The dark navy/indigo visual language from the login page should become the foundation for:
+
+* Agent Control Tower
+* Operations dashboards
+* Agent orchestration views
+* AI activity panels
+* command-center areas
+* executive operational views
+* high-level monitoring pages
+
+Use:
+
+Midnight → Deep Navy → Control Tower → Indigo/Violet accents
+
+The dark surfaces should have subtle depth.
+
+Use restrained radial/rise lighting effects where appropriate.
+
+Example visual approach:
+
+* deep navy base
+* subtle indigo illumination
+* slightly elevated dark cards
+* thin lavender/indigo borders
+* restrained green for healthy states
+
+Do NOT use excessive glowing effects.
+
+---
+
+# 4. LIGHT ENTERPRISE THEME
+
+Not every page should be dark.
+
+For data-heavy enterprise workflows such as:
+
+* employee records
+* case management
+* onboarding forms
+* payroll workflows
+* compliance reviews
+* approvals
+* tables
+* employee details
+* settings
+* administration
+
+use a clean light enterprise surface.
+
+Primary structure:
+
+White
+→ Soft Gray
+→ Cool Gray borders
+→ Indigo actions
+→ Navy text
+→ restrained semantic colors
+
+The dark control-tower style and light operational workspace must feel like the SAME PRODUCT.
+
+They should share:
+
+* typography
+* icon language
+* spacing
+* borders
+* radius
+* buttons
+* badges
+* semantic colors
+* interaction states
+
+---
+
+# 5. GLOBAL COLOR PHILOSOPHY
+
+Important:
+
+Do NOT simply make every component purple.
+
+Purple/indigo is the **Agentic HRO brand language**, not the color of every object.
+
+Use:
+
+### Indigo/Violet
+
+Brand
+Primary actions
+Agent states
+Selected navigation
+Important interactive elements
+
+### Navy
+
+Primary dark surfaces
+Control Tower backgrounds
+Enterprise operational environments
+
+### Lavender
+
+Secondary emphasis
+Icons
+Subtle labels
+Inactive/secondary states
+
+### Emerald
+
+Healthy
+Operational
+Successful
+Completed
+
+### Amber
+
+Attention
+Pending
+Warning
+Human review
+
+### Red
+
+Blocked
+Failed
+Critical exception
+
+Color must communicate meaning.
+
+---
+
+# 6. GLOBAL TYPOGRAPHY
+
+Standardize typography across the entire app.
+
+Use the existing application font system unless there is a strong reason to change it.
+
+Establish clear levels:
+
+### Display
+
+Large page titles / hero titles
+
+### H1
+
+Primary page heading
+
+### H2
+
+Section heading
+
+### H3
+
+Subsection heading
+
+### Label
+
+Compact uppercase enterprise labels
+
+### Body
+
+Normal operational text
+
+### Metadata
+
+Secondary timestamps / IDs / supporting information
+
+### Numeric
+
+KPIs and operational values
+
+Avoid excessive bolding.
+
+Use font weight to establish hierarchy rather than color alone.
+
+---
+
+# 7. STANDARDIZE BORDER RADIUS
+
+Create a consistent radius system.
+
+Example:
+
+Small:
+`8px`
+
+Medium:
+`12px`
+
+Large:
+`16px`
+
+Extra Large:
+`20px`
+
+Do not allow random components to use unrelated corner radii.
+
+The login concept uses rounded enterprise cards; carry that language throughout the application.
+
+---
+
+# 8. STANDARDIZE SHADOWS
+
+Use restrained shadows.
+
+Light surfaces:
+soft cool-gray shadows.
+
+Dark surfaces:
+very subtle elevation using low-opacity black/indigo shadows.
+
+Do NOT use exaggerated glowing shadows.
+
+The product should feel premium through subtle depth.
+
+---
+
+# 9. STANDARDIZE BORDERS
+
+Use:
+
+Light UI:
+soft cool-gray borders
+
+Dark UI:
+low-opacity lavender/indigo borders
+
+Selected:
+controlled indigo border
+
+Focus:
+indigo focus ring
+
+Error:
+semantic red border
+
+Avoid thick borders.
+
+---
+
+# 10. BACKGROUND SYSTEM
+
+Create reusable backgrounds.
+
+### Control Tower Background
+
+Use the approved concept:
+
+Deep midnight navy with:
+
+* subtle indigo radial illumination
+* subtle dotted/grid texture
+* restrained depth
+* no distracting animation
+
+### Enterprise Workspace Background
+
+Use:
+
+`#F8F9FC`
+
+with white cards.
+
+### Detail / Modal Surface
+
+Use:
+
+White / raised surface
+
+All screens should inherit these from theme tokens rather than creating their own backgrounds.
+
+---
+
+# 11. GLOBAL BUTTON SYSTEM
+
+Standardize buttons across the entire application.
+
+Primary:
+
+Agentic Indigo gradient or solid-indigo treatment consistent with the login page.
+
+Secondary:
+
+White/light surface with subtle border.
+
+Dark secondary:
+
+Transparent dark surface with subtle border.
+
+Danger:
+
+Restricted semantic red.
+
+Success:
+
+Restricted semantic green.
+
+Every button should support:
+
+* default
+* hover
+* focus
+* pressed
+* disabled
+* loading
+
+Do not create random button colors on individual screens.
+
+---
+
+# 12. GLOBAL FORM SYSTEM
+
+Standardize:
+
+* text inputs
+* password inputs
+* dropdowns
+* date fields
+* search
+* text areas
+* checkboxes
+* radio buttons
+* toggles
+
+Use the same:
+
+* radius
+* border
+* focus state
+* typography
+* label spacing
+* helper text
+* error treatment
+
+The authentication screen and the rest of the application should clearly feel like the same design system.
+
+---
+
+# 13. GLOBAL CARD SYSTEM
+
+Create a reusable card model.
+
+Card variants:
+
+### Light Card
+
+For enterprise operational workspaces.
+
+### Dark Card
+
+For Control Tower environments.
+
+### Elevated Card
+
+For important/high-priority content.
+
+### Interactive Card
+
+For selectable/hoverable content.
+
+Do NOT create unique card styling for every screen.
+
+---
+
+# 14. AGENT VISUAL LANGUAGE
+
+Establish a distinct visual language for agents throughout the platform.
+
+Agents should consistently use:
+
+* Agentic Indigo
+* lavender highlights
+* automation/workflow icons
+* operational status indicators
+
+Standard agent states:
+
+### Operational
+
+Emerald
+
+### Waiting
+
+Neutral / soft lavender
+
+### Human Review
+
+Amber
+
+### Blocked
+
+Red
+
+### Degraded
+
+Amber/red combination
+
+Make these reusable components.
+
+Do not hard-code agent state colors separately in each screen.
+
+---
+
+# 15. HUMAN-IN-THE-LOOP VISUAL LANGUAGE
+
+Human interventions should have their own consistent treatment.
+
+Use a restrained amber/gold accent.
+
+Examples:
+
+**Human Review**
+
+**Approval Required**
+
+**Exception Requires Decision**
+
+**Awaiting Reviewer**
+
+These should look clearly different from autonomous agent activity.
+
+This is an important product distinction.
+
+---
+
+# 16. POLICY / GOVERNANCE VISUAL LANGUAGE
+
+Policy decisions should consistently use the RULES/GOVERNANCE visual language.
+
+Use a subtle shield/check/rules icon family.
+
+Example states:
+
+Policy Passed
+Policy Review
+Policy Exception
+Policy Block
+
+Do not use the same styling as ordinary system events.
+
+---
+
+# 17. NAVIGATION
+
+Apply the same design language to:
+
+* sidebar
+* top navigation
+* breadcrumbs
+* tabs
+* command menus
+* workspace switching
+
+Selected navigation should use the Agentic Indigo system.
+
+Do not use bright purple blocks everywhere.
+
+Selection should be subtle and premium.
+
+---
+
+# 18. TABLES
+
+Standardize tables across:
+
+* employees
+* cases
+* approvals
+* payroll
+* compliance
+* agent actions
+* audit logs
+
+Use:
+
+* clean white/light background
+* subtle row separators
+* strong column hierarchy
+* compact enterprise spacing
+* indigo selected states
+* semantic status badges
+
+Avoid overly decorative table designs.
+
+---
+
+# 19. BADGES AND STATUS PILLS
+
+Create one reusable status system.
+
+Examples:
+
+**Operational**
+
+**Pending**
+
+**Human Review**
+
+**Blocked**
+
+**Completed**
+
+**Exception**
+
+Each should have standardized:
+
+* background
+* text
+* border
+* icon
+* spacing
+* radius
+
+Do not manually style these per page.
+
+---
+
+# 20. ICONOGRAPHY
+
+Use a consistent icon family throughout the product.
+
+Do not mix unrelated visual icon styles.
+
+Use:
+
+* workflow icons for agents
+* shield/rules icons for governance
+* human icons for review
+* document icons for HR records
+* system icons for integrations
+
+Icons should generally be:
+
+* thin/medium weight
+* enterprise
+* simple
+* non-cartoonish
+
+---
+
+# 21. MODALS / DRAWERS
+
+Apply the same design language to:
+
+* approval dialogs
+* employee detail drawers
+* agent decision explanations
+* policy exceptions
+* confirmation dialogs
+
+Use:
+
+* consistent radius
+* subtle shadow
+* consistent padding
+* clear hierarchy
+* Indigo primary actions
+
+---
+
+# 22. AGENT CONTROL TOWER
+
+The authenticated Control Tower should become the place where the operational dashboard content goes.
+
+Here it is appropriate to show:
+
+* Active Cases
+* SLA Adherence
+* Autonomously Resolved
+* Agent Operations
+* Agent Activity
+* Human Interventions
+* Exceptions
+* Policy Decisions
+* Escalations
+
+The login page should NOT show this operational information.
+
+The application should make a clear distinction:
+
+### Login
+
+Secure product entry
+
+### Control Tower
+
+Live operational command center
+
+---
+
+# 23. DO NOT APPLY DARK THEME EVERYWHERE
+
+This is important.
+
+Do not force every screen into the dark navy design.
+
+Use the dark visual language primarily for:
+
+* control tower
+* executive views
+* agent orchestration
+* AI operational views
+
+Use the light enterprise theme for:
+
+* forms
+* employee data
+* workflows
+* tables
+* configuration
+* administration
+
+The two modes should feel like one coherent design system.
+
+---
+
+# 24. ANIMATION
+
+Standardize animation behavior.
+
+Use subtle transitions:
+
+150–220ms typical UI transitions.
+
+Use animation for:
+
+* hover
+* panel opening
+* navigation
+* status changes
+* loading
+
+Avoid:
+
+* continuous pulsing
+* flashy AI animations
+* rotating cards
+* fake live activity
+* excessive motion
+
+The UI should feel responsive, not theatrical.
+
+---
+
+# 25. RESPONSIVE DESIGN
+
+The new design system must work across:
+
+* desktop
+* laptop
+* tablet
+* mobile
+
+Use centralized breakpoints.
+
+Ensure:
+
+* cards reflow gracefully
+* navigation collapses appropriately
+* tables become responsive
+* drawers become full-screen when appropriate
+* control tower remains readable
+* spacing scales consistently
+
+Do not create separate visual identities for mobile.
+
+---
+
+# 26. IMPLEMENTATION STRATEGY
+
+Before changing UI:
+
+1. Inspect the existing application architecture.
+2. Identify the current global CSS/theme system.
+3. Identify reusable UI components.
+4. Create or consolidate design tokens.
+5. Update the shared components first.
+6. Then propagate the visual system across screens.
+7. Avoid one-off page-specific styles.
+8. Remove duplicated color definitions where practical.
+9. Do not rewrite business logic.
+10. Do not change APIs or application behavior unless necessary for styling.
+
+Prioritize maintainability.
+
+---
+
+# 27. CENTRALIZE THEME VALUES
+
+Where the current application supports it, establish a centralized theme system such as:
+
+* CSS variables
+* theme configuration
+* design-token file
+* shared component theme
+
+Example conceptual structure:
+
+```text
+colors
+typography
+spacing
+radius
+shadows
+borders
+states
+components
+```
+
+The exact implementation should follow the existing technology stack.
+
+Do not create unnecessary dependencies simply to implement the theme.
+
+---
+
+# 28. IMPORTANT: DO NOT BREAK FUNCTIONALITY
+
+This is a visual-system implementation.
+
+Do NOT change:
+
+* authentication logic
+* routing
+* database logic
+* APIs
+* agent execution logic
+* business rules
+* employee workflows
+* permissions
+* backend services
+
+unless an existing component has a purely presentational defect that must be fixed to apply the shared styling.
+
+---
+
+# 29. LOGIN PAGE
+
+Update the login page so it matches the approved visual concept.
+
+The left side should use the new:
+
+**midnight → deep navy → controlled indigo → subtle violet illumination**
+
+pattern.
+
+The capability cards should use the same elevated dark-surface treatment.
+
+The right side should remain a clean enterprise authentication surface.
+
+Ensure there are no demo credentials or demo-language elements.
+
+Do not reintroduce operational HR metrics on the login screen.
+
+---
+
+# 30. APP-WIDE CONSISTENCY CHECK
+
+After implementation, inspect the major application areas:
+
+* Login
+* Control Tower
+* Agent Management
+* Case Management
+* Employee Operations
+* Onboarding
+* Payroll
+* Compliance
+* Helpdesk
+* Approvals
+* Exceptions
+* Audit
+* Integrations
+* Administration
+* Settings
+
+Every area should visibly belong to the same Agentic HRO product.
+
+A user should be able to move from one section to another without feeling that each page was designed independently.
+
+---
+
+# 31. FINAL DESIGN PRINCIPLE
+
+The Agentic HRO visual identity should communicate:
+
+**Intelligence through Indigo.**
+
+**Trust through Navy and White.**
+
+**Governance through structured surfaces and controls.**
+
+**Operational health through Emerald.**
+
+**Human intervention through Amber.**
+
+**Critical exceptions through Red.**
+
+This color logic must be consistent across the entire platform.
+
+Do not merely "make the app purple."
+
+Create a coherent visual language.
+
+---
+
+# 32. ACCEPTANCE CRITERIA
+
+Before considering this complete:
+
+* Login page matches the approved visual direction.
+* Global design tokens exist.
+* Colors are centralized.
+* Typography is standardized.
+* Radius system is standardized.
+* Shadows are standardized.
+* Borders are standardized.
+* Buttons are standardized.
+* Inputs are standardized.
+* Cards are standardized.
+* Status badges are standardized.
+* Agent states are standardized.
+* Human-review states are standardized.
+* Governance/policy states are standardized.
+* Dark Control Tower theme is standardized.
+* Light enterprise workspace theme is standardized.
+* Navigation uses the same design language.
+* Tables use the same design language.
+* Modals/drawers use the same design language.
+* Mobile/responsive behavior follows the same system.
+* No random per-page colors remain where shared tokens should be used.
+* No unrelated business logic has been changed.
+* Existing functionality continues to work.
+
+Most importantly:
+
+**The entire application should now look like one intentional enterprise product called Agentic HRO Suite, rather than a collection of individually designed screens.**
