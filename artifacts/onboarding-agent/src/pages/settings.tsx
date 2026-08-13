@@ -12,7 +12,7 @@ import {
   type DemoPersona,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, Button, Badge, Label, cn, PageHeader } from '@/components/ui-shared';
+import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
 import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall } from 'lucide-react';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -47,12 +47,12 @@ function PersonaBrief({ persona, volunteerName }: { persona: DemoPersona | undef
   if (!persona) return null;
   const briefText = `Hi${volunteerName ? ` ${volunteerName.split(' ')[0]}` : ''}! You're playing: ${persona.title}.\n\n${persona.description}\n\nYour part: ${persona.volunteerBrief}`;
   return (
-    <div className="mt-3 p-3 rounded-md border border-violet-200 bg-violet-50/50 text-sm">
+    <div className="mt-2.5 p-2.5 rounded-md border border-violet-200 bg-violet-50/50 text-[var(--text-xs)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-violet-900">{persona.title}</p>
+          <p className="font-semibold text-violet-900 text-[var(--text-sm)]">{persona.title}</p>
           <p className="text-violet-900/80 mt-1"><span className="font-medium">Their part:</span> {persona.volunteerBrief}</p>
-          <p className="text-violet-900/60 mt-1 text-xs"><span className="font-medium">What the agent should do:</span> {persona.expectedBehaviour}</p>
+          <p className="text-violet-900/60 mt-1"><span className="font-medium">What the agent should do:</span> {persona.expectedBehaviour}</p>
         </div>
         <Button
           variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs"
@@ -73,16 +73,14 @@ Your part: keep the control tower open. The AI hands over to you whenever it rea
 function HrOperatorBrief() {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-5 p-4 rounded-lg border border-sky-200 bg-sky-50/50 text-sm">
+    <div className="mt-4 p-3 rounded-[var(--radius-md)] border border-sky-200 bg-sky-50/50 text-[var(--text-xs)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-sky-900">The seventh chair: HR / Human-in-the-loop (not a volunteer row)</p>
+          <p className="font-semibold text-sky-900 text-[var(--text-sm)]">The seventh chair: HR / Human-in-the-loop (not a volunteer row)</p>
           <p className="text-sky-900/80 mt-1">
-            Every demo needs one person on the HR side — the escalation human the AI is designed to defer to. They don't
-            receive hire messages; they work the <span className="font-medium">Approvals queue</span>, where the agent
-            hands over background-check exceptions, blockers reported on calls, questions it can't answer, and any
-            promise it couldn't keep (like an undeliverable email or a "human will call you back" from a voice call).
-            Approving or rejecting there is what makes the human-in-the-loop story land.
+            Every demo needs one person working the <span className="font-medium">Approvals queue</span> — the escalation
+            human the AI defers to for background-check exceptions, call blockers, unanswerable questions, and broken
+            promises. Approving or rejecting there is what makes the human-in-the-loop story land.
           </p>
         </div>
         <Button
@@ -137,15 +135,14 @@ function RemoteApproverSettings() {
 
   if (isLoading) return null;
   return (
-    <div className="mt-5 p-4 rounded-lg border border-sky-200 bg-sky-50/30">
+    <div className="mt-4 p-3 rounded-[var(--radius-md)] border border-sky-200 bg-sky-50/30">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-sm text-sky-900">Remote HR approver (optional)</p>
-          <p className="text-sm text-sky-900/80 mt-1">
-            Let a second volunteer play the HR approver from their own inbox: when the AI escalates, they get an email
-            with the recommendation and can decide it by replying <span className="font-medium">approve</span> or{' '}
-            <span className="font-medium">reject</span>. Only replies from this exact address are honored, and each
-            decision is recorded in the audit trail under their name.
+          <p className="font-semibold text-[var(--text-sm)] text-sky-900">Remote HR approver (optional)</p>
+          <p className="text-[var(--text-xs)] text-sky-900/80 mt-1">
+            When the AI escalates, this address gets an email with the recommendation and decides it by replying{' '}
+            <span className="font-medium">approve</span> or <span className="font-medium">reject</span>. Only replies
+            from this exact address are honored; each decision is recorded in the audit trail.
           </p>
         </div>
         <Badge
@@ -168,7 +165,7 @@ function RemoteApproverSettings() {
           className={cn(inputCls, 'max-w-sm', invalid && 'border-red-400 focus:border-red-500 focus:ring-red-500')}
           aria-label="HR approver email"
         />
-        <Button onClick={() => save(trimmed.length > 0 ? trimmed : null)} disabled={update.isPending || invalid || !dirty} className="gap-2 font-bold">
+        <Button onClick={() => save(trimmed.length > 0 ? trimmed : null)} disabled={update.isPending || invalid || !dirty} className="gap-2">
           <Check className="w-4 h-4" /> Save
         </Button>
         {settings?.hrApproverEmail && (
@@ -250,15 +247,13 @@ function DemoVolunteersCard() {
 
   return (
     <Card className="shadow-sm">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm bg-violet-100 text-violet-700 border-violet-200">
-              <Users className="w-6 h-6" />
-            </div>
+      <CardContent className="p-[var(--space-lg)]">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <IconTile icon={Users} className="bg-violet-100 text-violet-700 border-violet-200" />
             <div>
-              <h3 className="font-bold uppercase tracking-wider text-sm">Demo Volunteers</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Demo Volunteers</h3>
+              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
                 Real people for live demos. Saving authorizes their email/phone for real messages and calls — no one else
                 can be contacted. "Create demo cases" runs each volunteer through the full agent pipeline.
               </p>
@@ -267,15 +262,15 @@ function DemoVolunteersCard() {
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-muted-foreground text-center border rounded-xl border-dashed">Loading volunteers...</div>
+          <LoadingBlock>Loading volunteers...</LoadingBlock>
         ) : (
           <>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {rows.map((v, i) => {
                 const problem = problems[i];
                 return (
-                  <div key={i} className={cn('border rounded-lg p-4', problem && (v.name || v.email) ? 'border-amber-300 bg-amber-50/40' : 'bg-muted/10')}>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div key={i} className={cn('border rounded-[var(--radius-md)] p-3', problem && (v.name || v.email) ? 'border-amber-300 bg-amber-50/40' : 'bg-muted/10')}>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <input placeholder="Full name" value={v.name} onChange={(e) => edit(i, { name: e.target.value })} className={inputCls} />
                       <input placeholder="email@example.com" type="email" value={v.email} onChange={(e) => edit(i, { email: e.target.value })} className={inputCls} />
                       <input placeholder="+919876543210 (optional)" value={v.phone} onChange={(e) => edit(i, { phone: e.target.value })} className={inputCls} />
@@ -313,21 +308,19 @@ function DemoVolunteersCard() {
                 );
               })}
               {rows.length === 0 && (
-                <div className="p-6 text-sm text-muted-foreground text-center border rounded-xl border-dashed">
-                  No volunteers yet. Add one to enable live demo delivery.
-                </div>
+                <LoadingBlock>No volunteers yet. Add one to enable live demo delivery.</LoadingBlock>
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2 mt-5">
+            <div className="flex flex-wrap gap-2 mt-4">
               <Button variant="outline" className="gap-2" onClick={() => { setTouched(true); setRows((prev) => [...prev, blankVolunteer()]); }}>
                 <Plus className="w-4 h-4" /> Add volunteer
               </Button>
-              <Button onClick={save} disabled={update.isPending || !touched || anyInvalid} className="gap-2 font-bold">
+              <Button onClick={save} disabled={update.isPending || !touched || anyInvalid} className="gap-2">
                 <Check className="w-4 h-4" /> Save & authorize
               </Button>
               <Button variant="secondary" onClick={runSeed} disabled={seed.isPending || touched || (data?.volunteers.length ?? 0) === 0}
-                className="gap-2 font-bold" title={touched ? 'Save first, then create cases' : undefined}>
+                className="gap-2" title={touched ? 'Save first, then create cases' : undefined}>
                 <Rocket className="w-4 h-4" /> {seed.isPending ? 'Creating cases…' : 'Create demo cases'}
               </Button>
             </div>
@@ -344,7 +337,7 @@ function DemoVolunteersCard() {
             {seedResults && (
               <div className="mt-4 border rounded-md divide-y">
                 {seedResults.map((r, i) => (
-                  <div key={i} className="p-3 text-sm flex items-center gap-3">
+                  <div key={i} className="p-2.5 text-[var(--text-sm)] flex items-center gap-3">
                     <Badge className={cn('uppercase tracking-wider text-[10px] shadow-none shrink-0',
                       r.status === 'seeded' ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
                         : r.status === 'skipped' ? 'bg-slate-100 text-slate-700 hover:bg-slate-100 border-slate-200'
@@ -458,22 +451,20 @@ export function SettingsPage() {
         : 'Not configured';
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto pb-12">
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
       <PageHeader 
         title="Settings" 
         subtitle="Application-level configuration for the control tower." 
       />
 
       <Card className="shadow-sm mt-2">
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm bg-primary/10 text-primary border-primary/20">
-                <Mail className="w-6 h-6" />
-              </div>
+        <CardContent className="p-[var(--space-lg)]">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <IconTile icon={Mail} className="bg-primary/10 text-primary border-primary/20" />
               <div>
-                <h3 className="font-bold uppercase tracking-wider text-[var(--text-xs)]">HR Alert Email</h3>
-                <p className="text-[var(--text-sm)] text-muted-foreground mt-0.5">
+                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">HR Alert Email</h3>
+                <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
                   Where outage alerts go when the Gmail reply monitor breaks (and recovery notices when it resumes).
                 </p>
               </div>
@@ -493,17 +484,17 @@ export function SettingsPage() {
           </div>
 
           {isLoading ? (
-            <div className="p-8 text-muted-foreground text-center border rounded-xl border-dashed">Loading settings...</div>
+            <LoadingBlock>Loading settings...</LoadingBlock>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-                <div className="border rounded-md p-3 bg-muted/20">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <div className="border rounded-md p-2.5 bg-muted/20">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Alerts currently go to</p>
-                  <p className="text-sm font-mono mt-1 break-all">{settings?.effective ?? 'Nobody — alerts disabled'}</p>
+                  <p className="text-[var(--text-xs)] font-mono mt-1 break-all">{settings?.effective ?? 'Nobody — alerts disabled'}</p>
                 </div>
-                <div className="border rounded-md p-3 bg-muted/20">
+                <div className="border rounded-md p-2.5 bg-muted/20">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Source</p>
-                  <p className="text-sm mt-1">{sourceLabel}</p>
+                  <p className="text-[var(--text-xs)] mt-1">{sourceLabel}</p>
                 </div>
               </div>
 
@@ -538,7 +529,7 @@ export function SettingsPage() {
                 )}
               </div>
 
-              <div className="flex gap-2 mt-5">
+              <div className="flex gap-2 mt-4">
                 <Button
                   onClick={() => save(trimmed.length > 0 ? trimmed : null)}
                   disabled={update.isPending || invalid || !dirty || trimmed.length === 0 && !settings?.hrAlertEmail}
@@ -579,18 +570,15 @@ export function SettingsPage() {
       </Card>
 
       <Card className="shadow-sm">
-        <CardContent className="p-6">
+        <CardContent className="p-[var(--space-lg)]">
           <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm bg-primary/10 text-primary border-primary/20">
-                <PhoneCall className="w-6 h-6" />
-              </div>
+            <div className="flex items-center gap-3">
+              <IconTile icon={PhoneCall} className="bg-primary/10 text-primary border-primary/20" />
               <div>
-                <h3 className="font-bold uppercase tracking-wider text-sm">Automatic Escalation Calls</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  When an onboarding check breaches its SLA and the hire hasn't replied to any message, the System
-                  Watcher places the escalation voice call itself. The recipient allowlist and hourly call limit
-                  still apply, and the reason for each call is recorded on the case timeline.
+                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Automatic Escalation Calls</h3>
+                <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
+                  On SLA breach with no reply from the hire, the System Watcher places the escalation call itself —
+                  allowlist and hourly limit still apply; each call is recorded on the case timeline.
                 </p>
               </div>
             </div>
@@ -609,7 +597,7 @@ export function SettingsPage() {
           </div>
 
           {!isLoading && (
-            <div className="mt-5 flex items-center gap-3">
+            <div className="mt-4 flex items-center gap-3">
               <button
                 type="button"
                 role="switch"
@@ -629,7 +617,7 @@ export function SettingsPage() {
                   )}
                 />
               </button>
-              <span className="text-sm">
+              <span className="text-[var(--text-sm)]">
                 {settings?.autoEscalationCalls
                   ? 'On — overdue, unresponsive hires get an automatic escalation call.'
                   : 'Off — escalation calls are only placed manually from the case page.'}

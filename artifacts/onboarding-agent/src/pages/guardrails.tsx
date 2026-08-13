@@ -8,7 +8,7 @@ import {
   type Guardrail,
   type SecurityDrillResult,
 } from '@workspace/api-client-react';
-import { Card, Button, Badge, cn, PageHeader } from '@/components/ui-shared';
+import { Card, Button, Badge, cn, PageHeader, SectionHeading, LoadingBlock } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Link } from 'wouter';
@@ -73,7 +73,7 @@ export function GuardrailsPage() {
         </Card>
       )}
 
-      <div className="flex gap-3 flex-wrap text-[var(--text-sm)] mt-4">
+      <div className="flex gap-2 flex-wrap text-[var(--text-sm)] mt-2">
         <Badge variant="outline" className="gap-1.5 py-[2px] px-[8px] bg-white">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> {guardrails.length} controls enforced
         </Badge>
@@ -83,18 +83,15 @@ export function GuardrailsPage() {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading guardrails…</div>
+        <LoadingBlock>Loading guardrails…</LoadingBlock>
       ) : (
         (data?.categories ?? []).map((cat) => {
           const items = guardrails.filter((g) => g.category === cat.key);
           if (items.length === 0) return null;
           return (
-            <section key={cat.key} className="space-y-3 pt-4">
-              <div>
-                <h2 className="text-[var(--text-lg)] font-semibold">{cat.title}</h2>
-                <p className="text-[var(--text-sm)] text-muted-foreground">{cat.blurb}</p>
-              </div>
-              <div className="space-y-3">
+            <section key={cat.key} className="space-y-3 pt-2">
+              <SectionHeading title={cat.title} description={cat.blurb} />
+              <div className="space-y-2">
                 {items.map((g) => (
                   <GuardrailCard key={g.key} guardrail={g} />
                 ))}
@@ -146,16 +143,16 @@ function GuardrailCard({ guardrail: g }: { guardrail: Guardrail }) {
   return (
     <Card className="p-0 overflow-hidden">
       <button
-        className="w-full text-left p-4 flex items-center gap-3 hover:bg-secondary/40 transition-colors"
+        className="w-full text-left px-[var(--space-lg)] py-[var(--space-md)] flex items-center gap-3 hover:bg-secondary/40 transition-colors"
         onClick={() => setOpen((v) => !v)}
       >
-        <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+        <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-[var(--text-base)]">{g.title}</div>
-          <div className="text-[var(--text-sm)] text-muted-foreground truncate">{g.threat}</div>
+          <div className="font-semibold text-[var(--text-sm)]">{g.title}</div>
+          <div className="text-[var(--text-xs)] text-muted-foreground truncate">{g.threat}</div>
         </div>
-        <Badge variant="outline" className={cn('capitalize', SEVERITY_STYLE[g.severity] ?? '')}>{g.severity}</Badge>
-        <Badge variant="outline" className={cn(g.activationCount > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'text-muted-foreground')}>
+        <Badge variant="outline" className={cn('capitalize text-[10px] uppercase tracking-wider', SEVERITY_STYLE[g.severity] ?? '')}>{g.severity}</Badge>
+        <Badge variant="outline" className={cn('text-[10px] uppercase tracking-wider', g.activationCount > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'text-muted-foreground')}>
           {g.activationCount > 0 ? `${g.activationCount}× intervened` : 'no interventions yet'}
         </Badge>
         {open ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
@@ -170,8 +167,8 @@ function GuardrailDetail({ guardrail: g }: { guardrail: Guardrail }) {
     query: { queryKey: getListGuardrailEventsQueryKey(g.key) },
   });
   return (
-    <div className="border-t px-[var(--space-lg)] py-[var(--space-lg)] space-y-4 text-[var(--text-sm)] bg-secondary/20">
-      <div className="grid md:grid-cols-2 gap-4">
+    <div className="border-t px-[var(--space-lg)] py-[var(--space-md)] space-y-3 text-[var(--text-sm)] bg-secondary/20">
+      <div className="grid md:grid-cols-2 gap-3">
         <div>
           <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-1">What it prevents</div>
           <p className="text-[var(--text-sm)]">{g.threat}</p>
@@ -224,10 +221,10 @@ function GuardrailDetail({ guardrail: g }: { guardrail: Guardrail }) {
         ) : !events || events.length === 0 ? (
           <p className="text-[var(--text-sm)] text-muted-foreground">This guardrail has not needed to intervene yet. Run the security drill to see it in action.</p>
         ) : (
-          <ul className="space-y-3 mt-3">
+          <ul className="space-y-2.5 mt-2">
             {events.map((ev) => (
               <li key={ev.id} className="flex gap-3 items-start border-l-2 pl-3 border-muted">
-                <Badge className={cn('capitalize shrink-0 mt-0.5', ACTION_STYLE[ev.action] ?? 'bg-slate-100 text-slate-700')}>{ev.action}</Badge>
+                <Badge className={cn('capitalize shrink-0 mt-0.5 text-[10px] uppercase tracking-wider', ACTION_STYLE[ev.action] ?? 'bg-slate-100 text-slate-700')}>{ev.action}</Badge>
                 <div className="min-w-0">
                   <p className="break-words font-medium leading-snug text-[var(--text-sm)]">{ev.detail}</p>
                   <p className="text-[var(--text-xs)] text-muted-foreground mt-1">

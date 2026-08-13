@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useListOnboardingConnectors, useUpdateOnboardingConnector, useGetOnboardingChannels, useTestOnboardingChannel, useGetOnboardingSystemWatcher, useGetOnboardingEmailWatch, useSimulateOnboardingWatchEmail, getListOnboardingConnectorsQueryKey, getGetOnboardingChannelsQueryKey, getGetOnboardingSystemWatcherQueryKey, getGetOnboardingEmailWatchQueryKey } from '@workspace/api-client-react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn, PageHeader } from '@/components/ui-shared';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn, PageHeader, SectionHeading, IconTile, LoadingBlock } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle, Eye, Webhook, RefreshCw, Clock, Inbox, FlaskConical } from 'lucide-react';
 import { format } from 'date-fns';
@@ -46,23 +46,18 @@ export function SystemsPage() {
         subtitle="Manage system-of-record adapters and outbound communication channels." 
       />
 
-      <div className="space-y-5 mt-2">
-        <div className="border-b pb-2" style={{ borderColor: 'var(--border)' }}>
-          <h2 className="text-[var(--text-lg)] font-semibold flex items-center gap-2"><Server className="w-5 h-5 text-primary" /> System Adapters</h2>
-          <p className="text-[var(--text-sm)] text-muted-foreground mt-1">Source systems that agents read from and write to via MCP.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {loadingConn ? <div className="p-[var(--space-2xl)] text-[var(--text-muted)] col-span-full text-center border rounded-[var(--radius-lg)] border-dashed">Loading adapters...</div> : connectors?.map(conn => (
+      <div className="space-y-4 mt-2">
+        <SectionHeading icon={Server} title="System Adapters" description="Source systems that agents read from and write to via MCP." />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {loadingConn ? <LoadingBlock className="col-span-full">Loading adapters...</LoadingBlock> : connectors?.map(conn => (
             <Card key={conn.key} className={cn("transition-all duration-300 shadow-sm", conn.status !== 'connected' && "opacity-75 bg-muted/10")}>
-              <CardContent className="p-[var(--space-xl)]">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex items-center gap-4">
-                    <div className={cn("p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", conn.status === 'connected' ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border")}>
-                      <Server className="w-6 h-6" />
-                    </div>
+              <CardContent className="p-[var(--space-lg)]">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <IconTile icon={Server} className={conn.status === 'connected' ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border"} />
                     <div>
-                      <h3 className="font-bold text-[var(--text-base)] leading-tight">{conn.label}</h3>
-                      <p className="text-[var(--text-sm)] text-muted-foreground mt-1">{conn.description}</p>
+                      <h3 className="font-semibold text-[var(--text-sm)] leading-tight">{conn.label}</h3>
+                      <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">{conn.description}</p>
                     </div>
                   </div>
                   <label className="flex items-center cursor-pointer shrink-0 mt-1">
@@ -74,7 +69,7 @@ export function SystemsPage() {
                   </label>
                 </div>
                 
-                <div className="flex items-end justify-between gap-4 mt-6 pt-5 border-t border-border">
+                <div className="flex items-end justify-between gap-4 mt-4 pt-4 border-t border-border">
                   <div className="space-y-1.5 flex-1 max-w-[200px]">
                     <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                       <ArrowRightLeft className="w-3 h-3" /> Active Vendor
@@ -111,16 +106,13 @@ export function SystemsPage() {
         </div>
       </div>
 
-      <div className="space-y-5 pt-8">
-        <div className="border-b pb-2">
-          <h2 className="text-xl font-semibold flex items-center gap-2"><Eye className="w-5 h-5 text-primary" /> System Watcher</h2>
-          <p className="text-sm text-muted-foreground">Monitoring agent tracking BGV, ITSM access and payroll status — webhook push where the vendor supports it, scheduled polling otherwise.</p>
-        </div>
+      <div className="space-y-4 pt-2">
+        <SectionHeading icon={Eye} title="System Watcher" description="Monitoring agent tracking BGV, ITSM access and payroll status — webhook push where the vendor supports it, scheduled polling otherwise." />
         {loadingWatcher ? (
-          <div className="p-8 text-muted-foreground text-center border rounded-xl border-dashed">Loading watcher status...</div>
+          <LoadingBlock>Loading watcher status...</LoadingBlock>
         ) : watcher ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {watcher.connectors.map((c: any) => <WatcherConnectorCard key={c.key} conn={c} />)}
             </div>
             <WatcherChecksTable checks={watcher.checks} />
@@ -128,13 +120,10 @@ export function SystemsPage() {
         ) : null}
       </div>
 
-      <div className="space-y-5 pt-8">
-        <div className="border-b pb-2">
-          <h2 className="text-xl font-semibold flex items-center gap-2"><Inbox className="w-5 h-5 text-primary" /> Email Watch</h2>
-          <p className="text-sm text-muted-foreground">Shallow-integration fallback: when a system offers no API or webhook, vendors simply CC status emails to the watch mailbox — the System Watcher reads them as status changes.</p>
-        </div>
+      <div className="space-y-4 pt-2">
+        <SectionHeading icon={Inbox} title="Email Watch" description="Shallow-integration fallback: when a system offers no API or webhook, vendors simply CC status emails to the watch mailbox — the System Watcher reads them as status changes." />
         {loadingEmailWatch ? (
-          <div className="p-8 text-muted-foreground text-center border rounded-xl border-dashed">Loading email watch status...</div>
+          <LoadingBlock>Loading email watch status...</LoadingBlock>
         ) : emailWatch ? (
           <EmailWatchPanel
             watch={emailWatch}
@@ -144,13 +133,10 @@ export function SystemsPage() {
         ) : null}
       </div>
 
-      <div className="space-y-5 pt-8">
-        <div className="border-b pb-2">
-          <h2 className="text-xl font-semibold flex items-center gap-2"><Zap className="w-5 h-5 text-primary" /> Messaging Channels</h2>
-          <p className="text-sm text-muted-foreground">Outbound communication targets used by agents to contact hires.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {loadingChan ? <div className="p-8 text-muted-foreground col-span-full text-center border rounded-xl border-dashed">Loading channels...</div> : (
+      <div className="space-y-4 pt-2">
+        <SectionHeading icon={Zap} title="Messaging Channels" description="Outbound communication targets used by agents to contact hires." />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {loadingChan ? <LoadingBlock className="col-span-full">Loading channels...</LoadingBlock> : (
             <>
               {channels?.email && <ChannelCard key="email" channelKey="email" channel={channels.email} onTest={() => testChannel.mutateAsync({ data: { channel: 'email' } })} />}
               {channels?.whatsapp && <ChannelCard key="whatsapp" channelKey="whatsapp" channel={channels.whatsapp} onTest={() => testChannel.mutateAsync({ data: { channel: 'whatsapp' } })} />}
@@ -159,13 +145,10 @@ export function SystemsPage() {
         </div>
       </div>
 
-      <div className="space-y-5 pt-8">
-        <div className="border-b pb-2">
-          <h2 className="text-xl font-semibold flex items-center gap-2"><Radio className="w-5 h-5 text-primary" /> Live Inbox Monitoring</h2>
-          <p className="text-sm text-muted-foreground">Background Gmail polling that picks up real email replies from hires.</p>
-        </div>
+      <div className="space-y-4 pt-2">
+        <SectionHeading icon={Radio} title="Live Inbox Monitoring" description="Background Gmail polling that picks up real email replies from hires." />
         {loadingChan ? (
-          <div className="p-8 text-muted-foreground text-center border rounded-xl border-dashed">Loading monitor status...</div>
+          <LoadingBlock>Loading monitor status...</LoadingBlock>
         ) : channels?.inboundEmail ? (
           <InboundMonitorCard monitor={channels.inboundEmail} />
         ) : null}
@@ -194,15 +177,13 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
   return (
     <div className="space-y-5">
       <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-5">
-            <div className="flex items-center gap-4">
-              <div className={cn("p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200")}>
-                <Inbox className="w-6 h-6" />
-              </div>
+        <CardContent className="p-[var(--space-lg)]">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <IconTile icon={Inbox} className={healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200"} />
               <div>
-                <h3 className="font-bold uppercase tracking-wider text-sm">Watch Mailbox</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">
+                <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Watch Mailbox</h3>
+                <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
                   Vendors CC status emails quoting the tracking reference to{' '}
                   {watch.mailbox ? <span className="font-mono text-xs bg-secondary px-1 rounded">{watch.mailbox}</span> : <span className="italic">the connected Gmail account</span>}
                   {' '}— scanned every {watch.pollIntervalSeconds}s.
@@ -213,18 +194,18 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
               {healthy ? 'HEALTHY' : initializing ? 'INITIALIZING' : watch.state === 'stopped' ? 'NOT RUNNING' : 'BROKEN'}
             </Badge>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="border rounded-md p-3 bg-muted/20">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="border rounded-md p-2.5 bg-muted/20">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Scan</p>
-              <p className="text-sm font-mono mt-1">{fmt(watch.lastPollAt)}</p>
+              <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(watch.lastPollAt)}</p>
             </div>
-            <div className="border rounded-md p-3 bg-muted/20">
+            <div className="border rounded-md p-2.5 bg-muted/20">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Success</p>
-              <p className="text-sm font-mono mt-1">{fmt(watch.lastSuccessAt)}</p>
+              <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(watch.lastSuccessAt)}</p>
             </div>
-            <div className="border rounded-md p-3 bg-muted/20">
+            <div className="border rounded-md p-2.5 bg-muted/20">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Checks On Email Watch</p>
-              <p className="text-sm font-mono mt-1">{watch.openChecks}</p>
+              <p className="text-[var(--text-xs)] font-mono mt-1">{watch.openChecks}</p>
             </div>
           </div>
           {watch.lastError && (
@@ -235,14 +216,14 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
           )}
 
           {checks.length > 0 && (
-            <div className="pt-5 mt-5 border-t space-y-3">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <div className="pt-4 mt-4 border-t space-y-3">
+              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <FlaskConical className="w-3.5 h-3.5" /> Demo: simulate a vendor status email
               </Label>
               <div className="space-y-2">
                 {checks.map((c: any) => (
                   <div key={c.id} className="flex items-center justify-between gap-3 border rounded-md p-2.5 bg-muted/10">
-                    <p className="text-sm font-medium">
+                    <p className="text-[var(--text-sm)] font-medium">
                       #{c.caseId} {c.caseWorkerName} — {c.label} <span className="font-mono text-xs text-muted-foreground">({c.externalRef})</span>
                     </p>
                     <div className="flex gap-2 shrink-0">
@@ -262,7 +243,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
             </div>
           )}
           {checks.length === 0 && (
-            <p className="text-sm text-muted-foreground mt-5 pt-5 border-t">
+            <p className="text-[var(--text-sm)] text-muted-foreground mt-4 pt-4 border-t">
               No open checks are on email watch. Switch a system adapter above to <span className="font-semibold">Email watch (no API)</span> and its open checks will be tracked through the mailbox instead.
             </p>
           )}
@@ -315,15 +296,13 @@ function WatcherConnectorCard({ conn }: { conn: any }) {
   const fmt = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, HH:mm:ss') : 'Never');
   return (
     <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between mb-4">
+      <CardContent className="p-[var(--space-lg)]">
+        <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
-            <div className={cn("p-2.5 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200")}>
-              {isPush ? <Webhook className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
-            </div>
+            <IconTile icon={isPush ? Webhook : RefreshCw} className={healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200"} />
             <div>
-              <h3 className="font-bold text-sm leading-tight">{conn.label}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <h3 className="font-semibold text-[var(--text-sm)] leading-tight">{conn.label}</h3>
+              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
                 {isPush ? 'Webhook push from vendor' : `Polled every ${conn.pollIntervalSeconds}s`}
               </p>
             </div>
@@ -375,15 +354,13 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
   const fmt = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, HH:mm:ss') : 'Never');
   return (
     <Card className={cn("shadow-sm border", healthy ? "border-emerald-200" : initializing ? "border-amber-200" : "border-red-200")}>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex items-center gap-4">
-            <div className={cn("p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200")}>
-              {healthy || initializing ? <Radio className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
-            </div>
+      <CardContent className="p-[var(--space-lg)]">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <IconTile icon={healthy || initializing ? Radio : AlertTriangle} className={healthy ? "bg-emerald-100 text-emerald-600 border-emerald-200" : initializing ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-red-100 text-red-600 border-red-200"} />
             <div>
-              <h3 className="font-bold uppercase tracking-wider text-sm">Gmail Reply Monitor</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">Gmail Reply Monitor</h3>
+              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">
                 Checks the inbox every {monitor.pollIntervalSeconds}s for replies from active hires.
               </p>
             </div>
@@ -393,18 +370,18 @@ function InboundMonitorCard({ monitor }: { monitor: any }) {
           </Badge>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="border rounded-md p-3 bg-muted/20">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="border rounded-md p-2.5 bg-muted/20">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Poll</p>
-            <p className="text-sm font-mono mt-1">{fmt(monitor.lastPollAt)}</p>
+            <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(monitor.lastPollAt)}</p>
           </div>
-          <div className="border rounded-md p-3 bg-muted/20">
+          <div className="border rounded-md p-2.5 bg-muted/20">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Success</p>
-            <p className="text-sm font-mono mt-1">{fmt(monitor.lastSuccessAt)}</p>
+            <p className="text-[var(--text-xs)] font-mono mt-1">{fmt(monitor.lastSuccessAt)}</p>
           </div>
-          <div className="border rounded-md p-3 bg-muted/20">
+          <div className="border rounded-md p-2.5 bg-muted/20">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last Error</p>
-            <p className="text-sm font-mono mt-1">{monitor.lastErrorAt ? fmt(monitor.lastErrorAt) : 'None'}</p>
+            <p className="text-[var(--text-xs)] font-mono mt-1">{monitor.lastErrorAt ? fmt(monitor.lastErrorAt) : 'None'}</p>
           </div>
         </div>
 
@@ -462,15 +439,13 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
 
   return (
     <Card className="shadow-sm">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex items-center gap-4">
-            <div className={cn("p-3 rounded-xl flex items-center justify-center shrink-0 border shadow-sm", channel.configured ? (channelKey === 'whatsapp' ? "bg-emerald-100 text-emerald-600 border-emerald-200" : "bg-blue-100 text-blue-600 border-blue-200") : "bg-muted text-muted-foreground border-border")}>
-              {channelKey === 'whatsapp' ? <Smartphone className="w-6 h-6" /> : <Mail className="w-6 h-6" />}
-            </div>
+      <CardContent className="p-[var(--space-lg)]">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <IconTile icon={channelKey === 'whatsapp' ? Smartphone : Mail} className={channel.configured ? (channelKey === 'whatsapp' ? "bg-emerald-100 text-emerald-600 border-emerald-200" : "bg-blue-100 text-blue-600 border-blue-200") : "bg-muted text-muted-foreground border-border"} />
             <div>
-              <h3 className="font-bold uppercase tracking-wider text-sm">{channelKey}</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">{channel.provider} {channel.target && <span className="font-mono text-xs ml-1 bg-secondary px-1 rounded">{channel.target}</span>}</p>
+              <h3 className="font-semibold uppercase tracking-wider text-[var(--text-xs)]">{channelKey}</h3>
+              <p className="text-[var(--text-xs)] text-muted-foreground mt-0.5">{channel.provider} {channel.target && <span className="font-mono text-xs ml-1 bg-secondary px-1 rounded">{channel.target}</span>}</p>
             </div>
           </div>
           <Badge variant={channel.configured ? 'default' : 'secondary'} className={cn("uppercase tracking-wider text-[10px]", channel.configured ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200 shadow-none' : '')}>
@@ -478,12 +453,12 @@ function ChannelCard({ channelKey, channel, onTest }: { channelKey: string, chan
           </Badge>
         </div>
         
-        {channel.note && <p className="text-sm bg-secondary/50 border p-3 rounded-md mb-5 text-secondary-foreground leading-relaxed">{channel.note}</p>}
+        {channel.note && <p className="text-[var(--text-xs)] bg-secondary/50 border p-2.5 rounded-md mb-4 text-secondary-foreground leading-relaxed">{channel.note}</p>}
         
-        <div className="pt-5 border-t space-y-3 bg-muted/10 -mx-6 -mb-6 p-6">
-          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Send Test Message</Label>
+        <div className="pt-4 border-t space-y-2 bg-muted/10 -mx-[var(--space-lg)] -mb-[var(--space-lg)] p-[var(--space-lg)]">
+          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Send Test Message</Label>
           <div className="flex gap-2">
-            <Button size="lg" onClick={doTest} disabled={testing} className="w-full gap-2 h-10 font-bold">
+            <Button onClick={doTest} disabled={testing} className="w-full gap-2">
               <Zap className="w-4 h-4" /> TEST {channelKey.toUpperCase()}
             </Button>
           </div>
@@ -508,7 +483,7 @@ function WatcherChecksTable({ checks }: { checks: any[] }) {
   const rows = [...open, ...recent];
   const fmt = (iso: string | null) => (iso ? format(new Date(iso), 'MMM d, HH:mm:ss') : '—');
   if (rows.length === 0) {
-    return <div className="p-6 text-sm text-muted-foreground text-center border rounded-xl border-dashed">No tracked checks yet — run a scenario or create a case and the watcher will start tracking BGV, ITSM and payroll automatically.</div>;
+    return <LoadingBlock>No tracked checks yet — run a scenario or create a case and the watcher will start tracking BGV, ITSM and payroll automatically.</LoadingBlock>;
   }
   return (
     <Card className="shadow-sm">

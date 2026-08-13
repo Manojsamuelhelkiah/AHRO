@@ -65,6 +65,33 @@ export const CardContent = ({ className, ...props }: React.HTMLAttributes<HTMLDi
   <div className={cn('p-[var(--space-lg)] pt-0', className)} {...props} />
 );
 
+export function SectionHeading({ icon: Icon, title, description }: { icon?: React.ComponentType<{ className?: string }>, title: string, description?: string }) {
+  return (
+    <div className="border-b pb-2" style={{ borderColor: 'var(--border)' }}>
+      <h2 className="text-[var(--text-sm)] font-semibold flex items-center gap-2 text-[var(--text-primary)] m-0">
+        {Icon && <Icon className="w-4 h-4 text-[var(--primary)]" />} {title}
+      </h2>
+      {description && <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5 mb-0">{description}</p>}
+    </div>
+  );
+}
+
+export function IconTile({ icon: Icon, className }: { icon: React.ComponentType<{ className?: string }>, className?: string }) {
+  return (
+    <div className={cn('p-2 rounded-[var(--radius-md)] flex items-center justify-center shrink-0 border', className)}>
+      <Icon className="w-4 h-4" />
+    </div>
+  );
+}
+
+export function LoadingBlock({ children, className }: { children: React.ReactNode, className?: string }) {
+  return (
+    <div className={cn('py-6 px-4 text-center text-[var(--text-sm)] text-[var(--text-muted)] border border-dashed rounded-[var(--radius-lg)]', className)}>
+      {children}
+    </div>
+  );
+}
+
 export const Badge = ({ className, variant = 'default', ...props }: React.HTMLAttributes<HTMLDivElement> & { variant?: 'default' | 'secondary' | 'outline' | 'destructive' }) => {
   const variants = {
     default: 'border-transparent bg-[var(--primary-light)] text-[var(--primary)]',
