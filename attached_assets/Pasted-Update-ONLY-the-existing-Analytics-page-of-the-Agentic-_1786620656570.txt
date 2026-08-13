@@ -1,0 +1,1015 @@
+Update **ONLY the existing Analytics page** of the Agentic HRO Suite.
+
+The objective is to transform the current onboarding-focused analytics screen into a premium, enterprise-grade **HRO Intelligence** workspace for the entire Agentic HRO Suite.
+
+Do NOT redesign unrelated pages.
+
+Do NOT change authentication, routing, database structure, agent execution logic, business rules, or unrelated backend functionality.
+
+Preserve existing analytics functionality and data sources wherever possible.
+
+The key change is conceptual:
+
+The current page answers:
+
+> "What is happening with onboarding cohorts?"
+
+The new page must answer:
+
+> **"How well is the autonomous HR operating model performing, where is it struggling, why is it happening, and what should HR leaders do next?"**
+
+Use the approved Agentic HRO design system and visual language already established across the application.
+
+---
+
+# 1. CHANGE THE PAGE IDENTITY
+
+Replace:
+
+**Data & Analytics Agent**
+
+with:
+
+# HRO Intelligence
+
+Replace:
+
+`Pattern detection and predictive readiness insights for onboarding cohorts.`
+
+with:
+
+`AI-powered intelligence across HR operations, agent performance, workforce risk, and operational efficiency.`
+
+The page must no longer feel like an onboarding analytics module.
+
+---
+
+# 2. UPDATE THE BREADCRUMB
+
+Keep the breadcrumb structure but use:
+
+`AGENTIC HRO SUITE / ANALYTICS`
+
+Do not rename the navigation item.
+
+The sidebar item should remain:
+
+**Analytics**
+
+---
+
+# 3. ADD AN ENTERPRISE ANALYTICS FILTER BAR
+
+Directly below the page header, create a compact filter bar.
+
+Provide:
+
+**Period**
+`Last 30 days`
+
+**HRO Domain**
+`All domains`
+
+**Region**
+`All regions`
+
+**Case Type**
+`All cases`
+
+**Agent**
+`All agents`
+
+and a compact:
+
+**Refresh**
+
+control where appropriate.
+
+Use real filters if the current data layer supports them.
+
+Do not create fake filter behavior.
+
+Filters should visually match the existing enterprise design system.
+
+Do not make the filter bar overly prominent.
+
+---
+
+# 4. REPLACE "AGENT NARRATIVE INSIGHT" WITH "EXECUTIVE INSIGHT"
+
+Keep the AI-generated narrative concept; it is an important differentiator.
+
+Replace:
+
+**AGENT NARRATIVE INSIGHT**
+
+with:
+
+# EXECUTIVE INSIGHT
+
+The insight should summarize the overall HRO operating environment, not just onboarding.
+
+Example conceptual output:
+
+> **HR operations are operating within target ranges.** 91% of eligible work is progressing autonomously across onboarding, payroll, compliance, and employee support. Human intervention is concentrated in policy exceptions and documentation reviews, while payroll remains the highest-volume operational domain.
+
+This is an example only.
+
+Use actual application data.
+
+Do NOT hard-code this narrative.
+
+The AI-generated summary should be based on the current analytics data.
+
+Add subtle supporting metadata:
+
+`Generated from current HRO operational data`
+
+`Updated 4 min ago`
+
+Only display timestamps when real data exists.
+
+---
+
+# 5. EXECUTIVE INSIGHT INTERACTION
+
+Make the insight panel expandable or clickable if the application architecture supports it.
+
+Summary view:
+
+**What is happening?**
+
+Expanded/detail view:
+
+**Why is it happening?**
+
+**What changed?**
+
+**What should HR operations do next?**
+
+Keep the main dashboard concise.
+
+Do not show long reasoning-engine traces directly in the main page.
+
+---
+
+# 6. CREATE AN "OPERATIONAL PERFORMANCE" SECTION
+
+Introduce:
+
+# Operational Performance
+
+Subtitle:
+
+`How effectively HR work is being executed across the HRO operating model.`
+
+Show high-value metrics such as:
+
+### AUTONOMOUS RESOLUTION RATE
+
+Percentage of eligible cases resolved without human intervention.
+
+### HUMAN INTERVENTION RATE
+
+Percentage of eligible work requiring human judgment.
+
+### SLA PERFORMANCE
+
+Percentage of cases completed within configured SLA targets.
+
+### AVERAGE RESOLUTION TIME
+
+Average time from case initiation to completion.
+
+### EXCEPTION RATE
+
+Percentage of cases entering exception or review paths.
+
+### ACTIVE CASE VOLUME
+
+Current active workload.
+
+Only display metrics that can be accurately derived from real application data.
+
+Do NOT invent metrics.
+
+If a metric is unavailable:
+
+`—`
+
+with a subtle label:
+
+`Insufficient data`
+
+---
+
+# 7. METRIC CARD DESIGN
+
+Do not make six large dashboard cards.
+
+Use a refined enterprise analytics presentation:
+
+* compact metric cards
+* strong number
+* concise label
+* small trend where accurately available
+* subtle semantic indicator
+* optional comparison to previous period
+
+Example:
+
+**91%**
+
+Autonomous Resolution
+
+`↑ 4.2% vs previous period`
+
+Only show trends when they can actually be calculated.
+
+Avoid excessive icons and decorative watermark illustrations.
+
+---
+
+# 8. CREATE "AGENT PERFORMANCE"
+
+Introduce:
+
+# Agent Performance
+
+Subtitle:
+
+`Compare workload, autonomy, intervention, and SLA performance across HR agents.`
+
+Display a clean comparison table or compact data visualization.
+
+Prepare for:
+
+**Onboarding Agent**
+
+**Payroll Agent**
+
+**Compliance Agent**
+
+**Helpdesk Agent**
+
+For each agent, support:
+
+* Cases handled
+* Autonomous resolution
+* Human intervention
+* SLA performance
+* Exceptions
+* Average resolution time
+
+Example structure:
+
+| Agent            | Cases | Autonomous | Human Review | SLA | Exceptions |
+| ---------------- | ----: | ---------: | -----------: | --: | ---------: |
+| Onboarding Agent |     — |          — |            — |   — |          — |
+| Payroll Agent    |     — |          — |            — |   — |          — |
+| Compliance Agent |     — |          — |            — |   — |          — |
+| Helpdesk Agent   |     — |          — |            — |   — |          — |
+
+Do not fabricate values.
+
+Use the application's actual data.
+
+---
+
+# 9. AGENT PERFORMANCE VISUAL LANGUAGE
+
+Agent identities should consistently use:
+
+* Agentic Indigo
+* Lavender accents
+* automation/workflow iconography
+
+Operational states should use:
+
+Emerald → Operational
+
+Amber → Human Review / Attention
+
+Red → Blocked / Critical
+
+Neutral → Waiting / Offline
+
+Color should never be the sole indicator.
+
+---
+
+# 10. CREATE "RISK & EXCEPTION INTELLIGENCE"
+
+Add:
+
+# Risk & Exception Intelligence
+
+Subtitle:
+
+`Where HR operations are slowing, escalating, or requiring intervention.`
+
+Provide compact indicators or cards for:
+
+**SLA Risk**
+
+**Policy Exceptions**
+
+**Human Review Backlog**
+
+**Blocked Cases**
+
+**Recurring Failure Patterns**
+
+Only show metrics that exist in the application.
+
+This section should connect directly to Cases, Approvals, and Guardrails.
+
+---
+
+# 11. OPERATIONAL BOTTLENECKS
+
+Keep the current:
+
+**Bottleneck Themes**
+
+concept, because it is useful.
+
+Rename it:
+
+# Operational Bottlenecks
+
+Each bottleneck should show:
+
+**Theme**
+
+**Volume / impact**
+
+**Description**
+
+Optionally:
+
+**Recommended action**
+
+Example:
+
+### Intake Review
+
+`47 cases`
+
+`Human approval required before workflow execution.`
+
+### Documentation
+
+`11 cases`
+
+`Missing compliance documentation is delaying execution.`
+
+### Policy Exception
+
+`6 cases`
+
+`Cases are waiting for policy review.`
+
+These are conceptual examples.
+
+Use actual data.
+
+Do not fabricate numbers.
+
+---
+
+# 12. MAKE BOTTLENECKS ACTIONABLE
+
+Where data supports it, each bottleneck should communicate:
+
+**Impact → Cause → Recommended Action**
+
+For example:
+
+**Intake Review**
+
+`47 cases affected`
+
+Cause:
+`Classification requires human approval`
+
+Recommended action:
+`Review intake rule configuration`
+
+The recommended action should be derived from real system capabilities.
+
+Do not pretend the AI has identified an action unless the application actually supports that capability.
+
+---
+
+# 13. CREATE "DECISION INTELLIGENCE"
+
+Add a section:
+
+# Decision Intelligence
+
+Purpose:
+
+Show where human decisions and governance are affecting autonomous execution.
+
+Potential insights:
+
+**Top policy exceptions**
+
+**Most common human intervention reasons**
+
+**Rules generating the most review volume**
+
+**Areas where automation is being restricted**
+
+**Most common reasons agents cannot proceed autonomously**
+
+This is a key differentiator for Agentic HRO.
+
+The page should make it clear that Analytics isn't only reporting HR metrics.
+
+It is analyzing:
+
+**Agent → Policy → Human → Outcome**
+
+---
+
+# 14. PRIVACY GUARD
+
+The current:
+
+`PRIVACY GUARD ACTIVE`
+
+and:
+
+`PRIVACY THRESHOLD IS SET TO K=3`
+
+concept is valuable, but change the presentation for enterprise HR users.
+
+Use:
+
+**Privacy Protected**
+
+Supporting text:
+
+`Small cohorts are suppressed to protect individual-level privacy.`
+
+Provide an info icon/tooltip with technical detail such as:
+
+`Minimum cohort size: 3`
+
+Do NOT present `K=3` as the main user-facing message.
+
+Keep detailed privacy configuration in the appropriate admin/privacy area.
+
+---
+
+# 15. KEEP "SKILL INFLOW FORECAST"
+
+Do not remove this functionality.
+
+Move it under a broader section:
+
+# Workforce Intelligence
+
+Then keep:
+
+### Skill Inflow Forecast
+
+Subtitle:
+
+`Projected workforce capability demand over the next 30 days.`
+
+The visualization can continue to show the skill categories.
+
+However, introduce a concise insight above or beside the chart.
+
+Example:
+
+**Technical skill demand remains concentrated in core engineering capabilities.**
+
+Use actual generated analysis if available.
+
+The chart should support the insight.
+
+It should not be the insight by itself.
+
+---
+
+# 16. IMPROVE THE CHART PRESENTATION
+
+The current chart is visually generic.
+
+Improve it by:
+
+* reducing visual clutter
+* strengthening labels
+* using consistent indigo/lavender colors
+* reducing excessive gridlines
+* improving tooltip behavior
+* making the data easier to scan
+
+Use:
+
+Indigo → primary data
+
+Lavender → secondary/suppressed data
+
+Gray → baseline/context
+
+Do NOT use rainbow colors.
+
+---
+
+# 17. PRIVACY-SUPPRESSED DATA
+
+If categories are suppressed due to privacy thresholds, keep the current concept that suppressed values are shown differently.
+
+But make the explanation clearer:
+
+`Suppressed categories meet privacy-protection thresholds and are excluded from individual-level reporting.`
+
+Use a tooltip or concise footnote.
+
+Do not expose individual employee information.
+
+---
+
+# 18. KEEP "COHORT READINESS"
+
+Do not remove the current readiness functionality.
+
+Move it into:
+
+# Workforce Intelligence
+
+or:
+
+# Process Readiness
+
+Depending on the underlying data model.
+
+For the onboarding domain, it can show:
+
+**Day 1 Ready**
+
+**In Progress**
+
+For broader future domains, this same component can support:
+
+**Ready**
+
+**In Progress**
+
+**At Risk**
+
+**Blocked**
+
+Do not force the entire Analytics page to be onboarding-specific.
+
+---
+
+# 19. ADD HRO DOMAIN INTELLIGENCE
+
+Provide a compact comparison across:
+
+**Onboarding**
+
+**Employee Changes**
+
+**Payroll**
+
+**Benefits**
+
+**Leave**
+
+**Compliance**
+
+**Offboarding**
+
+**HR Helpdesk**
+
+Show available measures such as:
+
+* Case volume
+* SLA
+* Autonomy
+* Human intervention
+* Exceptions
+
+Only show data where supported.
+
+This allows analytics to scale with the HRO Suite.
+
+---
+
+# 20. INFORMATION ARCHITECTURE
+
+The final Analytics page should follow this order:
+
+### HRO Intelligence
+
+Page header + filters
+
+↓
+
+### Executive Insight
+
+AI-generated operational summary
+
+↓
+
+### Operational Performance
+
+Autonomy / interventions / SLA / resolution / exceptions
+
+↓
+
+### Agent Performance
+
+How individual agents are performing
+
+↓
+
+### Risk & Exception Intelligence
+
+SLA risk / policy exceptions / review backlog / blocked work
+
+↓
+
+### Operational Bottlenecks
+
+Where work is getting stuck
+
+↓
+
+### Decision Intelligence
+
+Where policies and human decisions affect autonomy
+
+↓
+
+### Workforce Intelligence
+
+Skill forecasting / cohort readiness / capability gaps
+
+This hierarchy is critical.
+
+Do not simply place more cards on the page.
+
+---
+
+# 21. MOVE ONBOARDING-SPECIFIC LANGUAGE INTO DOMAIN CONTEXT
+
+Remove global statements such as:
+
+`onboarding cohorts`
+
+from the page header.
+
+Onboarding-specific language should exist only inside:
+
+* Onboarding filters
+* Onboarding-specific analytics
+* Onboarding-specific charts
+* Onboarding-specific insights
+
+The overall page must represent the complete HRO Suite.
+
+---
+
+# 22. VISUAL DESIGN
+
+Use the approved Agentic HRO Design System V2.
+
+This is primarily a:
+
+**Light Enterprise Intelligence Workspace**
+
+Use:
+
+* `#F8F9FC` workspace background
+* white surfaces
+* navy typography
+* Agentic Indigo primary analytics color
+* lavender secondary data
+* emerald for positive operational metrics
+* amber for risk/human review
+* red for critical/blocked conditions
+
+Reduce visible borders.
+
+Do not put every visualization inside a heavy bordered card.
+
+Use whitespace and typography to establish hierarchy.
+
+---
+
+# 23. TYPOGRAPHY
+
+Make analytics typography feel premium.
+
+Page title:
+30–36px
+
+Section heading:
+20–24px
+
+Metric:
+28–36px
+
+Supporting labels:
+12–14px
+
+Metadata:
+11–13px
+
+Do not overuse uppercase text.
+
+Reserve uppercase + letter spacing for small labels such as:
+
+`OPERATIONAL PERFORMANCE`
+
+`EXECUTIVE INSIGHT`
+
+`PRIVACY PROTECTED`
+
+---
+
+# 24. DO NOT OVER-CARD THE PAGE
+
+This is important.
+
+Do NOT create:
+
+* dozens of small cards
+* giant rounded containers
+* repetitive borders
+* excessive colored backgrounds
+
+Use cards only when they help separate meaningful analytical objects.
+
+The page should feel like an intelligent workspace, not a collection of widgets.
+
+---
+
+# 25. CHART STYLE
+
+Use a restrained chart language:
+
+* Indigo primary
+* Lavender secondary
+* subtle gray reference lines
+* clean axes
+* readable labels
+* concise tooltips
+
+Avoid:
+
+* rainbow charts
+* 3D charts
+* heavy chart decoration
+* excessive legends
+* distracting animations
+
+---
+
+# 26. ANALYTICS SHOULD BE ACTIONABLE
+
+Whenever possible, every major analytical insight should help answer:
+
+**What happened?**
+
+**Why did it happen?**
+
+**What is the impact?**
+
+**What should we do next?**
+
+Do not turn the page into a descriptive BI report.
+
+It should feel like **AI-powered operational intelligence**.
+
+---
+
+# 27. NO RAW DEBUG / REASONING TEXT
+
+Do not show technical engine messages directly in the primary Analytics view.
+
+Avoid:
+
+* raw reasoning-engine output
+* stack traces
+* internal implementation details
+* system exceptions written for developers
+
+Analytics can expose AI-generated explanations, but they must be translated into clear enterprise language.
+
+---
+
+# 28. DATA TRUSTWORTHINESS
+
+This is an enterprise HRO platform.
+
+Do NOT invent:
+
+* percentages
+* case volumes
+* trend values
+* agent metrics
+* SLA data
+* forecast values
+* bottleneck counts
+* insights
+
+Use actual application data.
+
+If insufficient data exists:
+
+Show:
+
+`—`
+
+or:
+
+`No data`
+
+rather than fabricated values.
+
+---
+
+# 29. LOADING STATES
+
+Provide professional loading states for:
+
+* Executive Insight
+* Operational Performance
+* Agent Performance
+* Risk & Exception Intelligence
+* Workforce Intelligence
+
+Use subtle skeletons.
+
+Never display fake analytics while data is loading.
+
+---
+
+# 30. EMPTY STATES
+
+Examples:
+
+**No insights available**
+
+`Analytics will appear as sufficient operational data becomes available.`
+
+**No agent performance data**
+
+`Agent performance will appear after sufficient activity has been recorded.`
+
+**No bottlenecks detected**
+
+`No significant operational bottlenecks are currently identified.`
+
+Keep empty states quiet and professional.
+
+---
+
+# 31. ERROR STATES
+
+Errors should be localized to the affected analytics module.
+
+Example:
+
+**Agent Performance unavailable**
+
+`Performance data couldn't be loaded.`
+
+**Retry**
+
+Do not expose raw errors.
+
+---
+
+# 32. RESPONSIVE BEHAVIOR
+
+Desktop:
+
+Use a two-column analytical layout where appropriate.
+
+Tablet:
+
+Stack analytical modules intelligently.
+
+Mobile:
+
+Prioritize:
+
+1. Executive Insight
+2. Operational Performance
+3. Risk & Exceptions
+4. Agent Performance
+5. Workforce Intelligence
+
+Do not force charts into unusable horizontal layouts.
+
+---
+
+# 33. INTERACTIONS
+
+Use subtle professional interactions:
+
+* hover states
+* tooltips
+* expandable insight details
+* chart tooltips
+* drill-down into case/agent detail where supported
+* filter updates
+
+Do not use excessive animations.
+
+---
+
+# 34. CROSS-MODULE NAVIGATION
+
+Where analytics identifies an actionable condition, link to the appropriate existing workspace.
+
+Examples:
+
+Bottleneck → Cases
+
+Human intervention → Approvals
+
+Policy exception → Guardrails / Case
+
+Agent performance issue → Agent detail
+
+SLA risk → Cases
+
+Do not create broken routes.
+
+Use existing routes where available.
+
+---
+
+# 35. KEEP PRIVACY AND GOVERNANCE VISIBLE
+
+Analytics involving employees must remain privacy-aware.
+
+Do not display personally identifiable information unnecessarily.
+
+Maintain aggregation and threshold protections.
+
+The Analytics page should reinforce:
+
+**Enterprise intelligence without compromising workforce privacy.**
+
+---
+
+# 36. IMPLEMENTATION STRATEGY
+
+Before changing code:
+
+1. Inspect the existing Analytics page.
+2. Identify current data sources.
+3. Identify which metrics can be calculated accurately.
+4. Reuse existing chart components where appropriate.
+5. Reuse the global design system.
+6. Refactor repeated analytics UI into reusable components where beneficial.
+7. Preserve current Skill Inflow Forecast functionality.
+8. Preserve current Cohort Readiness functionality.
+9. Preserve privacy guard behavior.
+10. Do not rewrite unrelated application modules.
+11. Do not install another charting/UI framework unless absolutely necessary.
+
+---
+
+# 37. ACCEPTANCE CRITERIA
+
+The Analytics page is complete only when:
+
+* Page title is **HRO Intelligence**.
+* Header no longer describes onboarding-only analytics.
+* Global analytics filters exist.
+* Executive Insight replaces Agent Narrative Insight.
+* Executive Insight covers the entire HRO operating model.
+* Operational Performance section exists.
+* Agent Performance section exists.
+* Risk & Exception Intelligence exists.
+* Operational Bottlenecks exists.
+* Decision Intelligence exists.
+* Privacy protection is presented in enterprise-friendly language.
+* Skill Inflow Forecast remains available under Workforce Intelligence.
+* Cohort Readiness remains available in appropriate domain context.
+* HRO domain analysis can support multiple HR processes.
+* Onboarding is no longer the default framing of the page.
+* No fake metrics or analytics were introduced.
+* No raw debug/reasoning output is shown in the primary view.
+* Analytics are actionable rather than merely descriptive.
+* Existing analytics functionality remains intact.
+* The page uses the approved Agentic HRO Design System V2.
+* The page feels like a premium enterprise analytics/intelligence workspace.
+* The page visually belongs to the same product as Control Tower, Cases, Approvals, and Agents.
+
+Most importantly, the finished page should make an HR operations leader think:
+
+> **“This isn't just reporting. This platform understands how our autonomous HR operation is performing, where agents need help, where policies are creating friction, and what we should focus on next.”**

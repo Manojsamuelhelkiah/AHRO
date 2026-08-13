@@ -1311,7 +1311,7 @@ router.get("/onboarding/analytics", async (_req, res, next) => {
         if (narrativeCache.generatingFor !== signature) {
           narrativeCache.generatingFor = signature;
           void llmComplete(
-            "You are the Data & Analytics Agent for an onboarding system. Write a 3-4 sentence aggregated workforce-planning insight for HR leadership. Only trend-level statements — never name or judge an individual. Plain text.",
+            "You are the intelligence layer of an autonomous HR operations platform. The data you receive covers the onboarding domain only — speak to that scope and do not claim insight into domains you have no data for. Write a 3-4 sentence executive insight for HR leadership: how much onboarding work is progressing autonomously, where human intervention is concentrated, and what deserves attention next. Only trend-level statements — never name or judge an individual. Plain text, clear enterprise language, no technical jargon.",
             `Aggregate onboarding data: ${cases.length} cases. Skill inflow: ${Array.from(skillMap.entries()).map(([s, v]) => `${s} x${v.count} (${v.criticality})`).join("; ")}. Pending human reviews: ${approvals.filter((a) => a.status === "pending").length}. Readiness: ${Array.from(readinessMap.entries()).map(([k, v]) => `${k}=${v}`).join(", ")}. Suppression threshold: groups under ${SUPPRESSION_THRESHOLD} are not reported individually.`,
             300,
           )
