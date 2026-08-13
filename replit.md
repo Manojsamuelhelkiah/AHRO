@@ -38,7 +38,15 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- **Twilio WhatsApp inbound webhook**: the WhatsApp sandbox sender (`whatsapp:+14155238886`) is configured to POST incoming messages to `https://hro-agent-nexus.replit.app/api/onboarding/webhooks/twilio/whatsapp`. If the deployment domain ever changes, update the sender's webhook via the Senders API:
+  ```bash
+  curl -u "$TWILIO_ACCOUNT_SID:$TWILIO_AUTH_TOKEN" -X POST \
+    "https://messaging.twilio.com/v2/Channels/Senders/XE2c300bbf327c4995bd0df1e9f11f0b35" \
+    -H "Content-Type: application/json" \
+    -d '{"webhook":{"callback_url":"https://<NEW_DOMAIN>/api/onboarding/webhooks/twilio/whatsapp","callback_method":"POST"}}'
+  ```
+  (or in the Twilio Console under Messaging → Try it out → WhatsApp sandbox settings, "When a message comes in"). The endpoint validates `X-Twilio-Signature`, so it only accepts requests signed with `TWILIO_AUTH_TOKEN` for the exact public URL.
+- `TWILIO_WHATSAPP_FROM` must be the sandbox sender `whatsapp:+14155238886` — outbound sends fail if it's set to any number not registered as a WhatsApp sender on the Twilio account.
 
 ## Pointers
 
