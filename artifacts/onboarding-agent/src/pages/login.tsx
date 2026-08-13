@@ -34,8 +34,8 @@ const OPERATING_MODEL = [
 
 export function LoginPage() {
   const { signIn } = useSignIn();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(DEMO_EMAIL);
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const [authing, setAuthing] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
