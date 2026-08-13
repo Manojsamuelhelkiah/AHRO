@@ -41,7 +41,7 @@ type CaseRow = typeof onbCases.$inferSelect;
 export async function logEvent(
   caseId: number,
   agent: string,
-  engine: "llm" | "ldm" | "orchestrator" | "human" | "system",
+  engine: "llm" | "rules" | "ldm" | "orchestrator" | "human" | "system",
   title: string,
   detail: string,
   opts?: { hitlPattern?: string; ruleRef?: string; idempotencyKey?: string },
@@ -108,7 +108,7 @@ export async function createApproval(opts: {
   await logEvent(
     opts.caseId,
     opts.agent,
-    "ldm",
+    "rules",
     opts.hitlPattern === "hard-block" ? "Hard-block raised" : "Approval requested",
     `${opts.recommendation} — ${opts.rationale}`,
     {
@@ -196,7 +196,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
   await logEvent(
     caseId,
     "intake",
-    "ldm",
+    "rules",
     "Case created & hire type classified",
     `Classified as ${c.hireType} / ${c.workerCategory} via deterministic intake rules. Recruiter and manager notified.`,
     { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 1" },
@@ -266,14 +266,44 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
     paused = true;
   }
   if (c.hireType === "rehire" && !paused) {
+    // Rule fires deterministically; the evidence-gathering below is an
+    // LLM↔LDM exchange: the LLM agent formulates what it needs to know,
+    // the LDM (large database model) agent interprets each question and
+    // answers it from the archived employment records.
+    const {
+      ensureDemoRehireArchive,
+      formulateRecordsQuestions,
+      answerRecordsQuestions,
+    } = await import("./records-agent");
+    // Demo constructs (scenario/persona cases) get a synthetic archive so
+    // the flow is demonstrable; manual rehires keep honest "no records".
+    if (c.scenarioKey) await ensureDemoRehireArchive(c.workerEmail, c.workerName);
+    const { questions, viaLlm } = await formulateRecordsQuestions(
+      `Rehire case: ${c.workerName}, ${c.role}, ${c.department}, joining ${c.joiningDate}. Notes: ${c.notes ?? "none"}.`,
+    );
+    await logEvent(caseId, "intake", "llm", "Rehire detected — querying records archive",
+      `The reasoning agent asked the LDM records agent:\n${questions.map((q, i) => `${i + 1}. ${q.slice(0, 200)}`).join("\n")}${viaLlm ? "" : "\n(standard question set — AI question forming unavailable)"}`,
+      { ruleRef: "4.1 Intake Rule 5", idempotencyKey: `rehire-records:${caseId}:ask` });
+    const { stintCount, answers } = await answerRecordsQuestions(c.workerEmail, questions);
+    await logEvent(caseId, "records", "ldm", stintCount > 0
+      ? `Employment archive queried (${stintCount} past stints)`
+      : "Employment archive queried — no records found",
+      answers.map((a) => `Q: ${a.question.slice(0, 200)}\nA: ${a.answer}`).join("\n\n"),
+      { ruleRef: "4.1 Intake Rule 5", idempotencyKey: `rehire-records:${caseId}:answer` });
+    // Approver-facing evidence is ONLY the deterministic executor output —
+    // never model-written prose (case notes are untrusted input).
+    const evidence = stintCount > 0
+      ? answers.filter((a) => a.interpreted).map((a) => a.answer).join(" ")
+      : "No archived employment records were found for this worker; HR must validate the prior record manually.";
     await createApproval({
       caseId,
       agent: "intake",
       ruleRef: "4.1 Intake Rule 5",
       hitlPattern: "approve-before-act",
       recommendation: "Flag prior employment record and reactivation considerations for HR review",
-      rationale: `Rehire detected. ${c.notes ?? "Prior record must be validated before proceeding."}`,
+      rationale: `Rehire detected. ${c.notes ?? "Prior record must be validated before proceeding."} Records evidence: ${evidence || "(no interpretable answers)"}`,
       resumeAction: "continue-after-intake",
+      idempotencyKey: `rehire-approval:${caseId}`,
     });
     paused = true;
   }
@@ -283,7 +313,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
     await logEvent(
       caseId,
       "intake",
-      "ldm",
+      "rules",
       "Routed to non-employee pathway",
       "Contractor/vendor checklist selected; employee-only benefits and payroll items excluded.",
       { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 3" },
@@ -295,7 +325,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
     await logEvent(
       caseId,
       "intake",
-      "ldm",
+      "rules",
       "Client-facing role flagged",
       "Project-readiness flagged; Delivery Head added to case watchers.",
       { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 11" },
@@ -363,7 +393,7 @@ async function runPlanGeneration(
   const automatic = adjustments.filter((a) => a.hitl !== "approve-before-act");
 
   for (const a of automatic) {
-    await logEvent(caseId, "plan", "ldm", "Checklist adjustment applied", a.text, {
+    await logEvent(caseId, "plan", "rules", "Checklist adjustment applied", a.text, {
       hitlPattern: a.hitl,
       ruleRef: a.rule,
     });
@@ -389,7 +419,7 @@ async function runPlanGeneration(
   }
 
   for (const a of gated) {
-    await logEvent(caseId, "plan", "ldm", "Checklist adjustment applied (human-approved)", a.text, {
+    await logEvent(caseId, "plan", "rules", "Checklist adjustment applied (human-approved)", a.text, {
       hitlPattern: a.hitl,
       ruleRef: a.rule,
     });
@@ -453,7 +483,7 @@ async function runWorkstreams(caseId: number) {
   setReadiness(readiness, "payroll", nonEmployee ? "ready" : "in-progress",
     nonEmployee ? "Not applicable — non-employee pathway" : "Awaiting bank & tax inputs from new hire");
   await seedDocumentsForCase(c);
-  await logEvent(caseId, "documentation", "ldm", "Documentation pack issued",
+  await logEvent(caseId, "documentation", "rules", "Documentation pack issued",
     `Mandatory identity/statutory documents for ${c.geography} requested; completion tracked with owner notification on gaps.`,
     { hitlPattern: "notify-only", ruleRef: "4.3 Documentation Rule 1" });
 
@@ -473,7 +503,7 @@ async function runWorkstreams(caseId: number) {
     "in-progress",
     `${accessDetail} Provisioning ticket raised in ITSM — awaiting completion confirmation.`,
   );
-  await logEvent(caseId, "access", "ldm", "Access readiness coordinated", accessDetail, {
+  await logEvent(caseId, "access", "rules", "Access readiness coordinated", accessDetail, {
     hitlPattern: "act-then-review",
     ruleRef: "4.4 Access Rules",
   });
@@ -481,7 +511,7 @@ async function runWorkstreams(caseId: number) {
   // Asset & Workplace Readiness
   setWorkstream(ws, "assets", "ready");
   setReadiness(readiness, "assets", "ready", "Laptop, ID card and workspace scheduled for joining date");
-  await logEvent(caseId, "assets", "ldm", "Assets & workspace scheduled",
+  await logEvent(caseId, "assets", "rules", "Assets & workspace scheduled",
     "Device, ID card and workspace (or remote kit) booked against the joining date.",
     { hitlPattern: "notify-only", ruleRef: "4.5 Asset Rules" });
 
@@ -489,7 +519,7 @@ async function runWorkstreams(caseId: number) {
   setWorkstream(ws, "learning", "ready");
   setReadiness(readiness, "learning", "ready", "Induction, compliance learning and buddy assigned");
   setReadiness(readiness, "checkpoints", "ready", "Day-1/30/60/90 checkpoints scheduled");
-  await logEvent(caseId, "learning", "ldm", "Learning & engagement plan assigned",
+  await logEvent(caseId, "learning", "rules", "Learning & engagement plan assigned",
     "Induction, compliance learning, buddy/mentor and manager-connect scheduled; Day-30/60/90 checkpoints created.",
     { hitlPattern: "notify-only", ruleRef: "4.6 Learning Rules" });
 
@@ -518,7 +548,7 @@ async function runCommunications(caseId: number) {
     `Welcome aboard, ${c.workerName}! Your onboarding for the ${c.role} role starting ${c.joiningDate} is underway. Your checklist is prepared — reply to this message with any question.\n— The Onboarding Team`;
 
   const routing = resolveWelcomeChannels(c.channelPreference, c.workerPhone);
-  await logEvent(caseId, "channel", "ldm", "Channel preference applied",
+  await logEvent(caseId, "channel", "rules", "Channel preference applied",
     `HR channel preference for this case is "${normalizePreference(c.channelPreference)}". Welcome communications are routed accordingly.`,
     { hitlPattern: "notify-only" });
 
@@ -569,7 +599,7 @@ async function runAnalyticsAndReview(caseId: number) {
   const c = await getCase(caseId);
 
   if (c.skillCriticality === "scarce" || c.skillCriticality === "client-critical") {
-    await logEvent(caseId, "analytics", "ldm", "Critical skill inflow flagged",
+    await logEvent(caseId, "analytics", "rules", "Critical skill inflow flagged",
       `Skill "${c.primarySkill}" (${c.skillCriticality}) entering the workforce. Aggregated insight routed to HR, Talent Planning and Delivery — individual-level judgement is never published.`,
       { hitlPattern: "notify-only", ruleRef: "14.2 Analytics Rules" });
   }
@@ -696,7 +726,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
           action: "escalated",
           detail: `Inbound ${channel} message touched a sensitive topic — automated reply suppressed, human review created. (Content withheld from this audit log; see the approval for details.)`,
         });
-        await logEvent(caseId, "channel", "ldm", "Inbound message flagged sensitive",
+        await logEvent(caseId, "channel", "rules", "Inbound message flagged sensitive",
           `New hire message on ${channel} touches a sensitive topic (pay/legal/medical/complaint). No automated answer generated; escalated for human review.`,
           { hitlPattern: "approve-before-act", ruleRef: "4.6 Communications Rules" });
         const holding = `Hi ${c.workerName.split(" ")[0]}, thanks for reaching out. Your message touches on a topic that needs a person rather than an automated reply, so a human onboarding specialist will get back to you shortly. Nothing further is needed from you right now.`;
@@ -745,7 +775,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
         if (chosen && (await bookSlot(proposal.id, chosen))) {
           const confirmation = `Hi ${firstName}, you're booked! Your onboarding kick-off call is confirmed for ${chosen.label}. ${c.managerName ? `${c.managerName} and an` : "An"} onboarding specialist will join. A reminder will reach you before the call — reply here any time if you need to change it.`;
           const result = await send(confirmation, { subject: "Kick-off call confirmed" });
-          await logEvent(caseId, "channel", "ldm", "Kick-off call booked",
+          await logEvent(caseId, "channel", "rules", "Kick-off call booked",
             `New hire picked slot ${chosen.n} (${chosen.label}) by replying to the slot offer. Confirmation ${result.status === "sent" ? "delivered" : "logged"} on ${sendChannel}.`,
             { hitlPattern: "notify-only", ruleRef: "4.6 Communications Rules" });
           return;
@@ -846,7 +876,7 @@ NEW MESSAGE FROM THE HIRE
         await proposeSlots(caseId, slots);
         replyBody = `${replyBody}\n\n${formatSlotOffer(slots)}`;
         subject = "Your onboarding kick-off call — pick a slot";
-        await logEvent(caseId, "channel", "ldm", "Kick-off call slots offered",
+        await logEvent(caseId, "channel", "rules", "Kick-off call slots offered",
           `Three bookable slots proposed (${slots.map((s) => s.label).join("; ")}). The hire books by replying with the slot number.`,
           { hitlPattern: "notify-only", ruleRef: "4.6 Communications Rules" });
       }

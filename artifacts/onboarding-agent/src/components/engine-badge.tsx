@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from './ui-shared';
-import { Cpu, BrainCircuit, Network, User, Settings } from 'lucide-react';
+import { Cpu, BrainCircuit, Network, User, Settings, Database } from 'lucide-react';
 
 export function EngineBadge({ engine, className }: { engine: string, className?: string }) {
   let color = '';
@@ -13,10 +13,16 @@ export function EngineBadge({ engine, className }: { engine: string, className?:
       Icon = BrainCircuit;
       label = 'AI';
       break;
-    case 'ldm':
+    case 'rules':
+    case 'ldm-legacy':
       color = 'bg-emerald-100 text-emerald-700 border-emerald-200';
       Icon = Cpu;
       label = 'RULES';
+      break;
+    case 'ldm':
+      color = 'bg-cyan-100 text-cyan-700 border-cyan-200';
+      Icon = Database;
+      label = 'LDM';
       break;
     case 'human':
       color = 'bg-blue-100 text-blue-700 border-blue-200';

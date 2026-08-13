@@ -544,7 +544,7 @@ async function persistCallOutcome(
           body: `Hi ${c.workerName.split(" ")[0]},\n\nAs discussed on the phone just now, here are new times for your onboarding kick-off call.\n\n${formatSlotOffer(slots)}\n\nBest,\nThe onboarding team`,
         });
         const emailed = emailResult.status === "sent";
-        await logEvent(session.caseId, "channel", "ldm", "Kick-off reschedule agreed on call",
+        await logEvent(session.caseId, "channel", "rules", "Kick-off reschedule agreed on call",
           `The hire asked to move the kick-off call during the ${label.toLowerCase()}; fresh bookable slots were ${
             emailed ? "emailed" : `composed but NOT delivered (${emailResult.status}${emailResult.failureReason ? `: ${emailResult.failureReason}` : ""})`
           }. ${note}`.trim(),

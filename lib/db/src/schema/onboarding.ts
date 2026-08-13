@@ -285,6 +285,33 @@ export const onbWatchEmails = pgTable("onb_watch_emails", {
 });
 
 /**
+ * Archived employment history — the system-of-record the LDM (large
+ * database model) agent queries when a rehire is detected. One row per
+ * past stint, matched to a case by worker email (demo archive).
+ */
+export const onbEmployeeRecords = pgTable("onb_employee_records", {
+  id: serial("id").primaryKey(),
+  /** Archive match key: the (re)hire's email, lowercased. */
+  workerEmail: text("worker_email").notNull(),
+  workerName: text("worker_name").notNull(),
+  role: text("role").notNull(),
+  department: text("department").notNull(),
+  startDate: text("start_date").notNull(), // YYYY-MM-DD
+  endDate: text("end_date").notNull(), // YYYY-MM-DD
+  exitReason: text("exit_reason").notNull(),
+  noticeRequiredDays: integer("notice_required_days").notNull(),
+  noticeServedDays: integer("notice_served_days").notNull(),
+  /** Final performance rating for the stint, 1.0–5.0 scale. */
+  performanceRating: text("performance_rating").notNull(),
+  rehireEligible: boolean("rehire_eligible").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  /** One stint per worker+start date — makes demo seeding an idempotent upsert. */
+  uniqueIndex("onb_employee_records_stint_idx").on(t.workerEmail, t.startDate),
+]);
+
+/**
  * Guardrail activation audit. One row each time a security/safety
  * guardrail actively intervened (blocked, sanitized, rate-limited or
  * escalated). Powers the Guardrails page drilldowns.

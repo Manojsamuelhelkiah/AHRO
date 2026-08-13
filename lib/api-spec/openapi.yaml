@@ -2983,7 +2983,7 @@ components:
           description: intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel
         engine:
           type: string
-          description: llm | ldm | orchestrator | human | system
+          description: llm | rules | ldm | orchestrator | human | system
         hitlPattern:
           type: ["string", "null"]
           description: notify-only | approve-before-act | act-then-review | hard-block
