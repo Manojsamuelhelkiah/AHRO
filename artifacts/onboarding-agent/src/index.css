@@ -99,36 +99,6 @@
   --shadow-lg:  0 8px 24px rgba(11, 18, 48, 0.08), 0 4px 8px rgba(11, 18, 48, 0.04);
 }
 
-.dark {
-  --primary:        #655BF3;
-  --primary-dark:   #4C42EE;
-  --primary-light:  rgba(101, 91, 243, 0.15);
-  --primary-light-bg: rgba(101, 91, 243, 0.15);
-  --violet-light-bg: rgba(185, 180, 255, 0.16);
-  --violet-fg:      #B9B4FF;
-
-  --surface:        #100D3E;
-  --surface-alt:    #080626;
-  --surface-soft:   #15134F;
-  
-  --border:         rgba(180, 175, 255, 0.18);
-  --border-strong:  rgba(180, 175, 255, 0.3);
-  
-  --text-primary:   #F7F7FF;
-  --text-secondary: #D5D2ED;
-  --text-muted:     #AAA7C7;
-  
-  --status-green:   #20E58A;
-  --status-amber:   #F59E0B;
-  --status-red:     #EF4444;
-  --status-blue:    #8F89FF;
-  --status-gray:    #AAA7C7;
-
-  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
-  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
-  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
 @layer base {
   * { @apply border-border; }
   body { 

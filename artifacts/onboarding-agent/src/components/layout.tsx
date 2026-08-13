@@ -26,7 +26,6 @@ function getPageName(path: string) {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const pageName = getPageName(location);
-  const isDashboard = location === '/';
   
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -42,7 +41,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const role = typeof window !== 'undefined' ? localStorage.getItem('hro_role') || 'Reviewer' : 'Reviewer';
 
   return (
-    <div className={cn("flex min-h-screen w-full transition-colors duration-300", isDashboard ? "dark" : "")} style={{ backgroundColor: 'var(--surface-alt)', color: 'var(--text-primary)' }}>
+    <div className="flex min-h-screen w-full transition-colors duration-300" style={{ backgroundColor: 'var(--surface-alt)', color: 'var(--text-primary)' }}>
       <aside style={{ width: '240px', backgroundColor: 'var(--surface)', borderRight: '1px solid var(--border)' }} className="flex flex-col hidden md:flex shrink-0 transition-colors duration-300">
         <div style={{ padding: 'var(--space-lg) var(--space-lg) var(--space-md)', borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2 text-[var(--text-lg)] font-bold" style={{ color: 'var(--primary)' }}>
