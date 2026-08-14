@@ -26,3 +26,10 @@ uri = "file://exports/hro-cost-shadow.xlsx"
 type = "table"
 title = "HRO Cost Shadow Workbook (.xlsx)"
 description = "Tap to open, then use the download option to save the Excel file."
+
+[[outputs]]
+id = "cDko1TgFbA8wQVPJjD33e"
+uri = "file://docs/component-inventory-for-estimation.md"
+type = "text"
+title = "HRO Platform — Component Inventory for Effort Estimation"
+description = "Complete build-scope inventory: apps, API, data model, AI agents, rules, workers, integrations, and Azure mapping notes."
