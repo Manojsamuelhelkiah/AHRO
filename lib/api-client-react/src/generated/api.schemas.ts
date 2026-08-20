@@ -316,6 +316,108 @@ export interface ScenarioUpdate {
   inputs?: ScenarioInputs;
 }
 
+export type PricingSheetInputsTenantTier = typeof PricingSheetInputsTenantTier[keyof typeof PricingSheetInputsTenantTier];
+
+
+export const PricingSheetInputsTenantTier = {
+  pooled: 'pooled',
+  siloed: 'siloed',
+  dedicated: 'dedicated',
+} as const;
+
+export type PricingSheetInputsSecurityTier = typeof PricingSheetInputsSecurityTier[keyof typeof PricingSheetInputsSecurityTier];
+
+
+export const PricingSheetInputsSecurityTier = {
+  standard: 'standard',
+  regulated: 'regulated',
+  enterprise: 'enterprise',
+} as const;
+
+export type PricingSheetInputsTokenProfile = typeof PricingSheetInputsTokenProfile[keyof typeof PricingSheetInputsTokenProfile];
+
+
+export const PricingSheetInputsTokenProfile = {
+  light: 'light',
+  balanced: 'balanced',
+  rich: 'rich',
+} as const;
+
+export type PricingSheetInputsInfrastructureTier = typeof PricingSheetInputsInfrastructureTier[keyof typeof PricingSheetInputsInfrastructureTier];
+
+
+export const PricingSheetInputsInfrastructureTier = {
+  starter: 'starter',
+  production: 'production',
+  critical: 'critical',
+} as const;
+
+export type PricingSheetInputsSupportTier = typeof PricingSheetInputsSupportTier[keyof typeof PricingSheetInputsSupportTier];
+
+
+export const PricingSheetInputsSupportTier = {
+  essential: 'essential',
+  premium: 'premium',
+  managed: 'managed',
+} as const;
+
+export interface PricingSheetInputs {
+  /** @minimum 1 */
+  clientsInCohort: number;
+  /** @minimum 1 */
+  annualTransactions: number;
+  /** @minimum 0 */
+  channels: number;
+  /** @minimum 0 */
+  integrations: number;
+  /** @minimum 1 */
+  agents: number;
+  /** @minimum 0 */
+  workflows: number;
+  tenantTier: PricingSheetInputsTenantTier;
+  securityTier: PricingSheetInputsSecurityTier;
+  tokenProfile: PricingSheetInputsTokenProfile;
+  infrastructureTier: PricingSheetInputsInfrastructureTier;
+  supportTier: PricingSheetInputsSupportTier;
+  /**
+     * @minimum 1
+     * @maximum 90
+     */
+  grossMarginPct: number;
+  /** @minimum 1 */
+  buildAmortizationYears: number;
+}
+
+export interface PricingRecommendation {
+  recommendedMonthlySubscription: number;
+  recommendedAnnualCommitment: number;
+  recommendedTransactionPrice: number;
+  recommendedOveragePrice: number;
+  recommendedImplementationFee: number;
+  includedAnnualTransactions: number;
+}
+
+export interface PricingSheet {
+  id: number;
+  name: string;
+  inputs: PricingSheetInputs;
+  recommendation: PricingRecommendation;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PricingSheetInput {
+  /** @minLength 1 */
+  name: string;
+  inputs: PricingSheetInputs;
+}
+
+export interface PricingSheetUpdate {
+  /** @minLength 1 */
+  name?: string;
+  inputs?: PricingSheetInputs;
+}
+
 export interface SensitivityRequest {
   inputs: ScenarioInputs;
   /** Optional saved actuals overlay id; held constant across baseline and every nudge so the tornado matches the calibrated rollup. */

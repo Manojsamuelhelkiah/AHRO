@@ -195,6 +195,9 @@ importers:
       '@workspace/integrations-openai-ai-server':
         specifier: workspace:*
         version: link:../../lib/integrations-openai-ai-server
+      '@workspace/pricing-model':
+        specifier: workspace:*
+        version: link:../../lib/pricing-model
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -380,6 +383,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/pricing-model':
+        specifier: workspace:*
+        version: link:../../lib/pricing-model
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -950,6 +956,8 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
+
+  lib/pricing-model: {}
 
   scripts:
     devDependencies:

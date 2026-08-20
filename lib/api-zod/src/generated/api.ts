@@ -491,6 +491,285 @@ export const DeleteScenarioResponse = zod.void()
 
 
 /**
+ * @summary List saved product pricing sheets
+ */
+
+
+export const listPricingSheetsResponseInputsChannelsMin = 0;
+
+export const listPricingSheetsResponseInputsIntegrationsMin = 0;
+
+
+export const listPricingSheetsResponseInputsWorkflowsMin = 0;
+
+export const listPricingSheetsResponseInputsGrossMarginPctMax = 90;
+
+
+
+
+export const ListPricingSheetsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "inputs": zod.object({
+  "clientsInCohort": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "channels": zod.number().min(listPricingSheetsResponseInputsChannelsMin),
+  "integrations": zod.number().min(listPricingSheetsResponseInputsIntegrationsMin),
+  "agents": zod.number().min(1),
+  "workflows": zod.number().min(listPricingSheetsResponseInputsWorkflowsMin),
+  "tenantTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "securityTier": zod.enum(['standard', 'regulated', 'enterprise']),
+  "tokenProfile": zod.enum(['light', 'balanced', 'rich']),
+  "infrastructureTier": zod.enum(['starter', 'production', 'critical']),
+  "supportTier": zod.enum(['essential', 'premium', 'managed']),
+  "grossMarginPct": zod.number().min(1).max(listPricingSheetsResponseInputsGrossMarginPctMax),
+  "buildAmortizationYears": zod.number().min(1)
+}),
+  "recommendation": zod.object({
+  "recommendedMonthlySubscription": zod.number(),
+  "recommendedAnnualCommitment": zod.number(),
+  "recommendedTransactionPrice": zod.number(),
+  "recommendedOveragePrice": zod.number(),
+  "recommendedImplementationFee": zod.number(),
+  "includedAnnualTransactions": zod.number()
+}),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPricingSheetsResponse = zod.array(ListPricingSheetsResponseItem)
+
+
+/**
+ * @summary Save a product pricing sheet
+ */
+
+
+
+export const createPricingSheetBodyInputsChannelsMin = 0;
+
+export const createPricingSheetBodyInputsIntegrationsMin = 0;
+
+
+export const createPricingSheetBodyInputsWorkflowsMin = 0;
+
+export const createPricingSheetBodyInputsGrossMarginPctMax = 90;
+
+
+
+
+export const CreatePricingSheetBody = zod.object({
+  "name": zod.string().min(1),
+  "inputs": zod.object({
+  "clientsInCohort": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "channels": zod.number().min(createPricingSheetBodyInputsChannelsMin),
+  "integrations": zod.number().min(createPricingSheetBodyInputsIntegrationsMin),
+  "agents": zod.number().min(1),
+  "workflows": zod.number().min(createPricingSheetBodyInputsWorkflowsMin),
+  "tenantTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "securityTier": zod.enum(['standard', 'regulated', 'enterprise']),
+  "tokenProfile": zod.enum(['light', 'balanced', 'rich']),
+  "infrastructureTier": zod.enum(['starter', 'production', 'critical']),
+  "supportTier": zod.enum(['essential', 'premium', 'managed']),
+  "grossMarginPct": zod.number().min(1).max(createPricingSheetBodyInputsGrossMarginPctMax),
+  "buildAmortizationYears": zod.number().min(1)
+})
+})
+
+
+
+export const createPricingSheetResponseInputsChannelsMin = 0;
+
+export const createPricingSheetResponseInputsIntegrationsMin = 0;
+
+
+export const createPricingSheetResponseInputsWorkflowsMin = 0;
+
+export const createPricingSheetResponseInputsGrossMarginPctMax = 90;
+
+
+
+
+export const CreatePricingSheetResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "inputs": zod.object({
+  "clientsInCohort": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "channels": zod.number().min(createPricingSheetResponseInputsChannelsMin),
+  "integrations": zod.number().min(createPricingSheetResponseInputsIntegrationsMin),
+  "agents": zod.number().min(1),
+  "workflows": zod.number().min(createPricingSheetResponseInputsWorkflowsMin),
+  "tenantTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "securityTier": zod.enum(['standard', 'regulated', 'enterprise']),
+  "tokenProfile": zod.enum(['light', 'balanced', 'rich']),
+  "infrastructureTier": zod.enum(['starter', 'production', 'critical']),
+  "supportTier": zod.enum(['essential', 'premium', 'managed']),
+  "grossMarginPct": zod.number().min(1).max(createPricingSheetResponseInputsGrossMarginPctMax),
+  "buildAmortizationYears": zod.number().min(1)
+}),
+  "recommendation": zod.object({
+  "recommendedMonthlySubscription": zod.number(),
+  "recommendedAnnualCommitment": zod.number(),
+  "recommendedTransactionPrice": zod.number(),
+  "recommendedOveragePrice": zod.number(),
+  "recommendedImplementationFee": zod.number(),
+  "includedAnnualTransactions": zod.number()
+}),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a saved product pricing sheet
+ */
+export const GetPricingSheetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+export const getPricingSheetResponseInputsChannelsMin = 0;
+
+export const getPricingSheetResponseInputsIntegrationsMin = 0;
+
+
+export const getPricingSheetResponseInputsWorkflowsMin = 0;
+
+export const getPricingSheetResponseInputsGrossMarginPctMax = 90;
+
+
+
+
+export const GetPricingSheetResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "inputs": zod.object({
+  "clientsInCohort": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "channels": zod.number().min(getPricingSheetResponseInputsChannelsMin),
+  "integrations": zod.number().min(getPricingSheetResponseInputsIntegrationsMin),
+  "agents": zod.number().min(1),
+  "workflows": zod.number().min(getPricingSheetResponseInputsWorkflowsMin),
+  "tenantTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "securityTier": zod.enum(['standard', 'regulated', 'enterprise']),
+  "tokenProfile": zod.enum(['light', 'balanced', 'rich']),
+  "infrastructureTier": zod.enum(['starter', 'production', 'critical']),
+  "supportTier": zod.enum(['essential', 'premium', 'managed']),
+  "grossMarginPct": zod.number().min(1).max(getPricingSheetResponseInputsGrossMarginPctMax),
+  "buildAmortizationYears": zod.number().min(1)
+}),
+  "recommendation": zod.object({
+  "recommendedMonthlySubscription": zod.number(),
+  "recommendedAnnualCommitment": zod.number(),
+  "recommendedTransactionPrice": zod.number(),
+  "recommendedOveragePrice": zod.number(),
+  "recommendedImplementationFee": zod.number(),
+  "includedAnnualTransactions": zod.number()
+}),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a saved product pricing sheet
+ */
+export const UpdatePricingSheetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const updatePricingSheetBodyInputsChannelsMin = 0;
+
+export const updatePricingSheetBodyInputsIntegrationsMin = 0;
+
+
+export const updatePricingSheetBodyInputsWorkflowsMin = 0;
+
+export const updatePricingSheetBodyInputsGrossMarginPctMax = 90;
+
+
+
+
+export const UpdatePricingSheetBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "inputs": zod.object({
+  "clientsInCohort": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "channels": zod.number().min(updatePricingSheetBodyInputsChannelsMin),
+  "integrations": zod.number().min(updatePricingSheetBodyInputsIntegrationsMin),
+  "agents": zod.number().min(1),
+  "workflows": zod.number().min(updatePricingSheetBodyInputsWorkflowsMin),
+  "tenantTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "securityTier": zod.enum(['standard', 'regulated', 'enterprise']),
+  "tokenProfile": zod.enum(['light', 'balanced', 'rich']),
+  "infrastructureTier": zod.enum(['starter', 'production', 'critical']),
+  "supportTier": zod.enum(['essential', 'premium', 'managed']),
+  "grossMarginPct": zod.number().min(1).max(updatePricingSheetBodyInputsGrossMarginPctMax),
+  "buildAmortizationYears": zod.number().min(1)
+}).optional()
+})
+
+
+
+export const updatePricingSheetResponseInputsChannelsMin = 0;
+
+export const updatePricingSheetResponseInputsIntegrationsMin = 0;
+
+
+export const updatePricingSheetResponseInputsWorkflowsMin = 0;
+
+export const updatePricingSheetResponseInputsGrossMarginPctMax = 90;
+
+
+
+
+export const UpdatePricingSheetResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "inputs": zod.object({
+  "clientsInCohort": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "channels": zod.number().min(updatePricingSheetResponseInputsChannelsMin),
+  "integrations": zod.number().min(updatePricingSheetResponseInputsIntegrationsMin),
+  "agents": zod.number().min(1),
+  "workflows": zod.number().min(updatePricingSheetResponseInputsWorkflowsMin),
+  "tenantTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "securityTier": zod.enum(['standard', 'regulated', 'enterprise']),
+  "tokenProfile": zod.enum(['light', 'balanced', 'rich']),
+  "infrastructureTier": zod.enum(['starter', 'production', 'critical']),
+  "supportTier": zod.enum(['essential', 'premium', 'managed']),
+  "grossMarginPct": zod.number().min(1).max(updatePricingSheetResponseInputsGrossMarginPctMax),
+  "buildAmortizationYears": zod.number().min(1)
+}),
+  "recommendation": zod.object({
+  "recommendedMonthlySubscription": zod.number(),
+  "recommendedAnnualCommitment": zod.number(),
+  "recommendedTransactionPrice": zod.number(),
+  "recommendedOveragePrice": zod.number(),
+  "recommendedImplementationFee": zod.number(),
+  "includedAnnualTransactions": zod.number()
+}),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a saved product pricing sheet
+ */
+export const DeletePricingSheetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePricingSheetResponse = zod.void()
+
+
+/**
  * @summary List selectable AI models per role with per-call prices
  */
 export const ListModelCatalogResponseItem = zod.object({

@@ -4,3 +4,4 @@ export * from "./actuals-overlays";
 export * from "./custom-intents";
 export * from "./onboarding";
 export * from "./pricing-rate-sets";
+export * from "./pricing-sheets";

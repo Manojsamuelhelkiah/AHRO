@@ -221,6 +221,109 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /pricing-sheets:
+    get:
+      operationId: listPricingSheets
+      tags: [pricingSheets]
+      summary: List saved product pricing sheets
+      responses:
+        "200":
+          description: Pricing sheet list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PricingSheet"
+    post:
+      operationId: createPricingSheet
+      tags: [pricingSheets]
+      summary: Save a product pricing sheet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingSheetInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingSheet"
+  /pricing-sheets/{id}:
+    get:
+      operationId: getPricingSheet
+      tags: [pricingSheets]
+      summary: Get a saved product pricing sheet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Pricing sheet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingSheet"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      operationId: updatePricingSheet
+      tags: [pricingSheets]
+      summary: Update a saved product pricing sheet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingSheetUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingSheet"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      operationId: deletePricingSheet
+      tags: [pricingSheets]
+      summary: Delete a saved product pricing sheet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /model-catalog:
     get:
       operationId: listModelCatalog
@@ -1974,6 +2077,77 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+    PricingSheetInputs:
+      type: object
+      required:
+        - clientsInCohort
+        - annualTransactions
+        - channels
+        - integrations
+        - agents
+        - workflows
+        - tenantTier
+        - securityTier
+        - tokenProfile
+        - infrastructureTier
+        - supportTier
+        - grossMarginPct
+        - buildAmortizationYears
+      properties:
+        clientsInCohort: { type: integer, minimum: 1 }
+        annualTransactions: { type: integer, minimum: 1 }
+        channels: { type: integer, minimum: 0 }
+        integrations: { type: integer, minimum: 0 }
+        agents: { type: integer, minimum: 1 }
+        workflows: { type: integer, minimum: 0 }
+        tenantTier: { type: string, enum: [pooled, siloed, dedicated] }
+        securityTier: { type: string, enum: [standard, regulated, enterprise] }
+        tokenProfile: { type: string, enum: [light, balanced, rich] }
+        infrastructureTier: { type: string, enum: [starter, production, critical] }
+        supportTier: { type: string, enum: [essential, premium, managed] }
+        grossMarginPct: { type: number, minimum: 1, maximum: 90 }
+        buildAmortizationYears: { type: integer, minimum: 1 }
+    PricingRecommendation:
+      type: object
+      required:
+        - recommendedMonthlySubscription
+        - recommendedAnnualCommitment
+        - recommendedTransactionPrice
+        - recommendedOveragePrice
+        - recommendedImplementationFee
+        - includedAnnualTransactions
+      properties:
+        recommendedMonthlySubscription: { type: number }
+        recommendedAnnualCommitment: { type: number }
+        recommendedTransactionPrice: { type: number }
+        recommendedOveragePrice: { type: number }
+        recommendedImplementationFee: { type: number }
+        includedAnnualTransactions: { type: integer }
+    PricingSheet:
+      type: object
+      required: [id, name, inputs, recommendation, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        inputs:
+          $ref: "#/components/schemas/PricingSheetInputs"
+        recommendation:
+          $ref: "#/components/schemas/PricingRecommendation"
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PricingSheetInput:
+      type: object
+      required: [name, inputs]
+      properties:
+        name: { type: string, minLength: 1 }
+        inputs:
+          $ref: "#/components/schemas/PricingSheetInputs"
+    PricingSheetUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        inputs:
+          $ref: "#/components/schemas/PricingSheetInputs"
     SensitivityRequest:
       type: object
       properties:

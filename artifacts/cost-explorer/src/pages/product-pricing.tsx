@@ -1,4 +1,12 @@
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getListPricingSheetsQueryKey,
+  useCreatePricingSheet,
+  useDeletePricingSheet,
+  useListPricingSheets,
+  useUpdatePricingSheet,
+} from "@workspace/api-client-react";
 import {
   BadgeDollarSign,
   Bot,
@@ -9,6 +17,9 @@ import {
   Headphones,
   Info,
   Layers3,
+  Copy,
+  Save,
+  Trash2,
   RefreshCcw,
   ShieldCheck,
   Workflow,
@@ -23,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
 import {
   calculatePricingModel,
   DEFAULT_PRICING_INPUTS,
@@ -32,6 +44,7 @@ import {
   type InfrastructureTier,
   type PricingCostLine,
   type PricingInputs,
+  type PricingRecommendation,
   type SecurityTier,
   type SupportTier,
   type TenantTier,
@@ -190,9 +203,125 @@ function DriverTable({ title, badge, lines }: { title: string; badge: string; li
 }
 
 export default function ProductPricing() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: pricingSheets, isLoading: isLoadingPricingSheets } = useListPricingSheets();
+  const createPricingSheet = useCreatePricingSheet();
+  const updatePricingSheet = useUpdatePricingSheet();
+  const deletePricingSheet = useDeletePricingSheet();
   const [inputs, setInputs] = useState<PricingInputs>(DEFAULT_PRICING_INPUTS);
-  const model = useMemo(() => calculatePricingModel(inputs), [inputs]);
+  const [selectedPricingSheetId, setSelectedPricingSheetId] = useState<number | "">("");
+  const [pricingSheetName, setPricingSheetName] = useState("Untitled pricing sheet");
+  const [savedRecommendation, setSavedRecommendation] = useState<PricingRecommendation | null>(null);
+  const calculatedModel = useMemo(() => calculatePricingModel(inputs), [inputs]);
+  const model = useMemo(
+    () =>
+      savedRecommendation
+        ? { ...calculatedModel, ...savedRecommendation }
+        : calculatedModel,
+    [calculatedModel, savedRecommendation],
+  );
+  const selectedPricingSheet = pricingSheets?.find((sheet) => sheet.id === selectedPricingSheetId);
+  const isSaving = createPricingSheet.isPending || updatePricingSheet.isPending;
+
+  const refreshPricingSheets = async () => {
+    await queryClient.invalidateQueries({ queryKey: getListPricingSheetsQueryKey() });
+  };
+
+  const selectPricingSheet = (value: string) => {
+    if (value === "new") {
+      setSelectedPricingSheetId("");
+      setPricingSheetName("Untitled pricing sheet");
+      setSavedRecommendation(null);
+      setInputs(DEFAULT_PRICING_INPUTS);
+      return;
+    }
+    const sheet = pricingSheets?.find((item) => item.id === Number(value));
+    if (!sheet) return;
+    setSelectedPricingSheetId(sheet.id);
+    setPricingSheetName(sheet.name);
+    setSavedRecommendation(sheet.recommendation);
+    setInputs(normalizePricingInputs(sheet.inputs as PricingInputs));
+  };
+
+  const saveNewPricingSheet = async () => {
+    const name = pricingSheetName.trim();
+    if (!name) {
+      toast({ title: "Name required", description: "Give this pricing sheet a name before saving.", variant: "destructive" });
+      return;
+    }
+    try {
+      const sheet = await createPricingSheet.mutateAsync({
+        data: { name, inputs },
+      });
+      setSelectedPricingSheetId(sheet.id);
+      setPricingSheetName(sheet.name);
+      setSavedRecommendation(sheet.recommendation);
+      await refreshPricingSheets();
+      toast({ title: "Pricing sheet saved", description: `${sheet.name} is ready to reopen for review.` });
+    } catch {
+      toast({ title: "Save failed", description: "The pricing sheet could not be saved.", variant: "destructive" });
+    }
+  };
+
+  const savePricingSheet = async () => {
+    if (selectedPricingSheetId === "") {
+      await saveNewPricingSheet();
+      return;
+    }
+    const name = pricingSheetName.trim();
+    if (!name) {
+      toast({ title: "Name required", description: "Give this pricing sheet a name before saving.", variant: "destructive" });
+      return;
+    }
+    try {
+      const sheet = await updatePricingSheet.mutateAsync({
+        id: selectedPricingSheetId,
+        data: { name, inputs },
+      });
+      setPricingSheetName(sheet.name);
+      setSavedRecommendation(sheet.recommendation);
+      await refreshPricingSheets();
+      toast({ title: "Pricing sheet updated", description: `${sheet.name} now reflects the current assumptions and recommendation.` });
+    } catch {
+      toast({ title: "Update failed", description: "The pricing sheet could not be updated.", variant: "destructive" });
+    }
+  };
+
+  const duplicatePricingSheet = async () => {
+    const sourceName = pricingSheetName.trim() || "Pricing sheet";
+    try {
+      const sheet = await createPricingSheet.mutateAsync({
+        data: { name: `Copy of ${sourceName}`, inputs },
+      });
+      setSelectedPricingSheetId(sheet.id);
+      setPricingSheetName(sheet.name);
+      setSavedRecommendation(sheet.recommendation);
+      await refreshPricingSheets();
+      toast({ title: "Pricing sheet duplicated", description: `${sheet.name} is now an independent copy.` });
+    } catch {
+      toast({ title: "Duplicate failed", description: "The pricing sheet could not be duplicated.", variant: "destructive" });
+    }
+  };
+
+  const removePricingSheet = async () => {
+    if (selectedPricingSheetId === "" || !selectedPricingSheet) return;
+    if (!window.confirm(`Delete "${selectedPricingSheet.name}"? This cannot be undone.`)) return;
+    try {
+      await deletePricingSheet.mutateAsync({ id: selectedPricingSheetId });
+      setSelectedPricingSheetId("");
+      setPricingSheetName("Untitled pricing sheet");
+      setSavedRecommendation(null);
+      setInputs(DEFAULT_PRICING_INPUTS);
+      await refreshPricingSheets();
+      toast({ title: "Pricing sheet deleted", description: "The saved sheet has been removed." });
+    } catch {
+      toast({ title: "Delete failed", description: "The pricing sheet could not be deleted.", variant: "destructive" });
+    }
+  };
+
   const update = <K extends keyof PricingInputs>(key: K, value: PricingInputs[K]) => {
+    setSavedRecommendation(null);
     setInputs((current) => normalizePricingInputs({ ...current, [key]: value }));
   };
 
@@ -212,10 +341,53 @@ export default function ProductPricing() {
             Convert architecture scope and committed client volume into an explainable build estimate, cost-to-serve, and commercial price.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setInputs(DEFAULT_PRICING_INPUTS)} data-testid="reset-pricing">
+        <Button variant="outline" size="sm" onClick={() => selectPricingSheet("new")} data-testid="reset-pricing">
           <RefreshCcw className="mr-2 h-4 w-4" />Reset assumptions
         </Button>
       </div>
+
+      <Card className="border-primary/20 shadow-sm" data-testid="pricing-sheet-manager">
+        <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-end">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="pricing-sheet-picker" className="text-xs text-muted-foreground">Saved pricing sheet</Label>
+              <Select value={selectedPricingSheetId === "" ? "new" : String(selectedPricingSheetId)} onValueChange={selectPricingSheet}>
+                <SelectTrigger id="pricing-sheet-picker" data-testid="pricing-sheet-picker"><SelectValue placeholder="New unsaved pricing sheet" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">New unsaved pricing sheet</SelectItem>
+                  {pricingSheets?.map((sheet) => (
+                    <SelectItem key={sheet.id} value={String(sheet.id)}>
+                      {sheet.name} · updated {new Date(sheet.updatedAt).toLocaleDateString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isLoadingPricingSheets ? (
+                <p className="text-xs text-muted-foreground">Loading saved sheets…</p>
+              ) : selectedPricingSheet ? (
+                <p className="text-xs text-muted-foreground" data-testid="pricing-sheet-updated">Last updated {new Date(selectedPricingSheet.updatedAt).toLocaleString()}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Save this configuration to reopen it later.</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pricing-sheet-name" className="text-xs text-muted-foreground">Sheet name</Label>
+              <Input id="pricing-sheet-name" value={pricingSheetName} onChange={(event) => setPricingSheetName(event.currentTarget.value)} disabled={isSaving} data-testid="pricing-sheet-name" />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <Button size="sm" onClick={() => void savePricingSheet()} disabled={isSaving} data-testid="save-pricing-sheet">
+              <Save className="mr-2 h-4 w-4" />{selectedPricingSheetId === "" ? "Save sheet" : "Save changes"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void duplicatePricingSheet()} disabled={isSaving} data-testid="duplicate-pricing-sheet">
+              <Copy className="mr-2 h-4 w-4" />Duplicate
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void removePricingSheet()} disabled={selectedPricingSheetId === "" || deletePricingSheet.isPending} data-testid="delete-pricing-sheet">
+              <Trash2 className="mr-2 h-4 w-4" />Delete
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="space-y-4 xl:sticky xl:top-0 xl:self-start">

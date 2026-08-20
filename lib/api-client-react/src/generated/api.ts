@@ -72,6 +72,9 @@ import type {
   PricingRateRegister,
   PricingRateSetInput,
   PricingRateSetVersion,
+  PricingSheet,
+  PricingSheetInput,
+  PricingSheetUpdate,
   Rollup,
   RollupRequest,
   Scenario,
@@ -1020,6 +1023,374 @@ export const useDeleteScenario = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getDeleteScenarioMutationOptions(options));
+    }
+
+export const getListPricingSheetsUrl = () => {
+
+
+
+
+  return `/api/pricing-sheets`
+}
+
+/**
+ * @summary List saved product pricing sheets
+ */
+export const listPricingSheets = async ( options?: RequestInit): Promise<PricingSheet[]> => {
+
+  return customFetch<PricingSheet[]>(getListPricingSheetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPricingSheetsQueryKey = () => {
+    return [
+    `/api/pricing-sheets`
+    ] as const;
+    }
+
+
+export const getListPricingSheetsQueryOptions = <TData = Awaited<ReturnType<typeof listPricingSheets>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPricingSheets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPricingSheetsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPricingSheets>>> = ({ signal }) => listPricingSheets({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPricingSheets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPricingSheetsQueryResult = NonNullable<Awaited<ReturnType<typeof listPricingSheets>>>
+export type ListPricingSheetsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List saved product pricing sheets
+ */
+
+export function useListPricingSheets<TData = Awaited<ReturnType<typeof listPricingSheets>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPricingSheets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPricingSheetsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePricingSheetUrl = () => {
+
+
+
+
+  return `/api/pricing-sheets`
+}
+
+/**
+ * @summary Save a product pricing sheet
+ */
+export const createPricingSheet = async (pricingSheetInput: PricingSheetInput, options?: RequestInit): Promise<PricingSheet> => {
+
+  return customFetch<PricingSheet>(getCreatePricingSheetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pricingSheetInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePricingSheetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPricingSheet>>, TError,{data: BodyType<PricingSheetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPricingSheet>>, TError,{data: BodyType<PricingSheetInput>}, TContext> => {
+
+const mutationKey = ['createPricingSheet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPricingSheet>>, {data: BodyType<PricingSheetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPricingSheet(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePricingSheetMutationResult = NonNullable<Awaited<ReturnType<typeof createPricingSheet>>>
+    export type CreatePricingSheetMutationBody = BodyType<PricingSheetInput>
+    export type CreatePricingSheetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save a product pricing sheet
+ */
+export const useCreatePricingSheet = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPricingSheet>>, TError,{data: BodyType<PricingSheetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPricingSheet>>,
+        TError,
+        {data: BodyType<PricingSheetInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePricingSheetMutationOptions(options));
+    }
+
+export const getGetPricingSheetUrl = (id: number,) => {
+
+
+
+
+  return `/api/pricing-sheets/${id}`
+}
+
+/**
+ * @summary Get a saved product pricing sheet
+ */
+export const getPricingSheet = async (id: number, options?: RequestInit): Promise<PricingSheet> => {
+
+  return customFetch<PricingSheet>(getGetPricingSheetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPricingSheetQueryKey = (id: number,) => {
+    return [
+    `/api/pricing-sheets/${id}`
+    ] as const;
+    }
+
+
+export const getGetPricingSheetQueryOptions = <TData = Awaited<ReturnType<typeof getPricingSheet>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricingSheet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPricingSheetQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPricingSheet>>> = ({ signal }) => getPricingSheet(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPricingSheet>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPricingSheetQueryResult = NonNullable<Awaited<ReturnType<typeof getPricingSheet>>>
+export type GetPricingSheetQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get a saved product pricing sheet
+ */
+
+export function useGetPricingSheet<TData = Awaited<ReturnType<typeof getPricingSheet>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricingSheet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPricingSheetQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdatePricingSheetUrl = (id: number,) => {
+
+
+
+
+  return `/api/pricing-sheets/${id}`
+}
+
+/**
+ * @summary Update a saved product pricing sheet
+ */
+export const updatePricingSheet = async (id: number,
+    pricingSheetUpdate: PricingSheetUpdate, options?: RequestInit): Promise<PricingSheet> => {
+
+  return customFetch<PricingSheet>(getUpdatePricingSheetUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pricingSheetUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdatePricingSheetMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePricingSheet>>, TError,{id: number;data: BodyType<PricingSheetUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePricingSheet>>, TError,{id: number;data: BodyType<PricingSheetUpdate>}, TContext> => {
+
+const mutationKey = ['updatePricingSheet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePricingSheet>>, {id: number;data: BodyType<PricingSheetUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePricingSheet(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePricingSheetMutationResult = NonNullable<Awaited<ReturnType<typeof updatePricingSheet>>>
+    export type UpdatePricingSheetMutationBody = BodyType<PricingSheetUpdate>
+    export type UpdatePricingSheetMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Update a saved product pricing sheet
+ */
+export const useUpdatePricingSheet = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePricingSheet>>, TError,{id: number;data: BodyType<PricingSheetUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePricingSheet>>,
+        TError,
+        {id: number;data: BodyType<PricingSheetUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdatePricingSheetMutationOptions(options));
+    }
+
+export const getDeletePricingSheetUrl = (id: number,) => {
+
+
+
+
+  return `/api/pricing-sheets/${id}`
+}
+
+/**
+ * @summary Delete a saved product pricing sheet
+ */
+export const deletePricingSheet = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePricingSheetUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeletePricingSheetMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePricingSheet>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePricingSheet>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePricingSheet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePricingSheet>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePricingSheet(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePricingSheetMutationResult = NonNullable<Awaited<ReturnType<typeof deletePricingSheet>>>
+
+    export type DeletePricingSheetMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Delete a saved product pricing sheet
+ */
+export const useDeletePricingSheet = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePricingSheet>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePricingSheet>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePricingSheetMutationOptions(options));
     }
 
 export const getListModelCatalogUrl = () => {

@@ -86,6 +86,15 @@ test("input normalization keeps displayed count assumptions whole and within val
   });
 });
 
+test("input normalization preserves a valid decimal gross margin exactly", () => {
+  const normalized = normalizePricingInputs({
+    ...DEFAULT_PRICING_INPUTS,
+    grossMarginPct: 64.5,
+  });
+
+  assert.equal(normalized.grossMarginPct, 64.5);
+});
+
 test("transaction entitlement is an exact annual pool with a derived monthly average", () => {
   const result = calculatePricingModel({ ...DEFAULT_PRICING_INPUTS, annualTransactions: 100_001 });
 

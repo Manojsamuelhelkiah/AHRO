@@ -10,6 +10,7 @@ import sensitivityRouter from "./sensitivity";
 import slideDeckRouter from "./slide-deck";
 import onboardingRouter from "./onboarding";
 import pricingRateSetsRouter from "./pricing-rate-sets";
+import pricingSheetsRouter from "./pricing-sheets";
 
 const router: IRouter = Router();
 
@@ -21,6 +22,7 @@ router.use(actualsRouter);
 router.use(customIntentsRouter);
 router.use(workbookRouter);
 router.use(sensitivityRouter);
+router.use(pricingSheetsRouter);
 router.use(slideDeckRouter);
 router.use(onboardingRouter);
 router.use(pricingRateSetsRouter);
