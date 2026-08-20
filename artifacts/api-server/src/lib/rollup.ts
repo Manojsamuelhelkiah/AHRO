@@ -3,7 +3,12 @@ import { buildComponents } from "../data/build-components";
 import { flowClassMap } from "../data/flow-classes";
 import { profileMap, profiles } from "../data/profiles";
 import { assumptionMap } from "../data/assumptions";
-import { pricePerCall, pricePerCallWithOverlay, MODEL_ROLES } from "../data/model-catalog";
+import {
+  pricePerCall,
+  pricePerCallWithOverlay,
+  MODEL_ROLES,
+  ESTIMATED_TOKEN_PROFILE_BY_ROLE,
+} from "../data/model-catalog";
 import type { GlobalAssumption, Intent, ActualsOverlay } from "../data/types";
 import { intents as referenceIntents } from "../data/intents";
 
@@ -25,6 +30,8 @@ export interface ScenarioInputs {
   hitlHourlyCostUsd: number;
 
   countries: number;
+
+  commercialAssumptions?: Partial<CommercialAssumptions>;
 
   intentShareOverrides?: Record<string, number>;
 
@@ -68,6 +75,60 @@ export interface ScenarioInputs {
   /** Per-flow-class fraction of automated txns that also get HITL review; scales toBeHumanMin. */
 
   hitlSamplingRates?: Partial<Record<string, number>>;
+}
+
+export interface CommercialAssumptions {
+  targetGrossMargin: number;
+  targetClients: number;
+  productRecoveryMonths: number;
+  supportTeamFte: number;
+  supportHourlyCostUsd: number;
+  supportToolingAnnualUsdPerClient: number;
+  actualsOverlayId?: number;
+}
+
+export const DEFAULT_COMMERCIAL_ASSUMPTIONS: CommercialAssumptions = {
+  targetGrossMargin: 0.6,
+  targetClients: 10,
+  productRecoveryMonths: 36,
+  supportTeamFte: 1,
+  supportHourlyCostUsd: 60,
+  supportToolingAnnualUsdPerClient: 5_000,
+};
+
+export function resolveCommercialAssumptions(
+  value: Partial<CommercialAssumptions> | undefined,
+): CommercialAssumptions {
+  return {
+    targetGrossMargin: Math.min(
+      0.95,
+      Math.max(0, value?.targetGrossMargin ?? DEFAULT_COMMERCIAL_ASSUMPTIONS.targetGrossMargin),
+    ),
+    targetClients: Math.max(
+      1,
+      Math.round(value?.targetClients ?? DEFAULT_COMMERCIAL_ASSUMPTIONS.targetClients),
+    ),
+    productRecoveryMonths: Math.max(
+      1,
+      Math.round(value?.productRecoveryMonths ?? DEFAULT_COMMERCIAL_ASSUMPTIONS.productRecoveryMonths),
+    ),
+    supportTeamFte: Math.max(
+      0,
+      value?.supportTeamFte ?? DEFAULT_COMMERCIAL_ASSUMPTIONS.supportTeamFte,
+    ),
+    supportHourlyCostUsd: Math.max(
+      0,
+      value?.supportHourlyCostUsd ?? DEFAULT_COMMERCIAL_ASSUMPTIONS.supportHourlyCostUsd,
+    ),
+    supportToolingAnnualUsdPerClient: Math.max(
+      0,
+      value?.supportToolingAnnualUsdPerClient ??
+        DEFAULT_COMMERCIAL_ASSUMPTIONS.supportToolingAnnualUsdPerClient,
+    ),
+    ...(value?.actualsOverlayId !== undefined && {
+      actualsOverlayId: Math.max(1, Math.round(value.actualsOverlayId)),
+    }),
+  };
 }
 
 const DEFAULT_CONTAINMENT: Record<string, string> = {
@@ -198,6 +259,7 @@ function companyMultiplierFor(
 
 interface PerTxnCost {
   ai: number;
+  mcp: number;
   infra: number;
   other: number;
   /** Dollarized step benefits + rework benefit (does NOT include human-time benefit; that's in computeRollup) */
@@ -289,6 +351,7 @@ function perTransaction(it: Intent, inputs: ScenarioInputs, ctx?: OverlayContext
   const infraRatio = defaultInfra > 0 ? eff("infra-per-txn", ov) / defaultInfra : 1;
 
   let ai = 0;
+  let mcp = 0;
   let infra = 0;
   let other = 0;
   let stepBenefit = 0;
@@ -303,7 +366,8 @@ function perTransaction(it: Intent, inputs: ScenarioInputs, ctx?: OverlayContext
       for (const c of step.costs) {
         let unit = c.unitCostUsd;
         let alreadyScaled = false;
-        if (isActStep && c.label.toLowerCase().includes("mcp")) {
+        const isMcpCost = isActStep && c.label.toLowerCase().includes("mcp");
+        if (isMcpCost) {
           // automatedUnits already carry fan-out weighting — do not apply
           // step-level landscape factor a second time.
           unit = automatedUnits * mcpCost;
@@ -333,7 +397,8 @@ function perTransaction(it: Intent, inputs: ScenarioInputs, ctx?: OverlayContext
           unit = c.unitCostUsd * infraRatio;
         }
         const scaled = unit * (!alreadyScaled && scales ? landscapeFactor : 1);
-        if (c.type === "ai-consumption") ai += scaled;
+        if (isMcpCost) mcp += scaled;
+        else if (c.type === "ai-consumption") ai += scaled;
         else if (c.type === "infra") infra += scaled;
         else if (c.type === "other") other += scaled;
       }
@@ -350,7 +415,7 @@ function perTransaction(it: Intent, inputs: ScenarioInputs, ctx?: OverlayContext
     stepBenefit += rework * errShare * (it.asIsHandlingMin / 60) * inputs.hrHourlyCostUsd;
   }
 
-  return { ai, infra, other, stepBenefit };
+  return { ai, mcp, infra, other, stepBenefit };
 }
 
 interface YearSlice {
@@ -582,6 +647,19 @@ export function computeRollup(
   const byFlowClass = new Map<string, number>();
   const byDomain = new Map<string, number>();
   const byCost = { "ai-consumption": 0, infra: 0, human: 0, build: 0, other: 0 };
+  const tokenUsage = {
+    annualModelCalls: 0,
+    annualInputTokens: 0,
+    annualOutputTokens: 0,
+    annualTotalTokens: 0,
+    basis: "estimated" as "estimated" | "mixed" | "measured",
+  };
+  let usedEstimatedTokenProfile = false;
+  let usedMeasuredTokenProfile = false;
+  let commercialAiCostUsd = 0;
+  let commercialInfrastructureCostUsd = 0;
+  let commercialVendorHitlCostUsd = 0;
+  let commercialChannelAndOtherVariableCostUsd = 0;
   // Txn-weighted amortization factor per flow class (uses adopted volume, not contained).
   const fcAmortFactor = new Map<string, number>();
 
@@ -675,6 +753,51 @@ export function computeRollup(
     const baseHumanMin = intentActualsData?.avgHitlMinutes ?? it.toBeHumanMin;
     const effectiveHumanMin = baseHumanMin * samplingRate + manualMinutes;
 
+    // Commercial COGS uses the full committed annual volume so subscription,
+    // transaction and overage prices share one denominator. It includes only
+    // supplier-delivered operating work: client fallback HR labor remains in
+    // the client business case above, not in supplier COGS.
+    commercialAiCostUsd += per.ai * txns * costMult * localMult;
+    commercialInfrastructureCostUsd += per.infra * txns * costMult * localMult;
+    commercialChannelAndOtherVariableCostUsd +=
+      per.other * txns + per.mcp * txns * costMult * localMult;
+    commercialVendorHitlCostUsd +=
+      txns *
+      containmentRate *
+      ((baseHumanMin * samplingRate) / 60) *
+      inputs.hitlHourlyCostUsd;
+
+    if (fc) {
+      const fanout = eff("landscape-fanout", ov) * maturity.value;
+      const extraSystems = Math.max(
+        0,
+        Math.min(inputs.numSystems, 12) - it.systemsTouchedBase,
+      );
+      for (const step of fc.steps) {
+        const scalesWithLandscape = step.systems.some(
+          (system) => system.scalesWithLandscape,
+        );
+        const stepFactor = scalesWithLandscape ? 1 + fanout * extraSystems : 1;
+        for (const cost of step.costs) {
+          for (const call of cost.calls ?? []) {
+            const measured = overlay?.tokenActualsByRole?.[call.role];
+            const estimated =
+              ESTIMATED_TOKEN_PROFILE_BY_ROLE[
+                call.role as keyof typeof ESTIMATED_TOKEN_PROFILE_BY_ROLE
+              ];
+            const profile = measured ?? estimated;
+            if (!profile) continue;
+            if (measured) usedMeasuredTokenProfile = true;
+            else usedEstimatedTokenProfile = true;
+            const calls = txns * call.count * stepFactor * localMult;
+            tokenUsage.annualModelCalls += calls;
+            tokenUsage.annualInputTokens += calls * profile.avgInputTokens;
+            tokenUsage.annualOutputTokens += calls * profile.avgOutputTokens;
+          }
+        }
+      }
+    }
+
     // Build cost is amortized per flow class, scaled by landscape maturity.
     const buildPerTxn = fc ? (fc.buildCostUsd * maturity.value) / fc.amortizationTransactions : 0;
     if (fc) {
@@ -694,7 +817,7 @@ export function computeRollup(
 
       // AI/infra/other/build charged on full ADOPTED (attempted) volume —
       // failed attempts still ran and cost money before escalating.
-      const aiCostY = per.ai * adoptedTxns * costMult * localMult;
+      const aiCostY = (per.ai + per.mcp) * adoptedTxns * costMult * localMult;
       const infraCostY = per.infra * adoptedTxns * costMult * localMult;
       const otherCostY = per.other * adoptedTxns;
       const buildCostY = buildPerTxn * adoptedTxns;
@@ -959,6 +1082,92 @@ export function computeRollup(
     ),
   };
 
+  tokenUsage.annualTotalTokens =
+    tokenUsage.annualInputTokens + tokenUsage.annualOutputTokens;
+  tokenUsage.basis =
+    usedMeasuredTokenProfile && usedEstimatedTokenProfile
+      ? "mixed"
+      : usedMeasuredTokenProfile
+        ? "measured"
+        : "estimated";
+
+  const commercialAssumptions = resolveCommercialAssumptions(
+    inputs.commercialAssumptions,
+  );
+  const productBuildCostUsd = demarcationSplit.coreOneTimeUsd;
+  const clientImplementationCostUsd = demarcationSplit.customOneTimeUsd;
+  const annualKnowledgeMaintenanceCostUsd = knowledgeMaintenanceUsd;
+  const commercialAnnualRunCostUsd =
+    commercialAiCostUsd +
+    commercialInfrastructureCostUsd +
+    commercialVendorHitlCostUsd +
+    commercialChannelAndOtherVariableCostUsd +
+    annualKnowledgeMaintenanceCostUsd;
+  const commercialVariableRunCostUsd =
+    commercialAiCostUsd +
+    commercialInfrastructureCostUsd +
+    commercialVendorHitlCostUsd +
+    commercialChannelAndOtherVariableCostUsd;
+  const annualSupportCostUsd =
+    (commercialAssumptions.supportTeamFte *
+      workingHours *
+      commercialAssumptions.supportHourlyCostUsd) /
+      commercialAssumptions.targetClients +
+    commercialAssumptions.supportToolingAnnualUsdPerClient;
+  const annualRecurringCogsUsd =
+    commercialAnnualRunCostUsd + annualSupportCostUsd;
+  const annualProductRecoveryUsd =
+    (productBuildCostUsd * 12) /
+    commercialAssumptions.productRecoveryMonths /
+    commercialAssumptions.targetClients;
+  const priceDenominator = Math.max(
+    0.05,
+    1 - commercialAssumptions.targetGrossMargin,
+  );
+  const clientImplementationPriceUsd =
+    clientImplementationCostUsd / priceDenominator;
+  const recommendedAnnualPriceUsd =
+    (annualRecurringCogsUsd + annualProductRecoveryUsd) / priceDenominator;
+  const annualTransactionVolume = Math.max(1, inputs.annualTransactions);
+  const commercialSummary = {
+    productBuildCostUsd,
+    clientImplementationCostUsd,
+    clientImplementationPriceUsd,
+    annualRunCostUsd: commercialAnnualRunCostUsd,
+    annualCommittedTransactions: inputs.annualTransactions,
+    monthlyRunCostUsd: commercialAnnualRunCostUsd / 12,
+    annualAiCostUsd: commercialAiCostUsd,
+    annualInfrastructureCostUsd: commercialInfrastructureCostUsd,
+    annualVendorHitlCostUsd: commercialVendorHitlCostUsd,
+    annualChannelAndOtherVariableCostUsd:
+      commercialChannelAndOtherVariableCostUsd,
+    annualKnowledgeMaintenanceCostUsd,
+    annualSupportCostUsd,
+    annualSupportPriceUsd: annualSupportCostUsd / priceDenominator,
+    annualRecurringCogsUsd,
+    monthlyRecurringCogsUsd: annualRecurringCogsUsd / 12,
+    annualProductRecoveryUsd,
+    recommendedMonthlyPriceUsd: recommendedAnnualPriceUsd / 12,
+    recommendedAnnualPriceUsd,
+    recommendedTransactionPriceUsd:
+      recommendedAnnualPriceUsd / annualTransactionVolume,
+    overagePricePerTransactionUsd:
+      commercialVariableRunCostUsd /
+      annualTransactionVolume /
+      priceDenominator,
+    firstYearContractValueUsd:
+      clientImplementationPriceUsd + recommendedAnnualPriceUsd,
+    pricingMargin: commercialAssumptions.targetGrossMargin,
+    plannedPaybackMonths:
+      annualProductRecoveryUsd > 0
+        ? (productBuildCostUsd /
+            (annualProductRecoveryUsd * commercialAssumptions.targetClients)) *
+          12
+        : 0,
+    assumptions: commercialAssumptions,
+    tokenUsage,
+  };
+
   const fcLabels: Record<string, string> = {
     "fc1-deterministic": "Deterministic Self-Service",
     "fc2-policy":        "Grounded Policy Answer",
@@ -999,6 +1208,7 @@ export function computeRollup(
     onboardingAnnualUsd,
     buildBreakdown,
     demarcationSplit,
+    commercialSummary,
     appliedAssumptions,
     confidence: computeConfidence(inputs, measuredFactorKeys),
     calibrated: !!overlay,

@@ -671,3 +671,25 @@ test("round-trip: clearing all intent overrides removes intentContainmentOverrid
     "intentContainmentOverrides must be absent after clearing",
   );
 });
+
+test("round-trip: commercial pricing assumptions survive Scenario Builder load and save", () => {
+  const commercialAssumptions = {
+    targetGrossMargin: 0.64,
+    targetClients: 14,
+    productRecoveryMonths: 30,
+    supportTeamFte: 1.5,
+    supportHourlyCostUsd: 72,
+    supportToolingAnnualUsdPerClient: 8_000,
+    actualsOverlayId: 23,
+  };
+  const form = fromApiInputs(asInputs({ ...BASE, commercialAssumptions }));
+  assert.deepEqual(form._commercialAssumptions, commercialAssumptions);
+  const payload = toApiInputs(form);
+  assert.deepEqual(payload.commercialAssumptions, commercialAssumptions);
+});
+
+test("toApiInputs: absent commercial pricing assumptions remain absent", () => {
+  const form = fromApiInputs(BASE);
+  const payload = toApiInputs(form);
+  assert.equal(payload.commercialAssumptions, undefined);
+});

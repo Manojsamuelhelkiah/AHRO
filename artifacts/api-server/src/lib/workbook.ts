@@ -11,6 +11,7 @@ import {
   computeShares,
   maturityAssumptionFor,
   OVERRIDABLE_ASSUMPTION_KEYS,
+  type CommercialAssumptions,
   type ScenarioInputs,
 } from "./rollup";
 import { assumptions, assumptionMap } from "../data/assumptions";
@@ -49,6 +50,42 @@ const INPUT_ROWS: Array<{
 
 /** Adoption ramp is a 3-element array in ScenarioInputs; serialized as three keyed rows. */
 const RAMP_KEYS = ["adoptionRampY1", "adoptionRampY2", "adoptionRampY3"] as const;
+const COMMERCIAL_INPUT_ROWS: Array<{
+  key: keyof CommercialAssumptions & string;
+  label: string;
+  note: string;
+}> = [
+  {
+    key: "targetGrossMargin",
+    label: "Commercial target margin (0-0.95)",
+    note: "OPTIONAL. Supplier pricing margin applied to implementation and recurring price.",
+  },
+  {
+    key: "targetClients",
+    label: "Target paying clients",
+    note: "OPTIONAL. Clients sharing reusable product investment and support capacity.",
+  },
+  {
+    key: "productRecoveryMonths",
+    label: "Product recovery period (months)",
+    note: "OPTIONAL. Planned period for recovering reusable product investment.",
+  },
+  {
+    key: "supportTeamFte",
+    label: "Shared support team (FTE)",
+    note: "OPTIONAL. Shared supplier support and maintenance capacity.",
+  },
+  {
+    key: "supportHourlyCostUsd",
+    label: "Support hourly cost (USD)",
+    note: "OPTIONAL. Loaded hourly cost of supplier support capacity.",
+  },
+  {
+    key: "supportToolingAnnualUsdPerClient",
+    label: "Support tooling/client/year (USD)",
+    note: "OPTIONAL. Monitoring and service-management tooling per client.",
+  },
+];
 
 interface FcAgg {
   key: string;
@@ -178,6 +215,11 @@ export async function buildScenarioWorkbook(
       note: "OPTIONAL. Fill all three or none. Fraction of volume in the automated channel that year. Blank = engine default ramp (40/75/100%).",
       optional: true,
       value: inputs.adoptionRamp?.[i],
+    })),
+    ...COMMERCIAL_INPUT_ROWS.map((row) => ({
+      ...row,
+      optional: true,
+      value: inputs.commercialAssumptions?.[row.key],
     })),
   ];
   for (const row of inputRows) {
@@ -458,6 +500,16 @@ export async function parseScenarioWorkbook(buffer: Buffer): Promise<ScenarioInp
   if (rw !== undefined) inputs.reworkRatePct = num(rw, "reworkRatePct");
   const pl = opt("peakLoadFactor");
   if (pl !== undefined) inputs.peakLoadFactor = num(pl, "peakLoadFactor");
+  const commercial: Partial<CommercialAssumptions> = {};
+  for (const row of COMMERCIAL_INPUT_ROWS) {
+    const value = opt(row.key);
+    if (value !== undefined) {
+      commercial[row.key] = num(value, row.key);
+    }
+  }
+  if (Object.keys(commercial).length > 0) {
+    inputs.commercialAssumptions = commercial;
+  }
   // Adoption ramp: all three or none.
   const rampCells = RAMP_KEYS.map((k) => opt(k));
   const rampFilled = rampCells.filter((v) => v !== undefined).length;

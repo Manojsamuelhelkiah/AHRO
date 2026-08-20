@@ -176,6 +176,7 @@ export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const listScenariosResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -189,6 +190,15 @@ export const ListScenariosResponseItem = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(listScenariosResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -220,6 +230,7 @@ export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -232,6 +243,15 @@ export const CreateScenarioBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(createScenarioBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -256,6 +276,7 @@ export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const createScenarioResponseInputsAdoptionRampMax = 3;
 
 
+
 export const CreateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -269,6 +290,15 @@ export const CreateScenarioResponse = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(createScenarioResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -303,6 +333,7 @@ export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const getScenarioResponseInputsAdoptionRampMax = 3;
 
 
+
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -316,6 +347,15 @@ export const GetScenarioResponse = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(getScenarioResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -350,6 +390,7 @@ export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -362,6 +403,15 @@ export const UpdateScenarioBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(updateScenarioBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -386,6 +436,7 @@ export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const updateScenarioResponseInputsAdoptionRampMax = 3;
 
 
+
 export const UpdateScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -399,6 +450,15 @@ export const UpdateScenarioResponse = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(updateScenarioResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -739,6 +799,7 @@ export const computeSensitivityBodyInputsAdoptionRampMin = 3;
 export const computeSensitivityBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ComputeSensitivityBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -750,6 +811,15 @@ export const ComputeSensitivityBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(computeSensitivityBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -807,6 +877,7 @@ export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
 export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ExportScenarioWorkbookBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -818,6 +889,15 @@ export const ExportScenarioWorkbookBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(exportScenarioWorkbookBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -854,6 +934,7 @@ export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
 export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ImportScenarioWorkbookResponse = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -865,6 +946,15 @@ export const ImportScenarioWorkbookResponse = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(importScenarioWorkbookResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -893,6 +983,7 @@ export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const computeRollupBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ComputeRollupBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -904,6 +995,15 @@ export const ComputeRollupBody = zod.object({
   "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
   "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
   "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
   "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
   "assumptionOverrides": zod.record(zod.string(), zod.number().min(computeRollupBodyInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
   "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
@@ -1013,6 +1113,47 @@ export const ComputeRollupResponse = zod.object({
 }).describe('Attribution of a data point to its origin corpus')
 })).describe('Configurable assumptions (client dials) applied to this scenario, deduped by key')
 }).describe('Core vs custom cost split for commercial quoting: core platform build (amortized product cost, same for every client) vs one-time custom per-client implementation, with the configurable dials applied to this scenario listed. Amounts derive from buildBreakdown and reconcile with the scenario\'s total build cost.'),
+  "commercialSummary": zod.object({
+  "productBuildCostUsd": zod.number().describe('Reusable core product engineering investment.'),
+  "clientImplementationCostUsd": zod.number().describe('One-time client-specific onboarding and implementation delivery cost.'),
+  "clientImplementationPriceUsd": zod.number().describe('Recommended implementation sell price at the target pricing margin.'),
+  "annualRunCostUsd": zod.number().describe('Annual supplier AI, infrastructure, vendor HITL and knowledge operating cost at full committed volume, before support.'),
+  "annualCommittedTransactions": zod.number().describe('Annual transaction volume used consistently for recurring and unit pricing.'),
+  "monthlyRunCostUsd": zod.number(),
+  "annualAiCostUsd": zod.number().describe('Annual AI\/model consumption cost at full committed volume.'),
+  "annualInfrastructureCostUsd": zod.number().describe('Annual transaction-driven infrastructure cost at full committed volume.'),
+  "annualVendorHitlCostUsd": zod.number().describe('Annual supplier-delivered HITL cost; excludes client fallback HR labor.'),
+  "annualChannelAndOtherVariableCostUsd": zod.number().describe('Annual transaction-driven channel, MCP and other operating cost.'),
+  "annualKnowledgeMaintenanceCostUsd": zod.number().describe('Annual fixed knowledge maintenance cost for the configured countries.'),
+  "annualSupportCostUsd": zod.number().describe('Allocated annual support and maintenance delivery cost per client.'),
+  "annualSupportPriceUsd": zod.number().describe('Standalone annual support sell price at the target pricing margin.'),
+  "annualRecurringCogsUsd": zod.number().describe('Annual run cost plus allocated support and maintenance cost.'),
+  "monthlyRecurringCogsUsd": zod.number(),
+  "annualProductRecoveryUsd": zod.number().describe('Per-client annual allocation for recovering reusable product investment.'),
+  "recommendedMonthlyPriceUsd": zod.number(),
+  "recommendedAnnualPriceUsd": zod.number(),
+  "recommendedTransactionPriceUsd": zod.number().describe('All-in annual subscription price divided by committed annual transactions.'),
+  "overagePricePerTransactionUsd": zod.number().describe('Incremental run cost per transaction priced at the target margin.'),
+  "firstYearContractValueUsd": zod.number().describe('Recommended implementation price plus first-year recurring price.'),
+  "pricingMargin": zod.number().describe('Target margin applied after including the product-recovery allocation.'),
+  "plannedPaybackMonths": zod.number().describe('Product investment recovery period at the target client count.'),
+  "assumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
+  "tokenUsage": zod.object({
+  "annualModelCalls": zod.number(),
+  "annualInputTokens": zod.number(),
+  "annualOutputTokens": zod.number(),
+  "annualTotalTokens": zod.number(),
+  "basis": zod.enum(['estimated', 'mixed', 'measured']).describe('Whether role-level token profiles came from architecture estimates, calibrated logs, or both.')
+})
+}).describe('Supplier-side pricing summary. This is deliberately separate from the client\'s cost-benefit ROI in totals.'),
   "appliedAssumptions": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
@@ -1393,6 +1534,7 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
  */
 
 
+
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
   "workerEmail": zod.string(),
@@ -1763,6 +1905,8 @@ export const ReceiveOnboardingInboundParams = zod.object({
 })
 
 
+
+
 export const ReceiveOnboardingInboundBody = zod.object({
   "channel": zod.string().describe('email | whatsapp'),
   "body": zod.string().min(1)
@@ -2061,8 +2205,6 @@ export const GetOnboardingSettingsResponse = zod.object({
   "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet'),
   "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them')
 })
-
-
 /**
  * @summary Update app settings (set or clear the HR alert email address)
  */
@@ -2080,4 +2222,3 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet'),
   "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them')
 })
-

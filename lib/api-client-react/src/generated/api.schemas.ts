@@ -191,6 +191,26 @@ export interface CorpusSummary {
 }
 
 /**
+ * Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.
+ */
+export interface CommercialAssumptions {
+  /** Target pricing margin as a fraction (default 0.60). */
+  targetGrossMargin?: number;
+  /** Expected clients sharing product investment and support capacity (default 10). */
+  targetClients?: number;
+  /** Planned period for recovering the reusable product build investment (default 36 months). */
+  productRecoveryMonths?: number;
+  /** Shared support and maintenance team capacity in FTE (default 1). */
+  supportTeamFte?: number;
+  /** Loaded hourly cost of support and maintenance capacity (default 60 USD). */
+  supportHourlyCostUsd?: number;
+  /** Annual per-client support tooling, monitoring and service-management cost (default 5000 USD). */
+  supportToolingAnnualUsdPerClient?: number;
+  /** Optional saved calibration overlay used for measured token and operating-cost repricing. */
+  actualsOverlayId?: number;
+}
+
+/**
  * Optional manual overrides of intent shares (intent key to share fraction)
  */
 export type ScenarioInputsIntentShareOverrides = {[key: string]: number};
@@ -241,6 +261,7 @@ export interface ScenarioInputs {
   /** Loaded hourly cost of HITL reviewers in the to-be model */
   hitlHourlyCostUsd: number;
   countries: number;
+  commercialAssumptions?: CommercialAssumptions;
   /** Optional manual overrides of intent shares (intent key to share fraction) */
   intentShareOverrides?: ScenarioInputsIntentShareOverrides;
   /** Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers. */
@@ -401,6 +422,77 @@ export interface YearSlice {
 }
 
 /**
+ * Whether role-level token profiles came from architecture estimates, calibrated logs, or both.
+ */
+export type TokenUsageBasis = typeof TokenUsageBasis[keyof typeof TokenUsageBasis];
+
+
+export const TokenUsageBasis = {
+  estimated: 'estimated',
+  mixed: 'mixed',
+  measured: 'measured',
+} as const;
+
+export interface TokenUsage {
+  annualModelCalls: number;
+  annualInputTokens: number;
+  annualOutputTokens: number;
+  annualTotalTokens: number;
+  /** Whether role-level token profiles came from architecture estimates, calibrated logs, or both. */
+  basis: TokenUsageBasis;
+}
+
+/**
+ * Supplier-side pricing summary. This is deliberately separate from the client's cost-benefit ROI in totals.
+ */
+export interface CommercialSummary {
+  /** Reusable core product engineering investment. */
+  productBuildCostUsd: number;
+  /** One-time client-specific onboarding and implementation delivery cost. */
+  clientImplementationCostUsd: number;
+  /** Recommended implementation sell price at the target pricing margin. */
+  clientImplementationPriceUsd: number;
+  /** Annual supplier AI, infrastructure, vendor HITL and knowledge operating cost at full committed volume, before support. */
+  annualRunCostUsd: number;
+  /** Annual transaction volume used consistently for recurring and unit pricing. */
+  annualCommittedTransactions: number;
+  monthlyRunCostUsd: number;
+  /** Annual AI/model consumption cost at full committed volume. */
+  annualAiCostUsd: number;
+  /** Annual transaction-driven infrastructure cost at full committed volume. */
+  annualInfrastructureCostUsd: number;
+  /** Annual supplier-delivered HITL cost; excludes client fallback HR labor. */
+  annualVendorHitlCostUsd: number;
+  /** Annual transaction-driven channel, MCP and other operating cost. */
+  annualChannelAndOtherVariableCostUsd: number;
+  /** Annual fixed knowledge maintenance cost for the configured countries. */
+  annualKnowledgeMaintenanceCostUsd: number;
+  /** Allocated annual support and maintenance delivery cost per client. */
+  annualSupportCostUsd: number;
+  /** Standalone annual support sell price at the target pricing margin. */
+  annualSupportPriceUsd: number;
+  /** Annual run cost plus allocated support and maintenance cost. */
+  annualRecurringCogsUsd: number;
+  monthlyRecurringCogsUsd: number;
+  /** Per-client annual allocation for recovering reusable product investment. */
+  annualProductRecoveryUsd: number;
+  recommendedMonthlyPriceUsd: number;
+  recommendedAnnualPriceUsd: number;
+  /** All-in annual subscription price divided by committed annual transactions. */
+  recommendedTransactionPriceUsd: number;
+  /** Incremental run cost per transaction priced at the target margin. */
+  overagePricePerTransactionUsd: number;
+  /** Recommended implementation price plus first-year recurring price. */
+  firstYearContractValueUsd: number;
+  /** Target margin applied after including the product-recovery allocation. */
+  pricingMargin: number;
+  /** Product investment recovery period at the target client count. */
+  plannedPaybackMonths: number;
+  assumptions: CommercialAssumptions;
+  tokenUsage: TokenUsage;
+}
+
+/**
  * Product demarcation: core platform components vs custom per-client onboarding effort.
  */
 export type BuildComponentCostProvisioning = typeof BuildComponentCostProvisioning[keyof typeof BuildComponentCostProvisioning];
@@ -509,6 +601,7 @@ export interface Rollup {
   /** Component-level decomposition of build cost; annual amounts sum to totals build cost */
   buildBreakdown: BuildComponentCost[];
   demarcationSplit: DemarcationSplit;
+  commercialSummary: CommercialSummary;
   appliedAssumptions: GlobalAssumption[];
   confidence: Confidence;
   /** True when a calibration actuals overlay was applied to this rollup. */
@@ -1062,6 +1155,31 @@ export interface OnbEvent {
 }
 
 export type OnbRecordsEvidenceItemScopeKind = typeof OnbRecordsEvidenceItemScopeKind[keyof typeof OnbRecordsEvidenceItemScopeKind];
+
+
+export const OnbRecordsEvidenceItemScopeKind = {
+  all: 'all',
+  latest: 'latest',
+  earliest: 'earliest',
+  yearRange: 'yearRange',
+} as const;
+
+/**
+ * Which stints the answer covers. kind "all" means the whole archived history; "yearRange" may carry from/to year bounds.
+ */
+export type OnbRecordsEvidenceItemScope = {
+  kind: OnbRecordsEvidenceItemScopeKind;
+  from?: number;
+  to?: number;
+};
+
+export interface OnbRecordsEvidenceItem {
+  question: string;
+  answer: string;
+  /** Which stints the answer covers. kind "all" means the whole archived history; "yearRange" may carry from/to year bounds. */
+  scope: OnbRecordsEvidenceItemScope;
+}
+
 export interface OnbApproval {
   id: number;
   caseId: number;
@@ -1464,7 +1582,6 @@ export type ListCustomIntentsParams = {
  */
 status?: string;
 };
-
 export type ExportScenarioWorkbookLinkParams = {
 /**
  * base64url-encoded JSON of {"inputs":ScenarioInputs}.
@@ -1539,27 +1656,3 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
-
-
-/**
- * Which stints the answer covers. kind "all" means the whole archived history; "yearRange" may carry from/to year bounds.
- */
-export type OnbRecordsEvidenceItemScope = {
-  kind: OnbRecordsEvidenceItemScopeKind;
-  from?: number;
-  to?: number;
-};
-
-export interface OnbRecordsEvidenceItem {
-  question: string;
-  answer: string;
-  /** Which stints the answer covers. kind "all" means the whole archived history; "yearRange" may carry from/to year bounds. */
-  scope: OnbRecordsEvidenceItemScope;
-}
-
-export const OnbRecordsEvidenceItemScopeKind = {
-  all: 'all',
-  latest: 'latest',
-  earliest: 'earliest',
-  yearRange: 'yearRange',
-} as const;

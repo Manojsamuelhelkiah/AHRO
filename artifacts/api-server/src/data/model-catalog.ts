@@ -166,6 +166,21 @@ export const modelCatalogMap: Record<string, ModelOption> = Object.fromEntries(
 
 export const MODEL_ROLES = ["router", "reasoning", "frontier", "data"] as const;
 
+/**
+ * Architecture planning profiles used to expose estimated token consumption
+ * before production telemetry exists. Calibration overlays replace these
+ * role-level averages with measured input/output token counts.
+ */
+export const ESTIMATED_TOKEN_PROFILE_BY_ROLE: Record<
+  (typeof MODEL_ROLES)[number],
+  { avgInputTokens: number; avgOutputTokens: number }
+> = {
+  router: { avgInputTokens: 1_500, avgOutputTokens: 200 },
+  reasoning: { avgInputTokens: 6_000, avgOutputTokens: 1_000 },
+  frontier: { avgInputTokens: 20_000, avgOutputTokens: 4_000 },
+  data: { avgInputTokens: 6_000, avgOutputTokens: 1_000 },
+};
+
 /** Resolves the per-call price for a role given an optional scenario selection. */
 export function pricePerCall(
   role: string,

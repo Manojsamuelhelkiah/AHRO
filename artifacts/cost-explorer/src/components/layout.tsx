@@ -11,6 +11,7 @@ import {
   X,
   GitCompareArrows,
   FlaskConical,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +25,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Flow Classes", href: "/flows", icon: Workflow },
     { name: "Scenario Builder", href: "/scenario", icon: Calculator },
     { name: "Compare Scenarios", href: "/compare", icon: GitCompareArrows },
+    { name: "Commercial Pricing", href: "/pricing", icon: DollarSign },
     { name: "Global Assumptions", href: "/assumptions", icon: Settings2 },
     { name: "Calibration", href: "/calibration", icon: FlaskConical },
   ];

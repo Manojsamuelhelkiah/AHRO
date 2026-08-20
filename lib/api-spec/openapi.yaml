@@ -1734,6 +1734,33 @@ components:
         count:
           type: integer
       required: [key, count]
+    CommercialAssumptions:
+      type: object
+      description: >-
+        Commercial planning inputs applied after the operational cost-benefit
+        calculation. These do not alter client benefit or automation economics.
+      properties:
+        targetGrossMargin:
+          type: number
+          description: Target pricing margin as a fraction (default 0.60).
+        targetClients:
+          type: integer
+          description: Expected clients sharing product investment and support capacity (default 10).
+        productRecoveryMonths:
+          type: integer
+          description: Planned period for recovering the reusable product build investment (default 36 months).
+        supportTeamFte:
+          type: number
+          description: Shared support and maintenance team capacity in FTE (default 1).
+        supportHourlyCostUsd:
+          type: number
+          description: Loaded hourly cost of support and maintenance capacity (default 60 USD).
+        supportToolingAnnualUsdPerClient:
+          type: number
+          description: Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).
+        actualsOverlayId:
+          type: integer
+          description: Optional saved calibration overlay used for measured token and operating-cost repricing.
     ScenarioInputs:
       type: object
       properties:
@@ -1761,6 +1788,8 @@ components:
           description: Loaded hourly cost of HITL reviewers in the to-be model
         countries:
           type: integer
+        commercialAssumptions:
+          $ref: "#/components/schemas/CommercialAssumptions"
         intentShareOverrides:
           type: object
           additionalProperties:
@@ -2072,6 +2101,123 @@ components:
         fteEquivalent:
           type: number
       required: [year, adoptionFraction, benefitUsd, totalCostUsd, netUsd, humanHoursSaved, fteEquivalent]
+    TokenUsage:
+      type: object
+      properties:
+        annualModelCalls:
+          type: number
+        annualInputTokens:
+          type: number
+        annualOutputTokens:
+          type: number
+        annualTotalTokens:
+          type: number
+        basis:
+          type: string
+          enum: [estimated, mixed, measured]
+          description: Whether role-level token profiles came from architecture estimates, calibrated logs, or both.
+      required: [annualModelCalls, annualInputTokens, annualOutputTokens, annualTotalTokens, basis]
+    CommercialSummary:
+      type: object
+      description: >-
+        Supplier-side pricing summary. This is deliberately separate from the
+        client's cost-benefit ROI in totals.
+      properties:
+        productBuildCostUsd:
+          type: number
+          description: Reusable core product engineering investment.
+        clientImplementationCostUsd:
+          type: number
+          description: One-time client-specific onboarding and implementation delivery cost.
+        clientImplementationPriceUsd:
+          type: number
+          description: Recommended implementation sell price at the target pricing margin.
+        annualRunCostUsd:
+          type: number
+          description: Annual supplier AI, infrastructure, vendor HITL and knowledge operating cost at full committed volume, before support.
+        annualCommittedTransactions:
+          type: number
+          description: Annual transaction volume used consistently for recurring and unit pricing.
+        monthlyRunCostUsd:
+          type: number
+        annualAiCostUsd:
+          type: number
+          description: Annual AI/model consumption cost at full committed volume.
+        annualInfrastructureCostUsd:
+          type: number
+          description: Annual transaction-driven infrastructure cost at full committed volume.
+        annualVendorHitlCostUsd:
+          type: number
+          description: Annual supplier-delivered HITL cost; excludes client fallback HR labor.
+        annualChannelAndOtherVariableCostUsd:
+          type: number
+          description: Annual transaction-driven channel, MCP and other operating cost.
+        annualKnowledgeMaintenanceCostUsd:
+          type: number
+          description: Annual fixed knowledge maintenance cost for the configured countries.
+        annualSupportCostUsd:
+          type: number
+          description: Allocated annual support and maintenance delivery cost per client.
+        annualSupportPriceUsd:
+          type: number
+          description: Standalone annual support sell price at the target pricing margin.
+        annualRecurringCogsUsd:
+          type: number
+          description: Annual run cost plus allocated support and maintenance cost.
+        monthlyRecurringCogsUsd:
+          type: number
+        annualProductRecoveryUsd:
+          type: number
+          description: Per-client annual allocation for recovering reusable product investment.
+        recommendedMonthlyPriceUsd:
+          type: number
+        recommendedAnnualPriceUsd:
+          type: number
+        recommendedTransactionPriceUsd:
+          type: number
+          description: All-in annual subscription price divided by committed annual transactions.
+        overagePricePerTransactionUsd:
+          type: number
+          description: Incremental run cost per transaction priced at the target margin.
+        firstYearContractValueUsd:
+          type: number
+          description: Recommended implementation price plus first-year recurring price.
+        pricingMargin:
+          type: number
+          description: Target margin applied after including the product-recovery allocation.
+        plannedPaybackMonths:
+          type: number
+          description: Product investment recovery period at the target client count.
+        assumptions:
+          $ref: "#/components/schemas/CommercialAssumptions"
+        tokenUsage:
+          $ref: "#/components/schemas/TokenUsage"
+      required:
+        - productBuildCostUsd
+        - clientImplementationCostUsd
+        - clientImplementationPriceUsd
+        - annualRunCostUsd
+        - annualCommittedTransactions
+        - monthlyRunCostUsd
+        - annualAiCostUsd
+        - annualInfrastructureCostUsd
+        - annualVendorHitlCostUsd
+        - annualChannelAndOtherVariableCostUsd
+        - annualKnowledgeMaintenanceCostUsd
+        - annualSupportCostUsd
+        - annualSupportPriceUsd
+        - annualRecurringCogsUsd
+        - monthlyRecurringCogsUsd
+        - annualProductRecoveryUsd
+        - recommendedMonthlyPriceUsd
+        - recommendedAnnualPriceUsd
+        - recommendedTransactionPriceUsd
+        - overagePricePerTransactionUsd
+        - firstYearContractValueUsd
+        - pricingMargin
+        - plannedPaybackMonths
+        - assumptions
+        - tokenUsage
     Rollup:
       type: object
       properties:
@@ -2117,6 +2263,8 @@ components:
             $ref: "#/components/schemas/BuildComponentCost"
         demarcationSplit:
           $ref: "#/components/schemas/DemarcationSplit"
+        commercialSummary:
+          $ref: "#/components/schemas/CommercialSummary"
         appliedAssumptions:
           type: array
           items:
@@ -2139,7 +2287,7 @@ components:
           description: Intent keys present in the actuals overlay that no longer exist in the active intent registry (reference + custom). The rollup proceeded on the valid remainder; these entries were silently skipped without this field. Present only when at least one orphan is detected.
           items:
             type: string
-      required: [totals, byYear, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, demarcationSplit, appliedAssumptions, confidence, calibrated]
+      required: [totals, byYear, rows, byFlowClass, byCostComponent, byDomain, tierMultiplier, adoptionRate, knowledgeMaintenanceUsd, onboardingAnnualUsd, buildBreakdown, demarcationSplit, commercialSummary, appliedAssumptions, confidence, calibrated]
     BuildComponentCost:
       type: object
       properties:

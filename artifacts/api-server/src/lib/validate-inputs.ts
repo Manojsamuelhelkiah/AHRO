@@ -47,6 +47,57 @@ export function validateScenarioInputs(inputs: ScenarioInputs, extraValidIntentK
   requirePositive("hitlHourlyCostUsd", inputs.hitlHourlyCostUsd, 10_000);
   requirePositiveInt("countries", inputs.countries, 250);
 
+  const commercial = inputs.commercialAssumptions;
+  if (commercial) {
+    if (commercial.targetGrossMargin !== undefined) {
+      if (
+        !Number.isFinite(commercial.targetGrossMargin) ||
+        commercial.targetGrossMargin < 0 ||
+        commercial.targetGrossMargin > 0.95
+      ) {
+        throw new InputValidationError(
+          "commercialAssumptions.targetGrossMargin must be between 0 and 0.95",
+        );
+      }
+    }
+    if (commercial.targetClients !== undefined) {
+      requirePositiveInt(
+        "commercialAssumptions.targetClients",
+        commercial.targetClients,
+        100_000,
+      );
+    }
+    if (commercial.productRecoveryMonths !== undefined) {
+      requirePositiveInt(
+        "commercialAssumptions.productRecoveryMonths",
+        commercial.productRecoveryMonths,
+        240,
+      );
+    }
+    if (commercial.actualsOverlayId !== undefined) {
+      requirePositiveInt(
+        "commercialAssumptions.actualsOverlayId",
+        commercial.actualsOverlayId,
+        2_147_483_647,
+      );
+    }
+    for (const [name, value] of [
+      ["commercialAssumptions.supportTeamFte", commercial.supportTeamFte],
+      [
+        "commercialAssumptions.supportHourlyCostUsd",
+        commercial.supportHourlyCostUsd,
+      ],
+      [
+        "commercialAssumptions.supportToolingAnnualUsdPerClient",
+        commercial.supportToolingAnnualUsdPerClient,
+      ],
+    ] as const) {
+      if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
+        throw new InputValidationError(`${name} must be a non-negative number`);
+      }
+    }
+  }
+
   if (!profileMap[inputs.sector]) {
     throw new InputValidationError(
       `Unknown sector "${inputs.sector}". Valid sectors: ${Object.keys(profileMap).join(", ")}`,

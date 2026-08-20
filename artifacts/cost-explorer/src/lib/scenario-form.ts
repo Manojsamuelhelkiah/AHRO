@@ -6,7 +6,10 @@
  * scenario.tsx.  Do NOT duplicate these functions on the page.
  */
 import * as z from "zod";
-import type { ScenarioInputs } from "@workspace/api-client-react";
+import type {
+  CommercialAssumptions,
+  ScenarioInputs,
+} from "@workspace/api-client-react";
 import {
   OVERRIDABLE_ASSUMPTION_KEYS,
   buildAssumptionOverrides,
@@ -71,6 +74,16 @@ const assumptionOverridesSchema = z.object(
   )
 ) as z.ZodObject<Record<OverridableKey, z.ZodOptional<z.ZodUnion<[z.ZodLiteral<"">, z.ZodNumber]>>>>;
 
+const commercialAssumptionsSchema = z.object({
+  targetGrossMargin: optionalNumber(z.coerce.number().min(0).max(0.95)),
+  targetClients: optionalNumber(z.coerce.number().int().min(1)),
+  productRecoveryMonths: optionalNumber(z.coerce.number().int().min(1).max(240)),
+  supportTeamFte: optionalNumber(z.coerce.number().min(0)),
+  supportHourlyCostUsd: optionalNumber(z.coerce.number().min(0)),
+  supportToolingAnnualUsdPerClient: optionalNumber(z.coerce.number().min(0)),
+  actualsOverlayId: optionalNumber(z.coerce.number().int().min(1)),
+});
+
 // ─── Form schema ──────────────────────────────────────────────────────────────
 
 export const formSchema = z.object({
@@ -131,6 +144,9 @@ export const formSchema = z.object({
       z.number().min(0).max(1).optional(),
     )
   ).optional(),
+  // Supplier-side pricing assumptions live separately from the client benefit model.
+  // They are edited on the Commercial Pricing page but must survive Scenario Builder saves.
+  _commercialAssumptions: commercialAssumptionsSchema.optional(),
 });
 
 export type FormValues = z.infer<typeof formSchema>;
@@ -224,6 +240,16 @@ export function toApiInputs(v: FormValues): ScenarioInputs {
   if (v.modelData)      modelSelection.data       = v.modelData;
   if (Object.keys(modelSelection).length > 0) inputs.modelSelection = modelSelection;
 
+  const commercial = v._commercialAssumptions;
+  if (commercial) {
+    const compact = Object.fromEntries(
+      Object.entries(commercial).filter(([, value]) => value !== undefined),
+    ) as CommercialAssumptions;
+    if (Object.keys(compact).length > 0) {
+      inputs.commercialAssumptions = compact;
+    }
+  }
+
   // Non-integrated systems — absence = all integrated.
   if ((v.nonIntegratedSystems?.length ?? 0) > 0)
     inputs.nonIntegratedSystems = v.nonIntegratedSystems;
@@ -273,6 +299,7 @@ export function fromApiInputs(s: ScenarioInputs): FormValues {
   const ms   = raw.modelSelection   as Record<string, string>  | undefined;
   const ov   = raw.assumptionOverrides as Record<string, number> | undefined;
   const ico  = raw.intentContainmentOverrides as Record<string, number> | undefined;
+  const commercial = raw.commercialAssumptions as CommercialAssumptions | undefined;
 
   // Merge legacy containmentOverrides (lower priority) with current containmentRates.
   const mergedCr: Record<string, number> | undefined =
@@ -331,5 +358,6 @@ export function fromApiInputs(s: ScenarioInputs): FormValues {
       Object.keys(_assumptionOverrides).length > 0 ? _assumptionOverrides : {},
     _intentContainmentOverrides:
       Object.keys(_intentContainmentOverrides).length > 0 ? _intentContainmentOverrides : {},
+    _commercialAssumptions: commercial ? { ...commercial } : undefined,
   };
 }

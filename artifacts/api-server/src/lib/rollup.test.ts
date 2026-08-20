@@ -71,6 +71,137 @@ test("totals reconcile with rows and cost-component buckets", () => {
   assert.ok(Math.abs(pRows - p.totals.totalCostUsd) < 1e-6);
 });
 
+test("commercial summary separates product, implementation, recurring and support costs", () => {
+  const r = computeRollup({
+    ...base,
+    commercialAssumptions: {
+      targetGrossMargin: 0.6,
+      targetClients: 10,
+      productRecoveryMonths: 36,
+      supportTeamFte: 1,
+      supportHourlyCostUsd: 60,
+      supportToolingAnnualUsdPerClient: 5_000,
+    },
+  });
+  const c = r.commercialSummary;
+  assert.equal(c.productBuildCostUsd, r.demarcationSplit.coreOneTimeUsd);
+  assert.equal(
+    c.clientImplementationCostUsd,
+    r.demarcationSplit.customOneTimeUsd,
+  );
+  assert.equal(
+    c.annualRunCostUsd,
+    c.annualAiCostUsd +
+      c.annualInfrastructureCostUsd +
+      c.annualVendorHitlCostUsd +
+      c.annualChannelAndOtherVariableCostUsd +
+      c.annualKnowledgeMaintenanceCostUsd,
+  );
+  assert.equal(
+    c.annualRecurringCogsUsd,
+    c.annualRunCostUsd + c.annualSupportCostUsd,
+  );
+  assert.ok(
+    Math.abs(c.clientImplementationPriceUsd * 0.4 - c.clientImplementationCostUsd) <
+      1e-6,
+  );
+  assert.ok(
+    Math.abs(
+      c.recommendedAnnualPriceUsd * 0.4 -
+        (c.annualRecurringCogsUsd + c.annualProductRecoveryUsd),
+    ) < 1e-6,
+  );
+  assert.ok(Math.abs(c.plannedPaybackMonths - 36) < 1e-9);
+});
+
+test("commercial assumptions and transaction volume move pricing outputs", () => {
+  const a = computeRollup(base).commercialSummary;
+  const b = computeRollup({
+    ...base,
+    annualTransactions: base.annualTransactions * 2,
+    commercialAssumptions: {
+      targetGrossMargin: 0.7,
+      targetClients: 5,
+      productRecoveryMonths: 24,
+      supportTeamFte: 2,
+      supportHourlyCostUsd: 85,
+      supportToolingAnnualUsdPerClient: 12_000,
+    },
+  }).commercialSummary;
+  assert.notEqual(a.recommendedAnnualPriceUsd, b.recommendedAnnualPriceUsd);
+  assert.notEqual(a.annualSupportCostUsd, b.annualSupportCostUsd);
+  assert.notEqual(a.recommendedTransactionPriceUsd, b.recommendedTransactionPriceUsd);
+  assert.ok(a.tokenUsage.annualTotalTokens > 0);
+  assert.equal(a.tokenUsage.basis, "estimated");
+});
+
+test("commercial pricing uses committed volume and excludes client fallback labor", () => {
+  const lowAdoption = computeRollup({
+    ...base,
+    adoptionRamp: [0.1, 0.2, 0.3],
+  });
+  const fullAdoption = computeRollup({
+    ...base,
+    adoptionRamp: [1, 1, 1],
+  });
+
+  assert.notEqual(lowAdoption.totals.runCostUsd, fullAdoption.totals.runCostUsd);
+  assert.equal(
+    lowAdoption.commercialSummary.annualRunCostUsd,
+    fullAdoption.commercialSummary.annualRunCostUsd,
+  );
+  assert.equal(
+    lowAdoption.commercialSummary.recommendedAnnualPriceUsd,
+    fullAdoption.commercialSummary.recommendedAnnualPriceUsd,
+  );
+
+  const c = lowAdoption.commercialSummary;
+  const variableCogs =
+    c.annualAiCostUsd +
+    c.annualInfrastructureCostUsd +
+    c.annualVendorHitlCostUsd +
+    c.annualChannelAndOtherVariableCostUsd;
+  assert.ok(
+    Math.abs(
+      c.overagePricePerTransactionUsd *
+        base.annualTransactions *
+        (1 - c.pricingMargin) -
+        variableCogs,
+    ) < 1e-6,
+  );
+});
+
+test("commercial supplier HITL excludes non-integrated client manual work", () => {
+  const integrated = computeRollup(base);
+  const manualClientSystems = computeRollup({
+    ...base,
+    nonIntegratedSystems: ["time-system"],
+  });
+
+  assert.equal(
+    integrated.commercialSummary.annualVendorHitlCostUsd,
+    manualClientSystems.commercialSummary.annualVendorHitlCostUsd,
+  );
+  assert.notEqual(
+    integrated.byCostComponent.find((bucket) => bucket.key === "human")?.usd,
+    manualClientSystems.byCostComponent.find((bucket) => bucket.key === "human")?.usd,
+  );
+});
+
+test("MCP action pricing is reported in the channel bucket, not AI", () => {
+  const baseline = computeRollup(base).commercialSummary;
+  const repriced = computeRollup({
+    ...base,
+    assumptionOverrides: { "mcp-action-cost": 0.5 },
+  }).commercialSummary;
+
+  assert.equal(baseline.annualAiCostUsd, repriced.annualAiCostUsd);
+  assert.notEqual(
+    baseline.annualChannelAndOtherVariableCostUsd,
+    repriced.annualChannelAndOtherVariableCostUsd,
+  );
+});
+
 test("every scenario input changes the result", () => {
   const baseCost = computeRollup(base).totals.totalCostUsd;
   const variants: Array<[string, Partial<ScenarioInputs>]> = [
@@ -404,6 +535,14 @@ test("shadow workbook round-trips inputs exactly", async () => {
     assumptionOverrides: { "llm-call-cost": 0.02 },
     modelSelection: { data: "nl2sql-slm", frontier: "gpt-5-pro" },
     nonIntegratedSystems: ["time-system"],
+    commercialAssumptions: {
+      targetGrossMargin: 0.64,
+      targetClients: 12,
+      productRecoveryMonths: 30,
+      supportTeamFte: 1.5,
+      supportHourlyCostUsd: 72,
+      supportToolingAnnualUsdPerClient: 8_000,
+    },
   };
   const buf = await buildScenarioWorkbook(inputs);
   const parsed = await parseScenarioWorkbook(buf);
