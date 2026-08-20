@@ -64,7 +64,7 @@ export const assumptions: GlobalAssumption[] = [
     value: 0.015,
     unit: "USD per transaction",
     rationale: "Allocated share of AKS, storage, observability, gateway and vector-search infrastructure per completed transaction at pooled-tier utilization.",
-    source: { name: "Azure calculator model for the deck's reference architecture", confidence: "medium" },
+    source: { name: "Azure consumption sizing model", confidence: "medium" },
   },
   {
     key: "hr-hourly-cost",
@@ -100,7 +100,7 @@ export const assumptions: GlobalAssumption[] = [
     value: 1.0,
     unit: "multiplier",
     rationale: "Pooled multi-tenant tier is the cost baseline (shared compute, shared model quota).",
-    source: { name: "Deck pricing slide", confidence: "high" },
+    source: { name: "Commercial pricing baseline", confidence: "high" },
   },
   {
     key: "tier-siloed",
@@ -108,8 +108,8 @@ export const assumptions: GlobalAssumption[] = [
     label: "Isolation tier multiplier: siloed",
     value: 1.4,
     unit: "multiplier",
-    rationale: "Siloed tier adds dedicated namespaces, storage and model quotas; ~40% infra/AI uplift per the deck's pricing slide.",
-    source: { name: "Deck pricing slide", confidence: "medium" },
+    rationale: "Siloed tier adds dedicated namespaces, storage and model quotas, creating an estimated 40% infrastructure and AI uplift.",
+    source: { name: "Commercial pricing baseline", confidence: "medium" },
   },
   {
     key: "tier-dedicated",
@@ -117,8 +117,8 @@ export const assumptions: GlobalAssumption[] = [
     label: "Isolation tier multiplier: dedicated",
     value: 2.5,
     unit: "multiplier",
-    rationale: "Dedicated single-tenant deployment forgoes pooling economics entirely; ~2.5x uplift per the deck's pricing slide.",
-    source: { name: "Deck pricing slide", confidence: "medium" },
+    rationale: "Dedicated single-tenant deployment forgoes pooling economics entirely, creating an estimated 2.5x uplift.",
+    source: { name: "Commercial pricing baseline", confidence: "medium" },
   },
   {
     key: "landscape-fanout",

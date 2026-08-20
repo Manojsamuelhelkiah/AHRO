@@ -24,6 +24,19 @@ const PROVISIONING_META: Record<string, { label: string; className: string; blur
   },
 };
 
+function displaySourceName(sourceName: string): string {
+  if (/deck/i.test(sourceName)) return "Commercial pricing baseline";
+  if (!/documented assumption/i.test(sourceName)) return sourceName;
+
+  const cleaned = sourceName
+    .replace(/documented assumption(?: from)?\s*/i, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s*\/\s*$/, "")
+    .trim();
+
+  return cleaned || "Planning assumption";
+}
+
 export default function Assumptions() {
   const { data: assumptions, isLoading: isLoadingAssumptions } = useListAssumptions();
   const { data: systems, isLoading: isLoadingSystems } = useListSystems();
@@ -107,7 +120,7 @@ export default function Assumptions() {
                   
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2 py-1.5 rounded">
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>{assumption.source.name}</span>
+                      <span>{displaySourceName(assumption.source.name)}</span>
                   </div>
                 </CardContent>
               </Card>

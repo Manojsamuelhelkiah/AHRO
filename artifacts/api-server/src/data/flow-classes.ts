@@ -15,7 +15,7 @@ const pricingSrc: SourceRef = {
   confidence: "medium",
 };
 const assumptionSrc: SourceRef = {
-  name: "Documented assumption (delivery sizing)",
+  name: "Delivery sizing baseline",
   confidence: "low",
 };
 
@@ -30,7 +30,7 @@ export const flowClasses: FlowClass[] = [
     name: "Deterministic Self-Service",
     slideRef: "Flow: Payslip Copy & Leave Balance",
     description:
-      "High-volume, zero-ambiguity requests resolved end-to-end without human involvement: retrieve, verify, deliver. Mirrors the deck's payslip-copy flow (1-4-6-7-6).",
+      "High-volume, zero-ambiguity requests resolved end-to-end without human involvement: retrieve, verify, and deliver.",
     buildCostUsd: 18000,
     buildAssumption:
       "Per intent family: prompt/route configuration, one MCP read pattern, test pack and rollout. ~15 person-days at blended delivery rate.",
@@ -81,7 +81,7 @@ export const flowClasses: FlowClass[] = [
         ],
         benefits: [
           { type: "human-effort", label: "Handling time eliminated", dollarized: true, unitBenefitUsd: 0, qualitative: "", assumption: "Dollarized centrally: (as-is minutes - to-be minutes) x HR hourly rate. Shown in the roll-up, not double-counted here." },
-          { type: "cycle-time", label: "Seconds instead of days", dollarized: false, unitBenefitUsd: 0, qualitative: "Resolution drops from a 1-2 day ticket to under a minute.", assumption: "Deck flow slide SLA comparison." },
+          { type: "cycle-time", label: "Seconds instead of days", dollarized: false, unitBenefitUsd: 0, qualitative: "Resolution drops from a 1-2 day ticket to under a minute.", assumption: "Service-level target for automated self-service." },
         ],
       },
       {
@@ -106,7 +106,7 @@ export const flowClasses: FlowClass[] = [
     name: "Grounded Policy Answer",
     slideRef: "Flow: Policy Question",
     description:
-      "Policy and knowledge questions answered from the curated client knowledge base with confidence scoring; low-confidence answers are gated to a human reviewer. Mirrors the deck's policy-question flow (1-4-6-5 + HITL gate).",
+      "Policy and knowledge questions answered from the curated client knowledge base with confidence scoring; low-confidence answers are gated to a human reviewer.",
     buildCostUsd: 45000,
     buildAssumption:
       "Per intent family: knowledge curation pipeline, retrieval tuning, confidence calibration, reviewer workflow. ~35 person-days plus content onboarding.",
@@ -169,7 +169,7 @@ export const flowClasses: FlowClass[] = [
           { type: "human", label: "Reviewer minutes (blended)", unitCostUsd: 0, assumption: "Residual human minutes are intent-specific (toBeHumanMin) and dollarized centrally at the HITL hourly rate.", source: assumptionSrc },
         ],
         benefits: [
-          { type: "compliance", label: "Human accountability on low confidence", dollarized: false, unitBenefitUsd: 0, qualitative: "Sensitive or ambiguous policy answers always carry a named human approver.", assumption: "Deck HITL gate (amber) on the policy flow." },
+          { type: "compliance", label: "Human accountability on low confidence", dollarized: false, unitBenefitUsd: 0, qualitative: "Sensitive or ambiguous policy answers always carry a named human approver.", assumption: "Policy answers below the confidence threshold require human approval." },
         ],
       },
       {
@@ -192,7 +192,7 @@ export const flowClasses: FlowClass[] = [
     name: "Multi-Agent Transaction",
     slideRef: "Flow: Payroll Discrepancy Dispute",
     description:
-      "Multi-step transactions where several specialist agents investigate, reconcile and execute writes behind a human approval gate. Mirrors the deck's payroll-discrepancy flow (1-3-5-5 + approver + 6-7-6).",
+      "Multi-step transactions where several specialist agents investigate, reconcile, and execute writes behind a human approval gate.",
     buildCostUsd: 120000,
     buildAssumption:
       "Per intent family: multi-agent orchestration graph, reconciliation logic, write-path integration with approval workflow, regression pack. ~90 person-days.",
@@ -259,7 +259,7 @@ export const flowClasses: FlowClass[] = [
           { type: "human", label: "Approver minutes (blended)", unitCostUsd: 0, assumption: "Residual human minutes are intent-specific (toBeHumanMin), dollarized at the HITL hourly rate.", source: assumptionSrc },
         ],
         benefits: [
-          { type: "compliance", label: "Approval-gated writes", dollarized: false, unitBenefitUsd: 0, qualitative: "No financial correction reaches a system of record without named human approval.", assumption: "Deck guardrail: all put actions are approval-gated." },
+          { type: "compliance", label: "Approval-gated writes", dollarized: false, unitBenefitUsd: 0, qualitative: "No financial correction reaches a system of record without named human approval.", assumption: "All financial write actions require named human approval." },
         ],
       },
       {
@@ -278,7 +278,7 @@ export const flowClasses: FlowClass[] = [
           { type: "infra", label: "Write-path infra + validation", unitCostUsd: INFRA * 0.33, assumption: "33% of infra-per-txn: idempotency, validation and rollback safety on writes.", source: pricingSrc },
         ],
         benefits: [
-          { type: "cycle-time", label: "Days to hours", dollarized: false, unitBenefitUsd: 0, qualitative: "Dispute resolution drops from a 5-10 day investigation to same-day.", assumption: "Deck flow slide SLA comparison." },
+          { type: "cycle-time", label: "Days to hours", dollarized: false, unitBenefitUsd: 0, qualitative: "Dispute resolution drops from a 5-10 day investigation to same-day.", assumption: "Service-level target for assisted dispute resolution." },
         ],
       },
       {
@@ -304,7 +304,7 @@ export const flowClasses: FlowClass[] = [
     name: "Frontier Judgment Case",
     slideRef: "Flow: Cross-Border Relocation",
     description:
-      "Low-volume, high-complexity cases requiring deep reasoning across tax, immigration, payroll and policy - with human gates at every consequential decision. Mirrors the deck's cross-border relocation flow.",
+      "Low-volume, high-complexity cases requiring deep reasoning across tax, immigration, payroll, and policy — with human gates at every consequential decision.",
     buildCostUsd: 250000,
     buildAssumption:
       "Per intent family: frontier-model reasoning harness, country-pair knowledge packs, multi-gate approval workflow, specialist evaluation suite. ~180 person-days.",
@@ -356,7 +356,7 @@ export const flowClasses: FlowClass[] = [
           { type: "human", label: "Specialist review minutes", unitCostUsd: 0, assumption: "Residual human minutes are intent-specific (toBeHumanMin), dollarized at the HITL hourly rate.", source: assumptionSrc },
         ],
         benefits: [
-          { type: "compliance", label: "Human sign-off on consequential steps", dollarized: false, unitBenefitUsd: 0, qualitative: "Immigration and tax-affecting steps always carry specialist approval.", assumption: "Deck frontier flow: human gates at every consequential decision." },
+          { type: "compliance", label: "Human sign-off on consequential steps", dollarized: false, unitBenefitUsd: 0, qualitative: "Immigration and tax-affecting steps always carry specialist approval.", assumption: "Every consequential decision requires specialist approval." },
         ],
       },
       {
@@ -376,7 +376,7 @@ export const flowClasses: FlowClass[] = [
           { type: "infra", label: "Write-path + vendor integration infra", unitCostUsd: INFRA * 0.53, assumption: "53% of infra-per-txn: multi-vendor connector amortization, validation, retries.", source: pricingSrc },
         ],
         benefits: [
-          { type: "cycle-time", label: "Weeks to days", dollarized: false, unitBenefitUsd: 0, qualitative: "Relocation setup drops from multi-week email coordination to days.", assumption: "Deck flow slide SLA comparison." },
+          { type: "cycle-time", label: "Weeks to days", dollarized: false, unitBenefitUsd: 0, qualitative: "Relocation setup drops from multi-week email coordination to days.", assumption: "Service-level target for coordinated relocation." },
         ],
       },
       {

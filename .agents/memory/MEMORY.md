@@ -16,4 +16,5 @@
 - [Restyle delegation drift](restyle-delegation-drift.md) — design subagents on restyle-only passes can silently change logic (auth predicates, dropped columns); always diff-review.
 - [TSX tests in node harness](tsx-tests-node-harness.md) — renderToStaticMarkup UI tests need jsx:automatic, bare builtin externals, and a createRequire banner in the esbuild bundle.
 - [Commercial pricing basis](commercial-pricing-basis.md) — quote full committed volume; exclude client labor from supplier COGS; overage recovers variable supplier cost only.
+- [Customer-facing copy](customer-facing-copy.md) — product screens must stand alone; never refer users to decks, slides, or other internal documents.
 - [OpenAPI integer persistence](openapi-integer-persistence.md) — generated Zod may accept fractional values for integer fields; enforce integrality before storing inputs used for derived snapshots.

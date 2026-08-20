@@ -45,9 +45,6 @@ export default function Flows() {
                         {flow.description}
                       </CardDescription>
                     </div>
-                    <Badge variant="secondary" className="font-mono bg-primary/10 text-primary border-primary/20 shrink-0 text-[10px]">
-                      {flow.slideRef}
-                    </Badge>
                   </div>
                 </CardHeader>
 
