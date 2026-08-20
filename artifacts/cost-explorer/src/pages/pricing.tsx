@@ -26,6 +26,8 @@ import {
   DatabaseZap,
 } from "lucide-react";
 
+import { formatRateSetReference } from "@/lib/pricing-format";
+
 const formatUsd = (val: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -131,6 +133,13 @@ const ReportView = ({
            <span className="mx-2">·</span>
            Calibration: <span className="font-medium text-foreground print:text-slate-800">{calibrationLabel}</span>
          </p>
+         {cs.rateSetReference && (
+           <p className="text-xs text-muted-foreground mt-1 print:text-slate-500">
+             <span className="font-medium text-foreground print:text-slate-800">{formatRateSetReference(cs.rateSetReference)}</span>
+             <span className="mx-2">·</span>
+             <span className="italic">{cs.rateSetReference.rationale}</span>
+           </p>
+         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-2 print:gap-6">

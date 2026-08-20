@@ -20,6 +20,8 @@ tags:
     description: Client-specific intents that extend the reference corpus
   - name: onboarding
     description: Orchestrated multi-agent onboarding POC (cases, agents, approvals, channels, connectors, analytics)
+  - name: pricingRateSets
+    description: Immutable versioned pricing rate register for quote-critical Azure, AI, implementation, and support unit rates
 paths:
   /healthz:
     get:
@@ -1436,6 +1438,63 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /pricing-rate-sets:
+    get:
+      operationId: listPricingRateSets
+      tags: [pricingRateSets]
+      summary: Get the pricing rate register (current version and full history)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Rate register with current snapshot and all versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingRateRegister"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      operationId: createPricingRateSet
+      tags: [pricingRateSets]
+      summary: Create a new immutable pricing rate set version
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingRateSetInput"
+      responses:
+        "201":
+          description: Created rate set version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingRateSetVersion"
+        "400":
+          description: Validation error (missing/unsafe rates, blank rationale/date)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Commercial rate manager permission required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 components:
   schemas:
     HealthStatus:
@@ -2192,6 +2251,9 @@ components:
           $ref: "#/components/schemas/CommercialAssumptions"
         tokenUsage:
           $ref: "#/components/schemas/TokenUsage"
+        rateSetReference:
+          $ref: "#/components/schemas/RateSetReference"
+          description: Metadata identifying which rate set snapshot was used. Present only when a rate snapshot was loaded.
       required:
         - productBuildCostUsd
         - clientImplementationCostUsd
@@ -3723,3 +3785,79 @@ components:
           type: string
           nullable: true
           description: New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged.
+    RateSetReference:
+      type: object
+      description: Metadata identifying which pricing rate set snapshot was used to generate a rollup or quote.
+      properties:
+        rateSetId:
+          type: integer
+          description: Version sequence id of the rate set.
+        effectiveDate:
+          type: string
+          description: YYYY-MM-DD calendar date from which this rate set is effective.
+        rationale:
+          type: string
+          description: Human-readable rationale for this rate set version.
+        createdBy:
+          type: string
+          description: Display name of the author who created this version.
+        createdAt:
+          type: string
+          description: ISO 8601 timestamp when this version was created.
+      required: [rateSetId, effectiveDate, rationale, createdBy, createdAt]
+    PricingRateSetVersion:
+      type: object
+      description: A single immutable pricing rate set version.
+      properties:
+        id:
+          type: integer
+          description: Version sequence id (highest effective-date <= today is current).
+        effectiveDate:
+          type: string
+          description: YYYY-MM-DD calendar date this version is effective from.
+        rationale:
+          type: string
+          description: Human-readable rationale for this version.
+        rates:
+          type: object
+          additionalProperties: true
+          description: Complete pricing rate snapshot (all quote-critical rates).
+        createdBy:
+          type: string
+          description: Display name of the author resolved at write time.
+        createdAt:
+          type: string
+          description: ISO 8601 creation timestamp.
+      required: [id, effectiveDate, rationale, rates, createdBy, createdAt]
+    PricingRateRegister:
+      type: object
+      description: The full pricing rate register — current snapshot and complete version history.
+      properties:
+        current:
+          $ref: "#/components/schemas/PricingRateSetVersion"
+          description: The current effective rate set (null when none exists yet).
+          nullable: true
+        versions:
+          type: array
+          description: All versions, newest first.
+          items:
+            $ref: "#/components/schemas/PricingRateSetVersion"
+        canManage:
+          type: boolean
+          description: Whether the signed-in user may publish immutable global rate versions.
+      required: [current, versions, canManage]
+    PricingRateSetInput:
+      type: object
+      description: Body for creating a new pricing rate set version.
+      properties:
+        effectiveDate:
+          type: string
+          description: YYYY-MM-DD calendar date this version takes effect. May be in the future (scheduled).
+        rationale:
+          type: string
+          description: Non-blank rationale explaining why this version was created.
+        rates:
+          type: object
+          additionalProperties: true
+          description: Complete pricing rate snapshot. All quote-critical keys are required; missing or unsafe values block save.
+      required: [effectiveDate, rationale, rates]

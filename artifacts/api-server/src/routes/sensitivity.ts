@@ -8,15 +8,21 @@ import { validateScenarioInputs } from "../lib/validate-inputs";
 import { loadActiveFlowOverrides } from "./flow-overrides";
 import { loadActiveCustomIntents } from "./custom-intents";
 import type { ScenarioInputs } from "../lib/rollup";
+import {
+  ensureBaselineRateSet,
+  loadAndValidateCurrentRateSet,
+} from "../lib/pricing-rate-sets";
 
 const router: IRouter = Router();
 
 router.post("/sensitivity", async (req, res, next) => {
   try {
     const body = ComputeSensitivityBody.parse(req.body);
-    const [overrides, customIntents] = await Promise.all([
+    await ensureBaselineRateSet();
+    const [overrides, customIntents, currentRateSet] = await Promise.all([
       loadActiveFlowOverrides(),
       loadActiveCustomIntents(),
+      loadAndValidateCurrentRateSet(),
     ]);
     const inputs = body.inputs as ScenarioInputs;
     validateScenarioInputs(inputs, new Set(customIntents.map((i) => i.key)));
@@ -35,7 +41,13 @@ router.post("/sensitivity", async (req, res, next) => {
       overlay = overlayRow.payload as ActualsOverlay;
     }
 
-    const result = computeSensitivity(inputs, overrides, customIntents, overlay);
+    const result = computeSensitivity(
+      inputs,
+      overrides,
+      customIntents,
+      overlay,
+      currentRateSet.rates,
+    );
     res.json(ComputeSensitivityResponse.parse(result));
   } catch (err) {
     next(err);

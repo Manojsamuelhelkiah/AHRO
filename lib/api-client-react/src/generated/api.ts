@@ -69,6 +69,9 @@ import type {
   OnbWatchEmailSimulate,
   OnbWatchEmailSimulateResult,
   ParseActualsLogBody,
+  PricingRateRegister,
+  PricingRateSetInput,
+  PricingRateSetVersion,
   Rollup,
   RollupRequest,
   Scenario,
@@ -4965,5 +4968,153 @@ export const useUpdateOnboardingSettings = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getUpdateOnboardingSettingsMutationOptions(options));
+    }
+
+export const getListPricingRateSetsUrl = () => {
+
+
+
+
+  return `/api/pricing-rate-sets`
+}
+
+/**
+ * @summary Get the pricing rate register (current version and full history)
+ */
+export const listPricingRateSets = async ( options?: RequestInit): Promise<PricingRateRegister> => {
+
+  return customFetch<PricingRateRegister>(getListPricingRateSetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPricingRateSetsQueryKey = () => {
+    return [
+    `/api/pricing-rate-sets`
+    ] as const;
+    }
+
+
+export const getListPricingRateSetsQueryOptions = <TData = Awaited<ReturnType<typeof listPricingRateSets>>, TError = ErrorType<ErrorMessage>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPricingRateSets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPricingRateSetsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPricingRateSets>>> = ({ signal }) => listPricingRateSets({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPricingRateSets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPricingRateSetsQueryResult = NonNullable<Awaited<ReturnType<typeof listPricingRateSets>>>
+export type ListPricingRateSetsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get the pricing rate register (current version and full history)
+ */
+
+export function useListPricingRateSets<TData = Awaited<ReturnType<typeof listPricingRateSets>>, TError = ErrorType<ErrorMessage>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPricingRateSets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPricingRateSetsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePricingRateSetUrl = () => {
+
+
+
+
+  return `/api/pricing-rate-sets`
+}
+
+/**
+ * @summary Create a new immutable pricing rate set version
+ */
+export const createPricingRateSet = async (pricingRateSetInput: PricingRateSetInput, options?: RequestInit): Promise<PricingRateSetVersion> => {
+
+  return customFetch<PricingRateSetVersion>(getCreatePricingRateSetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pricingRateSetInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePricingRateSetMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPricingRateSet>>, TError,{data: BodyType<PricingRateSetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPricingRateSet>>, TError,{data: BodyType<PricingRateSetInput>}, TContext> => {
+
+const mutationKey = ['createPricingRateSet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPricingRateSet>>, {data: BodyType<PricingRateSetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPricingRateSet(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePricingRateSetMutationResult = NonNullable<Awaited<ReturnType<typeof createPricingRateSet>>>
+    export type CreatePricingRateSetMutationBody = BodyType<PricingRateSetInput>
+    export type CreatePricingRateSetMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Create a new immutable pricing rate set version
+ */
+export const useCreatePricingRateSet = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPricingRateSet>>, TError,{data: BodyType<PricingRateSetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPricingRateSet>>,
+        TError,
+        {data: BodyType<PricingRateSetInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePricingRateSetMutationOptions(options));
     }
 

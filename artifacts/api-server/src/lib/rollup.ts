@@ -8,9 +8,12 @@ import {
   pricePerCallWithOverlay,
   MODEL_ROLES,
   ESTIMATED_TOKEN_PROFILE_BY_ROLE,
+  modelCatalog,
+  type ModelOption,
 } from "../data/model-catalog";
 import type { GlobalAssumption, Intent, ActualsOverlay } from "../data/types";
 import { intents as referenceIntents } from "../data/intents";
+import type { PricingRateSnapshot, RateSetReference } from "./pricing-rate-sets";
 
 export interface ScenarioInputs {
   numSystems: number;
@@ -329,9 +332,17 @@ export function manualActionFractions(
  * Returns stepBenefit (step dollarized + rework); human cost and peak-load benefit are applied
  * per-year in computeRollup so they can vary across the adoption ramp.
  * When ctx is present (calibration overlay), model calls are repriced from measured token actuals.
+ * effectiveOv is the merged assumption overrides (snapshot base + scenario overrides).
+ * snapshotModelLookup provides snapshot-derived per-call and per-token prices.
  */
-function perTransaction(it: Intent, inputs: ScenarioInputs, ctx?: OverlayContext): PerTxnCost {
-  const ov = inputs.assumptionOverrides;
+function perTransaction(
+  it: Intent,
+  inputs: ScenarioInputs,
+  ctx?: OverlayContext,
+  effectiveOv?: Record<string, number>,
+  snapshotModelLookup?: Map<string, ModelOption>,
+): PerTxnCost {
+  const ov = effectiveOv;
   const fc = flowClassMap[it.flowClass];
   // Landscape maturity scales Act fan-out effort: legacy landscapes make each
   // extra system more expensive to touch, clean landscapes cheaper.
@@ -342,13 +353,16 @@ function perTransaction(it: Intent, inputs: ScenarioInputs, ctx?: OverlayContext
   const { automatedUnits } = manualActionFractions(it, inputs);
 
   // Model-cost scaling ratio for ai-consumption components without explicit c.calls.
+  // When a snapshot is present, the "default" cost is the snapshot's registered rate (via ov).
   const primaryModelKey = FC_PRIMARY_MODEL[it.flowClass] ?? "slm-call-cost";
   const defaultModelCost = assumptionMap[primaryModelKey]!.value;
-  const modelRatio = defaultModelCost > 0 ? eff(primaryModelKey, ov) / defaultModelCost : 1;
+  const effectiveModelCost = eff(primaryModelKey, ov);
+  const modelRatio = defaultModelCost > 0 ? effectiveModelCost / defaultModelCost : 1;
 
   // Infra cost ratio scaling.
   const defaultInfra = assumptionMap["infra-per-txn"]!.value;
-  const infraRatio = defaultInfra > 0 ? eff("infra-per-txn", ov) / defaultInfra : 1;
+  const effectiveInfra = eff("infra-per-txn", ov);
+  const infraRatio = defaultInfra > 0 ? effectiveInfra / defaultInfra : 1;
 
   let ai = 0;
   let mcp = 0;
@@ -376,10 +390,11 @@ function perTransaction(it: Intent, inputs: ScenarioInputs, ctx?: OverlayContext
           // Reprice each call using the precedence chain documented on ROLE_ASSUMPTION_KEY:
           //   token actuals > explicit non-default model > default model + scenario override.
           unit = c.calls.reduce((a, call) => {
-            const { price, model, fromTokens } = pricePerCallWithOverlay(
+            const { price, model, fromTokens } = pricePerCallFromSnapshot(
               call.role,
               inputs.modelSelection,
               ctx?.tokenActuals,
+              snapshotModelLookup,
             );
             let callPrice = price;
             if (!fromTokens && model.isDefault) {
@@ -591,13 +606,107 @@ interface OverlayContext {
   /** Token counts per role for per-token repricing. */
   tokenActuals?: Record<string, { avgInputTokens: number; avgOutputTokens: number }>;
 }
+/**
+ * Build a merged assumption-override map that incorporates a rate snapshot as the
+ * base layer (below scenario overrides). This allows snapshot rates to drive all
+ * pricing while scenario overrides remain the highest precedence.
+ */
+function buildEffectiveOverrides(
+  scenarioOv: Record<string, number> | undefined,
+  rateSnapshot: PricingRateSnapshot | undefined,
+): Record<string, number> | undefined {
+  if (!rateSnapshot) return scenarioOv;
+  // Map snapshot fields to the assumption keys used by eff()
+  const snapshotOv: Record<string, number> = {
+    "slm-call-cost": rateSnapshot.slmCallCost,
+    "llm-call-cost": rateSnapshot.llmCallCost,
+    "frontier-call-cost": rateSnapshot.frontierCallCost,
+    "data-call-cost": rateSnapshot.dataCallCost,
+    "mcp-action-cost": rateSnapshot.mcpActionCost,
+    "infra-per-txn": rateSnapshot.infraPerTxn,
+    "onboarding-base": rateSnapshot.onboardingBase,
+    "onboarding-per-system": rateSnapshot.onboardingPerSystem,
+    "onboarding-per-country": rateSnapshot.onboardingPerCountry,
+    "knowledge-maintenance-country": rateSnapshot.knowledgeMaintenancePerCountry,
+  };
+  // Scenario overrides take precedence over snapshot
+  return { ...snapshotOv, ...(scenarioOv ?? {}) };
+}
+
+/**
+ * Build a snapshot-aware model catalog lookup.
+ * When a rate snapshot is provided, per-call prices come from the snapshot;
+ * per-token prices also come from the snapshot for repricing.
+ * Scenario model selection (key override) is honoured.
+ */
+function buildSnapshotModelLookup(
+  rateSnapshot: PricingRateSnapshot | undefined,
+): Map<string, ModelOption> | undefined {
+  if (!rateSnapshot) return undefined;
+  const lookup = new Map<string, ModelOption>();
+  for (const m of modelCatalog) {
+    const sr = rateSnapshot.modelRates[m.key];
+    if (sr) {
+      lookup.set(m.key, {
+        ...m,
+        pricePerCallUsd: sr.pricePerCallUsd,
+        inputPricePerMillionTokens: sr.inputPricePerMillionTokens,
+        outputPricePerMillionTokens: sr.outputPricePerMillionTokens,
+      });
+    } else {
+      lookup.set(m.key, m);
+    }
+  }
+  return lookup;
+}
+
+/**
+ * Resolve per-call price using either the snapshot model lookup or catalog default.
+ */
+function pricePerCallFromSnapshot(
+  role: string,
+  selection: Record<string, string> | undefined,
+  tokenActuals: Record<string, { avgInputTokens: number; avgOutputTokens: number }> | undefined,
+  snapshotLookup: Map<string, ModelOption> | undefined,
+): { price: number; model: ModelOption; fromTokens: boolean } {
+  if (!snapshotLookup) {
+    return pricePerCallWithOverlay(role, selection, tokenActuals);
+  }
+  const selectedKey = selection?.[role];
+  const model = selectedKey
+    ? (snapshotLookup.get(selectedKey) ?? modelCatalog.find((m) => m.key === selectedKey)!)
+    : (Array.from(snapshotLookup.values()).find((m) => m.role === role && m.isDefault) ??
+       modelCatalog.find((m) => m.role === role && m.isDefault)!);
+
+  const tokens = tokenActuals?.[role];
+  if (
+    !tokens ||
+    !Number.isFinite(tokens.avgInputTokens) ||
+    !Number.isFinite(tokens.avgOutputTokens) ||
+    tokens.avgInputTokens < 0 ||
+    tokens.avgOutputTokens < 0
+  ) {
+    return { price: model.pricePerCallUsd, model, fromTokens: false };
+  }
+  const tokenPrice =
+    (tokens.avgInputTokens * model.inputPricePerMillionTokens +
+      tokens.avgOutputTokens * model.outputPricePerMillionTokens) /
+    1_000_000;
+  return { price: tokenPrice, model, fromTokens: true };
+}
+
 export function computeRollup(
   inputs: ScenarioInputs,
   flowOverrides?: Record<string, FlowOverrideValues>,
   overlay?: ActualsOverlay,
   extraIntents: Intent[] = [],
+  rateSnapshot?: PricingRateSnapshot,
+  rateSetRef?: RateSetReference,
 ) {
-  const ov = inputs.assumptionOverrides;
+  // Build effective overrides: snapshot rates as base layer, scenario overrides on top.
+  const ov = buildEffectiveOverrides(inputs.assumptionOverrides, rateSnapshot);
+  // Snapshot model lookup for per-call pricing (undefined when no snapshot).
+  const snapshotModelLookup = buildSnapshotModelLookup(rateSnapshot);
   const allIntents = [...referenceIntents, ...extraIntents];
   const shares = computeShares(inputs, extraIntents);
   const tier = tierMultiplierFor(inputs.isolationTier, ov);
@@ -723,7 +832,7 @@ export function computeRollup(
       ? { tokenActuals: overlay.tokenActualsByRole }
       : undefined;
 
-    const per = perTransaction(it, inputs, ctx);
+    const per = perTransaction(it, inputs, ctx, ov, snapshotModelLookup);
     const fc = flowClassMap[it.flowClass];
 
     const localMult = LOCALIZED_CLASSES.has(it.flowClass) ? localizationMult : 1;
@@ -799,12 +908,16 @@ export function computeRollup(
     }
 
     // Build cost is amortized per flow class, scaled by landscape maturity.
-    const buildPerTxn = fc ? (fc.buildCostUsd * maturity.value) / fc.amortizationTransactions : 0;
+    // When a rate snapshot is present, use snapshot build costs and amortization denominators.
+    const snapshotFcRates = rateSnapshot?.flowBuildRates[it.flowClass];
+    const effectiveBuildCost = snapshotFcRates?.buildCostUsd ?? fc?.buildCostUsd ?? 0;
+    const effectiveAmortTxns = snapshotFcRates?.amortizationTransactions ?? fc?.amortizationTransactions ?? 1;
+    const buildPerTxn = fc ? (effectiveBuildCost * maturity.value) / effectiveAmortTxns : 0;
     if (fc) {
       // fcAmortFactor uses adopted (y1) volume so buildBreakdown.annualUsd reconciles with totals.buildCostUsd.
       fcAmortFactor.set(
         it.flowClass,
-        (fcAmortFactor.get(it.flowClass) ?? 0) + (txns * ramp[0]!) / fc.amortizationTransactions,
+        (fcAmortFactor.get(it.flowClass) ?? 0) + (txns * ramp[0]!) / effectiveAmortTxns,
       );
     }
 
@@ -866,8 +979,9 @@ export function computeRollup(
   }
 
   // Knowledge maintenance: fixed annual editorial cost per country for policy/frontier flows.
+  // When a snapshot is present, eff() resolves knowledge-maintenance-country from it.
   const kmAssumption = assumptionMap["knowledge-maintenance-country"]!;
-  const knowledgeMaintenanceUsd = kmAssumption.value * inputs.countries;
+  const knowledgeMaintenanceUsd = eff("knowledge-maintenance-country", ov) * inputs.countries;
   const localizedRows = rows.filter((r) => LOCALIZED_CLASSES.has(r.flowClass));
   const localizedTxns = localizedRows.reduce((a, r) => a + r.transactions, 0);
   for (const r of localizedRows) {
@@ -884,10 +998,11 @@ export function computeRollup(
 
   // Client onboarding: one-time setup amortized over the contract length,
   // allocated across all rows by transaction volume.
+  // eff() resolves onboarding rates from snapshot when present (scenario overrides > snapshot > code defaults).
   const onboardingTotal =
-    assumptionMap["onboarding-base"]!.value +
-    assumptionMap["onboarding-per-system"]!.value * inputs.numSystems +
-    assumptionMap["onboarding-per-country"]!.value * inputs.countries;
+    eff("onboarding-base", ov) +
+    eff("onboarding-per-system", ov) * inputs.numSystems +
+    eff("onboarding-per-country", ov) * inputs.countries;
   const onboardingAnnualUsd = onboardingTotal / Math.max(1, contractYears);
   const allTxns = rows.reduce((a, r) => a + r.transactions, 0);
   for (const r of rows) {
@@ -931,14 +1046,27 @@ export function computeRollup(
   // Component-level build breakdown: platform components decompose each flow-class
   // build cost; onboarding split by its three drivers. Annual amounts sum exactly
   // to totals.buildCostUsd.
+  // When a rate snapshot is present, component contributions are scaled proportionally
+  // to preserve reconciliation: each component keeps its share of the total per-FC cost.
   const buildBreakdown = [
     ...buildComponents.map((c) => {
+      // For each FC, if snapshot overrides buildCostUsd, scale this component proportionally.
+      const scaledPerFc = (fcKey: string): number => {
+        const base = c.perFlowClassUsd[fcKey] ?? 0;
+        const snapshotFc = rateSnapshot?.flowBuildRates[fcKey];
+        if (!snapshotFc) return base;
+        const originalFc = flowClassMap[fcKey];
+        const originalFcBuild = originalFc?.buildCostUsd ?? 0;
+        if (originalFcBuild === 0) return base;
+        // Scale component contribution by ratio of snapshot/original for this FC
+        return base * (snapshotFc.buildCostUsd / originalFcBuild);
+      };
       const oneTime =
         maturity.value *
-        Object.values(c.perFlowClassUsd).reduce((a, v) => a + v, 0);
+        Object.keys(c.perFlowClassUsd).reduce((a, fcKey) => a + scaledPerFc(fcKey), 0);
       let annual = 0;
       for (const [fcKey, factor] of fcAmortFactor) {
-        annual += (c.perFlowClassUsd[fcKey] ?? 0) * maturity.value * factor;
+        annual += scaledPerFc(fcKey) * maturity.value * factor;
       }
       return {
         key: c.key,
@@ -951,9 +1079,9 @@ export function computeRollup(
       };
     }),
     ...[
-      { a: assumptionMap["onboarding-base"]!,       total: assumptionMap["onboarding-base"]!.value },
-      { a: assumptionMap["onboarding-per-system"]!,  total: assumptionMap["onboarding-per-system"]!.value * inputs.numSystems },
-      { a: assumptionMap["onboarding-per-country"]!, total: assumptionMap["onboarding-per-country"]!.value * inputs.countries },
+      { a: assumptionMap["onboarding-base"]!,       total: eff("onboarding-base", ov) },
+      { a: assumptionMap["onboarding-per-system"]!,  total: eff("onboarding-per-system", ov) * inputs.numSystems },
+      { a: assumptionMap["onboarding-per-country"]!, total: eff("onboarding-per-country", ov) * inputs.countries },
     ].map(({ a, total }) => ({
       key: a.key,
       name: a.label,
@@ -1018,10 +1146,11 @@ export function computeRollup(
     ...(anyManualActions ? [assumptionMap["manual-action-minutes"]!] : []),
     // The effective model per role — tagged measured when overlay supplies token actuals.
     ...MODEL_ROLES.map((role): GlobalAssumption => {
-      const { price: effectivePrice, model, fromTokens } = pricePerCallWithOverlay(
+      const { price: effectivePrice, model, fromTokens } = pricePerCallFromSnapshot(
         role,
         inputs.modelSelection,
         overlay?.tokenActualsByRole,
+        snapshotModelLookup,
       );
       const tokenData = overlay?.tokenActualsByRole?.[role];
       return {
@@ -1091,9 +1220,19 @@ export function computeRollup(
         ? "measured"
         : "estimated";
 
-  const commercialAssumptions = resolveCommercialAssumptions(
-    inputs.commercialAssumptions,
-  );
+  // When a rate snapshot is present, its support defaults seed the commercial assumptions
+  // if not explicitly overridden by the scenario's commercialAssumptions.
+  const snapshotSupportDefaults = rateSnapshot
+    ? {
+        supportTeamFte: rateSnapshot.supportTeamFte,
+        supportHourlyCostUsd: rateSnapshot.supportHourlyCostUsd,
+        supportToolingAnnualUsdPerClient: rateSnapshot.supportToolingAnnualUsdPerClient,
+      }
+    : undefined;
+  const mergedCommercialInputs = snapshotSupportDefaults
+    ? { ...snapshotSupportDefaults, ...inputs.commercialAssumptions }
+    : inputs.commercialAssumptions;
+  const commercialAssumptions = resolveCommercialAssumptions(mergedCommercialInputs);
   const productBuildCostUsd = demarcationSplit.coreOneTimeUsd;
   const clientImplementationCostUsd = demarcationSplit.customOneTimeUsd;
   const annualKnowledgeMaintenanceCostUsd = knowledgeMaintenanceUsd;
@@ -1166,6 +1305,7 @@ export function computeRollup(
         : 0,
     assumptions: commercialAssumptions,
     tokenUsage,
+    ...(rateSetRef ? { rateSetReference: rateSetRef } : {}),
   };
 
   const fcLabels: Record<string, string> = {

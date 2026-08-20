@@ -21,6 +21,11 @@ import { systems } from "../data/systems";
 import { modelCatalog, MODEL_ROLES } from "../data/model-catalog";
 import type { Intent } from "../data/types";
 import { InputValidationError } from "./validate-inputs";
+import {
+  rateSnapshotAssumptionValue,
+  type PricingRateSnapshot,
+  type RateSetReference,
+} from "./pricing-rate-sets";
 
 const WORKBOOK_MARKER = "HRO-COST-SHADOW-V1";
 
@@ -119,15 +124,37 @@ const DEFAULT_SAMPLING: Record<string, number> = {
 };
 const LOCALIZED = new Set(["fc2-policy", "fc4-frontier"]);
 
-function effVal(key: string, inputs: ScenarioInputs): number {
-  return inputs.assumptionOverrides?.[key] ?? assumptionMap[key]!.value;
+function effVal(
+  key: string,
+  inputs: ScenarioInputs,
+  rateSnapshot?: PricingRateSnapshot,
+): number {
+  return (
+    inputs.assumptionOverrides?.[key] ??
+    (rateSnapshot
+      ? rateSnapshotAssumptionValue(rateSnapshot, key)
+      : undefined) ??
+    assumptionMap[key]!.value
+  );
 }
 
 /** Aggregates the engine's per-intent pricing into per-flow-class unit rates at a reference configuration. */
-function buildFcAggregates(inputs: ScenarioInputs, customIntents: Intent[]): FcAgg[] {
+function buildFcAggregates(
+  inputs: ScenarioInputs,
+  customIntents: Intent[],
+  rateSnapshot?: PricingRateSnapshot,
+  rateSetReference?: RateSetReference,
+): FcAgg[] {
   // Reference run: full adoption, no ramp, so unit rates divide out cleanly.
   const ref: ScenarioInputs = { ...inputs, adoptionRate: 1, adoptionRamp: undefined };
-  const rollup = computeRollup(ref, {}, undefined, customIntents);
+  const rollup = computeRollup(
+    ref,
+    {},
+    undefined,
+    customIntents,
+    rateSnapshot,
+    rateSetReference,
+  );
   const shares = computeShares(ref, customIntents);
   const allIntents = [...intents, ...customIntents];
 
@@ -172,6 +199,8 @@ function buildFcAggregates(inputs: ScenarioInputs, customIntents: Intent[]): FcA
 export async function buildScenarioWorkbook(
   inputs: ScenarioInputs,
   customIntents: Intent[] = [],
+  rateSnapshot?: PricingRateSnapshot,
+  rateSetReference?: RateSetReference,
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "HRO Intent Flow Cost-Benefit Explorer";
@@ -187,6 +216,14 @@ export async function buildScenarioWorkbook(
     WORKBOOK_MARKER,
     "HRO Intent Flow Cost-Benefit Explorer — shadow model",
     "",
+    ...(rateSetReference
+      ? [
+          "RATE SET USED",
+          `Rate set v${rateSetReference.rateSetId} · effective ${rateSetReference.effectiveDate}`,
+          rateSetReference.rationale,
+          "",
+        ]
+      : []),
     "HOW TO USE",
     "1. Edit the YELLOW cells only: Inputs, Flow Classes (containment / sampling overrides), Assumptions (override column),",
     "   Model Stack (model choice) and Systems (Integrated? = No for systems the client will not connect).",
@@ -243,12 +280,12 @@ export async function buildScenarioWorkbook(
   // ── Ref (lookup tables & reference multipliers) ──
   const ref = wb.addWorksheet("Ref");
   ref.state = "veryHidden";
-  const tierPooled = effVal("tier-pooled", inputs);
-  const tierSiloed = effVal("tier-siloed", inputs);
-  const tierDedicated = effVal("tier-dedicated", inputs);
+  const tierPooled = effVal("tier-pooled", inputs, rateSnapshot);
+  const tierSiloed = effVal("tier-siloed", inputs, rateSnapshot);
+  const tierDedicated = effVal("tier-dedicated", inputs, rateSnapshot);
   const refTier = inputs.isolationTier === "dedicated" ? tierDedicated : inputs.isolationTier === "siloed" ? tierSiloed : tierPooled;
-  const multi = effVal("company-multi-country", inputs);
-  const globalM = effVal("company-global", inputs);
+  const multi = effVal("company-multi-country", inputs, rateSnapshot);
+  const globalM = effVal("company-global", inputs, rateSnapshot);
   const refLoc = inputs.companyType === "global" ? globalM : inputs.companyType === "multi-country" ? multi : 1;
   const matClean = assumptionMap["maturity-clean"]!.value;
   const matMixed = assumptionMap["maturity-mixed"]!.value;
@@ -280,7 +317,12 @@ export async function buildScenarioWorkbook(
   const ADOPTION = `IF(${inpCell("adoptionRampY1")}<>"",${rampAvg},IF(${inpCell("adoptionRate")}="",0.71667,${inpCell("adoptionRate")}))`; // 0.71667 = avg of default 40/75/100 ramp
 
   // ── Flow Classes (the shadow engine) ──
-  const aggs = buildFcAggregates(inputs, customIntents);
+  const aggs = buildFcAggregates(
+    inputs,
+    customIntents,
+    rateSnapshot,
+    rateSetReference,
+  );
   const fcs = wb.addWorksheet("Flow Classes");
   fcs.columns = [
     { width: 18 }, { width: 28 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
@@ -328,15 +370,26 @@ export async function buildScenarioWorkbook(
   const asmRowIndex = new Map<string, number>();
   overridable.forEach((a, i) => {
     asmRowIndex.set(a.key, i + 2);
-    const row = asmSheet.addRow([a.key, a.label, a.unit, a.value, inputs.assumptionOverrides?.[a.key] ?? "", a.rationale]);
+    const registeredDefault =
+      (rateSnapshot
+        ? rateSnapshotAssumptionValue(rateSnapshot, a.key)
+        : undefined) ?? a.value;
+    const row = asmSheet.addRow([a.key, a.label, a.unit, registeredDefault, inputs.assumptionOverrides?.[a.key] ?? "", a.rationale]);
     Object.assign(row.getCell(5), edit);
     [1, 2, 3, 4, 6].forEach((c) => Object.assign(row.getCell(c), lock));
   });
   // Fixed annual costs referenced by Results (onboarding + knowledge maintenance use registry defaults; not user-overridable here).
-  const kmVal = assumptionMap["knowledge-maintenance-country"]!.value;
-  const obBase = assumptionMap["onboarding-base"]!.value;
-  const obSys = assumptionMap["onboarding-per-system"]!.value;
-  const obCty = assumptionMap["onboarding-per-country"]!.value;
+  const kmVal =
+    rateSnapshot?.knowledgeMaintenancePerCountry ??
+    assumptionMap["knowledge-maintenance-country"]!.value;
+  const obBase =
+    rateSnapshot?.onboardingBase ?? assumptionMap["onboarding-base"]!.value;
+  const obSys =
+    rateSnapshot?.onboardingPerSystem ??
+    assumptionMap["onboarding-per-system"]!.value;
+  const obCty =
+    rateSnapshot?.onboardingPerCountry ??
+    assumptionMap["onboarding-per-country"]!.value;
 
   // ── Model Stack ──
   const ms = wb.addWorksheet("Model Stack");
@@ -346,7 +399,12 @@ export async function buildScenarioWorkbook(
     const opts = modelCatalog.filter((m) => m.role === role);
     const row = ms.addRow([
       role,
-      opts.map((o) => `${o.key} — $${o.pricePerCallUsd}`).join("  |  "),
+      opts.map((o) => {
+        const price =
+          rateSnapshot?.modelRates[o.key]?.pricePerCallUsd ??
+          o.pricePerCallUsd;
+        return `${o.key} — $${price}`;
+      }).join("  |  "),
       inputs.modelSelection?.[role] ?? "",
       "Blank = engine default. Model choice reprices AI steps exactly on re-import (spreadsheet totals do not reprice).",
     ]);

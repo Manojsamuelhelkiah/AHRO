@@ -443,6 +443,22 @@ export interface TokenUsage {
 }
 
 /**
+ * Metadata identifying which pricing rate set snapshot was used to generate a rollup or quote.
+ */
+export interface RateSetReference {
+  /** Version sequence id of the rate set. */
+  rateSetId: number;
+  /** YYYY-MM-DD calendar date from which this rate set is effective. */
+  effectiveDate: string;
+  /** Human-readable rationale for this rate set version. */
+  rationale: string;
+  /** Display name of the author who created this version. */
+  createdBy: string;
+  /** ISO 8601 timestamp when this version was created. */
+  createdAt: string;
+}
+
+/**
  * Supplier-side pricing summary. This is deliberately separate from the client's cost-benefit ROI in totals.
  */
 export interface CommercialSummary {
@@ -490,6 +506,8 @@ export interface CommercialSummary {
   plannedPaybackMonths: number;
   assumptions: CommercialAssumptions;
   tokenUsage: TokenUsage;
+  /** Metadata identifying which rate set snapshot was used. Present only when a rate snapshot was loaded. */
+  rateSetReference?: RateSetReference;
 }
 
 /**
@@ -1574,6 +1592,58 @@ export interface UpdateOnbSettings {
   autoEscalationCalls?: boolean;
   /** New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged. */
   hrApproverEmail?: string | null;
+}
+
+/**
+ * Complete pricing rate snapshot (all quote-critical rates).
+ */
+export type PricingRateSetVersionRates = { [key: string]: unknown };
+
+/**
+ * A single immutable pricing rate set version.
+ */
+export interface PricingRateSetVersion {
+  /** Version sequence id (highest effective-date <= today is current). */
+  id: number;
+  /** YYYY-MM-DD calendar date this version is effective from. */
+  effectiveDate: string;
+  /** Human-readable rationale for this version. */
+  rationale: string;
+  /** Complete pricing rate snapshot (all quote-critical rates). */
+  rates: PricingRateSetVersionRates;
+  /** Display name of the author resolved at write time. */
+  createdBy: string;
+  /** ISO 8601 creation timestamp. */
+  createdAt: string;
+}
+
+/**
+ * The full pricing rate register — current snapshot and complete version history.
+ */
+export interface PricingRateRegister {
+  /** The current effective rate set (null when none exists yet). */
+  current: PricingRateSetVersion | null;
+  /** All versions, newest first. */
+  versions: PricingRateSetVersion[];
+  /** Whether the signed-in user may publish immutable global rate versions. */
+  canManage: boolean;
+}
+
+/**
+ * Complete pricing rate snapshot. All quote-critical keys are required; missing or unsafe values block save.
+ */
+export type PricingRateSetInputRates = { [key: string]: unknown };
+
+/**
+ * Body for creating a new pricing rate set version.
+ */
+export interface PricingRateSetInput {
+  /** YYYY-MM-DD calendar date this version takes effect. May be in the future (scheduled). */
+  effectiveDate: string;
+  /** Non-blank rationale explaining why this version was created. */
+  rationale: string;
+  /** Complete pricing rate snapshot. All quote-critical keys are required; missing or unsafe values block save. */
+  rates: PricingRateSetInputRates;
 }
 
 export type ListCustomIntentsParams = {

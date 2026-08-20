@@ -16,6 +16,11 @@ import { loadActiveFlowOverrides } from "./flow-overrides";
 import { loadActiveCustomIntents } from "./custom-intents";
 import { validateScenarioInputs, InputValidationError } from "../lib/validate-inputs";
 import type { ActualsOverlay } from "../data/types";
+import {
+  loadAndValidateCurrentRateSet,
+  ensureBaselineRateSet,
+  type RateSetReference,
+} from "../lib/pricing-rate-sets";
 
 const router: IRouter = Router();
 
@@ -129,6 +134,19 @@ router.delete("/scenarios/:id", async (req, res, next) => {
 router.post("/rollup", async (req, res, next) => {
   try {
     const body = ComputeRollupBody.parse(req.body);
+
+    // Seed baseline if no rate sets exist, then load and validate the current snapshot.
+    // This must happen before any compute so both passes use exactly the same snapshot.
+    await ensureBaselineRateSet();
+    const currentRateSet = await loadAndValidateCurrentRateSet();
+    const rateSetRef: RateSetReference = {
+      rateSetId: currentRateSet.id,
+      effectiveDate: currentRateSet.effectiveDate,
+      rationale: currentRateSet.rationale,
+      createdBy: currentRateSet.createdBy,
+      createdAt: currentRateSet.createdAt.toISOString(),
+    };
+
     const [overrides, customIntents] = await Promise.all([
       loadActiveFlowOverrides(),
       loadActiveCustomIntents(),
@@ -153,8 +171,9 @@ router.post("/rollup", async (req, res, next) => {
 
     if (overlay) {
       // Two-pass: estimate without overlay, then compute with overlay, diff for variance.
-      const estimated = computeRollup(inputs, overrides, undefined, customIntents);
-      const actual = computeRollup(inputs, overrides, overlay, customIntents);
+      // Both passes use the SAME rate snapshot loaded above.
+      const estimated = computeRollup(inputs, overrides, undefined, customIntents, currentRateSet.rates, rateSetRef);
+      const actual = computeRollup(inputs, overrides, overlay, customIntents, currentRateSet.rates, rateSetRef);
       const variance = computeVariance(estimated, actual);
       const response = {
         ...actual,
@@ -164,7 +183,7 @@ router.post("/rollup", async (req, res, next) => {
       };
       res.json(ComputeRollupResponse.parse(response));
     } else {
-      const rollup = computeRollup(inputs, overrides, undefined, customIntents);
+      const rollup = computeRollup(inputs, overrides, undefined, customIntents, currentRateSet.rates, rateSetRef);
       res.json(ComputeRollupResponse.parse(rollup));
     }
   } catch (err) {

@@ -7,6 +7,10 @@
 import { computeRollup, OVERRIDABLE_ASSUMPTION_KEYS, type ScenarioInputs, type FlowOverrideValues } from "./rollup";
 import { assumptionMap } from "../data/assumptions";
 import type { ActualsOverlay, Intent } from "../data/types";
+import {
+  rateSnapshotAssumptionValue,
+  type PricingRateSnapshot,
+} from "./pricing-rate-sets";
 
 const NUDGE = 0.2;
 
@@ -45,11 +49,12 @@ export function computeSensitivity(
   overrides?: Record<string, FlowOverrideValues>,
   customIntents: Intent[] = [],
   overlay?: ActualsOverlay,
+  rateSnapshot?: PricingRateSnapshot,
 ): SensitivityResult {
   // Overlay (measured actuals) is held constant across baseline and every
   // nudge, so the tornado matches the calibrated rollup on screen.
   const net = (v: ScenarioInputs) =>
-    computeRollup(v, overrides, overlay, customIntents).totals.netUsd;
+    computeRollup(v, overrides, overlay, customIntents, rateSnapshot).totals.netUsd;
   const baseline = net(inputs);
 
   const rows: SensitivityRow[] = [];
@@ -75,7 +80,12 @@ export function computeSensitivity(
   for (const key of OVERRIDABLE_ASSUMPTION_KEYS) {
     const def = assumptionMap[key];
     if (!def) continue;
-    const base = inputs.assumptionOverrides?.[key] ?? def.value;
+    const base =
+      inputs.assumptionOverrides?.[key] ??
+      (rateSnapshot
+        ? rateSnapshotAssumptionValue(rateSnapshot, key)
+        : undefined) ??
+      def.value;
     if (base === 0) continue; // ±20% of zero moves nothing
     push(key, def.label, "assumption", base, (f) => ({
       ...inputs,

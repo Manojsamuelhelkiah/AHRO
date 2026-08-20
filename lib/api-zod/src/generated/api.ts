@@ -1152,7 +1152,14 @@ export const ComputeRollupResponse = zod.object({
   "annualOutputTokens": zod.number(),
   "annualTotalTokens": zod.number(),
   "basis": zod.enum(['estimated', 'mixed', 'measured']).describe('Whether role-level token profiles came from architecture estimates, calibrated logs, or both.')
-})
+}),
+  "rateSetReference": zod.object({
+  "rateSetId": zod.number().describe('Version sequence id of the rate set.'),
+  "effectiveDate": zod.string().describe('YYYY-MM-DD calendar date from which this rate set is effective.'),
+  "rationale": zod.string().describe('Human-readable rationale for this rate set version.'),
+  "createdBy": zod.string().describe('Display name of the author who created this version.'),
+  "createdAt": zod.string().describe('ISO 8601 timestamp when this version was created.')
+}).optional().describe('Metadata identifying which rate set snapshot was used. Present only when a rate snapshot was loaded.')
 }).describe('Supplier-side pricing summary. This is deliberately separate from the client\'s cost-benefit ROI in totals.'),
   "appliedAssumptions": zod.array(zod.object({
   "key": zod.string(),
@@ -2205,6 +2212,8 @@ export const GetOnboardingSettingsResponse = zod.object({
   "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet'),
   "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them')
 })
+
+
 /**
  * @summary Update app settings (set or clear the HR alert email address)
  */
@@ -2222,3 +2231,46 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "autoEscalationCalls": zod.boolean().describe('When true, the System Watcher automatically places the SLA escalation voice call for hires who have gone quiet'),
   "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them')
 })
+
+
+/**
+ * @summary Get the pricing rate register (current version and full history)
+ */
+export const ListPricingRateSetsResponse = zod.object({
+  "current": zod.object({
+  "id": zod.number().describe('Version sequence id (highest effective-date <= today is current).'),
+  "effectiveDate": zod.string().describe('YYYY-MM-DD calendar date this version is effective from.'),
+  "rationale": zod.string().describe('Human-readable rationale for this version.'),
+  "rates": zod.record(zod.string(), zod.unknown()).describe('Complete pricing rate snapshot (all quote-critical rates).'),
+  "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
+  "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
+}).nullable().describe('The current effective rate set (null when none exists yet).'),
+  "versions": zod.array(zod.object({
+  "id": zod.number().describe('Version sequence id (highest effective-date <= today is current).'),
+  "effectiveDate": zod.string().describe('YYYY-MM-DD calendar date this version is effective from.'),
+  "rationale": zod.string().describe('Human-readable rationale for this version.'),
+  "rates": zod.record(zod.string(), zod.unknown()).describe('Complete pricing rate snapshot (all quote-critical rates).'),
+  "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
+  "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
+}).describe('A single immutable pricing rate set version.')).describe('All versions, newest first.'),
+  "canManage": zod.boolean().describe('Whether the signed-in user may publish immutable global rate versions.')
+}).describe('The full pricing rate register — current snapshot and complete version history.')
+
+
+/**
+ * @summary Create a new immutable pricing rate set version
+ */
+export const CreatePricingRateSetBody = zod.object({
+  "effectiveDate": zod.string().describe('YYYY-MM-DD calendar date this version takes effect. May be in the future (scheduled).'),
+  "rationale": zod.string().describe('Non-blank rationale explaining why this version was created.'),
+  "rates": zod.record(zod.string(), zod.unknown()).describe('Complete pricing rate snapshot. All quote-critical keys are required; missing or unsafe values block save.')
+}).describe('Body for creating a new pricing rate set version.')
+
+export const CreatePricingRateSetResponse = zod.object({
+  "id": zod.number().describe('Version sequence id (highest effective-date <= today is current).'),
+  "effectiveDate": zod.string().describe('YYYY-MM-DD calendar date this version is effective from.'),
+  "rationale": zod.string().describe('Human-readable rationale for this version.'),
+  "rates": zod.record(zod.string(), zod.unknown()).describe('Complete pricing rate snapshot (all quote-critical rates).'),
+  "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
+  "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
+}).describe('A single immutable pricing rate set version.')

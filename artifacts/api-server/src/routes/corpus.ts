@@ -16,6 +16,7 @@ import { modelCatalog } from "../data/model-catalog";
 import { loadActiveCustomIntents, rowToIntent } from "./custom-intents";
 import { db, customIntentsTable } from "@workspace/db";
 import type { Intent } from "../data/types";
+import { loadCurrentRateSet } from "../lib/pricing-rate-sets";
 
 const router: IRouter = Router();
 
@@ -55,8 +56,28 @@ router.get("/profiles", (_req, res) => {
   res.json(ListDistributionProfilesResponse.parse(profiles));
 });
 
-router.get("/model-catalog", (_req, res) => {
-  res.json(ListModelCatalogResponse.parse(modelCatalog));
+router.get("/model-catalog", async (_req, res, next) => {
+  try {
+    const currentRateSet = await loadCurrentRateSet();
+    if (currentRateSet) {
+      // Overlay snapshot rates onto the catalog entries so the GET reflects current prices.
+      const overlaid = modelCatalog.map((m) => {
+        const sr = currentRateSet.rates.modelRates?.[m.key];
+        if (!sr) return m;
+        return {
+          ...m,
+          pricePerCallUsd: sr.pricePerCallUsd,
+          inputPricePerMillionTokens: sr.inputPricePerMillionTokens,
+          outputPricePerMillionTokens: sr.outputPricePerMillionTokens,
+        };
+      });
+      res.json(ListModelCatalogResponse.parse(overlaid));
+    } else {
+      res.json(ListModelCatalogResponse.parse(modelCatalog));
+    }
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.get("/assumptions", (_req, res) => {

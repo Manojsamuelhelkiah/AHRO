@@ -42,3 +42,57 @@ export async function resolveReviewerName(userId: string): Promise<string> {
   }
   return userId;
 }
+
+export function hasCommercialRateManagerPermission(
+  privateMetadata: unknown,
+): boolean {
+  return (
+    typeof privateMetadata === "object" &&
+    privateMetadata !== null &&
+    (privateMetadata as Record<string, unknown>).commercialRateManager === true
+  );
+}
+
+export async function userCanManagePricingRates(userId: string): Promise<boolean> {
+  try {
+    const user = await clerkClient.users.getUser(userId);
+    return hasCommercialRateManagerPermission(user.privateMetadata);
+  } catch {
+    return false;
+  }
+}
+
+type RateManagerPermissionCheck = (userId: string) => Promise<boolean>;
+
+export function createPricingRateManagerGuard(
+  checkPermission: RateManagerPermissionCheck = userCanManagePricingRates,
+) {
+  return async function requirePricingRateManager(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    const userId = req.authUserId;
+    if (!userId) {
+      res.status(401).json({ message: "Authentication required" });
+      return;
+    }
+
+    let allowed = false;
+    try {
+      allowed = await checkPermission(userId);
+    } catch {
+      // Authorization lookups fail closed: commercial master data must never
+      // become writable merely because the identity provider is unavailable.
+    }
+    if (!allowed) {
+      res.status(403).json({
+        message: "Commercial rate manager permission required",
+      });
+      return;
+    }
+    next();
+  };
+}
+
+export const requirePricingRateManager = createPricingRateManagerGuard();

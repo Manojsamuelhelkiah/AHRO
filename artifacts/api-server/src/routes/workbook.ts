@@ -5,6 +5,11 @@ import { buildScenarioWorkbook, parseScenarioWorkbook } from "../lib/workbook";
 import { validateScenarioInputs, InputValidationError } from "../lib/validate-inputs";
 import { loadActiveCustomIntents } from "./custom-intents";
 import type { ScenarioInputs } from "../lib/rollup";
+import {
+  ensureBaselineRateSet,
+  loadAndValidateCurrentRateSet,
+  type RateSetReference,
+} from "../lib/pricing-rate-sets";
 
 const router: IRouter = Router();
 
@@ -12,9 +17,25 @@ const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 async function sendWorkbook(inputs: ScenarioInputs, res: Parameters<Parameters<IRouter["post"]>[1]>[1]) {
-  const customIntents = await loadActiveCustomIntents();
+  await ensureBaselineRateSet();
+  const [customIntents, currentRateSet] = await Promise.all([
+    loadActiveCustomIntents(),
+    loadAndValidateCurrentRateSet(),
+  ]);
   validateScenarioInputs(inputs, new Set(customIntents.map((i) => i.key)));
-  const buffer = await buildScenarioWorkbook(inputs, customIntents);
+  const rateSetReference: RateSetReference = {
+    rateSetId: currentRateSet.id,
+    effectiveDate: currentRateSet.effectiveDate,
+    rationale: currentRateSet.rationale,
+    createdBy: currentRateSet.createdBy,
+    createdAt: currentRateSet.createdAt.toISOString(),
+  };
+  const buffer = await buildScenarioWorkbook(
+    inputs,
+    customIntents,
+    currentRateSet.rates,
+    rateSetReference,
+  );
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", 'attachment; filename="hro-cost-shadow.xlsx"');
   res.send(buffer);

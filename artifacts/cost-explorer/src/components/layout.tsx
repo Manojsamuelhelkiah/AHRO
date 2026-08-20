@@ -13,8 +13,10 @@ import {
   FlaskConical,
   DollarSign,
   BadgeDollarSign,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { UserButton, Show } from "@clerk/react";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -28,6 +30,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Compare Scenarios", href: "/compare", icon: GitCompareArrows },
     { name: "Commercial Pricing", href: "/pricing", icon: DollarSign },
     { name: "Product Pricing", href: "/product-pricing", icon: BadgeDollarSign },
+    { name: "Unit Rate Register", href: "/rates", icon: BookOpen },
     { name: "Global Assumptions", href: "/assumptions", icon: Settings2 },
     { name: "Calibration", href: "/calibration", icon: FlaskConical },
   ];
@@ -97,10 +100,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="p-4 border-t border-sidebar-border flex items-center justify-between">
           <div className="text-xs text-sidebar-foreground/40 font-mono">
             v2.5.0 — Architecture Ref
           </div>
+          <Show when="signed-in">
+            <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8" } }} />
+          </Show>
+          <Show when="signed-out">
+            <Link href="/sign-in" className="text-xs font-medium text-primary hover:underline">
+              Sign In
+            </Link>
+          </Show>
         </div>
       </div>
 
