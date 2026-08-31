@@ -11,6 +11,7 @@ import slideDeckRouter from "./slide-deck";
 import onboardingRouter from "./onboarding";
 import pricingRateSetsRouter from "./pricing-rate-sets";
 import pricingSheetsRouter from "./pricing-sheets";
+import enterpriseArchitectureRouter from "./enterprise-architecture";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(pricingSheetsRouter);
 router.use(slideDeckRouter);
 router.use(onboardingRouter);
 router.use(pricingRateSetsRouter);
+router.use(enterpriseArchitectureRouter);
 
 export default router;

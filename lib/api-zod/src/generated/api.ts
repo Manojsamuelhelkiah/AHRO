@@ -9,6 +9,4150 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Derive the reusable solution baseline from the current corpus
+ */
+export const getEnterpriseArchitectureBaselineResponseViewpointsMin = 8;
+export const getEnterpriseArchitectureBaselineResponseViewpointsMax = 8;
+
+
+
+export const GetEnterpriseArchitectureBaselineResponse = zod.object({
+  "generatedAt": zod.string(),
+  "viewpoints": zod.array(zod.object({
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "summary": zod.string(),
+  "buildingBlocks": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "sourceType": zod.enum(['intent', 'flow-class', 'system', 'model', 'assumption', 'pricing-architecture'])
+}))
+})).min(getEnterpriseArchitectureBaselineResponseViewpointsMin).max(getEnterpriseArchitectureBaselineResponseViewpointsMax),
+  "sourceCounts": zod.object({
+  "intents": zod.number(),
+  "flowClasses": zod.number(),
+  "systems": zod.number(),
+  "models": zod.number(),
+  "assumptions": zod.number()
+})
+})
+
+
+/**
+ * @summary List assessments owned by the signed-in user
+ */
+export const ListEaAssessmentsQueryParams = zod.object({
+  "status": zod.enum(['active', 'archived']).optional()
+})
+
+export const listEaAssessmentsResponseOneNameMax = 200;
+
+export const listEaAssessmentsResponseOneClientNameMax = 200;
+
+export const listEaAssessmentsResponseOneContentPhaseProgressItemCompletionPercentMin = 0;
+export const listEaAssessmentsResponseOneContentPhaseProgressItemCompletionPercentMax = 100;
+
+export const listEaAssessmentsResponseOneContentPhaseProgressMin = 10;
+export const listEaAssessmentsResponseOneContentPhaseProgressMax = 10;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMax = 5;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMax = 5;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
+export const listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
+
+export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
+
+
+
+export const listEaAssessmentsResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemValueMin = 0;
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemValueMax = 5;
+
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemRiskMin = 0;
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemRiskMax = 5;
+
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemUrgencyMin = 0;
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemUrgencyMax = 5;
+
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemDependencyMin = 0;
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemDependencyMax = 5;
+
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemReadinessMin = 0;
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemReadinessMax = 5;
+
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMin = 0;
+export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const listEaAssessmentsResponseOneContentRisksItemLikelihoodMax = 5;
+
+export const listEaAssessmentsResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
+
+
+export const ListEaAssessmentsResponseItem = zod.object({
+  "name": zod.string().min(1).max(listEaAssessmentsResponseOneNameMax),
+  "clientName": zod.string().min(1).max(listEaAssessmentsResponseOneClientNameMax),
+  "currentPhase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "content": zod.object({
+  "phaseProgress": zod.array(zod.object({
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "status": zod.enum(['not-started', 'in-progress', 'complete', 'blocked']),
+  "completionPercent": zod.number().min(listEaAssessmentsResponseOneContentPhaseProgressItemCompletionPercentMin).max(listEaAssessmentsResponseOneContentPhaseProgressItemCompletionPercentMax),
+  "notes": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})).min(listEaAssessmentsResponseOneContentPhaseProgressMin).max(listEaAssessmentsResponseOneContentPhaseProgressMax),
+  "requirements": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "stakeholder": zod.string(),
+  "concern": zod.string(),
+  "priority": zod.enum(['low', 'medium', 'high', 'critical']),
+  "status": zod.enum(['proposed', 'approved', 'implemented', 'verified', 'rejected']),
+  "acceptanceCriteria": zod.array(zod.string()),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "currentState": zod.object({
+  "business": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "data": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "application": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "technology": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "integration": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "ai": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "security": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "operatingModel": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMin).max(listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+}))
+}),
+  "gaps": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "impact": zod.string(),
+  "recommendation": zod.string(),
+  "targetBuildingBlockId": zod.string(),
+  "implementationDependencyIds": zod.array(zod.string()),
+  "disposition": zod.enum(['open', 'accepted', 'mitigated', 'deferred', 'closed']),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "targetArchitecture": zod.object({
+  "components": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "componentType": zod.string().min(1),
+  "description": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'implementing', 'live', 'retired']),
+  "owner": zod.string(),
+  "addressesGapIds": zod.array(zod.string()),
+  "deliveredByWorkPackageIds": zod.array(zod.string())
+})),
+  "relationships": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "sourceComponentId": zod.string().min(1),
+  "targetComponentId": zod.string().min(1),
+  "relationshipType": zod.string().min(1),
+  "description": zod.string()
+}))
+}),
+  "opportunities": zod.object({
+  "solutionOptions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "approach": zod.enum(['build', 'buy', 'reuse', 'hybrid']),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "benefits": zod.array(zod.string()),
+  "constraints": zod.array(zod.string()),
+  "score": zod.number(),
+  "selected": zod.boolean()
+})),
+  "transitionArchitectures": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "description": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "entryCriteria": zod.array(zod.string()),
+  "exitCriteria": zod.array(zod.string())
+}))
+}),
+  "roadmap": zod.object({
+  "workPackages": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "outcomes": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "status": zod.enum(['planned', 'ready', 'in-progress', 'blocked', 'complete']),
+  "sequence": zod.number().min(listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemSequenceMin),
+  "estimatedCost": zod.number().min(listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin)
+})),
+  "waves": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "sequence": zod.number().min(listEaAssessmentsResponseOneContentRoadmapWavesItemSequenceMin),
+  "transitionArchitectureId": zod.string(),
+  "workPackageIds": zod.array(zod.string()),
+  "startDate": zod.string(),
+  "endDate": zod.string()
+})),
+  "dependencies": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "predecessorWorkPackageId": zod.string().min(1),
+  "successorWorkPackageId": zod.string().min(1),
+  "dependencyType": zod.enum(['finish-start', 'start-start', 'external']),
+  "notes": zod.string()
+})),
+  "prioritization": zod.array(zod.object({
+  "workPackageId": zod.string().min(1),
+  "value": zod.number().min(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemValueMin).max(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemValueMax),
+  "risk": zod.number().min(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemRiskMin).max(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemRiskMax),
+  "urgency": zod.number().min(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemUrgencyMin).max(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemUrgencyMax),
+  "dependency": zod.number().min(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemDependencyMin).max(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemDependencyMax),
+  "readiness": zod.number().min(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemReadinessMin).max(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemReadinessMax),
+  "cost": zod.number().min(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMin).max(listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMax),
+  "totalScore": zod.number(),
+  "rationale": zod.string()
+}))
+}),
+  "governance": zod.object({
+  "contracts": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "deviations": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "waivers": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "remediation": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+}))
+}),
+  "changeManagement": zod.object({
+  "requests": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "requestedBy": zod.string(),
+  "status": zod.enum(['submitted', 'assessing', 'approved', 'rejected', 'implemented']),
+  "classification": zod.enum(['minor', 'new-cycle']),
+  "impact": zod.object({
+  "baseline": zod.string(),
+  "targetState": zod.string(),
+  "roadmap": zod.string(),
+  "cost": zod.string(),
+  "affectedIds": zod.array(zod.string())
+})
+})),
+  "versionHistory": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "version": zod.string().min(1),
+  "description": zod.string(),
+  "approvedAt": zod.string(),
+  "approvedBy": zod.string(),
+  "changeRequestIds": zod.array(zod.string())
+}))
+}),
+  "decisions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "decision": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'superseded']),
+  "owner": zod.string(),
+  "decidedAt": zod.string(),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "likelihood": zod.number().min(1).max(listEaAssessmentsResponseOneContentRisksItemLikelihoodMax),
+  "impact": zod.number().min(1).max(listEaAssessmentsResponseOneContentRisksItemImpactMax),
+  "mitigation": zod.string(),
+  "owner": zod.string(),
+  "status": zod.enum(['open', 'mitigating', 'accepted', 'closed'])
+})),
+  "costLinks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "linkType": zod.enum(['scenario', 'pricing-sheet']),
+  "linkedRecordId": zod.number().min(1),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "scopeSnapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.string()
+}))
+})
+}).and(zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "version": zod.number().min(1),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "archivedAt": zod.string().nullable()
+}))
+export const ListEaAssessmentsResponse = zod.array(ListEaAssessmentsResponseItem)
+
+
+/**
+ * @summary Create an owned assessment
+ */
+export const createEaAssessmentBodyNameMax = 200;
+
+export const createEaAssessmentBodyClientNameMax = 200;
+
+export const createEaAssessmentBodyContentPhaseProgressItemCompletionPercentMin = 0;
+export const createEaAssessmentBodyContentPhaseProgressItemCompletionPercentMax = 100;
+
+export const createEaAssessmentBodyContentPhaseProgressMin = 10;
+export const createEaAssessmentBodyContentPhaseProgressMax = 10;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateDataItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateDataItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateAiItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateAiItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin = 0;
+export const createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const createEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0;
+
+export const createEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
+
+
+
+export const createEaAssessmentBodyContentRoadmapWavesItemSequenceMin = 0;
+
+
+
+
+
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemValueMin = 0;
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemValueMax = 5;
+
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemRiskMin = 0;
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemRiskMax = 5;
+
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMin = 0;
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMax = 5;
+
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMin = 0;
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMax = 5;
+
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMin = 0;
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMax = 5;
+
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemCostMin = 0;
+export const createEaAssessmentBodyContentRoadmapPrioritizationItemCostMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const createEaAssessmentBodyContentRisksItemLikelihoodMax = 5;
+
+export const createEaAssessmentBodyContentRisksItemImpactMax = 5;
+
+
+
+
+
+export const CreateEaAssessmentBody = zod.object({
+  "name": zod.string().min(1).max(createEaAssessmentBodyNameMax),
+  "clientName": zod.string().min(1).max(createEaAssessmentBodyClientNameMax),
+  "currentPhase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "content": zod.object({
+  "phaseProgress": zod.array(zod.object({
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "status": zod.enum(['not-started', 'in-progress', 'complete', 'blocked']),
+  "completionPercent": zod.number().min(createEaAssessmentBodyContentPhaseProgressItemCompletionPercentMin).max(createEaAssessmentBodyContentPhaseProgressItemCompletionPercentMax),
+  "notes": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})).min(createEaAssessmentBodyContentPhaseProgressMin).max(createEaAssessmentBodyContentPhaseProgressMax),
+  "requirements": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "stakeholder": zod.string(),
+  "concern": zod.string(),
+  "priority": zod.enum(['low', 'medium', 'high', 'critical']),
+  "status": zod.enum(['proposed', 'approved', 'implemented', 'verified', 'rejected']),
+  "acceptanceCriteria": zod.array(zod.string()),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "currentState": zod.object({
+  "business": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "data": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateDataItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateDataItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "application": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "technology": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "integration": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "ai": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateAiItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateAiItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "security": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "operatingModel": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin).max(createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+}))
+}),
+  "gaps": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "impact": zod.string(),
+  "recommendation": zod.string(),
+  "targetBuildingBlockId": zod.string(),
+  "implementationDependencyIds": zod.array(zod.string()),
+  "disposition": zod.enum(['open', 'accepted', 'mitigated', 'deferred', 'closed']),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "targetArchitecture": zod.object({
+  "components": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "componentType": zod.string().min(1),
+  "description": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'implementing', 'live', 'retired']),
+  "owner": zod.string(),
+  "addressesGapIds": zod.array(zod.string()),
+  "deliveredByWorkPackageIds": zod.array(zod.string())
+})),
+  "relationships": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "sourceComponentId": zod.string().min(1),
+  "targetComponentId": zod.string().min(1),
+  "relationshipType": zod.string().min(1),
+  "description": zod.string()
+}))
+}),
+  "opportunities": zod.object({
+  "solutionOptions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "approach": zod.enum(['build', 'buy', 'reuse', 'hybrid']),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "benefits": zod.array(zod.string()),
+  "constraints": zod.array(zod.string()),
+  "score": zod.number(),
+  "selected": zod.boolean()
+})),
+  "transitionArchitectures": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "description": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "entryCriteria": zod.array(zod.string()),
+  "exitCriteria": zod.array(zod.string())
+}))
+}),
+  "roadmap": zod.object({
+  "workPackages": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "outcomes": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "status": zod.enum(['planned', 'ready', 'in-progress', 'blocked', 'complete']),
+  "sequence": zod.number().min(createEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin),
+  "estimatedCost": zod.number().min(createEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin)
+})),
+  "waves": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "sequence": zod.number().min(createEaAssessmentBodyContentRoadmapWavesItemSequenceMin),
+  "transitionArchitectureId": zod.string(),
+  "workPackageIds": zod.array(zod.string()),
+  "startDate": zod.string(),
+  "endDate": zod.string()
+})),
+  "dependencies": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "predecessorWorkPackageId": zod.string().min(1),
+  "successorWorkPackageId": zod.string().min(1),
+  "dependencyType": zod.enum(['finish-start', 'start-start', 'external']),
+  "notes": zod.string()
+})),
+  "prioritization": zod.array(zod.object({
+  "workPackageId": zod.string().min(1),
+  "value": zod.number().min(createEaAssessmentBodyContentRoadmapPrioritizationItemValueMin).max(createEaAssessmentBodyContentRoadmapPrioritizationItemValueMax),
+  "risk": zod.number().min(createEaAssessmentBodyContentRoadmapPrioritizationItemRiskMin).max(createEaAssessmentBodyContentRoadmapPrioritizationItemRiskMax),
+  "urgency": zod.number().min(createEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMin).max(createEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMax),
+  "dependency": zod.number().min(createEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMin).max(createEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMax),
+  "readiness": zod.number().min(createEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMin).max(createEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMax),
+  "cost": zod.number().min(createEaAssessmentBodyContentRoadmapPrioritizationItemCostMin).max(createEaAssessmentBodyContentRoadmapPrioritizationItemCostMax),
+  "totalScore": zod.number(),
+  "rationale": zod.string()
+}))
+}),
+  "governance": zod.object({
+  "contracts": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "deviations": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "waivers": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "remediation": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+}))
+}),
+  "changeManagement": zod.object({
+  "requests": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "requestedBy": zod.string(),
+  "status": zod.enum(['submitted', 'assessing', 'approved', 'rejected', 'implemented']),
+  "classification": zod.enum(['minor', 'new-cycle']),
+  "impact": zod.object({
+  "baseline": zod.string(),
+  "targetState": zod.string(),
+  "roadmap": zod.string(),
+  "cost": zod.string(),
+  "affectedIds": zod.array(zod.string())
+})
+})),
+  "versionHistory": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "version": zod.string().min(1),
+  "description": zod.string(),
+  "approvedAt": zod.string(),
+  "approvedBy": zod.string(),
+  "changeRequestIds": zod.array(zod.string())
+}))
+}),
+  "decisions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "decision": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'superseded']),
+  "owner": zod.string(),
+  "decidedAt": zod.string(),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "likelihood": zod.number().min(1).max(createEaAssessmentBodyContentRisksItemLikelihoodMax),
+  "impact": zod.number().min(1).max(createEaAssessmentBodyContentRisksItemImpactMax),
+  "mitigation": zod.string(),
+  "owner": zod.string(),
+  "status": zod.enum(['open', 'mitigating', 'accepted', 'closed'])
+})),
+  "costLinks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "linkType": zod.enum(['scenario', 'pricing-sheet']),
+  "linkedRecordId": zod.number().min(1),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "scopeSnapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.string()
+}))
+})
+})
+
+export const createEaAssessmentResponseOneNameMax = 200;
+
+export const createEaAssessmentResponseOneClientNameMax = 200;
+
+export const createEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin = 0;
+export const createEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax = 100;
+
+export const createEaAssessmentResponseOneContentPhaseProgressMin = 10;
+export const createEaAssessmentResponseOneContentPhaseProgressMax = 10;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
+export const createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
+
+export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
+
+
+
+export const createEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
+
+
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax = 5;
+
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin = 0;
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax = 5;
+
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin = 0;
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax = 5;
+
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin = 0;
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax = 5;
+
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin = 0;
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax = 5;
+
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin = 0;
+export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const createEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
+
+export const createEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
+
+
+export const CreateEaAssessmentResponse = zod.object({
+  "name": zod.string().min(1).max(createEaAssessmentResponseOneNameMax),
+  "clientName": zod.string().min(1).max(createEaAssessmentResponseOneClientNameMax),
+  "currentPhase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "content": zod.object({
+  "phaseProgress": zod.array(zod.object({
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "status": zod.enum(['not-started', 'in-progress', 'complete', 'blocked']),
+  "completionPercent": zod.number().min(createEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin).max(createEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax),
+  "notes": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})).min(createEaAssessmentResponseOneContentPhaseProgressMin).max(createEaAssessmentResponseOneContentPhaseProgressMax),
+  "requirements": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "stakeholder": zod.string(),
+  "concern": zod.string(),
+  "priority": zod.enum(['low', 'medium', 'high', 'critical']),
+  "status": zod.enum(['proposed', 'approved', 'implemented', 'verified', 'rejected']),
+  "acceptanceCriteria": zod.array(zod.string()),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "currentState": zod.object({
+  "business": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "data": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "application": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "technology": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "integration": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "ai": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "security": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "operatingModel": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin).max(createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+}))
+}),
+  "gaps": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "impact": zod.string(),
+  "recommendation": zod.string(),
+  "targetBuildingBlockId": zod.string(),
+  "implementationDependencyIds": zod.array(zod.string()),
+  "disposition": zod.enum(['open', 'accepted', 'mitigated', 'deferred', 'closed']),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "targetArchitecture": zod.object({
+  "components": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "componentType": zod.string().min(1),
+  "description": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'implementing', 'live', 'retired']),
+  "owner": zod.string(),
+  "addressesGapIds": zod.array(zod.string()),
+  "deliveredByWorkPackageIds": zod.array(zod.string())
+})),
+  "relationships": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "sourceComponentId": zod.string().min(1),
+  "targetComponentId": zod.string().min(1),
+  "relationshipType": zod.string().min(1),
+  "description": zod.string()
+}))
+}),
+  "opportunities": zod.object({
+  "solutionOptions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "approach": zod.enum(['build', 'buy', 'reuse', 'hybrid']),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "benefits": zod.array(zod.string()),
+  "constraints": zod.array(zod.string()),
+  "score": zod.number(),
+  "selected": zod.boolean()
+})),
+  "transitionArchitectures": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "description": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "entryCriteria": zod.array(zod.string()),
+  "exitCriteria": zod.array(zod.string())
+}))
+}),
+  "roadmap": zod.object({
+  "workPackages": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "outcomes": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "status": zod.enum(['planned', 'ready', 'in-progress', 'blocked', 'complete']),
+  "sequence": zod.number().min(createEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin),
+  "estimatedCost": zod.number().min(createEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin)
+})),
+  "waves": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "sequence": zod.number().min(createEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin),
+  "transitionArchitectureId": zod.string(),
+  "workPackageIds": zod.array(zod.string()),
+  "startDate": zod.string(),
+  "endDate": zod.string()
+})),
+  "dependencies": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "predecessorWorkPackageId": zod.string().min(1),
+  "successorWorkPackageId": zod.string().min(1),
+  "dependencyType": zod.enum(['finish-start', 'start-start', 'external']),
+  "notes": zod.string()
+})),
+  "prioritization": zod.array(zod.object({
+  "workPackageId": zod.string().min(1),
+  "value": zod.number().min(createEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin).max(createEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax),
+  "risk": zod.number().min(createEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin).max(createEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax),
+  "urgency": zod.number().min(createEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin).max(createEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax),
+  "dependency": zod.number().min(createEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin).max(createEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax),
+  "readiness": zod.number().min(createEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin).max(createEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax),
+  "cost": zod.number().min(createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin).max(createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax),
+  "totalScore": zod.number(),
+  "rationale": zod.string()
+}))
+}),
+  "governance": zod.object({
+  "contracts": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "deviations": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "waivers": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "remediation": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+}))
+}),
+  "changeManagement": zod.object({
+  "requests": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "requestedBy": zod.string(),
+  "status": zod.enum(['submitted', 'assessing', 'approved', 'rejected', 'implemented']),
+  "classification": zod.enum(['minor', 'new-cycle']),
+  "impact": zod.object({
+  "baseline": zod.string(),
+  "targetState": zod.string(),
+  "roadmap": zod.string(),
+  "cost": zod.string(),
+  "affectedIds": zod.array(zod.string())
+})
+})),
+  "versionHistory": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "version": zod.string().min(1),
+  "description": zod.string(),
+  "approvedAt": zod.string(),
+  "approvedBy": zod.string(),
+  "changeRequestIds": zod.array(zod.string())
+}))
+}),
+  "decisions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "decision": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'superseded']),
+  "owner": zod.string(),
+  "decidedAt": zod.string(),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "likelihood": zod.number().min(1).max(createEaAssessmentResponseOneContentRisksItemLikelihoodMax),
+  "impact": zod.number().min(1).max(createEaAssessmentResponseOneContentRisksItemImpactMax),
+  "mitigation": zod.string(),
+  "owner": zod.string(),
+  "status": zod.enum(['open', 'mitigating', 'accepted', 'closed'])
+})),
+  "costLinks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "linkType": zod.enum(['scenario', 'pricing-sheet']),
+  "linkedRecordId": zod.number().min(1),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "scopeSnapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.string()
+}))
+})
+}).and(zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "version": zod.number().min(1),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "archivedAt": zod.string().nullable()
+}))
+
+
+/**
+ * @summary Get an owned assessment
+ */
+
+
+
+export const GetEaAssessmentParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const getEaAssessmentResponseOneNameMax = 200;
+
+export const getEaAssessmentResponseOneClientNameMax = 200;
+
+export const getEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin = 0;
+export const getEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax = 100;
+
+export const getEaAssessmentResponseOneContentPhaseProgressMin = 10;
+export const getEaAssessmentResponseOneContentPhaseProgressMax = 10;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
+export const getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
+
+export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
+
+
+
+export const getEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
+
+
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax = 5;
+
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin = 0;
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax = 5;
+
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin = 0;
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax = 5;
+
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin = 0;
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax = 5;
+
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin = 0;
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax = 5;
+
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin = 0;
+export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const getEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
+
+export const getEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
+
+
+export const GetEaAssessmentResponse = zod.object({
+  "name": zod.string().min(1).max(getEaAssessmentResponseOneNameMax),
+  "clientName": zod.string().min(1).max(getEaAssessmentResponseOneClientNameMax),
+  "currentPhase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "content": zod.object({
+  "phaseProgress": zod.array(zod.object({
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "status": zod.enum(['not-started', 'in-progress', 'complete', 'blocked']),
+  "completionPercent": zod.number().min(getEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin).max(getEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax),
+  "notes": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})).min(getEaAssessmentResponseOneContentPhaseProgressMin).max(getEaAssessmentResponseOneContentPhaseProgressMax),
+  "requirements": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "stakeholder": zod.string(),
+  "concern": zod.string(),
+  "priority": zod.enum(['low', 'medium', 'high', 'critical']),
+  "status": zod.enum(['proposed', 'approved', 'implemented', 'verified', 'rejected']),
+  "acceptanceCriteria": zod.array(zod.string()),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "currentState": zod.object({
+  "business": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "data": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "application": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "technology": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "integration": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "ai": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "security": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "operatingModel": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin).max(getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+}))
+}),
+  "gaps": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "impact": zod.string(),
+  "recommendation": zod.string(),
+  "targetBuildingBlockId": zod.string(),
+  "implementationDependencyIds": zod.array(zod.string()),
+  "disposition": zod.enum(['open', 'accepted', 'mitigated', 'deferred', 'closed']),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "targetArchitecture": zod.object({
+  "components": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "componentType": zod.string().min(1),
+  "description": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'implementing', 'live', 'retired']),
+  "owner": zod.string(),
+  "addressesGapIds": zod.array(zod.string()),
+  "deliveredByWorkPackageIds": zod.array(zod.string())
+})),
+  "relationships": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "sourceComponentId": zod.string().min(1),
+  "targetComponentId": zod.string().min(1),
+  "relationshipType": zod.string().min(1),
+  "description": zod.string()
+}))
+}),
+  "opportunities": zod.object({
+  "solutionOptions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "approach": zod.enum(['build', 'buy', 'reuse', 'hybrid']),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "benefits": zod.array(zod.string()),
+  "constraints": zod.array(zod.string()),
+  "score": zod.number(),
+  "selected": zod.boolean()
+})),
+  "transitionArchitectures": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "description": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "entryCriteria": zod.array(zod.string()),
+  "exitCriteria": zod.array(zod.string())
+}))
+}),
+  "roadmap": zod.object({
+  "workPackages": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "outcomes": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "status": zod.enum(['planned', 'ready', 'in-progress', 'blocked', 'complete']),
+  "sequence": zod.number().min(getEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin),
+  "estimatedCost": zod.number().min(getEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin)
+})),
+  "waves": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "sequence": zod.number().min(getEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin),
+  "transitionArchitectureId": zod.string(),
+  "workPackageIds": zod.array(zod.string()),
+  "startDate": zod.string(),
+  "endDate": zod.string()
+})),
+  "dependencies": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "predecessorWorkPackageId": zod.string().min(1),
+  "successorWorkPackageId": zod.string().min(1),
+  "dependencyType": zod.enum(['finish-start', 'start-start', 'external']),
+  "notes": zod.string()
+})),
+  "prioritization": zod.array(zod.object({
+  "workPackageId": zod.string().min(1),
+  "value": zod.number().min(getEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin).max(getEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax),
+  "risk": zod.number().min(getEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin).max(getEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax),
+  "urgency": zod.number().min(getEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin).max(getEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax),
+  "dependency": zod.number().min(getEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin).max(getEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax),
+  "readiness": zod.number().min(getEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin).max(getEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax),
+  "cost": zod.number().min(getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin).max(getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax),
+  "totalScore": zod.number(),
+  "rationale": zod.string()
+}))
+}),
+  "governance": zod.object({
+  "contracts": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "deviations": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "waivers": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "remediation": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+}))
+}),
+  "changeManagement": zod.object({
+  "requests": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "requestedBy": zod.string(),
+  "status": zod.enum(['submitted', 'assessing', 'approved', 'rejected', 'implemented']),
+  "classification": zod.enum(['minor', 'new-cycle']),
+  "impact": zod.object({
+  "baseline": zod.string(),
+  "targetState": zod.string(),
+  "roadmap": zod.string(),
+  "cost": zod.string(),
+  "affectedIds": zod.array(zod.string())
+})
+})),
+  "versionHistory": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "version": zod.string().min(1),
+  "description": zod.string(),
+  "approvedAt": zod.string(),
+  "approvedBy": zod.string(),
+  "changeRequestIds": zod.array(zod.string())
+}))
+}),
+  "decisions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "decision": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'superseded']),
+  "owner": zod.string(),
+  "decidedAt": zod.string(),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "likelihood": zod.number().min(1).max(getEaAssessmentResponseOneContentRisksItemLikelihoodMax),
+  "impact": zod.number().min(1).max(getEaAssessmentResponseOneContentRisksItemImpactMax),
+  "mitigation": zod.string(),
+  "owner": zod.string(),
+  "status": zod.enum(['open', 'mitigating', 'accepted', 'closed'])
+})),
+  "costLinks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "linkType": zod.enum(['scenario', 'pricing-sheet']),
+  "linkedRecordId": zod.number().min(1),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "scopeSnapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.string()
+}))
+})
+}).and(zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "version": zod.number().min(1),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "archivedAt": zod.string().nullable()
+}))
+
+
+/**
+ * @summary Update an owned assessment
+ */
+
+
+
+export const UpdateEaAssessmentParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+export const updateEaAssessmentBodyNameMax = 200;
+
+export const updateEaAssessmentBodyClientNameMax = 200;
+
+export const updateEaAssessmentBodyContentPhaseProgressItemCompletionPercentMin = 0;
+export const updateEaAssessmentBodyContentPhaseProgressItemCompletionPercentMax = 100;
+
+export const updateEaAssessmentBodyContentPhaseProgressMin = 10;
+export const updateEaAssessmentBodyContentPhaseProgressMax = 10;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateDataItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateDataItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateAiItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateAiItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin = 0;
+export const updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0;
+
+export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
+
+
+
+export const updateEaAssessmentBodyContentRoadmapWavesItemSequenceMin = 0;
+
+
+
+
+
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemValueMin = 0;
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemValueMax = 5;
+
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemRiskMin = 0;
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemRiskMax = 5;
+
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMin = 0;
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMax = 5;
+
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMin = 0;
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMax = 5;
+
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMin = 0;
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMax = 5;
+
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMin = 0;
+export const updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const updateEaAssessmentBodyContentRisksItemLikelihoodMax = 5;
+
+export const updateEaAssessmentBodyContentRisksItemImpactMax = 5;
+
+
+
+
+
+export const UpdateEaAssessmentBody = zod.object({
+  "expectedVersion": zod.number().min(1),
+  "name": zod.string().min(1).max(updateEaAssessmentBodyNameMax).optional(),
+  "clientName": zod.string().min(1).max(updateEaAssessmentBodyClientNameMax).optional(),
+  "currentPhase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']).optional(),
+  "content": zod.object({
+  "phaseProgress": zod.array(zod.object({
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "status": zod.enum(['not-started', 'in-progress', 'complete', 'blocked']),
+  "completionPercent": zod.number().min(updateEaAssessmentBodyContentPhaseProgressItemCompletionPercentMin).max(updateEaAssessmentBodyContentPhaseProgressItemCompletionPercentMax),
+  "notes": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})).min(updateEaAssessmentBodyContentPhaseProgressMin).max(updateEaAssessmentBodyContentPhaseProgressMax),
+  "requirements": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "stakeholder": zod.string(),
+  "concern": zod.string(),
+  "priority": zod.enum(['low', 'medium', 'high', 'critical']),
+  "status": zod.enum(['proposed', 'approved', 'implemented', 'verified', 'rejected']),
+  "acceptanceCriteria": zod.array(zod.string()),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "currentState": zod.object({
+  "business": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "data": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateDataItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateDataItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "application": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "technology": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "integration": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "ai": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateAiItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateAiItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "security": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "operatingModel": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin).max(updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+}))
+}),
+  "gaps": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "impact": zod.string(),
+  "recommendation": zod.string(),
+  "targetBuildingBlockId": zod.string(),
+  "implementationDependencyIds": zod.array(zod.string()),
+  "disposition": zod.enum(['open', 'accepted', 'mitigated', 'deferred', 'closed']),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "targetArchitecture": zod.object({
+  "components": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "componentType": zod.string().min(1),
+  "description": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'implementing', 'live', 'retired']),
+  "owner": zod.string(),
+  "addressesGapIds": zod.array(zod.string()),
+  "deliveredByWorkPackageIds": zod.array(zod.string())
+})),
+  "relationships": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "sourceComponentId": zod.string().min(1),
+  "targetComponentId": zod.string().min(1),
+  "relationshipType": zod.string().min(1),
+  "description": zod.string()
+}))
+}),
+  "opportunities": zod.object({
+  "solutionOptions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "approach": zod.enum(['build', 'buy', 'reuse', 'hybrid']),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "benefits": zod.array(zod.string()),
+  "constraints": zod.array(zod.string()),
+  "score": zod.number(),
+  "selected": zod.boolean()
+})),
+  "transitionArchitectures": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "description": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "entryCriteria": zod.array(zod.string()),
+  "exitCriteria": zod.array(zod.string())
+}))
+}),
+  "roadmap": zod.object({
+  "workPackages": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "outcomes": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "status": zod.enum(['planned', 'ready', 'in-progress', 'blocked', 'complete']),
+  "sequence": zod.number().min(updateEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin),
+  "estimatedCost": zod.number().min(updateEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin)
+})),
+  "waves": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "sequence": zod.number().min(updateEaAssessmentBodyContentRoadmapWavesItemSequenceMin),
+  "transitionArchitectureId": zod.string(),
+  "workPackageIds": zod.array(zod.string()),
+  "startDate": zod.string(),
+  "endDate": zod.string()
+})),
+  "dependencies": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "predecessorWorkPackageId": zod.string().min(1),
+  "successorWorkPackageId": zod.string().min(1),
+  "dependencyType": zod.enum(['finish-start', 'start-start', 'external']),
+  "notes": zod.string()
+})),
+  "prioritization": zod.array(zod.object({
+  "workPackageId": zod.string().min(1),
+  "value": zod.number().min(updateEaAssessmentBodyContentRoadmapPrioritizationItemValueMin).max(updateEaAssessmentBodyContentRoadmapPrioritizationItemValueMax),
+  "risk": zod.number().min(updateEaAssessmentBodyContentRoadmapPrioritizationItemRiskMin).max(updateEaAssessmentBodyContentRoadmapPrioritizationItemRiskMax),
+  "urgency": zod.number().min(updateEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMin).max(updateEaAssessmentBodyContentRoadmapPrioritizationItemUrgencyMax),
+  "dependency": zod.number().min(updateEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMin).max(updateEaAssessmentBodyContentRoadmapPrioritizationItemDependencyMax),
+  "readiness": zod.number().min(updateEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMin).max(updateEaAssessmentBodyContentRoadmapPrioritizationItemReadinessMax),
+  "cost": zod.number().min(updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMin).max(updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMax),
+  "totalScore": zod.number(),
+  "rationale": zod.string()
+}))
+}),
+  "governance": zod.object({
+  "contracts": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "deviations": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "waivers": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "remediation": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+}))
+}),
+  "changeManagement": zod.object({
+  "requests": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "requestedBy": zod.string(),
+  "status": zod.enum(['submitted', 'assessing', 'approved', 'rejected', 'implemented']),
+  "classification": zod.enum(['minor', 'new-cycle']),
+  "impact": zod.object({
+  "baseline": zod.string(),
+  "targetState": zod.string(),
+  "roadmap": zod.string(),
+  "cost": zod.string(),
+  "affectedIds": zod.array(zod.string())
+})
+})),
+  "versionHistory": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "version": zod.string().min(1),
+  "description": zod.string(),
+  "approvedAt": zod.string(),
+  "approvedBy": zod.string(),
+  "changeRequestIds": zod.array(zod.string())
+}))
+}),
+  "decisions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "decision": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'superseded']),
+  "owner": zod.string(),
+  "decidedAt": zod.string(),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "likelihood": zod.number().min(1).max(updateEaAssessmentBodyContentRisksItemLikelihoodMax),
+  "impact": zod.number().min(1).max(updateEaAssessmentBodyContentRisksItemImpactMax),
+  "mitigation": zod.string(),
+  "owner": zod.string(),
+  "status": zod.enum(['open', 'mitigating', 'accepted', 'closed'])
+})),
+  "costLinks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "linkType": zod.enum(['scenario', 'pricing-sheet']),
+  "linkedRecordId": zod.number().min(1),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "scopeSnapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.string()
+}))
+}).optional()
+})
+
+export const updateEaAssessmentResponseOneNameMax = 200;
+
+export const updateEaAssessmentResponseOneClientNameMax = 200;
+
+export const updateEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin = 0;
+export const updateEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax = 100;
+
+export const updateEaAssessmentResponseOneContentPhaseProgressMin = 10;
+export const updateEaAssessmentResponseOneContentPhaseProgressMax = 10;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
+export const updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
+
+export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
+
+
+
+export const updateEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax = 5;
+
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin = 0;
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax = 5;
+
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin = 0;
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax = 5;
+
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin = 0;
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax = 5;
+
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin = 0;
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax = 5;
+
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin = 0;
+export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const updateEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
+
+export const updateEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
+
+
+export const UpdateEaAssessmentResponse = zod.object({
+  "name": zod.string().min(1).max(updateEaAssessmentResponseOneNameMax),
+  "clientName": zod.string().min(1).max(updateEaAssessmentResponseOneClientNameMax),
+  "currentPhase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "content": zod.object({
+  "phaseProgress": zod.array(zod.object({
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "status": zod.enum(['not-started', 'in-progress', 'complete', 'blocked']),
+  "completionPercent": zod.number().min(updateEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin).max(updateEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax),
+  "notes": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})).min(updateEaAssessmentResponseOneContentPhaseProgressMin).max(updateEaAssessmentResponseOneContentPhaseProgressMax),
+  "requirements": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "stakeholder": zod.string(),
+  "concern": zod.string(),
+  "priority": zod.enum(['low', 'medium', 'high', 'critical']),
+  "status": zod.enum(['proposed', 'approved', 'implemented', 'verified', 'rejected']),
+  "acceptanceCriteria": zod.array(zod.string()),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "currentState": zod.object({
+  "business": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "data": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "application": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "technology": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "integration": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "ai": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "security": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "operatingModel": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin).max(updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+}))
+}),
+  "gaps": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "impact": zod.string(),
+  "recommendation": zod.string(),
+  "targetBuildingBlockId": zod.string(),
+  "implementationDependencyIds": zod.array(zod.string()),
+  "disposition": zod.enum(['open', 'accepted', 'mitigated', 'deferred', 'closed']),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "targetArchitecture": zod.object({
+  "components": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "componentType": zod.string().min(1),
+  "description": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'implementing', 'live', 'retired']),
+  "owner": zod.string(),
+  "addressesGapIds": zod.array(zod.string()),
+  "deliveredByWorkPackageIds": zod.array(zod.string())
+})),
+  "relationships": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "sourceComponentId": zod.string().min(1),
+  "targetComponentId": zod.string().min(1),
+  "relationshipType": zod.string().min(1),
+  "description": zod.string()
+}))
+}),
+  "opportunities": zod.object({
+  "solutionOptions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "approach": zod.enum(['build', 'buy', 'reuse', 'hybrid']),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "benefits": zod.array(zod.string()),
+  "constraints": zod.array(zod.string()),
+  "score": zod.number(),
+  "selected": zod.boolean()
+})),
+  "transitionArchitectures": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "description": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "entryCriteria": zod.array(zod.string()),
+  "exitCriteria": zod.array(zod.string())
+}))
+}),
+  "roadmap": zod.object({
+  "workPackages": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "outcomes": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "status": zod.enum(['planned', 'ready', 'in-progress', 'blocked', 'complete']),
+  "sequence": zod.number().min(updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin),
+  "estimatedCost": zod.number().min(updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin)
+})),
+  "waves": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "sequence": zod.number().min(updateEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin),
+  "transitionArchitectureId": zod.string(),
+  "workPackageIds": zod.array(zod.string()),
+  "startDate": zod.string(),
+  "endDate": zod.string()
+})),
+  "dependencies": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "predecessorWorkPackageId": zod.string().min(1),
+  "successorWorkPackageId": zod.string().min(1),
+  "dependencyType": zod.enum(['finish-start', 'start-start', 'external']),
+  "notes": zod.string()
+})),
+  "prioritization": zod.array(zod.object({
+  "workPackageId": zod.string().min(1),
+  "value": zod.number().min(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin).max(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax),
+  "risk": zod.number().min(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin).max(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax),
+  "urgency": zod.number().min(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin).max(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax),
+  "dependency": zod.number().min(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin).max(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax),
+  "readiness": zod.number().min(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin).max(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax),
+  "cost": zod.number().min(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin).max(updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax),
+  "totalScore": zod.number(),
+  "rationale": zod.string()
+}))
+}),
+  "governance": zod.object({
+  "contracts": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "deviations": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "waivers": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "remediation": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+}))
+}),
+  "changeManagement": zod.object({
+  "requests": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "requestedBy": zod.string(),
+  "status": zod.enum(['submitted', 'assessing', 'approved', 'rejected', 'implemented']),
+  "classification": zod.enum(['minor', 'new-cycle']),
+  "impact": zod.object({
+  "baseline": zod.string(),
+  "targetState": zod.string(),
+  "roadmap": zod.string(),
+  "cost": zod.string(),
+  "affectedIds": zod.array(zod.string())
+})
+})),
+  "versionHistory": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "version": zod.string().min(1),
+  "description": zod.string(),
+  "approvedAt": zod.string(),
+  "approvedBy": zod.string(),
+  "changeRequestIds": zod.array(zod.string())
+}))
+}),
+  "decisions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "decision": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'superseded']),
+  "owner": zod.string(),
+  "decidedAt": zod.string(),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "likelihood": zod.number().min(1).max(updateEaAssessmentResponseOneContentRisksItemLikelihoodMax),
+  "impact": zod.number().min(1).max(updateEaAssessmentResponseOneContentRisksItemImpactMax),
+  "mitigation": zod.string(),
+  "owner": zod.string(),
+  "status": zod.enum(['open', 'mitigating', 'accepted', 'closed'])
+})),
+  "costLinks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "linkType": zod.enum(['scenario', 'pricing-sheet']),
+  "linkedRecordId": zod.number().min(1),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "scopeSnapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.string()
+}))
+})
+}).and(zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "version": zod.number().min(1),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "archivedAt": zod.string().nullable()
+}))
+
+
+/**
+ * @summary Permanently delete an owned assessment
+ */
+
+
+
+export const DeleteEaAssessmentParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+
+export const DeleteEaAssessmentBody = zod.object({
+  "expectedVersion": zod.number().min(1)
+})
+
+export const DeleteEaAssessmentResponse = zod.void()
+
+
+/**
+ * Archives an active assessment when expectedVersion matches. Calling this operation for an already archived assessment is idempotent and returns the current archived row even when the supplied expectedVersion is older; stale expectedVersion is rejected only while the assessment is active.
+ * @summary Archive an owned assessment
+ */
+
+
+
+export const ArchiveEaAssessmentParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+
+export const ArchiveEaAssessmentBody = zod.object({
+  "expectedVersion": zod.number().min(1)
+})
+
+export const archiveEaAssessmentResponseOneNameMax = 200;
+
+export const archiveEaAssessmentResponseOneClientNameMax = 200;
+
+export const archiveEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin = 0;
+export const archiveEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax = 100;
+
+export const archiveEaAssessmentResponseOneContentPhaseProgressMin = 10;
+export const archiveEaAssessmentResponseOneContentPhaseProgressMax = 10;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
+export const archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
+
+export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
+
+
+
+export const archiveEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax = 5;
+
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin = 0;
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax = 5;
+
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin = 0;
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax = 5;
+
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin = 0;
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax = 5;
+
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin = 0;
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax = 5;
+
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin = 0;
+export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const archiveEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
+
+export const archiveEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
+
+
+export const ArchiveEaAssessmentResponse = zod.object({
+  "name": zod.string().min(1).max(archiveEaAssessmentResponseOneNameMax),
+  "clientName": zod.string().min(1).max(archiveEaAssessmentResponseOneClientNameMax),
+  "currentPhase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "content": zod.object({
+  "phaseProgress": zod.array(zod.object({
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "status": zod.enum(['not-started', 'in-progress', 'complete', 'blocked']),
+  "completionPercent": zod.number().min(archiveEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMin).max(archiveEaAssessmentResponseOneContentPhaseProgressItemCompletionPercentMax),
+  "notes": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})).min(archiveEaAssessmentResponseOneContentPhaseProgressMin).max(archiveEaAssessmentResponseOneContentPhaseProgressMax),
+  "requirements": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "stakeholder": zod.string(),
+  "concern": zod.string(),
+  "priority": zod.enum(['low', 'medium', 'high', 'critical']),
+  "status": zod.enum(['proposed', 'approved', 'implemented', 'verified', 'rejected']),
+  "acceptanceCriteria": zod.array(zod.string()),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "currentState": zod.object({
+  "business": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "data": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "application": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "technology": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "integration": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "ai": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "security": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+})),
+  "operatingModel": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "kind": zod.string().min(1),
+  "description": zod.string(),
+  "maturity": zod.number().min(archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin).max(archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax),
+  "criticality": zod.enum(['unknown', 'low', 'medium', 'high', 'critical']),
+  "lifecycle": zod.enum(['unknown', 'planned', 'active', 'tolerated', 'sunset', 'retired']),
+  "owner": zod.string(),
+  "confidence": zod.enum(['unknown', 'low', 'medium', 'high']),
+  "notes": zod.string(),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "uri": zod.string().optional(),
+  "source": zod.string(),
+  "capturedAt": zod.string().optional(),
+  "notes": zod.string().optional()
+}))
+}))
+}),
+  "gaps": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "severity": zod.enum(['low', 'medium', 'high', 'critical']),
+  "impact": zod.string(),
+  "recommendation": zod.string(),
+  "targetBuildingBlockId": zod.string(),
+  "implementationDependencyIds": zod.array(zod.string()),
+  "disposition": zod.enum(['open', 'accepted', 'mitigated', 'deferred', 'closed']),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "targetArchitecture": zod.object({
+  "components": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "domain": zod.enum(['business', 'data', 'application', 'technology', 'integration', 'ai', 'security', 'operating-model']),
+  "componentType": zod.string().min(1),
+  "description": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'implementing', 'live', 'retired']),
+  "owner": zod.string(),
+  "addressesGapIds": zod.array(zod.string()),
+  "deliveredByWorkPackageIds": zod.array(zod.string())
+})),
+  "relationships": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "sourceComponentId": zod.string().min(1),
+  "targetComponentId": zod.string().min(1),
+  "relationshipType": zod.string().min(1),
+  "description": zod.string()
+}))
+}),
+  "opportunities": zod.object({
+  "solutionOptions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "approach": zod.enum(['build', 'buy', 'reuse', 'hybrid']),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "benefits": zod.array(zod.string()),
+  "constraints": zod.array(zod.string()),
+  "score": zod.number(),
+  "selected": zod.boolean()
+})),
+  "transitionArchitectures": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "description": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "entryCriteria": zod.array(zod.string()),
+  "exitCriteria": zod.array(zod.string())
+}))
+}),
+  "roadmap": zod.object({
+  "workPackages": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "phase": zod.enum(['preliminary', 'architecture-vision', 'business', 'data', 'application', 'technology', 'opportunities-solutions', 'migration-planning', 'implementation-governance', 'architecture-change-management']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "outcomes": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "status": zod.enum(['planned', 'ready', 'in-progress', 'blocked', 'complete']),
+  "sequence": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin),
+  "estimatedCost": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin)
+})),
+  "waves": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "name": zod.string().min(1),
+  "sequence": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin),
+  "transitionArchitectureId": zod.string(),
+  "workPackageIds": zod.array(zod.string()),
+  "startDate": zod.string(),
+  "endDate": zod.string()
+})),
+  "dependencies": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "predecessorWorkPackageId": zod.string().min(1),
+  "successorWorkPackageId": zod.string().min(1),
+  "dependencyType": zod.enum(['finish-start', 'start-start', 'external']),
+  "notes": zod.string()
+})),
+  "prioritization": zod.array(zod.object({
+  "workPackageId": zod.string().min(1),
+  "value": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin).max(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMax),
+  "risk": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMin).max(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemRiskMax),
+  "urgency": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMin).max(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemUrgencyMax),
+  "dependency": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMin).max(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemDependencyMax),
+  "readiness": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMin).max(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemReadinessMax),
+  "cost": zod.number().min(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin).max(archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax),
+  "totalScore": zod.number(),
+  "rationale": zod.string()
+}))
+}),
+  "governance": zod.object({
+  "contracts": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "deviations": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "waivers": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+})),
+  "remediation": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "recordType": zod.enum(['contract', 'review', 'deviation', 'waiver', 'remediation']),
+  "status": zod.enum(['open', 'scheduled', 'approved', 'rejected', 'complete', 'expired']),
+  "owner": zod.string(),
+  "description": zod.string(),
+  "dueDate": zod.string(),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "decisionIds": zod.array(zod.string())
+}))
+}),
+  "changeManagement": zod.object({
+  "requests": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "requestedBy": zod.string(),
+  "status": zod.enum(['submitted', 'assessing', 'approved', 'rejected', 'implemented']),
+  "classification": zod.enum(['minor', 'new-cycle']),
+  "impact": zod.object({
+  "baseline": zod.string(),
+  "targetState": zod.string(),
+  "roadmap": zod.string(),
+  "cost": zod.string(),
+  "affectedIds": zod.array(zod.string())
+})
+})),
+  "versionHistory": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "version": zod.string().min(1),
+  "description": zod.string(),
+  "approvedAt": zod.string(),
+  "approvedBy": zod.string(),
+  "changeRequestIds": zod.array(zod.string())
+}))
+}),
+  "decisions": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "decision": zod.string(),
+  "rationale": zod.string(),
+  "status": zod.enum(['proposed', 'approved', 'superseded']),
+  "owner": zod.string(),
+  "decidedAt": zod.string(),
+  "traceability": zod.object({
+  "requirementIds": zod.array(zod.string()),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "governanceReviewIds": zod.array(zod.string())
+})
+})),
+  "risks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "title": zod.string().min(1),
+  "description": zod.string(),
+  "likelihood": zod.number().min(1).max(archiveEaAssessmentResponseOneContentRisksItemLikelihoodMax),
+  "impact": zod.number().min(1).max(archiveEaAssessmentResponseOneContentRisksItemImpactMax),
+  "mitigation": zod.string(),
+  "owner": zod.string(),
+  "status": zod.enum(['open', 'mitigating', 'accepted', 'closed'])
+})),
+  "costLinks": zod.array(zod.object({
+  "id": zod.string().min(1),
+  "linkType": zod.enum(['scenario', 'pricing-sheet']),
+  "linkedRecordId": zod.number().min(1),
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "scopeSnapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.string()
+}))
+})
+}).and(zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "version": zod.number().min(1),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "archivedAt": zod.string().nullable()
+}))
+
+
+/**
+ * Returns suggestions only; the existing scenario and pricing engines remain authoritative.
+ * @summary Derive reviewable scenario and product-pricing scope suggestions
+ */
+
+
+
+export const CreateEaAssessmentHandoffParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+
+
+export const CreateEaAssessmentHandoffBody = zod.object({
+  "scenarioId": zod.number().min(1).optional(),
+  "pricingSheetId": zod.number().min(1).optional()
+})
+
+export const CreateEaAssessmentHandoffResponse = zod.object({
+  "assessmentId": zod.number(),
+  "generatedAt": zod.string(),
+  "scenario": zod.object({
+  "name": zod.string(),
+  "scope": zod.record(zod.string(), zod.unknown()),
+  "reviewNotes": zod.array(zod.string())
+}),
+  "productPricing": zod.object({
+  "name": zod.string(),
+  "scope": zod.record(zod.string(), zod.unknown()),
+  "reviewNotes": zod.array(zod.string())
+}),
+  "traceability": zod.object({
+  "gapIds": zod.array(zod.string()),
+  "targetComponentIds": zod.array(zod.string()),
+  "workPackageIds": zod.array(zod.string()),
+  "requestedScenarioId": zod.number().nullable(),
+  "requestedPricingSheetId": zod.number().nullable()
+})
+})
+
+
+/**
  * Returns server health status
  * @summary Health check
  */

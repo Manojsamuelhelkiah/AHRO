@@ -5,6 +5,740 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type EaAssessmentStatus = typeof EaAssessmentStatus[keyof typeof EaAssessmentStatus];
+
+
+export const EaAssessmentStatus = {
+  active: 'active',
+  archived: 'archived',
+} as const;
+
+export type EaPhase = typeof EaPhase[keyof typeof EaPhase];
+
+
+export const EaPhase = {
+  preliminary: 'preliminary',
+  'architecture-vision': 'architecture-vision',
+  business: 'business',
+  data: 'data',
+  application: 'application',
+  technology: 'technology',
+  'opportunities-solutions': 'opportunities-solutions',
+  'migration-planning': 'migration-planning',
+  'implementation-governance': 'implementation-governance',
+  'architecture-change-management': 'architecture-change-management',
+} as const;
+
+export type EaDomain = typeof EaDomain[keyof typeof EaDomain];
+
+
+export const EaDomain = {
+  business: 'business',
+  data: 'data',
+  application: 'application',
+  technology: 'technology',
+  integration: 'integration',
+  ai: 'ai',
+  security: 'security',
+  'operating-model': 'operating-model',
+} as const;
+
+export interface EaTraceability {
+  requirementIds: string[];
+  gapIds: string[];
+  targetComponentIds: string[];
+  workPackageIds: string[];
+  governanceReviewIds: string[];
+}
+
+export interface EaEvidence {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  title: string;
+  uri?: string;
+  source: string;
+  capturedAt?: string;
+  notes?: string;
+}
+
+export type EaPhaseProgressStatus = typeof EaPhaseProgressStatus[keyof typeof EaPhaseProgressStatus];
+
+
+export const EaPhaseProgressStatus = {
+  'not-started': 'not-started',
+  'in-progress': 'in-progress',
+  complete: 'complete',
+  blocked: 'blocked',
+} as const;
+
+export interface EaPhaseProgress {
+  phase: EaPhase;
+  status: EaPhaseProgressStatus;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  completionPercent: number;
+  notes?: string;
+  updatedAt?: string;
+}
+
+export type EaRequirementPriority = typeof EaRequirementPriority[keyof typeof EaRequirementPriority];
+
+
+export const EaRequirementPriority = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
+export type EaRequirementStatus = typeof EaRequirementStatus[keyof typeof EaRequirementStatus];
+
+
+export const EaRequirementStatus = {
+  proposed: 'proposed',
+  approved: 'approved',
+  implemented: 'implemented',
+  verified: 'verified',
+  rejected: 'rejected',
+} as const;
+
+export interface EaRequirement {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  title: string;
+  description: string;
+  stakeholder: string;
+  concern: string;
+  priority: EaRequirementPriority;
+  status: EaRequirementStatus;
+  acceptanceCriteria: string[];
+  traceability: EaTraceability;
+}
+
+export type EaInventoryItemCriticality = typeof EaInventoryItemCriticality[keyof typeof EaInventoryItemCriticality];
+
+
+export const EaInventoryItemCriticality = {
+  unknown: 'unknown',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
+export type EaInventoryItemLifecycle = typeof EaInventoryItemLifecycle[keyof typeof EaInventoryItemLifecycle];
+
+
+export const EaInventoryItemLifecycle = {
+  unknown: 'unknown',
+  planned: 'planned',
+  active: 'active',
+  tolerated: 'tolerated',
+  sunset: 'sunset',
+  retired: 'retired',
+} as const;
+
+export type EaInventoryItemConfidence = typeof EaInventoryItemConfidence[keyof typeof EaInventoryItemConfidence];
+
+
+export const EaInventoryItemConfidence = {
+  unknown: 'unknown',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export interface EaInventoryItem {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 1 */
+  kind: string;
+  description: string;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  maturity: number;
+  criticality: EaInventoryItemCriticality;
+  lifecycle: EaInventoryItemLifecycle;
+  owner: string;
+  confidence: EaInventoryItemConfidence;
+  notes: string;
+  evidence: EaEvidence[];
+}
+
+export interface EaCurrentStateInventory {
+  business: EaInventoryItem[];
+  data: EaInventoryItem[];
+  application: EaInventoryItem[];
+  technology: EaInventoryItem[];
+  integration: EaInventoryItem[];
+  ai: EaInventoryItem[];
+  security: EaInventoryItem[];
+  operatingModel: EaInventoryItem[];
+}
+
+export type EaGapSeverity = typeof EaGapSeverity[keyof typeof EaGapSeverity];
+
+
+export const EaGapSeverity = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
+export type EaGapDisposition = typeof EaGapDisposition[keyof typeof EaGapDisposition];
+
+
+export const EaGapDisposition = {
+  open: 'open',
+  accepted: 'accepted',
+  mitigated: 'mitigated',
+  deferred: 'deferred',
+  closed: 'closed',
+} as const;
+
+export interface EaGap {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  title: string;
+  domain: EaDomain;
+  severity: EaGapSeverity;
+  impact: string;
+  recommendation: string;
+  targetBuildingBlockId: string;
+  implementationDependencyIds: string[];
+  disposition: EaGapDisposition;
+  traceability: EaTraceability;
+}
+
+export type EaTargetComponentStatus = typeof EaTargetComponentStatus[keyof typeof EaTargetComponentStatus];
+
+
+export const EaTargetComponentStatus = {
+  proposed: 'proposed',
+  approved: 'approved',
+  implementing: 'implementing',
+  live: 'live',
+  retired: 'retired',
+} as const;
+
+export interface EaTargetComponent {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  name: string;
+  domain: EaDomain;
+  /** @minLength 1 */
+  componentType: string;
+  description: string;
+  status: EaTargetComponentStatus;
+  owner: string;
+  addressesGapIds: string[];
+  deliveredByWorkPackageIds: string[];
+}
+
+export interface EaTargetRelationship {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  sourceComponentId: string;
+  /** @minLength 1 */
+  targetComponentId: string;
+  /** @minLength 1 */
+  relationshipType: string;
+  description: string;
+}
+
+export type EaSolutionOptionApproach = typeof EaSolutionOptionApproach[keyof typeof EaSolutionOptionApproach];
+
+
+export const EaSolutionOptionApproach = {
+  build: 'build',
+  buy: 'buy',
+  reuse: 'reuse',
+  hybrid: 'hybrid',
+} as const;
+
+export interface EaSolutionOption {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  name: string;
+  approach: EaSolutionOptionApproach;
+  gapIds: string[];
+  targetComponentIds: string[];
+  benefits: string[];
+  constraints: string[];
+  score: number;
+  selected: boolean;
+}
+
+export interface EaTransitionArchitecture {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  name: string;
+  description: string;
+  targetComponentIds: string[];
+  workPackageIds: string[];
+  entryCriteria: string[];
+  exitCriteria: string[];
+}
+
+export type EaWorkPackageStatus = typeof EaWorkPackageStatus[keyof typeof EaWorkPackageStatus];
+
+
+export const EaWorkPackageStatus = {
+  planned: 'planned',
+  ready: 'ready',
+  'in-progress': 'in-progress',
+  blocked: 'blocked',
+  complete: 'complete',
+} as const;
+
+export interface EaWorkPackage {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  name: string;
+  phase: EaPhase;
+  description: string;
+  owner: string;
+  outcomes: string[];
+  targetComponentIds: string[];
+  status: EaWorkPackageStatus;
+  /** @minimum 0 */
+  sequence: number;
+  /** @minimum 0 */
+  estimatedCost: number;
+}
+
+export type EaRoadmapDependencyDependencyType = typeof EaRoadmapDependencyDependencyType[keyof typeof EaRoadmapDependencyDependencyType];
+
+
+export const EaRoadmapDependencyDependencyType = {
+  'finish-start': 'finish-start',
+  'start-start': 'start-start',
+  external: 'external',
+} as const;
+
+export interface EaRoadmapDependency {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  predecessorWorkPackageId: string;
+  /** @minLength 1 */
+  successorWorkPackageId: string;
+  dependencyType: EaRoadmapDependencyDependencyType;
+  notes: string;
+}
+
+export interface EaRoadmapWave {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  name: string;
+  /** @minimum 0 */
+  sequence: number;
+  transitionArchitectureId: string;
+  workPackageIds: string[];
+  startDate: string;
+  endDate: string;
+}
+
+export interface EaPrioritization {
+  /** @minLength 1 */
+  workPackageId: string;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  value: number;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  risk: number;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  urgency: number;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  dependency: number;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  readiness: number;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  cost: number;
+  totalScore: number;
+  rationale: string;
+}
+
+export type EaGovernanceRecordRecordType = typeof EaGovernanceRecordRecordType[keyof typeof EaGovernanceRecordRecordType];
+
+
+export const EaGovernanceRecordRecordType = {
+  contract: 'contract',
+  review: 'review',
+  deviation: 'deviation',
+  waiver: 'waiver',
+  remediation: 'remediation',
+} as const;
+
+export type EaGovernanceRecordStatus = typeof EaGovernanceRecordStatus[keyof typeof EaGovernanceRecordStatus];
+
+
+export const EaGovernanceRecordStatus = {
+  open: 'open',
+  scheduled: 'scheduled',
+  approved: 'approved',
+  rejected: 'rejected',
+  complete: 'complete',
+  expired: 'expired',
+} as const;
+
+export interface EaGovernanceRecord {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  title: string;
+  recordType: EaGovernanceRecordRecordType;
+  status: EaGovernanceRecordStatus;
+  owner: string;
+  description: string;
+  dueDate: string;
+  targetComponentIds: string[];
+  workPackageIds: string[];
+  decisionIds: string[];
+}
+
+export type EaChangeRequestStatus = typeof EaChangeRequestStatus[keyof typeof EaChangeRequestStatus];
+
+
+export const EaChangeRequestStatus = {
+  submitted: 'submitted',
+  assessing: 'assessing',
+  approved: 'approved',
+  rejected: 'rejected',
+  implemented: 'implemented',
+} as const;
+
+export type EaChangeRequestClassification = typeof EaChangeRequestClassification[keyof typeof EaChangeRequestClassification];
+
+
+export const EaChangeRequestClassification = {
+  minor: 'minor',
+  'new-cycle': 'new-cycle',
+} as const;
+
+export type EaChangeRequestImpact = {
+  baseline: string;
+  targetState: string;
+  roadmap: string;
+  cost: string;
+  affectedIds: string[];
+};
+
+export interface EaChangeRequest {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  title: string;
+  description: string;
+  requestedBy: string;
+  status: EaChangeRequestStatus;
+  classification: EaChangeRequestClassification;
+  impact: EaChangeRequestImpact;
+}
+
+export interface EaArchitectureVersion {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  version: string;
+  description: string;
+  approvedAt: string;
+  approvedBy: string;
+  changeRequestIds: string[];
+}
+
+export type EaDecisionStatus = typeof EaDecisionStatus[keyof typeof EaDecisionStatus];
+
+
+export const EaDecisionStatus = {
+  proposed: 'proposed',
+  approved: 'approved',
+  superseded: 'superseded',
+} as const;
+
+export interface EaDecision {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  title: string;
+  decision: string;
+  rationale: string;
+  status: EaDecisionStatus;
+  owner: string;
+  decidedAt: string;
+  traceability: EaTraceability;
+}
+
+export type EaRiskStatus = typeof EaRiskStatus[keyof typeof EaRiskStatus];
+
+
+export const EaRiskStatus = {
+  open: 'open',
+  mitigating: 'mitigating',
+  accepted: 'accepted',
+  closed: 'closed',
+} as const;
+
+export interface EaRisk {
+  /** @minLength 1 */
+  id: string;
+  /** @minLength 1 */
+  title: string;
+  description: string;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  likelihood: number;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  impact: number;
+  mitigation: string;
+  owner: string;
+  status: EaRiskStatus;
+}
+
+export type EaCostLinkLinkType = typeof EaCostLinkLinkType[keyof typeof EaCostLinkLinkType];
+
+
+export const EaCostLinkLinkType = {
+  scenario: 'scenario',
+  'pricing-sheet': 'pricing-sheet',
+} as const;
+
+export type EaCostLinkScopeSnapshot = { [key: string]: unknown };
+
+export interface EaCostLink {
+  /** @minLength 1 */
+  id: string;
+  linkType: EaCostLinkLinkType;
+  /** @minimum 1 */
+  linkedRecordId: number;
+  gapIds: string[];
+  targetComponentIds: string[];
+  workPackageIds: string[];
+  scopeSnapshot: EaCostLinkScopeSnapshot;
+  createdAt: string;
+}
+
+export type EaAssessmentContentTargetArchitecture = {
+  components: EaTargetComponent[];
+  relationships: EaTargetRelationship[];
+};
+
+export type EaAssessmentContentOpportunities = {
+  solutionOptions: EaSolutionOption[];
+  transitionArchitectures: EaTransitionArchitecture[];
+};
+
+export type EaAssessmentContentRoadmap = {
+  workPackages: EaWorkPackage[];
+  waves: EaRoadmapWave[];
+  dependencies: EaRoadmapDependency[];
+  prioritization: EaPrioritization[];
+};
+
+export type EaAssessmentContentGovernance = {
+  contracts: EaGovernanceRecord[];
+  reviews: EaGovernanceRecord[];
+  deviations: EaGovernanceRecord[];
+  waivers: EaGovernanceRecord[];
+  remediation: EaGovernanceRecord[];
+};
+
+export type EaAssessmentContentChangeManagement = {
+  requests: EaChangeRequest[];
+  versionHistory: EaArchitectureVersion[];
+};
+
+export interface EaAssessmentContent {
+  /**
+     * @minItems 10
+     * @maxItems 10
+     */
+  phaseProgress: EaPhaseProgress[];
+  requirements: EaRequirement[];
+  currentState: EaCurrentStateInventory;
+  gaps: EaGap[];
+  targetArchitecture: EaAssessmentContentTargetArchitecture;
+  opportunities: EaAssessmentContentOpportunities;
+  roadmap: EaAssessmentContentRoadmap;
+  governance: EaAssessmentContentGovernance;
+  changeManagement: EaAssessmentContentChangeManagement;
+  decisions: EaDecision[];
+  risks: EaRisk[];
+  costLinks: EaCostLink[];
+}
+
+export interface EaAssessmentInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  clientName: string;
+  currentPhase: EaPhase;
+  content: EaAssessmentContent;
+}
+
+export interface EaAssessmentUpdate {
+  /** @minimum 1 */
+  expectedVersion: number;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name?: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  clientName?: string;
+  currentPhase?: EaPhase;
+  content?: EaAssessmentContent;
+}
+
+export interface EaArchiveRequest {
+  /** @minimum 1 */
+  expectedVersion: number;
+}
+
+export interface EaDeleteRequest {
+  /** @minimum 1 */
+  expectedVersion: number;
+}
+
+export type EaAssessment = EaAssessmentInput & ({
+  id: number;
+  status: EaAssessmentStatus;
+  /** @minimum 1 */
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+});
+
+export type EaBaselineViewpointBuildingBlocksItemSourceType = typeof EaBaselineViewpointBuildingBlocksItemSourceType[keyof typeof EaBaselineViewpointBuildingBlocksItemSourceType];
+
+
+export const EaBaselineViewpointBuildingBlocksItemSourceType = {
+  intent: 'intent',
+  'flow-class': 'flow-class',
+  system: 'system',
+  model: 'model',
+  assumption: 'assumption',
+  'pricing-architecture': 'pricing-architecture',
+} as const;
+
+export type EaBaselineViewpointBuildingBlocksItem = {
+  key: string;
+  name: string;
+  description: string;
+  sourceType: EaBaselineViewpointBuildingBlocksItemSourceType;
+};
+
+export interface EaBaselineViewpoint {
+  domain: EaDomain;
+  summary: string;
+  buildingBlocks: EaBaselineViewpointBuildingBlocksItem[];
+}
+
+export type EaSolutionBaselineSourceCounts = {
+  intents: number;
+  flowClasses: number;
+  systems: number;
+  models: number;
+  assumptions: number;
+};
+
+export interface EaSolutionBaseline {
+  generatedAt: string;
+  /**
+     * @minItems 8
+     * @maxItems 8
+     */
+  viewpoints: EaBaselineViewpoint[];
+  sourceCounts: EaSolutionBaselineSourceCounts;
+}
+
+export interface EaHandoffRequest {
+  /** @minimum 1 */
+  scenarioId?: number;
+  /** @minimum 1 */
+  pricingSheetId?: number;
+}
+
+export type EaHandoffSuggestionScenarioScope = { [key: string]: unknown };
+
+export type EaHandoffSuggestionScenario = {
+  name: string;
+  scope: EaHandoffSuggestionScenarioScope;
+  reviewNotes: string[];
+};
+
+export type EaHandoffSuggestionProductPricingScope = { [key: string]: unknown };
+
+export type EaHandoffSuggestionProductPricing = {
+  name: string;
+  scope: EaHandoffSuggestionProductPricingScope;
+  reviewNotes: string[];
+};
+
+export type EaHandoffSuggestionTraceability = {
+  gapIds: string[];
+  targetComponentIds: string[];
+  workPackageIds: string[];
+  requestedScenarioId: number | null;
+  requestedPricingSheetId: number | null;
+};
+
+export interface EaHandoffSuggestion {
+  assessmentId: number;
+  generatedAt: string;
+  scenario: EaHandoffSuggestionScenario;
+  productPricing: EaHandoffSuggestionProductPricing;
+  traceability: EaHandoffSuggestionTraceability;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -1748,12 +2482,17 @@ export interface PricingRateSetInput {
   rates: PricingRateSetInputRates;
 }
 
+export type ListEaAssessmentsParams = {
+status?: EaAssessmentStatus;
+};
+
 export type ListCustomIntentsParams = {
 /**
  * active (default) | all
  */
 status?: string;
 };
+
 export type ExportScenarioWorkbookLinkParams = {
 /**
  * base64url-encoded JSON of {"inputs":ScenarioInputs}.

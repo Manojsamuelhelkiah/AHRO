@@ -14,6 +14,7 @@ import {
   DollarSign,
   BadgeDollarSign,
   BookOpen,
+  Component,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserButton, Show } from "@clerk/react";
@@ -26,6 +27,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Intent Corpus", href: "/intents", icon: Library },
     { name: "Flow Classes", href: "/flows", icon: Workflow },
+    { name: "Enterprise Architecture", href: "/enterprise-architecture", icon: Component },
     { name: "Scenario Builder", href: "/scenario", icon: Calculator },
     { name: "Compare Scenarios", href: "/compare", icon: GitCompareArrows },
     { name: "Commercial Pricing", href: "/pricing", icon: DollarSign },

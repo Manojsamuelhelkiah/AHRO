@@ -15,6 +15,7 @@ import Dashboard from '@/pages/dashboard';
 import Intents from '@/pages/intents';
 import IntentDetail from '@/pages/intent-detail';
 import Flows from '@/pages/flows';
+import EnterpriseArchitecture from '@/pages/enterprise-architecture';
 import Scenario from '@/pages/scenario';
 import Assumptions from '@/pages/assumptions';
 import Compare from '@/pages/compare';
@@ -123,6 +124,14 @@ function Router() {
       <Route path="/calibration" component={() => <AppLayout><Calibration /></AppLayout>} />
 
       {/* Protected routes */}
+      <Route path="/enterprise-architecture">
+        <Protected>
+          <AppLayout>
+            <EnterpriseArchitecture />
+          </AppLayout>
+        </Protected>
+      </Route>
+
       <Route path="/rates">
         <Protected>
           <AppLayout>

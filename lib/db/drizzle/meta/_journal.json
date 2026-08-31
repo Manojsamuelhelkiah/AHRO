@@ -120,6 +120,13 @@
       "when": 1787200000001,
       "tag": "0015_pricing_sheets",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787200000002,
+      "tag": "0016_enterprise_architecture",
+      "breakpoints": true
     }
   ]
 }

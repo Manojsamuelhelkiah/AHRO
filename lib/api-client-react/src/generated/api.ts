@@ -30,6 +30,14 @@ import type {
   CustomIntentUpdate,
   DemoVolunteerList,
   DistributionProfile,
+  EaArchiveRequest,
+  EaAssessment,
+  EaAssessmentInput,
+  EaAssessmentUpdate,
+  EaDeleteRequest,
+  EaHandoffRequest,
+  EaHandoffSuggestion,
+  EaSolutionBaseline,
   ErrorMessage,
   ExportScenarioWorkbookLinkParams,
   FlowClass,
@@ -44,6 +52,7 @@ import type {
   ImportWorkbookResult,
   Intent,
   ListCustomIntentsParams,
+  ListEaAssessmentsParams,
   ListOnboardingApprovalsParams,
   ModelOption,
   OnbAnalytics,
@@ -116,6 +125,605 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetEnterpriseArchitectureBaselineUrl = () => {
+
+
+
+
+  return `/api/enterprise-architecture/baseline`
+}
+
+/**
+ * @summary Derive the reusable solution baseline from the current corpus
+ */
+export const getEnterpriseArchitectureBaseline = async ( options?: RequestInit): Promise<EaSolutionBaseline> => {
+
+  return customFetch<EaSolutionBaseline>(getGetEnterpriseArchitectureBaselineUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEnterpriseArchitectureBaselineQueryKey = () => {
+    return [
+    `/api/enterprise-architecture/baseline`
+    ] as const;
+    }
+
+
+export const getGetEnterpriseArchitectureBaselineQueryOptions = <TData = Awaited<ReturnType<typeof getEnterpriseArchitectureBaseline>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEnterpriseArchitectureBaseline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEnterpriseArchitectureBaselineQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEnterpriseArchitectureBaseline>>> = ({ signal }) => getEnterpriseArchitectureBaseline({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEnterpriseArchitectureBaseline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEnterpriseArchitectureBaselineQueryResult = NonNullable<Awaited<ReturnType<typeof getEnterpriseArchitectureBaseline>>>
+export type GetEnterpriseArchitectureBaselineQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Derive the reusable solution baseline from the current corpus
+ */
+
+export function useGetEnterpriseArchitectureBaseline<TData = Awaited<ReturnType<typeof getEnterpriseArchitectureBaseline>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEnterpriseArchitectureBaseline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEnterpriseArchitectureBaselineQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListEaAssessmentsUrl = (params?: ListEaAssessmentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/enterprise-architecture/assessments?${stringifiedParams}` : `/api/enterprise-architecture/assessments`
+}
+
+/**
+ * @summary List assessments owned by the signed-in user
+ */
+export const listEaAssessments = async (params?: ListEaAssessmentsParams, options?: RequestInit): Promise<EaAssessment[]> => {
+
+  return customFetch<EaAssessment[]>(getListEaAssessmentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEaAssessmentsQueryKey = (params?: ListEaAssessmentsParams,) => {
+    return [
+    `/api/enterprise-architecture/assessments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListEaAssessmentsQueryOptions = <TData = Awaited<ReturnType<typeof listEaAssessments>>, TError = ErrorType<unknown>>(params?: ListEaAssessmentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEaAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEaAssessmentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEaAssessments>>> = ({ signal }) => listEaAssessments(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEaAssessments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEaAssessmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listEaAssessments>>>
+export type ListEaAssessmentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List assessments owned by the signed-in user
+ */
+
+export function useListEaAssessments<TData = Awaited<ReturnType<typeof listEaAssessments>>, TError = ErrorType<unknown>>(
+ params?: ListEaAssessmentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEaAssessments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEaAssessmentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateEaAssessmentUrl = () => {
+
+
+
+
+  return `/api/enterprise-architecture/assessments`
+}
+
+/**
+ * @summary Create an owned assessment
+ */
+export const createEaAssessment = async (eaAssessmentInput: EaAssessmentInput, options?: RequestInit): Promise<EaAssessment> => {
+
+  return customFetch<EaAssessment>(getCreateEaAssessmentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(eaAssessmentInput)
+  }
+);}
+
+
+
+
+
+export const getCreateEaAssessmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEaAssessment>>, TError,{data: BodyType<EaAssessmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEaAssessment>>, TError,{data: BodyType<EaAssessmentInput>}, TContext> => {
+
+const mutationKey = ['createEaAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEaAssessment>>, {data: BodyType<EaAssessmentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createEaAssessment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateEaAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof createEaAssessment>>>
+    export type CreateEaAssessmentMutationBody = BodyType<EaAssessmentInput>
+    export type CreateEaAssessmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create an owned assessment
+ */
+export const useCreateEaAssessment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEaAssessment>>, TError,{data: BodyType<EaAssessmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createEaAssessment>>,
+        TError,
+        {data: BodyType<EaAssessmentInput>},
+        TContext
+      > => {
+      return useMutation(getCreateEaAssessmentMutationOptions(options));
+    }
+
+export const getGetEaAssessmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/enterprise-architecture/assessments/${id}`
+}
+
+/**
+ * @summary Get an owned assessment
+ */
+export const getEaAssessment = async (id: number, options?: RequestInit): Promise<EaAssessment> => {
+
+  return customFetch<EaAssessment>(getGetEaAssessmentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEaAssessmentQueryKey = (id: number,) => {
+    return [
+    `/api/enterprise-architecture/assessments/${id}`
+    ] as const;
+    }
+
+
+export const getGetEaAssessmentQueryOptions = <TData = Awaited<ReturnType<typeof getEaAssessment>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEaAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEaAssessmentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEaAssessment>>> = ({ signal }) => getEaAssessment(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEaAssessment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEaAssessmentQueryResult = NonNullable<Awaited<ReturnType<typeof getEaAssessment>>>
+export type GetEaAssessmentQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get an owned assessment
+ */
+
+export function useGetEaAssessment<TData = Awaited<ReturnType<typeof getEaAssessment>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEaAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEaAssessmentQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateEaAssessmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/enterprise-architecture/assessments/${id}`
+}
+
+/**
+ * @summary Update an owned assessment
+ */
+export const updateEaAssessment = async (id: number,
+    eaAssessmentUpdate: EaAssessmentUpdate, options?: RequestInit): Promise<EaAssessment> => {
+
+  return customFetch<EaAssessment>(getUpdateEaAssessmentUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(eaAssessmentUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateEaAssessmentMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEaAssessment>>, TError,{id: number;data: BodyType<EaAssessmentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateEaAssessment>>, TError,{id: number;data: BodyType<EaAssessmentUpdate>}, TContext> => {
+
+const mutationKey = ['updateEaAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEaAssessment>>, {id: number;data: BodyType<EaAssessmentUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateEaAssessment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateEaAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof updateEaAssessment>>>
+    export type UpdateEaAssessmentMutationBody = BodyType<EaAssessmentUpdate>
+    export type UpdateEaAssessmentMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Update an owned assessment
+ */
+export const useUpdateEaAssessment = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEaAssessment>>, TError,{id: number;data: BodyType<EaAssessmentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateEaAssessment>>,
+        TError,
+        {id: number;data: BodyType<EaAssessmentUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateEaAssessmentMutationOptions(options));
+    }
+
+export const getDeleteEaAssessmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/enterprise-architecture/assessments/${id}`
+}
+
+/**
+ * @summary Permanently delete an owned assessment
+ */
+export const deleteEaAssessment = async (id: number,
+    eaDeleteRequest: EaDeleteRequest, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteEaAssessmentUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(eaDeleteRequest)
+  }
+);}
+
+
+
+
+
+export const getDeleteEaAssessmentMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEaAssessment>>, TError,{id: number;data: BodyType<EaDeleteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteEaAssessment>>, TError,{id: number;data: BodyType<EaDeleteRequest>}, TContext> => {
+
+const mutationKey = ['deleteEaAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteEaAssessment>>, {id: number;data: BodyType<EaDeleteRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteEaAssessment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteEaAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteEaAssessment>>>
+    export type DeleteEaAssessmentMutationBody = BodyType<EaDeleteRequest>
+    export type DeleteEaAssessmentMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Permanently delete an owned assessment
+ */
+export const useDeleteEaAssessment = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEaAssessment>>, TError,{id: number;data: BodyType<EaDeleteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteEaAssessment>>,
+        TError,
+        {id: number;data: BodyType<EaDeleteRequest>},
+        TContext
+      > => {
+      return useMutation(getDeleteEaAssessmentMutationOptions(options));
+    }
+
+export const getArchiveEaAssessmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/enterprise-architecture/assessments/${id}/archive`
+}
+
+/**
+ * Archives an active assessment when expectedVersion matches. Calling this operation for an already archived assessment is idempotent and returns the current archived row even when the supplied expectedVersion is older; stale expectedVersion is rejected only while the assessment is active.
+ * @summary Archive an owned assessment
+ */
+export const archiveEaAssessment = async (id: number,
+    eaArchiveRequest: EaArchiveRequest, options?: RequestInit): Promise<EaAssessment> => {
+
+  return customFetch<EaAssessment>(getArchiveEaAssessmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(eaArchiveRequest)
+  }
+);}
+
+
+
+
+
+export const getArchiveEaAssessmentMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveEaAssessment>>, TError,{id: number;data: BodyType<EaArchiveRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveEaAssessment>>, TError,{id: number;data: BodyType<EaArchiveRequest>}, TContext> => {
+
+const mutationKey = ['archiveEaAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveEaAssessment>>, {id: number;data: BodyType<EaArchiveRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  archiveEaAssessment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveEaAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof archiveEaAssessment>>>
+    export type ArchiveEaAssessmentMutationBody = BodyType<EaArchiveRequest>
+    export type ArchiveEaAssessmentMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Archive an owned assessment
+ */
+export const useArchiveEaAssessment = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveEaAssessment>>, TError,{id: number;data: BodyType<EaArchiveRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveEaAssessment>>,
+        TError,
+        {id: number;data: BodyType<EaArchiveRequest>},
+        TContext
+      > => {
+      return useMutation(getArchiveEaAssessmentMutationOptions(options));
+    }
+
+export const getCreateEaAssessmentHandoffUrl = (id: number,) => {
+
+
+
+
+  return `/api/enterprise-architecture/assessments/${id}/handoff`
+}
+
+/**
+ * Returns suggestions only; the existing scenario and pricing engines remain authoritative.
+ * @summary Derive reviewable scenario and product-pricing scope suggestions
+ */
+export const createEaAssessmentHandoff = async (id: number,
+    eaHandoffRequest?: EaHandoffRequest, options?: RequestInit): Promise<EaHandoffSuggestion> => {
+
+  return customFetch<EaHandoffSuggestion>(getCreateEaAssessmentHandoffUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(eaHandoffRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateEaAssessmentHandoffMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEaAssessmentHandoff>>, TError,{id: number;data?: BodyType<EaHandoffRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEaAssessmentHandoff>>, TError,{id: number;data?: BodyType<EaHandoffRequest>}, TContext> => {
+
+const mutationKey = ['createEaAssessmentHandoff'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEaAssessmentHandoff>>, {id: number;data?: BodyType<EaHandoffRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createEaAssessmentHandoff(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateEaAssessmentHandoffMutationResult = NonNullable<Awaited<ReturnType<typeof createEaAssessmentHandoff>>>
+    export type CreateEaAssessmentHandoffMutationBody = BodyType<EaHandoffRequest> | undefined
+    export type CreateEaAssessmentHandoffMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Derive reviewable scenario and product-pricing scope suggestions
+ */
+export const useCreateEaAssessmentHandoff = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEaAssessmentHandoff>>, TError,{id: number;data?: BodyType<EaHandoffRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createEaAssessmentHandoff>>,
+        TError,
+        {id: number;data?: BodyType<EaHandoffRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateEaAssessmentHandoffMutationOptions(options));
+    }
 
 export const getHealthCheckUrl = () => {
 

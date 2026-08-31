@@ -22,7 +22,201 @@ tags:
     description: Orchestrated multi-agent onboarding POC (cases, agents, approvals, channels, connectors, analytics)
   - name: pricingRateSets
     description: Immutable versioned pricing rate register for quote-critical Azure, AI, implementation, and support unit rates
+  - name: enterpriseArchitecture
+    description: Owner-scoped enterprise architecture assessments and reusable solution baseline
 paths:
+  /enterprise-architecture/baseline:
+    get:
+      operationId: getEnterpriseArchitectureBaseline
+      tags: [enterpriseArchitecture]
+      summary: Derive the reusable solution baseline from the current corpus
+      responses:
+        "200":
+          description: Reusable architecture baseline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EaSolutionBaseline"
+  /enterprise-architecture/assessments:
+    get:
+      operationId: listEaAssessments
+      tags: [enterpriseArchitecture]
+      summary: List assessments owned by the signed-in user
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/EaAssessmentStatus"
+      responses:
+        "200":
+          description: Assessment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EaAssessment"
+    post:
+      operationId: createEaAssessment
+      tags: [enterpriseArchitecture]
+      summary: Create an owned assessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EaAssessmentInput"
+      responses:
+        "201":
+          description: Created assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EaAssessment"
+  /enterprise-architecture/assessments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/EaAssessmentId"
+    get:
+      operationId: getEaAssessment
+      tags: [enterpriseArchitecture]
+      summary: Get an owned assessment
+      responses:
+        "200":
+          description: Assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EaAssessment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      operationId: updateEaAssessment
+      tags: [enterpriseArchitecture]
+      summary: Update an owned assessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EaAssessmentUpdate"
+      responses:
+        "200":
+          description: Updated assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EaAssessment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Assessment is archived or has been modified by another user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      operationId: deleteEaAssessment
+      tags: [enterpriseArchitecture]
+      summary: Permanently delete an owned assessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EaDeleteRequest"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Archived assessments are retained and cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /enterprise-architecture/assessments/{id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/EaAssessmentId"
+    post:
+      operationId: archiveEaAssessment
+      tags: [enterpriseArchitecture]
+      summary: Archive an owned assessment
+      description: >
+        Archives an active assessment when expectedVersion matches. Calling this
+        operation for an already archived assessment is idempotent and returns
+        the current archived row even when the supplied expectedVersion is older;
+        stale expectedVersion is rejected only while the assessment is active.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EaArchiveRequest"
+      responses:
+        "200":
+          description: Newly archived assessment, or the current row when already archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EaAssessment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Assessment has been modified since it was loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /enterprise-architecture/assessments/{id}/handoff:
+    parameters:
+      - $ref: "#/components/parameters/EaAssessmentId"
+    post:
+      operationId: createEaAssessmentHandoff
+      tags: [enterpriseArchitecture]
+      summary: Derive reviewable scenario and product-pricing scope suggestions
+      description: Returns suggestions only; the existing scenario and pricing engines remain authoritative.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EaHandoffRequest"
+      responses:
+        "200":
+          description: Reviewable handoff suggestions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EaHandoffSuggestion"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Assessment is archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /healthz:
     get:
       operationId: healthCheck
@@ -1599,7 +1793,507 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
 components:
+  parameters:
+    EaAssessmentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
   schemas:
+    EaAssessmentStatus:
+      type: string
+      enum: [active, archived]
+    EaPhase:
+      type: string
+      enum: [preliminary, architecture-vision, business, data, application, technology, opportunities-solutions, migration-planning, implementation-governance, architecture-change-management]
+    EaDomain:
+      type: string
+      enum: [business, data, application, technology, integration, ai, security, operating-model]
+    EaTraceability:
+      type: object
+      properties:
+        requirementIds:
+          type: array
+          items: { type: string }
+        gapIds:
+          type: array
+          items: { type: string }
+        targetComponentIds:
+          type: array
+          items: { type: string }
+        workPackageIds:
+          type: array
+          items: { type: string }
+        governanceReviewIds:
+          type: array
+          items: { type: string }
+      required: [requirementIds, gapIds, targetComponentIds, workPackageIds, governanceReviewIds]
+    EaEvidence:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        uri: { type: string }
+        source: { type: string }
+        capturedAt: { type: string }
+        notes: { type: string }
+      required: [id, title, source]
+    EaPhaseProgress:
+      type: object
+      properties:
+        phase:
+          $ref: "#/components/schemas/EaPhase"
+        status:
+          type: string
+          enum: [not-started, in-progress, complete, blocked]
+        completionPercent: { type: number, minimum: 0, maximum: 100 }
+        notes: { type: string }
+        updatedAt: { type: string }
+      required: [phase, status, completionPercent]
+    EaRequirement:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        stakeholder: { type: string }
+        concern: { type: string }
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [proposed, approved, implemented, verified, rejected]
+        acceptanceCriteria:
+          type: array
+          items: { type: string }
+        traceability:
+          $ref: "#/components/schemas/EaTraceability"
+      required: [id, title, description, stakeholder, concern, priority, status, acceptanceCriteria, traceability]
+    EaInventoryItem:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        kind: { type: string, minLength: 1 }
+        description: { type: string }
+        maturity: { type: integer, minimum: 0, maximum: 5 }
+        criticality:
+          type: string
+          enum: [unknown, low, medium, high, critical]
+        lifecycle:
+          type: string
+          enum: [unknown, planned, active, tolerated, sunset, retired]
+        owner: { type: string }
+        confidence:
+          type: string
+          enum: [unknown, low, medium, high]
+        notes: { type: string }
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EaEvidence"
+      required: [id, name, kind, description, maturity, criticality, lifecycle, owner, confidence, notes, evidence]
+    EaCurrentStateInventory:
+      type: object
+      properties:
+        business: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+        data: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+        application: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+        technology: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+        integration: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+        ai: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+        security: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+        operatingModel: { type: array, items: { $ref: "#/components/schemas/EaInventoryItem" } }
+      required: [business, data, application, technology, integration, ai, security, operatingModel]
+    EaGap:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        domain: { $ref: "#/components/schemas/EaDomain" }
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        impact: { type: string }
+        recommendation: { type: string }
+        targetBuildingBlockId: { type: string }
+        implementationDependencyIds: { type: array, items: { type: string } }
+        disposition:
+          type: string
+          enum: [open, accepted, mitigated, deferred, closed]
+        traceability: { $ref: "#/components/schemas/EaTraceability" }
+      required: [id, title, domain, severity, impact, recommendation, targetBuildingBlockId, implementationDependencyIds, disposition, traceability]
+    EaTargetComponent:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        domain: { $ref: "#/components/schemas/EaDomain" }
+        componentType: { type: string, minLength: 1 }
+        description: { type: string }
+        status:
+          type: string
+          enum: [proposed, approved, implementing, live, retired]
+        owner: { type: string }
+        addressesGapIds: { type: array, items: { type: string } }
+        deliveredByWorkPackageIds: { type: array, items: { type: string } }
+      required: [id, name, domain, componentType, description, status, owner, addressesGapIds, deliveredByWorkPackageIds]
+    EaTargetRelationship:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        sourceComponentId: { type: string, minLength: 1 }
+        targetComponentId: { type: string, minLength: 1 }
+        relationshipType: { type: string, minLength: 1 }
+        description: { type: string }
+      required: [id, sourceComponentId, targetComponentId, relationshipType, description]
+    EaSolutionOption:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        approach:
+          type: string
+          enum: [build, buy, reuse, hybrid]
+        gapIds: { type: array, items: { type: string } }
+        targetComponentIds: { type: array, items: { type: string } }
+        benefits: { type: array, items: { type: string } }
+        constraints: { type: array, items: { type: string } }
+        score: { type: number }
+        selected: { type: boolean }
+      required: [id, name, approach, gapIds, targetComponentIds, benefits, constraints, score, selected]
+    EaTransitionArchitecture:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        targetComponentIds: { type: array, items: { type: string } }
+        workPackageIds: { type: array, items: { type: string } }
+        entryCriteria: { type: array, items: { type: string } }
+        exitCriteria: { type: array, items: { type: string } }
+      required: [id, name, description, targetComponentIds, workPackageIds, entryCriteria, exitCriteria]
+    EaWorkPackage:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        phase: { $ref: "#/components/schemas/EaPhase" }
+        description: { type: string }
+        owner: { type: string }
+        outcomes: { type: array, items: { type: string } }
+        targetComponentIds: { type: array, items: { type: string } }
+        status:
+          type: string
+          enum: [planned, ready, in-progress, blocked, complete]
+        sequence: { type: integer, minimum: 0 }
+        estimatedCost: { type: number, minimum: 0 }
+      required: [id, name, phase, description, owner, outcomes, targetComponentIds, status, sequence, estimatedCost]
+    EaRoadmapDependency:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        predecessorWorkPackageId: { type: string, minLength: 1 }
+        successorWorkPackageId: { type: string, minLength: 1 }
+        dependencyType:
+          type: string
+          enum: [finish-start, start-start, external]
+        notes: { type: string }
+      required: [id, predecessorWorkPackageId, successorWorkPackageId, dependencyType, notes]
+    EaRoadmapWave:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        sequence: { type: integer, minimum: 0 }
+        transitionArchitectureId: { type: string }
+        workPackageIds: { type: array, items: { type: string } }
+        startDate: { type: string }
+        endDate: { type: string }
+      required: [id, name, sequence, transitionArchitectureId, workPackageIds, startDate, endDate]
+    EaPrioritization:
+      type: object
+      properties:
+        workPackageId: { type: string, minLength: 1 }
+        value: { type: number, minimum: 0, maximum: 5 }
+        risk: { type: number, minimum: 0, maximum: 5 }
+        urgency: { type: number, minimum: 0, maximum: 5 }
+        dependency: { type: number, minimum: 0, maximum: 5 }
+        readiness: { type: number, minimum: 0, maximum: 5 }
+        cost: { type: number, minimum: 0, maximum: 5 }
+        totalScore: { type: number }
+        rationale: { type: string }
+      required: [workPackageId, value, risk, urgency, dependency, readiness, cost, totalScore, rationale]
+    EaGovernanceRecord:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        recordType:
+          type: string
+          enum: [contract, review, deviation, waiver, remediation]
+        status:
+          type: string
+          enum: [open, scheduled, approved, rejected, complete, expired]
+        owner: { type: string }
+        description: { type: string }
+        dueDate: { type: string }
+        targetComponentIds: { type: array, items: { type: string } }
+        workPackageIds: { type: array, items: { type: string } }
+        decisionIds: { type: array, items: { type: string } }
+      required: [id, title, recordType, status, owner, description, dueDate, targetComponentIds, workPackageIds, decisionIds]
+    EaChangeRequest:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        requestedBy: { type: string }
+        status:
+          type: string
+          enum: [submitted, assessing, approved, rejected, implemented]
+        classification:
+          type: string
+          enum: [minor, new-cycle]
+        impact:
+          type: object
+          properties:
+            baseline: { type: string }
+            targetState: { type: string }
+            roadmap: { type: string }
+            cost: { type: string }
+            affectedIds: { type: array, items: { type: string } }
+          required: [baseline, targetState, roadmap, cost, affectedIds]
+      required: [id, title, description, requestedBy, status, classification, impact]
+    EaArchitectureVersion:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        version: { type: string, minLength: 1 }
+        description: { type: string }
+        approvedAt: { type: string }
+        approvedBy: { type: string }
+        changeRequestIds: { type: array, items: { type: string } }
+      required: [id, version, description, approvedAt, approvedBy, changeRequestIds]
+    EaDecision:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        decision: { type: string }
+        rationale: { type: string }
+        status:
+          type: string
+          enum: [proposed, approved, superseded]
+        owner: { type: string }
+        decidedAt: { type: string }
+        traceability: { $ref: "#/components/schemas/EaTraceability" }
+      required: [id, title, decision, rationale, status, owner, decidedAt, traceability]
+    EaRisk:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        likelihood: { type: integer, minimum: 1, maximum: 5 }
+        impact: { type: integer, minimum: 1, maximum: 5 }
+        mitigation: { type: string }
+        owner: { type: string }
+        status:
+          type: string
+          enum: [open, mitigating, accepted, closed]
+      required: [id, title, description, likelihood, impact, mitigation, owner, status]
+    EaCostLink:
+      type: object
+      properties:
+        id: { type: string, minLength: 1 }
+        linkType:
+          type: string
+          enum: [scenario, pricing-sheet]
+        linkedRecordId: { type: integer, minimum: 1 }
+        gapIds: { type: array, items: { type: string } }
+        targetComponentIds: { type: array, items: { type: string } }
+        workPackageIds: { type: array, items: { type: string } }
+        scopeSnapshot:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string }
+      required: [id, linkType, linkedRecordId, gapIds, targetComponentIds, workPackageIds, scopeSnapshot, createdAt]
+    EaAssessmentContent:
+      type: object
+      properties:
+        phaseProgress:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items: { $ref: "#/components/schemas/EaPhaseProgress" }
+        requirements: { type: array, items: { $ref: "#/components/schemas/EaRequirement" } }
+        currentState: { $ref: "#/components/schemas/EaCurrentStateInventory" }
+        gaps: { type: array, items: { $ref: "#/components/schemas/EaGap" } }
+        targetArchitecture:
+          type: object
+          properties:
+            components: { type: array, items: { $ref: "#/components/schemas/EaTargetComponent" } }
+            relationships: { type: array, items: { $ref: "#/components/schemas/EaTargetRelationship" } }
+          required: [components, relationships]
+        opportunities:
+          type: object
+          properties:
+            solutionOptions: { type: array, items: { $ref: "#/components/schemas/EaSolutionOption" } }
+            transitionArchitectures: { type: array, items: { $ref: "#/components/schemas/EaTransitionArchitecture" } }
+          required: [solutionOptions, transitionArchitectures]
+        roadmap:
+          type: object
+          properties:
+            workPackages: { type: array, items: { $ref: "#/components/schemas/EaWorkPackage" } }
+            waves: { type: array, items: { $ref: "#/components/schemas/EaRoadmapWave" } }
+            dependencies: { type: array, items: { $ref: "#/components/schemas/EaRoadmapDependency" } }
+            prioritization: { type: array, items: { $ref: "#/components/schemas/EaPrioritization" } }
+          required: [workPackages, waves, dependencies, prioritization]
+        governance:
+          type: object
+          properties:
+            contracts: { type: array, items: { $ref: "#/components/schemas/EaGovernanceRecord" } }
+            reviews: { type: array, items: { $ref: "#/components/schemas/EaGovernanceRecord" } }
+            deviations: { type: array, items: { $ref: "#/components/schemas/EaGovernanceRecord" } }
+            waivers: { type: array, items: { $ref: "#/components/schemas/EaGovernanceRecord" } }
+            remediation: { type: array, items: { $ref: "#/components/schemas/EaGovernanceRecord" } }
+          required: [contracts, reviews, deviations, waivers, remediation]
+        changeManagement:
+          type: object
+          properties:
+            requests: { type: array, items: { $ref: "#/components/schemas/EaChangeRequest" } }
+            versionHistory: { type: array, items: { $ref: "#/components/schemas/EaArchitectureVersion" } }
+          required: [requests, versionHistory]
+        decisions: { type: array, items: { $ref: "#/components/schemas/EaDecision" } }
+        risks: { type: array, items: { $ref: "#/components/schemas/EaRisk" } }
+        costLinks: { type: array, items: { $ref: "#/components/schemas/EaCostLink" } }
+      required: [phaseProgress, requirements, currentState, gaps, targetArchitecture, opportunities, roadmap, governance, changeManagement, decisions, risks, costLinks]
+    EaAssessmentInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        clientName: { type: string, minLength: 1, maxLength: 200 }
+        currentPhase: { $ref: "#/components/schemas/EaPhase" }
+        content: { $ref: "#/components/schemas/EaAssessmentContent" }
+      required: [name, clientName, currentPhase, content]
+    EaAssessmentUpdate:
+      type: object
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        name: { type: string, minLength: 1, maxLength: 200 }
+        clientName: { type: string, minLength: 1, maxLength: 200 }
+        currentPhase: { $ref: "#/components/schemas/EaPhase" }
+        content: { $ref: "#/components/schemas/EaAssessmentContent" }
+      required: [expectedVersion]
+    EaArchiveRequest:
+      type: object
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+      required: [expectedVersion]
+    EaDeleteRequest:
+      type: object
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+      required: [expectedVersion]
+    EaAssessment:
+      allOf:
+        - $ref: "#/components/schemas/EaAssessmentInput"
+        - type: object
+          properties:
+            id: { type: integer }
+            status: { $ref: "#/components/schemas/EaAssessmentStatus" }
+            version: { type: integer, minimum: 1 }
+            createdAt: { type: string }
+            updatedAt: { type: string }
+            archivedAt:
+              type: string
+              nullable: true
+          required: [id, status, version, createdAt, updatedAt, archivedAt]
+    EaBaselineViewpoint:
+      type: object
+      properties:
+        domain: { $ref: "#/components/schemas/EaDomain" }
+        summary: { type: string }
+        buildingBlocks:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              name: { type: string }
+              description: { type: string }
+              sourceType:
+                type: string
+                enum: [intent, flow-class, system, model, assumption, pricing-architecture]
+            required: [key, name, description, sourceType]
+      required: [domain, summary, buildingBlocks]
+    EaSolutionBaseline:
+      type: object
+      properties:
+        generatedAt: { type: string }
+        viewpoints:
+          type: array
+          minItems: 8
+          maxItems: 8
+          items: { $ref: "#/components/schemas/EaBaselineViewpoint" }
+        sourceCounts:
+          type: object
+          properties:
+            intents: { type: integer }
+            flowClasses: { type: integer }
+            systems: { type: integer }
+            models: { type: integer }
+            assumptions: { type: integer }
+          required: [intents, flowClasses, systems, models, assumptions]
+      required: [generatedAt, viewpoints, sourceCounts]
+    EaHandoffRequest:
+      type: object
+      properties:
+        scenarioId: { type: integer, minimum: 1 }
+        pricingSheetId: { type: integer, minimum: 1 }
+    EaHandoffSuggestion:
+      type: object
+      properties:
+        assessmentId: { type: integer }
+        generatedAt: { type: string }
+        scenario:
+          type: object
+          properties:
+            name: { type: string }
+            scope:
+              type: object
+              additionalProperties: true
+            reviewNotes: { type: array, items: { type: string } }
+          required: [name, scope, reviewNotes]
+        productPricing:
+          type: object
+          properties:
+            name: { type: string }
+            scope:
+              type: object
+              additionalProperties: true
+            reviewNotes: { type: array, items: { type: string } }
+          required: [name, scope, reviewNotes]
+        traceability:
+          type: object
+          properties:
+            gapIds: { type: array, items: { type: string } }
+            targetComponentIds: { type: array, items: { type: string } }
+            workPackageIds: { type: array, items: { type: string } }
+            requestedScenarioId: { type: integer, nullable: true }
+            requestedPricingSheetId: { type: integer, nullable: true }
+          required: [gapIds, targetComponentIds, workPackageIds, requestedScenarioId, requestedPricingSheetId]
+      required: [assessmentId, generatedAt, scenario, productPricing, traceability]
     HealthStatus:
       type: object
       properties:
