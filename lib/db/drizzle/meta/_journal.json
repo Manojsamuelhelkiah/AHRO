@@ -148,6 +148,13 @@
       "when": 1788887340001,
       "tag": "0019_effect_journal",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788887340002,
+      "tag": "0020_align_email_watch_schema",
+      "breakpoints": true
     }
   ]
 }

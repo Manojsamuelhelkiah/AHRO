@@ -35,7 +35,13 @@ await build({
 
 const result = spawnSync(
   process.execPath,
-  ["--test", ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).map((f) => path.join(dir, f))],
+  [
+    "--test",
+    path.join(dir, "test-db-setup.test.mjs"),
+    ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).map((f) =>
+      path.join(dir, f),
+    ),
+  ],
   { stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } },
 );
 process.exit(result.status ?? 1);
