@@ -10,7 +10,9 @@ import {
   pool,
 } from "@workspace/db";
 import { errorHandler } from "../middlewares/error-handler";
-import customIntentsRouter from "./custom-intents";
+import customIntentsRouter, {
+  setCustomIntentCreateAfterPreflightHookForTests,
+} from "./custom-intents";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -159,6 +161,120 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
       );
     } finally {
       await db.delete(customIntentsTable).where(eq(customIntentsTable.id, created.id));
+    }
+  });
+
+  test("overlapping POSTs reserve an exact alias for only one custom intent", async (t) => {
+    const schemaCheck = await pool.query<{ ready: boolean }>(`
+      select (
+        to_regclass('custom_intent_routing_labels') is not null
+        and exists (
+          select 1
+          from information_schema.columns
+          where table_schema = current_schema()
+            and table_name = 'custom_intents'
+            and column_name = 'registry_version'
+        )
+      ) as ready
+    `);
+    if (!schemaCheck.rows[0]?.ready) {
+      t.skip("custom intent routing schema has not been applied to this database");
+      return;
+    }
+
+    const suffix = `${process.pid}-${Date.now()}`;
+    const alias = `concurrent_create_alias_${suffix}`;
+    const names = [
+      `Concurrent create alpha ${suffix}`,
+      `Concurrent create beta ${suffix}`,
+    ];
+    const keys = names.map((name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+    const payload = (name: string) => ({
+      name,
+      domain: "hire",
+      flowClass: "fc2-policy",
+      description: "Concurrent create routing-label regression",
+      asIsHandlingMin: 10,
+      toBeHumanMin: 2,
+      baseWeight: 1,
+      actGetActions: 1,
+      actPutActions: 0,
+      systemsTouchedBase: 1,
+      source: "integration-test",
+      author: "integration-test",
+      exactAliases: [alias],
+    });
+    const create = (name: string) => fetch(`${baseUrl}/custom-intents`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload(name)),
+    });
+    let preflightCount = 0;
+    let releasePreflights: (() => void) | undefined;
+    const bothPreflightsReached = new Promise<void>((resolve) => {
+      releasePreflights = resolve;
+    });
+    setCustomIntentCreateAfterPreflightHookForTests(async () => {
+      preflightCount += 1;
+      if (preflightCount === 2) releasePreflights?.();
+      await bothPreflightsReached;
+    });
+
+    try {
+      const responses = await Promise.all(names.map(create));
+      const statuses = responses.map(({ status }) => status).sort();
+      assert.deepEqual(statuses, [201, 400]);
+
+      const winnerResponse = responses.find(({ status }) => status === 201);
+      const loserResponse = responses.find(({ status }) => status === 400);
+      assert.ok(winnerResponse);
+      assert.ok(loserResponse);
+      const winner = await winnerResponse.json() as {
+        id: number;
+        key: string;
+        registryVersion: string;
+        exactAliases: string[];
+      };
+      assert.deepEqual(
+        await loserResponse.json(),
+        { error: "A canonical key or exact alias already belongs to another outcome" },
+      );
+
+      const storedRows = await Promise.all(keys.map(async (key) => {
+        const [row] = await db
+          .select()
+          .from(customIntentsTable)
+          .where(eq(customIntentsTable.key, key));
+        return row;
+      }));
+      assert.equal(storedRows.filter(Boolean).length, 1, "the losing custom-intent row must roll back");
+      const storedWinner = storedRows.find(Boolean);
+      assert.ok(storedWinner);
+      assert.equal(storedWinner.id, winner.id);
+      assert.equal(storedWinner.key, winner.key);
+      assert.equal(storedWinner.registryVersion, winner.registryVersion);
+      assert.deepEqual(JSON.parse(storedWinner.exactAliases), winner.exactAliases);
+
+      const reservations = await db
+        .select({
+          label: customIntentRoutingLabelsTable.label,
+          registryVersion: customIntentRoutingLabelsTable.registryVersion,
+        })
+        .from(customIntentRoutingLabelsTable)
+        .where(eq(customIntentRoutingLabelsTable.customIntentId, winner.id));
+      assert.deepEqual(
+        reservations
+          .map(({ label, registryVersion }) => ({ label, registryVersion }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+        [winner.key, ...winner.exactAliases]
+          .map((label) => ({ label, registryVersion: winner.registryVersion }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      );
+    } finally {
+      setCustomIntentCreateAfterPreflightHookForTests(undefined);
+      await Promise.all(keys.map((key) =>
+        db.delete(customIntentsTable).where(eq(customIntentsTable.key, key))
+      ));
     }
   });
 });

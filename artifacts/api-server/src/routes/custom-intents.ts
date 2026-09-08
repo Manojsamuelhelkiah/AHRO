@@ -257,10 +257,22 @@ function routingLabels(key: string, aliases: string[]) {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return typeof error === "object"
-    && error !== null
-    && "code" in error
-    && (error as { code?: unknown }).code === "23505";
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+  while (typeof current === "object" && current !== null && !seen.has(current)) {
+    seen.add(current);
+    if ("code" in current && (current as { code?: unknown }).code === "23505") return true;
+    current = "cause" in current ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
+
+let createAfterPreflightHookForTests: (() => Promise<void>) | undefined;
+
+export function setCustomIntentCreateAfterPreflightHookForTests(
+  hook: (() => Promise<void>) | undefined,
+) {
+  createAfterPreflightHookForTests = hook;
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────────
@@ -287,6 +299,7 @@ router.post("/custom-intents", async (req, res, next) => {
     validateMergedRoutingFields(body);
     const key = await generateKey(String(body.name));
     await assertNoRoutingLabelCollision(key, body.exactAliases as string[] | undefined ?? []);
+    await createAfterPreflightHookForTests?.();
     const aliases = body.exactAliases as string[] | undefined ?? [];
     let row: typeof customIntentsTable.$inferSelect;
     try {
