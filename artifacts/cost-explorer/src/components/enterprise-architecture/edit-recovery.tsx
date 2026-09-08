@@ -50,7 +50,7 @@ export function EditRecoveryProvider({ children }: { children: ReactNode }) {
   return <RecoveryContext.Provider value={{ retain, discard, hasConflicts: () => editsRef.current.length > 0, resolvedFields, resolveField, nextOrder: () => orderRef.current++ }}>
     {edits.length > 0 && <section className="m-4 space-y-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-slate-900" aria-label="Unsaved edits">
       <h2 className="font-semibold">Resolve unsaved edits</h2>
-      <p className="text-sm">Someone else changed this assessment. Your rejected drafts are kept here until you retry or discard them. Keep this workspace open until you finish.</p>
+      <p className="text-sm">A save failed or this assessment changed elsewhere. Your drafts are kept here and automatic saves are paused until you retry or discard them. An interrupted save may already have reached the server; compare the latest saved value before retrying. Keep this workspace open until you finish.</p>
       {edits.map((edit, index) => <div key={edit.id} className="space-y-3 border-t border-amber-200 pt-3">
         <h3 className="font-medium">{edit.label}</h3>
         <div className="grid gap-3 md:grid-cols-2">

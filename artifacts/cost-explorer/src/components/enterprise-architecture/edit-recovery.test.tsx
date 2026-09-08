@@ -6,6 +6,72 @@ import { assessment, conflict, deferred, mountRecovery, requirement } from "./te
 
 after(disposeDom);
 
+for (const failure of ["network", "503"] as const) {
+  for (const committed of [false, true]) {
+    test(`${failure} save failure (committed=${committed}) retains create and dependent edits until ordered recovery`, { timeout: 5000 }, async t => {
+      const h = await mountRecovery(t);
+      // Even a host-wide retry policy must not automatically replay mutations.
+      h.client.setDefaultOptions({
+        ...h.client.getDefaultOptions(),
+        mutations: { retry: 3, retryDelay: 0, gcTime: Infinity },
+      });
+      const gate = deferred<void>();
+      const fail = () => {
+        if (failure === "network") throw new TypeError("Connection lost");
+        return Response.json({ message: "Unavailable" }, { status: 503 });
+      };
+      h.server.nextWrites.push(async () => {
+        await gate.promise;
+        if (committed) h.server.commit(h.server.writes[0]);
+        return fail();
+      });
+      const created = requirement();
+      await h.save(current => [...current, created]);
+      await h.until(() => h.server.writes.length === 1, "create must start");
+      await h.title(created.id, "Dependent title");
+      await h.blur(created.id);
+      // The outage also prevents refreshing either recovery card.
+      h.server.nextReads.push(fail, fail);
+      gate.resolve();
+      await h.flush();
+      assert.equal(h.server.writes.length, 1);
+      assert.equal(h.cards().length, 2);
+      assert.deepEqual(h.draft(0), [created]);
+      assert.equal(h.draft(1)[0].title, "Dependent title");
+      assert.equal(h.button("Retry draft").disabled, true);
+      assert.ok(h.host.querySelector("[inert]"));
+      assert.match(h.host.textContent!, /automatic saves are paused/);
+
+      await h.remount("replacement");
+      assert.deepEqual(h.draft(0), [created], "draft must outlive its editor");
+      await h.click("Reload latest");
+      assert.deepEqual(h.latest(), committed ? [created] : []);
+      assert.equal(h.server.writes.length, 1, "reload cannot resume writes");
+      assert.equal(h.button("Retry draft", 1).disabled, true);
+
+      // A failed explicit retry must retain the same drafts and release busy state.
+      h.server.nextWrites.push(fail);
+      await h.click("Retry draft");
+      assert.equal(h.cards().length, 2);
+      assert.deepEqual(h.draft(0), [created]);
+      assert.equal(h.draft(1)[0].title, "Dependent title");
+      assert.equal(h.button("Retry draft").disabled, false);
+      assert.equal(h.server.writes.length, 2);
+      await h.click("Retry draft");
+      assert.equal(h.cards().length, 1);
+      assert.deepEqual(h.server.saved.content.requirements, [created], "ambiguous create retry must not duplicate the record");
+      assert.ok(h.host.querySelector("[inert]"));
+      await h.click("Retry draft");
+      assert.deepEqual(h.server.saved.content.requirements, [{ ...created, title: "Dependent title" }]);
+      assert.deepEqual(h.editor.draft, h.server.saved.content.requirements);
+      assert.equal(h.cards().length, 0);
+      assert.equal(h.host.querySelector("[inert]"), null);
+      assert.deepEqual(h.server.writes.map(write => write.expectedVersion),
+        committed ? [1, 2, 2, 3] : [1, 1, 1, 2]);
+    });
+  }
+}
+
 test("rejected create retains its queued title edit and explicit ordered retries save exactly one record", { timeout: 5000 }, async t => {
   const h = await mountRecovery(t);
   const rejected = deferred<Response>();

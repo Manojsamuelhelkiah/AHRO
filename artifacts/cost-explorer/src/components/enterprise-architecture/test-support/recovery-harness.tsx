@@ -48,6 +48,14 @@ export async function mountRecovery(t: TestContext, initial = assessment()) {
     reads: 0,
     nextWrites: [] as Array<() => Response | Promise<Response>>,
     nextReads: [] as Array<() => Response | Promise<Response>>,
+    commit(data: EaAssessmentUpdate) {
+      if (data.expectedVersion !== server.saved.version || server.saved.status === "archived") return conflict();
+      server.saved = {
+        ...server.saved, ...data, version: server.saved.version + 1,
+        content: data.content ?? server.saved.content,
+      };
+      return Response.json(server.saved);
+    },
   };
   t.mock.method(globalThis, "fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
     assert.equal(String(url), `/api/enterprise-architecture/assessments/${initial.id}`);
@@ -56,12 +64,7 @@ export async function mountRecovery(t: TestContext, initial = assessment()) {
       server.writes.push(data);
       const planned = server.nextWrites.shift();
       if (planned) return planned();
-      if (data.expectedVersion !== server.saved.version || server.saved.status === "archived") return conflict();
-      server.saved = {
-        ...server.saved, ...data, version: server.saved.version + 1,
-        content: data.content ?? server.saved.content,
-      };
-      return Response.json(server.saved);
+      return server.commit(data);
     }
     assert.equal(init?.method, "GET");
     server.reads++;

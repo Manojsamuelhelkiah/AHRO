@@ -9,8 +9,8 @@ Mutable JSON aggregates must combine server-side optimistic version checks with 
 
 **How to apply:** For any aggregate editor, apply stable-ID transforms at queue execution time, increment and match a persisted version atomically, return conflicts instead of overwriting, and drain the queue before archive or delete.
 
-Conflict recovery must require an explicit retry or discard; loading a newer version is not permission to resume autosaving a rejected draft.
+Failed-save recovery must require an explicit retry or discard, including network/5xx failures; loading a newer version is not permission to resume autosaving a draft.
 
-**Why:** Whole-row local mirrors can silently resubmit rejected values with the refreshed version during an unrelated blur event. A retry must preserve the original change intent rather than replay a toggle or replace an entire collection.
+**Why:** Whole-row local mirrors can silently resubmit rejected values with the refreshed version during an unrelated blur event. Network/server errors may occur after a save commits. A retry must preserve the original change intent and record identities rather than replay a toggle, regenerate IDs, or replace an entire collection.
 
-**How to apply:** Pause editing and queued writes while conflicts are unresolved, keep draft ownership above tab lifecycles, and reapply changed fields using each collection's actual identity (including phase keys) and link-set deltas. Notify the currently mounted editor when resolving instead of retaining an obsolete component's setter.
+**How to apply:** Pause editing and queued writes while failed drafts are unresolved, disable library-level automatic mutation retries, keep draft ownership above tab lifecycles, and reapply changed fields using each collection's actual identity (including phase keys) and link-set deltas. Notify the currently mounted editor when resolving instead of retaining an obsolete component's setter.

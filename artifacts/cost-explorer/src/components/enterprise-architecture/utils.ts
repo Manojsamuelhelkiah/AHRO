@@ -102,7 +102,9 @@ export function useAssessmentUpdater<T>(
   onResolved?: (latest: T) => void,
 ) {
   const queryClient = useQueryClient();
-  const updateMutation = useUpdateEaAssessment();
+  // An interrupted response may already have committed. Recovery, not the
+  // mutation library, must decide when to write again.
+  const updateMutation = useUpdateEaAssessment({ mutation: { retry: false } });
   const mutateAsyncRef = useRef(updateMutation.mutateAsync);
   mutateAsyncRef.current = updateMutation.mutateAsync;
   const { toast } = useToast();
@@ -215,21 +217,23 @@ export function useAssessmentUpdater<T>(
         if (rejected) resolveLocal();
         recovery.discard(recoveryId);
       } catch (error) {
+        // Preserve intent and pause the queue for every failed mutation, including
+        // ambiguous network/5xx outcomes. Reload never authorizes another write.
+        rejected = true;
         if (getErrorStatus(error) === 409) {
-          rejected = true;
           toast({
             title: "Conflict",
             description: "Your draft is preserved. Compare it with the latest saved value, then retry or discard.",
             variant: "destructive",
           });
-          await reload();
         } else {
           toast({
-            title: "Error",
-            description: "Failed to save changes.",
+            title: "Save interrupted",
+            description: "Your draft is preserved. Reload the latest saved value, then retry or discard.",
             variant: "destructive",
           });
         }
+        await reload();
       }
     }).catch(() => undefined);
     void execute().finally(() => {
