@@ -930,6 +930,10 @@ export interface CorpusSummary {
   byDomain: CountBucket[];
   byFlowClass: CountBucket[];
   bySource: CountBucket[];
+  /** False when custom-intent storage could not be read and all intent totals and buckets contain bundled reference intents only. */
+  customIntentsAvailable: boolean;
+  /** User-safe explanation when custom-intent totals are unavailable. */
+  warning?: string;
 }
 
 export interface RoutingSummary {

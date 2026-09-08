@@ -2694,7 +2694,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CountBucket"
-      required: [intentCount, systemCount, profileCount, byDomain, byFlowClass, bySource]
+        customIntentsAvailable:
+          type: boolean
+          description: False when custom-intent storage could not be read and all intent totals and buckets contain bundled reference intents only.
+        warning:
+          type: string
+          description: User-safe explanation when custom-intent totals are unavailable.
+      required: [intentCount, systemCount, profileCount, byDomain, byFlowClass, bySource, customIntentsAvailable]
     RoutingSummary:
       type: object
       properties:

@@ -4310,7 +4310,9 @@ export const GetCorpusSummaryResponse = zod.object({
   "bySource": zod.array(zod.object({
   "key": zod.string(),
   "count": zod.number()
-}))
+})),
+  "customIntentsAvailable": zod.boolean().describe('False when custom-intent storage could not be read and all intent totals and buckets contain bundled reference intents only.'),
+  "warning": zod.string().optional().describe('User-safe explanation when custom-intent totals are unavailable.')
 })
 
 

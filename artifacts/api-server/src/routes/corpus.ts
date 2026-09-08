@@ -114,33 +114,65 @@ router.get("/assumptions", (_req, res) => {
   res.json(ListAssumptionsResponse.parse(assumptions));
 });
 
-router.get("/summary", async (_req, res, next) => {
+export async function loadCorpusSummary(
+  loadCustomRows: () => Promise<CustomIntentRow[]> = async () =>
+    db.select().from(customIntentsTable),
+) {
+  let activeCustom: Intent[] = [];
+  let customIntentsAvailable = true;
+  let customStorageError: unknown;
+
   try {
-    const customRows = await db.select().from(customIntentsTable);
-    const activeCustom = customRows
+    const customRows = await loadCustomRows();
+    activeCustom = customRows
       .filter((r) => r.status === "active" && r.registryVersion === buildIntentRegistry().version)
       .map(rowToIntent);
-    const allIntents: Intent[] = [...intents, ...activeCustom];
-
-    const count = (keyOf: (i: Intent) => string) => {
-      const m = new Map<string, number>();
-      for (const it of allIntents) m.set(keyOf(it), (m.get(keyOf(it)) ?? 0) + 1);
-      return [...m.entries()].map(([key, c]) => ({ key, count: c }));
-    };
-    res.json(
-      GetCorpusSummaryResponse.parse({
-        intentCount: allIntents.length,
-        systemCount: systems.length,
-        profileCount: profiles.length,
-        byDomain: count((i) => i.domain),
-        byFlowClass: count((i) => i.flowClass),
-        bySource: count((i) => i.source.name),
-      }),
-    );
-  } catch (e) {
-    next(e);
+  } catch (error) {
+    customIntentsAvailable = false;
+    customStorageError = error;
   }
-});
+
+  const allIntents: Intent[] = [...intents, ...activeCustom];
+  const count = (keyOf: (i: Intent) => string) => {
+    const buckets = new Map<string, number>();
+    for (const intent of allIntents) {
+      const key = keyOf(intent);
+      buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    }
+    return [...buckets.entries()].map(([key, bucketCount]) => ({ key, count: bucketCount }));
+  };
+
+  return {
+    intentCount: allIntents.length,
+    systemCount: systems.length,
+    profileCount: profiles.length,
+    byDomain: count((intent) => intent.domain),
+    byFlowClass: count((intent) => intent.flowClass),
+    bySource: count((intent) => intent.source.name),
+    customIntentsAvailable,
+    ...(!customIntentsAvailable
+      ? { warning: "Dashboard totals currently include built-in reference intents only because custom intents could not be loaded. Try again later." }
+      : {}),
+    customStorageError,
+  };
+}
+
+export function createCorpusSummaryHandler(
+  loadSummary = loadCorpusSummary,
+): RequestHandler {
+  return async (req, res) => {
+    const summary = await loadSummary();
+    if (!summary.customIntentsAvailable) {
+      req.log?.warn(
+        { err: summary.customStorageError },
+        "Custom-intent storage unavailable; serving reference-only corpus summary",
+      );
+    }
+    res.json(GetCorpusSummaryResponse.parse(summary));
+  };
+}
+
+router.get("/summary", createCorpusSummaryHandler());
 
 router.get("/summary/routing", async (_req, res, next) => {
   try {

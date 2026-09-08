@@ -4,9 +4,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ArrowRight, BarChart3, Database, GitMerge, FileText, Layers, AlertCircle, Calculator } from "lucide-react";
 import { ResponsiveContainer, BarChart, XAxis, YAxis, Bar, Tooltip } from "recharts";
+import { IntentCorpusAvailability } from "@/components/intent-corpus-status";
 
 export default function Dashboard() {
-  const { data: summary, isLoading: isLoadingSummary, isError: isErrorSummary } = useGetCorpusSummary();
+  const {
+    data: summary,
+    isLoading: isLoadingSummary,
+    isError: isErrorSummary,
+    error: summaryError,
+    isFetching: isFetchingSummary,
+    refetch: refetchSummary,
+  } = useGetCorpusSummary();
   const { data: scenarios, isLoading: isLoadingScenarios } = useListScenarios();
 
   if (isErrorSummary) {
@@ -24,6 +32,15 @@ export default function Dashboard() {
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Overview</h1>
         <p className="text-muted-foreground mt-2">HRO Intent Flow Cost-Benefit Explorer</p>
       </div>
+
+      <IntentCorpusAvailability
+        isError={isErrorSummary}
+        error={summaryError}
+        customIntentsAvailable={summary?.customIntentsAvailable}
+        warning={summary?.warning}
+        isFetching={isFetchingSummary}
+        onRetry={() => { void refetchSummary(); }}
+      />
 
       {/* KPI cards */}
       {isLoadingSummary || !summary ? (
