@@ -116,3 +116,17 @@ mtime_ms = 1788885418262
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/713e84f5-166f-42bf-ad7c-4d6ae5a72c9a/b1c195ad-5a00-4636-bdbd-521ba0b69ad0"
 storage_version_token = "1788885589108341"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "IEvN3ZOYbpvUpuEgoC9Z4"
+uri = "file://research/hro-intent-agent-architecture.xlsx"
+type = "table"
+title = "HRO Intent & Agent Architecture — Excel Workbook"
+description = "Excel workbook with 10 sheets: executive summary, full 60-intent catalog, ownership view, parent intents, candidate gaps, custom intents, shared capabilities, compound actions, adversarial tests, and sources."
+logical_id = "f45b8e97-f351-4a54-a4f7-1037167dbbd3"
+content_hash = "sha256:893de0ce6826daab7ef0bba80be79d31994c3bb23fde80f2f174fc37b513e842"
+size = 36871
+mtime_ms = 1788892510547
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/f45b8e97-f351-4a54-a4f7-1037167dbbd3/e6be64f8-6218-469f-bf13-f7301199bf6b"
+storage_version_token = "1788892518031470"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
