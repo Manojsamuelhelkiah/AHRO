@@ -390,4 +390,107 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
       ));
     }
   });
+
+  test("overlapping same-name POSTs leave only the winning intent and its labels", async (t) => {
+    const schemaCheck = await pool.query<{ ready: boolean }>(`
+      select (
+        to_regclass('custom_intent_routing_labels') is not null
+        and exists (
+          select 1
+          from information_schema.columns
+          where table_schema = current_schema()
+            and table_name = 'custom_intents'
+            and column_name = 'registry_version'
+        )
+      ) as ready
+    `);
+    if (!schemaCheck.rows[0]?.ready) {
+      t.skip("custom intent routing schema has not been applied to this database");
+      return;
+    }
+
+    const suffix = `${process.pid}-${Date.now()}`;
+    const name = `Concurrent same name ${suffix}`;
+    const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const aliases = [
+      `concurrent_same_name_alpha_${suffix}`,
+      `concurrent_same_name_beta_${suffix}`,
+    ];
+    const payload = (alias: string) => ({
+      name,
+      domain: "hire",
+      flowClass: "fc2-policy",
+      description: "Concurrent same-name canonical-key regression",
+      asIsHandlingMin: 10,
+      toBeHumanMin: 2,
+      baseWeight: 1,
+      actGetActions: 1,
+      actPutActions: 0,
+      systemsTouchedBase: 1,
+      source: "integration-test",
+      author: "integration-test",
+      exactAliases: [alias],
+    });
+    const create = (alias: string) => fetch(`${baseUrl}/custom-intents`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload(alias)),
+    });
+    let preflightCount = 0;
+    let releasePreflights: (() => void) | undefined;
+    const bothPreflightsReached = new Promise<void>((resolve) => {
+      releasePreflights = resolve;
+    });
+    setCustomIntentCreateAfterPreflightHookForTests(async () => {
+      preflightCount += 1;
+      if (preflightCount === 2) releasePreflights?.();
+      await bothPreflightsReached;
+    });
+
+    try {
+      const responses = await Promise.all(aliases.map(create));
+      assert.deepEqual(responses.map(({ status }) => status).sort(), [201, 400]);
+
+      const winnerIndex = responses.findIndex(({ status }) => status === 201);
+      const loserIndex = responses.findIndex(({ status }) => status === 400);
+      assert.notEqual(winnerIndex, -1);
+      assert.notEqual(loserIndex, -1);
+      const winner = await responses[winnerIndex]!.json() as {
+        id: number;
+        key: string;
+        exactAliases: string[];
+      };
+      assert.deepEqual(
+        await responses[loserIndex]!.json(),
+        { error: "A canonical key or exact alias already belongs to another outcome" },
+      );
+      assert.equal(winner.key, key);
+      assert.deepEqual(winner.exactAliases, [aliases[winnerIndex]]);
+
+      const storedRows = await db
+        .select()
+        .from(customIntentsTable)
+        .where(eq(customIntentsTable.key, key));
+      assert.equal(storedRows.length, 1, "the losing parent row must fully roll back");
+      assert.equal(storedRows[0]!.id, winner.id);
+
+      const reservations = await db
+        .select({ label: customIntentRoutingLabelsTable.label })
+        .from(customIntentRoutingLabelsTable)
+        .where(eq(customIntentRoutingLabelsTable.customIntentId, winner.id));
+      assert.deepEqual(
+        reservations.map(({ label }) => label).sort(),
+        [key, aliases[winnerIndex]!].sort(),
+      );
+
+      const [losingReservation] = await db
+        .select({ customIntentId: customIntentRoutingLabelsTable.customIntentId })
+        .from(customIntentRoutingLabelsTable)
+        .where(eq(customIntentRoutingLabelsTable.label, aliases[loserIndex]!));
+      assert.equal(losingReservation, undefined, "the losing alias reservation must roll back");
+    } finally {
+      setCustomIntentCreateAfterPreflightHookForTests(undefined);
+      await db.delete(customIntentsTable).where(eq(customIntentsTable.key, key));
+    }
+  });
 });
