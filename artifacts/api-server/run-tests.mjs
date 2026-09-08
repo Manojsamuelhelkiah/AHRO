@@ -3,6 +3,7 @@ import { build } from "esbuild";
 import { spawnSync } from "node:child_process";
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { builtinModules } from "node:module";
 import path from "node:path";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -23,12 +24,15 @@ await build({
   format: "esm",
   target: "node20",
   outExtension: { ".js": ".mjs" },
-  external: ["node:*", "exceljs", "pg", "@replit/connectors-sdk"],
+  external: ["node:*", ...builtinModules, "exceljs", "pg", "@replit/connectors-sdk"],
+  banner: {
+    js: 'import { createRequire as __createRequire } from "node:module"; import { fileURLToPath as __fileURLToPath } from "node:url"; import { dirname as __pathDirname } from "node:path"; const require = __createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __pathDirname(__filename);',
+  },
 });
 
 const result = spawnSync(
   process.execPath,
   ["--test", ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).map((f) => path.join(dir, f))],
-  { stdio: "inherit" },
+  { stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } },
 );
 process.exit(result.status ?? 1);

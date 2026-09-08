@@ -3,29 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { EaAssessment, useUpdateEaAssessment, getGetEaAssessmentQueryKey } from "@workspace/api-client-react";
 import type { EaAssessmentContent, EaAssessmentInput } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-
-const assessmentUpdateQueues = new Map<number, Promise<void>>();
-
-export function enqueueAssessmentUpdate(
-  assessmentId: number,
-  task: () => Promise<void>,
-): Promise<void> {
-  const previous = assessmentUpdateQueues.get(assessmentId) ?? Promise.resolve();
-  const next = previous.catch(() => undefined).then(task);
-  assessmentUpdateQueues.set(assessmentId, next);
-  void next
-    .finally(() => {
-      if (assessmentUpdateQueues.get(assessmentId) === next) {
-        assessmentUpdateQueues.delete(assessmentId);
-      }
-    })
-    .catch(() => undefined);
-  return next;
-}
-
-export async function waitForAssessmentUpdates(assessmentId: number): Promise<void> {
-  await assessmentUpdateQueues.get(assessmentId)?.catch(() => undefined);
-}
+export {
+  enqueueAssessmentUpdate,
+  waitForAssessmentUpdates,
+} from "./assessment-concurrency";
+import { enqueueAssessmentUpdate } from "./assessment-concurrency";
 
 function getErrorStatus(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null) return undefined;

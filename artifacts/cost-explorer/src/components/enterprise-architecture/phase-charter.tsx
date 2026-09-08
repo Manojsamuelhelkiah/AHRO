@@ -19,7 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { enqueueAssessmentUpdate } from "./utils";
+import { enqueueAssessmentUpdate, mergePhaseProgress } from "./assessment-concurrency";
 
 const phaseGuidance: Record<"preliminary" | "architecture-vision", {
   title: string;
@@ -99,11 +99,8 @@ export function PhaseCharter({
     await enqueueAssessmentUpdate(assessment.id, async () => {
       const queryKey = getGetEaAssessmentQueryKey(assessment.id);
       const cachedAssessment = queryClient.getQueryData<EaAssessment>(queryKey) || assessment;
-       const transformProgress = (current: EaPhaseProgress[]) => current.map((item) =>
-        item.phase === phase
-           ? { ...item, ...dirtyValues }
-          : item,
-      );
+       const transformProgress = (current: EaPhaseProgress[]) =>
+         mergePhaseProgress(current, phase, dirtyValues);
       try {
         const result = await updateAssessment.mutateAsync({
           id: assessment.id,

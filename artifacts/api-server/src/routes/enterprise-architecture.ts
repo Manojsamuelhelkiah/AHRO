@@ -241,7 +241,7 @@ export function pruneRemovedEaReferences(
 }
 
 /** Validates cross-record references after generated Zod has validated shape. */
-function validateContentReferences(content: Record<string, any>): void {
+export function validateContentReferences(content: Record<string, any>): void {
   const allIds = new Set<string>();
   const register = (value: any): void => {
     if (Array.isArray(value)) return value.forEach(register);
@@ -384,6 +384,34 @@ function owned(id: number, ownerUserId: string) {
     eq(eaAssessmentsTable.id, id),
     eq(eaAssessmentsTable.ownerUserId, ownerUserId),
   );
+}
+
+type EaMutationAction = "patch" | "archive" | "delete" | "handoff";
+
+export function getEaMutationRejection(
+  existing: { status: string; version: number } | undefined,
+  expectedVersion: number | undefined,
+  action: EaMutationAction,
+): { status: 404 | 409; error: string } | undefined {
+  if (!existing) {
+    return { status: 404, error: "Enterprise architecture assessment not found" };
+  }
+  if (existing.status === "archived") {
+    const errors: Record<EaMutationAction, string> = {
+      patch: "Archived assessments are immutable",
+      archive: "Archived assessments are already archived",
+      delete: "Archived assessments are retained and cannot be deleted",
+      handoff: "Archived assessments cannot generate estimate handoffs",
+    };
+    return { status: 409, error: errors[action] };
+  }
+  if (expectedVersion !== undefined && existing.version !== expectedVersion) {
+    return {
+      status: 409,
+      error: "Assessment has changed; reload it and retry with its current expectedVersion",
+    };
+  }
+  return undefined;
 }
 
 function baselineBlock(
@@ -601,18 +629,11 @@ router.patch(
           );
         if (!current) {
           const [existing] = await db
-            .select({ status: eaAssessmentsTable.status })
+            .select({ status: eaAssessmentsTable.status, version: eaAssessmentsTable.version })
             .from(eaAssessmentsTable)
             .where(owned(id, req.authUserId!));
-          if (!existing) {
-            res.status(404).json({ error: "Enterprise architecture assessment not found" });
-          } else if (existing.status === "archived") {
-            res.status(409).json({ error: "Archived assessments are immutable" });
-          } else {
-            res.status(409).json({
-              error: "Assessment has changed; reload it and retry with its current expectedVersion",
-            });
-          }
+          const rejection = getEaMutationRejection(existing, expectedVersion, "patch")!;
+          res.status(rejection.status).json({ error: rejection.error });
           return;
         }
         const cleaned = pruneRemovedEaReferences(
@@ -641,18 +662,11 @@ router.patch(
         .returning();
       if (!row) {
         const [existing] = await db
-          .select({ status: eaAssessmentsTable.status })
+          .select({ status: eaAssessmentsTable.status, version: eaAssessmentsTable.version })
           .from(eaAssessmentsTable)
           .where(owned(id, req.authUserId!));
-        if (!existing) {
-          res.status(404).json({ error: "Enterprise architecture assessment not found" });
-        } else if (existing.status === "archived") {
-          res.status(409).json({ error: "Archived assessments are immutable" });
-        } else {
-          res.status(409).json({
-            error: "Assessment has changed; reload it and retry with its current expectedVersion",
-          });
-        }
+        const rejection = getEaMutationRejection(existing, expectedVersion, "patch")!;
+        res.status(rejection.status).json({ error: rejection.error });
         return;
       }
       logger.info(
@@ -687,20 +701,11 @@ router.delete(
         .returning({ id: eaAssessmentsTable.id });
       if (!row) {
         const [existing] = await db
-          .select({ status: eaAssessmentsTable.status })
+          .select({ status: eaAssessmentsTable.status, version: eaAssessmentsTable.version })
           .from(eaAssessmentsTable)
           .where(owned(id, req.authUserId!));
-        if (!existing) {
-          res.status(404).json({ error: "Enterprise architecture assessment not found" });
-        } else if (existing.status === "archived") {
-          res.status(409).json({
-            error: "Archived assessments are retained and cannot be deleted",
-          });
-        } else {
-          res.status(409).json({
-            error: "Assessment has changed; reload it and retry with its current expectedVersion",
-          });
-        }
+        const rejection = getEaMutationRejection(existing, expectedVersion, "delete")!;
+        res.status(rejection.status).json({ error: rejection.error });
         return;
       }
       logger.info(
@@ -753,9 +758,8 @@ router.post(
           res.json(ArchiveEaAssessmentResponse.parse(serialize(existing)));
           return;
         }
-        res.status(409).json({
-          error: "Assessment has changed; reload it and retry with its current expectedVersion",
-        });
+        const rejection = getEaMutationRejection(existing, expectedVersion, "archive")!;
+        res.status(rejection.status).json({ error: rejection.error });
         return;
       }
       logger.info(
