@@ -8,7 +8,8 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -b tsconfig.json",
-    "test": "node ./run-tests.mjs"
+    "test": "node ./run-tests.mjs",
+    "smoke:intent-routing": "node ./scripts/intent-routing-smoke.mjs"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
