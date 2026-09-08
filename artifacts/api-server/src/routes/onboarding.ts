@@ -31,6 +31,9 @@ import { ensureConnectorsSeeded } from "../lib/onboarding/connectors";
 import {
   emailChannelInfo,
   sendOutbound,
+  sendAdministrativeEmail,
+  systemEmailTestAddress,
+  retryCandidateEmail,
   whatsappChannelInfo,
 } from "../lib/onboarding/channels";
 import { llmComplete } from "../lib/onboarding/llm";
@@ -77,7 +80,7 @@ import {
 } from "../lib/onboarding/email-watch";
 import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
 import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
-import { normalizePreference } from "../lib/onboarding/channel-routing";
+import { normalizePreference, shouldAuthorizeCandidateEmail } from "../lib/onboarding/channel-routing";
 import { requireAuth, resolveReviewerName } from "../middlewares/require-auth";
 import { clerkClient } from "@clerk/express";
 
@@ -176,6 +179,7 @@ function serializeCase(row: typeof onbCases.$inferSelect) {
     skillCriticality: row.skillCriticality,
     scenarioKey: row.scenarioKey,
     planSummary: row.planSummary,
+    candidateEmailAuthorized: Boolean(row.candidateEmailAuthorizedAt),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -306,6 +310,12 @@ router.get("/onboarding/cases", async (_req, res, next) => {
 router.post("/onboarding/cases", async (req, res, next) => {
   try {
     const body = CreateOnboardingCaseBody.parse(req.body);
+    const workerEmail = body.workerEmail.trim().toLowerCase();
+    const channelPreference = normalizePreference(body.channelPreference);
+    if (!isValidEmail(workerEmail)) {
+      res.status(400).json({ message: "Enter a valid candidate email address." });
+      return;
+    }
     // Duplicate-trigger prevention (spec §1.3): same person with an active case.
     const dupes = await db
       .select({ id: onbCases.id, stage: onbCases.lifecycleStage })
@@ -324,9 +334,9 @@ router.post("/onboarding/cases", async (req, res, next) => {
     }
     const row = await insertCaseAndStart({
       workerName: body.workerName,
-      workerEmail: body.workerEmail,
+      workerEmail,
       workerPhone: body.workerPhone ?? null,
-      channelPreference: normalizePreference(body.channelPreference),
+      channelPreference,
       hireType: body.hireType,
       workerCategory: body.workerCategory,
       role: body.role,
@@ -340,6 +350,8 @@ router.post("/onboarding/cases", async (req, res, next) => {
       skillCriticality: body.skillCriticality ?? null,
       notes: body.notes ?? null,
       scenarioKey: null,
+      candidateEmailAuthorizedAt: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? new Date() : null,
+      candidateEmailAuthorizedBy: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? req.authUserId! : null,
     });
     res.status(201).json(serializeCase(row));
   } catch (err) {
@@ -400,6 +412,28 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
       .where(eq(onbCommunications.caseId, id))
       .orderBy(asc(onbCommunications.createdAt), asc(onbCommunications.id));
     res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/cases/:id/communications/:communicationId/retry", async (req, res, next) => {
+  try {
+    const caseId = Number(req.params.id);
+    const communicationId = Number(req.params.communicationId);
+    if (!Number.isInteger(caseId) || !Number.isInteger(communicationId)) {
+      res.status(400).json({ message: "Valid case and communication ids are required." });
+      return;
+    }
+    const reviewer = await resolveReviewerName(req.authUserId!);
+    const result = await retryCandidateEmail(caseId, communicationId, reviewer);
+    if (!result.ok) {
+      const status = result.code === "not-found" ? 404 : result.code === "not-retryable" ? 409 : 403;
+      res.status(status).json({ message: result.reason });
+      return;
+    }
+    const row = result.communication;
+    res.json({ ...row, createdAt: row.createdAt.toISOString(), retriedAt: iso(row.retriedAt) });
   } catch (err) {
     next(err);
   }
@@ -1369,19 +1403,35 @@ router.post("/onboarding/channels/test", async (req, res, next) => {
       return;
     }
     const info = body.channel === "email" ? emailChannelInfo() : whatsappChannelInfo();
-    const to =
-      body.channel === "email" ? anyCase.workerEmail : anyCase.workerPhone ?? "";
+    const to = body.channel === "email"
+      ? systemEmailTestAddress() ?? ""
+      : anyCase.workerPhone ?? "";
+    if (body.channel === "email" && !to) {
+      res.json({
+        ok: false,
+        detail: "Set ONBOARDING_CHANNEL_TEST_EMAIL to an address explicitly listed in ONBOARDING_ALLOWED_RECIPIENTS before sending an email channel test.",
+      });
+      return;
+    }
     if (body.channel === "whatsapp" && !to) {
       res.json({ ok: false, detail: "No case has a WhatsApp phone number yet — add one via the intake form." });
       return;
     }
-    const result = await sendOutbound({
-      caseId: anyCase.id,
-      channel: body.channel,
-      toAddress: to,
-      subject: body.channel === "email" ? "Onboarding channel test" : null,
-      body: `This is a test message from the Onboarding Agent Control Tower (${new Date().toISOString()}).`,
-    });
+    const testBody = `This is a test message from the Onboarding Agent Control Tower (${new Date().toISOString()}).`;
+    const result = body.channel === "email"
+      ? await sendAdministrativeEmail({
+          caseId: anyCase.id,
+          toAddress: to,
+          subject: "Onboarding channel test",
+          body: testBody,
+        })
+      : await sendOutbound({
+          caseId: anyCase.id,
+          channel: "whatsapp",
+          toAddress: to,
+          subject: null,
+          body: testBody,
+        });
     res.json({
       ok: result.status === "sent",
       detail:

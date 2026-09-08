@@ -4,6 +4,10 @@ import {
   normalizePreference,
   resolveReplyChannel,
   resolveWelcomeChannels,
+  shouldAuthorizeCandidateEmail,
+  candidateEmailDeliveryDecision,
+  candidateEmailMaySend,
+  isRetryableCandidateEmail,
 } from "./channel-routing";
 
 test("normalizePreference defaults unknown/missing values to both", () => {
@@ -68,4 +72,62 @@ test("reply: whatsapp preference without a phone falls back to email", () => {
   const r = resolveReplyChannel("whatsapp", null, "a@b.com", "whatsapp");
   assert.equal(r.channel, "email");
   assert.equal(r.to, "a@b.com");
+});
+
+test("manual intake authorizes valid candidate email only for email-capable preferences", () => {
+  assert.equal(shouldAuthorizeCandidateEmail(" Candidate@Example.com ", "email"), true);
+  assert.equal(shouldAuthorizeCandidateEmail("candidate@example.com", "both"), true);
+  assert.equal(shouldAuthorizeCandidateEmail("candidate@example.com", "whatsapp"), false);
+  assert.equal(shouldAuthorizeCandidateEmail("not-an-email", "email"), false);
+});
+
+test("candidate email delivery is case-scoped and always resolves the stored record address", () => {
+  const authorizedAt = new Date();
+  assert.deepEqual(
+    candidateEmailDeliveryDecision({
+      workerEmail: " Current.Candidate@Example.com ",
+      channelPreference: "email",
+      candidateEmailAuthorizedAt: authorizedAt,
+    }),
+    { allowed: true, address: "current.candidate@example.com", reason: null },
+  );
+  const seeded = candidateEmailDeliveryDecision({
+    workerEmail: "seed@example.com",
+    channelPreference: "both",
+    candidateEmailAuthorizedAt: null,
+  });
+  assert.equal(seeded.allowed, false);
+  assert.match(seeded.reason!, /not authorized/i);
+  assert.equal(candidateEmailDeliveryDecision({
+    workerEmail: "candidate@example.com",
+    channelPreference: "whatsapp",
+    candidateEmailAuthorizedAt: authorizedAt,
+  }).allowed, false);
+});
+
+test("only definitive failed/logged-only outbound email can be manually retried", () => {
+  for (const status of ["failed", "logged-only"]) {
+    assert.equal(isRetryableCandidateEmail({ channel: "email", direction: "outbound", status }), true);
+  }
+  for (const status of ["sent", "delivered", "sending", "received"]) {
+    assert.equal(isRetryableCandidateEmail({ channel: "email", direction: "outbound", status }), false);
+  }
+  assert.equal(isRetryableCandidateEmail({ channel: "whatsapp", direction: "outbound", status: "failed" }), false);
+  assert.equal(isRetryableCandidateEmail({ channel: "email", direction: "inbound", status: "failed" }), false);
+  assert.equal(isRetryableCandidateEmail({ channel: "email", direction: "outbound", audience: "admin", status: "failed" }), false);
+});
+
+test("an explicit legacy allowlist can deliver only a valid email/both candidate case", () => {
+  assert.equal(candidateEmailMaySend({ channelPreference: "email", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: true }), true);
+  assert.equal(candidateEmailMaySend({ channelPreference: "both", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: true }), true);
+  assert.equal(candidateEmailMaySend({ channelPreference: "whatsapp", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: true }), false);
+  assert.equal(candidateEmailMaySend({ channelPreference: "email", caseAuthorized: false, explicitlyAllowlisted: false, validEmail: true }), false);
+  assert.equal(candidateEmailMaySend({ channelPreference: "email", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: false }), false);
+});
+
+test("historical HR approval and Settings test subjects are never candidate-retryable", () => {
+  const base = { channel: "email", direction: "outbound", audience: "candidate", status: "failed" };
+  assert.equal(isRetryableCandidateEmail({ ...base, subject: "[AP-42] Approval needed — Example" }), false);
+  assert.equal(isRetryableCandidateEmail({ ...base, subject: "Onboarding channel test" }), false);
+  assert.equal(isRetryableCandidateEmail({ ...base, subject: "Welcome, Sam — your onboarding has started" }), true);
 });

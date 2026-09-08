@@ -59,6 +59,12 @@ export const onbCases = pgTable("onb_cases", {
   scenarioKey: text("scenario_key"),
   planSummary: text("plan_summary"),
   notes: text("notes"),
+  /**
+   * Case-scoped consent for live candidate email. Set only by the
+   * authenticated manual-intake route; scenario/demo seed paths leave it null.
+   */
+  candidateEmailAuthorizedAt: timestamp("candidate_email_authorized_at", { withTimezone: true }),
+  candidateEmailAuthorizedBy: text("candidate_email_authorized_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -107,6 +113,8 @@ export const onbCommunications = pgTable("onb_communications", {
     .references(() => onbCases.id, { onDelete: "cascade" }),
   channel: text("channel").notNull(),
   direction: text("direction").notNull(),
+  /** candidate communications are case-routed; admin/HITL email is separate. */
+  audience: text("audience").notNull().default("candidate"),
   toAddress: text("to_address").notNull(),
   subject: text("subject"),
   body: text("body").notNull(),
@@ -118,6 +126,9 @@ export const onbCommunications = pgTable("onb_communications", {
    * MessageSid). Used to deduplicate polling / webhook retries.
    */
   externalMessageId: text("external_message_id").unique(),
+  /** The authenticated reviewer who claimed the latest manual retry. */
+  retriedBy: text("retried_by"),
+  retriedAt: timestamp("retried_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -5909,6 +5909,7 @@ export const RunOnboardingScenarioResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -5953,6 +5954,7 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -6020,6 +6022,7 @@ export const CreateOnboardingCaseResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -6068,6 +6071,7 @@ export const GetOnboardingCaseResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -6106,15 +6110,44 @@ export const ListOnboardingCaseCommunicationsResponseItem = zod.object({
   "caseId": zod.number(),
   "channel": zod.string().describe('email | whatsapp'),
   "direction": zod.string().describe('outbound | inbound'),
+  "audience": zod.enum(['candidate', 'admin']).describe('Candidate case communication or separate HR\/HITL notification'),
   "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),
   "subject": zod.string().nullable(),
   "body": zod.string(),
-  "status": zod.string().describe('sent | delivered | failed | logged-only | received'),
+  "status": zod.string().describe('sent | delivered | failed | logged-only | sending | received'),
   "failureReason": zod.string().nullable(),
   "sensitive": zod.boolean().describe('Flagged for human review before\/after send per ethics guardrails'),
+  "retriedBy": zod.string().nullable(),
+  "retriedAt": zod.string().nullable(),
   "createdAt": zod.string()
 })
 export const ListOnboardingCaseCommunicationsResponse = zod.array(ListOnboardingCaseCommunicationsResponseItem)
+
+
+/**
+ * @summary Safely retry a definitively failed or logged-only candidate email
+ */
+export const RetryOnboardingCaseEmailParams = zod.object({
+  "id": zod.coerce.number(),
+  "communicationId": zod.coerce.number()
+})
+
+export const RetryOnboardingCaseEmailResponse = zod.object({
+  "id": zod.number(),
+  "caseId": zod.number(),
+  "channel": zod.string().describe('email | whatsapp'),
+  "direction": zod.string().describe('outbound | inbound'),
+  "audience": zod.enum(['candidate', 'admin']).describe('Candidate case communication or separate HR\/HITL notification'),
+  "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),
+  "subject": zod.string().nullable(),
+  "body": zod.string(),
+  "status": zod.string().describe('sent | delivered | failed | logged-only | sending | received'),
+  "failureReason": zod.string().nullable(),
+  "sensitive": zod.boolean().describe('Flagged for human review before\/after send per ethics guardrails'),
+  "retriedBy": zod.string().nullable(),
+  "retriedAt": zod.string().nullable(),
+  "createdAt": zod.string()
+})
 
 
 /**
@@ -6347,12 +6380,15 @@ export const ReceiveOnboardingInboundResponse = zod.object({
   "caseId": zod.number(),
   "channel": zod.string().describe('email | whatsapp'),
   "direction": zod.string().describe('outbound | inbound'),
+  "audience": zod.enum(['candidate', 'admin']).describe('Candidate case communication or separate HR\/HITL notification'),
   "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),
   "subject": zod.string().nullable(),
   "body": zod.string(),
-  "status": zod.string().describe('sent | delivered | failed | logged-only | received'),
+  "status": zod.string().describe('sent | delivered | failed | logged-only | sending | received'),
   "failureReason": zod.string().nullable(),
   "sensitive": zod.boolean().describe('Flagged for human review before\/after send per ethics guardrails'),
+  "retriedBy": zod.string().nullable(),
+  "retriedAt": zod.string().nullable(),
   "createdAt": zod.string()
 })
 
@@ -6697,3 +6733,5 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
+
+

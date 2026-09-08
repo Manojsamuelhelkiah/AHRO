@@ -4304,6 +4304,79 @@ export function useListOnboardingCaseCommunications<TData = Awaited<ReturnType<t
 
 
 
+export const getRetryOnboardingCaseEmailUrl = (id: number,
+    communicationId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/communications/${communicationId}/retry`
+}
+
+/**
+ * @summary Safely retry a definitively failed or logged-only candidate email
+ */
+export const retryOnboardingCaseEmail = async (id: number,
+    communicationId: number, options?: RequestInit): Promise<OnbCommunication> => {
+
+  return customFetch<OnbCommunication>(getRetryOnboardingCaseEmailUrl(id,communicationId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetryOnboardingCaseEmailMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryOnboardingCaseEmail>>, TError,{id: number;communicationId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryOnboardingCaseEmail>>, TError,{id: number;communicationId: number}, TContext> => {
+
+const mutationKey = ['retryOnboardingCaseEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryOnboardingCaseEmail>>, {id: number;communicationId: number}> = (props) => {
+          const {id,communicationId} = props ?? {};
+
+          return  retryOnboardingCaseEmail(id,communicationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryOnboardingCaseEmailMutationResult = NonNullable<Awaited<ReturnType<typeof retryOnboardingCaseEmail>>>
+
+    export type RetryOnboardingCaseEmailMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Safely retry a definitively failed or logged-only candidate email
+ */
+export const useRetryOnboardingCaseEmail = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryOnboardingCaseEmail>>, TError,{id: number;communicationId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryOnboardingCaseEmail>>,
+        TError,
+        {id: number;communicationId: number},
+        TContext
+      > => {
+      return useMutation(getRetryOnboardingCaseEmailMutationOptions(options));
+    }
+
 export const getListOnboardingCaseDocumentsUrl = (id: number,) => {
 
 

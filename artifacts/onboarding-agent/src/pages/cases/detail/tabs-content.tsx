@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { CheckCircle2, Clock, AlertTriangle, XCircle, FileText, FileCheck2, MessageSquare, Phone, Smartphone, Mail, Send, PhoneCall, Archive, Star } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, XCircle, FileText, FileCheck2, MessageSquare, Phone, Smartphone, Mail, Send, PhoneCall, Archive, Star, RotateCcw } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, cn, Input } from '@/components/ui-shared';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
-import { useReceiveOnboardingInbound, getListOnboardingCaseCommunicationsQueryKey, getListOnboardingCaseEventsQueryKey, useStartOnboardingVoiceCall } from '@workspace/api-client-react';
+import { useReceiveOnboardingInbound, getListOnboardingCaseCommunicationsQueryKey, getListOnboardingCaseEventsQueryKey, useStartOnboardingVoiceCall, useRetryOnboardingCaseEmail } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { WhatsAppSandboxWarning } from '@/components/whatsapp-sandbox-warning';
 import { StatusBadgeText } from './components';
@@ -143,6 +143,22 @@ export function ActivityTab({ events }: { events: any[] }) {
 }
 
 export function CommunicationsTab({ caseId, c, comms, channels }: any) {
+  const retryEmail = useRetryOnboardingCaseEmail();
+  const queryClient = useQueryClient();
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const retry = (communicationId: number) => {
+    setRetryError(null);
+    retryEmail.mutate({ id: caseId, communicationId }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId) });
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEventsQueryKey(caseId) });
+      },
+      onError: (error: any) => {
+        setRetryError(error?.data?.message || error?.message || 'Email retry failed.');
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId) });
+      },
+    });
+  };
   return (
     <div className="pb-12 max-w-4xl space-y-6">
       <WhatsAppSandboxWarning
@@ -159,6 +175,11 @@ export function CommunicationsTab({ caseId, c, comms, channels }: any) {
         </CardHeader>
         <CardContent className="p-0 flex-1 bg-[var(--surface-alt)]">
           <div className="p-6 space-y-6">
+            {retryError && (
+              <div role="alert" className="rounded-[var(--radius-md)] border p-3 text-[var(--text-xs)] text-[var(--status-red)]" style={{ borderColor: 'var(--status-red)', background: 'var(--status-red-bg)' }}>
+                {retryError}
+              </div>
+            )}
             {comms?.map((msg: any) => (
               <div key={msg.id} className={cn("flex flex-col max-w-[85%]", msg.direction === 'inbound' ? "items-start mr-auto" : "items-end ml-auto")}>
                 <div className="flex items-center gap-1.5 mb-1.5 px-1">
@@ -176,13 +197,39 @@ export function CommunicationsTab({ caseId, c, comms, channels }: any) {
                   <p className="whitespace-pre-wrap leading-relaxed">{msg.body}</p>
                 </div>
                 {msg.direction === 'outbound' && (
-                  <div className="flex items-center gap-1.5 mt-1.5 px-1">
+                  <div className="flex flex-col items-end gap-1.5 mt-1.5 px-1 max-w-full">
+                    <div className="flex flex-wrap justify-end items-center gap-1.5">
                     <span className={cn("text-[9px] font-bold uppercase tracking-wider", 
                       msg.status === 'failed' ? 'text-[var(--status-red)]' :
-                      msg.status === 'delivered' ? 'text-[var(--status-green)]' : 'text-[var(--text-muted)]'
+                      msg.status === 'delivered' || msg.status === 'sent' ? 'text-[var(--status-green)]' :
+                      msg.status === 'sending' ? 'text-[var(--status-amber)]' : 'text-[var(--text-muted)]'
                     )}>{msg.status}</span>
                     {msg.sensitive && <span className="text-[9px] bg-[var(--surface-soft)] text-[var(--status-amber)] border px-1.5 py-0.5 rounded font-bold" style={{ borderColor: 'var(--status-amber)' }}>SENSITIVE</span>}
-                    {msg.failureReason && <span className="text-[9px] text-[var(--status-red)] truncate max-w-[150px]" title={msg.failureReason}>({msg.failureReason})</span>}
+                    {msg.channel === 'email'
+                      && msg.audience === 'candidate'
+                      && ['failed', 'logged-only'].includes(msg.status)
+                      && !/^\[AP-\d+\](?:\s|$)/i.test((msg.subject ?? '').trim())
+                      && !/^Onboarding channel test$/i.test((msg.subject ?? '').trim())
+                      && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-[10px]"
+                        disabled={retryEmail.isPending}
+                        onClick={() => retry(msg.id)}
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        {retryEmail.isPending && retryEmail.variables?.communicationId === msg.id ? 'Retrying…' : 'Retry email'}
+                      </Button>
+                    )}
+                    </div>
+                    {msg.failureReason && (
+                      <p className="text-[10px] leading-relaxed text-right max-w-md m-0" style={{ color: msg.status === 'failed' ? 'var(--status-red)' : 'var(--text-secondary)' }}>
+                        {msg.failureReason}
+                      </p>
+                    )}
+                    {msg.retriedAt && <span className="text-[9px] text-[var(--text-muted)]">Retried {format(new Date(msg.retriedAt), 'MMM d, HH:mm')}{msg.retriedBy ? ` by ${msg.retriedBy}` : ''}</span>}
                   </div>
                 )}
               </div>

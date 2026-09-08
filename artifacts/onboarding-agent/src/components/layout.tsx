@@ -133,8 +133,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span style={{ color: 'var(--text-primary)' }}>{pageName}</span>
           </div>
           
-          <div className="hidden md:flex flex-1 justify-center">
-            <div className="relative" style={{ width: '280px' }}>
+          <div className="hidden md:flex flex-1 min-w-0 justify-center px-3">
+            <div className="relative w-full max-w-[280px] min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
               <input 
                 type="text" 

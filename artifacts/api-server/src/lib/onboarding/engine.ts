@@ -581,7 +581,7 @@ async function runCommunications(caseId: number) {
     });
     await logEvent(caseId, "channel", draft ? "llm" : "system",
       routing.emailIsFallback ? "Welcome email dispatched (fallback)" : "Welcome email dispatched",
-      `Pre-boarding welcome drafted by the reasoning engine and ${email.status === "sent" ? "delivered via email" : email.status === "logged-only" ? "logged (email provider not connected)" : `send failed: ${email.failureReason}`}.`,
+      `Pre-boarding welcome drafted by the reasoning engine. Delivery status: ${email.status}${email.failureReason ? ` — ${email.failureReason}` : ""}.`,
       { hitlPattern: "act-then-review" });
   }
 
@@ -596,7 +596,7 @@ async function runCommunications(caseId: number) {
       wa.status === "sent"
         ? "WhatsApp welcome delivered via Twilio."
         : wa.status === "logged-only"
-          ? "WhatsApp welcome logged (Twilio not connected)."
+          ? `WhatsApp welcome logged only${wa.failureReason ? ` — ${wa.failureReason}` : "."}`
           : `WhatsApp send failed: ${wa.failureReason}`,
       { hitlPattern: "act-then-review" });
   }
@@ -894,7 +894,7 @@ NEW MESSAGE FROM THE HIRE
 
       const result = await send(replyBody, { subject });
       await logEvent(caseId, "channel", "llm", "Reply drafted & dispatched",
-        `Contextual reply (grounded in checklist, document pack and conversation history) ${result.status === "sent" ? "delivered" : result.status === "logged-only" ? "logged (channel not connected)" : `failed: ${result.failureReason}`} on ${sendChannel}.`,
+        `Contextual reply (grounded in checklist, document pack and conversation history) status on ${sendChannel}: ${result.status}${result.failureReason ? ` — ${result.failureReason}` : ""}.`,
         { hitlPattern: "act-then-review" });
     } catch (err) {
       console.error(`[onboarding engine] inbound case ${caseId} failed:`, err);

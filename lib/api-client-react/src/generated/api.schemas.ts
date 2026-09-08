@@ -1781,6 +1781,8 @@ export interface OnbCase {
      * @nullable
      */
   planSummary: string | null;
+  /** Whether this manually-created case currently authorizes live email to its candidate record address */
+  candidateEmailAuthorized: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -2067,6 +2069,17 @@ export interface OnbApprovalDecision {
   comment?: string;
 }
 
+/**
+ * Candidate case communication or separate HR/HITL notification
+ */
+export type OnbCommunicationAudience = typeof OnbCommunicationAudience[keyof typeof OnbCommunicationAudience];
+
+
+export const OnbCommunicationAudience = {
+  candidate: 'candidate',
+  admin: 'admin',
+} as const;
+
 export interface OnbCommunication {
   id: number;
   caseId: number;
@@ -2074,17 +2087,23 @@ export interface OnbCommunication {
   channel: string;
   /** outbound | inbound */
   direction: string;
+  /** Candidate case communication or separate HR/HITL notification */
+  audience: OnbCommunicationAudience;
   /** Email address or phone number (masked for sensitive comms) */
   toAddress: string;
   /** @nullable */
   subject: string | null;
   body: string;
-  /** sent | delivered | failed | logged-only | received */
+  /** sent | delivered | failed | logged-only | sending | received */
   status: string;
   /** @nullable */
   failureReason: string | null;
   /** Flagged for human review before/after send per ethics guardrails */
   sensitive: boolean;
+  /** @nullable */
+  retriedBy: string | null;
+  /** @nullable */
+  retriedAt: string | null;
   createdAt: string;
 }
 
@@ -2567,3 +2586,4 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
+

@@ -51,8 +51,8 @@ export function CaseHeader({ c, caseId }: { c: any, caseId: number }) {
 
   return (
     <div className="sticky top-0 z-30 bg-[var(--surface)] pb-4 pt-4 px-6 md:px-8 -mx-6 md:-mx-8 border-b border-[var(--border)] shadow-[var(--shadow-sm)] mb-6">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="min-w-0">
            <div className="flex items-center gap-3 mb-1">
              <span className="text-[var(--text-xs)] font-bold text-[var(--primary)] bg-[var(--primary-light-bg)] px-2 py-0.5 rounded-full">Case #{c.id}</span>
              <h1 className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-none m-0">{c.workerName}</h1>
@@ -80,7 +80,7 @@ export function CaseHeader({ c, caseId }: { c: any, caseId: number }) {
              </div>
            )}
         </div>
-        <div className="flex items-center gap-2 self-start md:self-auto relative">
+         <div className="flex shrink-0 items-center gap-2 self-start lg:self-auto relative">
           <Button variant="secondary" className="gap-2"><Mail className="w-4 h-4"/> Contact</Button>
           <div className="relative">
             <Button onClick={() => setActionOpen(!actionOpen)} className="gap-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] border-transparent">

@@ -1,7 +1,10 @@
 import { db } from "@workspace/db";
-import { onbCommunications } from "@workspace/db/schema";
+import { onbCases, onbCommunications } from "@workspace/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import { recordGuardrailEvent } from "./guardrails";
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandidateEmail } from "./channel-routing";
+import { isValidEmail } from "./settings";
 
 const connectors = new ReplitConnectors();
 
@@ -57,6 +60,18 @@ export function whatsappChannelInfo(): ChannelInfo {
   };
 }
 
+export function gmailHttpFailure(status: number, detail: string) {
+  return { status: "failed", failureReason: `Gmail ${status}: ${detail.slice(0, 300)}`, externalMessageId: null };
+}
+
+export function gmailAmbiguousFailure(err: unknown) {
+  return {
+    status: "sending",
+    failureReason: `Delivery outcome unknown: Gmail request did not complete cleanly (${String(err).slice(0, 240)}). Do not retry automatically.`,
+    externalMessageId: null,
+  };
+}
+
 /**
  * Send a plain email via the connected Gmail account. Exported so system
  * alerting (e.g. the inbox-monitor outage notifier) can reuse the same
@@ -87,7 +102,7 @@ export async function sendEmail(
     );
     if (!resp.ok) {
       const detail = await resp.text();
-      return { status: "failed", failureReason: `Gmail ${resp.status}: ${detail.slice(0, 300)}`, externalMessageId: null };
+      return gmailHttpFailure(resp.status, detail);
     }
     // Store the Gmail message id so the inbound poller can recognise (and
     // skip) our own outbound messages when the demo recipient is the same
@@ -95,7 +110,7 @@ export async function sendEmail(
     const sent = (await resp.json().catch(() => null)) as { id?: string } | null;
     return { status: "sent", failureReason: null, externalMessageId: sent?.id ?? null };
   } catch (err) {
-    return { status: "failed", failureReason: String(err).slice(0, 300), externalMessageId: null };
+    return gmailAmbiguousFailure(err);
   }
 }
 
@@ -196,8 +211,41 @@ export function addressAllowed(address: string): boolean {
   return allowed.includes(normalized) || demoAllowed.has(normalized);
 }
 
+/** Unlike legacy demo defaults, system test delivery requires an explicit env allowlist entry. */
+export function explicitlyConfiguredAddressAllowed(address: string): boolean {
+  const configured = (process.env.ONBOARDING_ALLOWED_RECIPIENTS ?? "")
+    .split(",")
+    .map((s) => normalizeAddress(s))
+    .filter(Boolean);
+  return configured.includes(normalizeAddress(address));
+}
+
+/** Explicit demo-volunteer or environment authorization for legacy candidate cases. */
+export function explicitlyAllowlistedCandidateAddress(address: string): boolean {
+  return explicitlyConfiguredAddressAllowed(address) || demoAllowed.has(normalizeAddress(address));
+}
+
+/** Email channel diagnostics never borrow a candidate address. */
+export function systemEmailTestAddress(): string | null {
+  const address = (process.env.ONBOARDING_CHANNEL_TEST_EMAIL ?? "").trim();
+  return address && explicitlyConfiguredAddressAllowed(address) ? address : null;
+}
+
 function recipientAllowed(address: string): boolean {
   return addressAllowed(address);
+}
+
+export type CandidateEmailAuthorization = {
+  allowed: boolean;
+  address: string;
+  reason: string | null;
+};
+
+/** Resolve live candidate-email permission from the case, never from caller input. */
+export function candidateEmailAuthorization(
+  c: Pick<typeof onbCases.$inferSelect, "workerEmail" | "channelPreference" | "candidateEmailAuthorizedAt">,
+): CandidateEmailAuthorization {
+  return candidateEmailDeliveryDecision(c);
 }
 
 function withinRateLimit(): boolean {
@@ -231,18 +279,43 @@ export async function sendOutbound(opts: {
   } catch (err) {
     console.error("[channels] demo allowlist refresh failed:", err);
   }
-  if (!recipientAllowed(opts.toAddress)) {
+  const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
+  if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  const candidateEmail = opts.channel === "email" ? candidateEmailAuthorization(caseRow) : null;
+  const actualAddress = candidateEmail?.address ?? opts.toAddress;
+  // Preserve prior explicit demo/env authorization for a case candidate while
+  // still deriving the target from the record. It is not a blanket bypass:
+  // the address itself must be allowlisted and the case must allow email.
+  const candidateMaySend = candidateEmail && candidateEmailMaySend({
+    channelPreference: caseRow.channelPreference,
+    caseAuthorized: candidateEmail.allowed,
+    explicitlyAllowlisted: explicitlyAllowlistedCandidateAddress(candidateEmail.address),
+    validEmail: isValidEmail(candidateEmail.address),
+  });
+  if (candidateEmail && !candidateMaySend) {
     result = {
       status: "logged-only",
-      failureReason:
-        "Recipient is not on the demo allowlist — message composed and logged, not delivered (set ONBOARDING_ALLOWED_RECIPIENTS to change).",
+      failureReason: candidateEmail.reason,
       externalMessageId: null,
     };
     void recordGuardrailEvent({
       caseId: opts.caseId,
       key: "recipient-allowlist",
       action: "blocked",
-      detail: `Live ${opts.channel} delivery to ${opts.channel === "email" ? maskEmail(opts.toAddress) : maskPhone(opts.toAddress)} withheld — recipient not authorized. Message logged only.`,
+      detail: `Live email delivery to ${maskEmail(actualAddress)} withheld — case-scoped candidate authorization is absent. Message logged only.`,
+    });
+  } else if (opts.channel !== "email" && !recipientAllowed(actualAddress)) {
+    result = {
+      status: "logged-only",
+      failureReason:
+        "WhatsApp recipient is not on the demo allowlist — message composed and logged, not delivered.",
+      externalMessageId: null,
+    };
+    void recordGuardrailEvent({
+      caseId: opts.caseId,
+      key: "recipient-allowlist",
+      action: "blocked",
+      detail: `Live ${opts.channel} delivery to ${maskPhone(actualAddress)} withheld — recipient not authorized. Message logged only.`,
     });
   } else if (!withinRateLimit()) {
     result = {
@@ -257,18 +330,19 @@ export async function sendOutbound(opts: {
       detail: `Hourly live-send cap (${MAX_LIVE_SENDS_PER_HOUR}/h) reached — ${opts.channel} message logged, not delivered.`,
     });
   } else if (opts.channel === "email") {
-    result = await sendEmail(opts.toAddress, opts.subject ?? "Onboarding update", opts.body);
+    result = await sendEmail(actualAddress, opts.subject ?? "Onboarding update", opts.body);
   } else {
-    result = await sendWhatsApp(opts.toAddress, opts.body);
+    result = await sendWhatsApp(actualAddress, opts.body);
   }
   const masked =
-    opts.channel === "email" ? maskEmail(opts.toAddress) : maskPhone(opts.toAddress);
+    opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress);
   const [row] = await db
     .insert(onbCommunications)
     .values({
       caseId: opts.caseId,
       channel: opts.channel,
       direction: "outbound",
+      audience: "candidate",
       toAddress: masked,
       subject: opts.subject ?? null,
       body: opts.body,
@@ -279,4 +353,135 @@ export async function sendOutbound(opts: {
     })
     .returning({ id: onbCommunications.id });
   return { id: row.id, status: result.status, failureReason: result.failureReason };
+}
+
+/** Separate HR/HITL path: preserves the explicit admin allowlist and never case-routes to a candidate. */
+export async function sendAdministrativeEmail(opts: {
+  caseId: number;
+  toAddress: string;
+  subject: string;
+  body: string;
+}): Promise<{ id: number; status: string; failureReason: string | null }> {
+  let result: { status: string; failureReason: string | null; externalMessageId: string | null };
+  try {
+    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    await refreshDemoAllowlist();
+  } catch (err) {
+    console.error("[channels] admin allowlist refresh failed:", err);
+  }
+  if (!recipientAllowed(opts.toAddress)) {
+    result = { status: "logged-only", failureReason: "HR approver address is not on the administrative allowlist — notification logged, not delivered.", externalMessageId: null };
+  } else if (!withinRateLimit()) {
+    result = { status: "logged-only", failureReason: "Hourly live-send limit reached — notification logged, not delivered.", externalMessageId: null };
+  } else {
+    result = await sendEmail(opts.toAddress, opts.subject, opts.body);
+  }
+  const [row] = await db.insert(onbCommunications).values({
+    caseId: opts.caseId,
+    channel: "email",
+    direction: "outbound",
+    audience: "admin",
+    toAddress: maskEmail(opts.toAddress),
+    subject: opts.subject,
+    body: opts.body,
+    status: result.status,
+    failureReason: result.failureReason,
+    externalMessageId: result.externalMessageId,
+  }).returning({ id: onbCommunications.id });
+  return { id: row.id, status: result.status, failureReason: result.failureReason };
+}
+
+export type RetryEmailResult =
+  | { ok: true; communication: typeof onbCommunications.$inferSelect }
+  | { ok: false; code: "not-found" | "not-retryable" | "not-authorized"; reason: string };
+
+/**
+ * Manual email retry. The conditional status transition is the durable claim:
+ * only one concurrent request can move a definitive failed/logged-only row to
+ * sending. A crash leaves "sending" (ambiguous) and therefore cannot be retried.
+ */
+export async function retryCandidateEmail(
+  caseId: number,
+  communicationId: number,
+  reviewer: string,
+  send: typeof sendEmail = sendEmail,
+  claimLiveSend: () => boolean = withinRateLimit,
+): Promise<RetryEmailResult> {
+  const [existing] = await db
+    .select({ communication: onbCommunications, candidate: onbCases })
+    .from(onbCommunications)
+    .innerJoin(onbCases, eq(onbCommunications.caseId, onbCases.id))
+    .where(and(eq(onbCommunications.id, communicationId), eq(onbCommunications.caseId, caseId)));
+  if (!existing) return { ok: false, code: "not-found", reason: "Communication not found." };
+  const msg = existing.communication;
+  if (!isRetryableCandidateEmail(msg)) {
+    return { ok: false, code: "not-retryable", reason: `Email with status "${msg.status}" is not safe to retry.` };
+  }
+  // Pick up explicit volunteer authorization changed on another process
+  // before evaluating the legacy fallback path.
+  try {
+    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    await refreshDemoAllowlist();
+  } catch (err) {
+    console.error("[channels] retry allowlist refresh failed:", err);
+  }
+  const authorization = candidateEmailAuthorization(existing.candidate);
+  const retryAuthorized = candidateEmailMaySend({
+    channelPreference: existing.candidate.channelPreference,
+    caseAuthorized: authorization.allowed,
+    explicitlyAllowlisted: explicitlyAllowlistedCandidateAddress(authorization.address),
+    validEmail: isValidEmail(authorization.address),
+  });
+  if (!retryAuthorized) {
+    return { ok: false, code: "not-authorized", reason: authorization.reason! };
+  }
+  const claimedAt = new Date();
+  const [claimed] = await db
+    .update(onbCommunications)
+    .set({
+      status: "sending",
+      failureReason: "Manual retry claimed; awaiting Gmail result.",
+      toAddress: maskEmail(authorization.address),
+      retriedBy: reviewer,
+      retriedAt: claimedAt,
+    })
+    .where(and(
+      eq(onbCommunications.id, communicationId),
+      eq(onbCommunications.caseId, caseId),
+      sql`${onbCommunications.status} in ('failed', 'logged-only')`,
+    ))
+    .returning();
+  if (!claimed) {
+    return { ok: false, code: "not-retryable", reason: "This email was already claimed for retry or its status changed." };
+  }
+  if (!claimLiveSend()) {
+    const failureReason = "Hourly live-send limit reached — message logged, not delivered.";
+    const [capped] = await db
+      .update(onbCommunications)
+      .set({ status: "logged-only", failureReason })
+      .where(and(
+        eq(onbCommunications.id, communicationId),
+        eq(onbCommunications.status, "sending"),
+        eq(onbCommunications.retriedAt, claimedAt),
+      ))
+      .returning();
+    void recordGuardrailEvent({
+      caseId,
+      key: "send-rate-cap",
+      action: "rate-limited",
+      detail: `Hourly live-send cap (${MAX_LIVE_SENDS_PER_HOUR}/h) reached — email retry logged, not delivered.`,
+    });
+    return { ok: true, communication: capped ?? claimed };
+  }
+  const result = await send(authorization.address, msg.subject ?? "Onboarding update", msg.body);
+  const [updated] = await db
+    .update(onbCommunications)
+    .set({
+      status: result.status,
+      failureReason: result.failureReason,
+      externalMessageId: result.externalMessageId,
+    })
+    .where(and(eq(onbCommunications.id, communicationId), eq(onbCommunications.status, "sending"), eq(onbCommunications.retriedAt, claimedAt)))
+    .returning();
+  return { ok: true, communication: updated ?? claimed };
 }

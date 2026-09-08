@@ -11,7 +11,7 @@ import {
   stripQuotedReply,
   type GmailMessage,
 } from "./inbound-email";
-import { sendOutbound } from "./channels";
+import { sendAdministrativeEmail } from "./channels";
 import { getSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { logEvent, resumeAfterDecision } from "./engine";
 import { makeSharedTick } from "./shared-tick";
@@ -169,9 +169,8 @@ export async function notifyApproverOfApproval(approval: {
     // limit, and the persisted communication row (whose stored Gmail
     // message id also keeps a same-account demo inbox from echoing this
     // notification back as an inbound reply).
-    const result = await sendOutbound({
+    const result = await sendAdministrativeEmail({
       caseId: approval.caseId,
-      channel: "email",
       toAddress: to,
       subject,
       body,

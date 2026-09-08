@@ -1253,6 +1253,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/communications/{communicationId}/retry:
+    post:
+      operationId: retryOnboardingCaseEmail
+      tags: [onboarding]
+      summary: Safely retry a definitively failed or logged-only candidate email
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: communicationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Retried communication with its exact provider status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCommunication"
+        "403":
+          description: Candidate email is not currently authorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Communication not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Communication is sent, ambiguous, or already claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/cases/{id}/documents:
     get:
       operationId: listOnboardingCaseDocuments
@@ -3811,6 +3852,9 @@ components:
         planSummary:
           type: ["string", "null"]
           description: LLM-generated onboarding plan narrative
+        candidateEmailAuthorized:
+          type: boolean
+          description: Whether this manually-created case currently authorizes live email to its candidate record address
         createdAt:
           type: string
         updatedAt:
@@ -3839,6 +3883,7 @@ components:
         - skillCriticality
         - scenarioKey
         - planSummary
+        - candidateEmailAuthorized
         - createdAt
         - updatedAt
     OnbCaseIntake:
@@ -4215,6 +4260,10 @@ components:
         direction:
           type: string
           description: outbound | inbound
+        audience:
+          type: string
+          enum: [candidate, admin]
+          description: Candidate case communication or separate HR/HITL notification
         toAddress:
           type: string
           description: Email address or phone number (masked for sensitive comms)
@@ -4224,15 +4273,19 @@ components:
           type: string
         status:
           type: string
-          description: sent | delivered | failed | logged-only | received
+          description: sent | delivered | failed | logged-only | sending | received
         failureReason:
           type: ["string", "null"]
         sensitive:
           type: boolean
           description: Flagged for human review before/after send per ethics guardrails
+        retriedBy:
+          type: ["string", "null"]
+        retriedAt:
+          type: ["string", "null"]
         createdAt:
           type: string
-      required: [id, caseId, channel, direction, toAddress, subject, body, status, failureReason, sensitive, createdAt]
+      required: [id, caseId, channel, direction, audience, toAddress, subject, body, status, failureReason, sensitive, retriedBy, retriedAt, createdAt]
     OnbInboundMessage:
       type: object
       properties:
