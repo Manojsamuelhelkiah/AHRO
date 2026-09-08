@@ -7,18 +7,21 @@ uri = "file://.local/outputs/Autonomous-HRO-Agentic-Architecture.pdf"
 type = "pdf"
 title = "Autonomous HRO Agentic Architecture (PDF)"
 description = "PDF export of the slide deck."
+logical_id = "f3d045cd-04f2-4cf8-9b01-41b0fdafa0ad"
 
 [[outputs]]
 id = "atQEeNBLhDAmOQzscw1ld"
 uri = "file://.local/outputs/Autonomous-HRO-Agentic-Architecture.pptx"
 type = "slides"
 title = "Autonomous HRO Agentic Architecture.pptx"
+logical_id = "b8cf30dc-25d7-4a42-b847-5a336c9716b0"
 
 [[outputs]]
 id = "n1pbwQC-yJoXOMPx_5UoH"
 uri = "file://legal-documents.zip"
 type = "unspecified"
 title = "Legal & Product Documentation Pack (18 PDFs)"
+logical_id = "2f2d1b9f-9b7e-418f-9420-507bdadc7e5e"
 
 [[outputs]]
 id = "gVAvpZvYFmJfxBs0ZxGhe"
@@ -26,6 +29,7 @@ uri = "file://exports/hro-cost-shadow.xlsx"
 type = "table"
 title = "HRO Cost Shadow Workbook (.xlsx)"
 description = "Tap to open, then use the download option to save the Excel file."
+logical_id = "22ae4d5c-30a8-49f6-83d8-229fd777d918"
 
 [[outputs]]
 id = "cDko1TgFbA8wQVPJjD33e"
@@ -33,6 +37,7 @@ uri = "file://docs/component-inventory-for-estimation.md"
 type = "text"
 title = "Autonomous HRO App — Component Inventory for Effort Estimation"
 description = "Build-scope inventory of the onboarding product only: Control Tower app, API, data model, AI agents, rules, workers, integrations, and Azure mapping."
+logical_id = "b958f167-0ca1-4491-af88-bc46d7254e9a"
 
 [[outputs]]
 id = "Il1zbybWg-XMywbsmfcEE"
@@ -40,3 +45,74 @@ uri = "file://docs/hro-app-component-inventory.xlsx"
 type = "table"
 title = "Autonomous HRO App — Component Inventory (Excel)"
 description = "Download link — 9-sheet workbook with estimation buckets, screens, API endpoints, data model, AI agents, rules, workers, and integrations with Azure equivalents."
+logical_id = "30b3cdb1-40c4-45d3-b689-c836c7130cf6"
+
+[[outputs]]
+id = "ObB8jckLJFnheEVc-tWro"
+uri = "file://research/notes.md"
+type = "text"
+title = "HRO intent research notes"
+description = "Live research plan and findings log for the intent coverage and specialist-agent assessment."
+logical_id = "40eb1977-1c61-4ae3-9b01-83ad6d4530f1"
+content_hash = "sha256:e1a52f67a1e8a09730193becc83a673c9a8eb52ce052a5291b4e69083eb86446"
+size = 3560
+mtime_ms = 1788884325270
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/40eb1977-1c61-4ae3-9b01-83ad6d4530f1/19cda0a1-febf-45bc-9612-3f5149ae43e9"
+storage_version_token = "1788884336145862"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "APZ0mzff_l3wX2Cctm40l"
+uri = "file://research/hro-intent-agent-architecture.md"
+type = "text"
+title = "HRO intent and specialist-agent report"
+description = "Source-linked reconciliation of the 60 reference intents, the unrecoverable 69-row baseline, accountable specialist boundaries, runtime maturity, and staged implementation."
+logical_id = "31cb61c6-9eb3-450c-a553-57205ceeffbd"
+content_hash = "sha256:b49fb815755b404704ef4d5c5e3bb4fd42887642b1c8f31be4d54ead2d1a2c41"
+size = 37494
+mtime_ms = 1788885496294
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/31cb61c6-9eb3-450c-a553-57205ceeffbd/e99a819c-ccb3-4f8f-9264-289067bad7f3"
+storage_version_token = "1788885585025346"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "yMwQoG0jcy46jeQrghB8I"
+uri = "file://research/intent-agent-coverage.csv"
+type = "table"
+title = "HRO intent coverage matrix (CSV)"
+description = "Spreadsheet-ready 60-row matrix with parent intent, owner, systems, approvals, provenance edges, and runtime maturity."
+logical_id = "3a96d004-6fb8-499b-bf3e-3545d870cb02"
+content_hash = "sha256:c427e608b7eb20be7e3c3d285186c77d07bdf3b7fed62070a7d8fc8de527b06f"
+size = 43260
+mtime_ms = 1788885003702
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/3a96d004-6fb8-499b-bf3e-3545d870cb02/a4cac343-69e0-4cd3-b815-8762605996bc"
+storage_version_token = "1788885586387717"
+content_type = "text/csv"
+
+[[outputs]]
+id = "xVbaQknwX1OBmIn-gf7R4"
+uri = "file://research/intent-agent-coverage.json"
+type = "unspecified"
+title = "HRO intent coverage matrix (JSON)"
+description = "Machine-readable taxonomy with 38 parents, 60 fixed reference sub-intents, six candidate gaps, custom-intent observations, and exact/family/curated source relationships."
+logical_id = "74cd5a54-3603-489f-89f8-c07e41b96c4a"
+content_hash = "sha256:8329a88eaeed86a1086136627bc495eb28159233abb8e318f46535474c20d311"
+size = 285926
+mtime_ms = 1788885003434
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/74cd5a54-3603-489f-89f8-c07e41b96c4a/07dedecc-20ea-49ae-8cbe-4b0499e2e5b7"
+storage_version_token = "1788885587762729"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "JqLo74o9qWOnBotgA8Wt8"
+uri = "file://research/onboarding-compound-action-plan.json"
+type = "unspecified"
+title = "Compound onboarding action contract"
+description = "Machine-readable nine-action coordinator plan covering typed inputs/outputs, applicability, approvals, idempotency, fencing, retries, compensation, evidence, and adversarial scenarios."
+logical_id = "713e84f5-166f-42bf-ad7c-4d6ae5a72c9a"
+content_hash = "sha256:6eddeda64aa39a60c8a52b822e62684e78abdd89d03bbb51c5800bd5bcc9c44f"
+size = 66613
+mtime_ms = 1788885418262
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/713e84f5-166f-42bf-ad7c-4d6ae5a72c9a/b1c195ad-5a00-4636-bdbd-521ba0b69ad0"
+storage_version_token = "1788885589108341"
+content_type = "application/octet-stream"

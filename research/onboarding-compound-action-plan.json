@@ -1,0 +1,1987 @@
+{
+  "schemaVersion": "1.0",
+  "status": "recommended-contract-not-implemented",
+  "generatedOn": "2026-09-08",
+  "caseContract": {
+    "caseId": "stable UUID",
+    "planVersion": "monotonic integer; every material input or action-graph change creates a new version",
+    "caseIdempotencyKey": "tenantId + hiringRequestId",
+    "states": [
+      "pending",
+      "running",
+      "waiting_external",
+      "waiting_approval",
+      "confirmed",
+      "waived",
+      "not_applicable",
+      "unknown_external_effect",
+      "failed",
+      "compensating",
+      "cancelled",
+      "manual_repair"
+    ],
+    "leaseAndFencing": {
+      "leaseKey": "tenantId + caseId + actionId",
+      "token": "monotonic fencing token",
+      "dispatchRule": "A database compare-and-set claims one outbox row for logicalOperationKey with the current fencing token. Immediately before network dispatch, the dispatcher must atomically confirm the claim and current token; stale holders cannot obtain a dispatch claim.",
+      "commitRule": "Only the current fencing token may commit local action state. Provider idempotency protects a remote race only when the provider enforces it. For providers without idempotency or provider-side fencing, any dispatch that may have started blocks automatic redispatch until reconciliation positively finds the effect or definitively proves termination/nonexecution."
+    }
+  },
+  "approvalContract": {
+    "proposalFields": [
+      "tenantId",
+      "caseId",
+      "planVersion",
+      "actionId",
+      "logicalOperationKey",
+      "toolName",
+      "canonicalArguments",
+      "policyVersion",
+      "evidenceRefs",
+      "requiredApprovalRule"
+    ],
+    "binding": "SHA-256 hash of canonical proposal fields, including exact AND/OR approver requirements and nonwaivable-denial rules",
+    "decisionFields": [
+      "proposalHash",
+      "authorityId",
+      "authorityRole",
+      "decision",
+      "reason",
+      "decidedAt",
+      "expiresAt"
+    ],
+    "rule": "Execution rejects changed arguments, changed logical operation, changed plan version, expired approval, missing required allOf/anyOf authorities, separation-of-duties conflict, or nonwaivable denial.",
+    "separationOfDuties": "Evaluate named authority IDs, not roles alone. Requestor, approver and executor must be distinct when the rule says so; one person cannot satisfy two allOf roles unless the rule explicitly permits it."
+  },
+  "waiverContract": {
+    "defaultAllowed": false,
+    "fields": [
+      "tenantId",
+      "caseId",
+      "planVersion",
+      "actionId",
+      "logicalOperationKey",
+      "blockerCode",
+      "eligibilityRuleId",
+      "authorityId",
+      "authorityRole",
+      "reason",
+      "evidenceRefs",
+      "grantedAt",
+      "expiresAt"
+    ],
+    "eligibility": "The deterministic branch policy enumerates waiver-eligible blocker codes and exact authority IDs/roles. Any unlisted blocker is nonwaivable.",
+    "nonWaivable": [
+      "identity_mismatch",
+      "missing_legal_consent",
+      "legal_prohibition",
+      "segregation_of_duties_conflict",
+      "confirmed_adverse_bgv_policy_bar",
+      "missing_mandatory_payroll_identity"
+    ],
+    "rule": "A waiver is tenant-, case-, action-, operation-, plan-, authority-, and blocker-specific; it expires automatically, cannot be reused across cases, and never changes source-system state."
+  },
+  "retryPolicy": {
+    "retryable": [
+      "timeout",
+      "rate_limited",
+      "provider_5xx",
+      "temporary_network"
+    ],
+    "nonRetryable": [
+      "validation",
+      "authorization",
+      "policy_denial",
+      "identity_mismatch",
+      "source_conflict"
+    ],
+    "maxAttempts": 6,
+    "initialBackoffSeconds": 30,
+    "multiplier": 2,
+    "maxBackoffSeconds": 3600,
+    "jitter": "full",
+    "deadLetter": "After max attempts, set manual_repair and notify the accountable owner; never mark complete."
+  },
+  "branches": [
+    {
+      "actionId": "core-profile",
+      "accountable": "Onboarding Coordinator",
+      "prerequisites": [],
+      "idempotencyScope": "tenantId + hiringRequestId + core-profile + planVersion",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "rehire_or_transfer_ambiguity",
+            "requiredApprovers": {
+              "allOf": [
+                "named HR operations approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != approver"
+            ],
+            "nonWaivableDenyOn": [
+              "identity_mismatch"
+            ]
+          },
+          {
+            "trigger": "short_lead_exception",
+            "requiredApprovers": {
+              "allOf": [
+                "named HR operations approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [],
+            "nonWaivableDenyOn": []
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "onboarding case store",
+        "predicate": "validatedProfileHash equals canonical current inputs; all mandatory fields are present; authoritativeSubjectId resolves in HRIS or an authorized nonemployee registry; requiredBranchSet is deterministically derived and dependency-closed."
+      },
+      "evidenceLocators": [
+        "signed offer locator",
+        "validated profile hash",
+        "policy version",
+        "approval hash if required"
+      ],
+      "retryOverride": null,
+      "compensation": {
+        "automatic": [],
+        "manualRepair": [
+          "correct source inputs and create a new plan version"
+        ],
+        "irreversible": []
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenantId",
+          "hiringRequestId",
+          "candidateIdentityRef",
+          "signedOfferRef",
+          "employmentProfile",
+          "startDate",
+          "managerId",
+          "roleId",
+          "location",
+          "legalEntity"
+        ],
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hiringRequestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "candidateIdentityRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "signedOfferRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "employmentProfile": {
+            "type": "object"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "managerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "roleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1
+          },
+          "legalEntity": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "caseId",
+          "planVersion",
+          "workerIdentityKey",
+          "validatedProfileHash",
+          "disposition",
+          "authoritativeSubjectId",
+          "subjectSource",
+          "requiredBranchSet"
+        ],
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "planVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workerIdentityKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "validatedProfileHash": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          },
+          "authoritativeSubjectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subjectSource": {
+            "type": "string",
+            "enum": [
+              "HRIS",
+              "authorized-contractor-registry",
+              "authorized-vendor-registry"
+            ]
+          },
+          "requiredBranchSet": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "actionId",
+                "dispositionRequirement",
+                "policyRuleId",
+                "policyVersion",
+                "reason"
+              ],
+              "properties": {
+                "actionId": {
+                  "type": "string"
+                },
+                "dispositionRequirement": {
+                  "type": "string",
+                  "enum": [
+                    "confirmed",
+                    "confirmed_or_waived"
+                  ]
+                },
+                "policyRuleId": {
+                  "type": "string"
+                },
+                "policyVersion": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      "applicabilityRule": "always required",
+      "logicalOperationKey": "tenantId + workerIdentityKey + core-profile + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "sampleInput": {
+        "tenantId": "sample-tenantId",
+        "hiringRequestId": "sample-hiringRequestId",
+        "candidateIdentityRef": "sample-candidateIdentityRef",
+        "signedOfferRef": "sample-signedOfferRef",
+        "employmentProfile": {},
+        "startDate": "2026-09-15",
+        "managerId": "sample-managerId",
+        "roleId": "sample-roleId",
+        "location": "sample-location",
+        "legalEntity": "sample-legalEntity"
+      },
+      "sampleOutput": {
+        "caseId": "sample-caseId",
+        "planVersion": "sample-planVersion",
+        "workerIdentityKey": "sample-workerIdentityKey",
+        "validatedProfileHash": "sample-validatedProfileHash",
+        "disposition": "confirmed",
+        "authoritativeSubjectId": "sample-authoritativeSubjectId",
+        "subjectSource": "HRIS",
+        "requiredBranchSet": [
+          {
+            "actionId": "sample-actionId",
+            "dispositionRequirement": "confirmed",
+            "policyRuleId": "sample-policyRuleId",
+            "policyVersion": "sample-policyVersion",
+            "reason": "sample-reason"
+          }
+        ]
+      }
+    },
+    {
+      "actionId": "worker-record-documents",
+      "accountable": "Worker Records and Documents Specialist",
+      "prerequisites": [
+        "core-profile:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + worker-record-documents + planVersion",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "contract_clause_exception",
+            "requiredApprovers": {
+              "allOf": [
+                "named HR documents approver",
+                "named legal approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != each approver"
+            ],
+            "nonWaivableDenyOn": [
+              "legal_prohibition"
+            ]
+          },
+          {
+            "trigger": "identity_or_document_mismatch",
+            "requiredApprovers": {
+              "allOf": [],
+              "anyOf": []
+            },
+            "separationOfDuties": [],
+            "nonWaivableDenyOn": [
+              "identity_mismatch",
+              "missing_legal_consent"
+            ]
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "HRIS and document system",
+        "predicate": "workerId exists for workerIdentityKey; required documents exist at approved template version and have expected signature status"
+      },
+      "evidenceLocators": [
+        "HRIS worker record version",
+        "document IDs and hashes",
+        "signature provider status"
+      ],
+      "retryOverride": null,
+      "compensation": {
+        "automatic": [
+          "void unsigned generated documents",
+          "cancel duplicate draft worker record when source supports it"
+        ],
+        "manualRepair": [
+          "merge duplicate worker identity",
+          "legal correction for signed document"
+        ],
+        "irreversible": [
+          "signed legal agreement requires human-led amendment, not deletion"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "validatedProfileHash",
+          "signedOfferRef",
+          "documentRequirementSet",
+          "templateVersion"
+        ],
+        "properties": {
+          "validatedProfileHash": {
+            "type": "string",
+            "minLength": 1
+          },
+          "signedOfferRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "documentRequirementSet": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "templateVersion": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workerId",
+          "documentIds",
+          "documentStatus",
+          "disposition"
+        ],
+        "properties": {
+          "workerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "documentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "documentStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "required when workerType is employee or intern, or policy explicitly requires an HRIS employment record/document set",
+      "logicalOperationKey": "tenantId + workerIdentityKey + worker-record-documents + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "sampleInput": {
+        "validatedProfileHash": "sample-validatedProfileHash",
+        "signedOfferRef": "sample-signedOfferRef",
+        "documentRequirementSet": [
+          "sample-documentRequirementSet-item"
+        ],
+        "templateVersion": "sample-templateVersion"
+      },
+      "sampleOutput": {
+        "workerId": "sample-workerId",
+        "documentIds": [
+          "sample-documentIds-item"
+        ],
+        "documentStatus": "sample-documentStatus",
+        "disposition": "confirmed"
+      }
+    },
+    {
+      "actionId": "background-verification",
+      "accountable": "BGV Specialist",
+      "prerequisites": [
+        "core-profile:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + background-verification + checkPackage + planVersion",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "provider_review",
+            "requiredApprovers": {
+              "allOf": [
+                "named BGV adjudicator"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "provider operator != adjudicator"
+            ],
+            "nonWaivableDenyOn": [
+              "confirmed_adverse_bgv_policy_bar"
+            ]
+          },
+          {
+            "trigger": "policy_exception",
+            "requiredApprovers": {
+              "allOf": [
+                "named BGV adjudicator",
+                "named authorized HR risk approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != each approver"
+            ],
+            "nonWaivableDenyOn": [
+              "confirmed_adverse_bgv_policy_bar",
+              "missing_legal_consent"
+            ]
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "BGV provider",
+        "predicate": "providerCaseId exists and providerStatus is clear; review requires an unexpired named adjudication or policy-valid waiver"
+      },
+      "evidenceLocators": [
+        "provider case locator",
+        "raw provider status event",
+        "consent reference",
+        "adjudication decision hash"
+      ],
+      "retryOverride": {
+        "maxAttempts": 12,
+        "maxBackoffSeconds": 21600
+      },
+      "compensation": {
+        "automatic": [
+          "cancel pending check when provider contract allows"
+        ],
+        "manualRepair": [
+          "adjudicate disputed result",
+          "resolve duplicate provider case"
+        ],
+        "irreversible": [
+          "completed third-party checks and legally retained evidence are not deleted by workflow compensation"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workerIdentityKey",
+          "consentRef",
+          "checkPackage",
+          "jurisdiction"
+        ],
+        "properties": {
+          "workerIdentityKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "consentRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "checkPackage": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jurisdiction": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "providerCaseId",
+          "providerStatus",
+          "adjudicationRef",
+          "disposition"
+        ],
+        "properties": {
+          "providerCaseId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "providerStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "adjudicationRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "required only when country + workerType + role policy selects a check package",
+      "logicalOperationKey": "tenantId + workerIdentityKey + background-verification + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "sampleInput": {
+        "workerIdentityKey": "sample-workerIdentityKey",
+        "consentRef": "sample-consentRef",
+        "checkPackage": "sample-checkPackage",
+        "jurisdiction": "sample-jurisdiction"
+      },
+      "sampleOutput": {
+        "providerCaseId": "sample-providerCaseId",
+        "providerStatus": "sample-providerStatus",
+        "adjudicationRef": "sample-adjudicationRef",
+        "disposition": "confirmed"
+      }
+    },
+    {
+      "actionId": "payroll-benefits",
+      "accountable": "Payroll and Benefits Setup Specialist",
+      "prerequisites": [
+        "core-profile:confirmed",
+        "worker-record-documents:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + payroll-benefits + workerId + planVersion",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "new_or_changed_bank_instructions",
+            "requiredApprovers": {
+              "allOf": [
+                "named fraud-control approver",
+                "named payroll approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != each approver",
+              "executor != fraud-control approver"
+            ],
+            "nonWaivableDenyOn": [
+              "identity_mismatch",
+              "missing_mandatory_payroll_identity"
+            ]
+          },
+          {
+            "trigger": "pay_exception",
+            "requiredApprovers": {
+              "allOf": [
+                "named payroll approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != approver"
+            ],
+            "nonWaivableDenyOn": []
+          },
+          {
+            "trigger": "benefit_exception",
+            "requiredApprovers": {
+              "allOf": [
+                "named benefits approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != approver"
+            ],
+            "nonWaivableDenyOn": []
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "payroll and benefits providers",
+        "predicate": "worker exists in expected pay group; tax prerequisites are accepted; required benefit enrollment is confirmed or explicitly not applicable"
+      },
+      "evidenceLocators": [
+        "payroll record version",
+        "bank-verification reference",
+        "tax validation result",
+        "carrier enrollment ID"
+      ],
+      "retryOverride": null,
+      "compensation": {
+        "automatic": [
+          "cancel unprocessed enrollment/request when supported"
+        ],
+        "manualRepair": [
+          "reverse incorrect payroll setup under payroll controls",
+          "correct coverage with carrier effective-date review"
+        ],
+        "irreversible": [
+          "settled payroll and active insurance coverage require controlled correction, never blind rollback"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workerId",
+          "legalEntity",
+          "country",
+          "startDate",
+          "payGroup",
+          "taxProfileRef",
+          "bankVerificationRef",
+          "benefitEligibilityContext"
+        ],
+        "properties": {
+          "workerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "legalEntity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "payGroup": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taxProfileRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bankVerificationRef": {
+            "type": "string",
+            "minLength": 1
+          },
+          "benefitEligibilityContext": {
+            "type": "object"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "payrollWorkerId",
+          "payGroupStatus",
+          "taxStatus",
+          "benefitEnrollmentStatus",
+          "disposition"
+        ],
+        "properties": {
+          "payrollWorkerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "payGroupStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taxStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "benefitEnrollmentStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "required when workerType is employee or paid intern and the legal entity processes payroll/benefits",
+      "logicalOperationKey": "tenantId + workerIdentityKey + payroll-benefits + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "dependencyBindings": {
+        "workerId": "worker-record-documents.workerId"
+      },
+      "sampleInput": {
+        "workerId": "sample-workerId",
+        "legalEntity": "sample-legalEntity",
+        "country": "sample-country",
+        "startDate": "2026-09-15",
+        "payGroup": "sample-payGroup",
+        "taxProfileRef": "sample-taxProfileRef",
+        "bankVerificationRef": "sample-bankVerificationRef",
+        "benefitEligibilityContext": {}
+      },
+      "sampleOutput": {
+        "payrollWorkerId": "sample-payrollWorkerId",
+        "payGroupStatus": "sample-payGroupStatus",
+        "taxStatus": "sample-taxStatus",
+        "benefitEnrollmentStatus": "sample-benefitEnrollmentStatus",
+        "disposition": "confirmed"
+      }
+    },
+    {
+      "actionId": "it-identity-access",
+      "accountable": "IT Identity and Access Specialist",
+      "prerequisites": [
+        "core-profile:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + it-identity-access + accessBundleHash + planVersion",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "standard_access_bundle",
+            "requiredApprovers": {
+              "allOf": [
+                "named manager",
+                "named application owner"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != application owner when requestor is beneficiary"
+            ],
+            "nonWaivableDenyOn": [
+              "segregation_of_duties_conflict"
+            ]
+          },
+          {
+            "trigger": "privileged_access",
+            "requiredApprovers": {
+              "allOf": [
+                "named manager",
+                "named application owner",
+                "named security approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "beneficiary != each approver",
+              "executor != security approver"
+            ],
+            "nonWaivableDenyOn": [
+              "segregation_of_duties_conflict"
+            ]
+          },
+          {
+            "trigger": "segregation_of_duties_conflict",
+            "requiredApprovers": {
+              "allOf": [],
+              "anyOf": []
+            },
+            "separationOfDuties": [],
+            "nonWaivableDenyOn": [
+              "segregation_of_duties_conflict"
+            ]
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "IAM and ITSM",
+        "predicate": "directoryUserId exists for authoritativeSubjectId from the approved subjectSource; every required assignment is active for the approved bundle; fulfillment requests are source-confirmed."
+      },
+      "evidenceLocators": [
+        "directory object version",
+        "ITSM request IDs",
+        "approval proposal hash",
+        "group/role assignment snapshot"
+      ],
+      "retryOverride": null,
+      "compensation": {
+        "automatic": [
+          "revoke unneeded assignments",
+          "cancel unfulfilled requests"
+        ],
+        "manualRepair": [
+          "security review of partially provisioned privileged access"
+        ],
+        "irreversible": [
+          "security/audit logs are retained"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authoritativeSubjectId",
+          "managerId",
+          "roleId",
+          "startDate",
+          "accessBundle",
+          "leastPrivilegePolicyVersion",
+          "subjectSource"
+        ],
+        "properties": {
+          "managerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "roleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "accessBundle": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "leastPrivilegePolicyVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authoritativeSubjectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subjectSource": {
+            "type": "string",
+            "enum": [
+              "HRIS",
+              "authorized-contractor-registry",
+              "authorized-vendor-registry"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "directoryUserId",
+          "itsmRequestIds",
+          "accessAssignments",
+          "disposition"
+        ],
+        "properties": {
+          "directoryUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itsmRequestIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "accessAssignments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "required when role policy requires a company identity, application access or managed device account",
+      "logicalOperationKey": "tenantId + workerIdentityKey + it-identity-access + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "dependencyBindings": {
+        "authoritativeSubjectId": "core-profile.authoritativeSubjectId",
+        "subjectSource": "core-profile.subjectSource"
+      },
+      "sampleInput": {
+        "authoritativeSubjectId": "sample-authoritativeSubjectId",
+        "managerId": "sample-managerId",
+        "roleId": "sample-roleId",
+        "startDate": "2026-09-15",
+        "accessBundle": [
+          "sample-accessBundle-item"
+        ],
+        "leastPrivilegePolicyVersion": "sample-leastPrivilegePolicyVersion",
+        "subjectSource": "HRIS"
+      },
+      "sampleOutput": {
+        "directoryUserId": "sample-directoryUserId",
+        "itsmRequestIds": [
+          "sample-itsmRequestIds-item"
+        ],
+        "accessAssignments": [
+          "sample-accessAssignments-item"
+        ],
+        "disposition": "confirmed"
+      }
+    },
+    {
+      "actionId": "assets-workplace",
+      "accountable": "Assets and Workplace Specialist",
+      "prerequisites": [
+        "core-profile:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + assets-workplace + assetProfileHash + planVersion",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "nonstandard_asset_or_budget_exception",
+            "requiredApprovers": {
+              "allOf": [
+                "named manager",
+                "named asset approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "requestor != asset approver"
+            ],
+            "nonWaivableDenyOn": []
+          },
+          {
+            "trigger": "restricted_location_access",
+            "requiredApprovers": {
+              "allOf": [
+                "named facilities or physical-security approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "beneficiary != approver"
+            ],
+            "nonWaivableDenyOn": [
+              "legal_prohibition"
+            ]
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "asset and workplace systems",
+        "predicate": "required asset allocation/order and workplace/badge requests are confirmed with expected delivery/readiness dates"
+      },
+      "evidenceLocators": [
+        "asset order/reservation locators",
+        "badge request status",
+        "delivery commitment"
+      ],
+      "retryOverride": null,
+      "compensation": {
+        "automatic": [
+          "cancel cancellable orders/reservations",
+          "release unassigned asset"
+        ],
+        "manualRepair": [
+          "return or reassign shipped asset",
+          "security handling for issued badge"
+        ],
+        "irreversible": [
+          "shipping or restocking charges may require financial adjustment"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workerIdentityKey",
+          "roleId",
+          "location",
+          "startDate",
+          "assetProfile",
+          "workplaceProfile"
+        ],
+        "properties": {
+          "workerIdentityKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "roleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "assetProfile": {
+            "type": "object"
+          },
+          "workplaceProfile": {
+            "type": "object"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assetOrderIds",
+          "badgeRequestId",
+          "workplaceReservationId",
+          "readinessStatus",
+          "disposition"
+        ],
+        "properties": {
+          "assetOrderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "badgeRequestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workplaceReservationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "readinessStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "required when location/role policy requires equipment, badge, desk or workplace access",
+      "logicalOperationKey": "tenantId + workerIdentityKey + assets-workplace + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "sampleInput": {
+        "workerIdentityKey": "sample-workerIdentityKey",
+        "roleId": "sample-roleId",
+        "location": "sample-location",
+        "startDate": "2026-09-15",
+        "assetProfile": {},
+        "workplaceProfile": {}
+      },
+      "sampleOutput": {
+        "assetOrderIds": [
+          "sample-assetOrderIds-item"
+        ],
+        "badgeRequestId": "sample-badgeRequestId",
+        "workplaceReservationId": "sample-workplaceReservationId",
+        "readinessStatus": "sample-readinessStatus",
+        "disposition": "confirmed"
+      }
+    },
+    {
+      "actionId": "learning-induction",
+      "accountable": "Learning and Induction Specialist",
+      "prerequisites": [
+        "core-profile:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + learning-induction + curriculumHash + planVersion",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "training_exemption_or_curriculum_exception",
+            "requiredApprovers": {
+              "allOf": [
+                "named learning compliance approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "beneficiary != approver"
+            ],
+            "nonWaivableDenyOn": [
+              "legal_prohibition"
+            ]
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "LMS and onboarding task system",
+        "predicate": "mandatory assignments and orientation event exist for authoritativeSubjectId at expected versions; buddy/manager checkpoint is assigned when policy requires."
+      },
+      "evidenceLocators": [
+        "LMS assignment IDs",
+        "curriculum version",
+        "orientation roster locator",
+        "buddy assignment"
+      ],
+      "retryOverride": null,
+      "compensation": {
+        "automatic": [
+          "cancel duplicate enrollment or event reservation"
+        ],
+        "manualRepair": [
+          "record approved exemption",
+          "correct curriculum version"
+        ],
+        "irreversible": [
+          "completed training history is retained and corrected with superseding evidence"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authoritativeSubjectId",
+          "roleId",
+          "location",
+          "startDate",
+          "mandatoryCurriculumVersion",
+          "orientationProgram",
+          "subjectSource"
+        ],
+        "properties": {
+          "roleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "mandatoryCurriculumVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "orientationProgram": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authoritativeSubjectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subjectSource": {
+            "type": "string",
+            "enum": [
+              "HRIS",
+              "authorized-contractor-registry",
+              "authorized-vendor-registry"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "learningAssignmentIds",
+          "orientationEventId",
+          "buddyAssignmentId",
+          "disposition"
+        ],
+        "properties": {
+          "learningAssignmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "orientationEventId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "buddyAssignmentId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "required when curriculum/orientation policy applies to workerType, role or location",
+      "logicalOperationKey": "tenantId + workerIdentityKey + learning-induction + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "dependencyBindings": {
+        "authoritativeSubjectId": "core-profile.authoritativeSubjectId",
+        "subjectSource": "core-profile.subjectSource"
+      },
+      "sampleInput": {
+        "authoritativeSubjectId": "sample-authoritativeSubjectId",
+        "roleId": "sample-roleId",
+        "location": "sample-location",
+        "startDate": "2026-09-15",
+        "mandatoryCurriculumVersion": "sample-mandatoryCurriculumVersion",
+        "orientationProgram": "sample-orientationProgram",
+        "subjectSource": "HRIS"
+      },
+      "sampleOutput": {
+        "learningAssignmentIds": [
+          "sample-learningAssignmentIds-item"
+        ],
+        "orientationEventId": "sample-orientationEventId",
+        "buddyAssignmentId": "sample-buddyAssignmentId",
+        "disposition": "confirmed"
+      }
+    },
+    {
+      "actionId": "communications",
+      "accountable": "Onboarding Coordinator",
+      "prerequisites": [
+        "core-profile:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + communications + recipient + templateVersion + contentHash",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "sensitive_or_exception_content",
+            "requiredApprovers": {
+              "allOf": [
+                "named HR communications approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "author != approver"
+            ],
+            "nonWaivableDenyOn": [
+              "legal_prohibition"
+            ]
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "communication provider",
+        "predicate": "provider accepted or delivered the message; this proves communication only and cannot confirm any business branch"
+      },
+      "evidenceLocators": [
+        "provider message ID",
+        "template version",
+        "content hash",
+        "delivery callback"
+      ],
+      "retryOverride": {
+        "maxAttempts": 4,
+        "maxBackoffSeconds": 1800
+      },
+      "compensation": {
+        "automatic": [],
+        "manualRepair": [
+          "send a correction or clarification"
+        ],
+        "irreversible": [
+          "delivered message cannot be recalled reliably"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "caseId",
+          "recipient",
+          "authorizedChannel",
+          "templateVersion",
+          "contentHash",
+          "relatedActionIds"
+        ],
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recipient": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authorizedChannel": {
+            "type": "string",
+            "minLength": 1
+          },
+          "templateVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contentHash": {
+            "type": "string",
+            "minLength": 1
+          },
+          "relatedActionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "providerMessageIds",
+          "deliveryStates",
+          "disposition"
+        ],
+        "properties": {
+          "providerMessageIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "deliveryStates": {
+            "type": "object"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "always scheduled but never a readiness substitute for another branch",
+      "logicalOperationKey": "tenantId + workerIdentityKey + communications + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "sampleInput": {
+        "caseId": "sample-caseId",
+        "recipient": "sample-recipient",
+        "authorizedChannel": "sample-authorizedChannel",
+        "templateVersion": "sample-templateVersion",
+        "contentHash": "sample-contentHash",
+        "relatedActionIds": [
+          "sample-relatedActionIds-item"
+        ]
+      },
+      "sampleOutput": {
+        "providerMessageIds": [
+          "sample-providerMessageIds-item"
+        ],
+        "deliveryStates": {},
+        "disposition": "confirmed"
+      }
+    },
+    {
+      "actionId": "readiness-join",
+      "accountable": "Onboarding Coordinator",
+      "prerequisites": [
+        "core-profile:confirmed"
+      ],
+      "idempotencyScope": "tenantId + caseId + readiness-join + planVersion + branchEvidenceHash",
+      "approval": {
+        "rules": [
+          {
+            "trigger": "eligible_branch_waiver",
+            "requiredApprovers": {
+              "allOf": [
+                "named HR operations readiness approver"
+              ],
+              "anyOf": []
+            },
+            "separationOfDuties": [
+              "waiver grantor != readiness approver when policy requires dual control"
+            ],
+            "nonWaivableDenyOn": [
+              "identity_mismatch",
+              "missing_legal_consent",
+              "legal_prohibition",
+              "segregation_of_duties_conflict",
+              "confirmed_adverse_bgv_policy_bar",
+              "missing_mandatory_payroll_identity"
+            ]
+          }
+        ],
+        "proposalBindingRequired": true
+      },
+      "expectedAuthoritativeState": {
+        "system": "onboarding case store",
+        "predicate": "For each requiredBranchSet entry, disposition is confirmed, or waived only when dispositionRequirement permits it and the blocker-specific waiver is valid. Nonrequired branches retain evidence-backed not_applicable. failed and unknown_external_effect always block closure."
+      },
+      "evidenceLocators": [
+        "branch evidence hashes",
+        "waiver records",
+        "readiness decision hash",
+        "audit event range"
+      ],
+      "retryOverride": {
+        "maxAttempts": 1
+      },
+      "compensation": {
+        "automatic": [],
+        "manualRepair": [
+          "reopen case with a new plan version when post-close evidence changes"
+        ],
+        "irreversible": [
+          "historical readiness decision and audit events are retained"
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "planVersion",
+          "requiredBranchSet",
+          "branchDispositions",
+          "branchEvidenceHashes"
+        ],
+        "properties": {
+          "planVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requiredBranchSet": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "actionId",
+                "dispositionRequirement",
+                "policyRuleId",
+                "policyVersion",
+                "reason"
+              ],
+              "properties": {
+                "actionId": {
+                  "type": "string"
+                },
+                "dispositionRequirement": {
+                  "type": "string",
+                  "enum": [
+                    "confirmed",
+                    "confirmed_or_waived"
+                  ]
+                },
+                "policyRuleId": {
+                  "type": "string"
+                },
+                "policyVersion": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "branchDispositions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "confirmed",
+                "waived",
+                "not_applicable",
+                "failed",
+                "unknown_external_effect"
+              ]
+            }
+          },
+          "branchEvidenceHashes": {
+            "type": "object"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "readinessStatus",
+          "blockers",
+          "waiverRefs",
+          "closedAt",
+          "disposition"
+        ],
+        "properties": {
+          "readinessStatus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "waiverRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "closedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "waived",
+              "not_applicable",
+              "failed",
+              "unknown_external_effect"
+            ]
+          }
+        }
+      },
+      "applicabilityRule": "always required after requiredBranchSet is derived",
+      "logicalOperationKey": "tenantId + workerIdentityKey + readiness-join + targetSystem + materialInputHash",
+      "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal",
+      "providerEffectSafety": {
+        "providerIdempotencyKey": "Use logicalOperationKey only when the provider enforces idempotency or provider-side fencing.",
+        "beforeRetry": "If dispatch may have started, reconcile. With no provider idempotency/fencing, require positive effect discovery or definitive provider-side termination/nonexecution; a negative lookup alone does not authorize resend.",
+        "unknownOutcome": "unknown_external_effect -> manual_repair; automated redispatch is forbidden after possible dispatch unless provider idempotency/fencing applies or definitive nonexecution is proven."
+      },
+      "sampleInput": {
+        "planVersion": "sample-planVersion",
+        "requiredBranchSet": [
+          {
+            "actionId": "sample-actionId",
+            "dispositionRequirement": "confirmed",
+            "policyRuleId": "sample-policyRuleId",
+            "policyVersion": "sample-policyVersion",
+            "reason": "sample-reason"
+          }
+        ],
+        "branchDispositions": {},
+        "branchEvidenceHashes": {}
+      },
+      "sampleOutput": {
+        "readinessStatus": "sample-readinessStatus",
+        "blockers": [
+          "sample-blockers-item"
+        ],
+        "waiverRefs": [
+          "sample-waiverRefs-item"
+        ],
+        "closedAt": "2026-09-15T09:00:00Z",
+        "disposition": "confirmed"
+      }
+    }
+  ],
+  "compensationOrdering": {
+    "rule": "Use dependency-aware forward compensation, normally communications correction -> access revocation -> reservation/order cancellation -> enrollment/request cancellation -> document/record correction. Never assume strict reverse order; domain rules and irreversible actions override.",
+    "onFailure": "Persist compensating/manual_repair state and require the accountable specialist to close remaining obligations."
+  },
+  "completionRule": "A branch disposition is confirmed only when its expectedAuthoritativeState predicate is satisfied by evidence locators for the current material operation. A policy-valid unexpired waiver yields waived, never confirmed. Deterministic applicability evidence yields not_applicable. failed and unknown_external_effect block readiness. Local success flags, model prose, outbound delivery, and attempted API calls do not count.",
+  "externalEffectContract": {
+    "logicalOperationKey": "tenantId + workerIdentityKey + actionPurpose + targetSystem + materialInputHash",
+    "executionAttemptKey": "logicalOperationKey + planVersion + attemptOrdinal; identifies local execution only",
+    "materialInputRule": "Hash only inputs that change the intended external effect. Display text, observer lists, retry timing and unrelated branch changes are excluded.",
+    "effectJournal": "Unique logicalOperationKey stores requested, dispatched, unknown, and confirmed provider effects plus provider locator and last reconciled state.",
+    "replanReuse": "A new plan version reuses a confirmed effect when logicalOperationKey is unchanged. Changed material inputs create a new logical operation and explicit supersession/compensation decision.",
+    "providerIdempotency": "Pass logicalOperationKey to providers that support idempotency and require the same key for every retry.",
+    "ambiguousOutcome": "After timeout, lease expiry, worker disappearance, or connection loss once dispatch may have started, read/reconcile provider state by provider locator or business identity. Provider-side idempotency permits retry with the same logical key. Without provider idempotency/fencing, a negative lookup alone is insufficient because a stale request may still execute; automatic redispatch is prohibited unless reconciliation positively identifies the effect or definitively proves provider-side termination/nonexecution. Otherwise set unknown_external_effect and require manual repair.",
+    "logicalOperationKeyRule": "The logical external operation key must not include plan version or attempt number."
+  },
+  "applicabilityContract": {
+    "inputs": [
+      "workerType",
+      "hireType",
+      "country",
+      "legalEntity",
+      "roleId",
+      "location",
+      "startDate",
+      "policyVersion"
+    ],
+    "derivation": "A deterministic policy function emits requiredBranchSet entries before branch execution.",
+    "entrySchema": {
+      "type": "object",
+      "required": [
+        "actionId",
+        "dispositionRequirement",
+        "policyRuleId",
+        "policyVersion",
+        "reason"
+      ],
+      "properties": {
+        "actionId": {
+          "type": "string"
+        },
+        "dispositionRequirement": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "confirmed_or_waived"
+          ]
+        },
+        "policyRuleId": {
+          "type": "string"
+        },
+        "policyVersion": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "allowedDispositions": [
+      "confirmed",
+      "waived",
+      "not_applicable",
+      "failed",
+      "unknown_external_effect"
+    ],
+    "rules": [
+      "not_applicable requires a policy rule ID, version, evaluated inputs hash and reason",
+      "waived requires waiver eligibility, named authority ID, proposal binding and unexpired decision",
+      "hard-block branches require confirmed and cannot use waived",
+      "readiness evaluates only requiredBranchSet; nonrequired branches are preserved as not_applicable rather than fabricated as confirmed"
+    ],
+    "dependencyClosure": "The planner must reject any requiredBranchSet that is not dependency-closed. Every required branch prerequisite must be always-required, present in the set, or satisfied by an explicit authoritative alternative input binding.",
+    "branchRules": {
+      "worker-record-documents": {
+        "requiredWhen": "workerType is employee or intern, or any required downstream branch requires an HRIS workerId",
+        "alternativeInputBindings": []
+      },
+      "background-verification": {
+        "requiredWhen": "country + workerType + role policy selects a check package",
+        "alternativeInputBindings": []
+      },
+      "payroll-benefits": {
+        "requiredWhen": "workerType is employee or paid intern and legal entity processes payroll/benefits",
+        "alternativeInputBindings": [],
+        "requires": [
+          "worker-record-documents"
+        ]
+      },
+      "it-identity-access": {
+        "requiredWhen": "role policy requires company identity, application access or managed device account",
+        "alternativeInputBindings": [
+          "authoritativeSubjectId from core-profile may resolve from HRIS or authorized nonemployee registry"
+        ],
+        "requires": []
+      },
+      "assets-workplace": {
+        "requiredWhen": "location/role policy requires equipment, badge, desk or workplace access",
+        "alternativeInputBindings": [],
+        "requires": []
+      },
+      "learning-induction": {
+        "requiredWhen": "curriculum/orientation policy applies to workerType, role or location",
+        "alternativeInputBindings": [
+          "authoritativeSubjectId from core-profile may resolve from HRIS or authorized nonemployee registry"
+        ],
+        "requires": []
+      }
+    },
+    "examples": [
+      {
+        "id": "employee-all-branches",
+        "inputs": {
+          "workerType": "employee",
+          "hireType": "new_hire",
+          "requiresAccess": true,
+          "requiresLearning": true,
+          "requiresAssets": true,
+          "requiresBgv": true
+        },
+        "requiredBranchSet": [
+          "worker-record-documents",
+          "background-verification",
+          "payroll-benefits",
+          "it-identity-access",
+          "assets-workplace",
+          "learning-induction"
+        ],
+        "expected": "dependency_closed"
+      },
+      {
+        "id": "contractor-access-learning-no-hris",
+        "inputs": {
+          "workerType": "contractor",
+          "hireType": "new_engagement",
+          "requiresAccess": true,
+          "requiresLearning": true,
+          "requiresAssets": false,
+          "requiresBgv": false
+        },
+        "requiredBranchSet": [
+          "it-identity-access",
+          "learning-induction"
+        ],
+        "authoritativeBindings": {
+          "authoritativeSubjectId": "core-profile.nonEmployeeIdentityId",
+          "subjectSource": "authorized-contractor-registry"
+        },
+        "notApplicable": [
+          "worker-record-documents",
+          "background-verification",
+          "payroll-benefits",
+          "assets-workplace"
+        ],
+        "expected": "dependency_closed"
+      }
+    ]
+  },
+  "adversarialExamples": [
+    {
+      "id": "timeout-after-write",
+      "kind": "dispatch-recovery",
+      "input": {
+        "providerIdempotency": true,
+        "dispatchMayHaveStarted": true,
+        "reconciliation": "unknown"
+      },
+      "expectedDecision": "retry_same_logical_key"
+    },
+    {
+      "id": "stale-dispatcher-race-no-provider-idempotency",
+      "kind": "dispatch-recovery",
+      "input": {
+        "providerIdempotency": false,
+        "dispatchMayHaveStarted": true,
+        "reconciliation": "negative_not_definitive"
+      },
+      "expectedDecision": "unknown_external_effect_manual_repair"
+    },
+    {
+      "id": "definitive-provider-nonexecution",
+      "kind": "dispatch-recovery",
+      "input": {
+        "providerIdempotency": false,
+        "dispatchMayHaveStarted": true,
+        "reconciliation": "definitive_nonexecution"
+      },
+      "expectedDecision": "redispatch_same_logical_key"
+    },
+    {
+      "id": "irrelevant-replan",
+      "kind": "replan",
+      "input": {
+        "materialInputChanged": false,
+        "priorEffect": "confirmed",
+        "planVersionChanged": true
+      },
+      "expectedDecision": "reuse_confirmed_effect"
+    },
+    {
+      "id": "wrong-role-approval",
+      "kind": "approval",
+      "input": {
+        "trigger": "new_or_changed_bank_instructions",
+        "namedAuthorities": [
+          "manager"
+        ]
+      },
+      "expectedDecision": "reject"
+    },
+    {
+      "id": "privileged-access-sod-conflict",
+      "kind": "approval",
+      "input": {
+        "trigger": "privileged_access",
+        "namedAuthorities": [
+          "manager",
+          "application owner",
+          "security approver"
+        ],
+        "beneficiaryIsSecurityApprover": true,
+        "sodConflict": true
+      },
+      "expectedDecision": "reject_nonwaivable"
+    },
+    {
+      "id": "contractor-access-learning-no-hris",
+      "kind": "applicability",
+      "input": {
+        "workerType": "contractor",
+        "requiresAccess": true,
+        "requiresLearning": true,
+        "hasHrisRecord": false,
+        "subjectSource": "authorized-contractor-registry"
+      },
+      "requiredBranchSet": [
+        "it-identity-access",
+        "learning-induction"
+      ],
+      "expectedDecision": "dependency_closed"
+    },
+    {
+      "id": "changed-arguments-after-approval",
+      "kind": "approval-binding",
+      "input": {
+        "proposalHashMatches": false
+      },
+      "expectedDecision": "reject"
+    }
+  ]
+}

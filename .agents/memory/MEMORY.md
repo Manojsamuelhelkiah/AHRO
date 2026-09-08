@@ -20,3 +20,4 @@
 - [Customer-facing copy](customer-facing-copy.md) — product screens must stand alone; never refer users to decks, slides, or other internal documents.
 - [OpenAPI integer persistence](openapi-integer-persistence.md) — generated Zod may accept fractional values for integer fields; enforce integrality before storing inputs used for derived snapshots.
 - [Versioned aggregate editing](versioned-aggregate-editing.md) — JSON aggregate editors need server version preconditions plus queued latest-state transforms, including archive and delete.
+- [Intent taxonomy provenance](intent-taxonomy-provenance.md) — count reference outcomes separately from parents, aliases, custom rows, and candidates; type source edges by evidence strength.
