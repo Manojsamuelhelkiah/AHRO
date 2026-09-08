@@ -26,6 +26,24 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
   let baseUrl = "";
 
   before(async () => {
+    const schemaCheck = await pool.query<{ ready: boolean }>(`
+      select (
+        to_regclass('custom_intent_routing_labels') is not null
+        and exists (
+          select 1
+          from information_schema.columns
+          where table_schema = current_schema()
+            and table_name = 'custom_intents'
+            and column_name = 'registry_version'
+        )
+      ) as ready
+    `);
+    assert.equal(
+      schemaCheck.rows[0]?.ready,
+      true,
+      "custom intent routing schema is required for database-backed tests; run the API test setup",
+    );
+
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", () => resolve());
@@ -42,24 +60,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
     await pool.end();
   });
 
-  test("overlapping PATCHes keep aliases reserved and reject an invalid owner/executor merge", async (t) => {
-    const schemaCheck = await pool.query<{ ready: boolean }>(`
-      select (
-        to_regclass('custom_intent_routing_labels') is not null
-        and exists (
-          select 1
-          from information_schema.columns
-          where table_schema = current_schema()
-            and table_name = 'custom_intents'
-            and column_name = 'registry_version'
-        )
-      ) as ready
-    `);
-    if (!schemaCheck.rows[0]?.ready) {
-      t.skip("custom intent routing schema has not been applied to this database");
-      return;
-    }
-
+  test("overlapping PATCHes keep aliases reserved and reject an invalid owner/executor merge", async () => {
     const suffix = `${process.pid}-${Date.now()}`;
     const key = `concurrent-routing-${suffix}`;
     const oldAlias = `concurrent_old_${suffix}`;
@@ -164,24 +165,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
     }
   });
 
-  test("overlapping POSTs reserve an exact alias for only one custom intent", async (t) => {
-    const schemaCheck = await pool.query<{ ready: boolean }>(`
-      select (
-        to_regclass('custom_intent_routing_labels') is not null
-        and exists (
-          select 1
-          from information_schema.columns
-          where table_schema = current_schema()
-            and table_name = 'custom_intents'
-            and column_name = 'registry_version'
-        )
-      ) as ready
-    `);
-    if (!schemaCheck.rows[0]?.ready) {
-      t.skip("custom intent routing schema has not been applied to this database");
-      return;
-    }
-
+  test("overlapping POSTs reserve an exact alias for only one custom intent", async () => {
     const suffix = `${process.pid}-${Date.now()}`;
     const alias = `concurrent_create_alias_${suffix}`;
     const names = [
@@ -278,24 +262,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
     }
   });
 
-  test("overlapping POSTs cannot swap canonical keys and exact aliases", async (t) => {
-    const schemaCheck = await pool.query<{ ready: boolean }>(`
-      select (
-        to_regclass('custom_intent_routing_labels') is not null
-        and exists (
-          select 1
-          from information_schema.columns
-          where table_schema = current_schema()
-            and table_name = 'custom_intents'
-            and column_name = 'registry_version'
-        )
-      ) as ready
-    `);
-    if (!schemaCheck.rows[0]?.ready) {
-      t.skip("custom intent routing schema has not been applied to this database");
-      return;
-    }
-
+  test("overlapping POSTs cannot swap canonical keys and exact aliases", async () => {
     const suffix = `${process.pid}-${Date.now()}`;
     const names = [
       `Canonical alias swap alpha ${suffix}`,

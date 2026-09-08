@@ -5,6 +5,7 @@ import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { builtinModules } from "node:module";
 import path from "node:path";
+import { prepareDatabaseBackedTests } from "./test-db-setup.mjs";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const entryPoints = globSync("src/**/*.test.ts", { cwd: dir }).map((f) =>
@@ -15,6 +16,8 @@ if (entryPoints.length === 0) {
   console.error("No test files found");
   process.exit(1);
 }
+
+await prepareDatabaseBackedTests();
 
 await build({
   entryPoints,
