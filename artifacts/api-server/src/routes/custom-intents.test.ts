@@ -277,4 +277,117 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
       ));
     }
   });
+
+  test("overlapping POSTs cannot swap canonical keys and exact aliases", async (t) => {
+    const schemaCheck = await pool.query<{ ready: boolean }>(`
+      select (
+        to_regclass('custom_intent_routing_labels') is not null
+        and exists (
+          select 1
+          from information_schema.columns
+          where table_schema = current_schema()
+            and table_name = 'custom_intents'
+            and column_name = 'registry_version'
+        )
+      ) as ready
+    `);
+    if (!schemaCheck.rows[0]?.ready) {
+      t.skip("custom intent routing schema has not been applied to this database");
+      return;
+    }
+
+    const suffix = `${process.pid}-${Date.now()}`;
+    const names = [
+      `Canonical alias swap alpha ${suffix}`,
+      `Canonical alias swap beta ${suffix}`,
+    ];
+    const keys = names.map((name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+    const payload = (index: number) => ({
+      name: names[index],
+      domain: "hire",
+      flowClass: "fc2-policy",
+      description: "Concurrent canonical-key and exact-alias swap regression",
+      asIsHandlingMin: 10,
+      toBeHumanMin: 2,
+      baseWeight: 1,
+      actGetActions: 1,
+      actPutActions: 0,
+      systemsTouchedBase: 1,
+      source: "integration-test",
+      author: "integration-test",
+      exactAliases: [keys[index === 0 ? 1 : 0]],
+    });
+    const create = (index: number) => fetch(`${baseUrl}/custom-intents`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload(index)),
+    });
+    let preflightCount = 0;
+    let releasePreflights: (() => void) | undefined;
+    const bothPreflightsReached = new Promise<void>((resolve) => {
+      releasePreflights = resolve;
+    });
+    setCustomIntentCreateAfterPreflightHookForTests(async () => {
+      preflightCount += 1;
+      if (preflightCount === 2) releasePreflights?.();
+      await bothPreflightsReached;
+    });
+
+    try {
+      const responses = await Promise.all([create(0), create(1)]);
+      assert.deepEqual(
+        responses.map(({ status }) => status).sort(),
+        [201, 400],
+      );
+
+      const winnerResponse = responses.find(({ status }) => status === 201);
+      const loserResponse = responses.find(({ status }) => status === 400);
+      assert.ok(winnerResponse);
+      assert.ok(loserResponse);
+      const winner = await winnerResponse.json() as {
+        id: number;
+        key: string;
+        registryVersion: string;
+        exactAliases: string[];
+      };
+      assert.deepEqual(
+        await loserResponse.json(),
+        { error: "A canonical key or exact alias already belongs to another outcome" },
+      );
+
+      const storedRows = await db
+        .select()
+        .from(customIntentsTable)
+        .where(eq(customIntentsTable.source, "integration-test"));
+      const raceRows = storedRows.filter(({ key }) => keys.includes(key));
+      assert.equal(raceRows.length, 1, "the losing custom-intent row must roll back");
+      const [storedWinner] = raceRows;
+      assert.ok(storedWinner);
+      assert.equal(storedWinner.id, winner.id);
+      assert.equal(storedWinner.key, winner.key);
+      assert.equal(storedWinner.registryVersion, winner.registryVersion);
+      assert.deepEqual(JSON.parse(storedWinner.exactAliases), winner.exactAliases);
+
+      const reservations = await db
+        .select({
+          label: customIntentRoutingLabelsTable.label,
+          registryVersion: customIntentRoutingLabelsTable.registryVersion,
+        })
+        .from(customIntentRoutingLabelsTable)
+        .where(eq(customIntentRoutingLabelsTable.customIntentId, winner.id));
+      assert.deepEqual(
+        reservations
+          .map(({ label, registryVersion }) => ({ label, registryVersion }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+        [winner.key, ...winner.exactAliases]
+          .map((label) => ({ label, registryVersion: winner.registryVersion }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      );
+    } finally {
+      setCustomIntentCreateAfterPreflightHookForTests(undefined);
+      await Promise.all(keys.map((key) =>
+        db.delete(customIntentsTable).where(eq(customIntentsTable.key, key))
+      ));
+    }
+  });
 });
