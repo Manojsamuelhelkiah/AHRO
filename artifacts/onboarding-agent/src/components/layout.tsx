@@ -3,7 +3,7 @@ import { Link, useLocation } from 'wouter';
 import { useClerk, useUser } from '@clerk/react';
 import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
 import { cn } from './ui-shared';
-import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon } from 'lucide-react';
+import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
   {
@@ -26,6 +26,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     items: [
       { path: '/systems', label: 'Systems', icon: Server },
       { path: '/settings', label: 'Settings', icon: Settings },
+      { path: '/client-setup', label: 'Client Setup', icon: Compass },
     ],
   },
 ];
@@ -187,6 +188,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
+
+        <nav className="md:hidden flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2" aria-label="Primary navigation">
+          {NAV_ITEMS.map((item) => {
+            const isActive = location === item.path || (item.path !== '/' && location.startsWith(item.path));
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                aria-current={isActive ? 'page' : undefined}
+                className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-3 text-[var(--text-xs)] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+                style={{
+                  backgroundColor: isActive ? 'var(--surface-selected)' : 'transparent',
+                  color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
+                }}
+              >
+                <item.icon className="h-3.5 w-3.5" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
         <div className="flex-1 overflow-y-auto" style={{ padding: '0 var(--space-xl) var(--space-xl)' }}>
           {children}

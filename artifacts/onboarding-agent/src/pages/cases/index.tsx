@@ -1,10 +1,15 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { useListOnboardingCases, useCreateOnboardingCase, getListOnboardingCasesQueryKey } from '@workspace/api-client-react';
+import {
+  useListOnboardingCases,
+  useCreateOnboardingCase,
+  getListOnboardingCasesQueryKey,
+  runOnboardingScenario,
+} from '@workspace/api-client-react';
 import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
 import { format } from 'date-fns';
-import { Plus, Search, SlidersHorizontal, Bot, User, X } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Bot, User, X, FlaskConical } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 type OnbCase = ApiOnbCase;
@@ -23,16 +28,46 @@ const CASE_TYPES = [
   'Compliance',
   'Offboarding',
   'HR Helpdesk',
+  'IT Access',
+  'Learning',
+  'Mobility',
+  'Documents',
 ] as const;
 type CaseTypeFilter = (typeof CASE_TYPES)[number];
 
 type HroStatus = 'New' | 'In Progress' | 'Waiting' | 'Human Review' | 'Blocked' | 'Completed';
 
 export function caseTypeOf(c: OnbCase): Exclude<CaseTypeFilter, 'All Cases'> {
+  const scenarioTypes: Record<string, Exclude<CaseTypeFilter, 'All Cases'>> = {
+    'payroll-bank-change': 'Payroll',
+    'benefits-life-event': 'Benefits',
+    'leave-parental': 'Leave',
+    'compliance-work-authorization': 'Compliance',
+    'offboarding-voluntary': 'Offboarding',
+    'helpdesk-employment-letter': 'HR Helpdesk',
+    'it-privileged-access': 'IT Access',
+    'learning-mandatory-certification': 'Learning',
+    'mobility-country-transfer': 'Mobility',
+    'documents-policy-acknowledgement': 'Documents',
+  };
+  if (c.scenarioKey && scenarioTypes[c.scenarioKey]) return scenarioTypes[c.scenarioKey];
   return c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding';
 }
 
 export function caseTitleOf(c: OnbCase): string {
+  const scenarioTitles: Record<string, string> = {
+    'payroll-bank-change': 'Payroll Bank Change',
+    'benefits-life-event': 'Benefits Life Event',
+    'leave-parental': 'Parental Leave Request',
+    'compliance-work-authorization': 'Work Authorization Renewal',
+    'offboarding-voluntary': 'Voluntary Offboarding',
+    'helpdesk-employment-letter': 'Employment Letter Request',
+    'it-privileged-access': 'Privileged Access Request',
+    'learning-mandatory-certification': 'Mandatory Certification',
+    'mobility-country-transfer': 'Cross-border Transfer',
+    'documents-policy-acknowledgement': 'Policy Acknowledgement',
+  };
+  if (c.scenarioKey && scenarioTitles[c.scenarioKey]) return scenarioTitles[c.scenarioKey];
   switch (c.hireType) {
     case 'contractor': return 'Contractor Onboarding';
     case 'rehire': return 'Rehire Onboarding';
@@ -58,9 +93,22 @@ export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatu
 }
 
 function ownerOf(c: OnbCase): { name: string; kind: 'AI Agent' | 'Human Reviewer' } {
-  return statusOf(c) === 'Human Review'
-    ? { name: 'HR Reviewer', kind: 'Human Reviewer' }
-    : { name: 'Onboarding Agent', kind: 'AI Agent' };
+  if (statusOf(c) === 'Human Review') return { name: 'HR Reviewer', kind: 'Human Reviewer' };
+  const specialistByType: Record<Exclude<CaseTypeFilter, 'All Cases'>, string> = {
+    Onboarding: 'Onboarding Coordinator',
+    'Employee Changes': 'Worker Records Specialist',
+    Payroll: 'Payroll Specialist',
+    Benefits: 'Benefits Specialist',
+    Leave: 'Leave Specialist',
+    Compliance: 'Compliance Specialist',
+    Offboarding: 'Offboarding Coordinator',
+    'HR Helpdesk': 'HR Service Agent',
+    'IT Access': 'Identity & Access Specialist',
+    Learning: 'Learning Specialist',
+    Mobility: 'Mobility Specialist',
+    Documents: 'Worker Records Specialist',
+  };
+  return { name: specialistByType[caseTypeOf(c)], kind: 'AI Agent' };
 }
 
 const PAGE_CONTEXT: Record<CaseTypeFilter, { title: string; subtitle: string }> = {
@@ -73,7 +121,24 @@ const PAGE_CONTEXT: Record<CaseTypeFilter, { title: string; subtitle: string }> 
   'Compliance': { title: 'Compliance Cases', subtitle: 'Work authorization, document expiry, and policy exceptions.' },
   'Offboarding': { title: 'Offboarding Cases', subtitle: 'Resignations, terminations, and access removal.' },
   'HR Helpdesk': { title: 'HR Helpdesk Cases', subtitle: 'Employee inquiries, document requests, and policy questions.' },
+  'IT Access': { title: 'IT Access Cases', subtitle: 'Identity, application access, and privileged-role requests.' },
+  'Learning': { title: 'Learning Cases', subtitle: 'Curriculum assignment, certification, and induction tracking.' },
+  'Mobility': { title: 'Mobility Cases', subtitle: 'Cross-border moves, relocation, tax, and immigration coordination.' },
+  'Documents': { title: 'Document Cases', subtitle: 'Letters, policy acknowledgements, and worker-record documents.' },
 };
+
+const SYNTHETIC_SCENARIO_KEYS = [
+  'payroll-bank-change',
+  'benefits-life-event',
+  'leave-parental',
+  'compliance-work-authorization',
+  'offboarding-voluntary',
+  'helpdesk-employment-letter',
+  'it-privileged-access',
+  'learning-mandatory-certification',
+  'mobility-country-transfer',
+  'documents-policy-acknowledgement',
+] as const;
 
 /* ------------------------------ status badge ------------------------------ */
 
@@ -125,6 +190,8 @@ export function CasesPage() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
   const filtersRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -187,14 +254,48 @@ export function CasesPage() {
   const clearAll = () => { setFilters(EMPTY_FILTERS); setQuery(''); setTypeFilter('All Cases'); };
 
   const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
+  const existingSyntheticKeys = new Set((cases ?? []).map((c) => c.scenarioKey).filter(Boolean));
+  const missingSyntheticKeys = SYNTHETIC_SCENARIO_KEYS.filter((key) => !existingSyntheticKeys.has(key));
+
+  const seedSyntheticCoverage = async () => {
+    if (missingSyntheticKeys.length === 0) return;
+    setIsSeeding(true);
+    setSeedError(null);
+    try {
+      for (const key of missingSyntheticKeys) await runOnboardingScenario(key);
+      await refetch();
+    } catch (error: any) {
+      setSeedError(error?.response?.data?.message || error?.message || 'The synthetic coverage set could not be created.');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader title={context.title} subtitle={context.subtitle}>
-        <Button onClick={() => setShowNew(!showNew)} className="gap-2">
-          <Plus className="h-4 w-4" /> New Case
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={seedSyntheticCoverage}
+            disabled={isLoading || isSeeding || missingSyntheticKeys.length === 0}
+            className="gap-2"
+            title={missingSyntheticKeys.length === 0 ? 'Synthetic coverage is already present' : `Create ${missingSyntheticKeys.length} missing lifecycle cases`}
+          >
+            <FlaskConical className="h-4 w-4" />
+            {isSeeding ? 'Adding test cases…' : missingSyntheticKeys.length === 0 ? 'Test set ready' : `Add test set (${missingSyntheticKeys.length})`}
+          </Button>
+          <Button onClick={() => setShowNew(!showNew)} className="gap-2">
+            <Plus className="h-4 w-4" /> New Case
+          </Button>
+        </div>
       </PageHeader>
+
+      {seedError && (
+        <div role="alert" className="rounded-[var(--radius-md)] border px-4 py-3 text-sm" style={{ borderColor: 'var(--status-red)', backgroundColor: 'var(--status-red-bg)', color: 'var(--status-red-fg)' }}>
+          {seedError}
+        </div>
+      )}
 
       {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
 

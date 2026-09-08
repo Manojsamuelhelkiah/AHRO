@@ -20,6 +20,7 @@ import { AnalyticsPage } from './pages/analytics';
 import { SettingsPage } from './pages/settings';
 import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
+import { ClientSetupPage } from './pages/client-setup';
 
 const queryClient = new QueryClient();
 
@@ -119,7 +120,12 @@ function SignInPage() {
 function SignUpPage() {
   return (
     <AuthScreenShell>
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+      <SignUp
+        routing="path"
+        path={`${basePath}/sign-up`}
+        signInUrl={`${basePath}/sign-in`}
+        forceRedirectUrl={`${basePath}/client-setup`}
+      />
     </AuthScreenShell>
   );
 }
@@ -186,6 +192,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         <Protected><SettingsPage /></Protected>
+      </Route>
+      <Route path="/client-setup">
+        <Protected><ClientSetupPage /></Protected>
       </Route>
       <Route component={NotFound} />
     </Switch>
