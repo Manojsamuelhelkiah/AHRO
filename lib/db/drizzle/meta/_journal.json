@@ -141,6 +141,13 @@
       "when": 1788887340000,
       "tag": "0018_custom_intent_routing_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788887340001,
+      "tag": "0019_effect_journal",
+      "breakpoints": true
     }
   ]
 }

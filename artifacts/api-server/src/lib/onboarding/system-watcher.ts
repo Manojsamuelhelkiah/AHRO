@@ -26,6 +26,7 @@ import {
 } from "./inbound-email";
 import { ensureConnectorsSeeded } from "./connectors";
 import { makeSharedTick } from "./shared-tick";
+import { sweepExpiredNonIdempotentEffects } from "./effect-journal";
 
 /**
  * System Watcher agent.
@@ -534,6 +535,7 @@ async function openChecks() {
 async function tickOnce(): Promise<void> {
   const now = Date.now();
   await ensureConnectorsSeeded();
+  await sweepExpiredNonIdempotentEffects();
 
   // Self-heal: preboarding cases that somehow have no checks yet.
   const untracked = await db

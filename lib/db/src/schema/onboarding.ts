@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   integer,
   jsonb,
   pgTable,
@@ -185,6 +186,42 @@ export const onbConnectors = pgTable("onb_connectors", {
   authoritativeFor: jsonb("authoritative_for").$type<string[]>().notNull().default([]),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
 });
+
+/**
+ * Durable boundary around connector writes. The logical operation key is the
+ * identity of the remote effect, deliberately independent of plan version so
+ * replanning can reuse an already-confirmed payroll or access change.
+ */
+export const onbEffectJournal = pgTable(
+  "onb_effect_journal",
+  {
+    logicalOperationKey: text("logical_operation_key").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    caseId: integer("case_id").references(() => onbCases.id, { onDelete: "set null" }),
+    toolName: text("tool_name").notNull(),
+    argumentsHash: text("arguments_hash").notNull(),
+    providerIdempotency: boolean("provider_idempotency").notNull(),
+    /** ready | dispatching | confirmed | unknown_effect_manual_repair | failed */
+    status: text("status").notNull().default("ready"),
+    /** Monotonically increases on every successful dispatch claim. */
+    fencingToken: integer("fencing_token").notNull().default(0),
+    claimOwner: text("claim_owner"),
+    claimUntil: timestamp("claim_until", { withTimezone: true }),
+    dispatchStartedAt: timestamp("dispatch_started_at", { withTimezone: true }),
+    externalEffectId: text("external_effect_id"),
+    lastError: text("last_error"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      "onb_effect_journal_status_check",
+      sql`${t.status} in ('ready', 'dispatching', 'confirmed', 'unknown_effect_manual_repair', 'failed')`,
+    ),
+    check("onb_effect_journal_fencing_token_check", sql`${t.fencingToken} >= 0`),
+  ],
+);
 
 /**
  * Status emails matched by the watch-mailbox tracker (email tracking
