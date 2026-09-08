@@ -26,7 +26,10 @@ await build({
   target: "node20",
   outExtension: { ".js": ".mjs" },
   jsx: "automatic",
-  external: ["node:*", ...builtinModules],
+  // Keep the DOM runtime's package-relative resources intact. React's act
+  // needs native module.require to schedule Node tasks; bundling React makes
+  // it fall back to browser MessageChannels that keep the test worker alive.
+  external: ["node:*", ...builtinModules, "happy-dom", "react"],
   // react-dom/server (cjs) does require("util") etc.; when bundled to esm the
   // externalized require needs a real implementation.
   banner: {

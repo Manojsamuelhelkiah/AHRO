@@ -11,3 +11,9 @@ The cost-explorer test harness (esbuild bundle → `node --test`) can render rea
 
 **Why:** hit all three failure modes when adding the demarcation-strip UI reconciliation test.
 **How to apply:** any new UI-level test in a node:test + esbuild harness; extract page JSX into a shared component so test and page render identical markup.
+
+Mounted-component tests must keep React itself external to the esbuild bundle, rather than forcing the test runner to exit after assertions.
+
+**Why:** React's async `act` uses a dynamic `module.require("timers")` to select Node task scheduling. Bundling strips that native module method, so it falls back to browser MessageChannels. In Node those ports stay referenced: assertions pass but the worker never exits.
+
+**How to apply:** When adding DOM-backed hook/provider tests, use the native React package, initialize the DOM before browser-sensitive bundled modules, and unmount roots, clear query clients, and close the DOM during teardown. A timeout after passing assertions is a resource-lifetime failure, not a reason to add `--test-force-exit`.
