@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { EaAssessment, EaGovernanceRecord, EaGovernanceRecordRecordType, EaGovernanceRecordStatus } from "@workspace/api-client-react";
 import { useAssessmentUpdater } from "./utils";
 import { Plus, Trash2 } from "lucide-react";
@@ -6,16 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveSubmittedDraft, useDraftProtection, useMergeSavedDraft } from "./edit-recovery";
 
 function BlurInput({ value, onSave, ...props }: any) {
   const [val, setVal] = useState(value || "");
-  useEffect(() => setVal(value || ""), [value]);
+  useDraftProtection(val, value || "", () => setVal(value || ""), "Text field");
+  useMergeSavedDraft(value || "", setVal);
   return <Input value={val} onChange={e => setVal(e.target.value)} onBlur={() => { if(val !== (value || "")) onSave(val); }} {...props} />;
 }
 
 function BlurTextarea({ value, onSave, ...props }: any) {
   const [val, setVal] = useState(value || "");
-  useEffect(() => setVal(value || ""), [value]);
+  useDraftProtection(val, value || "", () => setVal(value || ""), "Text area");
+  useMergeSavedDraft(value || "", setVal);
   return <Textarea value={val} onChange={e => setVal(e.target.value)} onBlur={() => { if(val !== (value || "")) onSave(val); }} {...props} />;
 }
 
@@ -73,23 +76,37 @@ function CrossRecordSelector({
   );
 }
 
-export function ImplementationGovernanceManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [records, setRecords] = useState<EaGovernanceRecord[]>([]);
-  
-  useEffect(() => {
-    const gov = assessment.content.governance;
-    if (gov) {
-      setRecords([
-        ...(gov.contracts || []),
-        ...(gov.reviews || []),
-        ...(gov.deviations || []),
-        ...(gov.waivers || []),
-        ...(gov.remediation || [])
-      ]);
-    }
-  }, [assessment]);
+function flattenGovernanceRecords(governance: any): EaGovernanceRecord[] {
+  if (!governance) return [];
+  return [
+    ...(governance.contracts || []),
+    ...(governance.reviews || []),
+    ...(governance.deviations || []),
+    ...(governance.waivers || []),
+    ...(governance.remediation || [])
+  ];
+}
 
-  const updateGovernance = useAssessmentUpdater<any>(assessment, "governance");
+export function ImplementationGovernanceManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
+  const savedRecords = flattenGovernanceRecords(assessment.content.governance);
+  const [records, setRecords] = useState<EaGovernanceRecord[]>(savedRecords);
+  useMergeSavedDraft(
+    flattenGovernanceRecords(assessment.content.governance),
+    setRecords,
+    "governance",
+    flattenGovernanceRecords
+  );
+  const resolveRecords = resolveSubmittedDraft(setRecords);
+
+  const updateGovernance = useAssessmentUpdater<any>(
+    assessment,
+    "governance",
+    undefined,
+    (latest: any, submitted?: any) => resolveRecords(
+      flattenGovernanceRecords(latest),
+      submitted === undefined ? undefined : flattenGovernanceRecords(submitted)
+    )
+  );
 
   const saveRecords = (transform: (current: EaGovernanceRecord[]) => EaGovernanceRecord[]) => {
     setRecords(transform);

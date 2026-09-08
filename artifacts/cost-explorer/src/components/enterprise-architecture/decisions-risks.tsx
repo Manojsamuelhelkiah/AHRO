@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { EaAssessment, EaDecision, EaDecisionStatus, EaRisk, EaRiskStatus } from "@workspace/api-client-react";
 import { useAssessmentUpdater } from "./utils";
 import { Plus, Search, HelpCircle } from "lucide-react";
@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveSubmittedDraft, useMergeSavedDraft } from "./edit-recovery";
 
 export function DecisionsManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [items, setItems] = useState<EaDecision[]>([]);
-  useEffect(() => setItems(assessment.content.decisions || []), [assessment]);
+  const savedItems = assessment.content.decisions || [];
+  const [items, setItems] = useState<EaDecision[]>(savedItems);
+  useMergeSavedDraft(savedItems, setItems, "decisions");
   
-  const saveItems = useAssessmentUpdater<EaDecision[]>(assessment, "decisions");
+  const saveItems = useAssessmentUpdater<EaDecision[]>(assessment, "decisions", undefined, resolveSubmittedDraft(setItems));
 
   const handleAddItem = () => {
     const newItem: EaDecision = {
@@ -133,10 +135,11 @@ export function DecisionsManager({ assessment, isReadOnly }: { assessment: EaAss
 }
 
 export function RisksManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [items, setItems] = useState<EaRisk[]>([]);
-  useEffect(() => setItems(assessment.content.risks || []), [assessment]);
+  const savedItems = assessment.content.risks || [];
+  const [items, setItems] = useState<EaRisk[]>(savedItems);
+  useMergeSavedDraft(savedItems, setItems, "risks");
   
-  const saveItems = useAssessmentUpdater<EaRisk[]>(assessment, "risks");
+  const saveItems = useAssessmentUpdater<EaRisk[]>(assessment, "risks", undefined, resolveSubmittedDraft(setItems));
 
   const handleAddItem = () => {
     const newItem: EaRisk = {

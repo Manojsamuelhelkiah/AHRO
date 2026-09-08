@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@clerk/react";
 import { useLocation } from "wouter";
 import { 
   useGetEaAssessment, 
@@ -80,7 +81,8 @@ const LIFECYCLE_PHASES: { id: EaPhase; label: string }[] = [
 ];
 
 export function Workspace({ id }: { id: number }) {
-  return <EditRecoveryProvider key={id}><WorkspaceEditor id={id} /></EditRecoveryProvider>;
+  const { userId } = useAuth();
+  return <EditRecoveryProvider key={`${userId ?? "signed-out"}:${id}`}><WorkspaceEditor id={id} /></EditRecoveryProvider>;
 }
 
 function WorkspaceEditor({ id }: { id: number }) {

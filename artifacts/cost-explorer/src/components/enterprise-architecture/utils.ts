@@ -99,7 +99,7 @@ export function useAssessmentUpdater<T>(
   assessment: EaAssessment,
   field: keyof EaAssessment["content"] | "currentPhase",
   subfield?: string,
-  onResolved?: (latest: T) => void,
+  onResolved?: (latest: T, submitted?: T) => void,
 ) {
   const queryClient = useQueryClient();
   // An interrupted response may already have committed. Recovery, not the
@@ -120,7 +120,7 @@ export function useAssessmentUpdater<T>(
     const value = subfield
       ? (latest.content[field as keyof EaAssessment["content"]] as unknown as Record<string, T>)[subfield]
       : field === "currentPhase" ? latest.currentPhase : latest.content[field];
-    onResolvedRef.current(value as T);
+    onResolvedRef.current(value as T, recovery.resolvedDrafts[fieldKey] as T | undefined);
   }, [resolution, fieldKey, assessment?.id, queryClient]);
 
   return useCallback((update: AssessmentUpdate<T>, recoveryId = crypto.randomUUID()) => {
@@ -146,13 +146,24 @@ export function useAssessmentUpdater<T>(
     if (JSON.stringify(snapshot.base) === JSON.stringify(snapshot.draft)) return;
     projectionRef.current = { value: snapshot.draft, pending: (projectionRef.current?.pending ?? 0) + 1 };
     const order = recovery.nextOrder();
+    const pendingId = `pending:${order}`;
+    recovery.trackUnsaved(pendingId, true);
     let rejected = false;
-    const resolveLocal = () => recovery.resolveField(fieldKey);
+    // The inline baseline includes reconciled server fields, not just the
+    // original request. Only deviations from it represent subsequent typing.
+    let expectedEditor = snapshot.draft;
+    const resolveLocal = () => recovery.resolveField(fieldKey, expectedEditor);
     const reload = async () => {
       retain(undefined, true, false);
       try {
         const latest = await queryClient.fetchQuery({
-          queryKey, queryFn: () => getEaAssessment(assessment.id, { signal: AbortSignal.timeout(15_000) }), staleTime: 0, retry: false,
+          queryKey, queryFn: async () => {
+            const latest = await getEaAssessment(assessment.id, { signal: AbortSignal.timeout(15_000) });
+            const nextExpected = rebaseEdit(snapshot.base, snapshot.draft, getValue(latest)) as T;
+            recovery.prepareSavedMerge(fieldKey, expectedEditor, getValue(latest), nextExpected);
+            expectedEditor = nextExpected;
+            return latest;
+          }, staleTime: 0, retry: false,
         });
         retain(latest, false, false);
       } catch {
@@ -212,6 +223,9 @@ export function useAssessmentUpdater<T>(
             content: updatedContent,
           },
         });
+        // Publish the submission baseline BEFORE notifying cache subscribers.
+        recovery.prepareSavedMerge(fieldKey, expectedEditor, getValue(data));
+        expectedEditor = getValue(data);
         queryClient.setQueryData(queryKey, data);
         void queryClient.invalidateQueries({ queryKey: getListEaAssessmentsQueryKey() });
         if (rejected) resolveLocal();
@@ -237,6 +251,7 @@ export function useAssessmentUpdater<T>(
       }
     }).catch(() => undefined);
     void execute().finally(() => {
+      recovery.trackUnsaved(pendingId, false);
       if (projectionRef.current && --projectionRef.current.pending === 0) projectionRef.current = null;
     });
   }, [assessment, field, subfield, queryClient, toast, recovery]);

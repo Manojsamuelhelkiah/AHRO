@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { EaAssessment, EaPhaseProgress, EaPhaseProgressStatus } from "@workspace/api-client-react";
 import { useAssessmentUpdater } from "./utils";
 import { CheckCircle2, Circle, Clock, Check, ExternalLink } from "lucide-react";
@@ -8,16 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { useLocation } from "wouter";
+import { resolveSubmittedDraft, useMergeSavedDraft } from "./edit-recovery";
 
 export function SummaryDashboard({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
   const [, setLocation] = useLocation();
-  const [progress, setProgress] = useState<EaPhaseProgress[]>([]);
-  
-  useEffect(() => {
-    setProgress(assessment.content.phaseProgress || []);
-  }, [assessment]);
+  const savedProgress = assessment.content.phaseProgress || [];
+  const [progress, setProgress] = useState<EaPhaseProgress[]>(savedProgress);
+  useMergeSavedDraft(savedProgress, setProgress, "phaseProgress");
 
-  const saveProgress = useAssessmentUpdater<EaPhaseProgress[]>(assessment, "phaseProgress");
+  const saveProgress = useAssessmentUpdater<EaPhaseProgress[]>(assessment, "phaseProgress", undefined, resolveSubmittedDraft(setProgress));
   
   const updateProgress = (phaseId: string, field: keyof EaPhaseProgress, value: any) => {
     const transform = (current: EaPhaseProgress[]) => current.map(p => p.phase === phaseId ? { ...p, [field]: value } : p);

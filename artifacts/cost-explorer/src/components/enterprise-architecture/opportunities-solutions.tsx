@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { EaAssessment, EaSolutionOption, EaTransitionArchitecture, EaSolutionOptionApproach } from "@workspace/api-client-react";
 import { useAssessmentUpdater } from "./utils";
 import { Plus, Search, Trash2 } from "lucide-react";
@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { resolveSubmittedDraft, useDraftProtection, useMergeSavedDraft } from "./edit-recovery";
 
 function MultiSelect({ options, selected, onChange, placeholder, disabled }: { 
   options: {id: string, label: string}[], 
@@ -47,10 +48,8 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled }: {
 
 function StringListInput({ value, onChange, disabled, placeholder }: { value: string[], onChange: (val: string[]) => void, disabled?: boolean, placeholder?: string }) {
   const [localValue, setLocalValue] = useState(value.join("\n"));
-  
-  useEffect(() => {
-    setLocalValue(value.join("\n"));
-  }, [value]);
+  useDraftProtection(localValue, value.join("\n"), () => setLocalValue(value.join("\n")), "List field");
+  useMergeSavedDraft(value.join("\n"), setLocalValue);
 
   return (
     <Textarea
@@ -69,7 +68,8 @@ function StringListInput({ value, onChange, disabled, placeholder }: { value: st
 
 function TextInput({ value, onChange, disabled, className, type = "text", "data-testid": testId }: any) {
   const [local, setLocal] = useState(value);
-  useEffect(() => setLocal(value), [value]);
+  useDraftProtection(type === "number" ? Number(local) : local, value, () => setLocal(value), "Text field");
+  useMergeSavedDraft(value, setLocal);
   return (
     <Input 
       type={type}
@@ -85,7 +85,8 @@ function TextInput({ value, onChange, disabled, className, type = "text", "data-
 
 function TextAreaInput({ value, onChange, disabled, className, "data-testid": testId }: any) {
   const [local, setLocal] = useState(value);
-  useEffect(() => setLocal(value), [value]);
+  useDraftProtection(local, value, () => setLocal(value), "Text area");
+  useMergeSavedDraft(value, setLocal);
   return (
     <Textarea 
       value={local} 
@@ -99,16 +100,15 @@ function TextAreaInput({ value, onChange, disabled, className, "data-testid": te
 }
 
 export function OpportunitiesSolutionsManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [options, setOptions] = useState<EaSolutionOption[]>([]);
-  const [architectures, setArchitectures] = useState<EaTransitionArchitecture[]>([]);
-  
-  useEffect(() => {
-    setOptions(assessment.content.opportunities.solutionOptions || []);
-    setArchitectures(assessment.content.opportunities.transitionArchitectures || []);
-  }, [assessment]);
+  const savedOptions = assessment.content.opportunities.solutionOptions || [];
+  const savedArchitectures = assessment.content.opportunities.transitionArchitectures || [];
+  const [options, setOptions] = useState<EaSolutionOption[]>(savedOptions);
+  const [architectures, setArchitectures] = useState<EaTransitionArchitecture[]>(savedArchitectures);
+  useMergeSavedDraft(savedOptions, setOptions, "opportunities.solutionOptions");
+  useMergeSavedDraft(savedArchitectures, setArchitectures, "opportunities.transitionArchitectures");
 
-  const saveOptions = useAssessmentUpdater<EaSolutionOption[]>(assessment, "opportunities", "solutionOptions");
-  const saveArchitectures = useAssessmentUpdater<EaTransitionArchitecture[]>(assessment, "opportunities", "transitionArchitectures");
+  const saveOptions = useAssessmentUpdater<EaSolutionOption[]>(assessment, "opportunities", "solutionOptions", resolveSubmittedDraft(setOptions));
+  const saveArchitectures = useAssessmentUpdater<EaTransitionArchitecture[]>(assessment, "opportunities", "transitionArchitectures", resolveSubmittedDraft(setArchitectures));
 
   const gapList = (assessment.content.gaps || []).map(g => ({ id: g.id, label: g.title }));
   const componentList = (assessment.content.targetArchitecture?.components || []).map(c => ({ id: c.id, label: c.name }));

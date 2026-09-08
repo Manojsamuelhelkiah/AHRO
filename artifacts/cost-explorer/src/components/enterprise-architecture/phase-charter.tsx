@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { enqueueAssessmentUpdate, mergePhaseProgress } from "./assessment-concurrency";
+import { useEditRecovery } from "./edit-recovery";
 
 const phaseGuidance: Record<"preliminary" | "architecture-vision", {
   title: string;
@@ -75,6 +76,13 @@ export function PhaseCharter({
   const [conflict, setConflict] = useState<PhaseConflict | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
+  const { trackUnsaved } = useEditRecovery();
+  const hasUnsaved = dirtyFields.size > 0 || conflict !== null || isSaving;
+  useEffect(() => {
+    const key = `phase:${phase}`;
+    trackUnsaved(key, hasUnsaved);
+    return () => trackUnsaved(key, false);
+  }, [phase, hasUnsaved, trackUnsaved]);
   const dirtyRevisions = useRef<Record<DirtyPhaseField, number>>({
     status: 0,
     completionPercent: 0,
@@ -216,7 +224,6 @@ export function PhaseCharter({
   };
 
   const discardConflict = () => {
-    if (!conflict) return;
     const cachedAssessment = queryClient.getQueryData<EaAssessment>(getGetEaAssessmentQueryKey(assessment.id));
     const cachedPhase = cachedAssessment?.content.phaseProgress.find((item) => item.phase === phase);
     if (cachedPhase) {
@@ -260,6 +267,13 @@ export function PhaseCharter({
           <p className="mt-1 max-w-3xl text-muted-foreground">{guidance.purpose}</p>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
+          {dirtyFields.size > 0 && !conflict && <Button
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => {
+              if (window.confirm("Discard your unsaved phase edits and use the saved values?")) discardConflict();
+            }}
+          >Discard draft</Button>}
           {assessment.currentPhase !== phase && (
             <Button
               variant="outline"
@@ -282,6 +296,9 @@ export function PhaseCharter({
         </div>
       </div>
 
+      {dirtyFields.size > 0 && !conflict && <p role="status" className="text-sm text-amber-800">
+        Unsaved phase edits. Save or discard before leaving. For privacy, drafts are kept only in this open workspace and cannot be restored after a reload.
+      </p>}
       {conflict && (
         <Card className="border-destructive/50" data-testid={`phase-conflict-${phase}`}>
           <CardHeader>

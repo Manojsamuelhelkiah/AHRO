@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { EaAssessment, EaTargetComponent, EaTargetRelationship, EaTargetComponentStatus, EaDomain } from "@workspace/api-client-react";
 import { useAssessmentUpdater } from "./utils";
 import { Plus, Search, HelpCircle, ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
@@ -7,19 +7,23 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useDraftProtection, useMergeSavedDraft, resolveSubmittedDraft } from "./edit-recovery";
 
 export function TargetArchitectureManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [components, setComponents] = useState<EaTargetComponent[]>([]);
-  const [relationships, setRelationships] = useState<EaTargetRelationship[]>([]);
+  const savedComponents = assessment.content.targetArchitecture.components || [];
+  const savedRelationships = assessment.content.targetArchitecture.relationships || [];
+  const [components, setComponents] = useState<EaTargetComponent[]>(savedComponents);
+  const [relationships, setRelationships] = useState<EaTargetRelationship[]>(savedRelationships);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  
-  useEffect(() => {
-    setComponents(assessment.content.targetArchitecture.components || []);
-    setRelationships(assessment.content.targetArchitecture.relationships || []);
-  }, [assessment]);
 
-  const saveComponents = useAssessmentUpdater<EaTargetComponent[]>(assessment, "targetArchitecture", "components");
-  const saveRelationships = useAssessmentUpdater<EaTargetRelationship[]>(assessment, "targetArchitecture", "relationships");
+  useDraftProtection(components, savedComponents, () => setComponents(savedComponents), 'Target architecture components');
+  useDraftProtection(relationships, savedRelationships, () => setRelationships(savedRelationships), 'Target architecture relationships');
+  
+  useMergeSavedDraft(savedComponents, setComponents, "targetArchitecture.components");
+  useMergeSavedDraft(savedRelationships, setRelationships, "targetArchitecture.relationships");
+
+  const saveComponents = useAssessmentUpdater<EaTargetComponent[]>(assessment, "targetArchitecture", "components", resolveSubmittedDraft(setComponents));
+  const saveRelationships = useAssessmentUpdater<EaTargetRelationship[]>(assessment, "targetArchitecture", "relationships", resolveSubmittedDraft(setRelationships));
 
   // Component Handlers
   const handleAddComponent = () => {

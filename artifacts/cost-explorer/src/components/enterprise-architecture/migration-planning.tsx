@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { EaAssessment, EaWorkPackage, EaWorkPackageStatus, EaPhase, EaRoadmapWave, EaRoadmapDependency, EaPrioritization, EaRoadmapDependencyDependencyType } from "@workspace/api-client-react";
 import { useAssessmentUpdater } from "./utils";
 import { Plus, Search, Trash2 } from "lucide-react";
@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { resolveSubmittedDraft, useDraftProtection, useMergeSavedDraft } from "./edit-recovery";
 
 function MultiSelect({ options, selected, onChange, placeholder, disabled }: { 
   options: {id: string, label: string}[], 
@@ -47,10 +48,8 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled }: {
 
 function StringListInput({ value, onChange, disabled, placeholder }: { value: string[], onChange: (val: string[]) => void, disabled?: boolean, placeholder?: string }) {
   const [localValue, setLocalValue] = useState(value.join("\n"));
-  
-  useEffect(() => {
-    setLocalValue(value.join("\n"));
-  }, [value]);
+  useDraftProtection(localValue, value.join("\n"), () => setLocalValue(value.join("\n")), "List field");
+  useMergeSavedDraft(value.join("\n"), setLocalValue);
 
   return (
     <Textarea
@@ -69,7 +68,8 @@ function StringListInput({ value, onChange, disabled, placeholder }: { value: st
 
 function TextInput({ value, onChange, disabled, className, type = "text", "data-testid": testId, min, max }: any) {
   const [local, setLocal] = useState(value);
-  useEffect(() => setLocal(value), [value]);
+  useDraftProtection(type === "number" ? Number(local) : local, value, () => setLocal(value), "Text field");
+  useMergeSavedDraft(value, setLocal);
   return (
     <Input 
       type={type}
@@ -87,7 +87,8 @@ function TextInput({ value, onChange, disabled, className, type = "text", "data-
 
 function TextAreaInput({ value, onChange, disabled, className, "data-testid": testId }: any) {
   const [local, setLocal] = useState(value);
-  useEffect(() => setLocal(value), [value]);
+  useDraftProtection(local, value, () => setLocal(value), "Text area");
+  useMergeSavedDraft(value, setLocal);
   return (
     <Textarea 
       value={local} 
@@ -101,22 +102,23 @@ function TextAreaInput({ value, onChange, disabled, className, "data-testid": te
 }
 
 export function MigrationPlanningManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [workPackages, setWorkPackages] = useState<EaWorkPackage[]>([]);
-  const [waves, setWaves] = useState<EaRoadmapWave[]>([]);
-  const [dependencies, setDependencies] = useState<EaRoadmapDependency[]>([]);
-  const [prioritization, setPrioritization] = useState<EaPrioritization[]>([]);
-  
-  useEffect(() => {
-    setWorkPackages(assessment.content.roadmap.workPackages || []);
-    setWaves(assessment.content.roadmap.waves || []);
-    setDependencies(assessment.content.roadmap.dependencies || []);
-    setPrioritization(assessment.content.roadmap.prioritization || []);
-  }, [assessment]);
+  const savedWorkPackages = assessment.content.roadmap.workPackages || [];
+  const savedWaves = assessment.content.roadmap.waves || [];
+  const savedDependencies = assessment.content.roadmap.dependencies || [];
+  const savedPrioritization = assessment.content.roadmap.prioritization || [];
+  const [workPackages, setWorkPackages] = useState<EaWorkPackage[]>(savedWorkPackages);
+  const [waves, setWaves] = useState<EaRoadmapWave[]>(savedWaves);
+  const [dependencies, setDependencies] = useState<EaRoadmapDependency[]>(savedDependencies);
+  const [prioritization, setPrioritization] = useState<EaPrioritization[]>(savedPrioritization);
+  useMergeSavedDraft(savedWorkPackages, setWorkPackages, "roadmap.workPackages");
+  useMergeSavedDraft(savedWaves, setWaves, "roadmap.waves");
+  useMergeSavedDraft(savedDependencies, setDependencies, "roadmap.dependencies");
+  useMergeSavedDraft(savedPrioritization, setPrioritization, "roadmap.prioritization");
 
-  const saveWorkPackages = useAssessmentUpdater<EaWorkPackage[]>(assessment, "roadmap", "workPackages");
-  const saveWaves = useAssessmentUpdater<EaRoadmapWave[]>(assessment, "roadmap", "waves");
-  const saveDependencies = useAssessmentUpdater<EaRoadmapDependency[]>(assessment, "roadmap", "dependencies");
-  const savePrioritization = useAssessmentUpdater<EaPrioritization[]>(assessment, "roadmap", "prioritization");
+  const saveWorkPackages = useAssessmentUpdater<EaWorkPackage[]>(assessment, "roadmap", "workPackages", resolveSubmittedDraft(setWorkPackages));
+  const saveWaves = useAssessmentUpdater<EaRoadmapWave[]>(assessment, "roadmap", "waves", resolveSubmittedDraft(setWaves));
+  const saveDependencies = useAssessmentUpdater<EaRoadmapDependency[]>(assessment, "roadmap", "dependencies", resolveSubmittedDraft(setDependencies));
+  const savePrioritization = useAssessmentUpdater<EaPrioritization[]>(assessment, "roadmap", "prioritization", resolveSubmittedDraft(setPrioritization));
 
   const componentList = (assessment.content.targetArchitecture?.components || []).map(c => ({ id: c.id, label: c.name }));
   const transitionArchList = (assessment.content.opportunities?.transitionArchitectures || []).map(ta => ({ id: ta.id, label: ta.name }));

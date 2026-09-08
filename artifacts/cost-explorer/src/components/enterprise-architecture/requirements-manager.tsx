@@ -15,13 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAssessmentUpdater } from "./utils";
+import { useDraftProtection, useMergeSavedDraft, resolveSubmittedDraft } from "./edit-recovery";
 
 export function RequirementsManager({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [requirements, setRequirements] = useState<EaRequirement[]>([]);
+  const savedRequirements = assessment.content.requirements || [];
+  const [requirements, setRequirements] = useState<EaRequirement[]>(savedRequirements);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const initializedId = useRef<number | null>(null);
 
-  const updateRequirements = useAssessmentUpdater<EaRequirement[]>(assessment, 'requirements', undefined, setRequirements);
+  const updateRequirements = useAssessmentUpdater<EaRequirement[]>(assessment, 'requirements', undefined, resolveSubmittedDraft(setRequirements));
+  useDraftProtection(requirements, savedRequirements, () => setRequirements(savedRequirements), 'Requirements');
+  useMergeSavedDraft(savedRequirements, setRequirements, "requirements");
 
   useEffect(() => {
     if (assessment && initializedId.current !== assessment.id) {

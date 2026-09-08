@@ -12,13 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAssessmentUpdater } from "./utils";
+import { useDraftProtection, useMergeSavedDraft, resolveSubmittedDraft } from "./edit-recovery";
 
 export function GapRegister({ assessment, isReadOnly }: { assessment: EaAssessment, isReadOnly: boolean }) {
-  const [gaps, setGaps] = useState<EaGap[]>([]);
+  const savedGaps = assessment.content.gaps || [];
+  const [gaps, setGaps] = useState<EaGap[]>(savedGaps);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const initializedId = useRef<number | null>(null);
 
-  const updateGaps = useAssessmentUpdater<EaGap[]>(assessment, 'gaps', undefined, setGaps);
+  const updateGaps = useAssessmentUpdater<EaGap[]>(assessment, 'gaps', undefined, resolveSubmittedDraft(setGaps));
+  useDraftProtection(gaps, savedGaps, () => setGaps(savedGaps), 'Gap register');
+  useMergeSavedDraft(savedGaps, setGaps, "gaps");
 
   useEffect(() => {
     if (assessment && initializedId.current !== assessment.id) {

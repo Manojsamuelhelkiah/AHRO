@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useAssessmentUpdater } from "./utils";
+import { useDraftProtection, useMergeSavedDraft, resolveSubmittedDraft } from "./edit-recovery";
 
 export function DomainInventory({ 
   assessment, 
@@ -28,20 +29,28 @@ export function DomainInventory({
   isReadOnly?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [items, setItems] = useState<EaInventoryItem[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const initializedId = useRef<number | null>(null);
-  
   const domainKey = domain === 'operating-model' ? 'operatingModel' : domain;
-  const updateDomain = useAssessmentUpdater<EaInventoryItem[]>(assessment, 'currentState', domainKey, setItems);
+  const savedItems = (assessment.content.currentState as any)[domainKey] || [];
+  const [items, setItems] = useState<EaInventoryItem[]>(savedItems);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const initializedScope = useRef<string | null>(null);
+  
+  const updateDomain = useAssessmentUpdater<EaInventoryItem[]>(assessment, 'currentState', domainKey, resolveSubmittedDraft(setItems));
+  const scope = `${assessment.id}:${domainKey}`;
+  const scopedItems = initializedScope.current === null || initializedScope.current === scope ? items : savedItems;
+  const inventoryLabel = `${domain === 'operating-model'
+    ? 'Operating model'
+    : domain.charAt(0).toUpperCase() + domain.slice(1)} inventory`;
+  useDraftProtection(scopedItems, savedItems, () => setItems(savedItems), inventoryLabel);
+  useMergeSavedDraft(savedItems, setItems, `currentState.${domainKey}`);
 
   useEffect(() => {
-    if (assessment && initializedId.current !== assessment.id) {
-      initializedId.current = assessment.id;
+    if (initializedScope.current !== scope) {
+      initializedScope.current = scope;
       const currentItems = (assessment.content.currentState as any)[domainKey] || [];
       setItems(currentItems);
     }
-  }, [assessment, domainKey]);
+  }, [assessment, domainKey, scope]);
 
   const saveItems = useCallback((transform: (current: EaInventoryItem[]) => EaInventoryItem[]) => {
     setItems(transform);
