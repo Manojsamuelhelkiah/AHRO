@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "status": "recommended-contract-not-implemented",
+  "status": "executable-contract-tested-before-production-connectors",
   "generatedOn": "2026-09-08",
   "caseContract": {
     "caseId": "stable UUID",
@@ -1902,6 +1902,16 @@
         "reconciliation": "unknown"
       },
       "expectedDecision": "retry_same_logical_key"
+    },
+    {
+      "id": "timeout-after-write-no-provider-idempotency",
+      "kind": "dispatch-recovery",
+      "input": {
+        "providerIdempotency": false,
+        "dispatchMayHaveStarted": true,
+        "reconciliation": "negative_not_definitive"
+      },
+      "expectedDecision": "unknown_external_effect_manual_repair"
     },
     {
       "id": "stale-dispatcher-race-no-provider-idempotency",

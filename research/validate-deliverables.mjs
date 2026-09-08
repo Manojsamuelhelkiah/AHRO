@@ -456,6 +456,7 @@ assert(
 
 const requiredExamples = new Set([
   "timeout-after-write",
+  "timeout-after-write-no-provider-idempotency",
   "stale-dispatcher-race-no-provider-idempotency",
   "definitive-provider-nonexecution",
   "irrelevant-replan",
