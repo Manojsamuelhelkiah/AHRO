@@ -50,7 +50,7 @@ import type {
   HealthStatus,
   ImportScenarioWorkbookBody,
   ImportWorkbookResult,
-  Intent,
+  IntentCorpus,
   IntentRegistry,
   IntentRouteError,
   ListCustomIntentsParams,
@@ -819,9 +819,9 @@ export const getListIntentsUrl = () => {
 /**
  * @summary List all HRO intents in the corpus
  */
-export const listIntents = async ( options?: RequestInit): Promise<Intent[]> => {
+export const listIntents = async ( options?: RequestInit): Promise<IntentCorpus> => {
 
-  return customFetch<Intent[]>(getListIntentsUrl(),
+  return customFetch<IntentCorpus>(getListIntentsUrl(),
   {
     ...options,
     method: 'GET'

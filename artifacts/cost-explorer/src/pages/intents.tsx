@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Link } from "wouter";
-import { Search, Filter, ShieldCheck, Activity, BrainCircuit, Plus, Sparkles } from "lucide-react";
+import { Search, Filter, ShieldCheck, Activity, BrainCircuit, Plus, Sparkles, AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -28,6 +28,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { IntentCorpusStatus } from "@/components/intent-corpus-status";
 
 const FLOW_CLASSES = [
   { key: "fc1-deterministic", label: "FC1 — Deterministic Self-Service" },
@@ -256,7 +257,8 @@ function AddIntentDialog({ existingDomains }: { existingDomains: string[] }) {
 }
 
 export default function Intents() {
-  const { data: intents, isLoading } = useListIntents();
+  const { data: corpus, isLoading, isError, error, refetch, isFetching } = useListIntents();
+  const intents = corpus?.intents;
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState<string>("all");
 
@@ -325,14 +327,29 @@ export default function Intents() {
       </div>
 
       <div className="flex-1 overflow-auto -mx-1 px-1 pb-4">
-        {isLoading ? (
-          <div className="space-y-3">
+        <IntentCorpusStatus
+          isLoading={isLoading}
+          isError={isError}
+          error={error}
+          isFetching={isFetching}
+          onRetry={() => { void refetch(); }}
+          loading={<div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} className="h-24 w-full rounded-xl" />
             ))}
-          </div>
-        ) : (
+          </div>}
+        >
           <div className="space-y-3">
+            {corpus?.customIntentsAvailable === false && (
+              <div role="status" className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">Showing the built-in reference corpus</p>
+                  <p className="text-muted-foreground">{corpus.warning}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>Retry</Button>
+              </div>
+            )}
             {filteredIntents.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 No intents found matching your criteria.
@@ -397,7 +414,7 @@ export default function Intents() {
               })
             )}
           </div>
-        )}
+        </IntentCorpusStatus>
       </div>
     </div>
   );

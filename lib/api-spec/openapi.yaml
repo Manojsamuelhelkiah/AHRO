@@ -237,13 +237,11 @@ paths:
       summary: List all HRO intents in the corpus
       responses:
         "200":
-          description: Intent list
+          description: Intent corpus, including custom-storage availability
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Intent"
+                $ref: "#/components/schemas/IntentCorpus"
   /flow-classes:
     get:
       operationId: listFlowClasses
@@ -2421,6 +2419,20 @@ components:
           type: string
           description: measured | high | medium | low (documented-assumption). "measured" is the strongest tier, meaning the value came from observed production data.
       required: [name, confidence]
+    IntentCorpus:
+      type: object
+      required: [intents, customIntentsAvailable]
+      properties:
+        intents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Intent"
+        customIntentsAvailable:
+          type: boolean
+          description: False when custom-intent storage could not be read and only the bundled reference corpus is returned.
+        warning:
+          type: string
+          description: User-safe explanation when the corpus is operating in a degraded state.
     Intent:
       type: object
       properties:

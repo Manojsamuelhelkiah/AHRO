@@ -54,6 +54,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FlowDiagram } from "@/components/flow-diagram";
 import { DemarcationSplitStrip, BuildBreakdownTable } from "@/components/build-cost-breakdown";
+import { IntentCorpusAvailability } from "@/components/intent-corpus-status";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
@@ -83,7 +84,14 @@ export default function Scenario() {
   const { data: overlays } = useListActualsOverlays();
   const { data: globalAssumptions } = useListAssumptions();
   const { data: flowClasses } = useListFlowClasses();
-  const { data: intentList } = useListIntents();
+  const {
+    data: intentCorpus,
+    isError: isIntentError,
+    error: intentError,
+    refetch: refetchIntents,
+    isFetching: isFetchingIntents,
+  } = useListIntents();
+  const intentList = intentCorpus?.intents;
   const computeRollupMutation = useComputeRollup();
   const importWorkbookMutation = useImportScenarioWorkbook();
   const sensitivityMutation = useComputeSensitivity();
@@ -218,6 +226,14 @@ export default function Scenario() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Scenario Builder</h1>
           <p className="text-muted-foreground mt-1">Configure client landscape</p>
         </div>
+        <IntentCorpusAvailability
+          isError={isIntentError}
+          error={intentError}
+          customIntentsAvailable={intentCorpus?.customIntentsAvailable}
+          warning={intentCorpus?.warning}
+          isFetching={isFetchingIntents}
+          onRetry={() => { void refetchIntents(); }}
+        />
 
         <Card className="shadow-sm border-border bg-card flex-1 overflow-hidden flex flex-col">
           <Form {...form}>

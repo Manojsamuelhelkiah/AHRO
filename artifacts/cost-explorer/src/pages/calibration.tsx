@@ -66,6 +66,7 @@ import {
 } from "@/lib/drift";
 import { formatUsdPerCall, type RolePricingMap, type RolePricingEntry } from "@/lib/token-pricing";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { IntentCorpusAvailability } from "@/components/intent-corpus-status";
 
 // ---------------------------------------------------------------------------
 // CSV template helpers
@@ -423,7 +424,14 @@ export default function Calibration() {
   const logFileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: overlays, refetch: refetchOverlays } = useListActualsOverlays();
-  const { data: intents } = useListIntents();
+  const {
+    data: intentCorpus,
+    isError: isIntentError,
+    error: intentError,
+    refetch: refetchIntents,
+    isFetching: isFetchingIntents,
+  } = useListIntents();
+  const intents = intentCorpus?.intents;
   const { data: scenarios, isLoading: scenariosLoading } = useListScenarios();
   const createOverlay = useCreateActualsOverlay();
   const validateOverlay = useValidateActualsOverlay();
@@ -631,6 +639,14 @@ export default function Calibration() {
           Apply a saved overlay in Scenario Builder to see the calibrated business case and per-assumption variance.
         </p>
       </div>
+      <IntentCorpusAvailability
+        isError={isIntentError}
+        error={intentError}
+        customIntentsAvailable={intentCorpus?.customIntentsAvailable}
+        warning={intentCorpus?.warning}
+        isFetching={isFetchingIntents}
+        onRetry={() => { void refetchIntents(); }}
+      />
 
       {/* Outer tabs: Import & Manage | Drift Analysis */}
       <Tabs

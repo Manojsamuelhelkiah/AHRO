@@ -785,6 +785,14 @@ export interface Intent {
   isCustom?: boolean;
 }
 
+export interface IntentCorpus {
+  intents: Intent[];
+  /** False when custom-intent storage could not be read and only the bundled reference corpus is returned. */
+  customIntentsAvailable: boolean;
+  /** User-safe explanation when the corpus is operating in a degraded state. */
+  warning?: string;
+}
+
 export interface StepSystemTouch {
   systemKey: string;
   /** get | put */

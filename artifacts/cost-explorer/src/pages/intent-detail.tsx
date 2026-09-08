@@ -45,12 +45,13 @@ import {
   ArrowLeft, ShieldCheck, Activity, BrainCircuit,
   Database, User, Layers, ArrowRight, Zap, Info, DollarSign, Clock,
   PenLine, CheckCircle2, Trash2, Sparkles, Pencil, Archive,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AnimatePresence } from "framer-motion";
 import { FlowDiagram, FlowStepDetail } from "@/components/flow-diagram";
+import { IntentCorpusStatus } from "@/components/intent-corpus-status";
 const FLOW_CLASSES = [
   "fc1-deterministic",
   "fc2-policy",
@@ -74,7 +75,15 @@ export default function IntentDetail() {
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
   const [showDiagram, setShowDiagram] = useState(true);
 
-  const { data: intents, isLoading: isLoadingIntents } = useListIntents();
+  const {
+    data: corpus,
+    isLoading: isLoadingIntents,
+    isError: isIntentError,
+    error: intentError,
+    refetch: refetchIntents,
+    isFetching: isFetchingIntents,
+  } = useListIntents();
+  const intents = corpus?.intents;
   const { data: flowClasses, isLoading: isLoadingFlows } = useListFlowClasses();
 
   const intent = intents?.find((i) => i.key === intentKey);
@@ -95,7 +104,40 @@ export default function IntentDetail() {
     );
   }
 
+  if (isIntentError) {
+    return (
+      <IntentCorpusStatus
+        isLoading={false}
+        isError
+        error={intentError}
+        isFetching={isFetchingIntents}
+        onRetry={() => { void refetchIntents(); }}
+        loading={null}
+        errorTitle="Intent details could not be loaded"
+      >
+        {null}
+      </IntentCorpusStatus>
+    );
+  }
+
   if (!intent) {
+    if (corpus?.customIntentsAvailable === false) {
+      return (
+        <div className="space-y-5 py-16 text-center">
+          <AlertTriangle className="mx-auto h-8 w-8 text-amber-600" />
+          <h2 className="text-2xl font-bold text-foreground">This intent may be temporarily unavailable</h2>
+          <p className="mx-auto max-w-xl text-muted-foreground">
+            The built-in reference corpus loaded, but custom intents could not be checked. Retry before treating this intent as missing.
+          </p>
+          <Button onClick={() => { void refetchIntents(); }} disabled={isFetchingIntents}>
+            {isFetchingIntents ? "Retrying…" : "Try again"}
+          </Button>
+          <div>
+            <Link href="/intents" className="text-primary hover:underline">Return to Catalog</Link>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="text-center py-20">
         <h2 className="text-2xl font-bold text-foreground">Intent Not Found</h2>
@@ -114,6 +156,12 @@ export default function IntentDetail() {
       <Link href="/intents" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
         <ArrowLeft className="w-4 h-4 mr-1" /> Back to Intents
       </Link>
+      {corpus?.customIntentsAvailable === false && (
+        <div role="status" className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <p className="text-muted-foreground">{corpus.warning}</p>
+        </div>
+      )}
 
       {/* Hero header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">

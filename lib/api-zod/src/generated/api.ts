@@ -4164,7 +4164,8 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary List all HRO intents in the corpus
  */
-export const ListIntentsResponseItem = zod.object({
+export const ListIntentsResponse = zod.object({
+  "intents": zod.array(zod.object({
   "id": zod.number(),
   "key": zod.string(),
   "name": zod.string(),
@@ -4184,8 +4185,10 @@ export const ListIntentsResponseItem = zod.object({
   "systemsTouchedBase": zod.number().describe('Minimum count of systems of record this intent touches regardless of landscape size'),
   "tags": zod.array(zod.string()),
   "isCustom": zod.boolean().optional().describe('True when this intent was added by a client; false for the fixed reference corpus')
+})),
+  "customIntentsAvailable": zod.boolean().describe('False when custom-intent storage could not be read and only the bundled reference corpus is returned.'),
+  "warning": zod.string().optional().describe('User-safe explanation when the corpus is operating in a degraded state.')
 })
-export const ListIntentsResponse = zod.array(ListIntentsResponseItem)
 
 
 /**
