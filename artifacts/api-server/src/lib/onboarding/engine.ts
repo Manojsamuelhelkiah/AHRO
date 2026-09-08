@@ -17,7 +17,7 @@ import {
   resolveWelcomeChannels,
 } from "./channel-routing";
 import { llmComplete, llmCompleteJson } from "./llm";
-import { listDocuments, documentsSummary, seedDocumentsForCase } from "./documents";
+import { listDocuments, documentsSummary } from "./documents";
 import {
   bookSlot,
   bookedCall,
@@ -30,7 +30,7 @@ import {
   timezoneLabelFor,
   wantsCall,
 } from "./scheduling";
-import { trackCaseSystems } from "./system-watcher";
+import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
 import { isNonEmployee } from "./external-systems";
 
 type CaseRow = typeof onbCases.$inferSelect;
@@ -493,7 +493,7 @@ async function runWorkstreams(caseId: number) {
   const nonEmployee = isNonEmployee(c.workerCategory);
   setReadiness(readiness, "payroll", nonEmployee ? "ready" : "in-progress",
     nonEmployee ? "Not applicable — non-employee pathway" : "Awaiting bank & tax inputs from new hire");
-  await seedDocumentsForCase(c);
+  await dispatchWorkstreamConnectorMutations(c);
   await logEvent(caseId, "documentation", "rules", "Documentation pack issued",
     `Mandatory identity/statutory documents for ${c.geography} requested; completion tracked with owner notification on gaps.`,
     { hitlPattern: "notify-only", ruleRef: "4.3 Documentation Rule 1" });
@@ -536,10 +536,9 @@ async function runWorkstreams(caseId: number) {
 
   await updateCase(caseId, { readiness, workstreams: ws, lifecycleStage: "preboarding" });
 
-  // Hand the externally-owned items (BGV, ITSM access, payroll) to the
-  // System Watcher: it registers webhook/polling trackers per system and
-  // closes the readiness items when the source systems confirm.
-  await trackCaseSystems(caseId);
+  // The guarded connector dispatch above registered every applicable
+  // externally-owned item with the System Watcher. The watcher closes each
+  // readiness item only after its simulated source system confirms.
 }
 
 /* ------------------------------------------------------------------ */

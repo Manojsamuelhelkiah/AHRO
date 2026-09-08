@@ -381,11 +381,16 @@ export async function maybeAutoEscalationCall(
  * for any preboarding case that has no checks yet (self-healing after
  * restarts or for pre-existing cases).
  */
-export async function trackCaseSystems(caseId: number): Promise<void> {
+export async function trackCaseSystems(
+  caseId: number,
+  onlySystems?: readonly WatchedSystem[],
+): Promise<void> {
   const [c] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
   if (!c) return;
   const now = new Date();
-  const defs = applicableSystems(c);
+  const defs = applicableSystems(c).filter(
+    (def) => !onlySystems || onlySystems.includes(def.key),
+  );
   const emailTracked = await emailTrackedConnectors();
   for (const def of defs) {
     const useEmail = emailTracked.has(def.connectorKey);
@@ -532,20 +537,36 @@ async function openChecks() {
     .where(sql`${onbSystemChecks.status} in ('pending', 'overdue')`);
 }
 
+export async function recoverUntrackedCaseSystems(
+  onlyCaseId?: number,
+): Promise<void> {
+  const untracked = await db
+    .select()
+    .from(onbCases)
+    .where(
+      and(
+        sql`${onbCases.lifecycleStage} in ('preboarding', 'day1-review')
+            and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id})`,
+        onlyCaseId === undefined ? undefined : eq(onbCases.id, onlyCaseId),
+      ),
+    );
+  if (untracked.length > 0) {
+    // Recovery registration must use the same approval/applicability boundary
+    // as the primary engine path; a restart must never become a bypass.
+    const { dispatchWorkstreamConnectorMutations } = await import(
+      "./workstream-connectors"
+    );
+    for (const c of untracked) await dispatchWorkstreamConnectorMutations(c);
+  }
+}
+
 async function tickOnce(): Promise<void> {
   const now = Date.now();
   await ensureConnectorsSeeded();
   await sweepExpiredNonIdempotentEffects();
 
   // Self-heal: preboarding cases that somehow have no checks yet.
-  const untracked = await db
-    .select({ id: onbCases.id })
-    .from(onbCases)
-    .where(
-      sql`${onbCases.lifecycleStage} in ('preboarding', 'day1-review')
-          and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id})`,
-    );
-  for (const c of untracked) await trackCaseSystems(c.id);
+  await recoverUntrackedCaseSystems();
 
   const checks = await openChecks();
 

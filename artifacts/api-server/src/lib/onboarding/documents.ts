@@ -10,6 +10,10 @@ import { eq, sql } from "drizzle-orm";
  */
 
 type CaseRow = typeof onbCases.$inferSelect;
+export type DocumentSeedCase = Pick<
+  CaseRow,
+  "id" | "workerCategory" | "geography" | "hireType" | "lifecycleStage"
+>;
 export type DocumentRow = typeof onbDocuments.$inferSelect;
 
 type PackItem = {
@@ -20,7 +24,7 @@ type PackItem = {
 };
 
 /** The pack varies by worker category and geography. */
-export function documentPackFor(c: Pick<CaseRow, "workerCategory" | "geography" | "hireType">): PackItem[] {
+export function documentPackFor(c: Pick<DocumentSeedCase, "workerCategory" | "geography" | "hireType">): PackItem[] {
   const nonEmployee = c.workerCategory === "contractor" || c.workerCategory === "vendor";
   const india = /india/i.test(c.geography);
   const items: PackItem[] = [
@@ -51,7 +55,7 @@ export function documentPackFor(c: Pick<CaseRow, "workerCategory" | "geography" 
 }
 
 /** Seed the pack for one case. Idempotent per (caseId, key). */
-export async function seedDocumentsForCase(c: CaseRow): Promise<void> {
+export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<void> {
   const pack = documentPackFor(c);
   // Demo realism for already-progressed cases: earlier-stage docs arrive
   // first. Deterministic per case+key (no randomness) so restarts agree.

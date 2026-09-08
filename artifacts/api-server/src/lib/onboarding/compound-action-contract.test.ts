@@ -22,6 +22,8 @@ function proposal(rule: ApprovalRule): ApprovalProposal {
     caseId: "case-1",
     planVersion: 3,
     actionId: "payroll-benefits",
+    actionBranch: "payroll-benefits",
+    requiredBranchSet: ["worker-record-documents", "payroll-benefits"],
     logicalOperationKey: "tenant-1:worker-1:payroll:bank-hash",
     toolName: "update-bank",
     canonicalArguments: { accountToken: "vault-ref", routing: "001" },
@@ -194,7 +196,11 @@ describe("planning, replanning, and dispositions", () => {
     });
     assert.deepEqual(result, {
       accepted: true,
-      branches: ["it-identity-access", "learning-induction"],
+      branches: [
+        "worker-record-documents",
+        "it-identity-access",
+        "learning-induction",
+      ],
     });
   });
 

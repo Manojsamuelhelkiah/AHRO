@@ -48,7 +48,7 @@ export function canClaimDispatch(input: {
   );
 }
 
-type CanonicalValue =
+export type CanonicalValue =
   | null
   | boolean
   | number
@@ -74,6 +74,8 @@ export type ApprovalProposal = {
   caseId: string;
   planVersion: number;
   actionId: string;
+  actionBranch: PlanBranch;
+  requiredBranchSet: PlanBranch[];
   logicalOperationKey: string;
   toolName: string;
   canonicalArguments: CanonicalValue;
@@ -113,6 +115,41 @@ export type ApprovalEvaluation =
         | "separation_of_duties_conflict"
         | "nonwaivable_denial";
     };
+
+export type ApplicabilityEvaluation =
+  | { allowed: true }
+  | {
+      allowed: false;
+      reason:
+        | "unbound_proposal"
+        | "action_not_required"
+        | "action_not_executable";
+    };
+
+export type ExecutableActionBinding = {
+  proposalHash: string;
+  disposition?: ActionDisposition;
+};
+
+export function evaluateApplicability(input: {
+  proposal: ApprovalProposal;
+  binding: ExecutableActionBinding;
+  requiredBranch: PlanBranch;
+}): ApplicabilityEvaluation {
+  if (input.binding.proposalHash !== hashApprovalProposal(input.proposal)) {
+    return { allowed: false, reason: "unbound_proposal" };
+  }
+  if (
+    input.proposal.actionBranch !== input.requiredBranch ||
+    !input.proposal.requiredBranchSet.includes(input.requiredBranch)
+  ) {
+    return { allowed: false, reason: "action_not_required" };
+  }
+  if (input.binding.disposition !== undefined) {
+    return { allowed: false, reason: "action_not_executable" };
+  }
+  return { allowed: true };
+}
 
 export function evaluateApproval(input: {
   proposal: ApprovalProposal;
@@ -209,11 +246,9 @@ export function deriveRequiredBranches(input: {
   subjectSource: "HRIS" | "authorized-contractor-registry" | "authorized-vendor-registry";
 }): { accepted: true; branches: PlanBranch[] } | { accepted: false; reason: string } {
   const branches = new Set<PlanBranch>();
-  const employeeRecordRequired =
-    input.workerType === "employee" ||
-    input.workerType === "intern" ||
-    input.requiresPayroll;
-  if (employeeRecordRequired) branches.add("worker-record-documents");
+  // Every worker type needs a bound worker/document record, even when the
+  // non-employee pathway excludes payroll.
+  branches.add("worker-record-documents");
   if (input.requiresBgv) branches.add("background-verification");
   if (input.requiresPayroll) branches.add("payroll-benefits");
   if (input.requiresAccess) branches.add("it-identity-access");
