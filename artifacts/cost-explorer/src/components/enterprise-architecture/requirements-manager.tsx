@@ -21,7 +21,7 @@ export function RequirementsManager({ assessment, isReadOnly }: { assessment: Ea
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const initializedId = useRef<number | null>(null);
 
-  const updateRequirements = useAssessmentUpdater<EaRequirement[]>(assessment, 'requirements');
+  const updateRequirements = useAssessmentUpdater<EaRequirement[]>(assessment, 'requirements', undefined, setRequirements);
 
   useEffect(() => {
     if (assessment && initializedId.current !== assessment.id) {

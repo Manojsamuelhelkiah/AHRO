@@ -45,6 +45,7 @@ import { PhaseCharter } from "@/components/enterprise-architecture/phase-charter
 import { DecisionsManager, RisksManager } from "@/components/enterprise-architecture/decisions-risks";
 import { SummaryDashboard } from "@/components/enterprise-architecture/summary-dashboard";
 import { useAssessmentUpdater } from "@/components/enterprise-architecture/utils";
+import { EditRecoveryProvider } from "@/components/enterprise-architecture/edit-recovery";
 
 const PHASES: { id: EaPhase | "baseline" | "requirements" | "gaps" | "decisions" | "risks" | "summary" | "integration" | "ai" | "security" | "operating-model" | "target", label: string, icon: any }[] = [
   { id: "summary", label: "Overview & Summary", icon: LayoutDashboard },
@@ -79,6 +80,10 @@ const LIFECYCLE_PHASES: { id: EaPhase; label: string }[] = [
 ];
 
 export function Workspace({ id }: { id: number }) {
+  return <EditRecoveryProvider key={id}><WorkspaceEditor id={id} /></EditRecoveryProvider>;
+}
+
+function WorkspaceEditor({ id }: { id: number }) {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<string>("preliminary");
   
@@ -280,8 +285,8 @@ export function Workspace({ id }: { id: number }) {
           <div className="flex-1 overflow-y-auto p-4 md:p-6 print:p-0 print:overflow-visible">
             {activeTab === "summary" && <SummaryDashboard assessment={assessment} isReadOnly={assessment.status === 'archived'} />}
             {activeTab === "baseline" && <SolutionBaseline />}
-            {activeTab === "preliminary" && <PhaseCharter assessment={assessment} phase="preliminary" isReadOnly={assessment.status === 'archived'} />}
-            {activeTab === "architecture-vision" && <PhaseCharter assessment={assessment} phase="architecture-vision" isReadOnly={assessment.status === 'archived'} />}
+            <div hidden={activeTab !== "preliminary"}><PhaseCharter assessment={assessment} phase="preliminary" isReadOnly={assessment.status === 'archived'} /></div>
+            <div hidden={activeTab !== "architecture-vision"}><PhaseCharter assessment={assessment} phase="architecture-vision" isReadOnly={assessment.status === 'archived'} /></div>
             {activeTab === "business" && <DomainInventory assessment={assessment} domain="business" isReadOnly={assessment.status === 'archived'} />}
             {activeTab === "data" && <DomainInventory assessment={assessment} domain="data" isReadOnly={assessment.status === 'archived'} />}
             {activeTab === "application" && <DomainInventory assessment={assessment} domain="application" isReadOnly={assessment.status === 'archived'} />}

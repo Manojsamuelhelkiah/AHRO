@@ -33,7 +33,7 @@ export function DomainInventory({
   const initializedId = useRef<number | null>(null);
   
   const domainKey = domain === 'operating-model' ? 'operatingModel' : domain;
-  const updateDomain = useAssessmentUpdater<EaInventoryItem[]>(assessment, 'currentState', domainKey);
+  const updateDomain = useAssessmentUpdater<EaInventoryItem[]>(assessment, 'currentState', domainKey, setItems);
 
   useEffect(() => {
     if (assessment && initializedId.current !== assessment.id) {

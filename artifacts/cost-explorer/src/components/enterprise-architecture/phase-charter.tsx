@@ -5,6 +5,7 @@ import {
   type EaPhase,
   type EaPhaseProgress,
   EaPhaseProgressStatus,
+  getEaAssessment,
   getGetEaAssessmentQueryKey,
   useUpdateEaAssessment,
 } from "@workspace/api-client-react";
@@ -48,6 +49,14 @@ const phaseGuidance: Record<"preliminary" | "architecture-vision", {
 
 type DirtyPhaseField = "status" | "completionPercent" | "notes";
 
+type PhaseConflict = {
+  latest: EaPhaseProgress | null;
+  latestCurrentPhase: EaPhase | null;
+  makeCurrent: boolean;
+  latestIsArchived: boolean;
+  refreshFailed: boolean;
+};
+
 export function PhaseCharter({
   assessment,
   phase,
@@ -63,6 +72,9 @@ export function PhaseCharter({
   const source = assessment.content.phaseProgress.find((item) => item.phase === phase)!;
   const [draft, setDraft] = useState<EaPhaseProgress>(source);
   const [dirtyFields, setDirtyFields] = useState<Set<DirtyPhaseField>>(() => new Set());
+  const [conflict, setConflict] = useState<PhaseConflict | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const dirtyRevisions = useRef<Record<DirtyPhaseField, number>>({
     status: 0,
     completionPercent: 0,
@@ -84,8 +96,48 @@ export function PhaseCharter({
     setDirtyFields((current) => new Set(current).add(field));
   };
 
-  const save = async (makeCurrent = false) => {
-    if (assessment.status === 'archived') {
+  const refreshLatest = async (makeCurrent: boolean) => {
+    const queryKey = getGetEaAssessmentQueryKey(assessment.id);
+    try {
+      const latestAssessment = await queryClient.fetchQuery({
+        queryKey,
+        queryFn: () => getEaAssessment(assessment.id, { signal: AbortSignal.timeout(15_000) }),
+        staleTime: 0,
+        retry: false,
+      });
+      const latestPhase = latestAssessment.content.phaseProgress.find((item) => item.phase === phase);
+      if (!latestPhase) throw new Error("The latest assessment does not contain this phase.");
+      setConflict({
+        latest: latestPhase,
+        latestCurrentPhase: latestAssessment.currentPhase,
+        makeCurrent,
+        latestIsArchived: latestAssessment.status === "archived",
+        refreshFailed: false,
+      });
+      return true;
+    } catch {
+      setConflict((current) => ({
+        latest: null,
+        latestCurrentPhase: null,
+        makeCurrent: current?.makeCurrent ?? makeCurrent,
+        latestIsArchived: false,
+        refreshFailed: true,
+      }));
+      toast({
+        title: "Could not reload latest version",
+        description: "Your draft is preserved. Reload the latest version before retrying.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const save = async (makeCurrent = false, isConflictRetry = false) => {
+    if (isSavingRef.current || (conflict && !isConflictRetry)) return;
+
+    const queryKey = getGetEaAssessmentQueryKey(assessment.id);
+    const latestCachedAssessment = queryClient.getQueryData<EaAssessment>(queryKey);
+    if (assessment.status === "archived" || latestCachedAssessment?.status === "archived") {
       toast({ title: "Archived", description: "Cannot modify archived assessments.", variant: "destructive" });
       return;
     }
@@ -96,48 +148,104 @@ export function PhaseCharter({
     if (dirty.has("completionPercent")) dirtyValues.completionPercent = draft.completionPercent;
     if (dirty.has("notes")) dirtyValues.notes = draft.notes;
 
-    await enqueueAssessmentUpdate(assessment.id, async () => {
-      const queryKey = getGetEaAssessmentQueryKey(assessment.id);
-      const cachedAssessment = queryClient.getQueryData<EaAssessment>(queryKey) || assessment;
-       const transformProgress = (current: EaPhaseProgress[]) =>
-         mergePhaseProgress(current, phase, dirtyValues);
-      try {
-        const result = await updateAssessment.mutateAsync({
-          id: assessment.id,
-          data: {
-            expectedVersion: cachedAssessment.version,
-            ...(makeCurrent ? { currentPhase: phase as EaPhase } : {}),
-            content: {
-              ...cachedAssessment.content,
-               phaseProgress: transformProgress(cachedAssessment.content.phaseProgress),
-            },
-          },
-        });
-        queryClient.setQueryData(queryKey, result);
-         setDirtyFields((current) => {
-           const next = new Set(current);
-           dirty.forEach((field) => {
-             if (dirtyRevisions.current[field] === savedRevisions[field]) next.delete(field);
-           });
-           return next;
-         });
-        toast({
-          title: makeCurrent ? `${guidance.title} is now current` : `${guidance.title} saved`,
-          description: "The assessment lifecycle has been updated.",
-        });
-      } catch (error) {
-        const status = typeof error === "object" && error !== null
-          ? ("status" in error ? error.status : "response" in error && typeof error.response === "object" && error.response !== null && "status" in error.response ? error.response.status : undefined)
-          : undefined;
-        if (status === 409) {
-          toast({ title: "Conflict", description: "Modified elsewhere. Reloading...", variant: "destructive" });
-          await queryClient.invalidateQueries({ queryKey });
-        } else {
-          toast({ title: "Error", description: "Failed to save phase.", variant: "destructive" });
+    isSavingRef.current = true;
+    setIsSaving(true);
+    try {
+      await enqueueAssessmentUpdate(assessment.id, async () => {
+        const cachedAssessment = queryClient.getQueryData<EaAssessment>(queryKey) || assessment;
+        if (cachedAssessment.status === "archived") {
+          toast({ title: "Archived", description: "Cannot modify archived assessments.", variant: "destructive" });
+          return;
         }
-        throw error;
-      }
-    });
+        const transformProgress = (current: EaPhaseProgress[]) =>
+          mergePhaseProgress(current, phase, dirtyValues);
+        try {
+          const result = await updateAssessment.mutateAsync({
+            id: assessment.id,
+            data: {
+              expectedVersion: cachedAssessment.version,
+              ...(makeCurrent ? { currentPhase: phase as EaPhase } : {}),
+              content: {
+                ...cachedAssessment.content,
+                phaseProgress: transformProgress(cachedAssessment.content.phaseProgress),
+              },
+            },
+          });
+          queryClient.setQueryData(queryKey, result);
+          setConflict(null);
+          setDirtyFields((current) => {
+            const next = new Set(current);
+            dirty.forEach((field) => {
+              if (dirtyRevisions.current[field] === savedRevisions[field]) next.delete(field);
+            });
+            return next;
+          });
+          toast({
+            title: makeCurrent ? `${guidance.title} is now current` : `${guidance.title} saved`,
+            description: "The assessment lifecycle has been updated.",
+          });
+        } catch (error) {
+          const status = typeof error === "object" && error !== null
+            ? ("status" in error ? error.status : "response" in error && typeof error.response === "object" && error.response !== null && "status" in error.response ? error.response.status : undefined)
+            : undefined;
+          if (status === 409) {
+            setConflict({
+              latest: null,
+              latestCurrentPhase: null,
+              makeCurrent,
+              latestIsArchived: false,
+              refreshFailed: false,
+            });
+            toast({
+              title: "Save conflict",
+              description: "Your draft is preserved while the latest saved version is reloaded.",
+              variant: "destructive",
+            });
+            await refreshLatest(makeCurrent);
+          } else {
+            toast({ title: "Error", description: "Failed to save phase.", variant: "destructive" });
+          }
+        }
+      });
+    } catch {
+      // Errors are reported above; consume queue rejections so event handlers never leak them.
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
+    }
+  };
+
+  const discardConflict = () => {
+    if (!conflict) return;
+    const cachedAssessment = queryClient.getQueryData<EaAssessment>(getGetEaAssessmentQueryKey(assessment.id));
+    const cachedPhase = cachedAssessment?.content.phaseProgress.find((item) => item.phase === phase);
+    if (cachedPhase) {
+      setDraft(cachedPhase);
+    } else {
+      toast({
+        title: "Latest version unavailable",
+        description: "Could not find a cached phase to restore. Your draft was kept.",
+        variant: "destructive",
+      });
+      return;
+    }
+    dirtyRevisions.current.status += 1;
+    dirtyRevisions.current.completionPercent += 1;
+    dirtyRevisions.current.notes += 1;
+    setDirtyFields(new Set());
+    setConflict(null);
+  };
+
+  const reloadLatest = async () => {
+    if (isSavingRef.current || !conflict) return;
+    isSavingRef.current = true;
+    setIsSaving(true);
+    try {
+      await refreshLatest(conflict.makeCurrent);
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -156,7 +264,7 @@ export function PhaseCharter({
             <Button
               variant="outline"
               onClick={() => void save(true)}
-              disabled={isReadOnly || updateAssessment.isPending}
+              disabled={isReadOnly || isSaving || conflict !== null}
               data-testid={`button-make-current-${phase}`}
             >
               <Flag className="mr-2 h-4 w-4" />
@@ -165,14 +273,99 @@ export function PhaseCharter({
           )}
           <Button
             onClick={() => void save(false)}
-            disabled={isReadOnly || updateAssessment.isPending}
+            disabled={isReadOnly || isSaving || conflict !== null}
             data-testid={`button-save-${phase}`}
           >
             <Save className="mr-2 h-4 w-4" />
-            {updateAssessment.isPending ? "Saving…" : "Save phase"}
+            {isSaving ? "Saving…" : "Save phase"}
           </Button>
         </div>
       </div>
+
+      {conflict && (
+        <Card className="border-destructive/50" data-testid={`phase-conflict-${phase}`}>
+          <CardHeader>
+            <CardTitle className="text-base text-destructive">Resolve save conflict</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This phase changed after you opened it. Your draft is preserved. Compare it with the latest saved
+              version before retrying or discarding your changes.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              {conflict.latest && [
+                { title: "Latest saved", value: conflict.latest },
+                { title: "Your draft", value: draft },
+              ].map(({ title, value }) => (
+                <div key={title} className="space-y-3 rounded-md border p-4">
+                  <h3 className="font-semibold">{title}</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-muted-foreground">Status</div>
+                      <div className="font-medium">{value.status.replace("-", " ")}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Completion</div>
+                      <div className="font-medium">{value.completionPercent}%</div>
+                    </div>
+                  </div>
+                  <div className="text-sm">
+                    <div className="text-muted-foreground">Notes</div>
+                    <div className="mt-1 whitespace-pre-wrap break-words">{value.notes || "No notes"}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {conflict.refreshFailed && (
+              <p className="text-sm font-medium text-destructive">
+                Reloading the latest saved version failed. Retry is unavailable until it loads.
+              </p>
+            )}
+            {conflict.makeCurrent && conflict.latest && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-md border p-4 text-sm">
+                  <div className="text-muted-foreground">Latest saved current phase</div>
+                  <div className="mt-1 font-medium">{conflict.latestCurrentPhase}</div>
+                </div>
+                <div className="rounded-md border p-4 text-sm">
+                  <div className="text-muted-foreground">Your requested current phase</div>
+                  <div className="mt-1 font-medium">{phase}</div>
+                </div>
+              </div>
+            )}
+            {conflict.latestIsArchived && (
+              <p className="text-sm font-medium text-destructive">
+                The latest assessment is archived and cannot be modified.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => void save(conflict.makeCurrent, true)}
+                disabled={isReadOnly || isSaving || !conflict.latest || conflict.refreshFailed || conflict.latestIsArchived}
+                data-testid={`button-retry-conflict-${phase}`}
+              >
+                {isSaving ? "Retrying…" : "Retry"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void reloadLatest()}
+                disabled={isSaving}
+                data-testid={`button-reload-conflict-${phase}`}
+              >
+                {isSaving ? "Reloading…" : "Reload latest"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={discardConflict}
+                disabled={isSaving}
+                data-testid={`button-discard-conflict-${phase}`}
+              >
+                Discard
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.4fr)]">
         <Card>

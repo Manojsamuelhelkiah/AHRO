@@ -18,7 +18,7 @@ export function GapRegister({ assessment, isReadOnly }: { assessment: EaAssessme
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const initializedId = useRef<number | null>(null);
 
-  const updateGaps = useAssessmentUpdater<EaGap[]>(assessment, 'gaps');
+  const updateGaps = useAssessmentUpdater<EaGap[]>(assessment, 'gaps', undefined, setGaps);
 
   useEffect(() => {
     if (assessment && initializedId.current !== assessment.id) {
