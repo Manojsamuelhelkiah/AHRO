@@ -12,6 +12,7 @@ import onboardingRouter from "./onboarding";
 import pricingRateSetsRouter from "./pricing-rate-sets";
 import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
+import intentRegistryRouter from "./intent-registry";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(slideDeckRouter);
 router.use(onboardingRouter);
 router.use(pricingRateSetsRouter);
 router.use(enterpriseArchitectureRouter);
+router.use(intentRegistryRouter);
 
 export default router;

@@ -4312,6 +4312,139 @@ export const GetCorpusSummaryResponse = zod.object({
 
 
 /**
+ * @summary Reconcile cost-model and routing-registry taxonomy counts
+ */
+export const GetRoutingSummaryResponse = zod.object({
+  "registryVersion": zod.string(),
+  "reference": zod.number(),
+  "activeCustom": zod.number(),
+  "retiredCustom": zod.number(),
+  "staleCustom": zod.number(),
+  "groupingParents": zod.number(),
+  "candidateGaps": zod.number(),
+  "routable": zod.number(),
+  "costModelIntentCount": zod.number(),
+  "reconciled": zod.boolean()
+})
+
+
+/**
+ * @summary Get the versioned HRO outcome routing contract
+ */
+export const GetIntentRegistryResponse = zod.object({
+  "version": zod.string(),
+  "counts": zod.object({
+  "reference": zod.number(),
+  "activeCustom": zod.number(),
+  "retiredCustom": zod.number(),
+  "staleCustom": zod.number(),
+  "groupingParents": zod.number(),
+  "candidateGaps": zod.number(),
+  "routable": zod.number()
+}),
+  "executors": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['workflow', 'typed-tool']),
+  "owner": zod.string(),
+  "maximumMaturity": zod.enum(['simulated', 'integrated', 'verified'])
+})),
+  "reference": zod.array(zod.object({
+  "registryVersion": zod.string(),
+  "key": zod.string(),
+  "canonicalOutcome": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.object({
+  "completionEvidence": zod.string(),
+  "required": zod.array(zod.string())
+}),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
+  "source": zod.enum(['reference', 'custom']),
+  "status": zod.enum(['active', 'retired']),
+  "routable": zod.boolean()
+})),
+  "custom": zod.array(zod.object({
+  "registryVersion": zod.string(),
+  "key": zod.string(),
+  "canonicalOutcome": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.object({
+  "completionEvidence": zod.string(),
+  "required": zod.array(zod.string())
+}),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
+  "source": zod.enum(['reference', 'custom']),
+  "status": zod.enum(['active', 'retired']),
+  "routable": zod.boolean()
+})),
+  "groupingParents": zod.array(zod.record(zod.string(), zod.unknown())),
+  "candidateGaps": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Resolve a canonical outcome or approved exact alias to one executable route
+ */
+export const ResolveIntentRouteBody = zod.object({
+  "key": zod.string(),
+  "registryVersion": zod.string().optional()
+})
+
+export const ResolveIntentRouteResponse = zod.object({
+  "version": zod.string(),
+  "route": zod.object({
+  "registryVersion": zod.string(),
+  "key": zod.string(),
+  "canonicalOutcome": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.object({
+  "completionEvidence": zod.string(),
+  "required": zod.array(zod.string())
+}),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
+  "source": zod.enum(['reference', 'custom']),
+  "status": zod.enum(['active', 'retired']),
+  "routable": zod.boolean()
+})
+})
+
+
+/**
  * @summary List saved client scenarios
  */
 export const listScenariosResponseInputsAssumptionOverridesMinOne = 0;
@@ -5054,6 +5187,22 @@ export const ListCustomIntentsResponseItem = zod.object({
   "source": zod.string().describe('Free-text rationale or provenance'),
   "author": zod.string(),
   "status": zod.string().describe('active | retired'),
+  "registryVersion": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.record(zod.string(), zod.unknown()),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
@@ -5075,7 +5224,22 @@ export const CreateCustomIntentBody = zod.object({
   "actPutActions": zod.number(),
   "systemsTouchedBase": zod.number().optional().describe('Default 2'),
   "source": zod.string().describe('Rationale or provenance for this intent'),
-  "author": zod.string()
+  "author": zod.string(),
+  "parentIntentKey": zod.string().nullish(),
+  "exactAliases": zod.array(zod.string()).optional(),
+  "accountableSpecialist": zod.string().optional(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']).optional(),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}).optional(),
+  "evidenceContract": zod.record(zod.string(), zod.unknown()).optional(),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']).optional()
 }).describe('Fields required to create a custom intent. Key is auto-generated from name.')
 
 export const CreateCustomIntentResponse = zod.object({
@@ -5095,6 +5259,22 @@ export const CreateCustomIntentResponse = zod.object({
   "source": zod.string().describe('Free-text rationale or provenance'),
   "author": zod.string(),
   "status": zod.string().describe('active | retired'),
+  "registryVersion": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.record(zod.string(), zod.unknown()),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
@@ -5124,6 +5304,22 @@ export const GetCustomIntentResponse = zod.object({
   "source": zod.string().describe('Free-text rationale or provenance'),
   "author": zod.string(),
   "status": zod.string().describe('active | retired'),
+  "registryVersion": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.record(zod.string(), zod.unknown()),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
@@ -5148,7 +5344,22 @@ export const UpdateCustomIntentBody = zod.object({
   "actPutActions": zod.number().optional(),
   "systemsTouchedBase": zod.number().optional(),
   "source": zod.string().optional(),
-  "author": zod.string().optional()
+  "author": zod.string().optional(),
+  "parentIntentKey": zod.string().nullish(),
+  "exactAliases": zod.array(zod.string()).optional(),
+  "accountableSpecialist": zod.string().optional(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']).optional(),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}).optional(),
+  "evidenceContract": zod.record(zod.string(), zod.unknown()).optional(),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']).optional()
 }).describe('Partial update for a custom intent (all fields optional)')
 
 export const UpdateCustomIntentResponse = zod.object({
@@ -5168,6 +5379,22 @@ export const UpdateCustomIntentResponse = zod.object({
   "source": zod.string().describe('Free-text rationale or provenance'),
   "author": zod.string(),
   "status": zod.string().describe('active | retired'),
+  "registryVersion": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.record(zod.string(), zod.unknown()),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')
@@ -5207,6 +5434,22 @@ export const RetireCustomIntentResponse = zod.object({
   "source": zod.string().describe('Free-text rationale or provenance'),
   "author": zod.string(),
   "status": zod.string().describe('active | retired'),
+  "registryVersion": zod.string(),
+  "parentIntentKey": zod.string().nullable(),
+  "exactAliases": zod.array(zod.string()),
+  "accountableSpecialist": zod.string(),
+  "riskClass": zod.enum(['low', 'medium', 'high', 'consequential']),
+  "actionSchema": zod.object({
+  "actions": zod.array(zod.object({
+  "type": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "inputSchema": zod.record(zod.string(), zod.unknown()),
+  "executorKey": zod.string().nullable()
+}))
+}),
+  "evidenceContract": zod.record(zod.string(), zod.unknown()),
+  "maturity": zod.enum(['catalogued', 'simulated', 'integrated', 'verified', 'unsupported']),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).describe('A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.')

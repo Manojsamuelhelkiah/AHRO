@@ -17,6 +17,7 @@ import { loadActiveCustomIntents, rowToIntent } from "./custom-intents";
 import { db, customIntentsTable } from "@workspace/db";
 import type { Intent } from "../data/types";
 import { loadCurrentRateSet } from "../lib/pricing-rate-sets";
+import { buildIntentRegistry } from "../lib/intent-registry";
 
 const router: IRouter = Router();
 
@@ -88,7 +89,7 @@ router.get("/summary", async (_req, res, next) => {
   try {
     const customRows = await db.select().from(customIntentsTable);
     const activeCustom = customRows
-      .filter((r) => r.status === "active")
+      .filter((r) => r.status === "active" && r.registryVersion === buildIntentRegistry().version)
       .map(rowToIntent);
     const allIntents: Intent[] = [...intents, ...activeCustom];
 
@@ -107,6 +108,24 @@ router.get("/summary", async (_req, res, next) => {
         bySource: count((i) => i.source.name),
       }),
     );
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/summary/routing", async (_req, res, next) => {
+  try {
+    const customRows = await db.select().from(customIntentsTable);
+    const registry = buildIntentRegistry(customRows);
+    res.json({
+      registryVersion: registry.version,
+      ...registry.counts,
+      costModelIntentCount: intents.length + registry.counts.activeCustom,
+      reconciled:
+        registry.counts.reference === intents.length
+        && registry.counts.activeCustom === customRows.filter((row) =>
+          row.status === "active" && row.registryVersion === registry.version).length,
+    });
   } catch (e) {
     next(e);
   }

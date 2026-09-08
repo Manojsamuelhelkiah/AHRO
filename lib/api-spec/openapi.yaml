@@ -312,6 +312,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CorpusSummary"
+  /summary/routing:
+    get:
+      operationId: getRoutingSummary
+      tags: [corpus]
+      summary: Reconcile cost-model and routing-registry taxonomy counts
+      responses:
+        "200":
+          description: Routing taxonomy summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingSummary"
+  /intent-registry:
+    get:
+      operationId: getIntentRegistry
+      tags: [intentRegistry]
+      summary: Get the versioned HRO outcome routing contract
+      responses:
+        "200":
+          description: Versioned registry with separately counted taxonomy classes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentRegistry"
+  /intent-registry/resolve:
+    post:
+      operationId: resolveIntentRoute
+      tags: [intentRegistry]
+      summary: Resolve a canonical outcome or approved exact alias to one executable route
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveIntentRouteInput"
+      responses:
+        "200":
+          description: Resolved executable route
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedIntentRoute"
+        "404":
+          description: Unknown outcome
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentRouteError"
+        "409":
+          description: Retired, ambiguous, or wrong-version outcome
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentRouteError"
+        "422":
+          description: Known outcome without a registered executable route
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentRouteError"
   /scenarios:
     get:
       operationId: listScenarios
@@ -2623,6 +2683,200 @@ components:
           items:
             $ref: "#/components/schemas/CountBucket"
       required: [intentCount, systemCount, profileCount, byDomain, byFlowClass, bySource]
+    RoutingSummary:
+      type: object
+      properties:
+        registryVersion:
+          type: string
+        reference:
+          type: integer
+        activeCustom:
+          type: integer
+        retiredCustom:
+          type: integer
+        staleCustom:
+          type: integer
+        groupingParents:
+          type: integer
+        candidateGaps:
+          type: integer
+        routable:
+          type: integer
+        costModelIntentCount:
+          type: integer
+        reconciled:
+          type: boolean
+      required: [registryVersion, reference, activeCustom, retiredCustom, staleCustom, groupingParents, candidateGaps, routable, costModelIntentCount, reconciled]
+    RegisteredAction:
+      type: object
+      properties:
+        type:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        inputSchema:
+          type: object
+          additionalProperties: true
+        executorKey:
+          type: string
+          nullable: true
+      required: [type, name, description, inputSchema, executorKey]
+    IntentActionSchema:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RegisteredAction"
+      required: [actions]
+    IntentEvidenceContract:
+      type: object
+      properties:
+        completionEvidence:
+          type: string
+        required:
+          type: array
+          items:
+            type: string
+      required: [completionEvidence, required]
+    IntentRoute:
+      type: object
+      properties:
+        registryVersion:
+          type: string
+        key:
+          type: string
+        canonicalOutcome:
+          type: string
+        parentIntentKey:
+          type: string
+          nullable: true
+        exactAliases:
+          type: array
+          items:
+            type: string
+        accountableSpecialist:
+          type: string
+        riskClass:
+          type: string
+          enum: [low, medium, high, consequential]
+        actionSchema:
+          $ref: "#/components/schemas/IntentActionSchema"
+        evidenceContract:
+          $ref: "#/components/schemas/IntentEvidenceContract"
+        maturity:
+          type: string
+          enum: [catalogued, simulated, integrated, verified, unsupported]
+        source:
+          type: string
+          enum: [reference, custom]
+        status:
+          type: string
+          enum: [active, retired]
+        routable:
+          type: boolean
+      required: [registryVersion, key, canonicalOutcome, parentIntentKey, exactAliases, accountableSpecialist, riskClass, actionSchema, evidenceContract, maturity, source, status, routable]
+    IntentExecutorRegistration:
+      type: object
+      properties:
+        key:
+          type: string
+        kind:
+          type: string
+          enum: [workflow, typed-tool]
+        owner:
+          type: string
+        maximumMaturity:
+          type: string
+          enum: [simulated, integrated, verified]
+      required: [key, kind, owner, maximumMaturity]
+    IntentRegistryCounts:
+      type: object
+      properties:
+        reference:
+          type: integer
+        activeCustom:
+          type: integer
+        retiredCustom:
+          type: integer
+        staleCustom:
+          type: integer
+        groupingParents:
+          type: integer
+        candidateGaps:
+          type: integer
+        routable:
+          type: integer
+      required: [reference, activeCustom, retiredCustom, staleCustom, groupingParents, candidateGaps, routable]
+    IntentRegistry:
+      type: object
+      properties:
+        version:
+          type: string
+        counts:
+          $ref: "#/components/schemas/IntentRegistryCounts"
+        executors:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntentExecutorRegistration"
+        reference:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntentRoute"
+        custom:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntentRoute"
+        groupingParents:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        candidateGaps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required: [version, counts, executors, reference, custom, groupingParents, candidateGaps]
+    ResolveIntentRouteInput:
+      type: object
+      properties:
+        key:
+          type: string
+        registryVersion:
+          type: string
+      required: [key]
+    ResolvedIntentRoute:
+      type: object
+      properties:
+        version:
+          type: string
+        route:
+          $ref: "#/components/schemas/IntentRoute"
+      required: [version, route]
+    IntentRouteRepair:
+      type: object
+      properties:
+        required:
+          type: boolean
+        suppliedKey:
+          type: string
+        registryVersion:
+          type: string
+      required: [required, suppliedKey, registryVersion]
+    IntentRouteError:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          enum: [UNKNOWN_OUTCOME, RETIRED_OUTCOME, AMBIGUOUS_ALIAS, UNSUPPORTED_OUTCOME, REGISTRY_VERSION_MISMATCH]
+        repair:
+          $ref: "#/components/schemas/IntentRouteRepair"
+      required: [error, code, repair]
     CountBucket:
       type: object
       properties:
@@ -3377,6 +3631,28 @@ components:
         status:
           type: string
           description: active | retired
+        registryVersion:
+          type: string
+        parentIntentKey:
+          type: string
+          nullable: true
+        exactAliases:
+          type: array
+          items:
+            type: string
+        accountableSpecialist:
+          type: string
+        riskClass:
+          type: string
+          enum: [low, medium, high, consequential]
+        actionSchema:
+          $ref: "#/components/schemas/IntentActionSchema"
+        evidenceContract:
+          type: object
+          additionalProperties: true
+        maturity:
+          type: string
+          enum: [catalogued, simulated, integrated, verified, unsupported]
         createdAt:
           type: string
         updatedAt:
@@ -3398,6 +3674,14 @@ components:
         - source
         - author
         - status
+        - registryVersion
+        - parentIntentKey
+        - exactAliases
+        - accountableSpecialist
+        - riskClass
+        - actionSchema
+        - evidenceContract
+        - maturity
         - createdAt
         - updatedAt
     CustomIntentInput:
@@ -3430,6 +3714,26 @@ components:
           description: Rationale or provenance for this intent
         author:
           type: string
+        parentIntentKey:
+          type: string
+          nullable: true
+        exactAliases:
+          type: array
+          items:
+            type: string
+        accountableSpecialist:
+          type: string
+        riskClass:
+          type: string
+          enum: [low, medium, high, consequential]
+        actionSchema:
+          $ref: "#/components/schemas/IntentActionSchema"
+        evidenceContract:
+          type: object
+          additionalProperties: true
+        maturity:
+          type: string
+          enum: [catalogued, simulated, integrated, verified, unsupported]
       required:
         - name
         - domain
@@ -3470,6 +3774,26 @@ components:
           type: string
         author:
           type: string
+        parentIntentKey:
+          type: string
+          nullable: true
+        exactAliases:
+          type: array
+          items:
+            type: string
+        accountableSpecialist:
+          type: string
+        riskClass:
+          type: string
+          enum: [low, medium, high, consequential]
+        actionSchema:
+          $ref: "#/components/schemas/IntentActionSchema"
+        evidenceContract:
+          type: object
+          additionalProperties: true
+        maturity:
+          type: string
+          enum: [catalogued, simulated, integrated, verified, unsupported]
     FlowOverride:
       type: object
       description: A versioned SME adjustment to an intent's flow; latest approved version per intent is applied to roll-ups

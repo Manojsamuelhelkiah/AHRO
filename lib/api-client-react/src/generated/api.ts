@@ -51,6 +51,8 @@ import type {
   ImportScenarioWorkbookBody,
   ImportWorkbookResult,
   Intent,
+  IntentRegistry,
+  IntentRouteError,
   ListCustomIntentsParams,
   ListEaAssessmentsParams,
   ListOnboardingApprovalsParams,
@@ -84,8 +86,11 @@ import type {
   PricingSheet,
   PricingSheetInput,
   PricingSheetUpdate,
+  ResolveIntentRouteInput,
+  ResolvedIntentRoute,
   Rollup,
   RollupRequest,
+  RoutingSummary,
   Scenario,
   ScenarioInput,
   ScenarioUpdate,
@@ -1264,6 +1269,231 @@ export function useGetCorpusSummary<TData = Awaited<ReturnType<typeof getCorpusS
 
 
 
+
+export const getGetRoutingSummaryUrl = () => {
+
+
+
+
+  return `/api/summary/routing`
+}
+
+/**
+ * @summary Reconcile cost-model and routing-registry taxonomy counts
+ */
+export const getRoutingSummary = async ( options?: RequestInit): Promise<RoutingSummary> => {
+
+  return customFetch<RoutingSummary>(getGetRoutingSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRoutingSummaryQueryKey = () => {
+    return [
+    `/api/summary/routing`
+    ] as const;
+    }
+
+
+export const getGetRoutingSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getRoutingSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRoutingSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRoutingSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRoutingSummary>>> = ({ signal }) => getRoutingSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRoutingSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRoutingSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getRoutingSummary>>>
+export type GetRoutingSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Reconcile cost-model and routing-registry taxonomy counts
+ */
+
+export function useGetRoutingSummary<TData = Awaited<ReturnType<typeof getRoutingSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRoutingSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRoutingSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetIntentRegistryUrl = () => {
+
+
+
+
+  return `/api/intent-registry`
+}
+
+/**
+ * @summary Get the versioned HRO outcome routing contract
+ */
+export const getIntentRegistry = async ( options?: RequestInit): Promise<IntentRegistry> => {
+
+  return customFetch<IntentRegistry>(getGetIntentRegistryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIntentRegistryQueryKey = () => {
+    return [
+    `/api/intent-registry`
+    ] as const;
+    }
+
+
+export const getGetIntentRegistryQueryOptions = <TData = Awaited<ReturnType<typeof getIntentRegistry>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntentRegistry>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIntentRegistryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIntentRegistry>>> = ({ signal }) => getIntentRegistry({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIntentRegistry>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetIntentRegistryQueryResult = NonNullable<Awaited<ReturnType<typeof getIntentRegistry>>>
+export type GetIntentRegistryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the versioned HRO outcome routing contract
+ */
+
+export function useGetIntentRegistry<TData = Awaited<ReturnType<typeof getIntentRegistry>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntentRegistry>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetIntentRegistryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getResolveIntentRouteUrl = () => {
+
+
+
+
+  return `/api/intent-registry/resolve`
+}
+
+/**
+ * @summary Resolve a canonical outcome or approved exact alias to one executable route
+ */
+export const resolveIntentRoute = async (resolveIntentRouteInput: ResolveIntentRouteInput, options?: RequestInit): Promise<ResolvedIntentRoute> => {
+
+  return customFetch<ResolvedIntentRoute>(getResolveIntentRouteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(resolveIntentRouteInput)
+  }
+);}
+
+
+
+
+
+export const getResolveIntentRouteMutationOptions = <TError = ErrorType<IntentRouteError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveIntentRoute>>, TError,{data: BodyType<ResolveIntentRouteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveIntentRoute>>, TError,{data: BodyType<ResolveIntentRouteInput>}, TContext> => {
+
+const mutationKey = ['resolveIntentRoute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveIntentRoute>>, {data: BodyType<ResolveIntentRouteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveIntentRoute(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveIntentRouteMutationResult = NonNullable<Awaited<ReturnType<typeof resolveIntentRoute>>>
+    export type ResolveIntentRouteMutationBody = BodyType<ResolveIntentRouteInput>
+    export type ResolveIntentRouteMutationError = ErrorType<IntentRouteError>
+
+    /**
+ * @summary Resolve a canonical outcome or approved exact alias to one executable route
+ */
+export const useResolveIntentRoute = <TError = ErrorType<IntentRouteError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveIntentRoute>>, TError,{data: BodyType<ResolveIntentRouteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveIntentRoute>>,
+        TError,
+        {data: BodyType<ResolveIntentRouteInput>},
+        TContext
+      > => {
+      return useMutation(getResolveIntentRouteMutationOptions(options));
+    }
 
 export const getListScenariosUrl = () => {
 

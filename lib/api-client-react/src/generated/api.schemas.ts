@@ -924,6 +924,172 @@ export interface CorpusSummary {
   bySource: CountBucket[];
 }
 
+export interface RoutingSummary {
+  registryVersion: string;
+  reference: number;
+  activeCustom: number;
+  retiredCustom: number;
+  staleCustom: number;
+  groupingParents: number;
+  candidateGaps: number;
+  routable: number;
+  costModelIntentCount: number;
+  reconciled: boolean;
+}
+
+export type RegisteredActionInputSchema = { [key: string]: unknown };
+
+export interface RegisteredAction {
+  type: string;
+  name: string;
+  description: string;
+  inputSchema: RegisteredActionInputSchema;
+  executorKey: string | null;
+}
+
+export interface IntentActionSchema {
+  actions: RegisteredAction[];
+}
+
+export interface IntentEvidenceContract {
+  completionEvidence: string;
+  required: string[];
+}
+
+export type IntentRouteRiskClass = typeof IntentRouteRiskClass[keyof typeof IntentRouteRiskClass];
+
+
+export const IntentRouteRiskClass = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  consequential: 'consequential',
+} as const;
+
+export type IntentRouteMaturity = typeof IntentRouteMaturity[keyof typeof IntentRouteMaturity];
+
+
+export const IntentRouteMaturity = {
+  catalogued: 'catalogued',
+  simulated: 'simulated',
+  integrated: 'integrated',
+  verified: 'verified',
+  unsupported: 'unsupported',
+} as const;
+
+export type IntentRouteSource = typeof IntentRouteSource[keyof typeof IntentRouteSource];
+
+
+export const IntentRouteSource = {
+  reference: 'reference',
+  custom: 'custom',
+} as const;
+
+export type IntentRouteStatus = typeof IntentRouteStatus[keyof typeof IntentRouteStatus];
+
+
+export const IntentRouteStatus = {
+  active: 'active',
+  retired: 'retired',
+} as const;
+
+export interface IntentRoute {
+  registryVersion: string;
+  key: string;
+  canonicalOutcome: string;
+  parentIntentKey: string | null;
+  exactAliases: string[];
+  accountableSpecialist: string;
+  riskClass: IntentRouteRiskClass;
+  actionSchema: IntentActionSchema;
+  evidenceContract: IntentEvidenceContract;
+  maturity: IntentRouteMaturity;
+  source: IntentRouteSource;
+  status: IntentRouteStatus;
+  routable: boolean;
+}
+
+export type IntentExecutorRegistrationKind = typeof IntentExecutorRegistrationKind[keyof typeof IntentExecutorRegistrationKind];
+
+
+export const IntentExecutorRegistrationKind = {
+  workflow: 'workflow',
+  'typed-tool': 'typed-tool',
+} as const;
+
+export type IntentExecutorRegistrationMaximumMaturity = typeof IntentExecutorRegistrationMaximumMaturity[keyof typeof IntentExecutorRegistrationMaximumMaturity];
+
+
+export const IntentExecutorRegistrationMaximumMaturity = {
+  simulated: 'simulated',
+  integrated: 'integrated',
+  verified: 'verified',
+} as const;
+
+export interface IntentExecutorRegistration {
+  key: string;
+  kind: IntentExecutorRegistrationKind;
+  owner: string;
+  maximumMaturity: IntentExecutorRegistrationMaximumMaturity;
+}
+
+export interface IntentRegistryCounts {
+  reference: number;
+  activeCustom: number;
+  retiredCustom: number;
+  staleCustom: number;
+  groupingParents: number;
+  candidateGaps: number;
+  routable: number;
+}
+
+export type IntentRegistryGroupingParentsItem = { [key: string]: unknown };
+
+export type IntentRegistryCandidateGapsItem = { [key: string]: unknown };
+
+export interface IntentRegistry {
+  version: string;
+  counts: IntentRegistryCounts;
+  executors: IntentExecutorRegistration[];
+  reference: IntentRoute[];
+  custom: IntentRoute[];
+  groupingParents: IntentRegistryGroupingParentsItem[];
+  candidateGaps: IntentRegistryCandidateGapsItem[];
+}
+
+export interface ResolveIntentRouteInput {
+  key: string;
+  registryVersion?: string;
+}
+
+export interface ResolvedIntentRoute {
+  version: string;
+  route: IntentRoute;
+}
+
+export interface IntentRouteRepair {
+  required: boolean;
+  suppliedKey: string;
+  registryVersion: string;
+}
+
+export type IntentRouteErrorCode = typeof IntentRouteErrorCode[keyof typeof IntentRouteErrorCode];
+
+
+export const IntentRouteErrorCode = {
+  UNKNOWN_OUTCOME: 'UNKNOWN_OUTCOME',
+  RETIRED_OUTCOME: 'RETIRED_OUTCOME',
+  AMBIGUOUS_ALIAS: 'AMBIGUOUS_ALIAS',
+  UNSUPPORTED_OUTCOME: 'UNSUPPORTED_OUTCOME',
+  REGISTRY_VERSION_MISMATCH: 'REGISTRY_VERSION_MISMATCH',
+} as const;
+
+export interface IntentRouteError {
+  error: string;
+  code: IntentRouteErrorCode;
+  repair: IntentRouteRepair;
+}
+
 /**
  * Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.
  */
@@ -1482,6 +1648,29 @@ export interface ModelOption {
   isDefault: boolean;
 }
 
+export type CustomIntentRiskClass = typeof CustomIntentRiskClass[keyof typeof CustomIntentRiskClass];
+
+
+export const CustomIntentRiskClass = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  consequential: 'consequential',
+} as const;
+
+export type CustomIntentEvidenceContract = { [key: string]: unknown };
+
+export type CustomIntentMaturity = typeof CustomIntentMaturity[keyof typeof CustomIntentMaturity];
+
+
+export const CustomIntentMaturity = {
+  catalogued: 'catalogued',
+  simulated: 'simulated',
+  integrated: 'integrated',
+  verified: 'verified',
+  unsupported: 'unsupported',
+} as const;
+
 /**
  * A client-specific intent that extends the reference corpus. Active custom intents participate in roll-ups exactly like reference intents.
  */
@@ -1506,9 +1695,40 @@ export interface CustomIntent {
   author: string;
   /** active | retired */
   status: string;
+  registryVersion: string;
+  parentIntentKey: string | null;
+  exactAliases: string[];
+  accountableSpecialist: string;
+  riskClass: CustomIntentRiskClass;
+  actionSchema: IntentActionSchema;
+  evidenceContract: CustomIntentEvidenceContract;
+  maturity: CustomIntentMaturity;
   createdAt: string;
   updatedAt: string;
 }
+
+export type CustomIntentInputRiskClass = typeof CustomIntentInputRiskClass[keyof typeof CustomIntentInputRiskClass];
+
+
+export const CustomIntentInputRiskClass = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  consequential: 'consequential',
+} as const;
+
+export type CustomIntentInputEvidenceContract = { [key: string]: unknown };
+
+export type CustomIntentInputMaturity = typeof CustomIntentInputMaturity[keyof typeof CustomIntentInputMaturity];
+
+
+export const CustomIntentInputMaturity = {
+  catalogued: 'catalogued',
+  simulated: 'simulated',
+  integrated: 'integrated',
+  verified: 'verified',
+  unsupported: 'unsupported',
+} as const;
 
 /**
  * Fields required to create a custom intent. Key is auto-generated from name.
@@ -1528,7 +1748,37 @@ export interface CustomIntentInput {
   /** Rationale or provenance for this intent */
   source: string;
   author: string;
+  parentIntentKey?: string | null;
+  exactAliases?: string[];
+  accountableSpecialist?: string;
+  riskClass?: CustomIntentInputRiskClass;
+  actionSchema?: IntentActionSchema;
+  evidenceContract?: CustomIntentInputEvidenceContract;
+  maturity?: CustomIntentInputMaturity;
 }
+
+export type CustomIntentUpdateRiskClass = typeof CustomIntentUpdateRiskClass[keyof typeof CustomIntentUpdateRiskClass];
+
+
+export const CustomIntentUpdateRiskClass = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  consequential: 'consequential',
+} as const;
+
+export type CustomIntentUpdateEvidenceContract = { [key: string]: unknown };
+
+export type CustomIntentUpdateMaturity = typeof CustomIntentUpdateMaturity[keyof typeof CustomIntentUpdateMaturity];
+
+
+export const CustomIntentUpdateMaturity = {
+  catalogued: 'catalogued',
+  simulated: 'simulated',
+  integrated: 'integrated',
+  verified: 'verified',
+  unsupported: 'unsupported',
+} as const;
 
 /**
  * Partial update for a custom intent (all fields optional)
@@ -1546,6 +1796,13 @@ export interface CustomIntentUpdate {
   systemsTouchedBase?: number;
   source?: string;
   author?: string;
+  parentIntentKey?: string | null;
+  exactAliases?: string[];
+  accountableSpecialist?: string;
+  riskClass?: CustomIntentUpdateRiskClass;
+  actionSchema?: IntentActionSchema;
+  evidenceContract?: CustomIntentUpdateEvidenceContract;
+  maturity?: CustomIntentUpdateMaturity;
 }
 
 /**
