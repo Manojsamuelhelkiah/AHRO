@@ -20,6 +20,7 @@ interface IntentCorpusAvailabilityProps {
   warning?: string;
   isFetching: boolean;
   onRetry: () => void;
+  unavailableActions?: string;
 }
 
 export function IntentCorpusAvailability({
@@ -29,6 +30,7 @@ export function IntentCorpusAvailability({
   warning,
   isFetching,
   onRetry,
+  unavailableActions,
 }: IntentCorpusAvailabilityProps) {
   if (!isError && customIntentsAvailable !== false) return null;
 
@@ -54,6 +56,9 @@ export function IntentCorpusAvailability({
               ? error.message
               : "The intent service did not return a usable response."}
         </p>
+        {unavailableActions && (
+          <p className="mt-1 font-medium text-foreground">{unavailableActions}</p>
+        )}
       </div>
       <Button variant="outline" size="sm" onClick={onRetry} disabled={isFetching}>
         {isFetching ? "Retrying…" : "Retry"}

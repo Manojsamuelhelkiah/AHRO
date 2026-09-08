@@ -14,8 +14,18 @@ import { validateActualsOverlay, validateActualsOverlayOrThrow, InputValidationE
 import { loadActiveCustomIntents } from "./custom-intents";
 import { aggregateCallLog } from "../lib/aggregate-log";
 import type { ActualsOverlay } from "../data/types";
+import { intentMap } from "../data/intents";
 
 const router: IRouter = Router();
+
+export function overlayRequiresCustomIntentLookup(overlay: ActualsOverlay): boolean {
+  return overlay.intents?.some(({ intentKey }) => !intentMap[intentKey]) ?? false;
+}
+
+async function customIntentKeysForOverlay(overlay: ActualsOverlay): Promise<Set<string>> {
+  if (!overlayRequiresCustomIntentLookup(overlay)) return new Set();
+  return new Set((await loadActiveCustomIntents()).map((intent) => intent.key));
+}
 
 // 20 MB limit for raw call-log uploads
 const upload = multer({
@@ -58,8 +68,7 @@ router.post("/actuals/validate", async (req, res, next) => {
   try {
     const body = ValidateActualsOverlayBody.parse(req.body);
     const overlay = body as ActualsOverlay;
-    const customIntents = await loadActiveCustomIntents();
-    const customKeys = new Set(customIntents.map((i) => i.key));
+    const customKeys = await customIntentKeysForOverlay(overlay);
     const result = validateActualsOverlay(overlay, customKeys);
     res.json(ValidateActualsOverlayResponse.parse(result));
   } catch (err) {
@@ -76,7 +85,10 @@ router.post(
         throw new InputValidationError("logFile field is required");
       }
       const csvText = req.file.buffer.toString("utf-8");
-      const result = aggregateCallLog(csvText);
+      const referenceResult = aggregateCallLog(csvText);
+      const result = referenceResult.unknownIntents.length === 0
+        ? referenceResult
+        : aggregateCallLog(csvText, await loadActiveCustomIntents());
       res.json(result);
     } catch (err) {
       next(err);
@@ -88,8 +100,7 @@ router.post("/actuals", async (req, res, next) => {
   try {
     const body = CreateActualsOverlayBody.parse(req.body);
     const overlay = body as ActualsOverlay;
-    const customIntents = await loadActiveCustomIntents();
-    const customKeys = new Set(customIntents.map((i) => i.key));
+    const customKeys = await customIntentKeysForOverlay(overlay);
     validateActualsOverlayOrThrow(overlay, customKeys);
 
     const [row] = await db

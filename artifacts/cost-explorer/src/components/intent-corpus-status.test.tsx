@@ -47,12 +47,14 @@ test("degraded corpus consumers warn that custom intents are unavailable", () =>
       error={null}
       customIntentsAvailable={false}
       warning="Reference intents only."
+      unavailableActions="Calculations are paused until intent data recovers."
       isFetching={false}
       onRetry={() => undefined}
     />,
   );
   assert.match(html, /Custom intents are temporarily unavailable/);
   assert.match(html, /Reference intents only/);
+  assert.match(html, /Calculations are paused/);
   assert.match(html, /Retry/);
 });
 

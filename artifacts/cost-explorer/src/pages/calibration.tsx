@@ -67,6 +67,10 @@ import {
 import { formatUsdPerCall, type RolePricingMap, type RolePricingEntry } from "@/lib/token-pricing";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { IntentCorpusAvailability } from "@/components/intent-corpus-status";
+import {
+  isIntentCorpusUnavailable,
+  overlayRequiresCompleteCorpus,
+} from "@/lib/intent-corpus-safety";
 
 // ---------------------------------------------------------------------------
 // CSV template helpers
@@ -432,6 +436,14 @@ export default function Calibration() {
     isFetching: isFetchingIntents,
   } = useListIntents();
   const intents = intentCorpus?.intents;
+  const referenceIntentKeys = useMemo(
+    () => new Set((intents ?? []).filter((intent) => !intent.isCustom).map((intent) => intent.key)),
+    [intents],
+  );
+  const corpusUnavailable = isIntentCorpusUnavailable(
+    isIntentError,
+    intentCorpus?.customIntentsAvailable,
+  );
   const { data: scenarios, isLoading: scenariosLoading } = useListScenarios();
   const createOverlay = useCreateActualsOverlay();
   const validateOverlay = useValidateActualsOverlay();
@@ -474,6 +486,7 @@ export default function Calibration() {
 
   const handleValidate = async (overrideOverlay?: ActualsOverlayInput) => {
     const overlay = overrideOverlay ?? formToOverlay(form);
+    if (corpusUnavailable && overlayRequiresCompleteCorpus(overlay, referenceIntentKeys)) return null;
     try {
       const result = await validateOverlay.mutateAsync({ data: overlay });
       setValidation(result);
@@ -488,6 +501,7 @@ export default function Calibration() {
 
   const handleSave = async (overrideOverlay?: ActualsOverlayInput) => {
     const overlay = overrideOverlay ?? formToOverlay(form);
+    if (corpusUnavailable && overlayRequiresCompleteCorpus(overlay, referenceIntentKeys)) return;
     const result = await handleValidate(overlay);
     if (!result?.valid) {
       toast({ title: "Fix validation errors before saving", variant: "destructive" });
@@ -626,6 +640,8 @@ export default function Calibration() {
           : null
         : formToOverlay(form);
   const hasAnyData = activeOverlay && overlayMeasuredFields(activeOverlay).length > 0;
+  const activeOverlayNeedsCorpus = overlayRequiresCompleteCorpus(activeOverlay, referenceIntentKeys);
+  const corpusBlocksActiveOverlay = corpusUnavailable && activeOverlayNeedsCorpus;
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -646,6 +662,7 @@ export default function Calibration() {
         warning={intentCorpus?.warning}
         isFetching={isFetchingIntents}
         onRetry={() => { void refetchIntents(); }}
+        unavailableActions="Built-in reference measurements remain available. Custom or unknown intent work pauses until recovery."
       />
 
       {/* Outer tabs: Import & Manage | Drift Analysis */}
@@ -833,6 +850,8 @@ export default function Calibration() {
                                 <button
                                   type="button"
                                   onClick={() => toggleIntent(intent.key)}
+                                  disabled={corpusUnavailable && intent.isCustom}
+                                  title={corpusUnavailable && intent.isCustom ? "Custom intent data is unavailable" : undefined}
                                   className="w-full flex items-center justify-between px-3 py-2 text-left"
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
@@ -853,6 +872,7 @@ export default function Calibration() {
                                         type="number" step="0.01" min="0" max="1"
                                         value={form.intentContainment[intent.key] ?? ""}
                                         onChange={e => setIntentField(intent.key, "containment", e.target.value)}
+                                         disabled={corpusUnavailable && intent.isCustom}
                                         placeholder="flow-class default"
                                         className="bg-background h-8 text-sm"
                                       />
@@ -863,6 +883,7 @@ export default function Calibration() {
                                         type="number" step="0.5" min="0" max="600"
                                         value={form.intentHitlMin[intent.key] ?? ""}
                                         onChange={e => setIntentField(intent.key, "hitl", e.target.value)}
+                                         disabled={corpusUnavailable && intent.isCustom}
                                         placeholder="intent default"
                                         className="bg-background h-8 text-sm"
                                       />
@@ -1240,7 +1261,8 @@ Blank cells skip that field (not treated as zero).`}
                           handleValidate(buildRawLogOverlay(logParseResult.proposedOverlay as ActualsOverlayInput));
                         else handleValidate();
                       }}
-                      disabled={validateOverlay.isPending || !hasAnyData}
+                      disabled={validateOverlay.isPending || !hasAnyData || corpusBlocksActiveOverlay}
+                      title={corpusBlocksActiveOverlay ? "Complete intent data is required for per-intent validation" : undefined}
                       className="flex-1 sm:flex-none"
                     >
                       {validateOverlay.isPending ? "Validating…" : "Validate"}
@@ -1253,7 +1275,8 @@ Blank cells skip that field (not treated as zero).`}
                           handleSave(buildRawLogOverlay(logParseResult.proposedOverlay as ActualsOverlayInput));
                         else handleSave();
                       }}
-                      disabled={createOverlay.isPending || !hasAnyData}
+                      disabled={createOverlay.isPending || !hasAnyData || corpusBlocksActiveOverlay}
+                      title={corpusBlocksActiveOverlay ? "Complete intent data is required for per-intent overlays" : undefined}
                       className="flex-1"
                     >
                       <Plus className="w-4 h-4 mr-1.5" />

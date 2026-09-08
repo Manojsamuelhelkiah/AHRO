@@ -31,6 +31,7 @@
  */
 
 import { intentMap } from "../data/intents";
+import type { Intent } from "../data/types";
 
 export const MIN_ROWS_PER_INTENT = 30;
 
@@ -175,7 +176,14 @@ interface TokenAccum {
 // Main export
 // ---------------------------------------------------------------------------
 
-export function aggregateCallLog(csvText: string): LogParseResult {
+export function aggregateCallLog(
+  csvText: string,
+  extraIntents: readonly Intent[] = [],
+): LogParseResult {
+  const completeIntentMap: Record<string, Intent> = {
+    ...intentMap,
+    ...Object.fromEntries(extraIntents.map((intent) => [intent.key, intent])),
+  };
   const warnings: string[] = [];
 
   const rawLines = csvText.split(/\r?\n/);
@@ -308,14 +316,14 @@ export function aggregateCallLog(csvText: string): LogParseResult {
       resolvedFc = logFc;
     } else if (logFc && !VALID_FLOW_CLASSES.has(logFc)) {
       warnings.push(`Row ${lineIdx + 2}: unrecognised flow_class "${logFc}" — falling back to corpus lookup`);
-      resolvedFc = intentMap[intentKey]?.flowClass ?? null;
+      resolvedFc = completeIntentMap[intentKey]?.flowClass ?? null;
     } else {
       // No flow_class column or blank value — use corpus
-      resolvedFc = intentMap[intentKey]?.flowClass ?? null;
+      resolvedFc = completeIntentMap[intentKey]?.flowClass ?? null;
     }
 
     // Known vs unknown intent
-    const isKnown = !!intentMap[intentKey];
+    const isKnown = !!completeIntentMap[intentKey];
     if (!isKnown) {
       unknownIntentCounts.set(intentKey, (unknownIntentCounts.get(intentKey) ?? 0) + 1);
       // Unknown intents still contribute to token aggregates (role invoking is independent of intent)

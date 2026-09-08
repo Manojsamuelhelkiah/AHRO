@@ -55,6 +55,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FlowDiagram } from "@/components/flow-diagram";
 import { DemarcationSplitStrip, BuildBreakdownTable } from "@/components/build-cost-breakdown";
 import { IntentCorpusAvailability } from "@/components/intent-corpus-status";
+import { isIntentCorpusUnavailable } from "@/lib/intent-corpus-safety";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
@@ -92,6 +93,10 @@ export default function Scenario() {
     isFetching: isFetchingIntents,
   } = useListIntents();
   const intentList = intentCorpus?.intents;
+  const corpusUnavailable = isIntentCorpusUnavailable(
+    isIntentError,
+    intentCorpus?.customIntentsAvailable,
+  );
   const computeRollupMutation = useComputeRollup();
   const importWorkbookMutation = useImportScenarioWorkbook();
   const sensitivityMutation = useComputeSensitivity();
@@ -129,6 +134,7 @@ export default function Scenario() {
   }, [loadedScenario]);
 
   const onSubmit = async (values: FormValues) => {
+    if (corpusUnavailable) return;
     try {
       const body: { inputs: ScenarioInputs; actualsOverlayId?: number } = {
         inputs: toApiInputs(values) as ScenarioInputs,
@@ -150,6 +156,7 @@ export default function Scenario() {
   };
 
   const handleSave = form.handleSubmit(async (values) => {
+    if (corpusUnavailable) return;
     const name = `Scenario – ${values.employees} EEs, ${values.sector}`;
     try {
       if (parsedId) {
@@ -193,6 +200,7 @@ export default function Scenario() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (corpusUnavailable) return;
     try {
       const result = await importWorkbookMutation.mutateAsync({ data: { workbookFile: file } });
       const formValues = fromApiInputs(result.inputs as ScenarioInputs);
@@ -233,6 +241,7 @@ export default function Scenario() {
           warning={intentCorpus?.warning}
           isFetching={isFetchingIntents}
           onRetry={() => { void refetchIntents(); }}
+          unavailableActions="Compute, save, and workbook import are paused to prevent partial intent results. Export and comparison remain available."
         />
 
         <Card className="shadow-sm border-border bg-card flex-1 overflow-hidden flex flex-col">
@@ -832,10 +841,10 @@ export default function Scenario() {
 
               <div className="p-4 border-t border-border bg-muted/20 flex flex-col gap-2">
                 <div className="flex gap-3">
-                  <Button type="submit" className="flex-1 font-semibold" disabled={computeRollupMutation.isPending}>
+                  <Button type="submit" className="flex-1 font-semibold" disabled={computeRollupMutation.isPending || corpusUnavailable} title={corpusUnavailable ? "Complete intent data is required" : undefined}>
                     {computeRollupMutation.isPending ? "Computing…" : <><Play className="w-4 h-4 mr-2" /> {activeOverlayId ? "Compute (Calibrated)" : "Compute"}</>}
                   </Button>
-                  <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollupMutation.isPending}>
+                  <Button type="button" variant="outline" onClick={handleSave} disabled={computeRollupMutation.isPending || corpusUnavailable} title={corpusUnavailable ? "Complete intent data is required" : undefined}>
                     <Save className="w-4 h-4" />
                   </Button>
                 </div>
@@ -844,7 +853,7 @@ export default function Scenario() {
                     <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
                     Excel Shadow
                   </Button>
-                  <Button type="button" variant="outline" size="sm" className="flex-1 text-xs" onClick={() => workbookFileRef.current?.click()} disabled={importWorkbookMutation.isPending} data-testid="button-import-workbook">
+                  <Button type="button" variant="outline" size="sm" className="flex-1 text-xs" onClick={() => workbookFileRef.current?.click()} disabled={importWorkbookMutation.isPending || corpusUnavailable} title={corpusUnavailable ? "Complete intent data is required" : undefined} data-testid="button-import-workbook">
                     <Upload className="w-3.5 h-3.5 mr-1.5" />
                     {importWorkbookMutation.isPending ? "Importing…" : "Import Workbook"}
                   </Button>
