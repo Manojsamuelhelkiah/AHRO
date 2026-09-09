@@ -30,3 +30,4 @@
 - [Shared mailbox tenant attribution](shared-mailbox-tenant-attribution.md) — sender identity is insufficient; require exact case-bound references and quarantine ambiguous matches.
 - [Wouter query navigation](wouter-query-navigation.md) — pathname and search are separate reactive values; preserve both explicitly when replacing URL parameters.
 - [Production safety gates](production-safety-gates.md) — Replit has no post-deploy hook; fail closed in production startup before serving or passing health checks.
+- [Pre-trust startup alerts](pre-trust-startup-alerts.md) — dedupe blocked-publish alerts outside the app DB; database access itself may be the failed safeguard.

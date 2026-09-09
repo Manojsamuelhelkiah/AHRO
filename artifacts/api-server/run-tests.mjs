@@ -46,6 +46,7 @@ const result = spawnSync(
     path.join(dir, "test-db-setup.test.mjs"),
     path.join(dir, "start-production.test.mjs"),
     path.join(dir, "verify-tenant-safeguards.test.mjs"),
+    path.join(dir, "publish-safeguard-alert.test.mjs"),
     ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).map((f) =>
       path.join(dir, f),
     ),
