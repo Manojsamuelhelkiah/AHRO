@@ -360,6 +360,8 @@ export async function sendOutbound(opts: {
   toAddress: string;
   subject?: string | null;
   body: string;
+  /** Optional redacted timeline copy when the delivered body contains an ephemeral secret. */
+  persistedBody?: string;
   sensitive?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
@@ -451,7 +453,7 @@ export async function sendOutbound(opts: {
       audience: "candidate",
       toAddress: masked,
       subject: opts.subject ?? null,
-      body,
+      body: opts.persistedBody ?? body,
       status: result.status,
       failureReason: result.failureReason,
       sensitive: opts.sensitive ?? false,

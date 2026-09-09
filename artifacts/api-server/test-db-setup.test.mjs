@@ -966,7 +966,8 @@ test(
           tag !== "0025_private_scenario_tenancy" &&
           tag !== "0026_preserve_scenario_context" &&
           tag !== "0027_quarantine_scenario_file_ownership" &&
-          tag !== "0028_restore_staged_scenario_context",
+           tag !== "0028_restore_staged_scenario_context" &&
+           tag !== "0030_candidate_portal",
       );
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(),

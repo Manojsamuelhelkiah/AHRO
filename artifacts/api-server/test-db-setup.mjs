@@ -39,6 +39,9 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Reviewed removal of redundant legacy watch-email relationships after the
   // tenant-scoped composite foreign keys are already in place.
   "89e944c53e96b6c118f5976aa711f394bce447d13225b5364898413f6786d484",
+  // Candidate portal is conditional so historical recovery databases without
+  // tenant tables can safely replay the forward migration.
+  "8f113f159680a086acc79b46cac772f7543f1cd72125f14921cc97ec113dc9af",
 ]);
 
 // These errors mean an old migration's individual DDL statement is already

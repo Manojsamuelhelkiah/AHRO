@@ -7,3 +7,4 @@ export * from "./onboarding";
 export * from "./pricing-rate-sets";
 export * from "./pricing-sheets";
 export * from "./enterprise-architecture";
+export * from "./candidate-portal";

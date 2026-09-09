@@ -239,6 +239,13 @@
       "when": 1788887340011,
       "tag": "0029_drop_legacy_watch_email_foreign_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788887340012,
+      "tag": "0030_candidate_portal",
+      "breakpoints": true
     }
   ]
 }

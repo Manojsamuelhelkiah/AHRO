@@ -20,6 +20,7 @@ import {
 import { CaseHeader, CaseHealthStrip, CaseTabs } from './detail/components';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, DocumentsTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
+import { PortalControls } from './detail/portal-controls';
 
 export function CaseDetailPage() {
   const { id } = useParams();
@@ -88,6 +89,7 @@ export function CaseDetailPage() {
       <CaseHeader c={c} caseId={caseId} />
       
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} />
+      <PortalControls caseId={caseId} joiningDate={c.joiningDate} />
       
       <CaseTabs activeTab={activeTab} setTab={setActiveTab} />
       

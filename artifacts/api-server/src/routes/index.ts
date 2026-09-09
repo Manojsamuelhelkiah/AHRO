@@ -15,6 +15,8 @@ import enterpriseArchitectureRouter from "./enterprise-architecture";
 import intentRegistryRouter from "./intent-registry";
 import scenarioFilesRouter from "./scenario-files";
 import organizationsRouter from "./organizations";
+import candidatePublicRouter from "./candidate-public";
+import candidateAdminRouter from "./candidate-admin";
 import { requireAuth } from "../middlewares/require-auth";
 import { requireTenantContext } from "../middlewares/tenant-context";
 
@@ -22,6 +24,7 @@ const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(organizationsRouter);
+router.use(candidatePublicRouter);
 router.use((req, res, next) => {
   // Provider webhooks authenticate themselves and the demo-login bootstrap
   // must remain reachable before a Clerk session exists.
@@ -47,6 +50,7 @@ router.use(sensitivityRouter);
 router.use(pricingSheetsRouter);
 router.use(slideDeckRouter);
 router.use(onboardingRouter);
+router.use(candidateAdminRouter);
 router.use(pricingRateSetsRouter);
 router.use(enterpriseArchitectureRouter);
 router.use(intentRegistryRouter);

@@ -22,6 +22,7 @@ import { SettingsPage } from './pages/settings';
 import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
 import { ClientSetupPage } from './pages/client-setup';
+import { CandidatePage } from './pages/candidate';
 import {
   resolveOrganizationBootstrap,
   type OrganizationBootstrapResponse,
@@ -31,10 +32,15 @@ const queryClient = new QueryClient();
 
 // REQUIRED — resolves the key from window.location.hostname so the same
 // build serves multiple Clerk custom domains.
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
+const initialCandidatePath = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/candidate`
+  .replace(/^$/, '/candidate');
+const isCandidateRoute = window.location.pathname === initialCandidatePath;
+const clerkPubKey = isCandidateRoute
+  ? ''
+  : publishableKeyFromHost(
+      window.location.hostname,
+      import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+    );
 
 // Empty in dev (Clerk hits dev FAPI directly), auto-set in prod.
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
@@ -49,7 +55,7 @@ function stripBase(path: string): string {
     : path;
 }
 
-if (!clerkPubKey) {
+if (!clerkPubKey && !isCandidateRoute) {
   throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
 }
 
@@ -330,6 +336,13 @@ function ClerkProviderWithRoutes() {
 }
 
 function App() {
+  if (isCandidateRoute) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider><CandidatePage /><Toaster /></TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
   return (
     <WouterRouter base={basePath}>
       <ClerkProviderWithRoutes />
