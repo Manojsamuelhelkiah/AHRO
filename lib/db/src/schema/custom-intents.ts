@@ -1,5 +1,4 @@
 import { foreignKey, pgTable, primaryKey, serial, text, integer, real, timestamp, unique } from "drizzle-orm/pg-core";
-import { organizationsTable } from "./organizations";
 
 /**
  * Client-specific intents that extend the fixed 60-intent reference corpus.
@@ -11,7 +10,7 @@ export const customIntentsTable = pgTable("custom_intents", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .references(() => organizationsTable.id),
+    .default("demo"),
   /** URL-safe slug; uniqueness is enforced within the owning organization. */
   key: text("key").notNull(),
   name: text("name").notNull(),
@@ -59,7 +58,7 @@ export const customIntentRoutingLabelsTable = pgTable("custom_intent_routing_lab
   label: text("label").notNull(),
   organizationId: text("organization_id")
     .notNull()
-    .references(() => organizationsTable.id),
+    .default("demo"),
   customIntentId: integer("custom_intent_id").notNull(),
   registryVersion: text("registry_version").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

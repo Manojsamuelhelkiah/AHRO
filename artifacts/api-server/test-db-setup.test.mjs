@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Pool } from "pg";
 import { assertAutomaticMigrationIsSafe } from "./test-db-setup.mjs";
@@ -234,6 +236,93 @@ test("loads every journal migration with a stable hash", async () => {
     assert.match(migration.hash, /^[a-f0-9]{64}$/);
     assert.ok(migration.statements.length > 0);
   }
+});
+
+test("tenant Phase A keeps the publish target data-preserving and legacy-compatible", async () => {
+  const migrationUrl = new URL(
+    "../../lib/db/drizzle/0022_application_organizations_phase_a.sql",
+    import.meta.url,
+  );
+  const phaseASql = await readFile(migrationUrl, "utf8");
+  const applicationOrganizations0021 = await readFile(
+    new URL(
+      "../../lib/db/drizzle/0021_application_organizations.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.equal(
+    createHash("sha256").update(applicationOrganizations0021).digest("hex"),
+    "877e19bb3df8758688ab44039bd0196eeaa4e51ff1b1587ac9c19366de1a5adf",
+    "0021 must remain byte-for-byte unchanged",
+  );
+  assert.doesNotMatch(
+    phaseASql,
+    /^\s*(?:DELETE|TRUNCATE|UPDATE|INSERT)\b/im,
+  );
+
+  for (const table of [
+    "scenarios",
+    "custom_intents",
+    "actuals_overlays",
+    "flow_overrides",
+    "onb_cases",
+    "onb_events",
+    "onb_approvals",
+    "onb_communications",
+    "onb_system_checks",
+    "onb_settings",
+    "onb_connectors",
+    "onb_effect_journal",
+    "onb_documents",
+    "onb_call_slots",
+    "onb_voice_sessions",
+    "onb_watch_emails",
+    "onb_employee_records",
+    "onb_guardrail_events",
+    "custom_intent_routing_labels",
+    "pricing_rate_sets",
+    "pricing_sheets",
+    "ea_assessments",
+  ]) {
+    assert.match(
+      phaseASql,
+      new RegExp(
+        `ALTER TABLE "${table}" ALTER COLUMN "organization_id" SET DEFAULT 'demo'`,
+      ),
+    );
+  }
+
+  for (const phaseAIdentity of [
+    `PRIMARY KEY ("organization_id", "label")`,
+    `PRIMARY KEY ("organization_id", "key")`,
+    `PRIMARY KEY ("organization_id", "logical_operation_key")`,
+    `PRIMARY KEY ("organization_id", "token")`,
+    `"organization_id", "idempotency_key"`,
+    `"organization_id", "external_message_id"`,
+    `"organization_id", "case_id", "system"`,
+    `"organization_id", "case_id", "key"`,
+    `"organization_id", "dedupe_key"`,
+    `"organization_id", "call_sid"`,
+    `"organization_id", "gmail_message_id"`,
+  ]) {
+    assert.ok(
+      applicationOrganizations0021.includes(phaseAIdentity) ||
+        phaseASql.includes(phaseAIdentity),
+      `missing Phase A identity ${phaseAIdentity}`,
+    );
+  }
+
+  assert.doesNotMatch(phaseASql, /ADD CONSTRAINT "[^"]*organization[^"]*_fk"/i);
+  assert.match(
+    phaseASql,
+    /DROP CONSTRAINT IF EXISTS "onb_watch_emails_organization_case_fk"/,
+  );
+  assert.match(
+    phaseASql,
+    /DROP CONSTRAINT IF EXISTS "onb_watch_emails_organization_check_fk"/,
+  );
 });
 
 const hasDb = Boolean(process.env.DATABASE_URL);

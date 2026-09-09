@@ -1,7 +1,6 @@
 import { jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { organizationsTable } from "./organizations";
 
 export type PricingSheetInputs = {
   clientsInCohort: number;
@@ -32,7 +31,7 @@ export const pricingSheetsTable = pgTable("pricing_sheets", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .references(() => organizationsTable.id),
+    .default("demo"),
   name: text("name").notNull(),
   inputs: jsonb("inputs").$type<PricingSheetInputs>().notNull(),
   recommendation: jsonb("recommendation")

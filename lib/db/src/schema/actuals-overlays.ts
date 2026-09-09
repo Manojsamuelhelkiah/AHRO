@@ -1,5 +1,4 @@
 import { pgTable, serial, text, jsonb, timestamp } from "drizzle-orm/pg-core";
-import { organizationsTable } from "./organizations";
 
 /**
  * Persisted calibration actuals overlays. Each overlay contains measured
@@ -11,7 +10,7 @@ export const actualsOverlaysTable = pgTable("actuals_overlays", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .references(() => organizationsTable.id),
+    .default("demo"),
   /** Human-readable label, e.g. "Acme Q1 2025 production logs". */
   clientLabel: text("client_label"),
   /** ISO date string for the start of the observed period. */

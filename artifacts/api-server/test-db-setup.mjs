@@ -21,6 +21,9 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Security-reviewed organization backfill and tenant-constraint replacement.
   // The exact hash pins the approved migration; any edit fails closed.
   "877e19bb3df8758688ab44039bd0196eeaa4e51ff1b1587ac9c19366de1a5adf",
+  // Reviewed development-only transition from final 0021 to the temporary,
+  // publish-safe Phase A shape. It changes constraints/defaults but no rows.
+  "ad9006a05088bdeda2dfc687bad1de46453040064e25a1ce7c0bae4781cb136a",
 ]);
 
 // These errors mean an old migration's individual DDL statement is already

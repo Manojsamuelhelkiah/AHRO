@@ -17,6 +17,27 @@ function hashJoinCode(value: string): string {
   return createHash("sha256").update(value.trim().toUpperCase()).digest("hex");
 }
 
+const DEMO_ORGANIZATION = {
+  id: DEMO_ORGANIZATION_ID,
+  name: "Demo Organization",
+  slug: "demo",
+  joinCodeHash:
+    "4ff006ca6b88e752f08cb7881714505ceb3d2079eea432acfda8e158e0d1d82e",
+  createdByUserId: "system",
+} as const;
+
+/**
+ * Phase A deliberately publishes tenant columns before their organization
+ * foreign keys. Create the well-known demo row only when a user explicitly
+ * asks to join it; this is request data bootstrap, never startup/deploy DDL.
+ */
+export async function ensureDemoOrganization(): Promise<void> {
+  await db
+    .insert(organizationsTable)
+    .values(DEMO_ORGANIZATION)
+    .onConflictDoNothing({ target: organizationsTable.id });
+}
+
 function slugify(value: string): string {
   return value
     .normalize("NFKD")
@@ -109,6 +130,7 @@ router.post("/organizations/join", async (req, res, next): Promise<void> => {
     return;
   }
   try {
+    if (demo) await ensureDemoOrganization();
     const [organization] = await db
       .select({
         id: organizationsTable.id,

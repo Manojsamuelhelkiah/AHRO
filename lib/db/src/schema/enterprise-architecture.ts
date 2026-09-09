@@ -11,7 +11,6 @@ import {
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { organizationsTable } from "./organizations";
 
 export type EaAssessmentStatus = "active" | "archived";
 export type EaPhase =
@@ -34,7 +33,7 @@ export const eaAssessmentsTable = pgTable(
     id: serial("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organizationsTable.id),
+      .default("demo"),
     ownerUserId: text("owner_user_id").notNull(),
     name: text("name").notNull(),
     clientName: text("client_name").notNull(),
