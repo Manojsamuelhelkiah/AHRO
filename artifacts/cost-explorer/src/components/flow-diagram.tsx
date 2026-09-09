@@ -15,7 +15,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import type { FlowStep } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Clock, Database } from "lucide-react";
+import { User, Cog, TableProperties, Send, ArrowDownToLine, DollarSign, Clock, Database, ChevronDown, ShieldCheck } from "lucide-react";
+import { deriveProcessBranchMetrics, deriveProcessMapping, type BpmnLane } from "@/lib/process-mapping";
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 
@@ -59,6 +60,8 @@ export interface FlowDiagramAnnotations {
   usingDefaults?: boolean;
 }
 
+export type FlowDiagramView = "technical" | "bpmn" | "sipoc";
+
 export interface FlowDiagramProps {
   steps: FlowStep[];
   fcKey?: string;
@@ -68,6 +71,10 @@ export interface FlowDiagramProps {
   /** Called when a step node is clicked (full mode) */
   onStepClick?: (stepId: string | null) => void;
   expandedStepId?: string | null;
+  /** Active view mode */
+  viewMode?: FlowDiagramView;
+  onViewModeChange?: (view: FlowDiagramView) => void;
+  showSwitcher?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -169,15 +176,16 @@ export function FlowDiagramMini({ steps }: { steps: FlowStep[] }) {
 
 // ─── Full diagram ─────────────────────────────────────────────────────────────
 
-export function FlowDiagram({ steps, annotations, mini, onStepClick, expandedStepId }: FlowDiagramProps) {
+export function FlowDiagramTechnical({ steps, annotations, mini, onStepClick, expandedStepId }: FlowDiagramProps) {
   if (mini) return <FlowDiagramMini steps={steps} />;
 
   const ann = annotations ?? {};
-  const adoptFrac    = ann.adoptionFraction    ?? 0.40;
-  const containFrac  = ann.containmentFraction ?? 0.85;
-  const hitlFrac     = ann.hitlSamplingFraction ?? 0.10;
-  const annualTxn    = ann.annualTransactions;
-  const usingDef     = ann.usingDefaults ?? true;
+  const metrics = deriveProcessBranchMetrics(ann);
+  const adoptFrac = metrics.adoptionFraction;
+  const containFrac = metrics.containmentFraction;
+  const hitlFrac = metrics.hitlSamplingFraction;
+  const annualTxn = ann.annualTransactions;
+  const usingDef = ann.usingDefaults ?? true;
   const hasHitl      = steps.some(s => s.human);
 
   // ── Compute x positions ───────────────────────────────────────────────────
@@ -209,12 +217,12 @@ export function FlowDiagram({ steps, annotations, mini, onStepClick, expandedSte
   const totalH = (hasBranches ? BRANCH_Y + OH / 2 + PAD_B : ROW_Y + NH / 2 + PAD_B);
 
   // ── Volume labels on edges ────────────────────────────────────────────────
-  const adoptedVol  = annualTxn !== undefined ? Math.round(annualTxn * adoptFrac) : null;
-  const manualVol   = annualTxn !== undefined ? Math.round(annualTxn * (1 - adoptFrac)) : null;
-  const containedVol = adoptedVol !== null ? Math.round(adoptedVol * containFrac) : null;
-  const fallbackVol  = adoptedVol !== null ? Math.round(adoptedVol * (1 - containFrac)) : null;
-  const hitlVol      = containedVol !== null ? Math.round(containedVol * hitlFrac) : null;
-  const autoVol      = containedVol !== null && hitlVol !== null ? containedVol - hitlVol : containedVol;
+  const adoptedVol = metrics.adoptedTransactions;
+  const manualVol = metrics.manualTransactions;
+  const containedVol = metrics.containedTransactions;
+  const fallbackVol = metrics.fallbackTransactions;
+  const hitlVol = metrics.humanReviewTransactions;
+  const autoVol = metrics.automatedTransactions;
 
   // ── Gate centers ──────────────────────────────────────────────────────────
   const adoptCX = adoptX + GW / 2;
@@ -493,6 +501,315 @@ export function FlowDiagram({ steps, annotations, mini, onStepClick, expandedSte
         {/* ── Auto outcome ── */}
         <OutcomePill x={autoOutcomeX} y={ROW_Y} label="✓ Automated" sublabel={autoLabel ?? "benefit realised"} col="green" />
       </svg>
+    </div>
+  );
+}
+
+// ─── BPMN Diagram ─────────────────────────────────────────────────────────────
+
+export function FlowDiagramBpmn({ steps, annotations, onStepClick, expandedStepId }: FlowDiagramProps) {
+  const { bpmnNodes } = deriveProcessMapping(steps);
+  const ann = annotations ?? {};
+  const metrics = deriveProcessBranchMetrics(ann);
+  const adoptFrac = metrics.adoptionFraction;
+  const containFrac = metrics.containmentFraction;
+  const hitlFrac = metrics.hitlSamplingFraction;
+  const annualTxn = ann.annualTransactions;
+  const usingDef = ann.usingDefaults ?? true;
+  const hasHitl      = steps.some(s => s.human);
+
+  const LANES: BpmnLane[] = ["Employee", "Digital Service", "HR Operations", "Specialist"];
+  const LANE_H = 110;
+  const TOTAL_H = LANES.length * LANE_H;
+
+  const LEFT_MARGIN = 36;
+  let x = LEFT_MARGIN + PAD_L;
+
+  const startX = x; x += 40 + GAP;
+  const adoptX = x; x += GW + GAP;
+  const stepXs = bpmnNodes.map(() => { const sx = x; x += NW + GAP; return sx; });
+  const containX = x; x += GW + GAP;
+
+  let hitlGateX: number | null = null;
+  let hitlTaskX: number | null = null;
+  if (hasHitl) {
+    hitlGateX = x; x += GW + GAP;
+    hitlTaskX = x; x += NW + GAP;
+  }
+  const endX = x;
+  const TOTAL_W = endX + 60 + PAD_R;
+
+  const getLaneY = (lane: BpmnLane) => LANES.indexOf(lane) * LANE_H + LANE_H / 2;
+  const gateLane: BpmnLane = "Digital Service";
+  const gateY = getLaneY(gateLane);
+
+  const startCY = getLaneY("Employee");
+  const adoptCY = gateY;
+  const containCY = gateY;
+  const hitlCY = hitlGateX ? getLaneY("HR Operations") : null;
+  const autoEndCY = getLaneY("Employee");
+  const manualEndCY = getLaneY("HR Operations");
+  const fallbackEndCY = getLaneY("HR Operations");
+
+  const adoptLabel = metrics.adoptedTransactions === null
+    ? pct(adoptFrac)
+    : `${pct(adoptFrac)} · ${fmtN(metrics.adoptedTransactions)} txn`;
+  const notAdoptLabel = metrics.manualTransactions === null
+    ? pct(1 - adoptFrac)
+    : `${pct(1 - adoptFrac)} · ${fmtN(metrics.manualTransactions)} txn`;
+  const containLabel = metrics.containedTransactions === null
+    ? pct(containFrac)
+    : `${pct(containFrac)} · ${fmtN(metrics.containedTransactions)} txn`;
+  const fallbackLabel = metrics.fallbackTransactions === null
+    ? pct(1 - containFrac)
+    : `${pct(1 - containFrac)} · ${fmtN(metrics.fallbackTransactions)} txn`;
+  const hitlLabel = metrics.humanReviewTransactions === null
+    ? pct(hitlFrac)
+    : `${pct(hitlFrac)} · ${fmtN(metrics.humanReviewTransactions)} txn`;
+  const autoLabel = metrics.automatedTransactions === null
+    ? pct(1 - hitlFrac)
+    : `${fmtN(metrics.automatedTransactions)} txn`;
+
+  function BCurve({ x1, y1, x2, y2, color="#94a3b8", label, dashed, elbow }: any) {
+    let d = "";
+    if (elbow === "up-right") {
+      d = `M ${x1} ${y1} L ${x1} ${y2} L ${x2-8} ${y2}`;
+    } else if (Math.abs(y1 - y2) < 2) {
+      d = `M ${x1} ${y1} L ${x2-8} ${y2}`;
+    } else if (Math.abs(x1 - x2) < 2) {
+      d = `M ${x1} ${y1} L ${x2} ${y2 > y1 ? y2-8 : y2+8}`;
+    } else {
+      d = `M ${x1} ${y1} C ${x1 + 30} ${y1}, ${x2 - 30} ${y2}, ${x2-8} ${y2}`;
+    }
+
+    return (
+      <g>
+        <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeDasharray={dashed ? "4 3" : undefined} markerEnd={`url(#arr-${color.replace("#","")})`} />
+        {label && (
+          <text x={(x1+x2)/2} y={Math.abs(x1 - x2) < 2 ? (y1+y2)/2 : (y1+y2)/2 - 6} textAnchor="middle" fontSize={9} fill={color} fontFamily="Inter, sans-serif" fontWeight="500">
+            {label}
+          </text>
+        )}
+      </g>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border bg-background/50">
+      {usingDef && (
+        <div className="px-4 pt-3 pb-0 flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground border-muted-foreground/30 bg-muted/40">
+            global defaults — enter client data in Automation Fidelity to update
+          </Badge>
+        </div>
+      )}
+      <svg width={TOTAL_W} height={TOTAL_H} viewBox={`0 0 ${TOTAL_W} ${TOTAL_H}`} aria-label="BPMN Process Diagram" role="img" style={{ minWidth: TOTAL_W, display: "block" }}>
+        <defs>
+          <ArrowDef id="arr-64748b" color="#64748b" />
+          <ArrowDef id="arr-94a3b8" color="#94a3b8" />
+          <ArrowDef id="arr-3b82f6" color="#3b82f6" />
+          <ArrowDef id="arr-f59e0b" color="#f59e0b" />
+          <ArrowDef id="arr-10b981" color="#10b981" />
+        </defs>
+
+        {LANES.map((lane, i) => (
+          <g key={lane}>
+            <rect x={0} y={i * LANE_H} width={TOTAL_W} height={LANE_H} fill={i % 2 === 0 ? "var(--color-slate-50)" : "transparent"} stroke="currentColor" className="stroke-border" strokeWidth={1} />
+            <text transform={`rotate(-90 20 ${i * LANE_H + LANE_H/2})`} x={20} y={i * LANE_H + LANE_H/2} textAnchor="middle" fontSize={9} fill="currentColor" fontFamily="Inter, sans-serif" fontWeight="700" letterSpacing="0.05em" className="uppercase text-muted-foreground">
+              {lane}
+            </text>
+          </g>
+        ))}
+
+        {/* Start event and initial message flow */}
+        <circle cx={startX + 14} cy={startCY} r={14} fill="#f0fdf4" stroke="#10b981" strokeWidth={2} />
+        <text x={startX + 14} y={startCY + 26} textAnchor="middle" fontSize={9} fill="#065f46" fontWeight="600">Need raised</text>
+
+        <BCurve x1={startX + 28} y1={startCY} x2={adoptX} y2={adoptCY} color="#64748b" label="request message" dashed />
+
+        {/* Adopt Gate */}
+        <polygon points={`${adoptX + GW/2},${adoptCY - GH/2} ${adoptX + GW},${adoptCY} ${adoptX + GW/2},${adoptCY + GH/2} ${adoptX},${adoptCY}`} fill="#fff" stroke="#f59e0b" strokeWidth={1.5} />
+        <text x={adoptX + GW/2} y={adoptCY - GH/2 - 6} textAnchor="middle" fontSize={8} fill="#b45309" fontWeight="600">Adopt?</text>
+
+        <BCurve x1={adoptX + GW/2} y1={adoptCY + GH/2} x2={adoptX + GW/2} y2={manualEndCY - 16} color="#94a3b8" label={notAdoptLabel} dashed />
+        <circle cx={adoptX + GW/2} cy={manualEndCY} r={16} fill="#fff" stroke="#ef4444" strokeWidth={4} />
+        <text x={adoptX + GW/2} y={manualEndCY + 26} textAnchor="middle" fontSize={8} fill="#991b1b">Manual</text>
+
+        {bpmnNodes.length > 0 && (
+          <BCurve x1={adoptX + GW} y1={adoptCY} x2={stepXs[0]} y2={getLaneY(bpmnNodes[0].lane)} color="#3b82f6" label={adoptLabel} />
+        )}
+
+        {bpmnNodes.map((node, idx) => {
+          const sx = stepXs[idx];
+          const cy = getLaneY(node.lane);
+          const isSelected = expandedStepId === node.id;
+          const clickable = !!onStepClick;
+          const truncLabel = node.label.length > 18 ? node.label.substring(0, 17) + "…" : node.label;
+
+          return (
+            <g key={node.id} style={{ cursor: clickable ? "pointer" : "default" }} onClick={() => clickable && onStepClick?.(isSelected ? null : node.id)}>
+              {isSelected && <rect x={sx-3} y={cy - NH/2 - 3} width={NW+6} height={NH+6} rx={9} fill="none" stroke="#3b82f6" strokeWidth={2} opacity={0.5} />}
+              <rect x={sx} y={cy - NH/2} width={NW} height={NH} rx={6} fill={isSelected ? "#eff6ff" : "#fff"} stroke="#3b82f6" strokeWidth={1.5} />
+
+               {node.taskType === "user" && <User x={sx + 8} y={cy - NH/2 + 8} width={14} height={14} className="text-blue-600 opacity-70" />}
+               {node.taskType === "service" && <Cog x={sx + 8} y={cy - NH/2 + 8} width={14} height={14} className="text-blue-600 opacity-70" />}
+               {node.taskType === "business-rule" && <TableProperties x={sx + 8} y={cy - NH/2 + 8} width={14} height={14} className="text-blue-600 opacity-70" />}
+               {node.taskType === "send" && <Send x={sx + 8} y={cy - NH/2 + 8} width={14} height={14} className="text-blue-600 opacity-70" />}
+               {node.taskType === "receive" && <ArrowDownToLine x={sx + 8} y={cy - NH/2 + 8} width={14} height={14} className="text-blue-600 opacity-70" />}
+
+              <text x={sx + NW/2} y={cy + 4} textAnchor="middle" fontSize={10} fill="#0f172a" fontWeight="500">{truncLabel}</text>
+
+              {idx < bpmnNodes.length - 1 ? (
+                <BCurve x1={sx + NW} y1={cy} x2={stepXs[idx+1]} y2={getLaneY(bpmnNodes[idx+1].lane)} color="#3b82f6" />
+              ) : (
+                <BCurve x1={sx + NW} y1={cy} x2={containX} y2={containCY} color="#3b82f6" />
+              )}
+            </g>
+          );
+        })}
+
+        {/* Contain Gate */}
+        <polygon points={`${containX + GW/2},${containCY - GH/2} ${containX + GW},${containCY} ${containX + GW/2},${containCY + GH/2} ${containX},${containCY}`} fill="#fff" stroke="#f59e0b" strokeWidth={1.5} />
+        <text x={containX + GW/2} y={containCY - GH/2 - 6} textAnchor="middle" fontSize={8} fill="#b45309" fontWeight="600">Contain?</text>
+
+        <BCurve x1={containX + GW/2} y1={containCY + GH/2} x2={containX + GW/2} y2={fallbackEndCY - 16} color="#94a3b8" label={fallbackLabel} dashed />
+        <circle cx={containX + GW/2} cy={fallbackEndCY} r={16} fill="#fff" stroke="#ef4444" strokeWidth={4} />
+        <text x={containX + GW/2} y={fallbackEndCY + 26} textAnchor="middle" fontSize={8} fill="#991b1b">Fallback</text>
+
+        {hitlGateX && hitlTaskX && hitlCY !== null ? (
+          <g>
+            <BCurve x1={containX + GW} y1={containCY} x2={hitlGateX} y2={hitlCY} color="#10b981" label={containLabel} />
+
+            <polygon points={`${hitlGateX + GW/2},${hitlCY - GH/2} ${hitlGateX + GW},${hitlCY} ${hitlGateX + GW/2},${hitlCY + GH/2} ${hitlGateX},${hitlCY}`} fill="#fff" stroke="#f59e0b" strokeWidth={1.5} />
+            <text x={hitlGateX + GW/2} y={hitlCY - GH/2 - 6} textAnchor="middle" fontSize={8} fill="#b45309" fontWeight="600">Sample?</text>
+
+            <BCurve x1={hitlGateX + GW/2} y1={hitlCY - GH/2} x2={endX} y2={autoEndCY} color="#10b981" label={autoLabel} elbow="up-right" />
+
+            <BCurve x1={hitlGateX + GW} y1={hitlCY} x2={hitlTaskX} y2={hitlCY} color="#f59e0b" label={hitlLabel} />
+            <rect x={hitlTaskX} y={hitlCY - NH/2} width={NW} height={NH} rx={6} fill="#fffbeb" stroke="#f59e0b" strokeWidth={1.5} />
+            <User x={hitlTaskX + 8} y={hitlCY - NH/2 + 8} width={14} height={14} className="text-amber-600 opacity-70" />
+            <text x={hitlTaskX + NW/2} y={hitlCY + 4} textAnchor="middle" fontSize={10} fill="#92400e" fontWeight="500">HITL Review</text>
+
+            <BCurve x1={hitlTaskX + NW} y1={hitlCY} x2={endX} y2={autoEndCY} color="#10b981" />
+          </g>
+        ) : (
+          <BCurve x1={containX + GW} y1={containCY} x2={endX} y2={autoEndCY} color="#10b981" label={containLabel} />
+        )}
+
+        {/* Auto End */}
+        <circle cx={endX + 16} cy={autoEndCY} r={16} fill="#f0fdf4" stroke="#10b981" strokeWidth={4} />
+        <text x={endX + 16} y={autoEndCY + 26} textAnchor="middle" fontSize={9} fill="#065f46" fontWeight="600">Resolved</text>
+      </svg>
+      <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-border px-4 py-3 text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1.5"><span className="h-px w-6 bg-blue-500" /> Sequence flow</span>
+        <span className="flex items-center gap-1.5"><span className="w-6 border-t border-dashed border-slate-500" /> Message / exception flow</span>
+        <span>Rectangle: task · diamond: gateway · circle: event</span>
+        {annualTxn !== undefined && <span className="font-mono">{fmtN(annualTxn)} annual transactions</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── SIPOC Diagram ────────────────────────────────────────────────────────────
+
+export function FlowDiagramSipoc({ steps }: FlowDiagramProps) {
+  const { sipocRows } = deriveProcessMapping(steps);
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
+      <table className="w-full text-left text-sm whitespace-nowrap">
+        <thead className="bg-muted/40 border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+          <tr>
+            <th className="p-4 font-semibold">S<span className="hidden sm:inline">upplier</span></th>
+            <th className="p-4 font-semibold">I<span className="hidden sm:inline">nput</span></th>
+            <th className="p-4 font-semibold">P<span className="hidden sm:inline">rocess</span></th>
+            <th className="p-4 font-semibold">O<span className="hidden sm:inline">utput</span></th>
+            <th className="p-4 font-semibold">C<span className="hidden sm:inline">ustomer</span></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {sipocRows.map((row) => (
+            <tr key={row.stageId} className="hover:bg-muted/20 transition-colors">
+              <td className="p-4 text-muted-foreground text-xs">{row.supplier}</td>
+              <td className="p-4 font-medium text-foreground text-xs">{row.input}</td>
+              <td className="p-4">
+                <div className="font-semibold text-primary">{row.process}</div>
+                <div className="text-[10px] uppercase text-muted-foreground mt-0.5 tracking-wider">{row.evidence.stage}</div>
+              </td>
+              <td className="p-4 font-medium text-foreground text-xs">
+                {row.output}
+                {row.evidence.benefits[0] && <div className="mt-1 max-w-48 whitespace-normal text-[10px] font-normal text-emerald-700 dark:text-emerald-400">Value: {row.evidence.benefits[0].label}</div>}
+              </td>
+              <td className="p-4 text-muted-foreground text-xs">{row.customer}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── FlowDiagram Switcher ─────────────────────────────────────────────────────
+
+export function FlowDiagram(props: FlowDiagramProps) {
+  if (props.mini) return <FlowDiagramTechnical {...props} mini />;
+
+  const [internalMode, setInternalMode] = useState<FlowDiagramView>("bpmn");
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const mapping = deriveProcessMapping(props.steps);
+  const mode = props.viewMode ?? internalMode;
+  const setMode = props.onViewModeChange ?? setInternalMode;
+  const showSwitcher = props.showSwitcher ?? true;
+
+  return (
+    <div className="space-y-3">
+      {showSwitcher && (
+         <div className="flex justify-start sm:justify-end">
+           <div className="inline-flex max-w-full bg-muted/40 p-1 rounded-md border border-border shadow-sm" role="tablist" aria-label="Process view">
+             <button type="button" role="tab" aria-selected={mode === "technical"} onClick={() => setMode("technical")} className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-all duration-200 ${mode === "technical" ? "bg-background shadow-sm text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`}>Technical</button>
+             <button type="button" role="tab" aria-selected={mode === "bpmn"} onClick={() => setMode("bpmn")} className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-all duration-200 ${mode === "bpmn" ? "bg-background shadow-sm text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`}>BPMN</button>
+             <button type="button" role="tab" aria-selected={mode === "sipoc"} onClick={() => setMode("sipoc")} className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-all duration-200 ${mode === "sipoc" ? "bg-background shadow-sm text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`}>SIPOC</button>
+          </div>
+        </div>
+      )}
+
+      {mode === "technical" && <FlowDiagramTechnical {...props} />}
+      {mode === "bpmn" && <FlowDiagramBpmn {...props} />}
+      {mode === "sipoc" && <FlowDiagramSipoc {...props} />}
+      {mode !== "technical" && (
+        <div className="rounded-lg border border-border bg-muted/20">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setEvidenceOpen((open) => !open)}
+            aria-expanded={evidenceOpen}
+          >
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              {mapping.validation.valid ? "Methodology checks passed" : `${mapping.validation.issues.length} mapping issue(s)`}
+              {mapping.usedFallbacks && " · business fallback labels used"}
+            </span>
+            <span className="flex items-center gap-1">Evidence & technical details <ChevronDown className={`h-3.5 w-3.5 transition-transform ${evidenceOpen ? "rotate-180" : ""}`} /></span>
+          </button>
+          {evidenceOpen && (
+            <div className="grid gap-3 border-t border-border px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+              <div><span className="font-semibold">Trigger:</span> {mapping.trigger || "Not derivable"}</div>
+              <div><span className="font-semibold">Outcomes:</span> {mapping.outcomes.join("; ") || "Not derivable"}</div>
+              <div><span className="font-semibold">Ownership:</span> {Array.from(new Set(mapping.bpmnNodes.map((node) => node.lane))).join(", ")}</div>
+              <div><span className="font-semibold">Source:</span> {props.steps.length} canonical technical steps; costs and benefits unchanged</div>
+              <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+                {mapping.bpmnNodes.map((node) => (
+                  <div key={node.id} className="grid gap-1 rounded border border-border bg-background px-3 py-2 sm:grid-cols-[1fr_1fr_2fr]">
+                    <span className="font-medium">{node.label}</span>
+                    <span>{node.evidence.agents.join(", ") || "System-managed"}</span>
+                    <span className="font-mono text-[10px]">{node.evidence.systems.map((system) => `${system.systemKey} (${system.actions.join("/")})`).join(", ") || "No external system"} · components {node.evidence.componentRefs.join(", ") || "none"}</span>
+                  </div>
+                ))}
+              </div>
+              {mapping.validation.issues.map((issue) => <p key={issue} className="text-destructive sm:col-span-2 lg:col-span-4">{issue}</p>)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

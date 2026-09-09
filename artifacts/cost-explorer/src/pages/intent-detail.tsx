@@ -52,7 +52,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AnimatePresence } from "framer-motion";
-import { FlowDiagram, FlowStepDetail } from "@/components/flow-diagram";
+import { FlowDiagram, FlowStepDetail, type FlowDiagramView } from "@/components/flow-diagram";
 import { CustomIntentRoutingEditor } from "@/components/custom-intent-routing-editor";
 import { IntentCorpusStatus } from "@/components/intent-corpus-status";
 const FLOW_CLASSES = [
@@ -77,6 +77,7 @@ export default function IntentDetail() {
   const intentKey = params?.key;
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
   const [showDiagram, setShowDiagram] = useState(true);
+  const [processView, setProcessView] = useState<FlowDiagramView>("bpmn");
 
   const {
     data: corpus,
@@ -88,9 +89,14 @@ export default function IntentDetail() {
   } = useListIntents();
   const intents = corpus?.intents;
   const { data: flowClasses, isLoading: isLoadingFlows } = useListFlowClasses();
+  const { data: allFlowOverrides } = useListFlowOverrides();
 
   const intent = intents?.find((i) => i.key === intentKey);
-  const flowClass = flowClasses?.find((fc) => fc.key === intent?.flowClass);
+  const activeFlowOverride = (allFlowOverrides ?? [])
+    .filter((override) => override.intentKey === intentKey && override.status === "approved")
+    .sort((a, b) => b.version - a.version)[0];
+  const effectiveFlowClassKey = activeFlowOverride?.flowClass ?? intent?.flowClass;
+  const flowClass = flowClasses?.find((fc) => fc.key === effectiveFlowClassKey);
   const isCustom = intent ? (intent as { isCustom?: boolean }).isCustom === true : false;
 
   const handleStepClick = (stepId: string | null) => {
@@ -236,9 +242,11 @@ export default function IntentDetail() {
           <div className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-primary" />
             <h2 className="text-2xl font-bold tracking-tight">Flow Tracer</h2>
-            {isCustom && (
-              <span className="text-sm text-muted-foreground">— inherited from {intent.flowClass} template</span>
-            )}
+            <span className="text-sm text-muted-foreground">
+              — {activeFlowOverride?.flowClass
+                ? `approved override v${activeFlowOverride.version}: ${effectiveFlowClassKey}`
+                : `${isCustom ? "inherited from " : ""}${effectiveFlowClassKey} template`}
+            </span>
           </div>
           <Button
             variant="ghost"
@@ -269,9 +277,11 @@ export default function IntentDetail() {
                   annotations={{ usingDefaults: true }}
                   onStepClick={handleStepClick}
                   expandedStepId={expandedStepId}
+                  viewMode={processView}
+                  onViewModeChange={setProcessView}
                 />
                 <AnimatePresence>
-                  {expandedStep && (
+                  {processView === "technical" && expandedStep && (
                     <FlowStepDetail key={expandedStep.id} step={expandedStep} />
                   )}
                 </AnimatePresence>
@@ -279,7 +289,7 @@ export default function IntentDetail() {
             )}
 
             {/* Compact step list */}
-            <div>
+            {processView === "technical" && <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">All Steps</h3>
               <div className="space-y-2">
                 {flowClass.steps.map((step, idx) => {
@@ -328,7 +338,7 @@ export default function IntentDetail() {
                   );
                 })}
               </div>
-            </div>
+            </div>}
           </div>
         )}
       </div>
