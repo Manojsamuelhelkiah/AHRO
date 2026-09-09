@@ -393,6 +393,7 @@ export async function sendOutbound(opts: {
     opts.channel === "email" && candidateEmail
       ? addCandidateReplyReference(opts.body)
       : opts.body;
+  const deliveredBodyHash = createHash("sha256").update(body).digest("hex");
   let subject = opts.subject ?? null;
   const masked =
     opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress);
@@ -412,7 +413,7 @@ export async function sendOutbound(opts: {
       audience: "candidate",
       toAddress: masked,
       subject: opts.subject ?? null,
-      body,
+      body: opts.persistedBody ?? body,
       status: "sending",
       failureReason: null,
       sensitive: opts.sensitive ?? false,
@@ -427,13 +428,14 @@ export async function sendOutbound(opts: {
     if (!payload || payload.caseId !== opts.caseId || payload.channel !== opts.channel) {
       throw new Error("Communication idempotency key is bound to another payload");
     }
-    body = payload.body;
+    if (opts.persistedBody === undefined) body = payload.body;
     subject = payload.subject;
     const argumentsHash = createHash("sha256").update(JSON.stringify({
       channel: payload.channel,
       toAddress: payload.toAddress,
       subject: payload.subject,
       body: payload.body,
+      ...(opts.persistedBody !== undefined ? { deliveredBodyHash } : {}),
     })).digest("hex");
     const identity = {
       logicalOperationKey,

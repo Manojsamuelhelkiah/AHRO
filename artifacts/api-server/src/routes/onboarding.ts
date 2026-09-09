@@ -69,6 +69,11 @@ import {
   CANDIDATE_LINK_RETENTION_DAYS_KEY,
 } from "../lib/onboarding/settings";
 import { logisticsForCase, validateDay1LogisticsDefault } from "../lib/onboarding/logistics-defaults";
+import {
+  AUTOMATED_PORTAL_EMAIL_KEY,
+  issueCandidatePortalLink,
+  portalPublicBase,
+} from "../lib/onboarding/portal-link-issuance";
 import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas, refreshDemoAllowlist } from "../lib/onboarding/demo-volunteers";
 import { runApproverInboxTick } from "../lib/onboarding/approver-email";
 import { GUARDRAILS, GUARDRAIL_CATEGORIES, getGuardrail, recordGuardrailEvent } from "../lib/onboarding/guardrails";
@@ -439,6 +444,20 @@ router.post("/onboarding/cases", async (req, res, next) => {
       candidateEmailAuthorizedAt: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? new Date() : null,
       candidateEmailAuthorizedBy: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? req.authUserId! : null,
     }, getOrganizationId(req));
+    if (row.candidateEmailAuthorizedAt) {
+      try {
+        await issueCandidatePortalLink({
+          organizationId: getOrganizationId(req),
+          caseId: row.id,
+          issuedBy: req.authUserId!,
+          publicBase: portalPublicBase(req),
+          sendEmail: true,
+          idempotencyKey: AUTOMATED_PORTAL_EMAIL_KEY(row.id),
+        });
+      } catch (error) {
+        console.error(`[candidate-portal] automatic provisioning failed for case ${row.id}:`, error);
+      }
+    }
     res.status(201).json(serializeCase(row));
   } catch (err) {
     next(err);

@@ -137,6 +137,9 @@ export function PortalControls({ caseId, joiningDate }: { caseId: number; joinin
               ) : (
                 <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/80 p-4 text-center">
                   <p className="text-xs text-slate-500">No active portal link.</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                    The agent issues one automatically for new Email or Both cases. Use the fallback below if manual recovery is needed.
+                  </p>
                 </div>
               )}
 
@@ -149,7 +152,7 @@ export function PortalControls({ caseId, joiningDate }: { caseId: number; joinin
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" className="flex-1 h-8 text-xs gap-1.5 border-slate-200 hover:bg-slate-50 hover:border-slate-300" disabled={busy} onClick={issue}>
                     {sendEmail ? <Mail className="h-3.5 w-3.5 text-slate-500" /> : <Link2 className="h-3.5 w-3.5 text-slate-500" />}
-                    Issue 7-Day Link
+                    {activeLink ? 'Reissue 7-Day Link' : 'Issue Link Manually'}
                   </Button>
                 </div>
 

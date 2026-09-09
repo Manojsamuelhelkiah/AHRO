@@ -7,7 +7,7 @@ Treat authenticated manual intake with Email/Both selected as authorization to c
 
 **Why:** The approved product behavior is that HR entering a real candidate should enable candidate communications without a separate demo-volunteer step. Reusing global permissions would unintentionally grant unrelated administrative or WhatsApp access. Existing explicitly authorized demo recipients must continue working.
 
-**How to apply:** Resolve candidate recipients from the current case record; preserve the independent administrative and WhatsApp permission checks when adding new sending paths. Treat future contact-edit features as authorization-sensitive work, not just text editing.
+**How to apply:** Resolve candidate recipients from the current case record; preserve the independent administrative and WhatsApp permission checks when adding new sending paths. Real case intake with Email/Both should automatically provision and deliver the candidate portal link; seeded/scenario and unauthorized cases must not. Treat future contact-edit features as authorization-sensitive work, not just text editing.
 
 Retry only messages known not to have been sent. A provider timeout or interrupted request can mean Gmail accepted the email even when the application did not receive confirmation.
 

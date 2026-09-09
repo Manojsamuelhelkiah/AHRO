@@ -11,9 +11,11 @@ import {
   onbCandidateExchangeFailures,
   onbCandidateSessions,
   onbCaseLogistics,
+  onbCommunications,
   onbCases,
   onbConnectors,
   onbDocuments,
+  onbEffectJournal,
   onbEvents,
   onbSettings,
   organizationMembershipsTable,
@@ -32,6 +34,10 @@ import {
   hashSecret,
 } from "../lib/onboarding/candidate-portal";
 import { CANDIDATE_LINK_RETENTION_DAYS_KEY, setSetting } from "../lib/onboarding/settings";
+import {
+  AUTOMATED_PORTAL_EMAIL_KEY,
+  issueCandidatePortalLink,
+} from "../lib/onboarding/portal-link-issuance";
 
 const suffix = `${process.pid}-${Date.now()}-${randomUUID().slice(0, 8)}`;
 const orgA = `candidate-security-a-${suffix}`;
@@ -201,6 +207,60 @@ test("admin portal access snapshots defaults for a case with missing logistics",
     eq(onbCaseLogistics.caseId, caseA2),
   ));
   assert.equal(stored?.reportingContact, "Alex Example — Demo People Team");
+});
+
+test("automatic portal delivery is idempotent and never persists the secret link", async () => {
+  await db.update(onbCases).set({
+    candidateEmailAuthorizedAt: new Date(),
+    candidateEmailAuthorizedBy: userId,
+    channelPreference: "email",
+    workerEmail: "invalid-email",
+  }).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, caseA2)));
+  const key = AUTOMATED_PORTAL_EMAIL_KEY(caseA2);
+
+  try {
+    const first = await issueCandidatePortalLink({
+      organizationId: orgA,
+      caseId: caseA2,
+      issuedBy: userId,
+      publicBase: baseUrl,
+      sendEmail: true,
+      idempotencyKey: key,
+    });
+    const second = await issueCandidatePortalLink({
+      organizationId: orgA,
+      caseId: caseA2,
+      issuedBy: userId,
+      publicBase: baseUrl,
+      sendEmail: true,
+      idempotencyKey: key,
+    });
+
+    assert.ok(first?.portalUrl?.includes("/candidate#token="));
+    assert.equal(second?.portalUrl, null);
+    const deliveries = await db.select().from(onbCommunications).where(and(
+      eq(onbCommunications.organizationId, orgA),
+      eq(onbCommunications.idempotencyKey, key),
+    ));
+    assert.equal(deliveries.length, 1);
+    assert.doesNotMatch(deliveries[0].body, /candidate#token=/);
+    assert.match(deliveries[0].body, /secret link is not retained/i);
+  } finally {
+    await db.delete(onbEffectJournal).where(and(
+      eq(onbEffectJournal.organizationId, orgA),
+      eq(onbEffectJournal.logicalOperationKey, `candidate-communication:${key}`),
+    ));
+    await db.delete(onbCommunications).where(and(
+      eq(onbCommunications.organizationId, orgA),
+      eq(onbCommunications.idempotencyKey, key),
+    ));
+    await db.update(onbCases).set({
+      candidateEmailAuthorizedAt: null,
+      candidateEmailAuthorizedBy: null,
+      channelPreference: "both",
+      workerEmail: "candidate.alpha.two@example.com",
+    }).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, caseA2)));
+  }
 });
 
 test("mixed invalid token formats share one privacy-safe client throttle", async () => {
