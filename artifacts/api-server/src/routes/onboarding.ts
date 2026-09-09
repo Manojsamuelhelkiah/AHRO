@@ -211,19 +211,19 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
       .select()
       .from(onbCases)
       .where(organizationWhere(onbCases, organizationId));
-    const approvals = await db
-      .select()
+
+    const approvalRows = await db
+      .select({ approval: onbApprovals })
       .from(onbApprovals)
       .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
-      .where(and(
-        eq(onbApprovals.status, "pending"),
-        organizationWhere(onbCases, organizationId),
-      ));
+      .where(organizationWhere(onbCases, organizationId));
+    const approvals = approvalRows
+      .map(({ approval }) => approval)
+      .filter((approval) => approval.status === "pending");
     const recent = await db
-      .select({ event: onbEvents })
+      .select()
       .from(onbEvents)
-      .innerJoin(onbCases, eq(onbEvents.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, organizationId))
+      .where(organizationWhere(onbEvents, organizationId))
       .orderBy(desc(onbEvents.createdAt), desc(onbEvents.id))
       .limit(12);
 
@@ -245,12 +245,10 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
       totalCases: cases.length,
       byStage: Array.from(byStageMap.entries()).map(([key, count]) => ({ key, count })),
       pendingApprovals: approvals.length,
-      hardBlocked: approvals.filter(
-        ({ onb_approvals: approval }) => approval.hitlPattern === "hard-block",
-      ).length,
+      hardBlocked: approvals.filter((approval) => approval.hitlPattern === "hard-block").length,
       day1AtRisk,
       readyCases: cases.filter((c) => c.readiness.every((r) => r.status === "ready")).length,
-      recentEvents: recent.map(({ event }) => serializeEvent(event)),
+      recentEvents: recent.map(serializeEvent),
     });
   } catch (err) {
     next(err);
@@ -300,6 +298,8 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
       skillCriticality: scenario.intake.skillCriticality,
       notes: scenario.intake.notes,
       scenarioKey: scenario.key,
+      candidateEmailAuthorizedAt: null,
+      candidateEmailAuthorizedBy: null,
     }, getOrganizationId(req));
     res.status(201).json(serializeCase(row));
   } catch (err) {
@@ -378,10 +378,13 @@ router.post("/onboarding/cases", async (req, res, next) => {
 router.get("/onboarding/cases/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [row] = await db.select().from(onbCases).where(and(
-      eq(onbCases.id, id),
-      organizationWhere(onbCases, getOrganizationId(req)),
-    ));
+    const [row] = await db
+      .select()
+      .from(onbCases)
+      .where(and(
+        eq(onbCases.id, id),
+        organizationWhere(onbCases, getOrganizationId(req)),
+      ));
     if (!row) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -395,11 +398,10 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
 router.get("/onboarding/cases/:id/events", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const organizationId = getOrganizationId(req);
-    const [exists] = await db
-      .select({ id: onbCases.id })
-      .from(onbCases)
-      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId)));
+    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+      eq(onbCases.id, id),
+      organizationWhere(onbCases, getOrganizationId(req)),
+    ));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -407,10 +409,7 @@ router.get("/onboarding/cases/:id/events", async (req, res, next) => {
     const rows = await db
       .select()
       .from(onbEvents)
-      .where(and(
-        eq(onbEvents.caseId, id),
-        organizationWhere(onbEvents, organizationId),
-      ))
+      .where(eq(onbEvents.caseId, id))
       .orderBy(asc(onbEvents.createdAt), asc(onbEvents.id));
     res.json(rows.map(serializeEvent));
   } catch (err) {
@@ -421,11 +420,10 @@ router.get("/onboarding/cases/:id/events", async (req, res, next) => {
 router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const organizationId = getOrganizationId(req);
-    const [exists] = await db
-      .select({ id: onbCases.id })
-      .from(onbCases)
-      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId)));
+    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+      eq(onbCases.id, id),
+      organizationWhere(onbCases, getOrganizationId(req)),
+    ));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -433,10 +431,7 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
     const rows = await db
       .select()
       .from(onbCommunications)
-      .where(and(
-        eq(onbCommunications.caseId, id),
-        organizationWhere(onbCommunications, organizationId),
-      ))
+      .where(eq(onbCommunications.caseId, id))
       .orderBy(asc(onbCommunications.createdAt), asc(onbCommunications.id));
     res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
   } catch (err) {
@@ -480,10 +475,10 @@ router.post("/onboarding/cases/:id/communications/:communicationId/retry", async
 router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db
-      .select({ id: onbCases.id })
-      .from(onbCases)
-      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, getOrganizationId(req))));
+    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+      eq(onbCases.id, id),
+      organizationWhere(onbCases, getOrganizationId(req)),
+    ));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -513,7 +508,10 @@ router.get("/onboarding/cases/:id/records", async (req, res, next) => {
     const [c] = await db
       .select({ id: onbCases.id, workerEmail: onbCases.workerEmail })
       .from(onbCases)
-      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, getOrganizationId(req))));
+      .where(and(
+      eq(onbCases.id, id),
+      organizationWhere(onbCases, getOrganizationId(req)),
+    ));
     if (!c) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -549,6 +547,7 @@ router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
       res.status(400).json({ message: "channel must be 'email' or 'whatsapp'" });
       return;
     }
+    const organizationId = getOrganizationId(req);
     const [c] = await db.select().from(onbCases).where(and(
       eq(onbCases.id, id),
       organizationWhere(onbCases, getOrganizationId(req)),
@@ -562,7 +561,7 @@ router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
     const [row] = await db
       .insert(onbCommunications)
       .values({
-        organizationId: c.organizationId,
+        ...organizationValues(organizationId),
         caseId: id,
         channel: body.channel,
         direction: "inbound",
@@ -597,6 +596,17 @@ function requestSignatureValid(req: Parameters<Parameters<IRouter["post"]>[1]>[0
   });
 }
 
+async function recordRejectedTwilioWebhook(
+  req: Parameters<Parameters<IRouter["post"]>[1]>[0],
+): Promise<void> {
+  await recordGuardrailEvent({
+    organizationId: DEMO_ORGANIZATION_ID,
+    key: "webhook-signature",
+    action: "rejected",
+    detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.`,
+  });
+}
+
 const digitsOnly = (s: string) => s.replace(/\D/g, "");
 
 router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
@@ -606,13 +616,13 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
       return;
     }
     if (!requestSignatureValid(req)) {
-      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
+      await recordRejectedTwilioWebhook(req);
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
     const from = String(req.body?.From ?? "").replace(/^whatsapp:/, "");
     const text = String(req.body?.Body ?? "").trim();
-    const messageSid = String(req.body?.MessageSid ?? "");
+      const messageSid = String(req.body?.MessageSid ?? "");
     const respondEmpty = () => {
       res.type("text/xml").send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
     };
@@ -621,12 +631,15 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
       return;
     }
 
-    // Signed delivery still has no tenant credential. Only route a phone
-    // identity when it maps to exactly one active organization.
     const cases = await db
-      .select({ id: onbCases.id, organizationId: onbCases.organizationId, workerPhone: onbCases.workerPhone })
+      .select({
+        id: onbCases.id,
+        organizationId: onbCases.organizationId,
+        workerPhone: onbCases.workerPhone,
+      })
       .from(onbCases)
-      .where(sql`${onbCases.lifecycleStage} not in ('complete')`);
+      .where(sql`${onbCases.lifecycleStage} not in ('complete')`)
+      .orderBy(desc(onbCases.id));
     const fromDigits = digitsOnly(from);
     const matches = cases.filter(
       (c) => c.workerPhone && digitsOnly(c.workerPhone) === fromDigits,
@@ -689,7 +702,7 @@ router.post("/onboarding/cases/:id/voice-call", async (req, res, next) => {
 router.post("/onboarding/webhooks/twilio/voice-answer", async (req, res, next) => {
   try {
     if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
-      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
+      await recordRejectedTwilioWebhook(req);
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
@@ -709,7 +722,7 @@ router.post("/onboarding/webhooks/twilio/voice-answer", async (req, res, next) =
 router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => {
   try {
     if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
-      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
+      await recordRejectedTwilioWebhook(req);
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
@@ -739,7 +752,7 @@ router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => 
 router.post("/onboarding/webhooks/twilio/voice-status", async (req, res, next) => {
   try {
     if (!process.env.TWILIO_AUTH_TOKEN || !requestSignatureValid(req)) {
-      void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
+      await recordRejectedTwilioWebhook(req);
       res.status(403).json({ message: "Invalid Twilio signature" });
       return;
     }
@@ -768,8 +781,8 @@ router.post(
         return;
       }
       if (!requestSignatureValid(req)) {
-        void recordGuardrailEvent({ key: "webhook-signature", action: "rejected", detail: `Webhook to ${req.path} failed Twilio signature validation — request discarded.` });
-      res.status(403).json({ message: "Invalid Twilio signature" });
+        await recordRejectedTwilioWebhook(req);
+        res.status(403).json({ message: "Invalid Twilio signature" });
         return;
       }
       const messageSid = String(req.body?.MessageSid ?? "");
@@ -799,7 +812,7 @@ router.post(
               .join(" — ")
               .slice(0, 300)
           : null;
-      // A provider id is only safe to mutate after it derives one tenant.
+
       const candidates = await db
         .select({ id: onbCommunications.id, organizationId: onbCommunications.organizationId })
         .from(onbCommunications)
@@ -808,18 +821,16 @@ router.post(
           eq(onbCommunications.direction, "outbound"),
           eq(onbCommunications.channel, "whatsapp"),
         ));
-      if (candidates.length === 1) await db
-        .update(onbCommunications)
-        .set({ status: finalStatus, failureReason })
-        .where(
-          and(
-            eq(onbCommunications.id, candidates[0].id),
-            eq(onbCommunications.organizationId, candidates[0].organizationId),
-            eq(onbCommunications.externalMessageId, messageSid),
-            eq(onbCommunications.direction, "outbound"),
-            eq(onbCommunications.channel, "whatsapp"),
-          ),
-        );
+      if (candidates.length === 1) {
+        const candidate = candidates[0];
+        await db
+          .update(onbCommunications)
+          .set({ status: finalStatus, failureReason })
+          .where(and(
+            eq(onbCommunications.id, candidate.id),
+            organizationWhere(onbCommunications, candidate.organizationId),
+          ));
+      }
       res.status(204).end();
     } catch (err) {
       next(err);
@@ -843,7 +854,7 @@ router.get("/onboarding/approvals", async (req, res, next) => {
       .orderBy(desc(onbApprovals.createdAt), desc(onbApprovals.id));
     const filtered = wantAll
       ? rows
-      : rows.filter((r) => r.approval.status === "pending");
+      : rows.filter((row) => row.approval.status === "pending");
     res.json(
       filtered.map(({ approval: a, workerName }) => ({
         id: a.id,
@@ -888,10 +899,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       res.status(404).json({ message: "Approval not found" });
       return;
     }
-    // Record the real signed-in reviewer, never a client-supplied name.
     const decidedBy = await resolveReviewerName(req.authUserId!);
-    // Conditional update: only transitions from pending, so concurrent
-    // decisions cannot both win and double-trigger orchestration.
     const [updated] = await db
       .update(onbApprovals)
       .set({
@@ -900,20 +908,19 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
         comment: body.comment ?? null,
         decidedAt: new Date(),
       })
-      .where(and(
-        eq(onbApprovals.id, id),
-        eq(onbApprovals.status, "pending"),
-        organizationWhere(onbApprovals, getOrganizationId(req)),
-      ))
+      .where(and(eq(onbApprovals.id, id), eq(onbApprovals.status, "pending")))
       .returning();
     if (!updated) {
       res.status(400).json({ message: "Approval already decided" });
       return;
     }
-    const [c] = await db.select().from(onbCases).where(and(
-      eq(onbCases.id, a.caseId),
-      organizationWhere(onbCases, getOrganizationId(req)),
-    ));
+    const [c] = await db
+      .select()
+      .from(onbCases)
+      .where(and(
+        eq(onbCases.id, a.caseId),
+        organizationWhere(onbCases, getOrganizationId(req)),
+      ));
     resumeAfterDecision({
       caseId: a.caseId,
       approved: body.decision === "approved",
@@ -950,9 +957,11 @@ router.get("/onboarding/connectors", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
     await ensureConnectorsSeeded(organizationId);
-    const rows = await db.select().from(onbConnectors)
+    const rows = await db
+      .select()
+      .from(onbConnectors)
       .where(organizationWhere(onbConnectors, organizationId));
-    res.json(rows.map((r) => ({ ...r, lastSyncAt: iso(r.lastSyncAt) })));
+    res.json(rows.map((row) => ({ ...row, lastSyncAt: iso(row.lastSyncAt) })));
   } catch (err) {
     next(err);
   }
@@ -966,7 +975,10 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
     const [row] = await db
       .select()
       .from(onbConnectors)
-      .where(and(eq(onbConnectors.key, req.params.key), organizationWhere(onbConnectors, organizationId)));
+      .where(and(
+        eq(onbConnectors.key, req.params.key),
+        organizationWhere(onbConnectors, organizationId),
+      ));
     if (!row) {
       res.status(404).json({ message: "Connector not found" });
       return;
@@ -985,25 +997,22 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
         trackingMode: body.trackingMode ?? row.trackingMode,
         lastSyncAt: new Date(),
       })
-      .where(and(eq(onbConnectors.key, req.params.key), organizationWhere(onbConnectors, organizationId)))
+      .where(and(
+        eq(onbConnectors.key, req.params.key),
+        organizationWhere(onbConnectors, organizationId),
+      ))
       .returning();
-    // Retag open checks so a tracking-mode switch takes effect for
-    // in-flight cases too (done checks keep their historical mode).
     if (body.trackingMode && body.trackingMode !== row.trackingMode) {
-      const def = WATCHED_SYSTEMS.find((s) => s.connectorKey === req.params.key);
+      const def = WATCHED_SYSTEMS.find((system) => system.connectorKey === req.params.key);
       if (def) {
         await db
           .update(onbSystemChecks)
-          .set({
-            mode: body.trackingMode === "email" ? "email" : def.mode,
-          })
-          .where(
-            and(
-              eq(onbSystemChecks.system, def.key),
-              organizationWhere(onbSystemChecks, organizationId),
-              sql`${onbSystemChecks.status} in ('pending', 'overdue')`,
-            ),
-          );
+          .set({ mode: body.trackingMode === "email" ? "email" : def.mode })
+          .where(and(
+            eq(onbSystemChecks.system, def.key),
+            organizationWhere(onbSystemChecks, organizationId),
+            sql`${onbSystemChecks.status} in ('pending', 'overdue')`,
+          ));
       }
     }
     res.json({ ...updated, lastSyncAt: iso(updated.lastSyncAt) });
@@ -1105,7 +1114,7 @@ router.post(
       const result = await simulateVendorEmail({
         ...body,
         organizationId: getOrganizationId(req),
-      });
+        });
       res.status(result.ok ? 200 : 404).json(result);
     } catch (err) {
       next(err);
@@ -1140,10 +1149,8 @@ router.get("/onboarding/settings", async (req, res, next) => {
 
 router.put("/onboarding/settings", async (req, res, next) => {
   try {
-    const body = UpdateOnboardingSettingsBody.parse(req.body);
     const organizationId = getOrganizationId(req);
-    // Only fields present in the request are touched — a toggle-only update
-    // must not clear the stored alert address (and vice versa).
+    const body = UpdateOnboardingSettingsBody.parse(req.body);
     if (body.hrAlertEmail !== undefined) {
       const raw = (body.hrAlertEmail ?? "").trim();
       if (raw.length === 0) {
@@ -1184,6 +1191,7 @@ router.put("/onboarding/settings", async (req, res, next) => {
 
 router.get("/onboarding/guardrails", async (req, res, next) => {
   try {
+    const organizationId = getOrganizationId(req);
     const counts = await db
       .select({
         key: onbGuardrailEvents.guardrailKey,
@@ -1191,8 +1199,7 @@ router.get("/onboarding/guardrails", async (req, res, next) => {
         lastAt: sql<string | null>`max(${onbGuardrailEvents.createdAt})`,
       })
       .from(onbGuardrailEvents)
-      .innerJoin(onbCases, eq(onbGuardrailEvents.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(req)))
+      .where(organizationWhere(onbGuardrailEvents, organizationId))
       .groupBy(onbGuardrailEvents.guardrailKey);
     const byKey = new Map(counts.map((c) => [c.key, c]));
     res.json({
@@ -1225,10 +1232,13 @@ router.get("/onboarding/guardrails/:key/events", async (req, res, next) => {
         workerName: onbCases.workerName,
       })
       .from(onbGuardrailEvents)
-      .innerJoin(onbCases, eq(onbGuardrailEvents.caseId, onbCases.id))
+      .leftJoin(onbCases, and(
+        eq(onbGuardrailEvents.caseId, onbCases.id),
+        eq(onbGuardrailEvents.organizationId, onbCases.organizationId),
+      ))
       .where(and(
         eq(onbGuardrailEvents.guardrailKey, req.params.key),
-        organizationWhere(onbCases, getOrganizationId(req)),
+        organizationWhere(onbGuardrailEvents, getOrganizationId(req)),
       ))
       .orderBy(desc(onbGuardrailEvents.createdAt), desc(onbGuardrailEvents.id))
       .limit(50);
@@ -1242,9 +1252,8 @@ const lastDrillAt = new Map<string, number>();
 router.post("/onboarding/guardrails/drill", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
-    // One drill per 2 minutes: it exercises real enforcement paths, so
-    // repeated runs should not be able to churn quotas or flood audit logs.
-    if (Date.now() - (lastDrillAt.get(organizationId) ?? 0) < 120_000) {
+    const previous = lastDrillAt.get(organizationId) ?? 0;
+    if (Date.now() - previous < 120_000) {
       res.status(429).json({ message: "A drill just ran — wait a couple of minutes before running another." });
       return;
     }
@@ -1357,7 +1366,6 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
 
 const SUPPRESSION_THRESHOLD = 3;
 
-// In-memory cache for the analytics narrative so the endpoint never blocks on the LLM.
 type NarrativeCacheEntry = {
   signature: string | null;
   text: string | null;
@@ -1372,6 +1380,7 @@ router.get("/onboarding/analytics", async (req, res, next) => {
       .select()
       .from(onbCases)
       .where(organizationWhere(onbCases, organizationId));
+
     const approvalRows = await db
       .select({ approval: onbApprovals })
       .from(onbApprovals)
@@ -1440,17 +1449,16 @@ router.get("/onboarding/analytics", async (req, res, next) => {
       readiness: Array.from(readinessMap.entries()),
     });
     let narrative: string | null = null;
+    const cache = narrativeCache.get(organizationId) ?? {
+      signature: null,
+      text: null,
+      generatingFor: null,
+    };
+    narrativeCache.set(organizationId, cache);
     if (cases.length > 0) {
-      const cache = narrativeCache.get(organizationId) ?? {
-        signature: null,
-        text: null,
-        generatingFor: null,
-      };
-      narrativeCache.set(organizationId, cache);
       if (cache.signature === signature) {
         narrative = cache.text;
       } else {
-        // Only serve stale narrative from this organization while regenerating.
         narrative = cache.text;
         if (cache.generatingFor !== signature) {
           cache.generatingFor = signature;

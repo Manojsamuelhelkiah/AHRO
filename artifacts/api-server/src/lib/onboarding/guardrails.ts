@@ -279,21 +279,25 @@ export async function recordGuardrailEvent(opts: {
 }): Promise<void> {
   if (!withinAuditBudget(opts.key)) return;
   try {
-    if (opts.caseId == null) {
+    if (opts.caseId == null && !opts.organizationId) {
       throw new Error("organizationId is required for a guardrail event without a case");
     }
-    const [caseRow] = await db
-      .select({ organizationId: onbCases.organizationId })
-      .from(onbCases)
-      .where(and(
-        eq(onbCases.id, opts.caseId),
-        opts.organizationId
-          ? eq(onbCases.organizationId, opts.organizationId)
-          : undefined,
-      ));
-    if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+    const [caseRow] = opts.caseId == null
+      ? []
+      : await db
+          .select({ organizationId: onbCases.organizationId })
+          .from(onbCases)
+          .where(and(
+            eq(onbCases.id, opts.caseId),
+            opts.organizationId
+              ? eq(onbCases.organizationId, opts.organizationId)
+              : undefined,
+          ));
+    if (opts.caseId != null && !caseRow) {
+      throw new Error(`case ${opts.caseId} not found`);
+    }
     await db.insert(onbGuardrailEvents).values({
-      organizationId: opts.organizationId ?? caseRow.organizationId,
+      organizationId: opts.organizationId ?? caseRow!.organizationId,
       caseId: opts.caseId ?? null,
       guardrailKey: opts.key,
       action: opts.action,

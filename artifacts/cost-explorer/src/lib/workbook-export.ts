@@ -1,26 +1,25 @@
-import type { ScenarioInputs } from "@workspace/api-client-react";
+import {
+  customFetch,
+  type ScenarioInputs,
+} from "@workspace/api-client-react";
+
+type WorkbookRequester = (
+  input: RequestInfo | URL,
+  options: Parameters<typeof customFetch>[1],
+) => Promise<Blob>;
 
 export async function fetchScenarioWorkbook(
   inputs: ScenarioInputs,
-  organizationId: string,
-  fetcher: typeof fetch = fetch,
+  requester: WorkbookRequester = (input, options) =>
+    customFetch<Blob>(input, options),
 ): Promise<Blob> {
-  if (!organizationId) {
-    throw new Error("Select an organization before exporting a workbook.");
-  }
-
-  const response = await fetcher("/api/workbook/export", {
+  return requester("/api/workbook/export", {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      "x-organization-id": organizationId,
     },
     body: JSON.stringify({ inputs }),
+    responseType: "blob",
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { message?: string };
-    throw new Error(body.message || "Could not export the workbook.");
-  }
-  return response.blob();
 }

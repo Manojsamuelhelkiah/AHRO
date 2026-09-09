@@ -25,3 +25,24 @@ test("organization bootstrap replaces a stale stored selector", () => {
     { kind: "ready", organizationId: "org_second", selectorChanged: true },
   );
 });
+
+test("organization bootstrap preserves an existing private-workspace selector", () => {
+  assert.deepEqual(
+    resolveOrganizationBootstrap(
+      {
+        needsSetup: false,
+        activeOrganizationId: "legacy-private-owner",
+        memberships: [
+          { organizationId: "legacy-private-owner" },
+          { organizationId: "demo" },
+        ],
+      },
+      "legacy-private-owner",
+    ),
+    {
+      kind: "ready",
+      organizationId: "legacy-private-owner",
+      selectorChanged: false,
+    },
+  );
+});

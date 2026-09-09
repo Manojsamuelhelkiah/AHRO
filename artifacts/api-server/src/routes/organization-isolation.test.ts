@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import express from "express";
 import type { Server } from "node:http";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   actualsOverlaysTable,
   customIntentsTable,
@@ -10,13 +11,19 @@ import {
   eaAssessmentsTable,
   flowOverridesTable,
   onbCases,
+  onbEvents,
+  onbGuardrailEvents,
   organizationMembershipsTable,
   organizationsTable,
   pricingRateSetsTable,
   pricingSheetsTable,
+  scenarioFilesTable,
+  scenarioUploadIntentsTable,
   scenariosTable,
 } from "@workspace/db";
+import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
 import scenariosRouter from "./scenarios";
+import scenarioFilesRouter from "./scenario-files";
 import actualsRouter from "./actuals";
 import flowOverridesRouter from "./flow-overrides";
 import customIntentsRouter from "./custom-intents";
@@ -32,6 +39,7 @@ import {
   createTenantContextMiddleware,
   lookupMembership,
 } from "../middlewares/tenant-context";
+import { scenarioUploadObjectPath } from "../lib/objectStorage";
 
 const suffix = `${process.pid}-${Date.now()}`;
 const orgA = `isolation-a-${suffix}`;
@@ -174,11 +182,23 @@ before(async () => {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    req.authUserId = String(req.header("x-test-user"));
+    const userId = String(req.header("x-test-user"));
+    Object.assign(req, {
+      auth: Object.assign(
+        () => ({
+          userId,
+          sessionClaims: null,
+          tokenType: "session_token" as const,
+        }),
+        { [Symbol.for("@clerk/express.auth")]: true },
+      ),
+    });
+    req.authUserId = userId;
     next();
   });
   app.use(createTenantContextMiddleware(lookupMembership));
   app.use(scenariosRouter);
+  app.use(scenarioFilesRouter);
   app.use(actualsRouter);
   app.use(flowOverridesRouter);
   app.use(customIntentsRouter);
@@ -196,6 +216,8 @@ after(async () => {
   await new Promise<void>((resolve, reject) =>
     server.close((error) => error ? reject(error) : resolve()),
   );
+  await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgA));
+  await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgB));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgA));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
   await db.delete(eaAssessmentsTable).where(eq(eaAssessmentsTable.organizationId, orgA));
@@ -249,6 +271,105 @@ test("list route families do not expose another organization's records", async (
     assert.equal(rowsA.length, 1, path);
     assert.equal(rowsB.length, 1, path);
     assert.notEqual(rowsA[0]?.[identifyingField], rowsB[0]?.[identifyingField], path);
+  }
+});
+
+test("dashboard includes tenant-owned monitor events without a case", async () => {
+  const titles = {
+    a: `Monitor unavailable ${orgA}`,
+    b: `Monitor unavailable ${orgB}`,
+  };
+  await db.insert(onbEvents).values([
+    {
+      organizationId: orgA,
+      caseId: null,
+      agent: "Inbound email monitor",
+      engine: "test",
+      title: titles.a,
+      detail: "Mailbox polling failed.",
+    },
+    {
+      organizationId: orgB,
+      caseId: null,
+      agent: "Inbound email monitor",
+      engine: "test",
+      title: titles.b,
+      detail: "Mailbox polling failed.",
+    },
+  ]);
+
+  const response = await fetch(`${baseUrl}/onboarding/dashboard`, {
+    headers: {
+      "x-test-user": "test-user-a",
+      "x-organization-id": orgA,
+    },
+  });
+  assert.equal(response.status, 200);
+  const dashboard = await response.json() as {
+    recentEvents: Array<{ caseId: number | null; title: string }>;
+  };
+  assert.ok(
+    dashboard.recentEvents.some(
+      (event) => event.caseId === null && event.title === titles.a,
+    ),
+  );
+  assert.ok(
+    dashboard.recentEvents.every((event) => event.title !== titles.b),
+  );
+});
+
+test("rejected Twilio webhooks persist an explicit platform audit event", async () => {
+  const detail =
+    "Webhook to /onboarding/webhooks/twilio/whatsapp failed Twilio signature validation — request discarded.";
+  const existing = await db
+    .select({ id: onbGuardrailEvents.id })
+    .from(onbGuardrailEvents)
+    .where(and(
+      eq(onbGuardrailEvents.organizationId, DEMO_ORGANIZATION_ID),
+      eq(onbGuardrailEvents.guardrailKey, "webhook-signature"),
+      eq(onbGuardrailEvents.detail, detail),
+    ));
+  const existingIds = new Set(existing.map(({ id }) => id));
+  let auditId: number | undefined;
+  process.env.TWILIO_AUTH_TOKEN = "organization-isolation-test-token";
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/onboarding/webhooks/twilio/whatsapp`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-organization-id": orgA,
+          "x-test-user": "test-user-a",
+          "x-twilio-signature": "invalid-signature",
+        },
+        body: "{}",
+      },
+    );
+    assert.equal(response.status, 403);
+
+    const audits = await db
+      .select()
+      .from(onbGuardrailEvents)
+      .where(and(
+        eq(onbGuardrailEvents.organizationId, DEMO_ORGANIZATION_ID),
+        eq(onbGuardrailEvents.guardrailKey, "webhook-signature"),
+        eq(onbGuardrailEvents.detail, detail),
+      ))
+      .orderBy(desc(onbGuardrailEvents.id));
+    const audit = audits.find(({ id }) => !existingIds.has(id));
+    assert.ok(audit);
+    auditId = audit.id;
+    assert.equal(audit.caseId, null);
+    assert.equal(audit.action, "rejected");
+  } finally {
+    delete process.env.TWILIO_AUTH_TOKEN;
+    if (auditId !== undefined) {
+      await db
+        .delete(onbGuardrailEvents)
+        .where(eq(onbGuardrailEvents.id, auditId));
+    }
   }
 });
 
@@ -346,4 +467,243 @@ test("forged organization selectors are rejected before route access", async () 
     message: "You are not a member of the requested organization",
     code: "ORGANIZATION_ACCESS_DENIED",
   });
+});
+
+test("another demo member cannot access an owner-bound historical scenario", async () => {
+  const ownerUserId = `historical-owner-${suffix}`;
+  const otherUserId = `historical-intruder-${suffix}`;
+  await db.insert(organizationMembershipsTable).values([
+    {
+      organizationId: DEMO_ORGANIZATION_ID,
+      clerkUserId: ownerUserId,
+      role: "owner",
+    },
+    {
+      organizationId: DEMO_ORGANIZATION_ID,
+      clerkUserId: otherUserId,
+      role: "member",
+    },
+  ]);
+  const [scenario] = await db.insert(scenariosTable).values({
+    organizationId: DEMO_ORGANIZATION_ID,
+    ownerUserId,
+    name: "Historical private scenario",
+    inputs: {
+      numSystems: 4,
+      annualTransactions: 120_000,
+      employees: 8_000,
+      sector: "manufacturing",
+      companyType: "multi-country",
+      isolationTier: "siloed",
+      hrHourlyCostUsd: 38,
+      hitlHourlyCostUsd: 42,
+      countries: 6,
+    },
+  }).returning({ id: scenariosTable.id });
+
+  try {
+    const ownerResponse = await fetch(`${baseUrl}/scenarios/${scenario!.id}`, {
+      headers: {
+        "x-organization-id": DEMO_ORGANIZATION_ID,
+        "x-test-user": ownerUserId,
+      },
+    });
+    assert.equal(ownerResponse.status, 200);
+
+    const otherListResponse = await fetch(`${baseUrl}/scenarios`, {
+      headers: {
+        "x-organization-id": DEMO_ORGANIZATION_ID,
+        "x-test-user": otherUserId,
+      },
+    });
+    assert.equal(otherListResponse.status, 200);
+    const otherScenarios = await otherListResponse.json() as Array<{ id: number }>;
+    assert.ok(otherScenarios.every(({ id }) => id !== scenario!.id));
+
+    for (const attempt of [
+      { method: "GET" },
+      { method: "PATCH", body: JSON.stringify({ name: "stolen" }) },
+      { method: "DELETE" },
+    ]) {
+      const response = await fetch(`${baseUrl}/scenarios/${scenario!.id}`, {
+        method: attempt.method,
+        headers: {
+          "content-type": "application/json",
+          "x-organization-id": DEMO_ORGANIZATION_ID,
+          "x-test-user": otherUserId,
+        },
+        body: attempt.body,
+      });
+      assert.equal(response.status, 404, attempt.method);
+    }
+    const [preserved] = await db
+      .select({ name: scenariosTable.name })
+      .from(scenariosTable)
+      .where(eq(scenariosTable.id, scenario!.id));
+    assert.equal(preserved?.name, "Historical private scenario");
+  } finally {
+    await db.delete(scenariosTable).where(eq(scenariosTable.id, scenario!.id));
+    await db
+      .delete(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+        eq(organizationMembershipsTable.clerkUserId, ownerUserId),
+      ));
+    await db
+      .delete(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+        eq(organizationMembershipsTable.clerkUserId, otherUserId),
+      ));
+  }
+});
+
+test("a former member cannot reach old uploads through another organization", async () => {
+  const formerMember = `former-upload-member-${suffix}`;
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: orgA,
+    clerkUserId: formerMember,
+    role: "member",
+  });
+  const [scenario] = await db.insert(scenariosTable).values({
+    organizationId: orgA,
+    ownerUserId: formerMember,
+    name: "Former member scenario",
+    inputs: {},
+  }).returning({ id: scenariosTable.id });
+  const [file] = await db.insert(scenarioFilesTable).values({
+    organizationId: orgA,
+    ownerUserId: formerMember,
+    scenarioId: scenario!.id,
+    objectPath: `private/scenarios/${formerMember}/old-upload.txt`,
+    originalName: "old-upload.txt",
+    contentType: "text/plain",
+    sizeBytes: 4,
+  }).returning({ id: scenarioFilesTable.id });
+  const contentIntentId = randomUUID();
+  const finalizeIntentId = randomUUID();
+  const contentObjectPath = scenarioUploadObjectPath(
+    formerMember,
+    contentIntentId,
+  );
+  const finalizeObjectPath = scenarioUploadObjectPath(
+    formerMember,
+    finalizeIntentId,
+  );
+  await db.insert(scenarioUploadIntentsTable).values([
+    {
+      id: contentIntentId,
+      organizationId: orgA,
+      ownerUserId: formerMember,
+      objectPath: contentObjectPath,
+      originalName: "content.txt",
+      contentType: "text/plain",
+      sizeBytes: 4,
+      status: "pending",
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+    {
+      id: finalizeIntentId,
+      organizationId: orgA,
+      ownerUserId: formerMember,
+      objectPath: finalizeObjectPath,
+      originalName: "finalize.txt",
+      contentType: "text/plain",
+      sizeBytes: 4,
+      status: "uploaded",
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+  ]);
+  await db
+    .delete(organizationMembershipsTable)
+    .where(and(
+      eq(organizationMembershipsTable.organizationId, orgA),
+      eq(organizationMembershipsTable.clerkUserId, formerMember),
+    ));
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: orgB,
+    clerkUserId: formerMember,
+    role: "member",
+  });
+
+  try {
+    const listResponse = await fetch(
+      `${baseUrl}/scenarios/${scenario!.id}/files`,
+      {
+        headers: {
+          "x-organization-id": orgB,
+          "x-test-user": formerMember,
+        },
+      },
+    );
+    assert.equal(listResponse.status, 404);
+
+    for (const method of ["GET", "DELETE"]) {
+      const response = await fetch(
+        `${baseUrl}/scenario-files/${file!.id}${method === "GET" ? "/download" : ""}`,
+        {
+          method,
+          headers: {
+            "x-organization-id": orgB,
+            "x-test-user": formerMember,
+          },
+        },
+      );
+      assert.equal(response.status, 404, method);
+    }
+
+    const contentResponse = await fetch(
+      `${baseUrl}/scenario-files/upload-intents/${contentIntentId}/content`,
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-organization-id": orgB,
+          "x-test-user": formerMember,
+        },
+        body: "test",
+      },
+    );
+    assert.equal(contentResponse.status, 409);
+
+    const finalizeResponse = await fetch(
+      `${baseUrl}/scenario-files/finalize`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-organization-id": orgB,
+          "x-test-user": formerMember,
+        },
+        body: JSON.stringify({
+          objectPath: finalizeObjectPath,
+          name: "finalize.txt",
+          contentType: "text/plain",
+          size: 4,
+        }),
+      },
+    );
+    assert.equal(finalizeResponse.status, 409);
+
+    const [preserved] = await db
+      .select({ id: scenarioFilesTable.id })
+      .from(scenarioFilesTable)
+      .where(eq(scenarioFilesTable.id, file!.id));
+    assert.equal(preserved?.id, file!.id);
+  } finally {
+    await db
+      .delete(scenarioUploadIntentsTable)
+      .where(eq(scenarioUploadIntentsTable.id, contentIntentId));
+    await db
+      .delete(scenarioUploadIntentsTable)
+      .where(eq(scenarioUploadIntentsTable.id, finalizeIntentId));
+    await db.delete(scenarioFilesTable).where(eq(scenarioFilesTable.id, file!.id));
+    await db.delete(scenariosTable).where(eq(scenariosTable.id, scenario!.id));
+    await db
+      .delete(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, orgB),
+        eq(organizationMembershipsTable.clerkUserId, formerMember),
+      ));
+  }
 });

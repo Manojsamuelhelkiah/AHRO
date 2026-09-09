@@ -1,29 +1,39 @@
-import { index, integer, pgTable, serial, text, jsonb, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { organizationsTable } from "./organizations";
+import { foreignKey, index, integer, pgTable, serial, text, jsonb, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
-export const scenariosTable = pgTable("scenarios", {
-  id: serial("id").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organizationsTable.id),
-  ownerUserId: text("owner_user_id"),
-  name: text("name").notNull(),
-  inputs: jsonb("inputs").notNull(),
-  setupData: jsonb("setup_data"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const scenariosTable = pgTable(
+  "scenarios",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id),
+    ownerUserId: text("owner_user_id"),
+    name: text("name").notNull(),
+    inputs: jsonb("inputs").notNull(),
+    setupData: jsonb("setup_data"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    unique("scenarios_organization_id_id_unique").on(
+      table.organizationId,
+      table.id,
+    ),
+  ],
+);
 
 export const scenarioFilesTable = pgTable(
   "scenario_files",
   {
     id: serial("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id),
     ownerUserId: text("owner_user_id").notNull(),
-    scenarioId: integer("scenario_id").references(() => scenariosTable.id, {
-      onDelete: "cascade",
-    }),
+    scenarioId: integer("scenario_id"),
     objectPath: text("object_path").notNull().unique(),
     originalName: text("original_name").notNull(),
     contentType: text("content_type").notNull(),
@@ -32,7 +42,16 @@ export const scenarioFilesTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("scenario_files_owner_scenario_idx").on(table.ownerUserId, table.scenarioId),
+    foreignKey({
+      columns: [table.organizationId, table.scenarioId],
+      foreignColumns: [scenariosTable.organizationId, scenariosTable.id],
+      name: "scenario_files_organization_scenario_fk",
+    }).onDelete("cascade"),
+    index("scenario_files_organization_owner_scenario_idx").on(
+      table.organizationId,
+      table.ownerUserId,
+      table.scenarioId,
+    ),
   ],
 );
 
@@ -40,6 +59,9 @@ export const scenarioUploadIntentsTable = pgTable(
   "scenario_upload_intents",
   {
     id: uuid("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id),
     ownerUserId: text("owner_user_id").notNull(),
     objectPath: text("object_path").notNull().unique(),
     finalObjectPath: text("final_object_path").unique(),
@@ -54,7 +76,11 @@ export const scenarioUploadIntentsTable = pgTable(
     finalizedAt: timestamp("finalized_at", { withTimezone: true }),
   },
   (table) => [
-    index("scenario_upload_intents_owner_status_idx").on(table.ownerUserId, table.status),
+    index("scenario_upload_intents_organization_owner_status_idx").on(
+      table.organizationId,
+      table.ownerUserId,
+      table.status,
+    ),
     index("scenario_upload_intents_expiry_idx").on(table.status, table.expiresAt),
   ],
 );

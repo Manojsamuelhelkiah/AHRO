@@ -8,6 +8,11 @@ export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
+export type OrganizationRequestScope = {
+  getOrganizationId: () => string | null;
+  pinOrganizationId: (organizationId: string | null) => void;
+};
+
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
@@ -17,6 +22,44 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+
+export function createOrganizationRequestScope(
+  initialOrganizationId: string | null,
+): OrganizationRequestScope {
+  let organizationId = initialOrganizationId?.trim() || null;
+  return {
+    getOrganizationId: () => organizationId,
+    pinOrganizationId: (nextOrganizationId) => {
+      organizationId = nextOrganizationId?.trim() || null;
+    },
+  };
+}
+
+function readOrganizationIdAtPageLoad(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem("activeOrganizationId");
+  } catch {
+    return null;
+  }
+}
+
+// Every browser page realm gets its own immutable-at-dispatch request scope.
+// Bootstrap may deliberately repin this realm before rendering protected
+// content, but cross-tab localStorage changes cannot retarget mounted forms.
+const pageOrganizationScope = createOrganizationRequestScope(
+  readOrganizationIdAtPageLoad(),
+);
+
+export function pinOrganizationIdForPage(
+  organizationId: string | null,
+): void {
+  pageOrganizationScope.pinOrganizationId(organizationId);
+}
+
+export function getPinnedOrganizationIdForPage(): string | null {
+  return pageOrganizationScope.getOrganizationId();
+}
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -337,14 +380,14 @@ export async function customFetch<T = unknown>(
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
 
-  // Clerk identifies the person; this application-level selector identifies
-  // which of their organization memberships owns the request.
-  if (
-    typeof window !== "undefined" &&
-    !headers.has("x-organization-id")
-  ) {
-    const organizationId = window.localStorage.getItem("activeOrganizationId");
-    if (organizationId) headers.set("x-organization-id", organizationId);
+  // Clerk identifies the person; this page-pinned application scope identifies
+  // which of their organization memberships owns the request. Never reread
+  // mutable cross-tab storage while dispatching a mounted form.
+  if (!headers.has("x-organization-id")) {
+    const organizationId = pageOrganizationScope.getOrganizationId();
+    if (organizationId) {
+      headers.set("x-organization-id", organizationId);
+    }
   }
 
   if (

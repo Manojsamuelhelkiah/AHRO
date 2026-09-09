@@ -184,8 +184,9 @@ export default function Scenario() {
 
   const handleWorkbookExport = form.handleSubmit(async (values) => {
     try {
-      const organizationId = localStorage.getItem("activeOrganizationId") ?? "";
-      const blob = await fetchScenarioWorkbook(toApiInputs(values) as ScenarioInputs, organizationId);
+      const blob = await fetchScenarioWorkbook(
+        toApiInputs(values) as ScenarioInputs,
+      );
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

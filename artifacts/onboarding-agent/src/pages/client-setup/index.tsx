@@ -1,11 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useUser } from '@clerk/react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, initialDraft } from './schema';
-import { canNavigateOrCommit, planScenarioHydration } from './client-setup-persistence';
+import {
+  canNavigateOrCommit,
+  createClientSetupDraftSession,
+  planScenarioHydration,
+  type ClientSetupDraftSession,
+} from './client-setup-persistence';
 import { StepScope, StepLandscape, StepProcess, StepReview } from './wizard-steps';
 import { Button, PageHeader } from '@/components/ui-shared';
-import { useCreateScenario, useComputeRollup, useListIntents, useGetScenario, getGetScenarioQueryKey } from '@workspace/api-client-react';
+import {
+  getPinnedOrganizationIdForPage,
+  getGetScenarioQueryKey,
+  pinOrganizationIdForPage,
+  useComputeRollup,
+  useCreateScenario,
+  useGetScenario,
+  useListIntents,
+} from '@workspace/api-client-react';
 import type { Rollup, Scenario, ScenarioInputs } from '@workspace/api-client-react';
 import { Building2, Check, ChevronRight, Copy, FlaskConical, Users } from 'lucide-react';
 
@@ -16,16 +30,10 @@ const STEPS = [
   { id: 'review', label: 'Readiness & Rollup' },
 ];
 
-function loadInitialDraft(): ClientSetupDraft {
-  try {
-    const stored = localStorage.getItem('clientSetupDraft');
-    if (stored) {
-      return { ...initialDraft, ...JSON.parse(stored) };
-    }
-  } catch {
-    // Ignore a corrupt or unavailable browser draft and start cleanly.
-  }
-  return initialDraft;
+function loadInitialDraft(
+  draftSession: ClientSetupDraftSession<ClientSetupDraft>,
+): ClientSetupDraft {
+  return { ...initialDraft, ...draftSession.load() };
 }
 
 type OrganizationSummary = {
@@ -33,7 +41,11 @@ type OrganizationSummary = {
   name: string;
   role: 'owner' | 'admin' | 'member';
 };
-function ClientSetupWizard() {
+function ClientSetupWizard({
+  draftSession,
+}: {
+  draftSession: ClientSetupDraftSession<ClientSetupDraft>;
+}) {
   const savedScenarioId = Number(new URLSearchParams(window.location.search).get('scenarioId'));
   const [currentStep, setCurrentStep] = useState(0);
   const [rollup, setRollup] = useState<Rollup | null>(null);
@@ -46,7 +58,7 @@ function ClientSetupWizard() {
   
   const form = useForm<ClientSetupDraft>({
     resolver: zodResolver(clientSetupSchema),
-    defaultValues: loadInitialDraft(),
+    defaultValues: loadInitialDraft(draftSession),
   });
 
   const handleFileOperationPendingChange = React.useCallback((pending: boolean) => {
@@ -57,10 +69,10 @@ function ClientSetupWizard() {
   useEffect(() => {
     const sub = form.watch((value) => {
       if (!draftPersistenceEnabled.current) return;
-      localStorage.setItem('clientSetupDraft', JSON.stringify(value));
+      draftSession.save(value as Partial<ClientSetupDraft>);
     });
     return () => sub.unsubscribe();
-  }, [form]);
+  }, [draftSession, form]);
 
   const handleNext = async () => {
     if (!canNavigateOrCommit(fileOperationPendingRef.current)) return;
@@ -190,7 +202,7 @@ function ClientSetupWizard() {
       onSuccess: (data) => {
         activeScenarioIdRef.current = data.id;
         draftPersistenceEnabled.current = false;
-        localStorage.removeItem('clientSetupDraft');
+        draftSession.clear();
         setScenario(data);
          window.history.replaceState(null, '', `${window.location.pathname}?scenarioId=${data.id}`);
       },
@@ -281,6 +293,7 @@ function ClientSetupWizard() {
   );
 }
 export function ClientSetupPage() {
+  const { isLoaded: userLoaded, user } = useUser();
   const [organization, setOrganization] = useState<OrganizationSummary | null>();
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -294,8 +307,10 @@ export function ClientSetupPage() {
         ) ?? data.memberships[0];
         if (selected) {
           localStorage.setItem('activeOrganizationId', selected.organizationId);
+          pinOrganizationIdForPage(selected.organizationId);
           setOrganization(selected);
         } else {
+          pinOrganizationIdForPage(null);
           setOrganization(null);
         }
       })
@@ -307,16 +322,29 @@ export function ClientSetupPage() {
     };
   }, []);
 
+  const draftSession = useMemo(
+    () =>
+      createClientSetupDraftSession<ClientSetupDraft>(
+        localStorage,
+        user?.id,
+        organization?.organizationId,
+      ),
+    [organization?.organizationId, user?.id],
+  );
+
   if (loadError) {
     return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{loadError}</div>;
   }
-  if (organization === undefined) {
+  if (organization === undefined || !userLoaded) {
     return <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Loading organization…</div>;
   }
   if (organization === null) {
     return <OrganizationSetup onReady={setOrganization} />;
   }
-  return <ClientSetupWizard />;
+  if (!user || !draftSession) {
+    return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">Could not establish a private draft scope for this workspace.</div>;
+  }
+  return <ClientSetupWizard draftSession={draftSession} />;
 }
 
 function OrganizationSetup({
@@ -375,6 +403,7 @@ function OrganizationSetup({
         return;
       }
       localStorage.setItem('activeOrganizationId', organization.organizationId);
+      pinOrganizationIdForPage(organization.organizationId);
       onReady(organization);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Organization setup failed');
@@ -396,6 +425,7 @@ function OrganizationSetup({
   const continueWithOrganization = () => {
     if (!createdOrganization) return;
     localStorage.setItem('activeOrganizationId', createdOrganization.organizationId);
+    pinOrganizationIdForPage(createdOrganization.organizationId);
     try {
       sessionStorage.removeItem(PENDING_ORGANIZATION_KEY);
     } catch {
@@ -513,7 +543,7 @@ function loadPendingOrganization(): { organization: OrganizationSummary; joinCod
 }
 
 async function organizationRequest(path: string, init?: RequestInit) {
-  const organizationId = localStorage.getItem('activeOrganizationId');
+  const organizationId = getPinnedOrganizationIdForPage();
   const response = await fetch(`/api${path}`, {
     ...init,
     credentials: 'include',

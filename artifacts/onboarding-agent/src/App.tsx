@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { pinOrganizationIdForPage } from '@workspace/api-client-react';
 import { ClerkProvider, SignIn, SignUp, Show } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
@@ -181,6 +182,7 @@ function OrganizationBootstrapGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    pinOrganizationIdForPage(null);
     const storedOrganizationId = getStoredOrganizationId();
     const headers = storedOrganizationId
       ? { 'x-organization-id': storedOrganizationId }
@@ -209,10 +211,12 @@ function OrganizationBootstrapGate({ children }: { children: ReactNode }) {
           localStorage.setItem('activeOrganizationId', decision.organizationId);
           queryClient.clear();
         }
+        pinOrganizationIdForPage(decision.organizationId);
         setState('ready');
       })
       .catch((caught) => {
         if (!active) return;
+        pinOrganizationIdForPage(null);
         setError(caught instanceof Error ? caught.message : 'Could not load organization access');
         setState('error');
       });

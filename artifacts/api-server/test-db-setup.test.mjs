@@ -920,3 +920,380 @@ test(
     }
   },
 );
+
+test(
+  "preserves populated recovery workspaces and quarantines mismatched uploads",
+  { skip: !hasDb },
+  async () => {
+    const adminPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const schema = `api_test_private_scenario_${process.pid}`;
+    const schemaConnection = () => {
+      const url = new URL(process.env.DATABASE_URL);
+      url.searchParams.set("options", `-csearch_path=${schema}`);
+      return url.toString();
+    };
+    const ownerUserId = `historical-owner-${process.pid}`;
+
+    try {
+      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      const migrations = await loadCheckedInMigrations();
+      const preOrganizationMigrations = migrations.filter(
+        ({ tag }) =>
+          tag !== "0021_application_organizations" &&
+          tag !== "0022_application_organizations_phase_a" &&
+          tag !== "0023_application_organizations_phase_b" &&
+          tag !== "0025_private_scenario_tenancy" &&
+          tag !== "0026_preserve_scenario_context" &&
+          tag !== "0027_quarantine_scenario_file_ownership" &&
+          tag !== "0028_restore_staged_scenario_context",
+      );
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(),
+        migrations: preOrganizationMigrations,
+      });
+      const inserted = await adminPool.query(
+        `
+          INSERT INTO "${schema}".scenarios
+            (owner_user_id, name, inputs)
+          VALUES (
+            $1,
+            'Historical private scenario',
+            '{"annualTransactions":120000}'::jsonb
+          )
+          RETURNING id
+        `,
+        [ownerUserId],
+      );
+      const mismatchedOwner = `mismatched-file-owner-${process.pid}`;
+      const insertedFile = await adminPool.query(
+        `
+          INSERT INTO "${schema}".scenario_files (
+            owner_user_id,
+            scenario_id,
+            object_path,
+            original_name,
+            content_type,
+            size_bytes
+          )
+          VALUES ($1, $2, $3, 'historical.txt', 'text/plain', 4)
+          RETURNING id
+        `,
+        [
+          mismatchedOwner,
+          inserted.rows[0].id,
+          `private/scenarios/${mismatchedOwner}/historical.txt`,
+        ],
+      );
+      const uploadIntentId = "00000000-0000-4000-8000-000000000025";
+      await adminPool.query(
+        `
+          INSERT INTO "${schema}".scenario_upload_intents (
+            id,
+            owner_user_id,
+            object_path,
+            original_name,
+            content_type,
+            size_bytes,
+            expires_at
+          )
+          VALUES ($1, $2, $3, 'pending.txt', 'text/plain', 4, now() + interval '1 hour')
+        `,
+        [
+          uploadIntentId,
+          mismatchedOwner,
+          `private/scenario-uploads/${mismatchedOwner}/pending.txt`,
+        ],
+      );
+
+      const throughPrivateMigration = migrations.filter(
+        ({ tag }) =>
+          tag !== "0026_preserve_scenario_context" &&
+          tag !== "0027_quarantine_scenario_file_ownership" &&
+          tag !== "0028_restore_staged_scenario_context",
+      );
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(),
+        migrations: throughPrivateMigration,
+      });
+      const isolatedScenario = await adminPool.query(
+        `
+          SELECT organization_id
+          FROM "${schema}".scenarios
+          WHERE id = $1
+        `,
+        [inserted.rows[0].id],
+      );
+      const privateOrganizationId =
+        isolatedScenario.rows[0].organization_id;
+      assert.match(privateOrganizationId, /^legacy-private-/);
+      await adminPool.query(
+        `
+          INSERT INTO "${schema}".onb_settings
+            (organization_id, key, value)
+          VALUES ($1, 'staged-private-record', 'preserved')
+        `,
+        [privateOrganizationId],
+      );
+      const stagedCustomIntentKey = `staged-custom-${process.pid}`;
+      await adminPool.query(
+        `
+          INSERT INTO "${schema}".custom_intents (
+            organization_id,
+            key,
+            name,
+            domain,
+            flow_class,
+            description,
+            as_is_handling_min,
+            to_be_human_min,
+            base_weight,
+            act_get_actions,
+            act_put_actions,
+            source,
+            author
+          )
+          VALUES (
+            $1,
+            $2,
+            'Staged private intent',
+            'test',
+            'fc1-deterministic',
+            'Created after private workspace migration',
+            10,
+            2,
+            1,
+            1,
+            0,
+            'migration-test',
+            'migration-test'
+          )
+        `,
+        [privateOrganizationId, stagedCustomIntentKey],
+      );
+      await adminPool.query(
+        `
+          INSERT INTO "${schema}".flow_overrides (
+            organization_id,
+            intent_key,
+            version,
+            status,
+            author,
+            rationale,
+            flow_class
+          )
+          VALUES (
+            $1,
+            $2,
+            1,
+            'approved',
+            'migration-test',
+            'Keep staged override with its scenario',
+            'fc3-multiagent'
+          )
+        `,
+        [privateOrganizationId, stagedCustomIntentKey],
+      );
+      await adminPool.query(
+        `
+          INSERT INTO "${schema}".pricing_rate_sets (
+            organization_id,
+            effective_date,
+            rationale,
+            rates,
+            created_by
+          )
+          VALUES (
+            $1,
+            '2025-01-01',
+            'Staged private rates',
+            '{"marker":"private"}'::jsonb,
+            'migration-test'
+          )
+        `,
+        [privateOrganizationId],
+      );
+      const stagedScenario = await adminPool.query(
+        `
+          INSERT INTO "${schema}".scenarios (
+            organization_id,
+            owner_user_id,
+            name,
+            inputs
+          )
+          VALUES (
+            $1,
+            $2,
+            'Staged private scenario',
+            jsonb_build_object(
+              'annualTransactions',
+              240000,
+              'intentShareOverrides',
+              jsonb_build_object($3::text, 0.1)
+            )
+          )
+          RETURNING id
+        `,
+        [privateOrganizationId, ownerUserId, stagedCustomIntentKey],
+      );
+
+      const ordinaryOrganizationId = `ordinary-tenant-${process.pid}`;
+      await adminPool.query(
+        `
+          INSERT INTO "${schema}".organizations
+            (id, name, slug, join_code_hash, created_by_user_id)
+          VALUES ($1, 'Ordinary tenant', $1, $2, $3)
+        `,
+        [
+          ordinaryOrganizationId,
+          `ordinary-tenant-join-${process.pid}`,
+          ownerUserId,
+        ],
+      );
+      const ordinaryScenario = await adminPool.query(
+        `
+          INSERT INTO "${schema}".scenarios
+            (organization_id, owner_user_id, name, inputs)
+          VALUES ($1, $2, 'Ordinary private scenario', '{}'::jsonb)
+          RETURNING id
+        `,
+        [ordinaryOrganizationId, ownerUserId],
+      );
+      const ordinaryFile = await adminPool.query(
+        `
+          INSERT INTO "${schema}".scenario_files (
+            organization_id,
+            owner_user_id,
+            scenario_id,
+            object_path,
+            original_name,
+            content_type,
+            size_bytes
+          )
+          VALUES ($1, $2, $3, $4, 'ordinary.txt', 'text/plain', 4)
+          RETURNING id
+        `,
+        [
+          ordinaryOrganizationId,
+          mismatchedOwner,
+          ordinaryScenario.rows[0].id,
+          `private/scenarios/${mismatchedOwner}/ordinary.txt`,
+        ],
+      );
+
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(),
+        migrations,
+      });
+
+      const migrated = await adminPool.query(
+        `
+          SELECT
+            scenario.organization_id,
+            scenario.owner_user_id,
+            scenario.inputs,
+            file.organization_id AS file_organization_id,
+            file.scenario_id AS file_scenario_id,
+            upload.organization_id AS upload_organization_id
+          FROM "${schema}".scenarios scenario
+          JOIN "${schema}".scenario_files file
+            ON file.id = $2
+          JOIN "${schema}".scenario_upload_intents upload
+            ON upload.id = $3
+          WHERE scenario.id = $1
+        `,
+        [inserted.rows[0].id, insertedFile.rows[0].id, uploadIntentId],
+      );
+      assert.equal(migrated.rowCount, 1);
+      assert.equal(migrated.rows[0].organization_id, "demo");
+      assert.equal(migrated.rows[0].owner_user_id, ownerUserId);
+      assert.deepEqual(migrated.rows[0].inputs, {
+        annualTransactions: 120000,
+      });
+      assert.equal(migrated.rows[0].file_organization_id, "demo");
+      assert.equal(migrated.rows[0].file_scenario_id, null);
+      assert.equal(migrated.rows[0].upload_organization_id, "demo");
+
+      const preservedWorkspace = await adminPool.query(
+        `
+          SELECT
+            setting.value,
+            membership.role,
+            demo_membership.role AS demo_role
+          FROM "${schema}".onb_settings setting
+          JOIN "${schema}".organization_memberships membership
+            ON membership.organization_id = setting.organization_id
+           AND membership.clerk_user_id = $2
+          JOIN "${schema}".organization_memberships demo_membership
+            ON demo_membership.organization_id = 'demo'
+           AND demo_membership.clerk_user_id = $2
+          WHERE setting.organization_id = $1
+            AND setting.key = 'staged-private-record'
+        `,
+        [privateOrganizationId, ownerUserId],
+      );
+      assert.equal(preservedWorkspace.rowCount, 1);
+      assert.equal(preservedWorkspace.rows[0].value, "preserved");
+      assert.equal(preservedWorkspace.rows[0].role, "owner");
+      assert.equal(preservedWorkspace.rows[0].demo_role, "member");
+
+      const quarantinedOrdinaryFile = await adminPool.query(
+        `
+          SELECT organization_id, scenario_id
+          FROM "${schema}".scenario_files
+          WHERE id = $1
+        `,
+        [ordinaryFile.rows[0].id],
+      );
+      assert.equal(quarantinedOrdinaryFile.rowCount, 1);
+      assert.equal(
+        quarantinedOrdinaryFile.rows[0].organization_id,
+        ordinaryOrganizationId,
+      );
+      assert.equal(quarantinedOrdinaryFile.rows[0].scenario_id, null);
+
+      const stagedContext = await adminPool.query(
+        `
+          SELECT
+            scenario.organization_id AS scenario_organization_id,
+            custom_intent.organization_id AS intent_organization_id,
+            flow_override.organization_id AS override_organization_id,
+            rate_set.organization_id AS rate_organization_id,
+            scenario.inputs -> 'intentShareOverrides' ->> $3 AS custom_share
+          FROM "${schema}".scenarios scenario
+          JOIN "${schema}".custom_intents custom_intent
+            ON custom_intent.key = $3
+          JOIN "${schema}".flow_overrides flow_override
+            ON flow_override.intent_key = $3
+           AND flow_override.status = 'approved'
+          JOIN "${schema}".pricing_rate_sets rate_set
+            ON rate_set.rationale = 'Staged private rates'
+          WHERE scenario.id = $1
+            AND scenario.owner_user_id = $2
+        `,
+        [stagedScenario.rows[0].id, ownerUserId, stagedCustomIntentKey],
+      );
+      assert.equal(stagedContext.rowCount, 1);
+      assert.equal(
+        stagedContext.rows[0].scenario_organization_id,
+        privateOrganizationId,
+      );
+      assert.equal(
+        stagedContext.rows[0].intent_organization_id,
+        privateOrganizationId,
+      );
+      assert.equal(
+        stagedContext.rows[0].override_organization_id,
+        privateOrganizationId,
+      );
+      assert.equal(
+        stagedContext.rows[0].rate_organization_id,
+        privateOrganizationId,
+      );
+      assert.equal(stagedContext.rows[0].custom_share, "0.1");
+    } finally {
+      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.end();
+    }
+  },
+);

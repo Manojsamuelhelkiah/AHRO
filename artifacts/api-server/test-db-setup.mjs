@@ -27,6 +27,15 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Security-reviewed Phase B removal of temporary tenant defaults and
   // restoration of direct organization and deferred watch-email foreign keys.
   "0937be5afda5af42fd3674d1d3c195fa822d8467709fe7b9b42ea5c41bdbdd9d",
+  // Security-reviewed repair for historical private scenarios and file tenancy.
+  "7da40b9a9790b096283838b348fdad8ffe41430b88f2814eeed2d9c40c61b9be",
+  // Forward correction keeps legacy calculation context and quarantines
+  // mismatched attachments without rewriting applied migration history.
+  "3116a643308553bac85852539ae2812c07c3f4e3ef42975766a490a40af1ef85",
+  // Security-reviewed quarantine for owner-mismatched scenario attachments.
+  "478a75e14136fc164ae824e50bce8333dce1712c0362d23665df222a84ea2519",
+  // Security-reviewed forward repair for interval-created private scenarios.
+  "e15f14fd6cf4721edbd0f4be846a776cc1ef67d639939cefde16328852712656",
 ]);
 
 // These errors mean an old migration's individual DDL statement is already
@@ -50,6 +59,17 @@ function isAdoptablePostgresError(migration, statement, error) {
     migration.tag === "0018_custom_intent_routing_contract" &&
     error?.code === "42P10" &&
     /ON\s+CONFLICT\s*\(\s*"label"\s*\)\s+DO\s+NOTHING\s*;?\s*$/i.test(statement)
+  );
+}
+
+function shouldSkipSupersededMigrationStatement(migration, statement) {
+  return (
+    migration.tag === "0026_preserve_scenario_context" &&
+    statement.includes("legacy-private-%") &&
+    (
+      statement.includes('DELETE FROM "organization_memberships"') ||
+      statement.includes('DELETE FROM "organizations"')
+    )
   );
 }
 
@@ -627,6 +647,7 @@ async function executeForAdoption(client, migration, statement, index) {
 
 async function applyMigration(client, migration) {
   for (const [index, statement] of migration.statements.entries()) {
+    if (shouldSkipSupersededMigrationStatement(migration, statement)) continue;
     await executeForAdoption(client, migration, statement, index);
   }
   await client.query(
@@ -640,6 +661,7 @@ async function applyMigration(client, migration) {
 
 async function applyReviewedMigrationStrictly(client, migration) {
   for (const [index, statement] of migration.statements.entries()) {
+    if (shouldSkipSupersededMigrationStatement(migration, statement)) continue;
     try {
       await client.query("SET LOCAL standard_conforming_strings = on");
       await client.query(statement);

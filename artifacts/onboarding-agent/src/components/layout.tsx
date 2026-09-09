@@ -3,6 +3,7 @@ import { Link, useLocation } from 'wouter';
 import { useClerk, useUser } from '@clerk/react';
 import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
 import { cn } from './ui-shared';
+import { OrganizationSwitcher } from './organization-switcher';
 import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
@@ -162,6 +163,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-4">
+            <OrganizationSwitcher />
             <div className="relative cursor-pointer">
               <Bell className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} />
               <div className="absolute top-0 right-0 w-2 h-2 rounded-full border-2" style={{ backgroundColor: 'var(--status-amber)', borderColor: 'var(--surface)' }} />

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserButton, Show } from "@clerk/react";
+import { OrganizationSwitcher } from "@/components/organization-switcher";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -64,6 +65,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             HRO Explorer
           </div>
+        </div>
+        <div className="border-b border-sidebar-border px-4 py-3">
+          <OrganizationSwitcher />
         </div>
         
         <div className="flex-1 overflow-y-auto py-4 px-3">

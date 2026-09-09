@@ -1,5 +1,7 @@
 export type OrganizationMembership = {
   organizationId: string;
+  name?: string;
+  role?: string;
 };
 
 export type OrganizationBootstrapResponse = {

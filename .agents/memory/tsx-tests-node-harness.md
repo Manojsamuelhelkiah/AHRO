@@ -17,3 +17,9 @@ Mounted-component tests should keep React itself external to the esbuild bundle 
 **Why:** React's async `act` uses a dynamic `module.require("timers")` to select Node task scheduling. Bundling strips that native module method, so it falls back to browser MessageChannels. In Node those ports stay referenced: assertions pass but the worker never exits. Force-exit also produced varying, incomplete parallel-suite results rather than reliably validating every test.
 
 **How to apply:** Use the native React package, initialize the DOM before browser-sensitive bundled modules, and unmount roots, clear query/mutation timers, and close the DOM during teardown. If a test uses the MessageChannel fallback, track and close its test-owned ports. Let Node exit naturally: a timeout after passing assertions or an unexplained change in the reported test count is an unreliable run, not a reason to add `--test-force-exit`.
+
+Mounted page tests that use Wouter or form libraries also need the happy-dom `location`, `history`, window event methods, and HTML element constructors installed on `globalThis` before importing the page.
+
+**Why:** those libraries read browser globals directly rather than consistently through `window`; a partial DOM shim renders shared components but fails only when a routed page mounts.
+
+**How to apply:** mirror the complete browser-global setup from existing mounted page suites whenever a test imports routing, forms, dialogs, or query-driven pages.

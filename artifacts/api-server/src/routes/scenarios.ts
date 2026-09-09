@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db, scenariosTable, scenarioFilesTable, actualsOverlaysTable, objectCleanupJobsTable } from "@workspace/db";
 import {
   ListScenariosResponse,
@@ -31,6 +31,16 @@ import {
 } from "../lib/organization-scope";
 
 const router: IRouter = Router();
+
+function scenarioAccessWhere(organizationId: string, ownerUserId: string) {
+  return and(
+    organizationWhere(scenariosTable, organizationId),
+    or(
+      eq(scenariosTable.ownerUserId, ownerUserId),
+      isNull(scenariosTable.ownerUserId),
+    ),
+  );
+}
 
 async function loadRequiredCustomIntents(organizationId: string) {
   try {
@@ -64,12 +74,16 @@ router.get("/scenarios", requireAuth, async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
     const rows = await db.select().from(scenariosTable)
-      .where(organizationWhere(scenariosTable, organizationId))
+      .where(scenarioAccessWhere(organizationId, req.authUserId!))
       .orderBy(scenariosTable.id);
     const fileRows = rows.length
       ? await db.select({ id: scenarioFilesTable.id, scenarioId: scenarioFilesTable.scenarioId })
           .from(scenarioFilesTable)
-          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.scenarioId, rows.map((row) => row.id))))
+          .where(and(
+            organizationWhere(scenarioFilesTable, organizationId),
+            eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+            inArray(scenarioFilesTable.scenarioId, rows.map((row) => row.id)),
+          ))
       : [];
     res.json(ListScenariosResponse.parse(rows.map((row) =>
       serialize(row, fileRows.filter((file) => file.scenarioId === row.id).map((file) => file.id)))));
@@ -92,7 +106,11 @@ router.post("/scenarios", requireAuth, async (req, res, next) => {
     const row = await db.transaction(async (tx) => {
       if (fileIds.length) {
         const files = await tx.select({ id: scenarioFilesTable.id, scenarioId: scenarioFilesTable.scenarioId }).from(scenarioFilesTable)
-          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, fileIds)))
+          .where(and(
+            organizationWhere(scenarioFilesTable, organizationId),
+            eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+            inArray(scenarioFilesTable.id, fileIds),
+          ))
           .for("update");
         if (files.length !== fileIds.length) throw new InputValidationError("One or more file IDs are unavailable");
         if (files.some((file) => file.scenarioId !== null)) {
@@ -109,7 +127,11 @@ router.post("/scenarios", requireAuth, async (req, res, next) => {
         }).returning();
       if (fileIds.length) {
         await tx.update(scenarioFilesTable).set({ scenarioId: created!.id, updatedAt: new Date() })
-          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, fileIds)));
+          .where(and(
+            organizationWhere(scenarioFilesTable, organizationId),
+            eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+            inArray(scenarioFilesTable.id, fileIds),
+          ));
       }
       return created!;
     });
@@ -128,14 +150,18 @@ router.get("/scenarios/:id", requireAuth, async (req, res, next) => {
       .from(scenariosTable)
       .where(and(
         eq(scenariosTable.id, id),
-        organizationWhere(scenariosTable, organizationId),
+        scenarioAccessWhere(organizationId, req.authUserId!),
       ));
     if (!row) {
       res.status(404).json({ error: "Scenario not found" });
       return;
     }
     const files = await db.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable)
-      .where(and(eq(scenarioFilesTable.scenarioId, id), eq(scenarioFilesTable.ownerUserId, req.authUserId!)));
+      .where(and(
+        organizationWhere(scenarioFilesTable, organizationId),
+        eq(scenarioFilesTable.scenarioId, id),
+        eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+      ));
     res.json(GetScenarioResponse.parse(serialize(row, files.map((file) => file.id))));
   } catch (err) {
     next(err);
@@ -161,7 +187,7 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
         .from(scenariosTable)
         .where(and(
           eq(scenariosTable.id, id),
-          organizationWhere(scenariosTable, organizationId),
+          scenarioAccessWhere(organizationId, req.authUserId!),
         ))
         .for("update");
       if (!accessibleScenario) return undefined;
@@ -171,7 +197,11 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
         }
         const files = body.fileIds.length
           ? await tx.select({ id: scenarioFilesTable.id, scenarioId: scenarioFilesTable.scenarioId }).from(scenarioFilesTable)
-              .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, body.fileIds)))
+              .where(and(
+                organizationWhere(scenarioFilesTable, organizationId),
+                eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+                inArray(scenarioFilesTable.id, body.fileIds),
+              ))
               .for("update")
           : [];
         if (files.length !== body.fileIds.length) throw new InputValidationError("One or more file IDs are unavailable");
@@ -179,17 +209,29 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
           throw new InputValidationError("A file already belongs to another scenario");
         }
         await tx.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable)
-          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), eq(scenarioFilesTable.scenarioId, id)))
+          .where(and(
+            organizationWhere(scenarioFilesTable, organizationId),
+            eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+            eq(scenarioFilesTable.scenarioId, id),
+          ))
           .for("update");
         await tx.update(scenarioFilesTable).set({ scenarioId: null, updatedAt: new Date() })
-          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), eq(scenarioFilesTable.scenarioId, id)));
+          .where(and(
+            organizationWhere(scenarioFilesTable, organizationId),
+            eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+            eq(scenarioFilesTable.scenarioId, id),
+          ));
         if (body.fileIds.length) await tx.update(scenarioFilesTable).set({ scenarioId: id, updatedAt: new Date() })
-          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, body.fileIds)));
+          .where(and(
+            organizationWhere(scenarioFilesTable, organizationId),
+            eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+            inArray(scenarioFilesTable.id, body.fileIds),
+          ));
       }
       const [updated] = await tx.update(scenariosTable).set(updates)
         .where(and(
           eq(scenariosTable.id, id),
-          organizationWhere(scenariosTable, organizationId),
+          scenarioAccessWhere(organizationId, req.authUserId!),
         ))
         .returning();
       return updated;
@@ -199,7 +241,11 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
       return;
     }
     const files = await db.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable)
-      .where(and(eq(scenarioFilesTable.scenarioId, id), eq(scenarioFilesTable.ownerUserId, req.authUserId!)));
+      .where(and(
+        organizationWhere(scenarioFilesTable, organizationId),
+        eq(scenarioFilesTable.scenarioId, id),
+        eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+      ));
     res.json(UpdateScenarioResponse.parse(serialize(row, files.map((file) => file.id))));
   } catch (err) {
     next(err);
@@ -213,16 +259,19 @@ router.delete("/scenarios/:id", requireAuth, async (req, res, next) => {
     const row = await db.transaction(async (tx) => {
       const [accessible] = await tx.select().from(scenariosTable).where(and(
         eq(scenariosTable.id, id),
-        organizationWhere(scenariosTable, organizationId),
+        scenarioAccessWhere(organizationId, req.authUserId!),
       )).for("update");
       if (!accessible) return undefined;
-      const files = await tx.select().from(scenarioFilesTable).where(eq(scenarioFilesTable.scenarioId, id)).for("update");
+      const files = await tx.select().from(scenarioFilesTable).where(and(
+        organizationWhere(scenarioFilesTable, organizationId),
+        eq(scenarioFilesTable.scenarioId, id),
+      )).for("update");
       for (const file of files) {
         await tx.insert(objectCleanupJobsTable).values({ objectPath: file.objectPath }).onConflictDoNothing();
       }
       const [deleted] = await tx.delete(scenariosTable).where(and(
         eq(scenariosTable.id, id),
-        organizationWhere(scenariosTable, organizationId),
+        scenarioAccessWhere(organizationId, req.authUserId!),
       )).returning();
       return deleted;
     });

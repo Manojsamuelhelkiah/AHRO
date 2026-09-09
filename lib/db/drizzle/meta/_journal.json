@@ -204,6 +204,34 @@
       "when": 1788887340008,
       "tag": "0023_application_organizations_phase_b",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1788887340007,
+      "tag": "0025_private_scenario_tenancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788887340008,
+      "tag": "0026_preserve_scenario_context",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788887340009,
+      "tag": "0027_quarantine_scenario_file_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788887340010,
+      "tag": "0028_restore_staged_scenario_context",
+      "breakpoints": true
     }
   ]
 }

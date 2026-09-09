@@ -32,6 +32,11 @@ import {
   processObjectCleanupJobs,
 } from "../lib/scenario-file-lifecycle";
 import { streamScenarioFileDownload } from "../lib/scenario-file-download";
+import {
+  getOrganizationId,
+  organizationValues,
+  organizationWhere,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
@@ -46,16 +51,29 @@ function serialize(row: typeof scenarioFilesTable.$inferSelect) {
   };
 }
 
-async function ownedScenarioExists(id: number, ownerUserId: string): Promise<boolean> {
-  const [row] = await db.select({ id: scenariosTable.id }).from(scenariosTable)
-    .where(and(eq(scenariosTable.id, id), eq(scenariosTable.ownerUserId, ownerUserId)));
-  return Boolean(row);
-}
-
-async function accessibleScenarioExists(id: number, ownerUserId: string): Promise<boolean> {
+async function ownedScenarioExists(
+  id: number,
+  ownerUserId: string,
+  organizationId: string,
+): Promise<boolean> {
   const [row] = await db.select({ id: scenariosTable.id }).from(scenariosTable)
     .where(and(
       eq(scenariosTable.id, id),
+      organizationWhere(scenariosTable, organizationId),
+      eq(scenariosTable.ownerUserId, ownerUserId),
+    ));
+  return Boolean(row);
+}
+
+async function accessibleScenarioExists(
+  id: number,
+  ownerUserId: string,
+  organizationId: string,
+): Promise<boolean> {
+  const [row] = await db.select({ id: scenariosTable.id }).from(scenariosTable)
+    .where(and(
+      eq(scenariosTable.id, id),
+      organizationWhere(scenariosTable, organizationId),
       or(eq(scenariosTable.ownerUserId, ownerUserId), isNull(scenariosTable.ownerUserId)),
     ));
   return Boolean(row);
@@ -66,15 +84,17 @@ router.post("/scenario-files/upload-intents", requireAuth, async (req, res, next
     await cleanupExpiredScenarioUploadIntents();
     await processObjectCleanupJobs();
     const body = CreateScenarioFileUploadIntentBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
     const declared = validateDeclaredScenarioFile(body.name, body.contentType, body.size);
     const id = randomUUID();
     const objectPath = scenarioUploadObjectPath(req.authUserId!, id);
     await db.transaction(async (tx) => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${req.authUserId!}))`);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${organizationId}:${req.authUserId!}`}))`);
       const [usage] = await tx.select({
         count: sql<number>`count(*)::int`,
         bytes: sql<number>`coalesce(sum(${scenarioUploadIntentsTable.sizeBytes}), 0)::int`,
       }).from(scenarioUploadIntentsTable).where(and(
+        organizationWhere(scenarioUploadIntentsTable, organizationId),
         eq(scenarioUploadIntentsTable.ownerUserId, req.authUserId!),
         inArray(scenarioUploadIntentsTable.status, ["pending", "uploading", "uploaded", "processing"]),
         gt(scenarioUploadIntentsTable.expiresAt, new Date()),
@@ -84,6 +104,7 @@ router.post("/scenario-files/upload-intents", requireAuth, async (req, res, next
       }
       await tx.insert(scenarioUploadIntentsTable).values({
         id,
+        ...organizationValues(organizationId),
         ownerUserId: req.authUserId!,
         objectPath,
         finalObjectPath: scenarioFinalObjectPath(req.authUserId!, id),
@@ -115,8 +136,10 @@ router.put("/scenario-files/upload-intents/:intentId/content", requireAuth, asyn
   try {
     await cleanupExpiredScenarioUploadIntents();
     const { intentId } = UploadScenarioFileContentParams.parse(req.params);
+    const organizationId = getOrganizationId(req);
     const [declaration] = await db.select().from(scenarioUploadIntentsTable).where(and(
       eq(scenarioUploadIntentsTable.id, intentId),
+      organizationWhere(scenarioUploadIntentsTable, organizationId),
       eq(scenarioUploadIntentsTable.ownerUserId, req.authUserId!),
       eq(scenarioUploadIntentsTable.status, "pending"),
       gt(scenarioUploadIntentsTable.expiresAt, new Date()),
@@ -155,6 +178,7 @@ router.put("/scenario-files/upload-intents/:intentId/content", requireAuth, asyn
     await db.transaction(async (tx) => {
       const [claimed] = await tx.update(scenarioUploadIntentsTable).set({ status: "uploading" }).where(and(
         eq(scenarioUploadIntentsTable.id, intentId),
+        organizationWhere(scenarioUploadIntentsTable, organizationId),
         eq(scenarioUploadIntentsTable.ownerUserId, req.authUserId!),
         eq(scenarioUploadIntentsTable.status, "pending"),
         gt(scenarioUploadIntentsTable.expiresAt, new Date()),
@@ -170,6 +194,7 @@ router.put("/scenario-files/upload-intents/:intentId/content", requireAuth, asyn
       });
       const transitioned = await tx.update(scenarioUploadIntentsTable).set({ status: "uploaded" }).where(and(
         eq(scenarioUploadIntentsTable.id, claimed.id),
+        organizationWhere(scenarioUploadIntentsTable, organizationId),
         eq(scenarioUploadIntentsTable.ownerUserId, req.authUserId!),
         eq(scenarioUploadIntentsTable.status, "uploading"),
       )).returning({ id: scenarioUploadIntentsTable.id });
@@ -202,12 +227,16 @@ router.post("/scenario-files/finalize", requireAuth, async (req, res, next) => {
     await cleanupExpiredScenarioUploadIntents();
     await processObjectCleanupJobs();
     const body = FinalizeScenarioFileBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
     const declared = validateDeclaredScenarioFile(body.name, body.contentType, body.size);
     if (!isOwnedUploadPath(body.objectPath, req.authUserId!)) {
       res.status(404).json({ error: "Uploaded object not found" });
       return;
     }
-    if (body.scenarioId && !(await ownedScenarioExists(body.scenarioId, req.authUserId!))) {
+    if (
+      body.scenarioId &&
+      !(await ownedScenarioExists(body.scenarioId, req.authUserId!, organizationId))
+    ) {
       res.status(404).json({ error: "Scenario not found" });
       return;
     }
@@ -216,6 +245,7 @@ router.post("/scenario-files/finalize", requireAuth, async (req, res, next) => {
         status: "processing",
         processingAt: new Date(),
       }).where(and(
+        organizationWhere(scenarioUploadIntentsTable, organizationId),
         eq(scenarioUploadIntentsTable.ownerUserId, req.authUserId!),
         eq(scenarioUploadIntentsTable.objectPath, body.objectPath),
         eq(scenarioUploadIntentsTable.originalName, body.name),
@@ -255,6 +285,7 @@ router.post("/scenario-files/finalize", requireAuth, async (req, res, next) => {
       if (body.replaceFileId) {
         const [existing] = await tx.select().from(scenarioFilesTable).where(and(
           eq(scenarioFilesTable.id, body.replaceFileId!),
+          organizationWhere(scenarioFilesTable, organizationId),
           eq(scenarioFilesTable.ownerUserId, req.authUserId!),
         )).for("update");
         if (!existing) throw new Error("File to replace not found");
@@ -269,6 +300,7 @@ router.post("/scenario-files/finalize", requireAuth, async (req, res, next) => {
           updatedAt: new Date(),
         }).where(and(
           eq(scenarioFilesTable.id, existing.id),
+          organizationWhere(scenarioFilesTable, organizationId),
           eq(scenarioFilesTable.ownerUserId, req.authUserId!),
         )).returning();
         if (!updated) throw new Error("File replacement transition failed");
@@ -278,11 +310,13 @@ router.post("/scenario-files/finalize", requireAuth, async (req, res, next) => {
         if (body.scenarioId !== undefined) {
           const [scenario] = await tx.select({ id: scenariosTable.id }).from(scenariosTable).where(and(
             eq(scenariosTable.id, body.scenarioId),
+            organizationWhere(scenariosTable, organizationId),
             eq(scenariosTable.ownerUserId, req.authUserId!),
           )).for("update");
           if (!scenario) throw new Error("Scenario not found");
         }
         const [created] = await tx.insert(scenarioFilesTable).values({
+          ...organizationValues(organizationId),
           ownerUserId: req.authUserId!,
           scenarioId: body.scenarioId ?? null,
           objectPath: promoted.objectPath,
@@ -298,6 +332,7 @@ router.post("/scenario-files/finalize", requireAuth, async (req, res, next) => {
         finalizedAt: new Date(),
       }).where(and(
         eq(scenarioUploadIntentsTable.id, claimed.id),
+        organizationWhere(scenarioUploadIntentsTable, organizationId),
         eq(scenarioUploadIntentsTable.status, "processing"),
       )).returning({ id: scenarioUploadIntentsTable.id });
       if (finalized.length !== 1) throw new Error("Finalize lifecycle transition failed");
@@ -321,11 +356,13 @@ router.post("/scenario-files/finalize", requireAuth, async (req, res, next) => {
 router.get("/scenarios/:id/files", requireAuth, async (req, res, next) => {
   try {
     const { id } = ListScenarioFilesParams.parse(req.params);
-    if (!(await accessibleScenarioExists(id, req.authUserId!))) {
+    const organizationId = getOrganizationId(req);
+    if (!(await accessibleScenarioExists(id, req.authUserId!, organizationId))) {
       res.status(404).json({ error: "Scenario not found" });
       return;
     }
     const rows = await db.select().from(scenarioFilesTable).where(and(
+      organizationWhere(scenarioFilesTable, organizationId),
       eq(scenarioFilesTable.scenarioId, id),
       eq(scenarioFilesTable.ownerUserId, req.authUserId!),
     )).orderBy(scenarioFilesTable.createdAt);
@@ -342,8 +379,10 @@ router.get("/scenario-files/:id/download", requireAuth, async (req, res, next) =
       res.status(404).json({ error: "File not found" });
       return;
     }
+    const organizationId = getOrganizationId(req);
     const [row] = await db.select().from(scenarioFilesTable).where(and(
       eq(scenarioFilesTable.id, id),
+      organizationWhere(scenarioFilesTable, organizationId),
       eq(scenarioFilesTable.ownerUserId, req.authUserId!),
     ));
     if (!row) {
@@ -375,15 +414,18 @@ router.get("/scenario-files/:id/download", requireAuth, async (req, res, next) =
 router.delete("/scenario-files/:id", requireAuth, async (req, res, next) => {
   try {
     const { id } = DeleteScenarioFileParams.parse(req.params);
+    const organizationId = getOrganizationId(req);
     const existing = await db.transaction(async (tx) => {
       const [row] = await tx.select().from(scenarioFilesTable).where(and(
         eq(scenarioFilesTable.id, id),
+        organizationWhere(scenarioFilesTable, organizationId),
         eq(scenarioFilesTable.ownerUserId, req.authUserId!),
       )).for("update");
       if (!row) return undefined;
       await tx.insert(objectCleanupJobsTable).values({ objectPath: row.objectPath }).onConflictDoNothing();
       await tx.delete(scenarioFilesTable).where(and(
         eq(scenarioFilesTable.id, id),
+        organizationWhere(scenarioFilesTable, organizationId),
         eq(scenarioFilesTable.ownerUserId, req.authUserId!),
       ));
       return row;
