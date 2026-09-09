@@ -1,6 +1,32 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { explicitlyAllowlistedCandidateAddress, gmailAmbiguousFailure, gmailHttpFailure, systemEmailTestAddress, twilioAmbiguousFailure, twilioHttpFailure } from "./channels";
+import { blockedPublishBackupReadiness, explicitlyAllowlistedCandidateAddress, gmailAmbiguousFailure, gmailHttpFailure, systemEmailTestAddress, twilioAmbiguousFailure, twilioHttpFailure } from "./channels";
+
+const BACKUP_ENV_KEYS = [
+  "ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP",
+  "TWILIO_ACCOUNT_SID",
+  "TWILIO_AUTH_TOKEN",
+  "TWILIO_WHATSAPP_FROM",
+] as const;
+
+function withBackupEnvironment(
+  values: Partial<Record<(typeof BACKUP_ENV_KEYS)[number], string>>,
+  run: () => void,
+) {
+  const previous = Object.fromEntries(BACKUP_ENV_KEYS.map((key) => [key, process.env[key]]));
+  try {
+    for (const key of BACKUP_ENV_KEYS) {
+      if (values[key] === undefined) delete process.env[key];
+      else process.env[key] = values[key];
+    }
+    run();
+  } finally {
+    for (const key of BACKUP_ENV_KEYS) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
 
 test("Gmail HTTP rejection is definitive failed with the provider reason", () => {
   const result = gmailHttpFailure(403, "recipient rejected");
@@ -51,4 +77,40 @@ test("candidate legacy fallback honors only explicit environment authorization",
     if (oldAllowed === undefined) delete process.env.ONBOARDING_ALLOWED_RECIPIENTS;
     else process.env.ONBOARDING_ALLOWED_RECIPIENTS = oldAllowed;
   }
+});
+
+test("blocked-publish backup readiness masks phone values and never exposes credentials", () => {
+  withBackupEnvironment({
+    ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP: "whatsapp:+15551234567",
+    TWILIO_ACCOUNT_SID: "AC-private-account",
+    TWILIO_AUTH_TOKEN: "private-auth-token",
+    TWILIO_WHATSAPP_FROM: "whatsapp:+14155238886",
+  }, () => {
+    const status = blockedPublishBackupReadiness();
+    assert.deepEqual(status, {
+      ready: true,
+      destination: "+155•••67",
+      sender: "+141•••86",
+      missing: [],
+      note: "Backup WhatsApp alerts are ready if Gmail rejects a blocked-release alert.",
+    });
+    const serialized = JSON.stringify(status);
+    assert.doesNotMatch(serialized, /AC-private-account|private-auth-token|15551234567|14155238886/);
+  });
+});
+
+test("blocked-publish backup readiness names only missing setting categories", () => {
+  withBackupEnvironment({
+    ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP: "+15551234567",
+  }, () => {
+    const status = blockedPublishBackupReadiness();
+    assert.equal(status.ready, false);
+    assert.deepEqual(status.missing, [
+      "Twilio account configuration",
+      "Twilio WhatsApp sender",
+    ]);
+    assert.equal(status.destination, "+155•••67");
+    assert.equal(status.sender, null);
+    assert.doesNotMatch(status.note, /SID|token|credential/i);
+  });
 });

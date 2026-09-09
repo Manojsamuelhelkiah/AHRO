@@ -2562,6 +2562,26 @@ export interface OnbChannelInfo {
 }
 
 /**
+ * Side-effect-free readiness of the WhatsApp fallback for blocked-release alerts
+ */
+export interface OnbBlockedPublishBackupReadiness {
+  ready: boolean;
+  /**
+     * Masked backup WhatsApp destination
+     * @nullable
+     */
+  destination: string | null;
+  /**
+     * Masked Twilio WhatsApp sender
+     * @nullable
+     */
+  sender: string | null;
+  /** Non-secret setting categories that still need configuration */
+  missing: string[];
+  note: string;
+}
+
+/**
  * Health of the background Gmail inbox poller that ingests real email replies
  */
 export interface OnbInboundEmailMonitor {
@@ -2594,6 +2614,7 @@ export interface OnbInboundEmailMonitor {
 export interface OnbChannelStatus {
   email: OnbChannelInfo;
   whatsapp: OnbChannelInfo;
+  blockedPublishBackup: OnbBlockedPublishBackupReadiness;
   inboundEmail: OnbInboundEmailMonitor;
 }
 
@@ -2838,6 +2859,7 @@ export type ListCustomIntentsParams = {
  */
 status?: string;
 };
+
 export type ExportScenarioWorkbookLinkParams = {
 /**
  * base64url-encoded JSON of {"inputs":ScenarioInputs}.

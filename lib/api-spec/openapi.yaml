@@ -4988,9 +4988,31 @@ components:
           $ref: "#/components/schemas/OnbChannelInfo"
         whatsapp:
           $ref: "#/components/schemas/OnbChannelInfo"
+        blockedPublishBackup:
+          $ref: "#/components/schemas/OnbBlockedPublishBackupReadiness"
         inboundEmail:
           $ref: "#/components/schemas/OnbInboundEmailMonitor"
-      required: [email, whatsapp, inboundEmail]
+      required: [email, whatsapp, blockedPublishBackup, inboundEmail]
+    OnbBlockedPublishBackupReadiness:
+      type: object
+      description: Side-effect-free readiness of the WhatsApp fallback for blocked-release alerts
+      properties:
+        ready:
+          type: boolean
+        destination:
+          type: ["string", "null"]
+          description: Masked backup WhatsApp destination
+        sender:
+          type: ["string", "null"]
+          description: Masked Twilio WhatsApp sender
+        missing:
+          type: array
+          items:
+            type: string
+          description: Non-secret setting categories that still need configuration
+        note:
+          type: string
+      required: [ready, destination, sender, missing, note]
     OnbInboundEmailMonitor:
       type: object
       description: Health of the background Gmail inbox poller that ingests real email replies

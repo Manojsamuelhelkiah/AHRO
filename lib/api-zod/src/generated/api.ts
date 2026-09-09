@@ -7021,6 +7021,13 @@ export const GetOnboardingChannelsResponse = zod.object({
   "sandboxNumber": zod.string().nullish().describe('WhatsApp only — the Twilio sandbox sender number hires message to (re)join a session'),
   "sandboxJoinKeyword": zod.string().nullish().describe('WhatsApp only — the sandbox join keyword (hires send \"join <keyword>\"), when configured')
 }),
+  "blockedPublishBackup": zod.object({
+  "ready": zod.boolean(),
+  "destination": zod.string().nullable().describe('Masked backup WhatsApp destination'),
+  "sender": zod.string().nullable().describe('Masked Twilio WhatsApp sender'),
+  "missing": zod.array(zod.string()).describe('Non-secret setting categories that still need configuration'),
+  "note": zod.string()
+}).describe('Side-effect-free readiness of the WhatsApp fallback for blocked-release alerts'),
   "inboundEmail": zod.object({
   "running": zod.boolean().describe('Whether the poll loop has been started in this server process'),
   "healthy": zod.boolean().describe('True only when state is \"healthy\" — a poll succeeded recently and nothing failed since'),

@@ -106,6 +106,9 @@ export function SystemsPage() {
             </div>
           ))}
         </div>
+        {!loadingChan && channels?.blockedPublishBackup && (
+          <BlockedPublishBackupCard readiness={channels.blockedPublishBackup} />
+        )}
       </div>
 
       <div className="space-y-4 pt-4">
@@ -178,6 +181,74 @@ export function SystemsPage() {
         ) : null}
       </div>
 
+    </div>
+  );
+}
+
+function BlockedPublishBackupCard({ readiness }: { readiness: {
+  ready: boolean;
+  destination: string | null;
+  sender: string | null;
+  missing: string[];
+  note: string;
+} }) {
+  return (
+    <div className={cn(
+      "rounded-[var(--radius-lg)] border p-[var(--space-lg)] shadow-[var(--shadow-sm)]",
+      readiness.ready
+        ? "border-[var(--status-green-fg)] bg-[var(--status-green-bg)]"
+        : "border-[var(--status-amber-fg)] bg-[var(--status-amber-bg)]",
+    )}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <IconTile
+            icon={readiness.ready ? Check : AlertTriangle}
+            className={cn(
+              "border-none shadow-sm",
+              readiness.ready
+                ? "bg-[var(--surface)] text-[var(--status-green-fg)]"
+                : "bg-[var(--surface)] text-[var(--status-amber-fg)]",
+            )}
+          />
+          <div>
+            <h3 className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">
+              Blocked-release backup alerts
+            </h3>
+            <p className="mt-1 text-[var(--text-sm)] font-medium text-[var(--text-secondary)]">
+              {readiness.note}
+            </p>
+          </div>
+        </div>
+        <Badge className={cn(
+          "shrink-0 border-none text-[var(--text-xs)] font-semibold shadow-none",
+          readiness.ready
+            ? "bg-[var(--surface)] text-[var(--status-green-fg)]"
+            : "bg-[var(--surface)] text-[var(--status-amber-fg)]",
+        )}>
+          {readiness.ready ? "READY" : "NEEDS ATTENTION"}
+        </Badge>
+      </div>
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-[var(--radius-md)] bg-[var(--surface)] p-3">
+          <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Backup destination
+          </p>
+          <p className="mt-1.5 font-mono text-[var(--text-sm)] font-medium text-[var(--text-primary)]">
+            {readiness.destination ?? "Not configured"}
+          </p>
+        </div>
+        <div className="rounded-[var(--radius-md)] bg-[var(--surface)] p-3">
+          <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Twilio sender
+          </p>
+          <p className="mt-1.5 font-mono text-[var(--text-sm)] font-medium text-[var(--text-primary)]">
+            {readiness.sender ?? "Not configured"}
+          </p>
+        </div>
+      </div>
+      <p className="mt-4 text-[var(--text-xs)] font-medium text-[var(--text-secondary)]">
+        Readiness only — this check does not send an alert.
+      </p>
     </div>
   );
 }

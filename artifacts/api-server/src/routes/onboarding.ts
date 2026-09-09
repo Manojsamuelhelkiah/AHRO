@@ -30,6 +30,7 @@ import {
 import { getScenario, SCENARIOS, DEMO_EMAIL } from "../lib/onboarding/scenarios";
 import { ensureConnectorsSeeded } from "../lib/onboarding/connectors";
 import {
+  blockedPublishBackupReadiness,
   emailChannelInfo,
   sendOutbound,
   sendAdministrativeEmail,
@@ -1500,6 +1501,7 @@ router.get("/onboarding/channels", async (req, res, next) => {
     res.json({
       email: emailChannelInfo(),
       whatsapp: whatsappChannelInfo(),
+      blockedPublishBackup: blockedPublishBackupReadiness(),
       inboundEmail: await getInboundEmailMonitorStatus(getOrganizationId(req)),
     });
   } catch (err) {

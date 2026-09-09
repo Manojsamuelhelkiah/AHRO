@@ -21,6 +21,14 @@ export type ChannelInfo = {
   sandboxJoinKeyword?: string | null;
 };
 
+export type BlockedPublishBackupReadiness = {
+  ready: boolean;
+  destination: string | null;
+  sender: string | null;
+  missing: string[];
+  note: string;
+};
+
 function maskEmail(email: string): string {
   const [local, domain] = email.split("@");
   if (!domain) return "***";
@@ -59,6 +67,33 @@ export function whatsappChannelInfo(): ChannelInfo {
       : "Twilio WhatsApp not connected yet — messages are composed and logged in the case timeline, not delivered.",
     sandboxNumber: from || null,
     sandboxJoinKeyword: joinKeyword || null,
+  };
+}
+
+export function blockedPublishBackupReadiness(): BlockedPublishBackupReadiness {
+  const destination = (
+    process.env.ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP ?? ""
+  ).trim();
+  const accountSid = (process.env.TWILIO_ACCOUNT_SID ?? "").trim();
+  const authToken = (process.env.TWILIO_AUTH_TOKEN ?? "").trim();
+  const sender = (process.env.TWILIO_WHATSAPP_FROM ?? "")
+    .replace(/^whatsapp:/, "")
+    .trim();
+  const missing: string[] = [];
+
+  if (!destination) missing.push("Backup WhatsApp destination");
+  if (!accountSid || !authToken) missing.push("Twilio account configuration");
+  if (!sender) missing.push("Twilio WhatsApp sender");
+
+  return {
+    ready: missing.length === 0,
+    destination: destination ? maskPhone(destination.replace(/^whatsapp:/, "")) : null,
+    sender: sender ? maskPhone(sender) : null,
+    missing,
+    note:
+      missing.length === 0
+        ? "Backup WhatsApp alerts are ready if Gmail rejects a blocked-release alert."
+        : `Configuration needed: ${missing.join(", ")}.`,
   };
 }
 
