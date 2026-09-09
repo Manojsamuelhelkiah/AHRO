@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -b tsconfig.json",
+    "validate:routes": "tsc -b tsconfig.json --pretty false",
     "test": "node ./run-tests.mjs",
     "db:reconcile": "node ./test-db-setup.mjs",
     "db:migrate:reviewed": "node ./run-reviewed-migration.mjs",
