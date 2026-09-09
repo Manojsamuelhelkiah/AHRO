@@ -7,6 +7,7 @@ import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandi
 import { isValidEmail } from "./settings";
 import { randomBytes } from "node:crypto";
 import { externalProviderDispatchDenied } from "./provider-policy";
+import { invalidBlockedPublishBackupCategories } from "../../../blocked-publish-backup-readiness.mjs";
 
 const connectors = new ReplitConnectors();
 
@@ -42,10 +43,6 @@ export function maskPhone(phone: string): string {
 
 function whatsappPhone(value: string): string {
   return value.replace(/^whatsapp:/, "").trim();
-}
-
-function isE164Phone(value: string): boolean {
-  return /^\+[1-9]\d{7,14}$/.test(value);
 }
 
 export function emailChannelInfo(): ChannelInfo {
@@ -87,13 +84,11 @@ export function blockedPublishBackupReadiness(): BlockedPublishBackupReadiness {
   const authToken = (process.env.TWILIO_AUTH_TOKEN ?? "").trim();
   const sender = whatsappPhone(process.env.TWILIO_WHATSAPP_FROM ?? "");
   const missing: string[] = [];
-  const invalid: string[] = [];
+  const invalid = invalidBlockedPublishBackupCategories(process.env);
 
   if (!destination) missing.push("Backup WhatsApp destination");
-  else if (!isE164Phone(destination)) invalid.push("Backup WhatsApp destination");
   if (!accountSid || !authToken) missing.push("Twilio account configuration");
   if (!sender) missing.push("Twilio WhatsApp sender");
-  else if (!isE164Phone(sender)) invalid.push("Twilio WhatsApp sender");
 
   return {
     ready: missing.length === 0 && invalid.length === 0,

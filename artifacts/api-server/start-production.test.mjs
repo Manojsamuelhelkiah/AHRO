@@ -36,6 +36,44 @@ test("starts the API only after tenant safeguards pass", async () => {
   assert.deepEqual(calls, ["verify", "clear-alert", "start"]);
 });
 
+for (const [settingCategory, privateValue] of [
+  ["Backup WhatsApp destination", "whatsapp:555-123-4567"],
+  ["Twilio WhatsApp sender", "whatsapp:+01234567890"],
+]) {
+  test(`blocks API startup when ${settingCategory.toLowerCase()} is malformed`, async () => {
+    const calls = [];
+
+    await assert.rejects(
+      startProduction({
+        validateBackupAlertFormats: () => [settingCategory],
+        verify: async () => {
+          calls.push("verify");
+          return { schema: "public", failures: [] };
+        },
+        alertBlockedPublish: async () => {
+          calls.push("alert");
+        },
+        startApi: async () => {
+          calls.push("start");
+        },
+      }),
+      (error) => {
+        assert.equal(error.code, "PRODUCTION_STARTUP_BLOCKED");
+        assert.equal(
+          error.reasonCategory,
+          STARTUP_FAILURE_REASONS.BACKUP_ALERT_CONFIGURATION,
+        );
+        assert.match(error.message, new RegExp(settingCategory));
+        assert.doesNotMatch(error.message, new RegExp(privateValue));
+        assert.doesNotMatch(error.message, /SID|token|credential/i);
+        return true;
+      },
+    );
+
+    assert.deepEqual(calls, []);
+  });
+}
+
 test("blocks API startup when tenant safeguards fail", async () => {
   let started = false;
   let alerts = 0;

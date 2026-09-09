@@ -3,6 +3,7 @@ import {
   STARTUP_FAILURE_REASONS,
   verifyTenantSafeguards,
 } from "./verify-tenant-safeguards.mjs";
+import { invalidBlockedPublishBackupCategories } from "./blocked-publish-backup-readiness.mjs";
 
 function startupBlockedError(reasonCategory, message, options) {
   const error = new Error(
@@ -45,12 +46,22 @@ async function runAlertWorkWithDeadline(operation, timeoutMs, label) {
 }
 
 export async function startProduction({
+  validateBackupAlertFormats = invalidBlockedPublishBackupCategories,
   verify = verifyTenantSafeguards,
   alertBlockedPublish = defaultAlertBlockedPublish,
   clearBlockedPublishAlert = defaultClearBlockedPublishAlert,
   alertTimeoutMs = DEFAULT_ALERT_TIMEOUT_MS,
   startApi = () => import("./dist/index.mjs"),
 } = {}) {
+  const invalidBackupSettings = validateBackupAlertFormats();
+  if (invalidBackupSettings.length > 0) {
+    throw startupBlockedError(
+      STARTUP_FAILURE_REASONS.BACKUP_ALERT_CONFIGURATION,
+      "Backup alert configuration is invalid. " +
+        `Fix: ${invalidBackupSettings.join(", ")}. The API will not start.`,
+    );
+  }
+
   console.log(
     "Verifying tenant safeguards against the published production database...",
   );
