@@ -14,7 +14,7 @@ const ALERT_BODY = [
   "This alert intentionally omits database details and secrets.",
 ].join("\n");
 
-function defaultAlertMarker() {
+export function blockedPublishAlertMarker(objectName = ALERT_MARKER) {
   const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
   if (!bucketId) {
     throw new Error("DEFAULT_OBJECT_STORAGE_BUCKET_ID is not configured");
@@ -39,7 +39,7 @@ function defaultAlertMarker() {
       totalTimeout: 4,
     },
   });
-  return storage.bucket(bucketId).file(ALERT_MARKER);
+  return storage.bucket(bucketId).file(objectName);
 }
 
 export async function claimBlockedPublishAlert(marker) {
@@ -57,7 +57,7 @@ export async function claimBlockedPublishAlert(marker) {
 }
 
 export async function clearBlockedPublishAlert(options = {}) {
-  const marker = options.marker ?? defaultAlertMarker();
+  const marker = options.marker ?? blockedPublishAlertMarker();
   await marker.delete({ ignoreNotFound: true });
 }
 
@@ -75,7 +75,7 @@ export async function alertBlockedPublish(options = {}) {
     return { claimed: false, sent: false };
   }
 
-  const marker = options.marker ?? defaultAlertMarker();
+  const marker = options.marker ?? blockedPublishAlertMarker();
   const claimed = await claimBlockedPublishAlert(marker);
   if (!claimed) {
     console.log("Blocked-publish operator alert already sent; suppressing retry.");

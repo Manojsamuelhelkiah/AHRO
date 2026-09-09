@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import {
   alertBlockedPublish,
+  blockedPublishAlertMarker,
   claimBlockedPublishAlert,
   clearBlockedPublishAlert,
 } from "./publish-safeguard-alert.mjs";
@@ -18,6 +20,26 @@ test("claims only the first retry while an alert is active", async () => {
   assert.equal(await claimBlockedPublishAlert(marker), true);
   assert.equal(await claimBlockedPublishAlert(marker), false);
 });
+
+test(
+  "real App Storage grants exactly one simultaneous blocked-publish claim",
+  { skip: !process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID },
+  async () => {
+    const marker = blockedPublishAlertMarker(
+      `.system-alerts/integration-tests/blocked-publish-${randomUUID()}`,
+    );
+
+    try {
+      const claims = await Promise.all([
+        claimBlockedPublishAlert(marker),
+        claimBlockedPublishAlert(marker),
+      ]);
+      assert.deepEqual(claims.toSorted(), [false, true]);
+    } finally {
+      await clearBlockedPublishAlert({ marker });
+    }
+  },
+);
 
 test("sends a generic actionable alert without safeguard details", async () => {
   let request;
