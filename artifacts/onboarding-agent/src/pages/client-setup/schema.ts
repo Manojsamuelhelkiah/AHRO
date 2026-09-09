@@ -14,7 +14,16 @@ export const systemSchema = z.object({
   ownerEmail: z.string().email('Enter a valid system owner email').or(z.literal('')),
 });
 
-export const clientSetupSchema = z.object({
+export const processFileSchema = z.object({
+  id: z.number().int().positive(),
+  scenarioId: z.number().int().positive().nullable().optional(),
+  originalName: z.string().min(1),
+  contentType: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+  createdAt: z.string().min(1),
+});
+
+const clientSetupFieldsSchema = z.object({
   clientName: z.string().min(1, 'Client name is required'),
   sector: z.string().min(1, 'Sector is required'),
   employees: z.coerce.number().min(1, 'Must be at least 1'),
@@ -27,16 +36,20 @@ export const clientSetupSchema = z.object({
   hitlHourlyCostUsd: z.coerce.number().min(1, 'Must be at least 1'),
   processMode: z.enum(['recommended', 'hybrid', 'custom']),
   selectedDomains: z.array(z.string()).min(1, 'Select at least one process domain'),
-  uploadedFlowNames: z.string().default(''),
+  processFiles: z.array(processFileSchema).default([]),
   personas: z.array(personaSchema).min(1, 'Add at least one accountable contact'),
   systems: z.array(systemSchema).min(1, 'Map at least one source system'),
   notes: z.string().default(''),
-}).superRefine((draft, ctx) => {
-  if (draft.processMode !== 'recommended' && !draft.uploadedFlowNames.trim()) {
+});
+
+export const clientSetupDataSchema = clientSetupFieldsSchema.omit({ processFiles: true });
+
+export const clientSetupSchema = clientSetupFieldsSchema.superRefine((draft, ctx) => {
+  if (draft.processMode !== 'recommended' && draft.processFiles.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['uploadedFlowNames'],
-      message: 'Attach or name at least one client flow for hybrid or custom adoption',
+      path: ['processFiles'],
+      message: 'Upload at least one client flow for hybrid or custom adoption',
     });
   }
 });
@@ -56,7 +69,7 @@ export const initialDraft: ClientSetupDraft = {
   hitlHourlyCostUsd: 65,
   processMode: 'recommended',
   selectedDomains: ['Hire', 'Pay', 'Leave', 'Benefits', 'Time', 'Mobility', 'Develop', 'Retire', 'Data/Admin', 'Policy'],
-  uploadedFlowNames: '',
+  processFiles: [],
   personas: [
     { role: 'Implementation lead', name: '', email: '' },
     { role: 'HR process owner', name: '', email: '' },

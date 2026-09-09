@@ -2,9 +2,10 @@ import * as React from 'react';
 import { useFormContext, useFieldArray } from 'react-hook-form';
 import { ClientSetupDraft } from './schema';
 import { Input, Button, SectionHeading } from '@/components/ui-shared';
-import { Plus, Trash2, Check, Upload } from 'lucide-react';
+import { Plus, Trash2, Check } from 'lucide-react';
 import { Select, Textarea, FormField } from './ui-form';
 import type { Rollup, Scenario } from '@workspace/api-client-react';
+import { ProcessFileManager } from '@/components/process-file-manager';
 
 const systemDomains = ['Intake', 'Employee Master', 'IAM/Access', 'Learning', 'IT Assets', 'Payroll/Benefits', 'Leave', 'Compliance', 'Documents', 'Communications'];
 const processDomains = ['Hire', 'Pay', 'Leave', 'Benefits', 'Time', 'Mobility', 'Develop', 'Retire', 'Data/Admin', 'Policy'];
@@ -161,9 +162,17 @@ export function StepLandscape() {
   );
 }
 
-export function StepProcess() {
+export function StepProcess({
+  onFileOperationPendingChange,
+}: {
+  onFileOperationPendingChange: (pending: boolean) => void;
+}) {
   const { control, register, setValue, watch, formState: { errors } } = useFormContext<ClientSetupDraft>();
   const { fields, append, remove } = useFieldArray({ control, name: 'personas' });
+  const updateProcessFiles = React.useCallback(
+    (files: ClientSetupDraft['processFiles']) => setValue('processFiles', files, { shouldDirty: true, shouldValidate: true }),
+    [setValue],
+  );
   
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -175,28 +184,12 @@ export function StepProcess() {
                 <option value="custom">Custom (Bring Your Own)</option>
              </Select>
           </FormField>
-           <FormField label="Client Flow Definitions" error={errors.uploadedFlowNames?.message}>
-              <div className="space-y-2">
-                <input
-                  id="client-flow-files"
-                  type="file"
-                  multiple
-                  accept=".json,.csv,.txt,.md,.pdf,.docx"
-                  className="sr-only"
-                  onChange={(event) => {
-                    const names = Array.from(event.target.files ?? []).map((file) => file.name);
-                    if (names.length) setValue('uploadedFlowNames', names.join(', '), { shouldDirty: true, shouldValidate: true });
-                  }}
-                />
-                <label htmlFor="client-flow-files" className="flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--primary)] bg-[var(--primary-light)] px-3 py-2 text-sm font-semibold text-[var(--primary)] hover:bg-[var(--primary-light-bg)]">
-                   <Upload className="h-4 w-4" /> Add file references
-                </label>
-                <Input {...register('uploadedFlowNames')} placeholder="Attached file names or process references" />
-                <p className="m-0 text-[11px] leading-relaxed text-[var(--text-muted)]">
-                  This assessment records file names as handoff references; it does not store file contents yet.
-                  {watch('uploadedFlowNames') ? ` Selected: ${watch('uploadedFlowNames')}` : ''}
-                </p>
-              </div>
+            <FormField label="Client Flow Definitions" error={errors.processFiles?.message}>
+               <ProcessFileManager
+                 files={watch('processFiles')}
+                 onFilesChange={updateProcessFiles}
+                  onPendingChange={onFileOperationPendingChange}
+               />
           </FormField>
        </div>
 
@@ -269,18 +262,24 @@ export function StepProcess() {
   );
 }
 
-export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulating, isCommitting, operationError, intentsLoading }: { 
+export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulating, isCommitting, isFileOperationPending, onFileOperationPendingChange, operationError, intentsLoading }: {
   onSimulate: () => void, 
   onCommit: () => void, 
   rollup: Rollup | null | undefined, 
   scenario: Scenario | null | undefined, 
   isSimulating: boolean, 
   isCommitting: boolean,
+  isFileOperationPending: boolean,
+  onFileOperationPendingChange: (pending: boolean) => void,
   operationError: string | null,
   intentsLoading: boolean,
 }) {
-  const { watch, register } = useFormContext<ClientSetupDraft>();
+  const { watch, register, setValue } = useFormContext<ClientSetupDraft>();
   const draft = watch();
+  const updateProcessFiles = React.useCallback(
+    (files: ClientSetupDraft['processFiles']) => setValue('processFiles', files, { shouldDirty: true, shouldValidate: true }),
+    [setValue],
+  );
 
   if (scenario) {
     return (
@@ -298,6 +297,14 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
                <div className="flex justify-between gap-8"><span className="text-[var(--text-muted)]">Systems Mapped:</span> <span>{draft.systems.length}</span></div>
                 <div className="flex justify-between gap-8"><span className="text-[var(--text-muted)]">Target ROI:</span> <span className="text-[var(--status-green-fg)] font-bold">{rollup ? (rollup.totals.roi * 100).toFixed(1) + '%' : 'N/A'}</span></div>
             </div>
+         </div>
+         <div className="mx-auto mt-6 max-w-xl text-left">
+           <ProcessFileManager
+             scenarioId={scenario.id}
+             files={draft.processFiles}
+             onFilesChange={updateProcessFiles}
+              onPendingChange={onFileOperationPendingChange}
+           />
          </div>
       </div>
     );
@@ -370,8 +377,8 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
                 </div>
 
                 <div className="mt-8 flex justify-end">
-                   <Button size="lg" onClick={onCommit} disabled={isCommitting} className="bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white shadow-md font-semibold px-8 h-12 text-base">
-                     {isCommitting ? 'Committing...' : 'Commit Implementation Scenario'}
+                   <Button size="lg" onClick={onCommit} disabled={isCommitting || isFileOperationPending} className="bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white shadow-md font-semibold px-8 h-12 text-base">
+                      {isFileOperationPending ? 'Waiting for file upload…' : isCommitting ? 'Committing...' : 'Commit Implementation Scenario'}
                    </Button>
                 </div>
              </div>

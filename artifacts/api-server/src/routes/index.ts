@@ -13,12 +13,14 @@ import pricingRateSetsRouter from "./pricing-rate-sets";
 import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
 import intentRegistryRouter from "./intent-registry";
+import scenarioFilesRouter from "./scenario-files";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(corpusRouter);
 router.use(scenariosRouter);
+router.use(scenarioFilesRouter);
 router.use(flowOverridesRouter);
 router.use(actualsRouter);
 router.use(customIntentsRouter);

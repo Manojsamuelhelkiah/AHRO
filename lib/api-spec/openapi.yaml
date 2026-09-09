@@ -473,6 +473,154 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /scenario-files/upload-intents:
+    post:
+      operationId: createScenarioFileUploadIntent
+      tags: [scenarios]
+      summary: Create a one-time authenticated API upload intent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioFileUploadRequest"
+      responses:
+        "200":
+          description: Two-minute, one-time authenticated API upload destination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioFileUploadIntent"
+        "400":
+          description: Unsupported file metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Authentication required
+        "429":
+          description: Per-owner pending upload count or byte quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /scenario-files/upload-intents/{intentId}/content:
+    put:
+      operationId: uploadScenarioFileContent
+      tags: [scenarios]
+      summary: Upload bytes through a one-time authenticated intent
+      parameters:
+        - name: intentId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "204":
+          description: Bytes uploaded and intent ready to finalize
+        "400":
+          description: Content length did not match the declaration
+        "401":
+          description: Authentication required
+        "409":
+          description: Intent expired, already used, or currently in progress
+        "413":
+          description: Uploaded body exceeded the hard file-size limit
+        "415":
+          description: Upload transport must use application/octet-stream
+  /scenario-files/finalize:
+    post:
+      operationId: finalizeScenarioFile
+      tags: [scenarios]
+      summary: Validate an uploaded object and create its private metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioFileFinalizeRequest"
+      responses:
+        "201":
+          description: Upload finalized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioFile"
+        "400":
+          description: Object metadata or content failed validation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Scenario, replacement, or uploaded object not found
+        "409":
+          description: Upload intent expired, was already finalized, or did not match its declaration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /scenarios/{id}/files:
+    get:
+      operationId: listScenarioFiles
+      tags: [scenarios]
+      summary: List private files belonging to an owned scenario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Scenario file list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScenarioFile"
+        "404":
+          description: Scenario not found
+  /scenario-files/{id}/download:
+    get:
+      operationId: downloadScenarioFile
+      tags: [scenarios]
+      summary: Stream a private scenario file after owner authorization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: File bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404":
+          description: File not found
+  /scenario-files/{id}:
+    delete:
+      operationId: deleteScenarioFile
+      tags: [scenarios]
+      summary: Remove a private scenario file
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: File not found
   /pricing-sheets:
     get:
       operationId: listPricingSheets
@@ -3070,11 +3218,18 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+        setupData:
+          type: object
+          nullable: true
+          additionalProperties: true
         createdAt:
           type: string
         updatedAt:
           type: string
-      required: [id, name, inputs, createdAt, updatedAt]
+        fileIds:
+          type: array
+          items: { type: integer }
+      required: [id, name, inputs, createdAt, updatedAt, fileIds]
     ScenarioInput:
       type: object
       properties:
@@ -3082,6 +3237,14 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+        setupData:
+          type: object
+          nullable: true
+          additionalProperties: true
+        fileIds:
+          type: array
+          items: { type: integer }
+          uniqueItems: true
       required: [name, inputs]
     ScenarioUpdate:
       type: object
@@ -3090,6 +3253,47 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+        setupData:
+          type: object
+          nullable: true
+          additionalProperties: true
+        fileIds:
+          type: array
+          items: { type: integer }
+          uniqueItems: true
+    ScenarioFileUploadRequest:
+      type: object
+      required: [name, contentType, size]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        contentType: { type: string, minLength: 1 }
+        size: { type: integer, minimum: 1, maximum: 10485760 }
+    ScenarioFileUploadIntent:
+      type: object
+      required: [uploadUrl, objectPath]
+      properties:
+        uploadUrl: { type: string }
+        objectPath: { type: string }
+    ScenarioFileFinalizeRequest:
+      type: object
+      required: [objectPath, name, contentType, size]
+      properties:
+        objectPath: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        contentType: { type: string, minLength: 1 }
+        size: { type: integer, minimum: 1, maximum: 10485760 }
+        scenarioId: { type: integer, minimum: 1 }
+        replaceFileId: { type: integer, minimum: 1 }
+    ScenarioFile:
+      type: object
+      required: [id, originalName, contentType, sizeBytes, createdAt]
+      properties:
+        id: { type: integer }
+        scenarioId: { type: integer, nullable: true }
+        originalName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        createdAt: { type: string }
     PricingSheetInputs:
       type: object
       required:

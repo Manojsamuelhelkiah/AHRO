@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, scenariosTable, actualsOverlaysTable } from "@workspace/db";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { db, scenariosTable, scenarioFilesTable, actualsOverlaysTable, objectCleanupJobsTable } from "@workspace/db";
 import {
   ListScenariosResponse,
   CreateScenarioBody,
@@ -22,6 +22,8 @@ import {
   type RateSetReference,
 } from "../lib/pricing-rate-sets";
 import { CustomIntentStorageUnavailableError } from "../middlewares/error-handler";
+import { requireAuth } from "../middlewares/require-auth";
+import { processObjectCleanupJobs } from "../lib/scenario-file-lifecycle";
 
 const router: IRouter = Router();
 
@@ -33,34 +35,44 @@ async function loadRequiredCustomIntents() {
   }
 }
 
-function parseId(raw: string | undefined): number {
-  const id = Number(raw);
+function parseId(raw: string | string[] | undefined): number {
+  const id = Number(Array.isArray(raw) ? raw[0] : raw);
   if (!Number.isInteger(id) || id <= 0) {
     throw new InputValidationError("id must be a positive integer");
   }
   return id;
 }
 
-function serialize(row: typeof scenariosTable.$inferSelect) {
+function serialize(row: typeof scenariosTable.$inferSelect, fileIds: number[] = []) {
   return {
     id: row.id,
     name: row.name,
     inputs: row.inputs,
+    setupData: row.setupData,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    fileIds,
   };
 }
 
-router.get("/scenarios", async (_req, res, next) => {
+router.get("/scenarios", requireAuth, async (req, res, next) => {
   try {
-    const rows = await db.select().from(scenariosTable).orderBy(scenariosTable.id);
-    res.json(ListScenariosResponse.parse(rows.map(serialize)));
+    const rows = await db.select().from(scenariosTable)
+      .where(or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId)))
+      .orderBy(scenariosTable.id);
+    const fileRows = rows.length
+      ? await db.select({ id: scenarioFilesTable.id, scenarioId: scenarioFilesTable.scenarioId })
+          .from(scenarioFilesTable)
+          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.scenarioId, rows.map((row) => row.id))))
+      : [];
+    res.json(ListScenariosResponse.parse(rows.map((row) =>
+      serialize(row, fileRows.filter((file) => file.scenarioId === row.id).map((file) => file.id)))));
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/scenarios", async (req, res, next) => {
+router.post("/scenarios", requireAuth, async (req, res, next) => {
   try {
     const body = CreateScenarioBody.parse(req.body);
     const [overrides, customIntents] = await Promise.all([
@@ -69,34 +81,51 @@ router.post("/scenarios", async (req, res, next) => {
     ]);
     const customKeys = new Set(customIntents.map((i) => i.key));
     validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
-    const [row] = await db
-      .insert(scenariosTable)
-      .values({ name: body.name, inputs: body.inputs })
-      .returning();
-    res.status(201).json(CreateScenarioResponse.parse(serialize(row!)));
+    const fileIds = body.fileIds ?? [];
+    const row = await db.transaction(async (tx) => {
+      if (fileIds.length) {
+        const files = await tx.select({ id: scenarioFilesTable.id, scenarioId: scenarioFilesTable.scenarioId }).from(scenarioFilesTable)
+          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, fileIds)))
+          .for("update");
+        if (files.length !== fileIds.length) throw new InputValidationError("One or more file IDs are unavailable");
+        if (files.some((file) => file.scenarioId !== null)) {
+          throw new InputValidationError("A file is already linked to another scenario");
+        }
+      }
+      const [created] = await tx.insert(scenariosTable)
+        .values({ ownerUserId: req.authUserId!, name: body.name, inputs: body.inputs, setupData: body.setupData ?? null }).returning();
+      if (fileIds.length) {
+        await tx.update(scenarioFilesTable).set({ scenarioId: created!.id, updatedAt: new Date() })
+          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, fileIds)));
+      }
+      return created!;
+    });
+    res.status(201).json(CreateScenarioResponse.parse(serialize(row, fileIds)));
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/scenarios/:id", async (req, res, next) => {
+router.get("/scenarios/:id", requireAuth, async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
     const [row] = await db
       .select()
       .from(scenariosTable)
-      .where(eq(scenariosTable.id, id));
+      .where(and(eq(scenariosTable.id, id), or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId))));
     if (!row) {
       res.status(404).json({ error: "Scenario not found" });
       return;
     }
-    res.json(GetScenarioResponse.parse(serialize(row)));
+    const files = await db.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable)
+      .where(and(eq(scenarioFilesTable.scenarioId, id), eq(scenarioFilesTable.ownerUserId, req.authUserId!)));
+    res.json(GetScenarioResponse.parse(serialize(row, files.map((file) => file.id))));
   } catch (err) {
     next(err);
   }
 });
 
-router.patch("/scenarios/:id", async (req, res, next) => {
+router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
     const body = UpdateScenarioBody.parse(req.body);
@@ -108,32 +137,75 @@ router.patch("/scenarios/:id", async (req, res, next) => {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) updates["name"] = body.name;
     if (body.inputs !== undefined) updates["inputs"] = body.inputs;
-    const [row] = await db
-      .update(scenariosTable)
-      .set(updates)
-      .where(eq(scenariosTable.id, id))
-      .returning();
+    if (body.setupData !== undefined) updates["setupData"] = body.setupData;
+    const row = await db.transaction(async (tx) => {
+      const [accessibleScenario] = await tx.select({ id: scenariosTable.id, ownerUserId: scenariosTable.ownerUserId })
+        .from(scenariosTable)
+        .where(and(eq(scenariosTable.id, id), or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId))))
+        .for("update");
+      if (!accessibleScenario) return undefined;
+      if (body.fileIds !== undefined) {
+        if (accessibleScenario.ownerUserId === null && body.fileIds.length > 0) {
+          throw new InputValidationError("Private files cannot be attached to a legacy scenario");
+        }
+        const files = body.fileIds.length
+          ? await tx.select({ id: scenarioFilesTable.id, scenarioId: scenarioFilesTable.scenarioId }).from(scenarioFilesTable)
+              .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, body.fileIds)))
+              .for("update")
+          : [];
+        if (files.length !== body.fileIds.length) throw new InputValidationError("One or more file IDs are unavailable");
+        if (files.some((file) => file.scenarioId !== null && file.scenarioId !== id)) {
+          throw new InputValidationError("A file already belongs to another scenario");
+        }
+        await tx.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable)
+          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), eq(scenarioFilesTable.scenarioId, id)))
+          .for("update");
+        await tx.update(scenarioFilesTable).set({ scenarioId: null, updatedAt: new Date() })
+          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), eq(scenarioFilesTable.scenarioId, id)));
+        if (body.fileIds.length) await tx.update(scenarioFilesTable).set({ scenarioId: id, updatedAt: new Date() })
+          .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, body.fileIds)));
+      }
+      const [updated] = await tx.update(scenariosTable).set(updates)
+        .where(and(eq(scenariosTable.id, id), or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId))))
+        .returning();
+      return updated;
+    });
     if (!row) {
       res.status(404).json({ error: "Scenario not found" });
       return;
     }
-    res.json(UpdateScenarioResponse.parse(serialize(row)));
+    const files = await db.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable)
+      .where(and(eq(scenarioFilesTable.scenarioId, id), eq(scenarioFilesTable.ownerUserId, req.authUserId!)));
+    res.json(UpdateScenarioResponse.parse(serialize(row, files.map((file) => file.id))));
   } catch (err) {
     next(err);
   }
 });
 
-router.delete("/scenarios/:id", async (req, res, next) => {
+router.delete("/scenarios/:id", requireAuth, async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
-    const [row] = await db
-      .delete(scenariosTable)
-      .where(eq(scenariosTable.id, id))
-      .returning();
+    const row = await db.transaction(async (tx) => {
+      const [accessible] = await tx.select().from(scenariosTable).where(and(
+        eq(scenariosTable.id, id),
+        or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId)),
+      )).for("update");
+      if (!accessible) return undefined;
+      const files = await tx.select().from(scenarioFilesTable).where(eq(scenarioFilesTable.scenarioId, id)).for("update");
+      for (const file of files) {
+        await tx.insert(objectCleanupJobsTable).values({ objectPath: file.objectPath }).onConflictDoNothing();
+      }
+      const [deleted] = await tx.delete(scenariosTable).where(and(
+        eq(scenariosTable.id, id),
+        or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId)),
+      )).returning();
+      return deleted;
+    });
     if (!row) {
       res.status(404).json({ error: "Scenario not found" });
       return;
     }
+    await processObjectCleanupJobs();
     res.status(204).send();
   } catch (err) {
     next(err);

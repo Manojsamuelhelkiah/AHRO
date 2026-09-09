@@ -15,6 +15,7 @@ export const getEnterpriseArchitectureBaselineResponseViewpointsMin = 8;
 export const getEnterpriseArchitectureBaselineResponseViewpointsMax = 8;
 
 
+
 export const GetEnterpriseArchitectureBaselineResponse = zod.object({
   "generatedAt": zod.string(),
   "viewpoints": zod.array(zod.object({
@@ -55,36 +56,84 @@ export const listEaAssessmentsResponseOneContentPhaseProgressMin = 10;
 export const listEaAssessmentsResponseOneContentPhaseProgressMax = 10;
 
 
+
+
+
+
 export const listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
 
 
 export const listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
+
+
+
+
 export const listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
 
 
 export const listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
+
+
+
+
 export const listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
 
 
 export const listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
+
+
+
+
 export const listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
+
+
+
+
 export const listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -92,7 +141,11 @@ export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemSequenceM
 export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
+
 export const listEaAssessmentsResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
 
 
 export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -114,9 +167,30 @@ export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMin
 export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const listEaAssessmentsResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const listEaAssessmentsResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
 
 
 export const ListEaAssessmentsResponseItem = zod.object({
@@ -560,36 +634,84 @@ export const createEaAssessmentBodyContentPhaseProgressMin = 10;
 export const createEaAssessmentBodyContentPhaseProgressMax = 10;
 
 
+
+
+
+
 export const createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
 
 
 export const createEaAssessmentBodyContentCurrentStateDataItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateDataItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
 
 
 export const createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
 
 
 export const createEaAssessmentBodyContentCurrentStateAiItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateAiItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const createEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -597,7 +719,11 @@ export const createEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0
 export const createEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
+
 export const createEaAssessmentBodyContentRoadmapWavesItemSequenceMin = 0;
+
+
+
 
 
 export const createEaAssessmentBodyContentRoadmapPrioritizationItemValueMin = 0;
@@ -619,9 +745,29 @@ export const createEaAssessmentBodyContentRoadmapPrioritizationItemCostMin = 0;
 export const createEaAssessmentBodyContentRoadmapPrioritizationItemCostMax = 5;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const createEaAssessmentBodyContentRisksItemLikelihoodMax = 5;
 
 export const createEaAssessmentBodyContentRisksItemImpactMax = 5;
+
+
+
 
 
 export const CreateEaAssessmentBody = zod.object({
@@ -1053,36 +1199,84 @@ export const createEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const createEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
+
+
+
+
 export const createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
 
 
 export const createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
 
 
 export const createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
 
 
 export const createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
+
+
+
+
 export const createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -1090,7 +1284,11 @@ export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequence
 export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
+
 export const createEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
 
 
 export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -1112,9 +1310,30 @@ export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMi
 export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const createEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const createEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
 
 
 export const CreateEaAssessmentResponse = zod.object({
@@ -1548,6 +1767,7 @@ export const CreateEaAssessmentResponse = zod.object({
  */
 
 
+
 export const GetEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -1563,36 +1783,84 @@ export const getEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const getEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
+
+
+
+
 export const getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
 
 
 export const getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
+
+
+
+
 export const getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
 
 
 export const getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
+
+
+
+
 export const getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
 
 
 export const getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
+
+
+
+
 export const getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
+
+
+
+
 export const getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -1600,7 +1868,11 @@ export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin
 export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
+
 export const getEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
 
 
 export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -1622,9 +1894,30 @@ export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin =
 export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const getEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const getEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
 
 
 export const GetEaAssessmentResponse = zod.object({
@@ -2058,6 +2351,7 @@ export const GetEaAssessmentResponse = zod.object({
  */
 
 
+
 export const UpdateEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -2074,36 +2368,84 @@ export const updateEaAssessmentBodyContentPhaseProgressMin = 10;
 export const updateEaAssessmentBodyContentPhaseProgressMax = 10;
 
 
+
+
+
+
 export const updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
 
 
 export const updateEaAssessmentBodyContentCurrentStateDataItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateDataItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
 
 
 export const updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
 
 
 export const updateEaAssessmentBodyContentCurrentStateAiItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateAiItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -2111,7 +2453,11 @@ export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0
 export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
+
 export const updateEaAssessmentBodyContentRoadmapWavesItemSequenceMin = 0;
+
+
+
 
 
 export const updateEaAssessmentBodyContentRoadmapPrioritizationItemValueMin = 0;
@@ -2133,9 +2479,29 @@ export const updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMin = 0;
 export const updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMax = 5;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const updateEaAssessmentBodyContentRisksItemLikelihoodMax = 5;
 
 export const updateEaAssessmentBodyContentRisksItemImpactMax = 5;
+
+
+
 
 
 export const UpdateEaAssessmentBody = zod.object({
@@ -2568,36 +2934,84 @@ export const updateEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const updateEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
+
+
+
+
 export const updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
 
 
 export const updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
 
 
 export const updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
 
 
 export const updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
+
+
+
+
 export const updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -2605,7 +3019,11 @@ export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequence
 export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
+
 export const updateEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
 
 
 export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -2627,9 +3045,30 @@ export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMi
 export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const updateEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const updateEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
 
 
 export const UpdateEaAssessmentResponse = zod.object({
@@ -3063,9 +3502,12 @@ export const UpdateEaAssessmentResponse = zod.object({
  */
 
 
+
 export const DeleteEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
+
+
 
 
 export const DeleteEaAssessmentBody = zod.object({
@@ -3081,9 +3523,12 @@ export const DeleteEaAssessmentResponse = zod.void()
  */
 
 
+
 export const ArchiveEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
+
+
 
 
 export const ArchiveEaAssessmentBody = zod.object({
@@ -3101,36 +3546,84 @@ export const archiveEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const archiveEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
+
+
+
+
 export const archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
+
+
+
+
 
 
 export const archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
+
+
+
+
 export const archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
+
+
+
+
 
 
 export const archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
+
+
+
+
 export const archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
+
+
+
+
 
 
 export const archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
+
+
+
+
 export const archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
+
+
+
+
 export const archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -3138,7 +3631,11 @@ export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenc
 export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
+
 export const archiveEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
+
+
+
 
 
 export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -3160,9 +3657,30 @@ export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostM
 export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const archiveEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const archiveEaAssessmentResponseOneContentRisksItemImpactMax = 5;
+
+
+
+
 
 
 export const ArchiveEaAssessmentResponse = zod.object({
@@ -3597,9 +4115,13 @@ export const ArchiveEaAssessmentResponse = zod.object({
  */
 
 
+
 export const CreateEaAssessmentHandoffParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
+
+
+
 
 
 export const CreateEaAssessmentHandoffBody = zod.object({
@@ -3936,6 +4458,7 @@ export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const listScenariosResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -3974,8 +4497,10 @@ export const ListScenariosResponseItem = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }),
+  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "fileIds": zod.array(zod.number())
 })
 export const ListScenariosResponse = zod.array(ListScenariosResponseItem)
 
@@ -3987,6 +4512,7 @@ export const createScenarioBodyInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const createScenarioBodyInputsAdoptionRampMax = 3;
+
 
 
 export const CreateScenarioBody = zod.object({
@@ -4025,13 +4551,16 @@ export const CreateScenarioBody = zod.object({
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
-})
+}),
+  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
+  "fileIds": zod.array(zod.number()).optional()
 })
 
 export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const createScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const CreateScenarioResponse = zod.object({
@@ -4072,8 +4601,10 @@ export const CreateScenarioResponse = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }),
+  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "fileIds": zod.array(zod.number())
 })
 
 
@@ -4088,6 +4619,7 @@ export const getScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const getScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const GetScenarioResponse = zod.object({
@@ -4128,8 +4660,10 @@ export const GetScenarioResponse = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }),
+  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "fileIds": zod.array(zod.number())
 })
 
 
@@ -4144,6 +4678,7 @@ export const updateScenarioBodyInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const updateScenarioBodyInputsAdoptionRampMax = 3;
+
 
 
 export const UpdateScenarioBody = zod.object({
@@ -4182,13 +4717,16 @@ export const UpdateScenarioBody = zod.object({
   "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
-}).optional()
+}).optional(),
+  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
+  "fileIds": zod.array(zod.number()).optional()
 })
 
 export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const updateScenarioResponseInputsAdoptionRampMax = 3;
+
 
 
 export const UpdateScenarioResponse = zod.object({
@@ -4229,8 +4767,10 @@ export const UpdateScenarioResponse = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }),
+  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "fileIds": zod.array(zod.number())
 })
 
 
@@ -4242,6 +4782,111 @@ export const DeleteScenarioParams = zod.object({
 })
 
 export const DeleteScenarioResponse = zod.void()
+
+
+/**
+ * @summary Create a one-time authenticated API upload intent
+ */
+export const createScenarioFileUploadIntentBodyNameMax = 255;
+
+
+export const createScenarioFileUploadIntentBodySizeMax = 10485760;
+
+
+
+export const CreateScenarioFileUploadIntentBody = zod.object({
+  "name": zod.string().min(1).max(createScenarioFileUploadIntentBodyNameMax),
+  "contentType": zod.string().min(1),
+  "size": zod.number().min(1).max(createScenarioFileUploadIntentBodySizeMax)
+})
+
+export const CreateScenarioFileUploadIntentResponse = zod.object({
+  "uploadUrl": zod.string(),
+  "objectPath": zod.string()
+})
+
+
+/**
+ * @summary Upload bytes through a one-time authenticated intent
+ */
+export const uploadScenarioFileContentPathIntentIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+
+
+export const UploadScenarioFileContentParams = zod.object({
+  "intentId": zod.coerce.string().regex(uploadScenarioFileContentPathIntentIdRegExp)
+})
+
+export const UploadScenarioFileContentResponse = zod.void()
+
+
+/**
+ * @summary Validate an uploaded object and create its private metadata
+ */
+
+export const finalizeScenarioFileBodyNameMax = 255;
+
+
+export const finalizeScenarioFileBodySizeMax = 10485760;
+
+
+
+
+
+export const FinalizeScenarioFileBody = zod.object({
+  "objectPath": zod.string().min(1),
+  "name": zod.string().min(1).max(finalizeScenarioFileBodyNameMax),
+  "contentType": zod.string().min(1),
+  "size": zod.number().min(1).max(finalizeScenarioFileBodySizeMax),
+  "scenarioId": zod.number().min(1).optional(),
+  "replaceFileId": zod.number().min(1).optional()
+})
+
+export const FinalizeScenarioFileResponse = zod.object({
+  "id": zod.number(),
+  "scenarioId": zod.number().nullish(),
+  "originalName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.number(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary List private files belonging to an owned scenario
+ */
+export const ListScenarioFilesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListScenarioFilesResponseItem = zod.object({
+  "id": zod.number(),
+  "scenarioId": zod.number().nullish(),
+  "originalName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.number(),
+  "createdAt": zod.string()
+})
+export const ListScenarioFilesResponse = zod.array(ListScenarioFilesResponseItem)
+
+
+/**
+ * @summary Stream a private scenario file after owner authorization
+ */
+export const DownloadScenarioFileParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DownloadScenarioFileResponse = zod.unknown()
+
+
+/**
+ * @summary Remove a private scenario file
+ */
+export const DeleteScenarioFileParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteScenarioFileResponse = zod.void()
 
 
 /**
@@ -4257,6 +4902,8 @@ export const listPricingSheetsResponseInputsIntegrationsMin = 0;
 export const listPricingSheetsResponseInputsWorkflowsMin = 0;
 
 export const listPricingSheetsResponseInputsGrossMarginPctMax = 90;
+
+
 
 
 export const ListPricingSheetsResponseItem = zod.object({
@@ -4296,6 +4943,7 @@ export const ListPricingSheetsResponse = zod.array(ListPricingSheetsResponseItem
  */
 
 
+
 export const createPricingSheetBodyInputsChannelsMin = 0;
 
 export const createPricingSheetBodyInputsIntegrationsMin = 0;
@@ -4304,6 +4952,8 @@ export const createPricingSheetBodyInputsIntegrationsMin = 0;
 export const createPricingSheetBodyInputsWorkflowsMin = 0;
 
 export const createPricingSheetBodyInputsGrossMarginPctMax = 90;
+
+
 
 
 export const CreatePricingSheetBody = zod.object({
@@ -4326,6 +4976,7 @@ export const CreatePricingSheetBody = zod.object({
 })
 
 
+
 export const createPricingSheetResponseInputsChannelsMin = 0;
 
 export const createPricingSheetResponseInputsIntegrationsMin = 0;
@@ -4334,6 +4985,8 @@ export const createPricingSheetResponseInputsIntegrationsMin = 0;
 export const createPricingSheetResponseInputsWorkflowsMin = 0;
 
 export const createPricingSheetResponseInputsGrossMarginPctMax = 90;
+
+
 
 
 export const CreatePricingSheetResponse = zod.object({
@@ -4375,6 +5028,7 @@ export const GetPricingSheetParams = zod.object({
 })
 
 
+
 export const getPricingSheetResponseInputsChannelsMin = 0;
 
 export const getPricingSheetResponseInputsIntegrationsMin = 0;
@@ -4383,6 +5037,8 @@ export const getPricingSheetResponseInputsIntegrationsMin = 0;
 export const getPricingSheetResponseInputsWorkflowsMin = 0;
 
 export const getPricingSheetResponseInputsGrossMarginPctMax = 90;
+
+
 
 
 export const GetPricingSheetResponse = zod.object({
@@ -4424,6 +5080,8 @@ export const UpdatePricingSheetParams = zod.object({
 })
 
 
+
+
 export const updatePricingSheetBodyInputsChannelsMin = 0;
 
 export const updatePricingSheetBodyInputsIntegrationsMin = 0;
@@ -4432,6 +5090,8 @@ export const updatePricingSheetBodyInputsIntegrationsMin = 0;
 export const updatePricingSheetBodyInputsWorkflowsMin = 0;
 
 export const updatePricingSheetBodyInputsGrossMarginPctMax = 90;
+
+
 
 
 export const UpdatePricingSheetBody = zod.object({
@@ -4454,6 +5114,7 @@ export const UpdatePricingSheetBody = zod.object({
 })
 
 
+
 export const updatePricingSheetResponseInputsChannelsMin = 0;
 
 export const updatePricingSheetResponseInputsIntegrationsMin = 0;
@@ -4462,6 +5123,8 @@ export const updatePricingSheetResponseInputsIntegrationsMin = 0;
 export const updatePricingSheetResponseInputsWorkflowsMin = 0;
 
 export const updatePricingSheetResponseInputsGrossMarginPctMax = 90;
+
+
 
 
 export const UpdatePricingSheetResponse = zod.object({
@@ -4946,6 +5609,7 @@ export const computeSensitivityBodyInputsAdoptionRampMin = 3;
 export const computeSensitivityBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ComputeSensitivityBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -5023,6 +5687,7 @@ export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
 export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
 
 
+
 export const ExportScenarioWorkbookBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -5079,6 +5744,7 @@ export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
 export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
 
 
+
 export const ImportScenarioWorkbookResponse = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -5125,6 +5791,7 @@ export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const computeRollupBodyInputsAdoptionRampMax = 3;
+
 
 
 export const ComputeRollupBody = zod.object({
@@ -5686,6 +6353,7 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
  */
 
 
+
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
   "workerEmail": zod.string(),
@@ -6087,6 +6755,8 @@ export const ReceiveOnboardingInboundParams = zod.object({
 })
 
 
+
+
 export const ReceiveOnboardingInboundBody = zod.object({
   "channel": zod.string().describe('email | whatsapp'),
   "body": zod.string().min(1)
@@ -6450,4 +7120,3 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
-

@@ -58,6 +58,7 @@ import { runSecurityDrill } from "../lib/onboarding/security-drill";
 import { onbGuardrailEvents } from "@workspace/db/schema";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
 import { listDocuments } from "../lib/onboarding/documents";
+import { runScenarioFileMaintenance } from "../lib/scenario-file-lifecycle";
 import { getArchivedStints } from "../lib/onboarding/records-agent";
 import {
   startVoiceCall,
@@ -985,11 +986,12 @@ const watcherTick = async (req: Request, res: Response) => {
     res.json({ ran: false, reason: "throttled" });
     return;
   }
-  const [systemWatcher, emailWatch, inboundEmail, approverInbox] = await Promise.all([
+  const [systemWatcher, emailWatch, inboundEmail, approverInbox, scenarioFiles] = await Promise.all([
     runSystemWatcherTick(),
     runEmailWatchTick(),
     runInboundEmailTick(),
     runApproverInboxTick(),
+    runScenarioFileMaintenance(),
   ]);
   res.json({
     ran: true,
@@ -998,6 +1000,7 @@ const watcherTick = async (req: Request, res: Response) => {
     emailWatch,
     inboundEmail,
     approverInbox,
+    scenarioFiles,
   });
 };
 

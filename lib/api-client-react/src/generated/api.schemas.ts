@@ -1210,22 +1210,84 @@ export interface ScenarioInputs {
   intentContainmentOverrides?: ScenarioInputsIntentContainmentOverrides;
 }
 
+export type ScenarioSetupData = { [key: string]: unknown } | null;
+
 export interface Scenario {
   id: number;
   name: string;
   inputs: ScenarioInputs;
+  setupData?: ScenarioSetupData;
   createdAt: string;
   updatedAt: string;
+  fileIds: number[];
 }
+
+export type ScenarioInputSetupData = { [key: string]: unknown } | null;
 
 export interface ScenarioInput {
   name: string;
   inputs: ScenarioInputs;
+  setupData?: ScenarioInputSetupData;
+  fileIds?: number[];
 }
+
+export type ScenarioUpdateSetupData = { [key: string]: unknown } | null;
 
 export interface ScenarioUpdate {
   name?: string;
   inputs?: ScenarioInputs;
+  setupData?: ScenarioUpdateSetupData;
+  fileIds?: number[];
+}
+
+export interface ScenarioFileUploadRequest {
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  name: string;
+  /** @minLength 1 */
+  contentType: string;
+  /**
+     * @minimum 1
+     * @maximum 10485760
+     */
+  size: number;
+}
+
+export interface ScenarioFileUploadIntent {
+  uploadUrl: string;
+  objectPath: string;
+}
+
+export interface ScenarioFileFinalizeRequest {
+  /** @minLength 1 */
+  objectPath: string;
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  name: string;
+  /** @minLength 1 */
+  contentType: string;
+  /**
+     * @minimum 1
+     * @maximum 10485760
+     */
+  size: number;
+  /** @minimum 1 */
+  scenarioId?: number;
+  /** @minimum 1 */
+  replaceFileId?: number;
+}
+
+export interface ScenarioFile {
+  id: number;
+  scenarioId?: number | null;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
 }
 
 export type PricingSheetInputsTenantTier = typeof PricingSheetInputsTenantTier[keyof typeof PricingSheetInputsTenantTier];
@@ -1669,6 +1731,7 @@ export const CustomIntentRiskClass = {
   high: 'high',
   consequential: 'consequential',
 } as const;
+
 export type CustomIntentMaturity = typeof CustomIntentMaturity[keyof typeof CustomIntentMaturity];
 
 
@@ -1725,6 +1788,7 @@ export const CustomIntentInputRiskClass = {
   high: 'high',
   consequential: 'consequential',
 } as const;
+
 export type CustomIntentInputMaturity = typeof CustomIntentInputMaturity[keyof typeof CustomIntentInputMaturity];
 
 
@@ -1772,6 +1836,7 @@ export const CustomIntentUpdateRiskClass = {
   high: 'high',
   consequential: 'consequential',
 } as const;
+
 export type CustomIntentUpdateMaturity = typeof CustomIntentUpdateMaturity[keyof typeof CustomIntentUpdateMaturity];
 
 
@@ -2773,7 +2838,6 @@ export type ListCustomIntentsParams = {
  */
 status?: string;
 };
-
 export type ExportScenarioWorkbookLinkParams = {
 /**
  * base64url-encoded JSON of {"inputs":ScenarioInputs}.

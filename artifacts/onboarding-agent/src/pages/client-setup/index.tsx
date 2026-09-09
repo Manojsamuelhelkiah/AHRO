@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { clientSetupSchema, ClientSetupDraft, initialDraft } from './schema';
+import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, initialDraft } from './schema';
+import { canNavigateOrCommit, planScenarioHydration } from './client-setup-persistence';
 import { StepScope, StepLandscape, StepProcess, StepReview } from './wizard-steps';
 import { Button, PageHeader } from '@/components/ui-shared';
-import { useCreateScenario, useComputeRollup, useListIntents } from '@workspace/api-client-react';
+import { useCreateScenario, useComputeRollup, useListIntents, useGetScenario, getGetScenarioQueryKey } from '@workspace/api-client-react';
 import type { Rollup, Scenario, ScenarioInputs } from '@workspace/api-client-react';
 import { Check, ChevronRight } from 'lucide-react';
 
@@ -28,16 +29,25 @@ function loadInitialDraft(): ClientSetupDraft {
 }
 
 export function ClientSetupPage() {
+  const savedScenarioId = Number(new URLSearchParams(window.location.search).get('scenarioId'));
   const [currentStep, setCurrentStep] = useState(0);
   const [rollup, setRollup] = useState<Rollup | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [fileOperationPending, setFileOperationPending] = useState(false);
+  const fileOperationPendingRef = useRef(false);
+  const activeScenarioIdRef = useRef<number | null>(null);
   const draftPersistenceEnabled = useRef(true);
   
   const form = useForm<ClientSetupDraft>({
     resolver: zodResolver(clientSetupSchema),
     defaultValues: loadInitialDraft(),
   });
+
+  const handleFileOperationPendingChange = React.useCallback((pending: boolean) => {
+    fileOperationPendingRef.current = pending;
+    setFileOperationPending(pending);
+  }, []);
 
   useEffect(() => {
     const sub = form.watch((value) => {
@@ -48,20 +58,48 @@ export function ClientSetupPage() {
   }, [form]);
 
   const handleNext = async () => {
+    if (!canNavigateOrCommit(fileOperationPendingRef.current)) return;
     let fieldsToValidate: (keyof ClientSetupDraft)[] = [];
     if (currentStep === 0) fieldsToValidate = ['clientName', 'sector', 'employees', 'countries', 'annualTransactions', 'hrHourlyCostUsd', 'hitlHourlyCostUsd'];
     if (currentStep === 1) fieldsToValidate = ['companyType', 'isolationTier', 'landscapeMaturity', 'systems'];
-    if (currentStep === 2) fieldsToValidate = ['processMode', 'selectedDomains', 'uploadedFlowNames', 'personas'];
+    if (currentStep === 2) fieldsToValidate = ['processMode', 'selectedDomains', 'processFiles', 'personas'];
     
     const isValid = await form.trigger(fieldsToValidate);
     if (isValid) setCurrentStep(c => Math.min(STEPS.length - 1, c + 1));
   };
 
-  const handlePrev = () => setCurrentStep(c => Math.max(0, c - 1));
+  const handlePrev = () => {
+    if (!canNavigateOrCommit(fileOperationPendingRef.current)) return;
+    setCurrentStep(c => Math.max(0, c - 1));
+  };
   
   const computeRollup = useComputeRollup();
   const createScenario = useCreateScenario();
+  const { data: reloadedScenario } = useGetScenario(savedScenarioId || 0, {
+    query: { enabled: Number.isInteger(savedScenarioId) && savedScenarioId > 0, queryKey: getGetScenarioQueryKey(savedScenarioId || 0) },
+  });
   const { data: intentCorpus, isLoading: intentsLoading } = useListIntents();
+
+  useEffect(() => {
+    if (reloadedScenario) {
+      const hydrationPlan = planScenarioHydration(
+        activeScenarioIdRef.current,
+        form.getValues('processFiles'),
+      );
+      if (!hydrationPlan.shouldHydrateSetup) return;
+      draftPersistenceEnabled.current = false;
+      const parsedSetup = clientSetupDataSchema.safeParse(reloadedScenario.setupData);
+      if (!parsedSetup.success) {
+        setOperationError('The saved setup details are missing or invalid; stale local defaults were not displayed.');
+        setScenario(null);
+        return;
+      }
+      form.reset({ ...parsedSetup.data, processFiles: hydrationPlan.processFiles });
+      activeScenarioIdRef.current = reloadedScenario.id;
+      setScenario(reloadedScenario);
+      setCurrentStep(STEPS.length - 1);
+    }
+  }, [form, reloadedScenario]);
 
   const buildInputs = (values: ClientSetupDraft): ScenarioInputs => {
     const domainKeys: Record<string, string> = {
@@ -135,14 +173,21 @@ export function ClientSetupPage() {
   }
 
   const handleCommit = () => {
+    if (!canNavigateOrCommit(fileOperationPendingRef.current)) {
+      setOperationError('Wait for the file upload to finish before committing this scenario.');
+      return;
+    }
     const values = form.getValues();
     const inputs = buildInputs(values);
+    const { processFiles, ...setupData } = values;
     setOperationError(null);
-    createScenario.mutate({ data: { name: `${values.clientName} — ${values.processMode} implementation`, inputs } }, {
+    createScenario.mutate({ data: { name: `${values.clientName} — ${values.processMode} implementation`, inputs, setupData, fileIds: processFiles.map((file) => file.id) } }, {
       onSuccess: (data) => {
+        activeScenarioIdRef.current = data.id;
         draftPersistenceEnabled.current = false;
         localStorage.removeItem('clientSetupDraft');
         setScenario(data);
+         window.history.replaceState(null, '', `${window.location.pathname}?scenarioId=${data.id}`);
       },
       onError: (error: any) => setOperationError(error?.response?.data?.message || error?.message || 'The implementation scenario could not be saved.'),
     });
@@ -198,7 +243,7 @@ export function ClientSetupPage() {
             <div className="p-4 sm:p-8">
                {currentStep === 0 && <StepScope />}
                {currentStep === 1 && <StepLandscape />}
-               {currentStep === 2 && <StepProcess />}
+               {currentStep === 2 && <StepProcess onFileOperationPendingChange={handleFileOperationPendingChange} />}
                {currentStep === 3 && <StepReview 
                  onSimulate={handleSimulate} 
                  onCommit={handleCommit} 
@@ -206,18 +251,20 @@ export function ClientSetupPage() {
                  scenario={scenario} 
                  isSimulating={isSimulating} 
                  isCommitting={isCommitting} 
+                 isFileOperationPending={fileOperationPending}
+                 onFileOperationPendingChange={handleFileOperationPendingChange}
                  operationError={operationError}
                   intentsLoading={intentsLoading}
                />}
             </div>
             
              <div className="bg-[var(--surface-alt)] p-4 sm:p-6 border-t border-[var(--border)] flex justify-between items-center gap-3">
-               <Button type="button" variant="outline" onClick={handlePrev} disabled={currentStep === 0 || scenario !== null}>
+               <Button type="button" variant="outline" onClick={handlePrev} disabled={currentStep === 0 || scenario !== null || fileOperationPending}>
                  Previous
                </Button>
                {currentStep < 3 ? (
-                 <Button type="button" onClick={handleNext} className="px-6 bg-[var(--primary)] text-white">
-                   Next Step <ChevronRight className="w-4 h-4 ml-1" />
+                  <Button type="button" onClick={handleNext} disabled={fileOperationPending} className="px-6 bg-[var(--primary)] text-white">
+                    {fileOperationPending ? 'Uploading file…' : <>Next Step <ChevronRight className="w-4 h-4 ml-1" /></>}
                  </Button>
                ) : (
                  <div />
