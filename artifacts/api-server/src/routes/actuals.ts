@@ -15,6 +15,7 @@ import { loadActiveCustomIntents } from "./custom-intents";
 import { aggregateCallLog } from "../lib/aggregate-log";
 import type { ActualsOverlay } from "../data/types";
 import { intentMap } from "../data/intents";
+import { CustomIntentStorageUnavailableError } from "../middlewares/error-handler";
 
 const router: IRouter = Router();
 
@@ -22,9 +23,23 @@ export function overlayRequiresCustomIntentLookup(overlay: ActualsOverlay): bool
   return overlay.intents?.some(({ intentKey }) => !intentMap[intentKey]) ?? false;
 }
 
+export async function loadCustomIntentsWhenRequired(
+  requiresLookup: boolean,
+  load: typeof loadActiveCustomIntents = loadActiveCustomIntents,
+) {
+  if (!requiresLookup) return [];
+  try {
+    return await load();
+  } catch (error) {
+    throw new CustomIntentStorageUnavailableError({ cause: error });
+  }
+}
+
 async function customIntentKeysForOverlay(overlay: ActualsOverlay): Promise<Set<string>> {
-  if (!overlayRequiresCustomIntentLookup(overlay)) return new Set();
-  return new Set((await loadActiveCustomIntents()).map((intent) => intent.key));
+  const customIntents = await loadCustomIntentsWhenRequired(
+    overlayRequiresCustomIntentLookup(overlay),
+  );
+  return new Set(customIntents.map((intent) => intent.key));
 }
 
 // 20 MB limit for raw call-log uploads
@@ -88,7 +103,10 @@ router.post(
       const referenceResult = aggregateCallLog(csvText);
       const result = referenceResult.unknownIntents.length === 0
         ? referenceResult
-        : aggregateCallLog(csvText, await loadActiveCustomIntents());
+        : aggregateCallLog(
+          csvText,
+          await loadCustomIntentsWhenRequired(true),
+        );
       res.json(result);
     } catch (err) {
       next(err);

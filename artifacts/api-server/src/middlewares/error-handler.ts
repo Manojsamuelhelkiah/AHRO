@@ -2,6 +2,19 @@ import type { NextFunction, Request, Response } from "express";
 import { InputValidationError } from "../lib/validate-inputs";
 import { logger } from "../lib/logger";
 
+export const CUSTOM_INTENT_STORAGE_UNAVAILABLE_CODE = "CUSTOM_INTENT_STORAGE_UNAVAILABLE";
+export const CUSTOM_INTENT_STORAGE_UNAVAILABLE_MESSAGE =
+  "Custom intent data is temporarily unavailable. Retry the request later.";
+
+export class CustomIntentStorageUnavailableError extends Error {
+  readonly code = CUSTOM_INTENT_STORAGE_UNAVAILABLE_CODE;
+
+  constructor(options?: ErrorOptions) {
+    super(CUSTOM_INTENT_STORAGE_UNAVAILABLE_MESSAGE, options);
+    this.name = "CustomIntentStorageUnavailableError";
+  }
+}
+
 interface ZodLikeIssue {
   path?: Array<string | number>;
   message?: string;
@@ -21,6 +34,11 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  if (err instanceof CustomIntentStorageUnavailableError) {
+    logger.warn({ err }, "Custom-intent storage unavailable for dependent request");
+    res.status(503).json({ error: err.message, code: err.code });
+    return;
+  }
   if (err instanceof InputValidationError) {
     res.status(400).json({ error: err.message });
     return;

@@ -1,7 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { overlayRequiresCustomIntentLookup } from "./actuals.js";
+import {
+  loadCustomIntentsWhenRequired,
+  overlayRequiresCustomIntentLookup,
+} from "./actuals.js";
 import { aggregateCallLog } from "../lib/aggregate-log.js";
+import {
+  CUSTOM_INTENT_STORAGE_UNAVAILABLE_CODE,
+  CUSTOM_INTENT_STORAGE_UNAVAILABLE_MESSAGE,
+  CustomIntentStorageUnavailableError,
+  errorHandler,
+} from "../middlewares/error-handler.js";
+import type { NextFunction, Request, Response } from "express";
 
 test("reference-only overlays do not require custom-intent storage", () => {
   assert.equal(overlayRequiresCustomIntentLookup({
@@ -43,4 +53,52 @@ test("call-log aggregation recognizes loaded custom intents", () => {
   assert.deepEqual(result.unknownIntents, []);
   assert.equal(result.proposedOverlay.intents?.[0]?.intentKey, "custom-payroll");
   assert.equal(result.proposedOverlay.measuredContainmentByFlowClass?.["fc2-policy"], 1);
+});
+
+test("reference-only calibration bypasses unavailable custom-intent storage", async () => {
+  let loadCalled = false;
+  const intents = await loadCustomIntentsWhenRequired(false, async () => {
+    loadCalled = true;
+    throw new Error("storage unavailable");
+  });
+
+  assert.deepEqual(intents, []);
+  assert.equal(loadCalled, false);
+});
+
+test("custom-intent-dependent calibration maps storage failures to the availability error", async () => {
+  await assert.rejects(
+    loadCustomIntentsWhenRequired(true, async () => {
+      throw new Error("storage unavailable");
+    }),
+    CustomIntentStorageUnavailableError,
+  );
+});
+
+test("custom-intent storage failures return the stable retryable response contract", () => {
+  let statusCode: number | undefined;
+  let body: unknown;
+  const response = {
+    status(code: number) {
+      statusCode = code;
+      return this;
+    },
+    json(value: unknown) {
+      body = value;
+      return this;
+    },
+  } as unknown as Response;
+
+  errorHandler(
+    new CustomIntentStorageUnavailableError({ cause: new Error("database offline") }),
+    {} as Request,
+    response,
+    (() => undefined) as NextFunction,
+  );
+
+  assert.equal(statusCode, 503);
+  assert.deepEqual(body, {
+    error: CUSTOM_INTENT_STORAGE_UNAVAILABLE_MESSAGE,
+    code: CUSTOM_INTENT_STORAGE_UNAVAILABLE_CODE,
+  });
 });

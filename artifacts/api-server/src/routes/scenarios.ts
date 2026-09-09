@@ -21,8 +21,17 @@ import {
   ensureBaselineRateSet,
   type RateSetReference,
 } from "../lib/pricing-rate-sets";
+import { CustomIntentStorageUnavailableError } from "../middlewares/error-handler";
 
 const router: IRouter = Router();
+
+async function loadRequiredCustomIntents() {
+  try {
+    return await loadActiveCustomIntents();
+  } catch (error) {
+    throw new CustomIntentStorageUnavailableError({ cause: error });
+  }
+}
 
 function parseId(raw: string | undefined): number {
   const id = Number(raw);
@@ -56,7 +65,7 @@ router.post("/scenarios", async (req, res, next) => {
     const body = CreateScenarioBody.parse(req.body);
     const [overrides, customIntents] = await Promise.all([
       loadActiveFlowOverrides(),
-      loadActiveCustomIntents(),
+      loadRequiredCustomIntents(),
     ]);
     const customKeys = new Set(customIntents.map((i) => i.key));
     validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
@@ -92,7 +101,7 @@ router.patch("/scenarios/:id", async (req, res, next) => {
     const id = parseId(req.params["id"]);
     const body = UpdateScenarioBody.parse(req.body);
     if (body.inputs !== undefined) {
-      const customIntents = await loadActiveCustomIntents();
+      const customIntents = await loadRequiredCustomIntents();
       const customKeys = new Set(customIntents.map((i) => i.key));
       validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
     }
@@ -149,7 +158,7 @@ router.post("/rollup", async (req, res, next) => {
 
     const [overrides, customIntents] = await Promise.all([
       loadActiveFlowOverrides(),
-      loadActiveCustomIntents(),
+      loadRequiredCustomIntents(),
     ]);
     const inputs = body.inputs as ScenarioInputs;
     const customKeys = new Set(customIntents.map((i) => i.key));
