@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -b tsconfig.json",
     "test": "node ./run-tests.mjs",
+    "db:reconcile": "node ./test-db-setup.mjs",
     "seed:volunteers": "node ./run-seed.mjs"
   },
   "dependencies": {

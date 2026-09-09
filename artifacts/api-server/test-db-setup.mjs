@@ -22,10 +22,74 @@ function migrationHash(sql) {
 }
 
 function splitMigration(sql) {
-  return sql
-    .split(statementBreakpoint)
-    .map((statement) => statement.trim())
-    .filter(Boolean);
+  const statements = [];
+  let start = 0;
+  let quote = null;
+  let dollarQuote = null;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const current = sql[index];
+    const next = sql[index + 1];
+
+    if (quote) {
+      if (current === quote) {
+        if (next === quote) {
+          index += 1;
+        } else {
+          quote = null;
+        }
+      } else if (current === "\\" && quote === "'") {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (dollarQuote) {
+      if (sql.startsWith(dollarQuote, index)) {
+        index += dollarQuote.length - 1;
+        dollarQuote = null;
+      }
+      continue;
+    }
+
+    if (current === "'" || current === '"') {
+      quote = current;
+      continue;
+    }
+    if (current === "$") {
+      const match = sql.slice(index).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+      if (match) {
+        dollarQuote = match[0];
+        index += dollarQuote.length - 1;
+        continue;
+      }
+    }
+    if (current === "-" && next === "-") {
+      const lineEnd = sql.indexOf("\n", index + 2);
+      index = lineEnd === -1 ? sql.length : lineEnd;
+      continue;
+    }
+    if (current === "/" && next === "*") {
+      const commentEnd = sql.indexOf("*/", index + 2);
+      index = commentEnd === -1 ? sql.length : commentEnd + 1;
+      continue;
+    }
+    if (current === ";") {
+      const statement = sql
+        .slice(start, index)
+        .replaceAll(statementBreakpoint, "")
+        .trim();
+      if (statement) statements.push(statement);
+      start = index + 1;
+    }
+  }
+
+  const trailing = sql
+    .slice(start)
+    .replaceAll(statementBreakpoint, "")
+    .trim();
+  if (trailing) statements.push(trailing);
+  return statements;
 }
 
 function quoteIdentifier(identifier) {
@@ -298,9 +362,13 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
   }
 }
 
-export async function prepareDatabaseBackedTests(options = {}) {
+export async function reconcileDevelopmentDatabase(options = {}) {
   const connectionString = options.connectionString ?? process.env.DATABASE_URL;
-  if (!connectionString) return;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL is required to reconcile the development database",
+    );
+  }
 
   const migrations = await loadCheckedInMigrations();
   const pool = new Pool({ connectionString });
@@ -379,6 +447,22 @@ export async function prepareDatabaseBackedTests(options = {}) {
   }
 }
 
+export async function prepareDatabaseBackedTests(options = {}) {
+  const connectionString = options.connectionString ?? process.env.DATABASE_URL;
+  if (!connectionString) return;
+  await reconcileDevelopmentDatabase({ ...options, connectionString });
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await prepareDatabaseBackedTests();
+  try {
+    await reconcileDevelopmentDatabase();
+    console.log(
+      "Development database reconciliation passed: checked-in migrations are applied and the live schema is compatible.",
+    );
+  } catch (error) {
+    console.error(
+      "DEVELOPMENT DATABASE RECONCILIATION FAILED. Workflows were not restarted because the live schema is stale or incompatible.",
+    );
+    throw error;
+  }
 }

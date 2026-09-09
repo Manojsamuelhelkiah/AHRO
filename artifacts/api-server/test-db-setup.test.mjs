@@ -70,6 +70,30 @@ test(
 
       const migrations = await loadCheckedInMigrations();
       await adminPool.query(
+        `ALTER TABLE "${schema}".custom_intents DROP COLUMN registry_version`,
+      );
+      await adminPool.query(
+        `
+          DELETE FROM "${schema}".__api_test_schema_migrations
+          WHERE tag = '0018_custom_intent_routing_contract'
+        `,
+      );
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(schema),
+      });
+      const repairedAdditiveColumn = await adminPool.query(
+        `
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_schema = $1
+            AND table_name = 'custom_intents'
+            AND column_name = 'registry_version'
+        `,
+        [schema],
+      );
+      assert.equal(repairedAdditiveColumn.rowCount, 1);
+
+      await adminPool.query(
         `
           UPDATE "${schema}".__api_test_schema_migrations
           SET hash = 'tampered'

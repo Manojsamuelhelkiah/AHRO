@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { reconcileDevelopmentDatabase } from "../../api-server/test-db-setup.mjs";
 
 const rawBaseUrl =
   process.env.INTENT_ROUTING_SMOKE_BASE_URL ??
@@ -20,6 +21,8 @@ const browserHeaders = {
   "sec-fetch-mode": "navigate",
   "sec-fetch-site": "same-origin",
 };
+
+await reconcileDevelopmentDatabase();
 
 const pageResponse = await fetch(pageUrl, { headers: browserHeaders });
 assert.equal(
@@ -67,6 +70,40 @@ assert.equal(
   "/api/intents JSON did not contain an intents array",
 );
 
+const rollupUrl = new URL("/api/rollup", baseUrl);
+const rollupResponse = await fetch(rollupUrl, {
+  method: "POST",
+  headers: {
+    accept: "application/json",
+    "content-type": "application/json",
+  },
+  body: JSON.stringify({
+    inputs: {
+      numSystems: 4,
+      annualTransactions: 120000,
+      employees: 8000,
+      sector: "manufacturing",
+      companyType: "multi-country",
+      isolationTier: "siloed",
+      hrHourlyCostUsd: 38,
+      hitlHourlyCostUsd: 42,
+      countries: 6,
+    },
+  }),
+});
+const rollupBody = await rollupResponse.text();
+assert.equal(
+  rollupResponse.ok,
+  true,
+  `/api/rollup returned ${rollupResponse.status}; schema reconciliation or estimate generation failed. Body starts: ${rollupBody.slice(0, 240)}`,
+);
+const rollup = JSON.parse(rollupBody);
+assert.equal(
+  Array.isArray(rollup.rows),
+  true,
+  "/api/rollup JSON did not contain estimate rows",
+);
+
 console.log(
-  `Intent routing smoke passed: ${pageUrl.pathname} loaded and ${apiUrl.pathname} returned JSON through ${baseUrl.origin}`,
+  `Intent and rollup smoke passed: schema is compatible, ${pageUrl.pathname} loaded, and estimate generation succeeded through ${baseUrl.origin}`,
 );
