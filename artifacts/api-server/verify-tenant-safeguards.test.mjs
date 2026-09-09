@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import test from "node:test";
 import {
   expectedForeignKeys,
   findTenantSafeguardFailures,
+  STARTUP_FAILURE_REASONS,
   tenantTables,
   verifyTenantSafeguards,
 } from "./verify-tenant-safeguards.mjs";
@@ -77,8 +80,102 @@ test("fails a stalled database connection within the configured deadline", async
       pool,
       connectionTimeoutMs: 5,
     }),
-    /tenant safeguard database connection timed out after 5ms; production is not trusted/,
+    (error) => {
+      assert.equal(
+        error.reasonCategory,
+        STARTUP_FAILURE_REASONS.CONNECTION_TIMEOUT,
+      );
+      assert.match(
+        error.message,
+        /tenant safeguard database connection timed out after 5ms; production is not trusted/,
+      );
+      return true;
+    },
   );
+});
+
+test("a real stalled pg handshake exits promptly with a connection-timeout reason", async () => {
+  const sockets = new Set();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const { port } = server.address();
+  const connectionString = `postgres://user:password@127.0.0.1:${port}/database`;
+  const childSource = `
+    import { startProduction } from ${JSON.stringify(
+      new URL("./start-production.mjs", import.meta.url).href,
+    )};
+    import {
+      STARTUP_FAILURE_REASONS,
+      verifyTenantSafeguards,
+    } from ${JSON.stringify(
+      new URL("./verify-tenant-safeguards.mjs", import.meta.url).href,
+    )};
+
+    startProduction({
+      verify: () =>
+        verifyTenantSafeguards({
+          connectionTimeoutMs: 30,
+        }),
+      startApi: async () => {
+        process.exitCode = 3;
+      },
+    }).catch((error) => {
+      console.error(error.message);
+      process.exitCode =
+        error.reasonCategory === STARTUP_FAILURE_REASONS.CONNECTION_TIMEOUT
+          ? 1
+          : 2;
+    });
+  `;
+  const child = spawn(
+    process.execPath,
+    ["--input-type=module", "--eval", childSource],
+    {
+      env: {
+        ...process.env,
+        DATABASE_URL: connectionString,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk;
+  });
+
+  let timer;
+  try {
+    const exit = await Promise.race([
+      new Promise((resolve) => {
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+      }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          reject(new Error("stalled-handshake child did not exit within 2s"));
+        }, 2_000);
+      }),
+    ]);
+
+    assert.deepEqual(exit, { code: 1, signal: null });
+    assert.match(output, /reason=CONNECTION_TIMEOUT/);
+    assert.match(output, /production is not trusted/);
+    assert.doesNotMatch(output, /user:password|127\.0\.0\.1|\/database/);
+  } finally {
+    clearTimeout(timer);
+    child.kill("SIGKILL");
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test("applies a client and server timeout to verification statements", async () => {
@@ -107,15 +204,49 @@ test("applies a client and server timeout to verification statements", async () 
   assert.deepEqual(queries[0], {
     text: "BEGIN TRANSACTION READ ONLY",
     values: undefined,
-    query_timeout: 23,
+    query_timeout: 0,
   });
   assert.deepEqual(queries[1], {
     text: "SELECT set_config('statement_timeout', $1, true)",
     values: ["23ms"],
-    query_timeout: 23,
+    query_timeout: 0,
   });
   assert.equal(queries.at(-1).text, "ROLLBACK");
-  assert.equal(queries.at(-1).query_timeout, 23);
+  assert.equal(queries.at(-1).query_timeout, 0);
+});
+
+test("normalizes a competing pg query timer as a statement timeout", async () => {
+  let releasedWithError;
+  const client = {
+    async query(config) {
+      if (config.text === "ROLLBACK") return { rows: [] };
+      throw new Error("Query read timeout");
+    },
+    release(error) {
+      releasedWithError = error;
+    },
+  };
+
+  await assert.rejects(
+    verifyTenantSafeguards({
+      connectionString: "postgres://unused",
+      pool: { connect: async () => client },
+      statementTimeoutMs: 17,
+    }),
+    (error) => {
+      assert.equal(
+        error.reasonCategory,
+        STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT,
+      );
+      assert.match(
+        error.message,
+        /database statement timed out after 17ms; production is not trusted/,
+      );
+      return true;
+    },
+  );
+
+  assert.equal(releasedWithError, true);
 });
 
 test("fails a stalled statement within the configured deadline and discards its client", async () => {
@@ -140,7 +271,17 @@ test("fails a stalled statement within the configured deadline and discards its 
       pool: { connect: async () => client },
       statementTimeoutMs: 5,
     }),
-    /tenant safeguard database statement timed out after 5ms; production is not trusted/,
+    (error) => {
+      assert.equal(
+        error.reasonCategory,
+        STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT,
+      );
+      assert.match(
+        error.message,
+        /tenant safeguard database statement timed out after 5ms; production is not trusted/,
+      );
+      return true;
+    },
   );
 
   assert.equal(releasedWithError, true);

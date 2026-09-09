@@ -1,5 +1,18 @@
 import { pathToFileURL } from "node:url";
-import { verifyTenantSafeguards } from "./verify-tenant-safeguards.mjs";
+import {
+  STARTUP_FAILURE_REASONS,
+  verifyTenantSafeguards,
+} from "./verify-tenant-safeguards.mjs";
+
+function startupBlockedError(reasonCategory, message, options) {
+  const error = new Error(
+    `Production startup blocked [reason=${reasonCategory}]. ${message}`,
+    options,
+  );
+  error.code = "PRODUCTION_STARTUP_BLOCKED";
+  error.reasonCategory = reasonCategory;
+  return error;
+}
 
 const DEFAULT_ALERT_TIMEOUT_MS = 5_000;
 
@@ -52,6 +65,16 @@ export async function startProduction({
     ).catch((alertError) => {
       console.error(`Blocked-publish operator alert failed: ${alertError.message}`);
     });
+    if (
+      error?.reasonCategory === STARTUP_FAILURE_REASONS.CONNECTION_TIMEOUT ||
+      error?.reasonCategory === STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT
+    ) {
+      throw startupBlockedError(
+        error.reasonCategory,
+        `${error.message}. The API will not start.`,
+        { cause: error },
+      );
+    }
     throw error;
   }
 
@@ -64,8 +87,9 @@ export async function startProduction({
     ).catch((alertError) => {
       console.error(`Blocked-publish operator alert failed: ${alertError.message}`);
     });
-    throw new Error(
-      `Tenant safeguard verification failed for schema ${result.schema}. ` +
+    throw startupBlockedError(
+      STARTUP_FAILURE_REASONS.SAFEGUARD_MISMATCH,
+      "Tenant safeguard verification failed. " +
         "Production is not trusted and the API will not start.\n" +
         details,
     );

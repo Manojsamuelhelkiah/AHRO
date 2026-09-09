@@ -9,13 +9,33 @@ export { expectedForeignKeys, tenantTables };
 
 export const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
+export const STARTUP_FAILURE_REASONS = Object.freeze({
+  CONNECTION_TIMEOUT: "CONNECTION_TIMEOUT",
+  STATEMENT_TIMEOUT: "STATEMENT_TIMEOUT",
+  SAFEGUARD_MISMATCH: "SAFEGUARD_MISMATCH",
+});
 
-function timeoutError(kind, timeoutMs) {
+function timeoutError(kind, timeoutMs, reasonCategory) {
   const error = new Error(
     `tenant safeguard ${kind} timed out after ${timeoutMs}ms; production is not trusted`,
   );
   error.code = "TENANT_SAFEGUARD_TIMEOUT";
+  error.reasonCategory = reasonCategory;
   return error;
+}
+
+function isStatementTimeoutError(error) {
+  return (
+    error?.message === "Query read timeout" ||
+    (error?.code === "57014" && /statement timeout/i.test(error.message ?? ""))
+  );
+}
+
+function isConnectionTimeoutError(error) {
+  return (
+    error?.message === "timeout expired" ||
+    error?.message === "Connection terminated due to connection timeout"
+  );
 }
 
 async function connectWithTimeout(pool, timeoutMs) {
@@ -23,7 +43,14 @@ async function connectWithTimeout(pool, timeoutMs) {
   const connection = pool.connect();
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
-      () => reject(timeoutError("database connection", timeoutMs)),
+      () =>
+        reject(
+          timeoutError(
+            "database connection",
+            timeoutMs,
+            STARTUP_FAILURE_REASONS.CONNECTION_TIMEOUT,
+          ),
+        ),
       timeoutMs,
     );
     timer.unref?.();
@@ -33,6 +60,13 @@ async function connectWithTimeout(pool, timeoutMs) {
     return await Promise.race([connection, timeout]);
   } catch (error) {
     connection.then((lateClient) => lateClient.release(), () => {});
+    if (isConnectionTimeoutError(error)) {
+      throw timeoutError(
+        "database connection",
+        timeoutMs,
+        STARTUP_FAILURE_REASONS.CONNECTION_TIMEOUT,
+      );
+    }
     throw error;
   } finally {
     clearTimeout(timer);
@@ -44,11 +78,21 @@ async function queryWithTimeout(client, text, values, timeoutMs) {
   const query = client.query({
     text,
     values,
-    query_timeout: timeoutMs,
+    // This wrapper owns the client deadline so pg cannot reject first with an
+    // unclassified "Query read timeout". PostgreSQL's server-side timeout
+    // remains enabled separately and is normalized below.
+    query_timeout: 0,
   });
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
-      () => reject(timeoutError("database statement", timeoutMs)),
+      () =>
+        reject(
+          timeoutError(
+            "database statement",
+            timeoutMs,
+            STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT,
+          ),
+        ),
       timeoutMs,
     );
     timer.unref?.();
@@ -56,6 +100,15 @@ async function queryWithTimeout(client, text, values, timeoutMs) {
 
   try {
     return await Promise.race([query, timeout]);
+  } catch (error) {
+    if (isStatementTimeoutError(error)) {
+      throw timeoutError(
+        "database statement",
+        timeoutMs,
+        STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT,
+      );
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -167,11 +220,19 @@ export async function verifyTenantSafeguards(options = {}) {
     options.pool ??
     new Pool({
       connectionString,
+      // Keep pg's timer so stalled handshakes destroy their socket. Both its
+      // timeout and the wrapper deadline normalize to the same public reason.
       connectionTimeoutMillis: connectionTimeoutMs,
       statement_timeout: statementTimeoutMs,
     });
   const ownsPool = !options.pool;
-  const client = await connectWithTimeout(pool, connectionTimeoutMs);
+  let client;
+  try {
+    client = await connectWithTimeout(pool, connectionTimeoutMs);
+  } catch (error) {
+    if (ownsPool) await pool.end();
+    throw error;
+  }
   let transactionOpen = false;
   let discardClient = false;
   try {

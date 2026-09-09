@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { startProduction } from "./start-production.mjs";
+import { STARTUP_FAILURE_REASONS } from "./verify-tenant-safeguards.mjs";
 
 test("production publish startup uses the tenant safeguard gate", async () => {
   const artifactConfig = await readFile(
@@ -52,7 +53,18 @@ test("blocks API startup when tenant safeguards fail", async () => {
         alerts += 1;
       },
     }),
-    /Production is not trusted and the API will not start[\s\S]*foreign key missing: example/,
+    (error) => {
+      assert.equal(
+        error.reasonCategory,
+        STARTUP_FAILURE_REASONS.SAFEGUARD_MISMATCH,
+      );
+      assert.match(
+        error.message,
+        /reason=SAFEGUARD_MISMATCH[\s\S]*Production is not trusted and the API will not start[\s\S]*foreign key missing: example/,
+      );
+      assert.doesNotMatch(error.message, /schema public/);
+      return true;
+    },
   );
 
   assert.equal(started, false);
@@ -82,30 +94,47 @@ test("blocks API startup when verification cannot run", async () => {
   assert.equal(alerts, 1);
 });
 
-test("blocks API startup with a clear trust decision after verification timeout", async () => {
-  let started = false;
-  let alerts = 0;
+for (const [reasonCategory, timeoutTarget] of [
+  [STARTUP_FAILURE_REASONS.CONNECTION_TIMEOUT, "database connection"],
+  [STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT, "database statement"],
+]) {
+  test(`blocks API startup with reason ${reasonCategory}`, async () => {
+    let started = false;
+    const verificationError = new Error(
+      `tenant safeguard ${timeoutTarget} timed out after 10ms; production is not trusted`,
+    );
+    verificationError.reasonCategory = reasonCategory;
+    let alerts = 0;
 
-  await assert.rejects(
-    startProduction({
-      verify: async () => {
-        throw new Error(
-          "tenant safeguard database connection timed out after 10ms; production is not trusted",
+    await assert.rejects(
+      startProduction({
+        verify: async () => {
+          throw verificationError;
+        },
+        startApi: async () => {
+          started = true;
+        },
+        alertBlockedPublish: async () => {
+          alerts += 1;
+        },
+      }),
+      (error) => {
+        assert.equal(error.code, "PRODUCTION_STARTUP_BLOCKED");
+        assert.equal(error.reasonCategory, reasonCategory);
+        assert.equal(error.cause, verificationError);
+        assert.match(error.message, new RegExp(`reason=${reasonCategory}`));
+        assert.match(
+          error.message,
+          /production is not trusted. The API will not start/,
         );
+        return true;
       },
-      startApi: async () => {
-        started = true;
-      },
-      alertBlockedPublish: async () => {
-        alerts += 1;
-      },
-    }),
-    /timed out after 10ms; production is not trusted/,
-  );
+    );
 
-  assert.equal(started, false);
-  assert.equal(alerts, 1);
-});
+    assert.equal(started, false);
+    assert.equal(alerts, 1);
+  });
+}
 
 test("an alert delivery failure never replaces the safeguard failure", async () => {
   await assert.rejects(

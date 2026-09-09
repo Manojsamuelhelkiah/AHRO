@@ -28,3 +28,16 @@ and PostgreSQL does not accept a bound parameter in `SET statement_timeout`.
 **How to apply:** Emit a clear "production is not trusted" timeout error, discard
 clients with timed-out queries, and test never-resolving connection and query
 promises without relying on production access.
+
+Startup gates should attach stable, machine-readable reason categories to
+blocked-release errors while keeping the human trust decision in the message.
+The gate's own deadline must win over driver timeouts, or equivalent failures
+can escape without the expected category.
+
+**Why:** Operators and alerting need to distinguish connection stalls, statement
+stalls, and safeguard mismatches without parsing database errors or exposing
+connection details.
+
+**How to apply:** Keep categories coarse and credential-safe, include them in the
+operator-facing startup line, and unit-test both the category property and clear
+fail-closed wording for every supported reason.
