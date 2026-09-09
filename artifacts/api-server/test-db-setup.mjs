@@ -717,9 +717,28 @@ async function describeSchema(client, schema, normalizedSchemas = schema) {
       SELECT relation.relname AS table_name,
              constraint_record.conname AS constraint_name,
              constraint_record.contype AS constraint_type,
-             pg_get_constraintdef(constraint_record.oid, true) AS definition
+             pg_get_constraintdef(constraint_record.oid, true) AS definition,
+             referenced_relation.relname AS referenced_table_name,
+             ARRAY(
+               SELECT local_attribute.attname
+               FROM unnest(constraint_record.conkey) WITH ORDINALITY AS local_key(attnum, position)
+               JOIN pg_attribute local_attribute
+                 ON local_attribute.attrelid = constraint_record.conrelid
+                AND local_attribute.attnum = local_key.attnum
+               ORDER BY local_key.position
+             )::text[] AS column_names,
+             ARRAY(
+               SELECT referenced_attribute.attname
+               FROM unnest(constraint_record.confkey) WITH ORDINALITY AS referenced_key(attnum, position)
+               JOIN pg_attribute referenced_attribute
+                 ON referenced_attribute.attrelid = constraint_record.confrelid
+                AND referenced_attribute.attnum = referenced_key.attnum
+               ORDER BY referenced_key.position
+             )::text[] AS referenced_column_names
       FROM pg_constraint constraint_record
       JOIN pg_class relation ON relation.oid = constraint_record.conrelid
+      LEFT JOIN pg_class referenced_relation
+        ON referenced_relation.oid = constraint_record.confrelid
       JOIN pg_namespace namespace_record
         ON namespace_record.oid = relation.relnamespace
       WHERE namespace_record.nspname = $1
@@ -748,6 +767,23 @@ async function describeSchema(client, schema, normalizedSchemas = schema) {
     `,
     [schema],
   );
+
+  const foreignKeys = new Map();
+  for (const row of constraints.rows) {
+    if (row.constraint_type !== "f") continue;
+    const identity = {
+      table: row.table_name,
+      columns: row.column_names,
+      referencedTable: row.referenced_table_name,
+      referencedColumns: row.referenced_column_names,
+    };
+    const key = canonicalJson(identity);
+    const existing = foreignKeys.get(key);
+    foreignKeys.set(key, {
+      ...identity,
+      count: (existing?.count ?? 0) + 1,
+    });
+  }
 
   return {
     tables: new Set(tables.rows.map(({ table_name }) => table_name)),
@@ -781,6 +817,7 @@ async function describeSchema(client, schema, normalizedSchemas = schema) {
         },
       ]),
     ),
+    foreignKeys,
     indexes: new Map(
       indexes.rows.map((row) => [
         `${row.table_name}.${row.index_name}`,
@@ -826,6 +863,18 @@ function findSchemaDifferences(expected, actual) {
       }
     }
   }
+  for (const [identity, foreignKey] of expected.foreignKeys) {
+    const actualForeignKey = actual.foreignKeys.get(identity);
+    if (!actualForeignKey || actualForeignKey.count < foreignKey.count) {
+      differences.push(`missing foreign key ${canonicalJson(foreignKey)}`);
+    }
+  }
+  for (const [identity, foreignKey] of actual.foreignKeys) {
+    const expectedForeignKey = expected.foreignKeys.get(identity);
+    if (!expectedForeignKey || foreignKey.count > expectedForeignKey.count) {
+      differences.push(`unexpected foreign key ${canonicalJson(foreignKey)}`);
+    }
+  }
 
   return differences;
 }
@@ -848,8 +897,41 @@ function serializeSchema(schema) {
     tables: [...schema.tables],
     columns: [...schema.columns],
     constraints: [...schema.constraints],
+    foreignKeys: [...schema.foreignKeys],
     indexes: [...schema.indexes],
   };
+}
+
+function foreignKeysFromLegacyConstraints(constraints) {
+  const foreignKeys = [];
+  for (const [key, constraint] of constraints) {
+    if (constraint.type !== "f") continue;
+    const [table] = splitSchemaKey(key);
+    const match = constraint.definition.match(
+      /^FOREIGN KEY \((.+)\) REFERENCES ([^( ]+)\((.+)\)/,
+    );
+    if (!match) {
+      throw new Error(
+        `Database test setup cannot recover foreign-key identity from legacy receipt constraint ${key}`,
+      );
+    }
+    const parseColumns = (value) =>
+      value.split(",").map((column) => column.trim().replace(/^"(.*)"$/, "$1"));
+    const foreignKey = {
+      table,
+      columns: parseColumns(match[1]),
+      referencedTable: match[2].replace(/^"(.*)"$/, "$1"),
+      referencedColumns: parseColumns(match[3]),
+    };
+    const identity = canonicalJson(foreignKey);
+    const existing = foreignKeys.find(([key]) => key === identity);
+    if (existing) {
+      existing[1].count += 1;
+    } else {
+      foreignKeys.push([identity, { ...foreignKey, count: 1 }]);
+    }
+  }
+  return new Map(foreignKeys);
 }
 
 function deserializeSchema(schema) {
@@ -864,10 +946,14 @@ function deserializeSchema(schema) {
       "Database test setup found an invalid reviewed schema receipt",
     );
   }
+  const constraints = new Map(schema.constraints);
   return {
     tables: new Set(schema.tables),
     columns: new Map(schema.columns),
-    constraints: new Map(schema.constraints),
+    constraints,
+    foreignKeys: Array.isArray(schema.foreignKeys)
+      ? new Map(schema.foreignKeys)
+      : foreignKeysFromLegacyConstraints(constraints),
     indexes: new Map(schema.indexes),
   };
 }
@@ -921,6 +1007,7 @@ function deriveReviewedExpectedSchema(baseline, before, after) {
     tables,
     columns: deriveCollection("columns"),
     constraints: deriveCollection("constraints"),
+    foreignKeys: deriveCollection("foreignKeys"),
     indexes: deriveCollection("indexes"),
   };
 }

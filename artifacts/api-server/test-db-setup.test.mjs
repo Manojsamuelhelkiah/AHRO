@@ -766,6 +766,39 @@ test(
         connectionString: schemaConnection(reviewedSchema),
         migrations: postReviewedMigrations,
       });
+
+      const legacyForeignKeyName =
+        "legacy_scenarios_organization_relationship_that_postgresql_must_truncate_before_storing_fk";
+      await adminPool.query(
+        `ALTER TABLE "${reviewedSchema}".scenarios
+         ADD CONSTRAINT "${legacyForeignKeyName}"
+         FOREIGN KEY (organization_id) REFERENCES "${reviewedSchema}".organizations(id)`,
+      );
+      await assert.rejects(
+        reconcileDevelopmentDatabase({
+          connectionString: schemaConnection(reviewedSchema),
+          migrations: postReviewedMigrations,
+        }),
+        /unexpected foreign key .*"columns":\["organization_id"\].*"referencedColumns":\["id"\].*"referencedTable":"organizations".*"table":"scenarios"/,
+      );
+      const storedLegacyForeignKey = await adminPool.query(
+        `
+          SELECT constraint_record.conname
+          FROM pg_constraint constraint_record
+          JOIN pg_class relation ON relation.oid = constraint_record.conrelid
+          JOIN pg_namespace namespace_record ON namespace_record.oid = relation.relnamespace
+          WHERE namespace_record.nspname = $1
+            AND relation.relname = 'scenarios'
+            AND constraint_record.conname LIKE 'legacy_scenarios_organization_relationship%'
+        `,
+        [reviewedSchema],
+      );
+      assert.equal(storedLegacyForeignKey.rowCount, 1);
+      assert.equal(storedLegacyForeignKey.rows[0].conname.length, 63);
+      await adminPool.query(
+        `ALTER TABLE "${reviewedSchema}".scenarios
+         DROP CONSTRAINT "${storedLegacyForeignKey.rows[0].conname}"`,
+      );
       const postReviewShape = await adminPool.query(
         `
           SELECT
