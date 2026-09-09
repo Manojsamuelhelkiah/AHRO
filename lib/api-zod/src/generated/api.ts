@@ -7,7 +7,6 @@
  */
 import * as zod from 'zod';
 
-
 /**
  * @summary Derive the reusable solution baseline from the current corpus
  */
@@ -7249,6 +7248,20 @@ export const getOnboardingSettingsResponseDay1ChecklistItemOrderMin = 0;
 
 export const getOnboardingSettingsResponseDay1ChecklistMax = 100;
 
+export const getOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingSettingsResponseDay1LogisticsDefaultOrientationTimeRegExp = new RegExp('^(?:[01]\\d|2[0-3]):[0-5]\\d$');
+export const getOnboardingSettingsResponseDay1LogisticsDefaultTimezoneMax = 100;
+
+export const getOnboardingSettingsResponseDay1LogisticsDefaultVenueAddressMax = 1000;
+
+export const getOnboardingSettingsResponseDay1LogisticsDefaultGoogleMapsUrlMax = 1000;
+
+export const getOnboardingSettingsResponseDay1LogisticsDefaultMeetingUrlMax = 1000;
+
+export const getOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax = 500;
+
+export const getOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax = 4000;
+
 
 
 export const GetOnboardingSettingsResponse = zod.object({
@@ -7266,7 +7279,18 @@ export const GetOnboardingSettingsResponse = zod.object({
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
-})).min(1).max(getOnboardingSettingsResponseDay1ChecklistMax)
+})).min(1).max(getOnboardingSettingsResponseDay1ChecklistMax),
+  "day1LogisticsDefault": zod.object({
+  "orientationDate": zod.string().regex(getOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
+  "orientationTime": zod.string().regex(getOnboardingSettingsResponseDay1LogisticsDefaultOrientationTimeRegExp).nullable(),
+  "timezone": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultTimezoneMax).nullable(),
+  "format": zod.union([zod.literal('physical'),zod.literal('remote'),zod.literal('hybrid'),zod.literal(null)]).nullable(),
+  "venueAddress": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultVenueAddressMax).nullable(),
+  "googleMapsUrl": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultGoogleMapsUrlMax).nullable(),
+  "meetingUrl": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultMeetingUrlMax).nullable(),
+  "reportingContact": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax).nullable(),
+  "arrivalInstructions": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax).nullable()
+})
 })
 
 
@@ -7280,6 +7304,20 @@ export const updateOnboardingSettingsBodyDay1ChecklistItemLabelMax = 200;
 export const updateOnboardingSettingsBodyDay1ChecklistItemOrderMin = 0;
 
 export const updateOnboardingSettingsBodyDay1ChecklistMax = 100;
+
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultOrientationDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultOrientationTimeRegExp = new RegExp('^(?:[01]\\d|2[0-3]):[0-5]\\d$');
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultTimezoneMax = 100;
+
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultVenueAddressMax = 1000;
+
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultGoogleMapsUrlMax = 1000;
+
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultMeetingUrlMax = 1000;
+
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultReportingContactMax = 500;
+
+export const updateOnboardingSettingsBodyDay1LogisticsDefaultArrivalInstructionsMax = 4000;
 
 
 
@@ -7295,7 +7333,18 @@ export const UpdateOnboardingSettingsBody = zod.object({
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
-})).min(1).max(updateOnboardingSettingsBodyDay1ChecklistMax).optional()
+})).min(1).max(updateOnboardingSettingsBodyDay1ChecklistMax).optional(),
+  "day1LogisticsDefault": zod.object({
+  "orientationDate": zod.string().regex(updateOnboardingSettingsBodyDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
+  "orientationTime": zod.string().regex(updateOnboardingSettingsBodyDay1LogisticsDefaultOrientationTimeRegExp).nullable(),
+  "timezone": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultTimezoneMax).nullable(),
+  "format": zod.union([zod.literal('physical'),zod.literal('remote'),zod.literal('hybrid'),zod.literal(null)]).nullable(),
+  "venueAddress": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultVenueAddressMax).nullable(),
+  "googleMapsUrl": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultGoogleMapsUrlMax).nullable(),
+  "meetingUrl": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultMeetingUrlMax).nullable(),
+  "reportingContact": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultReportingContactMax).nullable(),
+  "arrivalInstructions": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultArrivalInstructionsMax).nullable()
+}).optional()
 })
 
 
@@ -7305,6 +7354,20 @@ export const updateOnboardingSettingsResponseDay1ChecklistItemLabelMax = 200;
 export const updateOnboardingSettingsResponseDay1ChecklistItemOrderMin = 0;
 
 export const updateOnboardingSettingsResponseDay1ChecklistMax = 100;
+
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultOrientationTimeRegExp = new RegExp('^(?:[01]\\d|2[0-3]):[0-5]\\d$');
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultTimezoneMax = 100;
+
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultVenueAddressMax = 1000;
+
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultGoogleMapsUrlMax = 1000;
+
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultMeetingUrlMax = 1000;
+
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax = 500;
+
+export const updateOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax = 4000;
 
 
 
@@ -7323,7 +7386,18 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
-})).min(1).max(updateOnboardingSettingsResponseDay1ChecklistMax)
+})).min(1).max(updateOnboardingSettingsResponseDay1ChecklistMax),
+  "day1LogisticsDefault": zod.object({
+  "orientationDate": zod.string().regex(updateOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
+  "orientationTime": zod.string().regex(updateOnboardingSettingsResponseDay1LogisticsDefaultOrientationTimeRegExp).nullable(),
+  "timezone": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultTimezoneMax).nullable(),
+  "format": zod.union([zod.literal('physical'),zod.literal('remote'),zod.literal('hybrid'),zod.literal(null)]).nullable(),
+  "venueAddress": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultVenueAddressMax).nullable(),
+  "googleMapsUrl": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultGoogleMapsUrlMax).nullable(),
+  "meetingUrl": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultMeetingUrlMax).nullable(),
+  "reportingContact": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax).nullable(),
+  "arrivalInstructions": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax).nullable()
+})
 })
 
 

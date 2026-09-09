@@ -8,7 +8,7 @@
  * remain unauthorized so the real email and voice guards return logged-only.
  */
 import { db } from "@workspace/db";
-import { onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
+import { onbCaseLogistics, onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { sendOutbound } from "./channels";
 import { startVoiceCall } from "./voice";
@@ -18,7 +18,8 @@ import { twilioSignatureValid } from "./twilio-signature";
 import { recordGuardrailEvent } from "./guardrails";
 import { refreshDemoAllowlist } from "./demo-volunteers";
 import { runWithProviderDeny } from "./provider-policy";
-import { getEffectiveChecklist, readinessFromChecklist } from "./settings";
+import { getDay1LogisticsDefault, getEffectiveChecklist, readinessFromChecklist } from "./settings";
+import { logisticsForCase } from "./logistics-defaults";
 
 export const DRILL_WORKER_NAME = "Red Team Drill (simulated attacker)";
 export const DRILL_EMAIL = "red.team.drill@attacker.example";
@@ -73,10 +74,13 @@ async function drillCase(organizationId: string): Promise<{ id: number; created:
     }
     return { id: existing.id, created: false };
   }
-  const checklist = await getEffectiveChecklist(organizationId);
-  const [row] = await db
-    .insert(onbCases)
-    .values({
+  const [checklist, logisticsDefault] = await Promise.all([
+    getEffectiveChecklist(organizationId),
+    getDay1LogisticsDefault(organizationId),
+  ]);
+  const joiningDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const row = await db.transaction(async (tx) => {
+    const [inserted] = await tx.insert(onbCases).values({
       organizationId,
       workerName: DRILL_WORKER_NAME,
       workerEmail: DRILL_EMAIL,
@@ -90,7 +94,7 @@ async function drillCase(organizationId: string): Promise<{ id: number; created:
       legalEntity: "Demo Corp",
       managerName: "Security Team",
       recruiterName: "Security Team",
-      joiningDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+      joiningDate,
       notes: "Synthetic case for the guardrails security drill. Not a real person; contacts require explicit organization-scoped demo-volunteer authorization.",
       checklistTemplateVersion: checklist.version,
       checklistSnapshot: checklist.items,
@@ -99,8 +103,14 @@ async function drillCase(organizationId: string): Promise<{ id: number; created:
       lifecycleStage: "in-progress",
       candidateEmailAuthorizedAt: null,
       candidateEmailAuthorizedBy: null,
-    })
-    .returning({ id: onbCases.id });
+    }).returning({ id: onbCases.id });
+    await tx.insert(onbCaseLogistics).values({
+      organizationId,
+      caseId: inserted.id,
+      ...logisticsForCase(logisticsDefault, joiningDate),
+    });
+    return inserted;
+  });
   await drillLogEvent(organizationId, row.id, "Security drill case created",
     "This case exists to demonstrate guardrails under attack. Every action below is a simulated attack that the live enforcement code blocked.",
   );

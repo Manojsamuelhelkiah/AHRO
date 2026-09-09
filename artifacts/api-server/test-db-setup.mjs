@@ -42,6 +42,9 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Candidate portal is conditional so historical recovery databases without
   // tenant tables can safely replay the forward migration.
   "8f113f159680a086acc79b46cac772f7543f1cd72125f14921cc97ec113dc9af",
+  // Reviewed tenant-scoped seed and non-overwriting case-logistics backfill.
+  // This forward reconciliation preserves both immutable historical 0030s.
+  "e91d02fb842cf47f4a9e6c32957d16025b484fa99bb58afc35d008f39c91c411",
 ]);
 
 // These errors mean an old migration's individual DDL statement is already

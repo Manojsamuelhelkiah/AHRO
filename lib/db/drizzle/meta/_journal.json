@@ -267,6 +267,13 @@
       "when": 1788887340014,
       "tag": "0032_onboarding_orchestration_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788887340015,
+      "tag": "0033_day1_logistics_defaults",
+      "breakpoints": true
     }
   ]
 }

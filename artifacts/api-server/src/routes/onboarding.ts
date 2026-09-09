@@ -8,6 +8,7 @@ import {
   onbCommunications,
   onbConnectors,
   onbEvents,
+  onbCaseLogistics,
   onbSettings,
   onbSystemChecks,
 } from "@workspace/db/schema";
@@ -57,7 +58,10 @@ import {
   getEffectiveChecklist,
   readinessFromChecklist,
   saveChecklistVersion,
+  getDay1LogisticsDefault,
+  setDay1LogisticsDefault,
 } from "../lib/onboarding/settings";
+import { logisticsForCase, validateDay1LogisticsDefault } from "../lib/onboarding/logistics-defaults";
 import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas, refreshDemoAllowlist } from "../lib/onboarding/demo-volunteers";
 import { runApproverInboxTick } from "../lib/onboarding/approver-email";
 import { GUARDRAILS, GUARDRAIL_CATEGORIES, getGuardrail, recordGuardrailEvent } from "../lib/onboarding/guardrails";
@@ -203,19 +207,30 @@ async function insertCaseAndStart(
   values: Omit<typeof onbCases.$inferInsert, "organizationId">,
   organizationId: string,
 ) {
-  const checklist = await getEffectiveChecklist(organizationId);
-  const [row] = await db
-    .insert(onbCases)
-    .values({
-      ...values,
-      ...organizationValues(organizationId),
-      checklistTemplateVersion: checklist.version,
-      checklistSnapshot: checklist.items,
-      readiness: readinessFromChecklist(checklist.items),
-      workstreams: defaultWorkstreams(),
-      orchestrationStatus: "idle",
-    })
-    .returning();
+  const [checklist, logisticsDefault] = await Promise.all([
+    getEffectiveChecklist(organizationId),
+    getDay1LogisticsDefault(organizationId),
+  ]);
+  const row = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(onbCases)
+      .values({
+        ...values,
+        ...organizationValues(organizationId),
+        checklistTemplateVersion: checklist.version,
+        checklistSnapshot: checklist.items,
+        readiness: readinessFromChecklist(checklist.items),
+        workstreams: defaultWorkstreams(),
+        orchestrationStatus: "idle",
+      })
+      .returning();
+    await tx.insert(onbCaseLogistics).values({
+      organizationId,
+      caseId: inserted.id,
+      ...logisticsForCase(logisticsDefault, inserted.joiningDate),
+    });
+    return inserted;
+  });
   startOrchestration(row.id);
   return row;
 }
@@ -1180,7 +1195,10 @@ async function settingsPayload(organizationId: string) {
   const hrAlertEmail = stored && stored.trim().length > 0 ? stored.trim() : null;
   const envFallback = resolveHrAlertAddress(null);
   const effective = hrAlertEmail ?? envFallback;
-  const checklist = await getEffectiveChecklist(organizationId);
+  const [checklist, day1LogisticsDefault] = await Promise.all([
+    getEffectiveChecklist(organizationId),
+    getDay1LogisticsDefault(organizationId),
+  ]);
   return {
     hrAlertEmail,
     envFallback,
@@ -1190,6 +1208,7 @@ async function settingsPayload(organizationId: string) {
     hrApproverEmail: await getSetting(organizationId, HR_APPROVER_EMAIL_KEY),
     checklistVersion: checklist.version,
     day1Checklist: checklist.items,
+    day1LogisticsDefault,
   };
 }
 
@@ -1210,6 +1229,7 @@ router.put("/onboarding/settings", async (req, res, next) => {
       body.hrAlertEmail === undefined ? undefined : (body.hrAlertEmail ?? "").trim() || null;
     const hrApproverEmail =
       body.hrApproverEmail === undefined ? undefined : (body.hrApproverEmail ?? "").trim() || null;
+    let logisticsDefault;
     // Validate the complete request before performing any write.
     if (hrAlertEmail && !isValidEmail(hrAlertEmail)) {
       res.status(400).json({ error: "Enter a valid email address (e.g. hr@company.com)." });
@@ -1227,6 +1247,14 @@ router.put("/onboarding/settings", async (req, res, next) => {
       res.status(400).json({ error: "day1Checklist is required with expectedChecklistVersion." });
       return;
     }
+    if (body.day1LogisticsDefault !== undefined) {
+      try {
+        logisticsDefault = validateDay1LogisticsDefault(body.day1LogisticsDefault);
+      } catch (error) {
+        res.status(400).json({ error: error instanceof Error ? error.message : "Invalid Day-1 logistics default." });
+        return;
+      }
+    }
     if (body.day1Checklist !== undefined) {
       try {
         await saveChecklistVersion(
@@ -1243,6 +1271,9 @@ router.put("/onboarding/settings", async (req, res, next) => {
         res.status(400).json({ error: error instanceof Error ? error.message : "Invalid checklist." });
         return;
       }
+    }
+    if (logisticsDefault !== undefined) {
+      await setDay1LogisticsDefault(organizationId, logisticsDefault);
     }
     if (body.hrAlertEmail !== undefined) {
       await setSetting(organizationId, HR_ALERT_EMAIL_KEY, hrAlertEmail ?? null);

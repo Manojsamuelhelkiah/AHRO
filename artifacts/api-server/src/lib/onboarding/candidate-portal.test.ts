@@ -8,6 +8,12 @@ import {
   portalEmailRequested,
   validateLogistics,
 } from "./candidate-portal";
+import {
+  logisticsForCase,
+  parseDay1LogisticsDefault,
+  SYNTHETIC_DAY1_LOGISTICS_DEFAULT,
+  validateDay1LogisticsDefault,
+} from "./logistics-defaults";
 
 test("portal secrets are random and represented by SHA-256 hashes", () => {
   const first = newSecret();
@@ -31,6 +37,20 @@ test("logistics validates formats, timezones, and safe URLs", () => {
   assert.throws(() => validateLogistics({ timezone: "Not/AZone" }), /timezone/);
   assert.throws(() => validateLogistics({ googleMapsUrl: "https://evil.example/maps" }), /Google Maps/);
   assert.throws(() => validateLogistics({ meetingUrl: "javascript:alert(1)" }), /meeting/);
+});
+
+test("tenant logistics defaults reuse portal validation and resolve blank dates per case", () => {
+  const parsed = parseDay1LogisticsDefault(JSON.stringify(SYNTHETIC_DAY1_LOGISTICS_DEFAULT));
+  assert.equal(parsed.reportingContact, "Alex Example — Demo People Team");
+  assert.equal(parsed.orientationDate, null);
+  assert.equal(logisticsForCase(parsed, "2027-02-03").orientationDate, "2027-02-03");
+  assert.equal(
+    logisticsForCase({ ...parsed, orientationDate: "2027-02-01" }, "2027-02-03").orientationDate,
+    "2027-02-01",
+  );
+  assert.throws(() => validateDay1LogisticsDefault([]), /JSON object/);
+  assert.throws(() => validateDay1LogisticsDefault({ timezone: "Synthetic/Invalid" }), /timezone/);
+  assert.throws(() => parseDay1LogisticsDefault("{"), /valid JSON/);
 });
 
 test("candidate file detection uses magic bytes rather than names", () => {

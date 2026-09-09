@@ -5381,7 +5381,9 @@ components:
           maxItems: 100
           items:
             $ref: "#/components/schemas/OnbChecklistTemplateItem"
-      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail, checklistVersion, day1Checklist]
+        day1LogisticsDefault:
+          $ref: "#/components/schemas/OnbDay1Logistics"
+      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail, checklistVersion, day1Checklist, day1LogisticsDefault]
     UpdateOnbSettings:
       type: object
       properties:
@@ -5406,6 +5408,40 @@ components:
           maxItems: 100
           items:
             $ref: "#/components/schemas/OnbChecklistTemplateItem"
+        day1LogisticsDefault:
+          $ref: "#/components/schemas/OnbDay1Logistics"
+    OnbDay1Logistics:
+      type: object
+      properties:
+        orientationDate:
+          type: ["string", "null"]
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Blank uses each new case's joining date when the default is copied
+        orientationTime:
+          type: ["string", "null"]
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+        timezone:
+          type: ["string", "null"]
+          maxLength: 100
+        format:
+          type: ["string", "null"]
+          enum: [physical, remote, hybrid, null]
+        venueAddress:
+          type: ["string", "null"]
+          maxLength: 1000
+        googleMapsUrl:
+          type: ["string", "null"]
+          maxLength: 1000
+        meetingUrl:
+          type: ["string", "null"]
+          maxLength: 1000
+        reportingContact:
+          type: ["string", "null"]
+          maxLength: 500
+        arrivalInstructions:
+          type: ["string", "null"]
+          maxLength: 4000
+      required: [orientationDate, orientationTime, timezone, format, venueAddress, googleMapsUrl, meetingUrl, reportingContact, arrivalInstructions]
     RateSetReference:
       type: object
       description: Metadata identifying which pricing rate set snapshot was used to generate a rollup or quote.

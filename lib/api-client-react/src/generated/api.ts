@@ -18,7 +18,6 @@ import type {
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
-
 import type {
   ActualsLogParseResult,
   ActualsOverlayInput,

@@ -7,7 +7,6 @@
  */
 export type EaAssessmentStatus = typeof EaAssessmentStatus[keyof typeof EaAssessmentStatus];
 
-
 export const EaAssessmentStatus = {
   active: 'active',
   archived: 'archived',
@@ -2830,6 +2829,64 @@ export interface OnbChannelTestResult {
   detail: string;
 }
 
+/**
+ * @nullable
+ */
+export type OnbDay1LogisticsFormat = typeof OnbDay1LogisticsFormat[keyof typeof OnbDay1LogisticsFormat] | null;
+
+
+export const OnbDay1LogisticsFormat = {
+  physical: 'physical',
+  remote: 'remote',
+  hybrid: 'hybrid',
+} as const;
+
+export interface OnbDay1Logistics {
+  /**
+     * Blank uses each new case's joining date when the default is copied
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  orientationDate: string | null;
+  /**
+     * @nullable
+     * @pattern ^(?:[01]\d|2[0-3]):[0-5]\d$
+     */
+  orientationTime: string | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  timezone: string | null;
+  /** @nullable */
+  format: OnbDay1LogisticsFormat;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  venueAddress: string | null;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  googleMapsUrl: string | null;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  meetingUrl: string | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  reportingContact: string | null;
+  /**
+     * @maxLength 4000
+     * @nullable
+     */
+  arrivalInstructions: string | null;
+}
+
 export interface OnbSettings {
   /** Address stored via the settings screen, or null when not set */
   hrAlertEmail: string | null;
@@ -2853,6 +2910,7 @@ export interface OnbSettings {
      * @maxItems 100
      */
   day1Checklist: OnbChecklistTemplateItem[];
+  day1LogisticsDefault: OnbDay1Logistics;
 }
 
 export interface UpdateOnbSettings {
@@ -2872,6 +2930,7 @@ export interface UpdateOnbSettings {
      * @maxItems 100
      */
   day1Checklist?: OnbChecklistTemplateItem[];
+  day1LogisticsDefault?: OnbDay1Logistics;
 }
 
 /**

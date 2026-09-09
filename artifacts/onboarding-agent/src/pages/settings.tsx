@@ -15,10 +15,11 @@ import {
   type DemoPersona,
   type OnbChecklistTemplateItem,
   type OnbChecklistEnforcementStage,
+  type OnbDay1Logistics,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
-import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown } from 'lucide-react';
+import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin } from 'lucide-react';
 import { useLocation } from 'wouter';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -562,6 +563,116 @@ function ChecklistSettingsCard() {
   );
 }
 
+const LOGISTICS_FIELDS: {
+  key: keyof OnbDay1Logistics;
+  label: string;
+  placeholder: string;
+  type?: string;
+}[] = [
+  { key: 'orientationDate', label: 'Orientation date', placeholder: 'Uses each hire’s joining date', type: 'date' },
+  { key: 'orientationTime', label: 'Orientation time', placeholder: '09:30', type: 'time' },
+  { key: 'timezone', label: 'Time zone', placeholder: 'Etc/UTC' },
+  { key: 'venueAddress', label: 'Venue address', placeholder: 'Example HQ, 100 Demo Avenue, Sample City' },
+  { key: 'googleMapsUrl', label: 'Google Maps URL', placeholder: 'https://maps.google.com/…', type: 'url' },
+  { key: 'meetingUrl', label: 'Meeting URL', placeholder: 'https://meet.example.com/…', type: 'url' },
+  { key: 'reportingContact', label: 'Reporting contact', placeholder: 'Alex Example — Demo People Team' },
+  { key: 'arrivalInstructions', label: 'Arrival instructions', placeholder: 'Synthetic demo arrival instructions' },
+];
+
+function Day1LogisticsSettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: settings, isLoading } = useGetOnboardingSettings();
+  const update = useUpdateOnboardingSettings();
+  const [draft, setDraft] = useState<OnbDay1Logistics | null>(null);
+  const [touched, setTouched] = useState(false);
+  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    if (settings && !touched) setDraft({ ...settings.day1LogisticsDefault });
+  }, [settings, touched]);
+
+  const edit = (key: keyof OnbDay1Logistics, value: string | null) => {
+    setDraft((current) => current ? { ...current, [key]: value || null } : current);
+    setTouched(true);
+    setNotice(null);
+  };
+
+  const save = () => {
+    if (!draft) return;
+    update.mutate({ data: { day1LogisticsDefault: draft } }, {
+      onSuccess: (saved) => {
+        setDraft({ ...saved.day1LogisticsDefault });
+        setTouched(false);
+        setNotice({ ok: true, message: 'Tenant default saved. It will be copied onto future cases; existing case logistics remain unchanged.' });
+        queryClient.setQueryData(getGetOnboardingSettingsQueryKey(), saved);
+      },
+      onError: (err: any) => setNotice({ ok: false, message: err?.error ?? err?.message ?? 'Saving failed — check the URLs, time zone, date, and time.' }),
+    });
+  };
+
+  return (
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+      <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
+        <div className="flex items-start gap-3">
+          <IconTile icon={MapPin} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
+          <div>
+            <h3 className="text-[var(--text-xs)] font-semibold text-[var(--text-primary)] uppercase tracking-[0.05em]">Default Day-1 Logistics</h3>
+            <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
+              Copied once onto every new case, where HR can edit it independently. Logistics are not part of checklist snapshots.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="p-[var(--space-lg)] bg-[var(--surface)]">
+        {isLoading || !draft ? <LoadingBlock>Loading Day-1 logistics...</LoadingBlock> : (
+          <>
+            <div className="mb-4 p-3 rounded-[var(--radius-md)] border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] text-[var(--text-xs)] text-[var(--status-amber-fg)]">
+              Fresh tenants start with clearly synthetic example values (Example HQ, Demo People Team, and an example meeting URL).
+              Replace them before real use. Leave the orientation date blank to use each hire’s joining date.
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="day1-format" className="text-[var(--text-xs)]">Format</Label>
+                <select id="day1-format" value={draft.format ?? ''} onChange={(e) => edit('format', e.target.value)} className={cn(inputCls, 'mt-1')}>
+                  <option value="">Not specified</option>
+                  <option value="physical">Physical</option>
+                  <option value="remote">Remote</option>
+                  <option value="hybrid">Hybrid</option>
+                </select>
+              </div>
+              {LOGISTICS_FIELDS.map((field) => (
+                <div key={field.key} className={field.key === 'arrivalInstructions' ? 'md:col-span-2' : ''}>
+                  <Label htmlFor={`day1-${field.key}`} className="text-[var(--text-xs)]">{field.label}</Label>
+                  {field.key === 'arrivalInstructions' ? (
+                    <textarea id={`day1-${field.key}`} value={draft[field.key] ?? ''} onChange={(e) => edit(field.key, e.target.value)}
+                      placeholder={field.placeholder} maxLength={4000} className={cn(inputCls, 'mt-1 h-20 py-2 resize-y')} />
+                  ) : (
+                    <input id={`day1-${field.key}`} type={field.type ?? 'text'} value={draft[field.key] ?? ''}
+                      onChange={(e) => edit(field.key, e.target.value)} placeholder={field.placeholder} className={cn(inputCls, 'mt-1')} />
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 mt-4 pt-4 border-t border-[var(--border)]">
+              <Button onClick={save} disabled={!touched || update.isPending} className="gap-2">
+                <Check className="w-4 h-4" /> {update.isPending ? 'Saving…' : 'Save tenant default'}
+              </Button>
+              <span className="text-[var(--text-xs)] text-[var(--text-muted)]">Changes affect future cases only.</span>
+            </div>
+            {notice && (
+              <div className={cn('p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3',
+                notice.ok ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]')}>
+                {notice.ok ? <Check className="w-5 h-5 shrink-0" /> : <X className="w-5 h-5 shrink-0" />}
+                <p>{notice.message}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useGetOnboardingSettings();
@@ -834,6 +945,8 @@ export function SettingsPage() {
       </div>
 
       <ChecklistSettingsCard />
+
+      <Day1LogisticsSettingsCard />
 
       <DemoVolunteersCard />
 

@@ -8,6 +8,12 @@ import {
   type OnbReadinessItemRow,
 } from "@workspace/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
+import {
+  parseDay1LogisticsDefault,
+  SYNTHETIC_DAY1_LOGISTICS_DEFAULT,
+  validateDay1LogisticsDefault,
+  type Day1Logistics,
+} from "./logistics-defaults";
 
 /**
  * App-level settings persisted in the onb_settings key/value table so
@@ -32,6 +38,7 @@ export const HR_APPROVER_EMAIL_KEY = "hr_approver_email";
  * Absent/any other value means off — calls must never surprise anyone.
  */
 export const AUTO_ESCALATION_CALLS_KEY = "auto_escalation_calls";
+export const DAY1_LOGISTICS_DEFAULT_KEY = "day1_logistics_default";
 
 export const LEGACY_CHECKLIST_VERSION = 1;
 export const LEGACY_CHECKLIST: readonly OnbChecklistTemplateItem[] = [
@@ -162,6 +169,22 @@ export async function saveChecklistVersion(
 
 export async function autoEscalationCallsEnabled(organizationId: string): Promise<boolean> {
   return (await getSetting(organizationId, AUTO_ESCALATION_CALLS_KEY)) === "on";
+}
+
+export async function getDay1LogisticsDefault(organizationId: string): Promise<Day1Logistics> {
+  const stored = await getSetting(organizationId, DAY1_LOGISTICS_DEFAULT_KEY);
+  return stored
+    ? parseDay1LogisticsDefault(stored)
+    : { ...SYNTHETIC_DAY1_LOGISTICS_DEFAULT };
+}
+
+export async function setDay1LogisticsDefault(
+  organizationId: string,
+  input: unknown,
+): Promise<Day1Logistics> {
+  const logistics = validateDay1LogisticsDefault(input);
+  await setSetting(organizationId, DAY1_LOGISTICS_DEFAULT_KEY, JSON.stringify(logistics));
+  return logistics;
 }
 
 /** Lenient-but-sane email shape check: one @, no spaces, a dot in the domain. */

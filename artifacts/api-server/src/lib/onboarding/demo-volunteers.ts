@@ -8,12 +8,13 @@
  * (plus anyone in ONBOARDING_ALLOWED_RECIPIENTS) and nobody else.
  */
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbCases } from "@workspace/db/schema";
+import { DEMO_ORGANIZATION_ID, onbCaseLogistics, onbCases } from "@workspace/db/schema";
 import { and, sql } from "drizzle-orm";
 import { getSetting, setSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { setDemoAllowlist } from "./channels";
 import { defaultWorkstreams, startOrchestration } from "./engine";
-import { getEffectiveChecklist, readinessFromChecklist } from "./settings";
+import { getDay1LogisticsDefault, getEffectiveChecklist, readinessFromChecklist } from "./settings";
+import { logisticsForCase } from "./logistics-defaults";
 import { SCENARIOS, getScenario } from "./scenarios";
 import { organizationValues, organizationWhere } from "../organization-scope";
 
@@ -170,6 +171,7 @@ export async function seedVolunteerCases(
 ): Promise<SeedResult[]> {
   const volunteers = await loadVolunteers(organizationId);
   const checklist = await getEffectiveChecklist(organizationId);
+  const logisticsDefault = await getDay1LogisticsDefault(organizationId);
   const results: SeedResult[] = [];
   for (const v of volunteers) {
     const problem = volunteerProblems(v);
@@ -195,9 +197,8 @@ export async function seedVolunteerCases(
     // skill, notes) while keeping the volunteer's real identity and contacts,
     // so the agent's messages match the story the volunteer is playing.
     const scenario = getScenario(v.persona);
-    const [row] = await db
-      .insert(onbCases)
-      .values({
+    const row = await db.transaction(async (tx) => {
+      const [inserted] = await tx.insert(onbCases).values({
         workerName: v.name,
         workerEmail: v.email,
         workerPhone: v.phone || null,
@@ -221,8 +222,14 @@ export async function seedVolunteerCases(
         workstreams: defaultWorkstreams(),
         orchestrationStatus: "idle",
          ...organizationValues(organizationId),
-      })
-      .returning();
+      }).returning();
+      await tx.insert(onbCaseLogistics).values({
+        organizationId,
+        caseId: inserted.id,
+        ...logisticsForCase(logisticsDefault, inserted.joiningDate),
+      });
+      return inserted;
+    });
     startOrchestration(row.id);
     results.push({
       name: v.name,
