@@ -41,6 +41,22 @@ export type OnbChecklistTemplateItem = {
   enforcementStage: OnbChecklistEnforcementStage;
 };
 
+export type OnbChecklistProfileCriteria = {
+  band?: string;
+  role?: string;
+  employmentType?: string;
+  location?: string;
+};
+
+export type OnbChecklistItemOverride = {
+  id: string;
+  label?: string;
+  order?: number;
+  enabled?: boolean;
+  mandatory?: boolean;
+  enforcementStage?: OnbChecklistEnforcementStage;
+};
+
 /** One archive Q&A pair attached to an escalation, with the structured stint scope. */
 export type OnbRecordsEvidenceItem = {
   question: string;
@@ -68,6 +84,7 @@ export const onbCases = pgTable("onb_cases", {
   channelPreference: text("channel_preference").notNull().default("both"),
   hireType: text("hire_type").notNull(),
   workerCategory: text("worker_category").notNull(),
+  workerBand: text("worker_band"),
   role: text("role").notNull(),
   department: text("department").notNull(),
   geography: text("geography").notNull(),
@@ -81,6 +98,11 @@ export const onbCases = pgTable("onb_cases", {
   /** Immutable effective checklist copied at case creation. */
   checklistTemplateVersion: integer("checklist_template_version").notNull().default(1),
   checklistSnapshot: jsonb("checklist_snapshot").$type<OnbChecklistTemplateItem[]>().notNull().default([]),
+  checklistProfileId: text("checklist_profile_id").notNull().default("default"),
+  checklistProfileName: text("checklist_profile_name").notNull().default("Organization default"),
+  checklistProfileVersion: integer("checklist_profile_version"),
+  checklistMatchedCriteria: jsonb("checklist_matched_criteria").$type<OnbChecklistProfileCriteria>().notNull().default({}),
+  checklistMatchExplanation: text("checklist_match_explanation").notNull().default("No targeted profile matched; organization default selected."),
   /** Last safely completed orchestration boundary; also identifies a checklist pause. */
   orchestrationCheckpoint: text("orchestration_checkpoint"),
   orchestrationClaimOwner: text("orchestration_claim_owner"),
@@ -213,6 +235,26 @@ export const onbChecklistTemplates = pgTable("onb_checklist_templates", {
 }, (t) => [
   primaryKey({ columns: [t.organizationId, t.version] }),
   check("onb_checklist_templates_version_check", sql`${t.version} > 0`),
+]);
+
+/** Immutable versions of named targeted profiles. The greatest version is current. */
+export const onbChecklistProfiles = pgTable("onb_checklist_profiles", {
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
+  profileId: text("profile_id").notNull(),
+  version: integer("version").notNull(),
+  name: text("name").notNull(),
+  criteria: jsonb("criteria").$type<OnbChecklistProfileCriteria>().notNull(),
+  overrides: jsonb("overrides").$type<OnbChecklistItemOverride[]>().notNull().default([]),
+  priority: integer("priority").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.organizationId, t.profileId, t.version] }),
+  check("onb_checklist_profiles_version_check", sql`${t.version} > 0`),
+  check("onb_checklist_profiles_priority_check", sql`${t.priority} >= 0`),
 ]);
 /**
  * One tracked external-system checklist item per case (BGV clearance,

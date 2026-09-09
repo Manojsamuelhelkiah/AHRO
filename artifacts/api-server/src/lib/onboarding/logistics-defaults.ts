@@ -1,4 +1,4 @@
-import { validateLogistics } from "./candidate-portal";
+import { validateLogistics } from "./logistics-validation";
 
 export type Day1Logistics = ReturnType<typeof validateLogistics>;
 

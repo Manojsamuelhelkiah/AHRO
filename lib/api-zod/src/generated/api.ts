@@ -6263,10 +6263,13 @@ export const RunOnboardingScenarioParams = zod.object({
 export const runOnboardingScenarioResponseReadinessItemOrderMin = 0;
 
 
-export const runOnboardingScenarioResponseChecklistSnapshotItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const runOnboardingScenarioResponseChecklistSnapshotItemLabelMax = 200;
 
 export const runOnboardingScenarioResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
 
 
 
@@ -6278,6 +6281,7 @@ export const RunOnboardingScenarioResponse = zod.object({
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
   "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
   "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
   "role": zod.string(),
   "department": zod.string(),
   "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
@@ -6312,13 +6316,23 @@ export const RunOnboardingScenarioResponse = zod.object({
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
-  "id": zod.string().regex(runOnboardingScenarioResponseChecklistSnapshotItemIdRegExp),
-  "label": zod.string().min(1).max(runOnboardingScenarioResponseChecklistSnapshotItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(runOnboardingScenarioResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
 })),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
@@ -6332,10 +6346,13 @@ export const RunOnboardingScenarioResponse = zod.object({
 export const listOnboardingCasesResponseReadinessItemOrderMin = 0;
 
 
-export const listOnboardingCasesResponseChecklistSnapshotItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const listOnboardingCasesResponseChecklistSnapshotItemLabelMax = 200;
 
 export const listOnboardingCasesResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
 
 
 
@@ -6347,6 +6364,7 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
   "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
   "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
   "role": zod.string(),
   "department": zod.string(),
   "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
@@ -6381,13 +6399,23 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
-  "id": zod.string().regex(listOnboardingCasesResponseChecklistSnapshotItemIdRegExp),
-  "label": zod.string().min(1).max(listOnboardingCasesResponseChecklistSnapshotItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(listOnboardingCasesResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
 })),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
@@ -6409,6 +6437,7 @@ export const CreateOnboardingCaseBody = zod.object({
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']).optional().describe('How the new hire should be contacted (defaults to both)'),
   "hireType": zod.string(),
   "workerCategory": zod.string(),
+  "workerBand": zod.string().optional().describe('Optional employee band used for targeted checklist matching'),
   "role": zod.string(),
   "department": zod.string(),
   "geography": zod.string(),
@@ -6424,10 +6453,13 @@ export const CreateOnboardingCaseBody = zod.object({
 export const createOnboardingCaseResponseReadinessItemOrderMin = 0;
 
 
-export const createOnboardingCaseResponseChecklistSnapshotItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const createOnboardingCaseResponseChecklistSnapshotItemLabelMax = 200;
 
 export const createOnboardingCaseResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
 
 
 
@@ -6439,6 +6471,7 @@ export const CreateOnboardingCaseResponse = zod.object({
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
   "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
   "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
   "role": zod.string(),
   "department": zod.string(),
   "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
@@ -6473,13 +6506,23 @@ export const CreateOnboardingCaseResponse = zod.object({
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
-  "id": zod.string().regex(createOnboardingCaseResponseChecklistSnapshotItemIdRegExp),
-  "label": zod.string().min(1).max(createOnboardingCaseResponseChecklistSnapshotItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(createOnboardingCaseResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
 })),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
@@ -6497,10 +6540,13 @@ export const GetOnboardingCaseParams = zod.object({
 export const getOnboardingCaseResponseReadinessItemOrderMin = 0;
 
 
-export const getOnboardingCaseResponseChecklistSnapshotItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const getOnboardingCaseResponseChecklistSnapshotItemLabelMax = 200;
 
 export const getOnboardingCaseResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
 
 
 
@@ -6512,6 +6558,7 @@ export const GetOnboardingCaseResponse = zod.object({
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
   "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
   "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
   "role": zod.string(),
   "department": zod.string(),
   "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
@@ -6546,18 +6593,472 @@ export const GetOnboardingCaseResponse = zod.object({
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
-  "id": zod.string().regex(getOnboardingCaseResponseChecklistSnapshotItemIdRegExp),
-  "label": zod.string().min(1).max(getOnboardingCaseResponseChecklistSnapshotItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(getOnboardingCaseResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
 })),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
+
+
+/**
+ * @summary Recalculate a case profile before orchestration, or deliberately replace an active snapshot
+ */
+
+
+
+export const RecalculateOnboardingChecklistProfileParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const recalculateOnboardingChecklistProfileBodyReasonMax = 500;
+
+
+
+
+
+export const RecalculateOnboardingChecklistProfileBody = zod.object({
+  "action": zod.enum(['recalculate', 'replace-active']),
+  "reason": zod.string().max(recalculateOnboardingChecklistProfileBodyReasonMax).optional(),
+  "expectedChecklistTemplateVersion": zod.number().min(1).describe('Default checklist snapshot version currently displayed for this case.'),
+  "expectedChecklistProfileId": zod.string().describe('Checklist profile identifier currently displayed for this case.'),
+  "expectedChecklistProfileVersion": zod.number().min(1).describe('Checklist profile version currently displayed for this case.')
+})
+
+export const recalculateOnboardingChecklistProfileResponseReadinessItemOrderMin = 0;
+
+
+
+export const recalculateOnboardingChecklistProfileResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
+
+
+
+export const RecalculateOnboardingChecklistProfileResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | checklist-blocked | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('Stable item identifier; retained as key for legacy clients'),
+  "id": zod.string().optional().describe('Stable template item identifier'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional(),
+  "order": zod.number().min(recalculateOnboardingChecklistProfileResponseReadinessItemOrderMin).optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+}).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "checklistTemplateVersion": zod.number().min(1),
+  "checklistSnapshot": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(recalculateOnboardingChecklistProfileResponseChecklistSnapshotItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+})),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
+  "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary List current organization-scoped targeted checklist profiles with effective previews
+ */
+
+
+
+
+
+
+export const listOnboardingChecklistProfilesResponseOneOverridesItemOrderMin = 0;
+
+export const listOnboardingChecklistProfilesResponseOnePriorityMin = 0;
+
+
+
+export const listOnboardingChecklistProfilesResponseTwoEffectiveChecklistItemOrderMin = 0;
+
+
+
+export const ListOnboardingChecklistProfilesResponseItem = zod.object({
+  "name": zod.string().min(1),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(listOnboardingChecklistProfilesResponseOneOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+})),
+  "priority": zod.number().min(listOnboardingChecklistProfilesResponseOnePriorityMin),
+  "enabled": zod.boolean()
+}).and(zod.object({
+  "profileId": zod.string(),
+  "version": zod.number().min(1),
+  "effectiveChecklist": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(listOnboardingChecklistProfilesResponseTwoEffectiveChecklistItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+})),
+  "createdAt": zod.string()
+}))
+export const ListOnboardingChecklistProfilesResponse = zod.array(ListOnboardingChecklistProfilesResponseItem)
+
+
+/**
+ * @summary Create a named targeted checklist profile
+ */
+
+
+
+
+
+
+export const createOnboardingChecklistProfileBodyOverridesItemOrderMin = 0;
+
+export const createOnboardingChecklistProfileBodyPriorityMin = 0;
+
+
+
+export const CreateOnboardingChecklistProfileBody = zod.object({
+  "name": zod.string().min(1),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(createOnboardingChecklistProfileBodyOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+})),
+  "priority": zod.number().min(createOnboardingChecklistProfileBodyPriorityMin),
+  "enabled": zod.boolean()
+})
+
+
+
+
+
+
+
+export const createOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
+
+export const createOnboardingChecklistProfileResponseOnePriorityMin = 0;
+
+
+
+export const createOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
+
+
+
+export const CreateOnboardingChecklistProfileResponse = zod.object({
+  "name": zod.string().min(1),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(createOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+})),
+  "priority": zod.number().min(createOnboardingChecklistProfileResponseOnePriorityMin),
+  "enabled": zod.boolean()
+}).and(zod.object({
+  "profileId": zod.string(),
+  "version": zod.number().min(1),
+  "effectiveChecklist": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(createOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+})),
+  "createdAt": zod.string()
+}))
+
+
+/**
+ * @summary Create a new immutable version to edit, reprioritize, or disable a profile
+ */
+export const UpdateOnboardingChecklistProfileParams = zod.object({
+  "profileId": zod.coerce.string()
+})
+
+
+
+
+
+
+
+export const updateOnboardingChecklistProfileBodyOneOverridesItemOrderMin = 0;
+
+export const updateOnboardingChecklistProfileBodyOnePriorityMin = 0;
+
+
+
+
+export const UpdateOnboardingChecklistProfileBody = zod.object({
+  "name": zod.string().min(1),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(updateOnboardingChecklistProfileBodyOneOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+})),
+  "priority": zod.number().min(updateOnboardingChecklistProfileBodyOnePriorityMin),
+  "enabled": zod.boolean()
+}).and(zod.object({
+  "expectedVersion": zod.number().min(1)
+}))
+
+
+
+
+
+
+
+export const updateOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
+
+export const updateOnboardingChecklistProfileResponseOnePriorityMin = 0;
+
+
+
+export const updateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
+
+
+
+export const UpdateOnboardingChecklistProfileResponse = zod.object({
+  "name": zod.string().min(1),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(updateOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+})),
+  "priority": zod.number().min(updateOnboardingChecklistProfileResponseOnePriorityMin),
+  "enabled": zod.boolean()
+}).and(zod.object({
+  "profileId": zod.string(),
+  "version": zod.number().min(1),
+  "effectiveChecklist": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(updateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+})),
+  "createdAt": zod.string()
+}))
+
+
+/**
+ * @summary Disable a profile by creating an immutable disabled version
+ */
+export const DisableOnboardingChecklistProfileParams = zod.object({
+  "profileId": zod.coerce.string()
+})
+
+
+
+
+
+
+
+export const disableOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
+
+export const disableOnboardingChecklistProfileResponseOnePriorityMin = 0;
+
+
+
+export const disableOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
+
+
+
+export const DisableOnboardingChecklistProfileResponse = zod.object({
+  "name": zod.string().min(1),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(disableOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+})),
+  "priority": zod.number().min(disableOnboardingChecklistProfileResponseOnePriorityMin),
+  "enabled": zod.boolean()
+}).and(zod.object({
+  "profileId": zod.string(),
+  "version": zod.number().min(1),
+  "effectiveChecklist": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(disableOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+})),
+  "createdAt": zod.string()
+}))
+
+
+/**
+ * @summary Duplicate a profile as a disabled independent profile
+ */
+export const DuplicateOnboardingChecklistProfileParams = zod.object({
+  "profileId": zod.coerce.string()
+})
+
+
+
+
+
+
+
+export const duplicateOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
+
+export const duplicateOnboardingChecklistProfileResponseOnePriorityMin = 0;
+
+
+
+export const duplicateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
+
+
+
+export const DuplicateOnboardingChecklistProfileResponse = zod.object({
+  "name": zod.string().min(1),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(duplicateOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+})),
+  "priority": zod.number().min(duplicateOnboardingChecklistProfileResponseOnePriorityMin),
+  "enabled": zod.boolean()
+}).and(zod.object({
+  "profileId": zod.string(),
+  "version": zod.number().min(1),
+  "effectiveChecklist": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(duplicateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+})),
+  "createdAt": zod.string()
+}))
 
 
 /**
@@ -6678,10 +7179,13 @@ export const UpdateOnboardingChecklistItemBody = zod.object({
 export const updateOnboardingChecklistItemResponseReadinessItemOrderMin = 0;
 
 
-export const updateOnboardingChecklistItemResponseChecklistSnapshotItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const updateOnboardingChecklistItemResponseChecklistSnapshotItemLabelMax = 200;
 
 export const updateOnboardingChecklistItemResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
 
 
 
@@ -6693,6 +7197,7 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
   "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
   "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
   "role": zod.string(),
   "department": zod.string(),
   "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
@@ -6727,13 +7232,23 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
-  "id": zod.string().regex(updateOnboardingChecklistItemResponseChecklistSnapshotItemIdRegExp),
-  "label": zod.string().min(1).max(updateOnboardingChecklistItemResponseChecklistSnapshotItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(updateOnboardingChecklistItemResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
   "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
 })),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "createdAt": zod.string(),
@@ -7242,8 +7757,6 @@ export const TestOnboardingChannelResponse = zod.object({
  * @summary Workspace onboarding and compliance settings
  */
 
-export const getOnboardingSettingsResponseDay1ChecklistItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const getOnboardingSettingsResponseDay1ChecklistItemLabelMax = 200;
 
 export const getOnboardingSettingsResponseDay1ChecklistItemOrderMin = 0;
 
@@ -7274,8 +7787,8 @@ export const GetOnboardingSettingsResponse = zod.object({
   "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them'),
   "checklistVersion": zod.number().min(1).describe('Effective immutable checklist template version'),
   "day1Checklist": zod.array(zod.object({
-  "id": zod.string().regex(getOnboardingSettingsResponseDay1ChecklistItemIdRegExp),
-  "label": zod.string().min(1).max(getOnboardingSettingsResponseDay1ChecklistItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(getOnboardingSettingsResponseDay1ChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
@@ -7300,8 +7813,6 @@ export const GetOnboardingSettingsResponse = zod.object({
  * @summary Update workspace onboarding and compliance settings
  */
 
-export const updateOnboardingSettingsBodyDay1ChecklistItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const updateOnboardingSettingsBodyDay1ChecklistItemLabelMax = 200;
 
 export const updateOnboardingSettingsBodyDay1ChecklistItemOrderMin = 0;
 
@@ -7329,8 +7840,8 @@ export const UpdateOnboardingSettingsBody = zod.object({
   "hrApproverEmail": zod.string().nullish().describe('New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged.'),
   "expectedChecklistVersion": zod.number().min(1).optional().describe('Required optimistic concurrency version when day1Checklist is supplied'),
   "day1Checklist": zod.array(zod.object({
-  "id": zod.string().regex(updateOnboardingSettingsBodyDay1ChecklistItemIdRegExp),
-  "label": zod.string().min(1).max(updateOnboardingSettingsBodyDay1ChecklistItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(updateOnboardingSettingsBodyDay1ChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
@@ -7351,8 +7862,6 @@ export const UpdateOnboardingSettingsBody = zod.object({
 })
 
 
-export const updateOnboardingSettingsResponseDay1ChecklistItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const updateOnboardingSettingsResponseDay1ChecklistItemLabelMax = 200;
 
 export const updateOnboardingSettingsResponseDay1ChecklistItemOrderMin = 0;
 
@@ -7383,8 +7892,8 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "hrApproverEmail": zod.string().nullable().describe('Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve\/reject from that exact sender decides them'),
   "checklistVersion": zod.number().min(1).describe('Effective immutable checklist template version'),
   "day1Checklist": zod.array(zod.object({
-  "id": zod.string().regex(updateOnboardingSettingsResponseDay1ChecklistItemIdRegExp),
-  "label": zod.string().min(1).max(updateOnboardingSettingsResponseDay1ChecklistItemLabelMax),
+  "id": zod.string(),
+  "label": zod.string().min(1),
   "order": zod.number().min(updateOnboardingSettingsResponseDay1ChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
@@ -7446,5 +7955,3 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
-
-

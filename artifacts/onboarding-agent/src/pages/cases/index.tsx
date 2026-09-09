@@ -618,6 +618,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
       channelPreference: fd.get('channelPreference') as 'email' | 'whatsapp' | 'both',
       hireType: fd.get('hireType') as string,
       workerCategory: fd.get('workerCategory') as string,
+      workerBand: fd.get('workerBand') as string || undefined,
       role: fd.get('role') as string,
       department: fd.get('department') as string,
       geography: fd.get('geography') as string,
@@ -694,6 +695,10 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
               <option value="vendor">Vendor</option>
               <option value="intern">Intern</option>
             </select>
+          </div>
+          <div className="space-y-1">
+            <Label>Worker Band (Optional)</Label>
+            <Input name="workerBand" placeholder="e.g. L4, Executive" />
           </div>
           <div className="space-y-1">
             <Label>Role</Label>

@@ -689,6 +689,19 @@ async function executeForAdoption(client, migration, statement, index) {
       await client.query(`RELEASE SAVEPOINT ${savepoint}`);
       return;
     }
+    if (
+      migration.tag === "0033_targeted_checklist_profiles" &&
+      index === 0 &&
+      error?.code === "42P01"
+    ) {
+      const recoveryStatement = statement.replace(
+        /\s+REFERENCES\s+(?:"[^"]+"\.)?"organizations"\s*\("id"\)/i,
+        "",
+      );
+      await client.query(recoveryStatement);
+      await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+      return;
+    }
     await client.query(`RELEASE SAVEPOINT ${savepoint}`);
     if (!isAdoptablePostgresError(migration, statement, error)) {
       throw new Error(
@@ -1188,6 +1201,34 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
            REFERENCES ${quoteIdentifier(actualSchema)}."organizations"("id")`,
       );
     }
+    const checklistProfilesTable = await client.query("SELECT to_regclass($1) AS relation", [
+      `${actualSchema}.onb_checklist_profiles`,
+    ]);
+    const checklistProfilesFk = await client.query(
+      `SELECT 1
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+         JOIN pg_class rt ON rt.oid = c.confrelid
+        WHERE n.nspname = $1
+          AND t.relname = 'onb_checklist_profiles'
+          AND c.contype = 'f'
+          AND rt.relname = 'organizations'
+          AND (
+            SELECT array_agg(a.attname ORDER BY key_position)
+            FROM unnest(c.conkey) WITH ORDINALITY AS keys(attnum, key_position)
+            JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = keys.attnum
+          ) = ARRAY['organization_id']::name[]`,
+      [actualSchema],
+    );
+    if (checklistProfilesTable.rows[0]?.relation && checklistProfilesFk.rowCount === 0) {
+      await client.query(
+        `ALTER TABLE ${quoteIdentifier(actualSchema)}."onb_checklist_profiles"
+           ADD CONSTRAINT "onb_checklist_profiles_organization_id_fkey"
+           FOREIGN KEY ("organization_id")
+           REFERENCES ${quoteIdentifier(actualSchema)}."organizations"("id")`,
+      );
+    }
   }
   if (actualHasTenantCommunications) {
     const index = await client.query(
@@ -1230,6 +1271,16 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
         ) {
           expectedStatement = expectedStatement.replace(
             /,\s*CONSTRAINT\s+"onb_checklist_templates_organization_id_organizations_id_fk"\s+FOREIGN KEY\s*\("organization_id"\)\s+REFERENCES\s+(?:"[^"]+"\.)?"organizations"\s*\("id"\)/i,
+            "",
+          );
+        }
+        if (
+          !actualHasOrganizations &&
+          migration.tag === "0033_targeted_checklist_profiles" &&
+          /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+"onb_checklist_profiles"/i.test(statement)
+        ) {
+          expectedStatement = expectedStatement.replace(
+            /\s+REFERENCES\s+(?:"[^"]+"\.)?"organizations"\s*\("id"\)/i,
             "",
           );
         }

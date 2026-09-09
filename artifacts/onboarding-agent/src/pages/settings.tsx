@@ -22,6 +22,8 @@ import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, Load
 import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
 
+import { TargetedChecklistProfiles } from './settings-checklist-profiles';
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
 
@@ -1009,6 +1011,7 @@ export function SettingsPage() {
       </div>
 
       <ChecklistSettingsCard />
+      <TargetedChecklistProfiles />
 
       <Day1LogisticsSettingsCard />
 

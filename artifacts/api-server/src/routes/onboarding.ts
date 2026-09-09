@@ -21,6 +21,9 @@ import {
   UpdateOnboardingConnectorBody,
   UpdateOnboardingSettingsBody,
   UpdateOnboardingChecklistItemBody,
+  CreateOnboardingChecklistProfileBody,
+  UpdateOnboardingChecklistProfileBody,
+  RecalculateOnboardingChecklistProfileBody,
 } from "@workspace/api-zod";
 import {
   defaultReadiness,
@@ -55,6 +58,7 @@ import {
   AUTO_ESCALATION_CALLS_KEY,
   HR_APPROVER_EMAIL_KEY,
   autoEscalationCallsEnabled,
+  acquireChecklistPolicyLock,
   getEffectiveChecklist,
   readinessFromChecklist,
   saveChecklistVersion,
@@ -104,6 +108,17 @@ import {
   organizationValues,
   organizationWhere,
 } from "../lib/organization-scope";
+import {
+  activeReplacementDecision,
+  applyChecklistOverrides,
+  disableChecklistProfile,
+  listCurrentChecklistProfiles,
+  mergeChecklistReadiness,
+  resolveChecklistProfile,
+  resolveChecklistProfileInTransaction,
+  saveChecklistProfile,
+  validateProfilesAgainstBase,
+} from "../lib/onboarding/checklist-profiles";
 
 const router: IRouter = Router();
 
@@ -178,6 +193,7 @@ function serializeCase(row: typeof onbCases.$inferSelect) {
     channelPreference: row.channelPreference,
     hireType: row.hireType,
     workerCategory: row.workerCategory,
+    workerBand: row.workerBand,
     role: row.role,
     department: row.department,
     geography: row.geography,
@@ -196,6 +212,11 @@ function serializeCase(row: typeof onbCases.$inferSelect) {
     planSummary: row.planSummary,
     checklistTemplateVersion: row.checklistTemplateVersion,
     checklistSnapshot: row.checklistSnapshot,
+    checklistProfileId: row.checklistProfileId,
+    checklistProfileName: row.checklistProfileName,
+    checklistProfileVersion: row.checklistProfileVersion ?? row.checklistTemplateVersion,
+    checklistMatchedCriteria: row.checklistMatchedCriteria,
+    checklistMatchExplanation: row.checklistMatchExplanation,
     orchestrationCheckpoint: row.orchestrationCheckpoint,
     candidateEmailAuthorized: Boolean(row.candidateEmailAuthorizedAt),
     createdAt: row.createdAt.toISOString(),
@@ -211,19 +232,27 @@ async function insertCaseAndStart(
   values: Omit<typeof onbCases.$inferInsert, "organizationId">,
   organizationId: string,
 ) {
-  const [checklist, logisticsDefault] = await Promise.all([
-    getEffectiveChecklist(organizationId),
-    getDay1LogisticsDefault(organizationId),
-  ]);
+  const logisticsDefault = await getDay1LogisticsDefault(organizationId);
   const row = await db.transaction(async (tx) => {
+    const profile = await resolveChecklistProfileInTransaction(tx, organizationId, {
+      band: values.workerBand ?? values.workerCategory,
+      role: values.role,
+      employmentType: values.hireType,
+      location: values.geography,
+    });
     const [inserted] = await tx
       .insert(onbCases)
       .values({
         ...values,
         ...organizationValues(organizationId),
-        checklistTemplateVersion: checklist.version,
-        checklistSnapshot: checklist.items,
-        readiness: readinessFromChecklist(checklist.items),
+        checklistTemplateVersion: profile.templateVersion,
+        checklistSnapshot: profile.items,
+        checklistProfileId: profile.profileId,
+        checklistProfileName: profile.profileName,
+        checklistProfileVersion: profile.profileVersion,
+        checklistMatchedCriteria: profile.matchedCriteria,
+        checklistMatchExplanation: profile.explanation,
+        readiness: readinessFromChecklist(profile.items),
         workstreams: defaultWorkstreams(),
         orchestrationStatus: "idle",
       })
@@ -392,6 +421,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       channelPreference,
       hireType: body.hireType,
       workerCategory: body.workerCategory,
+      workerBand: body.workerBand ?? null,
       role: body.role,
       department: body.department,
       geography: body.geography,
@@ -427,6 +457,117 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
       return;
     }
     res.json(serializeCase(row));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const body = RecalculateOnboardingChecklistProfileBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
+    const id = Number(req.params.id);
+    if (body.action === "replace-active" && !body.reason?.trim()) {
+      res.status(400).json({ message: "A reason is required for deliberate replacement of an active transaction." });
+      return;
+    }
+    const reviewer = await resolveReviewerName(req.authUserId!);
+    const outcome = await db.transaction(async (tx) => {
+      const [current] = await tx.select().from(onbCases).where(and(
+        eq(onbCases.id, id),
+        organizationWhere(onbCases, organizationId),
+      )).for("update");
+      if (!current) return { kind: "not-found" as const };
+      if (
+        current.checklistTemplateVersion !== body.expectedChecklistTemplateVersion ||
+        current.checklistProfileId !== body.expectedChecklistProfileId ||
+        (current.checklistProfileVersion ?? current.checklistTemplateVersion) !== body.expectedChecklistProfileVersion
+      ) {
+        return {
+          kind: "conflict" as const,
+          message: "The case checklist changed since it was loaded. Refresh the case before recalculating or replacing it.",
+        };
+      }
+      const preOrchestration =
+        current.orchestrationStatus === "idle" &&
+        current.lifecycleStage === "trigger-received" &&
+        current.orchestrationCheckpoint === null;
+      await acquireChecklistPolicyLock(tx, organizationId);
+      const profile = await resolveChecklistProfileInTransaction(tx, organizationId, {
+        band: current.workerBand ?? current.workerCategory,
+        role: current.role,
+        employmentType: current.hireType,
+        location: current.geography,
+      });
+      const readiness = mergeChecklistReadiness(profile.items, current.readiness);
+      const unchanged =
+        current.checklistTemplateVersion === profile.templateVersion &&
+        current.checklistProfileId === profile.profileId &&
+        current.checklistProfileVersion === profile.profileVersion &&
+        JSON.stringify(current.checklistSnapshot) === JSON.stringify(profile.items);
+      if (unchanged) return { kind: "updated" as const, row: current };
+      if (!preOrchestration && body.action !== "replace-active") {
+        return {
+          kind: "conflict" as const,
+          message: "Orchestration has begun. Use action \"replace-active\" for a deliberate audited replacement.",
+        };
+      }
+      if (
+        !preOrchestration &&
+        (current.orchestrationStatus === "running" || current.orchestrationClaimOwner !== null)
+      ) {
+        return {
+          kind: "conflict" as const,
+          message: "This case currently has an active orchestration claim. Wait for it to pause before replacing the checklist.",
+        };
+      }
+      const replacementDecision = preOrchestration
+        ? { ok: true as const, forceReReview: false }
+        : activeReplacementDecision(current, profile.items, readiness);
+      if (!replacementDecision.ok) {
+        return { kind: "conflict" as const, message: replacementDecision.reason };
+      }
+      const [row] = await tx.update(onbCases).set({
+        checklistTemplateVersion: profile.templateVersion,
+        checklistSnapshot: profile.items,
+        checklistProfileId: profile.profileId,
+        checklistProfileName: profile.profileName,
+        checklistProfileVersion: profile.profileVersion,
+        checklistMatchedCriteria: profile.matchedCriteria,
+        checklistMatchExplanation: profile.explanation,
+        readiness,
+        ...(replacementDecision.forceReReview
+          ? {
+              lifecycleStage: "preboarding" as const,
+              orchestrationStatus: "checklist-blocked" as const,
+              orchestrationCheckpoint: "blocked:re-review",
+              orchestrationClaimOwner: null,
+              orchestrationClaimUntil: null,
+            }
+          : {}),
+        updatedAt: new Date(),
+      }).where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId))).returning();
+      await tx.insert(onbEvents).values({
+        organizationId,
+        caseId: id,
+        agent: "hr-checklist-admin",
+        engine: "human",
+        hitlPattern: "approve-before-act",
+        title: body.action === "replace-active" ? "Active checklist profile deliberately replaced" : "Checklist profile recalculated",
+        detail: `${reviewer} (${req.authUserId}) changed ${current.checklistProfileName} v${current.checklistProfileVersion ?? current.checklistTemplateVersion} → ${profile.profileName} v${profile.profileVersion}.${body.reason ? ` Reason: ${body.reason.trim()}` : ""}${replacementDecision.forceReReview ? " Previously passed boundaries will not replay; the case was moved to a fresh mandatory-item review." : ""}`,
+      });
+      return { kind: "updated" as const, row };
+    });
+    if (outcome.kind === "not-found") {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    if (outcome.kind === "conflict") {
+      res.status(409).json({ message: outcome.message });
+      return;
+    }
+    res.json(serializeCase(outcome.row));
   } catch (err) {
     next(err);
   }
@@ -1220,6 +1361,119 @@ async function settingsPayload(organizationId: string) {
   };
 }
 
+async function serializeChecklistProfile(
+  organizationId: string,
+  profile: Awaited<ReturnType<typeof listCurrentChecklistProfiles>>[number],
+) {
+  const base = await getEffectiveChecklist(organizationId);
+  return {
+    profileId: profile.profileId,
+    version: profile.version,
+    name: profile.name,
+    criteria: profile.criteria,
+    overrides: profile.overrides,
+    priority: profile.priority,
+    enabled: profile.enabled,
+    effectiveChecklist: applyChecklistOverrides(base.items, profile.overrides),
+    createdAt: profile.createdAt.toISOString(),
+  };
+}
+
+router.get("/onboarding/checklist-profiles", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    const profiles = await listCurrentChecklistProfiles(organizationId);
+    res.json(await Promise.all(profiles.map((profile) => serializeChecklistProfile(organizationId, profile))));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/checklist-profiles", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const organizationId = getOrganizationId(req);
+    const body = CreateOnboardingChecklistProfileBody.parse(req.body);
+    try {
+      const created = await saveChecklistProfile(organizationId, null, null, body, req.authUserId!);
+      res.status(201).json(await serializeChecklistProfile(organizationId, created));
+    } catch (error) {
+      res.status(error instanceof Error && error.name === "ProfileAmbiguity" ? 409 : 400)
+        .json({ message: error instanceof Error ? error.message : "Invalid checklist profile." });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/onboarding/checklist-profiles/:profileId", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const organizationId = getOrganizationId(req);
+    const body = UpdateOnboardingChecklistProfileBody.parse(req.body);
+    const { expectedVersion, ...input } = body;
+    try {
+      const created = await saveChecklistProfile(
+        organizationId,
+        String(req.params.profileId),
+        expectedVersion,
+        input,
+        req.authUserId!,
+      );
+      res.json(await serializeChecklistProfile(organizationId, created));
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      const status = name === "ProfileNotFound" ? 404 : name === "ProfileVersionConflict" || name === "ProfileAmbiguity" ? 409 : 400;
+      res.status(status).json({ message: error instanceof Error ? error.message : "Invalid checklist profile." });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/onboarding/checklist-profiles/:profileId", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const organizationId = getOrganizationId(req);
+    try {
+      const disabled = await disableChecklistProfile(
+        organizationId,
+        String(req.params.profileId),
+        req.authUserId!,
+      );
+      res.json(await serializeChecklistProfile(organizationId, disabled));
+    } catch (error) {
+      const status = error instanceof Error && error.name === "ProfileNotFound" ? 404 : 400;
+      res.status(status).json({ message: error instanceof Error ? error.message : "Invalid checklist profile." });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/checklist-profiles/:profileId/duplicate", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const organizationId = getOrganizationId(req);
+    const profile = (await listCurrentChecklistProfiles(organizationId))
+      .find((candidate) => candidate.profileId === String(req.params.profileId));
+    if (!profile) {
+      res.status(404).json({ message: "Checklist profile not found." });
+      return;
+    }
+    const created = await saveChecklistProfile(organizationId, null, null, {
+      name: `${profile.name} copy`,
+      criteria: profile.criteria,
+      overrides: profile.overrides,
+      priority: profile.priority,
+      enabled: false,
+    }, req.authUserId!);
+    res.status(201).json(await serializeChecklistProfile(organizationId, created));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/onboarding/settings", async (req, res, next) => {
   try {
     res.json(await settingsPayload(getOrganizationId(req)));
@@ -1277,6 +1531,10 @@ router.put("/onboarding/settings", async (req, res, next) => {
           body.expectedChecklistVersion!,
           body.day1Checklist,
           req.authUserId!,
+          async (tx) => {
+            const profiles = await listCurrentChecklistProfiles(organizationId, tx);
+            validateProfilesAgainstBase({ items: body.day1Checklist! }, profiles);
+          },
         );
       } catch (error) {
         if (error instanceof Error && error.name === "ChecklistVersionConflict") {

@@ -2048,18 +2048,85 @@ export interface OnbReadinessItem {
 }
 
 export interface OnbChecklistTemplateItem {
-  /** @pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
   id: string;
-  /**
-     * @minLength 1
-     * @maxLength 200
-     */
+  /** @minLength 1 */
   label: string;
   /** @minimum 0 */
   order: number;
   enabled: boolean;
   mandatory: boolean;
   enforcementStage: OnbChecklistEnforcementStage;
+}
+
+export interface OnbChecklistProfileCriteria {
+  /** @minLength 1 */
+  band?: string;
+  /** @minLength 1 */
+  role?: string;
+  /** @minLength 1 */
+  employmentType?: string;
+  /** @minLength 1 */
+  location?: string;
+}
+
+export interface OnbChecklistItemOverride {
+  id: string;
+  /** @minLength 1 */
+  label?: string;
+  /** @minimum 0 */
+  order?: number;
+  enabled?: boolean;
+  mandatory?: boolean;
+  enforcementStage?: OnbChecklistEnforcementStage;
+}
+
+export interface OnbChecklistProfileInput {
+  /** @minLength 1 */
+  name: string;
+  criteria: OnbChecklistProfileCriteria;
+  overrides: OnbChecklistItemOverride[];
+  /** @minimum 0 */
+  priority: number;
+  enabled: boolean;
+}
+
+export type OnbChecklistProfileUpdate = OnbChecklistProfileInput & {
+  /** @minimum 1 */
+  expectedVersion: number;
+};
+
+export type OnbChecklistProfile = OnbChecklistProfileInput & {
+  profileId: string;
+  /** @minimum 1 */
+  version: number;
+  effectiveChecklist: OnbChecklistTemplateItem[];
+  createdAt: string;
+};
+
+export type OnbChecklistRecalculationInputAction = typeof OnbChecklistRecalculationInputAction[keyof typeof OnbChecklistRecalculationInputAction];
+
+
+export const OnbChecklistRecalculationInputAction = {
+  recalculate: 'recalculate',
+  'replace-active': 'replace-active',
+} as const;
+
+export interface OnbChecklistRecalculationInput {
+  action: OnbChecklistRecalculationInputAction;
+  /** @maxLength 500 */
+  reason?: string;
+  /**
+     * Default checklist snapshot version currently displayed for this case.
+     * @minimum 1
+     */
+  expectedChecklistTemplateVersion: number;
+  /** Checklist profile identifier currently displayed for this case. */
+  expectedChecklistProfileId: string;
+  /**
+     * Checklist profile version currently displayed for this case.
+     * @minimum 1
+     */
+  expectedChecklistProfileVersion: number;
 }
 
 export type OnbChecklistItemStatusUpdateStatus = typeof OnbChecklistItemStatusUpdateStatus[keyof typeof OnbChecklistItemStatusUpdateStatus];
@@ -2121,6 +2188,11 @@ export interface OnbCase {
   hireType: string;
   /** employee | contractor | vendor | intern */
   workerCategory: string;
+  /**
+     * Employee band used for exact targeted checklist matching
+     * @nullable
+     */
+  workerBand: string | null;
   role: string;
   department: string;
   /** Country/region driving statutory items (e.g. India, USA, UK) */
@@ -2158,6 +2230,12 @@ export interface OnbCase {
   /** @minimum 1 */
   checklistTemplateVersion: number;
   checklistSnapshot: OnbChecklistTemplateItem[];
+  checklistProfileId: string;
+  checklistProfileName: string;
+  /** @minimum 1 */
+  checklistProfileVersion: number;
+  checklistMatchedCriteria: OnbChecklistProfileCriteria;
+  checklistMatchExplanation: string;
   /**
      * Last completed orchestration boundary, or the exact checklist gate currently blocking the case
      * @nullable
@@ -2194,6 +2272,8 @@ export interface OnbCaseIntake {
   channelPreference?: OnbCaseIntakeChannelPreference;
   hireType: string;
   workerCategory: string;
+  /** Optional employee band used for targeted checklist matching */
+  workerBand?: string;
   role: string;
   department: string;
   geography: string;
@@ -3101,4 +3181,3 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
-

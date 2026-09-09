@@ -288,6 +288,13 @@
       "when": 1788973740001,
       "tag": "0035_candidate_exchange_throttle",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788887340015,
+      "tag": "0033_targeted_checklist_profiles",
+      "breakpoints": true
     }
   ]
 }

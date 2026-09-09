@@ -1413,6 +1413,125 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/checklist-profile:
+    post:
+      operationId: recalculateOnboardingChecklistProfile
+      tags: [onboarding]
+      summary: Recalculate a case profile before orchestration, or deliberately replace an active snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbChecklistRecalculationInput"
+      responses:
+        "200":
+          description: Case with recalculated immutable snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCase"
+        "403":
+          description: Owner or admin required
+        "404":
+          description: Case not found
+        "409":
+          description: Active cases require an explicit audited replacement
+  /onboarding/checklist-profiles:
+    get:
+      operationId: listOnboardingChecklistProfiles
+      tags: [onboarding]
+      summary: List current organization-scoped targeted checklist profiles with effective previews
+      responses:
+        "200":
+          description: Current profile versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbChecklistProfile"
+    post:
+      operationId: createOnboardingChecklistProfile
+      tags: [onboarding]
+      summary: Create a named targeted checklist profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbChecklistProfileInput"
+      responses:
+        "201":
+          description: Created profile version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfile"
+        "400":
+          description: Invalid or ambiguous enabled profile
+        "409":
+          description: Enabled rule is ambiguous with an existing profile at the same priority
+  /onboarding/checklist-profiles/{profileId}:
+    patch:
+      operationId: updateOnboardingChecklistProfile
+      tags: [onboarding]
+      summary: Create a new immutable version to edit, reprioritize, or disable a profile
+      parameters:
+        - $ref: "#/components/parameters/OnbChecklistProfileId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbChecklistProfileUpdate"
+      responses:
+        "200":
+          description: New current profile version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfile"
+        "404":
+          description: Profile not found in this organization
+        "409":
+          description: Stale version or ambiguous enabled rule
+    delete:
+      operationId: disableOnboardingChecklistProfile
+      tags: [onboarding]
+      summary: Disable a profile by creating an immutable disabled version
+      parameters:
+        - $ref: "#/components/parameters/OnbChecklistProfileId"
+      responses:
+        "200":
+          description: Disabled profile version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfile"
+        "404":
+          description: Profile not found
+  /onboarding/checklist-profiles/{profileId}/duplicate:
+    post:
+      operationId: duplicateOnboardingChecklistProfile
+      tags: [onboarding]
+      summary: Duplicate a profile as a disabled independent profile
+      parameters:
+        - $ref: "#/components/parameters/OnbChecklistProfileId"
+      responses:
+        "201":
+          description: Duplicate profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfile"
+        "404":
+          description: Profile not found
   /onboarding/cases/{id}/events:
     get:
       operationId: listOnboardingCaseEvents
@@ -2088,6 +2207,12 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
 components:
   parameters:
+    OnbChecklistProfileId:
+      name: profileId
+      in: path
+      required: true
+      schema:
+        type: string
     EaAssessmentId:
       name: id
       in: path
@@ -4378,11 +4503,9 @@ components:
       properties:
         id:
           type: string
-          pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
         label:
           type: string
           minLength: 1
-          maxLength: 200
         order:
           type: integer
           minimum: 0
@@ -4393,6 +4516,87 @@ components:
         enforcementStage:
           $ref: "#/components/schemas/OnbChecklistEnforcementStage"
       required: [id, label, order, enabled, mandatory, enforcementStage]
+    OnbChecklistProfileCriteria:
+      type: object
+      additionalProperties: false
+      properties:
+        band: { type: string, minLength: 1 }
+        role: { type: string, minLength: 1 }
+        employmentType: { type: string, minLength: 1 }
+        location: { type: string, minLength: 1 }
+    OnbChecklistItemOverride:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        label: { type: string, minLength: 1 }
+        order: { type: integer, minimum: 0 }
+        enabled: { type: boolean }
+        mandatory: { type: boolean }
+        enforcementStage:
+          $ref: "#/components/schemas/OnbChecklistEnforcementStage"
+      required: [id]
+    OnbChecklistProfileInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1 }
+        criteria:
+          $ref: "#/components/schemas/OnbChecklistProfileCriteria"
+        overrides:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbChecklistItemOverride"
+        priority: { type: integer, minimum: 0 }
+        enabled: { type: boolean }
+      required: [name, criteria, overrides, priority, enabled]
+    OnbChecklistProfileUpdate:
+      allOf:
+        - $ref: "#/components/schemas/OnbChecklistProfileInput"
+        - type: object
+          properties:
+            expectedVersion: { type: integer, minimum: 1 }
+          required: [expectedVersion]
+    OnbChecklistProfile:
+      allOf:
+        - $ref: "#/components/schemas/OnbChecklistProfileInput"
+        - type: object
+          properties:
+            profileId: { type: string }
+            version: { type: integer, minimum: 1 }
+            effectiveChecklist:
+              type: array
+              items:
+                $ref: "#/components/schemas/OnbChecklistTemplateItem"
+            createdAt: { type: string }
+          required: [profileId, version, effectiveChecklist, createdAt]
+    OnbChecklistRecalculationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum: [recalculate, replace-active]
+        reason:
+          type: string
+          maxLength: 500
+        expectedChecklistTemplateVersion:
+          type: integer
+          minimum: 1
+          description: Default checklist snapshot version currently displayed for this case.
+        expectedChecklistProfileId:
+          type: string
+          description: Checklist profile identifier currently displayed for this case.
+        expectedChecklistProfileVersion:
+          type: integer
+          minimum: 1
+          description: Checklist profile version currently displayed for this case.
+      required:
+        - action
+        - expectedChecklistTemplateVersion
+        - expectedChecklistProfileId
+        - expectedChecklistProfileVersion
     OnbChecklistItemStatusUpdate:
       type: object
       additionalProperties: false
@@ -4448,6 +4652,9 @@ components:
         workerCategory:
           type: string
           description: employee | contractor | vendor | intern
+        workerBand:
+          type: ["string", "null"]
+          description: Employee band used for exact targeted checklist matching
         role:
           type: string
         department:
@@ -4499,6 +4706,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OnbChecklistTemplateItem"
+        checklistProfileId:
+          type: string
+        checklistProfileName:
+          type: string
+        checklistProfileVersion:
+          type: integer
+          minimum: 1
+        checklistMatchedCriteria:
+          $ref: "#/components/schemas/OnbChecklistProfileCriteria"
+        checklistMatchExplanation:
+          type: string
         orchestrationCheckpoint:
           type: ["string", "null"]
           description: Last completed orchestration boundary, or the exact checklist gate currently blocking the case
@@ -4517,6 +4735,7 @@ components:
         - channelPreference
         - hireType
         - workerCategory
+        - workerBand
         - role
         - department
         - geography
@@ -4535,6 +4754,11 @@ components:
         - planSummary
         - checklistTemplateVersion
         - checklistSnapshot
+        - checklistProfileId
+        - checklistProfileName
+        - checklistProfileVersion
+        - checklistMatchedCriteria
+        - checklistMatchExplanation
         - orchestrationCheckpoint
         - candidateEmailAuthorized
         - createdAt
@@ -4559,6 +4783,9 @@ components:
           type: string
         workerCategory:
           type: string
+        workerBand:
+          type: string
+          description: Optional employee band used for targeted checklist matching
         role:
           type: string
         department:

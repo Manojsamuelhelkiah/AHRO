@@ -11,6 +11,7 @@ import {
   eaAssessmentsTable,
   flowOverridesTable,
   onbCases,
+  onbChecklistProfiles,
   onbEvents,
   onbGuardrailEvents,
   onbSettings,
@@ -36,6 +37,10 @@ import {
   loadCurrentRateSet,
 } from "../lib/pricing-rate-sets";
 import { organizationValues } from "../lib/organization-scope";
+import {
+  LEGACY_CHECKLIST,
+  readinessFromChecklist,
+} from "../lib/onboarding/settings";
 import {
   createTenantContextMiddleware,
   lookupMembership,
@@ -225,6 +230,8 @@ after(async () => {
   await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgB));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgA));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
+  await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, orgA));
+  await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, orgB));
   await db.delete(eaAssessmentsTable).where(eq(eaAssessmentsTable.organizationId, orgA));
   await db.delete(eaAssessmentsTable).where(eq(eaAssessmentsTable.organizationId, orgB));
   await db.delete(pricingSheetsTable).where(eq(pricingSheetsTable.organizationId, orgA));
@@ -515,6 +522,125 @@ test("candidate-link retention settings are validated, persisted, and tenant-sco
     (await tenantB.json() as { candidateLinkRetentionDays: number }).candidateLinkRetentionDays,
     90,
   );
+});
+
+test("checklist replacement route rejects stale snapshots, active claims, and passed gates", async () => {
+  const role = `route-policy-role-${suffix}`;
+  const gateId = `route-policy-gate-${process.pid}`;
+  const headers = {
+    "content-type": "application/json",
+    "x-test-user": "test-user-a",
+    "x-organization-id": orgA,
+  };
+  const profileResponse = await fetch(`${baseUrl}/onboarding/checklist-profiles`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      name: "Route policy profile",
+      criteria: { role },
+      overrides: [{
+        id: gateId,
+        label: "Route policy gate",
+        order: LEGACY_CHECKLIST.length,
+        enabled: true,
+        mandatory: true,
+        enforcementStage: "before-workstreams",
+      }],
+      priority: 25,
+      enabled: true,
+    }),
+  });
+  assert.equal(profileResponse.status, 201);
+
+  const [policyCase] = await db.insert(onbCases).values({
+    organizationId: orgA,
+    workerName: "Checklist Route Guard",
+    workerEmail: `checklist-route-${suffix}@example.com`,
+    hireType: "external",
+    workerCategory: "full-time",
+    role,
+    department: "Engineering",
+    geography: "US",
+    legalEntity: "Example",
+    managerName: "Manager",
+    recruiterName: "Recruiter",
+    joiningDate: "2030-01-01",
+    checklistTemplateVersion: 1,
+    checklistSnapshot: [...LEGACY_CHECKLIST],
+    checklistProfileId: "default",
+    checklistProfileName: "Organization default",
+    checklistProfileVersion: 1,
+    checklistMatchedCriteria: {},
+    checklistMatchExplanation: "Organization default selected.",
+    readiness: readinessFromChecklist(LEGACY_CHECKLIST),
+  }).returning({ id: onbCases.id });
+
+  const replace = (body: Record<string, unknown>) =>
+    fetch(`${baseUrl}/onboarding/cases/${policyCase.id}/checklist-profile`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+  const expectedSnapshot = {
+    expectedChecklistTemplateVersion: 1,
+    expectedChecklistProfileId: "default",
+    expectedChecklistProfileVersion: 1,
+  };
+
+  const stale = await replace({
+    action: "recalculate",
+    ...expectedSnapshot,
+    expectedChecklistTemplateVersion: 2,
+  });
+  assert.equal(stale.status, 409);
+  assert.match(
+    (await stale.json() as { message: string }).message,
+    /changed since it was loaded/i,
+  );
+
+  await db.update(onbCases).set({
+    lifecycleStage: "preboarding",
+    orchestrationStatus: "running",
+    orchestrationCheckpoint: "initial",
+    orchestrationClaimOwner: "route-test-claim",
+    orchestrationClaimUntil: new Date(Date.now() + 60_000),
+  }).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id)));
+  const claimed = await replace({
+    action: "replace-active",
+    reason: "Route-level active claim regression",
+    ...expectedSnapshot,
+  });
+  assert.equal(claimed.status, 409);
+  assert.match(
+    (await claimed.json() as { message: string }).message,
+    /active orchestration claim/i,
+  );
+
+  await db.update(onbCases).set({
+    orchestrationStatus: "idle",
+    orchestrationCheckpoint: "workstreams-complete",
+    orchestrationClaimOwner: null,
+    orchestrationClaimUntil: null,
+  }).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id)));
+  const passedGate = await replace({
+    action: "replace-active",
+    reason: "Route-level passed gate regression",
+    ...expectedSnapshot,
+  });
+  assert.equal(passedGate.status, 409);
+  assert.match(
+    (await passedGate.json() as { message: string }).message,
+    /gate has already passed/i,
+  );
+
+  const [unchanged] = await db.select({
+    profileId: onbCases.checklistProfileId,
+    templateVersion: onbCases.checklistTemplateVersion,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, policyCase.id),
+  ));
+  assert.deepEqual(unchanged, { profileId: "default", templateVersion: 1 });
 });
 
 test("another demo member cannot access an owner-bound historical scenario", async () => {

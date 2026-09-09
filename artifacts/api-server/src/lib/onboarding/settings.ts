@@ -102,11 +102,14 @@ export function validateChecklist(items: OnbChecklistTemplateItem[]): string | n
   return null;
 }
 
-export async function getEffectiveChecklist(organizationId: string): Promise<{
+export async function getEffectiveChecklist(
+  organizationId: string,
+  client: ChecklistReadClient = db,
+): Promise<{
   version: number;
   items: OnbChecklistTemplateItem[];
 }> {
-  const [row] = await db.select().from(onbChecklistTemplates)
+  const [row] = await client.select().from(onbChecklistTemplates)
     .where(eq(onbChecklistTemplates.organizationId, organizationId))
     .orderBy(desc(onbChecklistTemplates.version)).limit(1);
   return row
@@ -156,11 +159,13 @@ export async function saveChecklistVersion(
   expectedVersion: number,
   items: OnbChecklistTemplateItem[],
   createdBy: string,
+  validateLockedPolicy?: (tx: OnboardingDbTransaction) => Promise<void>,
 ): Promise<{ version: number; items: OnbChecklistTemplateItem[] }> {
   const error = validateChecklist(items);
   if (error) throw new Error(error);
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${organizationId}))`);
+    await acquireChecklistPolicyLock(tx, organizationId);
+    await validateLockedPolicy?.(tx);
     const [latest] = await tx.select({
       version: onbChecklistTemplates.version,
       items: onbChecklistTemplates.items,
@@ -237,3 +242,14 @@ export async function setSetting(organizationId: string, key: string, value: str
       set: { value, updatedAt: sql`now()` },
     });
 }
+
+export type OnboardingDbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function acquireChecklistPolicyLock(
+  tx: Pick<OnboardingDbTransaction, "execute">,
+  organizationId: string,
+): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`checklist-policy:${organizationId}`}))`);
+}
+
+type ChecklistReadClient = Pick<typeof db, "select">;

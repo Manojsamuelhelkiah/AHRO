@@ -66,6 +66,10 @@ import type {
   OnbChannelTest,
   OnbChannelTestResult,
   OnbChecklistItemStatusUpdate,
+  OnbChecklistProfile,
+  OnbChecklistProfileInput,
+  OnbChecklistProfileUpdate,
+  OnbChecklistRecalculationInput,
   OnbCommunication,
   OnbConnector,
   OnbConnectorUpdate,
@@ -4824,6 +4828,440 @@ export function useGetOnboardingCase<TData = Awaited<ReturnType<typeof getOnboar
 
 
 
+export const getRecalculateOnboardingChecklistProfileUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/checklist-profile`
+}
+
+/**
+ * @summary Recalculate a case profile before orchestration, or deliberately replace an active snapshot
+ */
+export const recalculateOnboardingChecklistProfile = async (id: number,
+    onbChecklistRecalculationInput: OnbChecklistRecalculationInput, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getRecalculateOnboardingChecklistProfileUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbChecklistRecalculationInput)
+  }
+);}
+
+
+
+
+
+export const getRecalculateOnboardingChecklistProfileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recalculateOnboardingChecklistProfile>>, TError,{id: number;data: BodyType<OnbChecklistRecalculationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recalculateOnboardingChecklistProfile>>, TError,{id: number;data: BodyType<OnbChecklistRecalculationInput>}, TContext> => {
+
+const mutationKey = ['recalculateOnboardingChecklistProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recalculateOnboardingChecklistProfile>>, {id: number;data: BodyType<OnbChecklistRecalculationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  recalculateOnboardingChecklistProfile(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecalculateOnboardingChecklistProfileMutationResult = NonNullable<Awaited<ReturnType<typeof recalculateOnboardingChecklistProfile>>>
+    export type RecalculateOnboardingChecklistProfileMutationBody = BodyType<OnbChecklistRecalculationInput>
+    export type RecalculateOnboardingChecklistProfileMutationError = ErrorType<void>
+
+    /**
+ * @summary Recalculate a case profile before orchestration, or deliberately replace an active snapshot
+ */
+export const useRecalculateOnboardingChecklistProfile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recalculateOnboardingChecklistProfile>>, TError,{id: number;data: BodyType<OnbChecklistRecalculationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recalculateOnboardingChecklistProfile>>,
+        TError,
+        {id: number;data: BodyType<OnbChecklistRecalculationInput>},
+        TContext
+      > => {
+      return useMutation(getRecalculateOnboardingChecklistProfileMutationOptions(options));
+    }
+
+export const getListOnboardingChecklistProfilesUrl = () => {
+
+
+
+
+  return `/api/onboarding/checklist-profiles`
+}
+
+/**
+ * @summary List current organization-scoped targeted checklist profiles with effective previews
+ */
+export const listOnboardingChecklistProfiles = async ( options?: RequestInit): Promise<OnbChecklistProfile[]> => {
+
+  return customFetch<OnbChecklistProfile[]>(getListOnboardingChecklistProfilesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingChecklistProfilesQueryKey = () => {
+    return [
+    `/api/onboarding/checklist-profiles`
+    ] as const;
+    }
+
+
+export const getListOnboardingChecklistProfilesQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingChecklistProfiles>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingChecklistProfiles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingChecklistProfilesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingChecklistProfiles>>> = ({ signal }) => listOnboardingChecklistProfiles({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingChecklistProfiles>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingChecklistProfilesQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingChecklistProfiles>>>
+export type ListOnboardingChecklistProfilesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List current organization-scoped targeted checklist profiles with effective previews
+ */
+
+export function useListOnboardingChecklistProfiles<TData = Awaited<ReturnType<typeof listOnboardingChecklistProfiles>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingChecklistProfiles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingChecklistProfilesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateOnboardingChecklistProfileUrl = () => {
+
+
+
+
+  return `/api/onboarding/checklist-profiles`
+}
+
+/**
+ * @summary Create a named targeted checklist profile
+ */
+export const createOnboardingChecklistProfile = async (onbChecklistProfileInput: OnbChecklistProfileInput, options?: RequestInit): Promise<OnbChecklistProfile> => {
+
+  return customFetch<OnbChecklistProfile>(getCreateOnboardingChecklistProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbChecklistProfileInput)
+  }
+);}
+
+
+
+
+
+export const getCreateOnboardingChecklistProfileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingChecklistProfile>>, TError,{data: BodyType<OnbChecklistProfileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createOnboardingChecklistProfile>>, TError,{data: BodyType<OnbChecklistProfileInput>}, TContext> => {
+
+const mutationKey = ['createOnboardingChecklistProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createOnboardingChecklistProfile>>, {data: BodyType<OnbChecklistProfileInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createOnboardingChecklistProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateOnboardingChecklistProfileMutationResult = NonNullable<Awaited<ReturnType<typeof createOnboardingChecklistProfile>>>
+    export type CreateOnboardingChecklistProfileMutationBody = BodyType<OnbChecklistProfileInput>
+    export type CreateOnboardingChecklistProfileMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a named targeted checklist profile
+ */
+export const useCreateOnboardingChecklistProfile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingChecklistProfile>>, TError,{data: BodyType<OnbChecklistProfileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createOnboardingChecklistProfile>>,
+        TError,
+        {data: BodyType<OnbChecklistProfileInput>},
+        TContext
+      > => {
+      return useMutation(getCreateOnboardingChecklistProfileMutationOptions(options));
+    }
+
+export const getUpdateOnboardingChecklistProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/onboarding/checklist-profiles/${profileId}`
+}
+
+/**
+ * @summary Create a new immutable version to edit, reprioritize, or disable a profile
+ */
+export const updateOnboardingChecklistProfile = async (profileId: string,
+    onbChecklistProfileUpdate: OnbChecklistProfileUpdate, options?: RequestInit): Promise<OnbChecklistProfile> => {
+
+  return customFetch<OnbChecklistProfile>(getUpdateOnboardingChecklistProfileUrl(profileId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbChecklistProfileUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateOnboardingChecklistProfileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingChecklistProfile>>, TError,{profileId: string;data: BodyType<OnbChecklistProfileUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingChecklistProfile>>, TError,{profileId: string;data: BodyType<OnbChecklistProfileUpdate>}, TContext> => {
+
+const mutationKey = ['updateOnboardingChecklistProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOnboardingChecklistProfile>>, {profileId: string;data: BodyType<OnbChecklistProfileUpdate>}> = (props) => {
+          const {profileId,data} = props ?? {};
+
+          return  updateOnboardingChecklistProfile(profileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOnboardingChecklistProfileMutationResult = NonNullable<Awaited<ReturnType<typeof updateOnboardingChecklistProfile>>>
+    export type UpdateOnboardingChecklistProfileMutationBody = BodyType<OnbChecklistProfileUpdate>
+    export type UpdateOnboardingChecklistProfileMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a new immutable version to edit, reprioritize, or disable a profile
+ */
+export const useUpdateOnboardingChecklistProfile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingChecklistProfile>>, TError,{profileId: string;data: BodyType<OnbChecklistProfileUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOnboardingChecklistProfile>>,
+        TError,
+        {profileId: string;data: BodyType<OnbChecklistProfileUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateOnboardingChecklistProfileMutationOptions(options));
+    }
+
+export const getDisableOnboardingChecklistProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/onboarding/checklist-profiles/${profileId}`
+}
+
+/**
+ * @summary Disable a profile by creating an immutable disabled version
+ */
+export const disableOnboardingChecklistProfile = async (profileId: string, options?: RequestInit): Promise<OnbChecklistProfile> => {
+
+  return customFetch<OnbChecklistProfile>(getDisableOnboardingChecklistProfileUrl(profileId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDisableOnboardingChecklistProfileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableOnboardingChecklistProfile>>, TError,{profileId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disableOnboardingChecklistProfile>>, TError,{profileId: string}, TContext> => {
+
+const mutationKey = ['disableOnboardingChecklistProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disableOnboardingChecklistProfile>>, {profileId: string}> = (props) => {
+          const {profileId} = props ?? {};
+
+          return  disableOnboardingChecklistProfile(profileId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisableOnboardingChecklistProfileMutationResult = NonNullable<Awaited<ReturnType<typeof disableOnboardingChecklistProfile>>>
+
+    export type DisableOnboardingChecklistProfileMutationError = ErrorType<void>
+
+    /**
+ * @summary Disable a profile by creating an immutable disabled version
+ */
+export const useDisableOnboardingChecklistProfile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableOnboardingChecklistProfile>>, TError,{profileId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disableOnboardingChecklistProfile>>,
+        TError,
+        {profileId: string},
+        TContext
+      > => {
+      return useMutation(getDisableOnboardingChecklistProfileMutationOptions(options));
+    }
+
+export const getDuplicateOnboardingChecklistProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/onboarding/checklist-profiles/${profileId}/duplicate`
+}
+
+/**
+ * @summary Duplicate a profile as a disabled independent profile
+ */
+export const duplicateOnboardingChecklistProfile = async (profileId: string, options?: RequestInit): Promise<OnbChecklistProfile> => {
+
+  return customFetch<OnbChecklistProfile>(getDuplicateOnboardingChecklistProfileUrl(profileId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDuplicateOnboardingChecklistProfileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof duplicateOnboardingChecklistProfile>>, TError,{profileId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof duplicateOnboardingChecklistProfile>>, TError,{profileId: string}, TContext> => {
+
+const mutationKey = ['duplicateOnboardingChecklistProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof duplicateOnboardingChecklistProfile>>, {profileId: string}> = (props) => {
+          const {profileId} = props ?? {};
+
+          return  duplicateOnboardingChecklistProfile(profileId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DuplicateOnboardingChecklistProfileMutationResult = NonNullable<Awaited<ReturnType<typeof duplicateOnboardingChecklistProfile>>>
+
+    export type DuplicateOnboardingChecklistProfileMutationError = ErrorType<void>
+
+    /**
+ * @summary Duplicate a profile as a disabled independent profile
+ */
+export const useDuplicateOnboardingChecklistProfile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof duplicateOnboardingChecklistProfile>>, TError,{profileId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof duplicateOnboardingChecklistProfile>>,
+        TError,
+        {profileId: string},
+        TContext
+      > => {
+      return useMutation(getDuplicateOnboardingChecklistProfileMutationOptions(options));
+    }
+
 export const getListOnboardingCaseEventsUrl = (id: number,) => {
 
 
@@ -6917,4 +7355,3 @@ export const useCreatePricingRateSet = <TError = ErrorType<ErrorMessage>,
       > => {
       return useMutation(getCreatePricingRateSetMutationOptions(options));
     }
-

@@ -14,6 +14,7 @@ export const tenantSafeguards = [
   { table: "onb_settings", phaseB: true },
   // Added after the historical Phase A/B migration pair; born fail-closed.
   { table: "onb_checklist_templates", phaseB: false },
+  { table: "onb_checklist_profiles", phaseB: false },
   { table: "onb_connectors", phaseB: true },
   { table: "onb_effect_journal", phaseB: true },
   { table: "onb_documents", phaseB: true },

@@ -13,10 +13,11 @@ import { and, sql } from "drizzle-orm";
 import { getSetting, setSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { setDemoAllowlist } from "./channels";
 import { defaultWorkstreams, startOrchestration } from "./engine";
-import { getDay1LogisticsDefault, getEffectiveChecklist, readinessFromChecklist } from "./settings";
+import { getDay1LogisticsDefault, readinessFromChecklist } from "./settings";
 import { logisticsForCase } from "./logistics-defaults";
 import { SCENARIOS, getScenario } from "./scenarios";
 import { organizationValues, organizationWhere } from "../organization-scope";
+import { resolveChecklistProfileInTransaction } from "./checklist-profiles";
 
 export const DEMO_VOLUNTEERS_KEY = "demo_volunteers";
 
@@ -170,7 +171,6 @@ export async function seedVolunteerCases(
   organizationId = DEMO_ORGANIZATION_ID,
 ): Promise<SeedResult[]> {
   const volunteers = await loadVolunteers(organizationId);
-  const checklist = await getEffectiveChecklist(organizationId);
   const logisticsDefault = await getDay1LogisticsDefault(organizationId);
   const results: SeedResult[] = [];
   for (const v of volunteers) {
@@ -197,7 +197,14 @@ export async function seedVolunteerCases(
     // skill, notes) while keeping the volunteer's real identity and contacts,
     // so the agent's messages match the story the volunteer is playing.
     const scenario = getScenario(v.persona);
+    const employee = {
+      band: scenario?.intake.workerCategory ?? v.workerCategory,
+      role: scenario?.intake.role ?? v.role,
+      employmentType: scenario?.intake.hireType ?? v.hireType,
+      location: v.geography,
+    };
     const row = await db.transaction(async (tx) => {
+      const checklist = await resolveChecklistProfileInTransaction(tx, organizationId, employee);
       const [inserted] = await tx.insert(onbCases).values({
         workerName: v.name,
         workerEmail: v.email,
@@ -216,12 +223,17 @@ export async function seedVolunteerCases(
         skillCriticality: scenario?.intake.skillCriticality ?? null,
         notes: scenario?.intake.notes ?? v.notes,
         scenarioKey: scenario?.key ?? null,
-        checklistTemplateVersion: checklist.version,
+        checklistTemplateVersion: checklist.templateVersion,
         checklistSnapshot: checklist.items,
+        checklistProfileId: checklist.profileId,
+        checklistProfileName: checklist.profileName,
+        checklistProfileVersion: checklist.profileVersion,
+        checklistMatchedCriteria: checklist.matchedCriteria,
+        checklistMatchExplanation: checklist.explanation,
         readiness: readinessFromChecklist(checklist.items),
         workstreams: defaultWorkstreams(),
         orchestrationStatus: "idle",
-         ...organizationValues(organizationId),
+        ...organizationValues(organizationId),
       }).returning();
       await tx.insert(onbCaseLogistics).values({
         organizationId,
