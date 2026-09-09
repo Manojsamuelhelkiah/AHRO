@@ -430,4 +430,244 @@ Run these as separate cases so the primary test remains easy to diagnose.
 
 ---
 
+## 9. Configuration scenario — change the Day-1 checklist and flow
+
+**Scenario ID:** HRO-CONFIG-DAY1-001  
+**Purpose:** Prove that an authorized administrator can configure checklist items and enforcement stages, that new cases receive the correct snapshot, and that mandatory items change workflow progression.
+
+### Important behavior
+
+- Checklist configuration requires an organization **owner or administrator**.
+- The current timeline choices are workflow gates, not calendar offsets:
+  - **Before Workstreams**
+  - **Before Comms**
+  - **Before Day-1**
+- Only enabled, mandatory items block the applicable gate.
+- Optional items do not block progression.
+- Configuration is snapshotted when a case is created. Existing cases do not change automatically.
+- Updating an active case requires the deliberate **Manage Case Checklist** flow and may force a fresh review.
+
+### Configuration test data
+
+Add these three synthetic items to the organization default checklist:
+
+| Order | Item label | Stable ID | Status | Requirement | Enforcement stage | Intended effect |
+|---:|---|---|---|---|---|---|
+| Next available | Confirm employee profile | qa-confirm-profile | Enabled | Mandatory | Before Workstreams | Workstreams must not start until completed |
+| Next available | Confirm welcome pack | qa-confirm-welcome-pack | Enabled | Mandatory | Before Comms | Candidate communications must wait until completed |
+| Next available | Schedule buddy coffee | qa-schedule-buddy-coffee | Enabled | Optional | Before Day-1 | Visible for tracking but must not block |
+
+> Use the next contiguous order numbers shown by the screen. Checklist order must begin at zero and remain contiguous.
+
+### Step A — open checklist settings
+
+1. Sign in as an organization owner or administrator.
+2. Select **Settings**.
+3. Locate the organization’s Day-1 checklist settings.
+4. Record the current checklist version and take a screenshot.
+
+**Expected result**
+
+- Checklist administration controls are visible.
+- Existing items show label, stable ID, enabled status, mandatory/optional requirement, enforcement stage, and order.
+
+### Step B — add and save the synthetic items
+
+1. Add the three items from **Configuration test data**.
+2. Ensure every stable ID is lowercase and unique.
+3. Use contiguous order numbers.
+4. Save the checklist.
+
+**Expected result**
+
+- The save succeeds.
+- A message similar to **Checklist updated to version N** appears.
+- The new version is greater than the version recorded in Step A.
+
+**Validation checks**
+
+- A duplicate stable ID must be rejected.
+- Duplicate or non-contiguous order values must be rejected.
+- An empty label must be rejected.
+- An enabled mandatory workstream-owned item must not be configured to block before workstreams.
+
+Correct any deliberately introduced invalid value before continuing.
+
+### Step C — create a case that receives the new configuration
+
+Create a second synthetic case:
+
+| Field | Value |
+|---|---|
+| Worker Name | Daniel Okafor |
+| Email | Approved monitored QA inbox |
+| Contact Channel | Email only |
+| Hire Type | External FTE |
+| Worker Category | Employee |
+| Worker Band | P2 |
+| Role | Service Delivery Analyst |
+| Department | Operations |
+| Geography | India |
+| Legal Entity | Example HQ India Pvt Ltd |
+| Joining Date | 2026-09-28 |
+| Manager | Maya Iyer |
+| Recruiter | Neha Kapoor |
+| Urgency | Normal |
+| Notes | Synthetic checklist configuration test. No real personal data. |
+
+**Expected result**
+
+- The new Daniel Okafor case contains all three synthetic checklist items.
+- The earlier Priya Nair case remains unchanged because it retained its original checklist snapshot.
+
+### Step D — verify the Before Workstreams gate
+
+1. Open the Daniel Okafor case.
+2. Leave **Confirm employee profile** incomplete.
+3. Observe the case status, activity, next milestone, and specialist workstreams.
+
+**Expected result**
+
+- The case shows that onboarding is paused or blocked by the mandatory item.
+- Workstreams do not progress past the configured gate.
+- The optional buddy-coffee item is not reported as the blocking reason.
+
+Then:
+
+1. Add the note `QA completed employee profile prerequisite.`
+2. Select **Complete** for **Confirm employee profile**.
+3. Refresh the case.
+
+**Expected result**
+
+- The workstream gate clears.
+- The workflow advances to its next valid stage.
+- The completion and note are recorded in Activity or Audit.
+
+### Step E — verify the Before Comms gate
+
+1. Leave **Confirm welcome pack** incomplete.
+2. Monitor the QA inbox and the case Communications tab.
+
+**Expected result**
+
+- Candidate communication waits at the Before Comms gate.
+- The case identifies the mandatory welcome-pack item as incomplete.
+
+Then:
+
+1. Add the note `QA approved the synthetic welcome pack.`
+2. Complete **Confirm welcome pack**.
+3. Refresh the case and monitor the QA inbox.
+
+**Expected result**
+
+- Communication processing resumes.
+- The authorized onboarding/portal email is delivered exactly once.
+- The completion action is audited.
+
+### Step F — verify that an optional item does not block
+
+1. Leave **Schedule buddy coffee** incomplete.
+2. Complete all other mandatory prerequisites.
+3. Observe the case’s progression toward Day-1 review.
+
+**Expected result**
+
+- The optional item remains visible and incomplete.
+- It does not pause or block the case.
+- The case can reach the Day-1 review when all mandatory items are satisfied.
+
+### Step G — verify existing-case snapshot protection
+
+1. Return to the earlier Priya Nair case.
+2. Review its checklist.
+
+**Expected result**
+
+- The three newly configured items have not appeared automatically.
+- Existing completion states and case-specific configuration remain unchanged.
+
+If authorized to test active-case replacement:
+
+1. Select **Manage Case Checklist**.
+2. Review the proposed recalculation or replacement.
+3. Enter a reason explaining that this is a synthetic QA test.
+4. Apply the change only in an approved non-production environment.
+
+**Expected result**
+
+- The action is deliberate rather than automatic.
+- Matching item statuses are preserved where possible.
+- The replacement and reason are audited.
+- The case may return to re-review when new mandatory blockers are introduced.
+
+### Step H — test a targeted checklist profile
+
+1. In **Settings**, locate **Targeted Checklist Profiles**.
+2. Select **Create Profile**.
+3. Enter:
+
+| Field | Value |
+|---|---|
+| Profile Name | QA P2 Operations Profile |
+| Priority | 50 |
+| Band Match | P2 |
+| Role Match | Service Delivery Analyst |
+| Employment Type Match | External FTE, if offered by the current selector |
+| Location Match | India |
+| Profile Enabled | Yes |
+
+4. Add an item override:
+
+| Field | Value |
+|---|---|
+| Target Item ID | qa-operations-induction |
+| Override Label | Complete Operations induction |
+| Status | Included |
+| Requirement | Mandatory |
+| Enforcement Stage | Before Day-1 |
+| Order | Next valid order |
+
+5. Save the profile.
+6. Create a third case matching P2, Service Delivery Analyst, External FTE, and India.
+7. Create a fourth case with a non-matching role or band.
+
+**Expected result**
+
+- The matching case receives the targeted Operations induction item.
+- The non-matching case receives the default checklist without that targeted item.
+- The mandatory targeted item blocks the matching case before Day-1 review until completed.
+- An equal-priority overlapping enabled profile is rejected rather than applied ambiguously.
+
+### Configuration scenario pass/fail checklist
+
+| Verification | Pass | Fail | Notes / evidence |
+|---|:---:|:---:|---|
+| Owner/admin can edit checklist configuration | ☐ | ☐ | |
+| Invalid IDs or ordering are rejected | ☐ | ☐ | |
+| Saving creates a new checklist version | ☐ | ☐ | |
+| New case receives the new checklist snapshot | ☐ | ☐ | |
+| Existing case remains unchanged automatically | ☐ | ☐ | |
+| Before Workstreams mandatory item blocks workstreams | ☐ | ☐ | |
+| Before Comms mandatory item delays communication | ☐ | ☐ | |
+| Completing a blocker resumes the correct flow | ☐ | ☐ | |
+| Optional item does not block progression | ☐ | ☐ | |
+| Configuration and status changes are audited | ☐ | ☐ | |
+| Matching targeted profile is applied | ☐ | ☐ | |
+| Non-matching case retains the default checklist | ☐ | ☐ | |
+| Overlapping equal-priority profile is rejected | ☐ | ☐ | |
+
+### Restore the test environment
+
+After testing:
+
+1. Disable or remove the synthetic targeted profile.
+2. Remove the three `qa-` default checklist items, or restore the approved baseline configuration.
+3. Save and record the resulting checklist version.
+4. Confirm no real onboarding cases were created while the synthetic configuration was active.
+5. Retain screenshots and case IDs in the QA evidence record.
+
+---
+
 **End of test guide**
