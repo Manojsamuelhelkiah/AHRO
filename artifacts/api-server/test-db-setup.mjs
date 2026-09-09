@@ -36,6 +36,9 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   "478a75e14136fc164ae824e50bce8333dce1712c0362d23665df222a84ea2519",
   // Security-reviewed forward repair for interval-created private scenarios.
   "e15f14fd6cf4721edbd0f4be846a776cc1ef67d639939cefde16328852712656",
+  // Reviewed removal of redundant legacy watch-email relationships after the
+  // tenant-scoped composite foreign keys are already in place.
+  "89e944c53e96b6c118f5976aa711f394bce447d13225b5364898413f6786d484",
 ]);
 
 // These errors mean an old migration's individual DDL statement is already
