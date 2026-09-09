@@ -8,12 +8,13 @@
  * (plus anyone in ONBOARDING_ALLOWED_RECIPIENTS) and nobody else.
  */
 import { db } from "@workspace/db";
-import { onbCases } from "@workspace/db/schema";
+import { DEMO_ORGANIZATION_ID, onbCases } from "@workspace/db/schema";
 import { and, sql } from "drizzle-orm";
 import { getSetting, setSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { setDemoAllowlist } from "./channels";
 import { defaultReadiness, defaultWorkstreams, startOrchestration } from "./engine";
 import { SCENARIOS, getScenario } from "./scenarios";
+import { organizationValues, organizationWhere } from "../organization-scope";
 
 export const DEMO_VOLUNTEERS_KEY = "demo_volunteers";
 
@@ -73,8 +74,8 @@ export function volunteerProblems(v: DemoVolunteer): string | null {
   return null;
 }
 
-export async function loadVolunteers(): Promise<DemoVolunteer[]> {
-  const raw = await getSetting(DEMO_VOLUNTEERS_KEY);
+export async function loadVolunteers(organizationId: string): Promise<DemoVolunteer[]> {
+  const raw = await getSetting(organizationId, DEMO_VOLUNTEERS_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -84,10 +85,10 @@ export async function loadVolunteers(): Promise<DemoVolunteer[]> {
   }
 }
 
-export async function saveVolunteers(raw: Partial<DemoVolunteer>[]): Promise<DemoVolunteer[]> {
+export async function saveVolunteers(organizationId: string, raw: Partial<DemoVolunteer>[]): Promise<DemoVolunteer[]> {
   const volunteers = raw.slice(0, 20).map(normalizeVolunteer);
-  await setSetting(DEMO_VOLUNTEERS_KEY, JSON.stringify(volunteers));
-  await initDemoAllowlist();
+  await setSetting(organizationId, DEMO_VOLUNTEERS_KEY, JSON.stringify(volunteers));
+  await initDemoAllowlist(organizationId);
   return volunteers;
 }
 
@@ -102,16 +103,16 @@ export async function saveVolunteers(raw: Partial<DemoVolunteer>[]): Promise<Dem
  * explicit, audited act that authorizes live delivery to it, and clearing
  * it revokes that authorization.
  */
-export async function initDemoAllowlist(): Promise<void> {
+export async function initDemoAllowlist(organizationId: string): Promise<void> {
   const addresses: string[] = [];
-  for (const v of await loadVolunteers()) {
+  for (const v of await loadVolunteers(organizationId)) {
     if (volunteerProblems(v)) continue; // only valid rows get live delivery
     addresses.push(v.email);
     if (v.phone) addresses.push(v.phone);
   }
-  const approver = (await getSetting(HR_APPROVER_EMAIL_KEY))?.trim();
+  const approver = (await getSetting(organizationId, HR_APPROVER_EMAIL_KEY))?.trim();
   if (approver && isValidEmail(approver)) addresses.push(approver);
-  setDemoAllowlist(addresses);
+  setDemoAllowlist(organizationId, addresses);
 }
 export const refreshDemoAllowlist = initDemoAllowlist;
 
@@ -163,8 +164,10 @@ export function listPersonas(): PersonaInfo[] {
 export type SeedResult = { name: string; status: "seeded" | "skipped" | "invalid"; note: string; caseId: number | null };
 
 /** Create a full onboarding case (real agent pipeline) per valid volunteer. */
-export async function seedVolunteerCases(): Promise<SeedResult[]> {
-  const volunteers = await loadVolunteers();
+export async function seedVolunteerCases(
+  organizationId = DEMO_ORGANIZATION_ID,
+): Promise<SeedResult[]> {
+  const volunteers = await loadVolunteers(organizationId);
   const results: SeedResult[] = [];
   for (const v of volunteers) {
     const problem = volunteerProblems(v);
@@ -179,6 +182,7 @@ export async function seedVolunteerCases(): Promise<SeedResult[]> {
         and(
           sql`lower(${onbCases.workerName}) = ${v.name.toLowerCase()}`,
           sql`${onbCases.lifecycleStage} not in ('complete')`,
+          organizationWhere(onbCases, organizationId),
         ),
       );
     if (dupe) {
@@ -212,6 +216,7 @@ export async function seedVolunteerCases(): Promise<SeedResult[]> {
         readiness: defaultReadiness(),
         workstreams: defaultWorkstreams(),
         orchestrationStatus: "running",
+         ...organizationValues(organizationId),
       })
       .returning();
     startOrchestration(row.id);

@@ -56,6 +56,7 @@ import { FlowDiagram } from "@/components/flow-diagram";
 import { DemarcationSplitStrip, BuildBreakdownTable } from "@/components/build-cost-breakdown";
 import { IntentCorpusAvailability } from "@/components/intent-corpus-status";
 import { isIntentCorpusUnavailable } from "@/lib/intent-corpus-safety";
+import { fetchScenarioWorkbook } from "@/lib/workbook-export";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
@@ -180,20 +181,25 @@ export default function Scenario() {
     form.reset({ ...current, _assumptionOverrides: cleared });
   };
 
-  // Excel shadow workbook: download prefilled from the current form; on import
-  // the server reads ONLY the inputs and we reprice with the exact engine.
-  // Direct-navigation download (GET + base64url payload): blob-based
-  // programmatic downloads are blocked by mobile browsers in the preview iframe.
-  const handleWorkbookExport = form.handleSubmit((values) => {
-    const json = JSON.stringify({ inputs: toApiInputs(values) });
-    const q = btoa(String.fromCharCode(...new TextEncoder().encode(json)))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    const a = document.createElement("a");
-    a.href = `/api/workbook/export?q=${q}`;
-    a.download = "hro-cost-shadow.xlsx";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  const handleWorkbookExport = form.handleSubmit(async (values) => {
+    try {
+      const organizationId = localStorage.getItem("activeOrganizationId") ?? "";
+      const blob = await fetchScenarioWorkbook(toApiInputs(values) as ScenarioInputs, organizationId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "hro-cost-shadow.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Export Failed",
+        description: err instanceof Error ? err.message : "Could not export the workbook.",
+        variant: "destructive",
+      });
+    }
   });
 
   const handleWorkbookImport = async (e: React.ChangeEvent<HTMLInputElement>) => {

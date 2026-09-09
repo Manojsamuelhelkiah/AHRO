@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { onbApprovals, onbCases } from "@workspace/db/schema";
+import { onbApprovals, onbCases, onbSettings } from "@workspace/db/schema";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { and, eq } from "drizzle-orm";
 import {
@@ -46,9 +46,9 @@ const SEARCH_WINDOW = "newer_than:2d";
 let timer: NodeJS.Timeout | null = null;
 
 /** Effective approver address, or null when unset/invalid. */
-export async function approverEmailAddress(): Promise<string | null> {
+export async function approverEmailAddress(organizationId: string): Promise<string | null> {
   try {
-    const stored = (await getSetting(HR_APPROVER_EMAIL_KEY))?.trim() ?? "";
+    const stored = (await getSetting(organizationId, HR_APPROVER_EMAIL_KEY))?.trim() ?? "";
     return stored.length > 0 && isValidEmail(stored) ? stored : null;
   } catch (err) {
     console.error("[approver-email] failed to read approver setting:", String(err));
@@ -142,18 +142,22 @@ export function composeApprovalEmail(opts: {
 export async function notifyApproverOfApproval(approval: {
   id: number;
   caseId: number;
+  organizationId: string;
   agent: string;
   hitlPattern: string;
   recommendation: string;
   rationale: string;
 }): Promise<void> {
   try {
-    const to = await approverEmailAddress();
+    const to = await approverEmailAddress(approval.organizationId);
     if (!to) return;
     const [c] = await db
       .select({ workerName: onbCases.workerName })
       .from(onbCases)
-      .where(eq(onbCases.id, approval.caseId));
+      .where(and(
+        eq(onbCases.id, approval.caseId),
+        eq(onbCases.organizationId, approval.organizationId),
+      ));
     const { subject, body } = composeApprovalEmail({
       approvalId: approval.id,
       workerName: c?.workerName ?? "worker",
@@ -208,13 +212,18 @@ export type ApplyReplyResult =
  * duplicates cannot decide twice.
  */
 export async function applyApproverReply(opts: {
+  organizationId: string;
   fromAddress: string;
   subject: string | null;
   bodyText: string;
   approver: string | null;
 }): Promise<{ outcome: ApplyReplyResult; approvalId: number | null }> {
   // 1. Allowlist check FIRST — nobody but the configured approver may act.
-  if (!senderIsApprover(opts.fromAddress, opts.approver)) {
+  const configuredApprover = await approverEmailAddress(opts.organizationId);
+  if (
+    !senderIsApprover(opts.fromAddress, opts.approver) ||
+    !senderIsApprover(opts.fromAddress, configuredApprover)
+  ) {
     return { outcome: "not-approver", approvalId: null };
   }
   const text = `${opts.subject ?? ""}\n${opts.bodyText}`;
@@ -223,7 +232,10 @@ export async function applyApproverReply(opts: {
 
   const decision = parseApproverDecision(opts.bodyText || (opts.subject ?? ""));
 
-  const [a] = await db.select().from(onbApprovals).where(eq(onbApprovals.id, approvalId));
+  const [a] = await db.select().from(onbApprovals).where(and(
+    eq(onbApprovals.id, approvalId),
+    eq(onbApprovals.organizationId, opts.organizationId),
+  ));
   if (!a) return { outcome: "not-found", approvalId };
 
   if (decision === null) {
@@ -248,7 +260,11 @@ export async function applyApproverReply(opts: {
       comment: opts.bodyText ? opts.bodyText.slice(0, 500) : null,
       decidedAt: new Date(),
     })
-    .where(and(eq(onbApprovals.id, approvalId), eq(onbApprovals.status, "pending")))
+    .where(and(
+      eq(onbApprovals.id, approvalId),
+      eq(onbApprovals.organizationId, opts.organizationId),
+      eq(onbApprovals.status, "pending"),
+    ))
     .returning();
   if (!updated) return { outcome: "already-decided", approvalId };
 
@@ -268,8 +284,8 @@ export async function applyApproverReply(opts: {
 /* Poll loop                                                           */
 /* ------------------------------------------------------------------ */
 
-async function pollOnce(): Promise<void> {
-  const approver = await approverEmailAddress();
+async function pollOnce(organizationId: string): Promise<void> {
+  const approver = await approverEmailAddress(organizationId);
   if (!approver) return;
 
   const q = `in:inbox ${SEARCH_WINDOW} from:${approver} "AP-"`;
@@ -285,8 +301,6 @@ async function pollOnce(): Promise<void> {
   }
   const list = (await listResp.json()) as { messages?: Array<{ id: string }> };
   for (const ref of list.messages ?? []) {
-    if (await alreadyRecorded(ref.id)) continue;
-
     const msgResp = await connectors.proxy(
       "google-mail",
       `/gmail/v1/users/me/messages/${ref.id}?format=full`,
@@ -298,8 +312,10 @@ async function pollOnce(): Promise<void> {
     const fromAddress = extractAddress(header(msg, "From"));
     const subject = header(msg, "Subject") || null;
     const bodyText = stripQuotedReply(findPlainText(msg.payload) ?? "");
+    if (await alreadyRecorded(ref.id, organizationId)) continue;
 
     const { outcome, approvalId } = await applyApproverReply({
+      organizationId,
       fromAddress,
       subject,
       bodyText,
@@ -311,12 +327,16 @@ async function pollOnce(): Promise<void> {
     if (outcome === "not-approver" || outcome === "no-ref" || outcome === "not-found") continue;
 
     const [a] = await db
-      .select({ caseId: onbApprovals.caseId })
+      .select({ caseId: onbApprovals.caseId, organizationId: onbApprovals.organizationId })
       .from(onbApprovals)
-      .where(eq(onbApprovals.id, approvalId!));
+      .where(and(
+        eq(onbApprovals.id, approvalId!),
+        eq(onbApprovals.organizationId, organizationId),
+      ));
     if (!a) continue;
     await persistInbound({
       caseId: a.caseId,
+      organizationId,
       channel: "email",
       fromAddress,
       subject,
@@ -336,7 +356,11 @@ async function pollOnce(): Promise<void> {
  */
 export const runApproverInboxTick = makeSharedTick(async () => {
   try {
-    await pollOnce();
+    const organizations = await db
+      .select({ organizationId: onbSettings.organizationId })
+      .from(onbSettings)
+      .where(eq(onbSettings.key, HR_APPROVER_EMAIL_KEY));
+    for (const { organizationId } of organizations) await pollOnce(organizationId);
   } catch (err) {
     console.error("[approver-email] poll failed:", String(err).slice(0, 300));
   }

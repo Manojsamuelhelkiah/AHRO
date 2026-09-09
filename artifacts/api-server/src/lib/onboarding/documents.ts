@@ -12,7 +12,7 @@ import { eq, sql } from "drizzle-orm";
 type CaseRow = typeof onbCases.$inferSelect;
 export type DocumentSeedCase = Pick<
   CaseRow,
-  "id" | "workerCategory" | "geography" | "hireType" | "lifecycleStage"
+  "id" | "organizationId" | "workerCategory" | "geography" | "hireType" | "lifecycleStage"
 >;
 export type DocumentRow = typeof onbDocuments.$inferSelect;
 
@@ -67,6 +67,7 @@ export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<void> {
         const seeded = progressed && (c.id + i) % 3 !== 0;
         const verified = seeded && (c.id + i) % 3 === 1;
         return {
+          organizationId: c.organizationId,
           caseId: c.id,
           key: p.key,
           label: p.label,

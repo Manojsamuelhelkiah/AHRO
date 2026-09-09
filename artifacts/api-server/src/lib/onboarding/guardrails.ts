@@ -9,7 +9,8 @@
  * Keep this file import-light (db only) — channels/voice/engine import it.
  */
 import { db } from "@workspace/db";
-import { onbGuardrailEvents } from "@workspace/db/schema";
+import { onbCases, onbGuardrailEvents } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 
 export type GuardrailCategory =
   | "identity"
@@ -271,13 +272,28 @@ function withinAuditBudget(key: string): boolean {
 
 export async function recordGuardrailEvent(opts: {
   caseId?: number | null;
+  organizationId?: string;
   key: string;
   action: "blocked" | "sanitized" | "rate-limited" | "escalated" | "rejected";
   detail: string;
 }): Promise<void> {
   if (!withinAuditBudget(opts.key)) return;
   try {
+    if (opts.caseId == null) {
+      throw new Error("organizationId is required for a guardrail event without a case");
+    }
+    const [caseRow] = await db
+      .select({ organizationId: onbCases.organizationId })
+      .from(onbCases)
+      .where(and(
+        eq(onbCases.id, opts.caseId),
+        opts.organizationId
+          ? eq(onbCases.organizationId, opts.organizationId)
+          : undefined,
+      ));
+    if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
     await db.insert(onbGuardrailEvents).values({
+      organizationId: opts.organizationId ?? caseRow.organizationId,
       caseId: opts.caseId ?? null,
       guardrailKey: opts.key,
       action: opts.action,

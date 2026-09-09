@@ -1,9 +1,11 @@
 import {
   boolean,
   check,
+  foreignKey,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -11,6 +13,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { organizationsTable } from "./organizations";
 
 export type OnbReadinessItemRow = {
   key: string;
@@ -37,6 +40,9 @@ export type OnbWorkstreamRow = {
 
 export const onbCases = pgTable("onb_cases", {
   id: serial("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   workerName: text("worker_name").notNull(),
   workerEmail: text("worker_email").notNull(),
   workerPhone: text("worker_phone"),
@@ -68,12 +74,15 @@ export const onbCases = pgTable("onb_cases", {
   candidateEmailAuthorizedBy: text("candidate_email_authorized_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [unique("onb_cases_organization_id_id_unique").on(t.organizationId, t.id)]);
 
 export const onbEvents = pgTable("onb_events", {
   id: serial("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   // Nullable: system-level events (e.g. inbox-monitor outages) are not tied to a case.
-  caseId: integer("case_id").references(() => onbCases.id, { onDelete: "cascade" }),
+  caseId: integer("case_id"),
   agent: text("agent").notNull(),
   engine: text("engine").notNull(),
   hitlPattern: text("hitl_pattern"),
@@ -81,15 +90,20 @@ export const onbEvents = pgTable("onb_events", {
   title: text("title").notNull(),
   detail: text("detail").notNull(),
   /** Optional dedupe key: a crash-resumed writer inserting the same key is a no-op. */
-  idempotencyKey: text("idempotency_key").unique(),
+  idempotencyKey: text("idempotency_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  unique("onb_events_organization_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_events_organization_case_fk" }).onDelete("cascade"),
+]);
 
 export const onbApprovals = pgTable("onb_approvals", {
   id: serial("id").primaryKey(),
-  caseId: integer("case_id")
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => onbCases.id, { onDelete: "cascade" }),
+    .references(() => organizationsTable.id),
+  caseId: integer("case_id")
+    .notNull(),
   agent: text("agent").notNull(),
   ruleRef: text("rule_ref"),
   hitlPattern: text("hitl_pattern").notNull().default("approve-before-act"),
@@ -102,16 +116,21 @@ export const onbApprovals = pgTable("onb_approvals", {
   comment: text("comment"),
   resumeAction: text("resume_action"),
   /** Optional dedupe key: a crash-resumed writer inserting the same key is a no-op. */
-  idempotencyKey: text("idempotency_key").unique(),
+  idempotencyKey: text("idempotency_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
-});
+}, (t) => [
+  unique("onb_approvals_organization_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_approvals_organization_case_fk" }).onDelete("cascade"),
+]);
 
 export const onbCommunications = pgTable("onb_communications", {
   id: serial("id").primaryKey(),
-  caseId: integer("case_id")
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => onbCases.id, { onDelete: "cascade" }),
+    .references(() => organizationsTable.id),
+  caseId: integer("case_id")
+    .notNull(),
   channel: text("channel").notNull(),
   direction: text("direction").notNull(),
   /** candidate communications are case-routed; admin/HITL email is separate. */
@@ -126,12 +145,15 @@ export const onbCommunications = pgTable("onb_communications", {
    * Provider-side id for inbound messages (Gmail message id, Twilio
    * MessageSid). Used to deduplicate polling / webhook retries.
    */
-  externalMessageId: text("external_message_id").unique(),
+  externalMessageId: text("external_message_id"),
   /** The authenticated reviewer who claimed the latest manual retry. */
   retriedBy: text("retried_by"),
   retriedAt: timestamp("retried_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  unique("onb_communications_organization_external_message_id_unique").on(t.organizationId, t.externalMessageId),
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_communications_organization_case_fk" }).onDelete("cascade"),
+]);
 
 /**
  * App-level key/value settings editable from the control tower UI
@@ -139,10 +161,13 @@ export const onbCommunications = pgTable("onb_communications", {
  * interpretation is up to the reader.
  */
 export const onbSettings = pgTable("onb_settings", {
-  key: text("key").primaryKey(),
+  key: text("key").notNull(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [primaryKey({ columns: [t.organizationId, t.key] })]);
 /**
  * One tracked external-system checklist item per case (BGV clearance,
  * ITSM access provisioning, payroll setup). The System Watcher agent
@@ -154,9 +179,11 @@ export const onbSystemChecks = pgTable(
   "onb_system_checks",
   {
     id: serial("id").primaryKey(),
-    caseId: integer("case_id")
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => onbCases.id, { onDelete: "cascade" }),
+      .references(() => organizationsTable.id),
+    caseId: integer("case_id")
+      .notNull(),
     /** bgv | itsm | payroll */
     system: text("system").notNull(),
     /** push (vendor webhook) | poll (scheduled API polling) | email (watch-mailbox) */
@@ -172,10 +199,17 @@ export const onbSystemChecks = pgTable(
     escalatedAt: timestamp("escalated_at", { withTimezone: true }),
     note: text("note"),
   },
-  (t) => [unique("onb_system_checks_case_system").on(t.caseId, t.system)],
+  (t) => [
+    unique("onb_system_checks_organization_id_id_unique").on(t.organizationId, t.id),
+    unique("onb_system_checks_organization_case_system_unique").on(t.organizationId, t.caseId, t.system),
+    foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_system_checks_organization_case_fk" }).onDelete("cascade"),
+  ],
 );
 export const onbConnectors = pgTable("onb_connectors", {
-  key: text("key").primaryKey(),
+  key: text("key").notNull(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   label: text("label").notNull(),
   vendor: text("vendor").notNull(),
   availableVendors: jsonb("available_vendors").$type<string[]>().notNull().default([]),
@@ -185,7 +219,7 @@ export const onbConnectors = pgTable("onb_connectors", {
   description: text("description").notNull(),
   authoritativeFor: jsonb("authoritative_for").$type<string[]>().notNull().default([]),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
-});
+}, (t) => [primaryKey({ columns: [t.organizationId, t.key] })]);
 
 /**
  * Durable boundary around connector writes. The logical operation key is the
@@ -195,9 +229,12 @@ export const onbConnectors = pgTable("onb_connectors", {
 export const onbEffectJournal = pgTable(
   "onb_effect_journal",
   {
-    logicalOperationKey: text("logical_operation_key").primaryKey(),
+    logicalOperationKey: text("logical_operation_key").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id),
     tenantId: text("tenant_id").notNull(),
-    caseId: integer("case_id").references(() => onbCases.id, { onDelete: "set null" }),
+    caseId: integer("case_id"),
     toolName: text("tool_name").notNull(),
     argumentsHash: text("arguments_hash").notNull(),
     providerIdempotency: boolean("provider_idempotency").notNull(),
@@ -215,11 +252,13 @@ export const onbEffectJournal = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    primaryKey({ columns: [t.organizationId, t.logicalOperationKey] }),
     check(
       "onb_effect_journal_status_check",
       sql`${t.status} in ('ready', 'dispatching', 'confirmed', 'unknown_effect_manual_repair', 'failed')`,
     ),
     check("onb_effect_journal_fencing_token_check", sql`${t.fencingToken} >= 0`),
+    foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_effect_journal_organization_case_fk" }),
   ],
 );
 
@@ -238,9 +277,11 @@ export const onbDocuments = pgTable(
   "onb_documents",
   {
     id: serial("id").primaryKey(),
-    caseId: integer("case_id")
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => onbCases.id, { onDelete: "cascade" }),
+      .references(() => organizationsTable.id),
+    caseId: integer("case_id")
+      .notNull(),
     /** stable key within a case, e.g. id-proof, tax-form */
     key: text("key").notNull(),
     label: text("label").notNull(),
@@ -252,7 +293,10 @@ export const onbDocuments = pgTable(
     note: text("note"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [unique().on(t.caseId, t.key)],
+  (t) => [
+    unique("onb_documents_organization_case_key_unique").on(t.organizationId, t.caseId, t.key),
+    foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_documents_organization_case_fk" }).onDelete("cascade"),
+  ],
 );
 
 /**
@@ -262,19 +306,24 @@ export const onbDocuments = pgTable(
  */
 export const onbCallSlots = pgTable("onb_call_slots", {
   id: serial("id").primaryKey(),
-  caseId: integer("case_id")
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => onbCases.id, { onDelete: "cascade" }),
+    .references(() => organizationsTable.id),
+  caseId: integer("case_id")
+    .notNull(),
   /** [{ n: 1, startIso, label }] */
   slots: jsonb("slots").$type<Array<{ n: number; startIso: string; label: string }>>().notNull(),
   /** proposed | booked | superseded */
   status: text("status").notNull().default("proposed"),
   /** Optional dedupe key: a crash-resumed proposer re-inserting the same key is a no-op. */
-  dedupeKey: text("dedupe_key").unique(),
+  dedupeKey: text("dedupe_key"),
   bookedSlotN: integer("booked_slot_n"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   bookedAt: timestamp("booked_at", { withTimezone: true }),
-});
+}, (t) => [
+  unique("onb_call_slots_organization_dedupe_key_unique").on(t.organizationId, t.dedupeKey),
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_call_slots_organization_case_fk" }).onDelete("cascade"),
+]);
 
 /**
  * Live AI voice-call sessions, keyed by our per-call token and bound to the
@@ -285,15 +334,17 @@ export const onbCallSlots = pgTable("onb_call_slots", {
  * Simulated calls run in-process and are not stored here.
  */
 export const onbVoiceSessions = pgTable("onb_voice_sessions", {
-  token: text("token").primaryKey(),
-  caseId: integer("case_id")
+  token: text("token").notNull(),
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => onbCases.id, { onDelete: "cascade" }),
+    .references(() => organizationsTable.id),
+  caseId: integer("case_id")
+    .notNull(),
   /** day-before | sla-escalation */
   scenario: text("scenario").notNull(),
   reason: text("reason"),
   /** Twilio CallSid, bound on the first webhook; later callbacks must match. */
-  callSid: text("call_sid").unique(),
+  callSid: text("call_sid"),
   turns: jsonb("turns")
     .$type<Array<{ role: "agent" | "hire"; text: string }>>()
     .notNull()
@@ -320,16 +371,20 @@ export const onbVoiceSessions = pgTable("onb_voice_sessions", {
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   finalizedAt: timestamp("finalized_at", { withTimezone: true }),
 }, (t) => [
+  primaryKey({ columns: [t.organizationId, t.token] }),
+  unique("onb_voice_sessions_organization_call_sid_unique").on(t.organizationId, t.callSid),
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_voice_sessions_organization_case_fk" }).onDelete("cascade"),
   /** At most one live (unfinalized) call session per case — the call-start claim is atomic at the DB. */
-  uniqueIndex("onb_voice_sessions_live_case_idx").on(t.caseId).where(sql`${t.finalized} = false`),
+  uniqueIndex("onb_voice_sessions_organization_live_case_idx").on(t.organizationId, t.caseId).where(sql`${t.finalized} = false`),
 ]);
 export const onbWatchEmails = pgTable("onb_watch_emails", {
   id: serial("id").primaryKey(),
-  gmailMessageId: text("gmail_message_id").notNull().unique(),
-  checkId: integer("check_id").references(() => onbSystemChecks.id, {
-    onDelete: "cascade",
-  }),
-  caseId: integer("case_id").references(() => onbCases.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
+  gmailMessageId: text("gmail_message_id").notNull(),
+  checkId: integer("check_id"),
+  caseId: integer("case_id"),
   system: text("system").notNull(),
   fromAddress: text("from_address").notNull(),
   subject: text("subject"),
@@ -339,7 +394,11 @@ export const onbWatchEmails = pgTable("onb_watch_emails", {
   /** What the watcher did about it, human-readable */
   action: text("action").notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  unique("onb_watch_emails_organization_gmail_message_id_unique").on(t.organizationId, t.gmailMessageId),
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_watch_emails_organization_case_fk" }).onDelete("cascade"),
+  foreignKey({ columns: [t.organizationId, t.checkId], foreignColumns: [onbSystemChecks.organizationId, onbSystemChecks.id], name: "onb_watch_emails_organization_check_fk" }).onDelete("cascade"),
+]);
 
 /**
  * Archived employment history — the system-of-record the LDM (large
@@ -348,6 +407,9 @@ export const onbWatchEmails = pgTable("onb_watch_emails", {
  */
 export const onbEmployeeRecords = pgTable("onb_employee_records", {
   id: serial("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   /** Archive match key: the (re)hire's email, lowercased. */
   workerEmail: text("worker_email").notNull(),
   workerName: text("worker_name").notNull(),
@@ -365,7 +427,7 @@ export const onbEmployeeRecords = pgTable("onb_employee_records", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   /** One stint per worker+start date — makes demo seeding an idempotent upsert. */
-  uniqueIndex("onb_employee_records_stint_idx").on(t.workerEmail, t.startDate),
+  uniqueIndex("onb_employee_records_organization_stint_idx").on(t.organizationId, t.workerEmail, t.startDate),
 ]);
 
 /**
@@ -375,12 +437,17 @@ export const onbEmployeeRecords = pgTable("onb_employee_records", {
  */
 export const onbGuardrailEvents = pgTable("onb_guardrail_events", {
   id: serial("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   /** Nullable: some guardrails fire outside any case (e.g. forged webhooks). */
-  caseId: integer("case_id").references(() => onbCases.id, { onDelete: "cascade" }),
+  caseId: integer("case_id"),
   /** Key into the guardrails catalog (see api-server guardrails lib). */
   guardrailKey: text("guardrail_key").notNull(),
   /** blocked | sanitized | rate-limited | escalated | rejected */
   action: text("action").notNull(),
   detail: text("detail").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_guardrail_events_organization_case_fk" }).onDelete("cascade"),
+]);

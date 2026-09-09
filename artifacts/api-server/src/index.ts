@@ -1,4 +1,5 @@
 import app from "./app";
+import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
 import { logger } from "./lib/logger";
 import { startInboundEmailPolling } from "./lib/onboarding/inbound-email";
 import { startSystemWatcher } from "./lib/onboarding/system-watcher";
@@ -43,7 +44,7 @@ app.listen(port, (err) => {
   backfillDocumentPacks().catch((err) =>
     logger.error({ err }, "document pack backfill failed"),
   );
-  initDemoAllowlist().catch((err) =>
+  initDemoAllowlist(DEMO_ORGANIZATION_ID).catch((err) =>
     logger.error({ err }, "demo allowlist init failed"),
   );
   recoverStaleVoiceSessions()

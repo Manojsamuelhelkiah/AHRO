@@ -26,3 +26,5 @@
 - [React Hook Form runtime values](react-hook-form-runtime-values.md) — sync default loaders cannot use the async callback form; parse or register numeric values before API serialization.
 - [Clerk API smoke probes](clerk-api-smoke-probes.md) — API readiness checks must look like CORS/fetch requests; navigation headers can trigger Clerk handshake redirects.
 - [Secure App Storage uploads](secure-app-storage-uploads.md) — the signer cannot bind size/type; strict limits need authenticated bounded writes plus a durable, fenced lifecycle.
+- [Application tenant boundaries](application-tenant-boundaries.md) — Clerk authenticates users; app-owned organizations isolate every client record with explicit, verified scope.
+- [Shared mailbox tenant attribution](shared-mailbox-tenant-attribution.md) — sender identity is insufficient; require exact case-bound references and quarantine ambiguous matches.

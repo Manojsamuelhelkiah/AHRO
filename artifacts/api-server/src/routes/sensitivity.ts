@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, actualsOverlaysTable } from "@workspace/db";
 import { ComputeSensitivityBody, ComputeSensitivityResponse } from "@workspace/api-zod";
 import type { ActualsOverlay } from "../data/types";
@@ -12,17 +12,22 @@ import {
   ensureBaselineRateSet,
   loadAndValidateCurrentRateSet,
 } from "../lib/pricing-rate-sets";
+import {
+  getOrganizationId,
+  organizationWhere,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
 router.post("/sensitivity", async (req, res, next) => {
   try {
     const body = ComputeSensitivityBody.parse(req.body);
-    await ensureBaselineRateSet();
+    const organizationId = getOrganizationId(req);
+    await ensureBaselineRateSet(organizationId);
     const [overrides, customIntents, currentRateSet] = await Promise.all([
-      loadActiveFlowOverrides(),
-      loadActiveCustomIntents(),
-      loadAndValidateCurrentRateSet(),
+      loadActiveFlowOverrides(organizationId),
+      loadActiveCustomIntents(organizationId),
+      loadAndValidateCurrentRateSet(organizationId),
     ]);
     const inputs = body.inputs as ScenarioInputs;
     validateScenarioInputs(inputs, new Set(customIntents.map((i) => i.key)));
@@ -33,7 +38,10 @@ router.post("/sensitivity", async (req, res, next) => {
       const [overlayRow] = await db
         .select()
         .from(actualsOverlaysTable)
-        .where(eq(actualsOverlaysTable.id, body.actualsOverlayId));
+        .where(and(
+          eq(actualsOverlaysTable.id, body.actualsOverlayId),
+          organizationWhere(actualsOverlaysTable, organizationId),
+        ));
       if (!overlayRow) {
         res.status(400).json({ error: `Actuals overlay ${body.actualsOverlayId} not found` });
         return;

@@ -29,6 +29,7 @@ type CaseRow = typeof onbCases.$inferSelect;
 export type WorkstreamConnectorCase = Pick<
   CaseRow,
   | "id"
+  | "organizationId"
   | "workerEmail"
   | "workerCategory"
   | "hireType"
@@ -101,11 +102,11 @@ function proposalFor(
 ): ApprovalProposal {
   return createConnectorProposal({
     mutation,
-    tenantId: c.legalEntity,
+    tenantId: c.organizationId,
     caseId: String(c.id),
     planVersion: Math.floor(c.updatedAt.getTime() / 1000),
     requiredBranchSet: branches,
-    logicalOperationKey: `${c.legalEntity}:${c.id}:${mutation.connector}:${mutation.operation}`,
+    logicalOperationKey: `${c.organizationId}:${c.id}:${mutation.connector}:${mutation.operation}`,
     policyVersion: "onboarding-runtime-v1",
     evidenceRefs: [`case:${c.id}:updated:${c.updatedAt.toISOString()}`],
   });
@@ -131,6 +132,7 @@ function systemForMutation(
 
 function documentSeedFrom(
   payload: Readonly<ConnectorMutation>["payload"],
+  organizationId: string,
 ): DocumentSeedCase {
   if (
     payload === null ||
@@ -146,6 +148,7 @@ function documentSeedFrom(
   }
   return {
     id: payload.caseId,
+    organizationId,
     workerCategory: payload.workerCategory,
     geography: payload.geography,
     hireType: payload.hireType,
@@ -161,7 +164,7 @@ async function productionWrite(
     mutation.connector === "documents" &&
     mutation.operation === "send-envelope"
   ) {
-    await seedDocumentsForCase(documentSeedFrom(mutation.payload));
+    await seedDocumentsForCase(documentSeedFrom(mutation.payload, _c.organizationId));
     return;
   }
   const system = systemForMutation(mutation);

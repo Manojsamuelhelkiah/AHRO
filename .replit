@@ -26,7 +26,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/cost-explorer run smoke:intent-routing"
+args = "NODE_ENV=development pnpm --filter @workspace/cost-explorer run smoke:intent-routing"
 
 [workflows.workflow.metadata]
 isValidation = true

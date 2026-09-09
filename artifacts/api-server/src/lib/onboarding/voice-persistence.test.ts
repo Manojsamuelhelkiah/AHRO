@@ -15,6 +15,7 @@ import {
   onbCommunications,
   onbEvents,
   onbVoiceSessions,
+  DEMO_ORGANIZATION_ID,
 } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import {
@@ -33,6 +34,7 @@ async function makeCase(): Promise<number> {
   const [c] = await db
     .insert(onbCases)
     .values({
+      organizationId: DEMO_ORGANIZATION_ID,
       workerName: "Voice Test Hire",
       workerEmail: "voice-test@example.com",
       workerPhone: "+15550001111",
@@ -73,6 +75,7 @@ function liveSession(token: string, caseId: number, startedAt = Date.now()): Ses
 async function insertSessionRow(s: Session): Promise<void> {
   await db.insert(onbVoiceSessions).values({
     token: s.token,
+    organizationId: s.organizationId ?? DEMO_ORGANIZATION_ID,
     caseId: s.caseId,
     scenario: s.scenario,
     reason: s.reason,
@@ -231,6 +234,7 @@ describe("voice session persistence (real DB)", () => {
     // then the process died before the decision/summary steps.
     await db.insert(onbCommunications).values({
       caseId,
+      organizationId: DEMO_ORGANIZATION_ID,
       channel: "voice",
       direction: "outbound",
       toAddress: "masked",
@@ -301,6 +305,7 @@ describe("voice session persistence (real DB)", () => {
     // present) but the process died before markOutcomeStep committed.
     await db.insert(onbEvents).values({
       caseId,
+      organizationId: DEMO_ORGANIZATION_ID,
       agent: "channel",
       engine: "llm",
       title: "Hire confirmed ready on call",
@@ -410,6 +415,7 @@ describe("voice session persistence (real DB)", () => {
     const storedSlots = [{ n: 1, startIso: "2026-08-20T10:00:00.000Z", label: "Thu 20 Aug, 10:00 AM IST" }];
     await db.insert(onbCallSlots).values({
       caseId,
+      organizationId: DEMO_ORGANIZATION_ID,
       slots: storedSlots,
       status: "proposed",
       dedupeKey: `voice:${s.token}:reschedule-slots`,

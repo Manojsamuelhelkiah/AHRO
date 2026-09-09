@@ -17,8 +17,8 @@
  * escalation.
  */
 import { db } from "@workspace/db";
-import { onbEmployeeRecords } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { DEMO_ORGANIZATION_ID, onbEmployeeRecords } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 import { llmComplete, llmCompleteJson } from "./llm";
 
 export type StintRow = typeof onbEmployeeRecords.$inferSelect;
@@ -30,12 +30,17 @@ export type StintRow = typeof onbEmployeeRecords.$inferSelect;
  * volunteer persona cases only — manually-created rehires get an honest
  * "no archived records" answer instead of fabricated history).
  */
-export async function ensureDemoRehireArchive(workerEmail: string, workerName: string): Promise<void> {
+export async function ensureDemoRehireArchive(
+  workerEmail: string,
+  workerName: string,
+  organizationId = DEMO_ORGANIZATION_ID,
+): Promise<void> {
   const email = workerEmail.trim().toLowerCase();
   // Concurrent seeders are safe: the (worker_email, start_date) unique
   // index makes this an idempotent no-op insert, never a duplicate stint.
   await db.insert(onbEmployeeRecords).values([
     {
+      organizationId,
       workerEmail: email,
       workerName,
       role: "Business Analyst",
@@ -50,6 +55,7 @@ export async function ensureDemoRehireArchive(workerEmail: string, workerName: s
       notes: "Left in good standing; exit interview positive.",
     },
     {
+      organizationId,
       workerEmail: email,
       workerName,
       role: "Senior Business Analyst",
@@ -63,14 +69,26 @@ export async function ensureDemoRehireArchive(workerEmail: string, workerName: s
       rehireEligible: true,
       notes: "Notice partially bought out by joining employer (28 days).",
     },
-  ]).onConflictDoNothing({ target: [onbEmployeeRecords.workerEmail, onbEmployeeRecords.startDate] });
+  ]).onConflictDoNothing({
+    target: [
+      onbEmployeeRecords.organizationId,
+      onbEmployeeRecords.workerEmail,
+      onbEmployeeRecords.startDate,
+    ],
+  });
 }
 
-export async function getArchivedStints(workerEmail: string): Promise<StintRow[]> {
+export async function getArchivedStints(
+  workerEmail: string,
+  organizationId = DEMO_ORGANIZATION_ID,
+): Promise<StintRow[]> {
   return await db
     .select()
     .from(onbEmployeeRecords)
-    .where(eq(onbEmployeeRecords.workerEmail, workerEmail.trim().toLowerCase()))
+    .where(and(
+      eq(onbEmployeeRecords.workerEmail, workerEmail.trim().toLowerCase()),
+      eq(onbEmployeeRecords.organizationId, organizationId),
+    ))
     .orderBy(onbEmployeeRecords.startDate);
 }
 
@@ -398,11 +416,15 @@ export type RecordsAnswer = {
   scope?: RecordsScope;
 };
 
-export async function answerRecordsQuestions(workerEmail: string, questions: string[]): Promise<{
+export async function answerRecordsQuestions(
+  workerEmail: string,
+  questions: string[],
+  organizationId = DEMO_ORGANIZATION_ID,
+): Promise<{
   stintCount: number;
   answers: RecordsAnswer[];
 }> {
-  const stints = await getArchivedStints(workerEmail);
+  const stints = await getArchivedStints(workerEmail, organizationId);
   if (stints.length === 0) {
     return {
       stintCount: 0,

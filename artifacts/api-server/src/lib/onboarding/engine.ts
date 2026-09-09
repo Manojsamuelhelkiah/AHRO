@@ -8,7 +8,7 @@ import {
   type OnbRecordsEvidenceItem,
   type OnbWorkstreamRow,
 } from "@workspace/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { sendOutbound } from "./channels";
 import { recordGuardrailEvent } from "./guardrails";
 import {
@@ -47,9 +47,13 @@ export async function logEvent(
   detail: string,
   opts?: { hitlPattern?: string; ruleRef?: string; idempotencyKey?: string },
 ) {
+  // Events are always case-owned in the orchestration engine. Resolve the
+  // tenant from that authoritative parent rather than relying on a DB default.
+  const c = await getCase(caseId);
   await db
     .insert(onbEvents)
     .values({
+      organizationId: c.organizationId,
       caseId,
       agent,
       engine,
@@ -61,14 +65,17 @@ export async function logEvent(
     })
     // With an idempotency key, a crash-resumed writer re-inserting the
     // same event is a no-op at the DB boundary instead of a duplicate.
-    .onConflictDoNothing({ target: onbEvents.idempotencyKey });
+    .onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
 }
 
 async function updateCase(caseId: number, patch: Partial<typeof onbCases.$inferInsert>) {
+  const c = await getCase(caseId);
   await db
     .update(onbCases)
     .set({ ...patch, updatedAt: new Date() })
-    .where(eq(onbCases.id, caseId));
+    .where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, c.organizationId)));
 }
 
 async function getCase(caseId: number): Promise<CaseRow> {
@@ -90,9 +97,11 @@ export async function createApproval(opts: {
   /** Dedupe key: a crash-resumed caller re-creating the same approval is a no-op. */
   idempotencyKey?: string;
 }) {
+  const c = await getCase(opts.caseId);
   const inserted = await db
     .insert(onbApprovals)
     .values({
+      organizationId: c.organizationId,
       caseId: opts.caseId,
       agent: opts.agent,
       ruleRef: opts.ruleRef,
@@ -103,7 +112,9 @@ export async function createApproval(opts: {
       resumeAction: opts.resumeAction,
       idempotencyKey: opts.idempotencyKey ?? null,
     })
-    .onConflictDoNothing({ target: onbApprovals.idempotencyKey })
+    .onConflictDoNothing({
+      target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
+    })
     .returning();
   // If the keyed approval already existed, its companion event (and the
   // approver notification) already happened too.
@@ -281,14 +292,20 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
     } = await import("./records-agent");
     // Demo constructs (scenario/persona cases) get a synthetic archive so
     // the flow is demonstrable; manual rehires keep honest "no records".
-    if (c.scenarioKey) await ensureDemoRehireArchive(c.workerEmail, c.workerName);
+    if (c.scenarioKey) {
+      await ensureDemoRehireArchive(c.workerEmail, c.workerName, c.organizationId);
+    }
     const { questions, viaLlm } = await formulateRecordsQuestions(
       `Rehire case: ${c.workerName}, ${c.role}, ${c.department}, joining ${c.joiningDate}. Notes: ${c.notes ?? "none"}.`,
     );
     await logEvent(caseId, "intake", "llm", "Rehire detected — querying records archive",
       `The reasoning agent asked the LDM records agent:\n${questions.map((q, i) => `${i + 1}. ${q.slice(0, 200)}`).join("\n")}${viaLlm ? "" : "\n(standard question set — AI question forming unavailable)"}`,
       { ruleRef: "4.1 Intake Rule 5", idempotencyKey: `rehire-records:${caseId}:ask` });
-    const { stintCount, answers } = await answerRecordsQuestions(c.workerEmail, questions);
+    const { stintCount, answers } = await answerRecordsQuestions(
+      c.workerEmail,
+      questions,
+      c.organizationId,
+    );
     await logEvent(caseId, "records", "ldm", stintCount > 0
       ? `Employment archive queried (${stintCount} past stints)`
       : "Employment archive queried — no records found",

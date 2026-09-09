@@ -1,5 +1,6 @@
 import { db } from "@workspace/db";
 import { onbConnectors } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 
 export const CONNECTOR_DEFAULTS = [
   {
@@ -68,22 +69,20 @@ export const CONNECTOR_DEFAULTS = [
   },
 ];
 
-let seeded = false;
-
 /** Idempotently seed the pluggable connector slots. */
-export async function ensureConnectorsSeeded() {
-  if (seeded) return;
-  const existing = await db.select({ key: onbConnectors.key }).from(onbConnectors);
+export async function ensureConnectorsSeeded(organizationId: string) {
+  const existing = await db.select({ key: onbConnectors.key }).from(onbConnectors)
+    .where(eq(onbConnectors.organizationId, organizationId));
   const have = new Set(existing.map((r) => r.key));
   const missing = CONNECTOR_DEFAULTS.filter((d) => !have.has(d.key));
   if (missing.length > 0) {
     await db.insert(onbConnectors).values(
       missing.map((d) => ({
         ...d,
+        organizationId,
         status: "connected",
         lastSyncAt: new Date(),
       })),
     );
   }
-  seeded = true;
 }

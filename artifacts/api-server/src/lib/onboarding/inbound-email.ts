@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { onbCases, onbCommunications, onbEvents } from "@workspace/db/schema";
+import { onbCases, onbCommunications, onbEvents, onbWatchEmails } from "@workspace/db/schema";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { handleInbound } from "./engine";
@@ -87,7 +87,7 @@ export function planMonitorEventWrite(
 }
 
 /** Title of the most recent persisted monitor event, or null. */
-async function latestMonitorEventTitle(): Promise<string | null> {
+async function latestMonitorEventTitle(organizationId: string): Promise<string | null> {
   try {
     const [row] = await db
       .select({ title: onbEvents.title })
@@ -95,6 +95,7 @@ async function latestMonitorEventTitle(): Promise<string | null> {
       .where(
         and(
           isNull(onbEvents.caseId),
+          eq(onbEvents.organizationId, organizationId),
           eq(onbEvents.engine, "system"),
           inArray(onbEvents.title, [
             MONITOR_DOWN_TITLE,
@@ -121,12 +122,14 @@ async function latestMonitorEventTitle(): Promise<string | null> {
  * dedup in planMonitorEventWrite relies on the persisted event).
  */
 async function logMonitorEvent(
+  organizationId: string,
   title: string,
   detail: string,
 ): Promise<boolean> {
   try {
     await db.insert(onbEvents).values({
       caseId: null,
+      organizationId,
       agent: "channel",
       engine: "system",
       hitlPattern: "notify-only",
@@ -160,11 +163,12 @@ export function resolveHrAlertAddress(
 }
 /** Effective HR alert address: DB setting first, env var fallback. */
 export async function hrAlertAddress(
+  organizationId: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<string | null> {
   let stored: string | null = null;
   try {
-    stored = await getSetting(HR_ALERT_EMAIL_KEY);
+    stored = await getSetting(organizationId, HR_ALERT_EMAIL_KEY);
   } catch (err) {
     // Never let a settings read break alerting — fall back to the env var.
     console.error(
@@ -204,10 +208,11 @@ export function composeMonitorAlertEmail(
 }
 
 async function sendMonitorAlertEmail(
+  organizationId: string,
   kind: "down" | "recovered",
   detail: string,
 ): Promise<void> {
-  const to = await hrAlertAddress();
+  const to = await hrAlertAddress(organizationId);
   if (!to) return;
   try {
     const { subject, body } = composeMonitorAlertEmail(kind, detail);
@@ -312,7 +317,9 @@ export function classifyMonitor(
   return since > staleMs ? "broken" : "initializing";
 }
 
-export async function getInboundEmailMonitorStatus(): Promise<InboundEmailMonitorStatus> {
+export async function getInboundEmailMonitorStatus(
+  organizationId: string,
+): Promise<InboundEmailMonitorStatus> {
   const iso = (d: Date | null) => (d ? d.toISOString() : null);
   const state = classifyMonitor(monitorStatus, Date.now());
   return {
@@ -324,7 +331,7 @@ export async function getInboundEmailMonitorStatus(): Promise<InboundEmailMonito
     lastErrorAt: iso(monitorStatus.lastErrorAt),
     state,
     healthy: state === "healthy",
-    alertEmailConfigured: (await hrAlertAddress()) !== null,
+    alertEmailConfigured: (await hrAlertAddress(organizationId)) !== null,
   };
 }
 
@@ -387,16 +394,23 @@ export function stripQuotedReply(text: string): string {
 
 export async function alreadyRecorded(
   externalMessageId: string,
+  _organizationId?: string,
 ): Promise<boolean> {
   const [row] = await db
     .select({ id: onbCommunications.id })
     .from(onbCommunications)
     .where(eq(onbCommunications.externalMessageId, externalMessageId));
-  return Boolean(row);
+  if (row) return true;
+  const [watched] = await db
+    .select({ id: onbWatchEmails.id })
+    .from(onbWatchEmails)
+    .where(eq(onbWatchEmails.gmailMessageId, externalMessageId));
+  return Boolean(watched);
 }
 
 export type InboundMessage = {
   caseId: number;
+  organizationId: string;
   channel: "email" | "whatsapp";
   fromAddress: string;
   subject: string | null;
@@ -410,10 +424,14 @@ export type InboundMessage = {
  * retry, or one of our own outbound messages echoing back).
  */
 export async function persistInbound(opts: InboundMessage): Promise<boolean> {
+  // Provider ids belong to the shared mailbox, not to a tenant. A message
+  // consumed by any inbox consumer must never be replayed into another org.
+  if (await alreadyRecorded(opts.externalMessageId)) return false;
   const rows = await db
     .insert(onbCommunications)
     .values({
       caseId: opts.caseId,
+      organizationId: opts.organizationId,
       channel: opts.channel,
       direction: "inbound",
       toAddress: opts.fromAddress,
@@ -423,7 +441,12 @@ export async function persistInbound(opts: InboundMessage): Promise<boolean> {
       sensitive: false,
       externalMessageId: opts.externalMessageId,
     })
-    .onConflictDoNothing({ target: onbCommunications.externalMessageId })
+    .onConflictDoNothing({
+      target: [
+        onbCommunications.organizationId,
+        onbCommunications.externalMessageId,
+      ],
+    })
     .returning({ id: onbCommunications.id });
   return rows.length > 0;
 }
@@ -440,9 +463,33 @@ export type DetailFetchResult = { ok: boolean; json: () => Promise<unknown> };
 
 export type ProcessDeps = {
   fetchDetail: (id: string) => Promise<DetailFetchResult>;
-  alreadyRecorded: (id: string) => Promise<boolean>;
+  alreadyRecorded: (id: string, organizationId: string) => Promise<boolean>;
   recordInbound: (opts: InboundMessage) => Promise<boolean>;
 };
+
+export type EmailCaseCandidate = {
+  caseId: number;
+  organizationId: string;
+  workerEmail?: string;
+};
+export type EmailCaseMatches = Map<string, EmailCaseCandidate[] | number>;
+export type ReplyReferenceMatches = Map<string, EmailCaseCandidate[]>;
+
+const CANDIDATE_REPLY_REF_RE = /\bCR-([a-f0-9]{32})\b/gi;
+const APPROVAL_REPLY_REF_RE = /\bAP-\d{1,9}\b/i;
+
+/** Extract exact unguessable candidate reply references from quoted mail. */
+export function candidateReplyReferences(text: string): string[] {
+  return [...text.matchAll(CANDIDATE_REPLY_REF_RE)].map((m) => `CR-${m[1].toLowerCase()}`);
+}
+
+/** A public inbox cannot safely route an identity shared by multiple tenants. */
+export function resolveUniqueEmailCase(
+  candidates: EmailCaseCandidate[] | number | undefined,
+): EmailCaseCandidate | undefined {
+  if (typeof candidates === "number") return { caseId: candidates, organizationId: "" };
+  return candidates?.length === 1 ? candidates[0] : undefined;
+}
 
 /**
  * Process a page of Gmail message refs. Returns how many message-detail
@@ -452,13 +499,12 @@ export type ProcessDeps = {
  */
 export async function processMessageRefs(
   refs: Array<{ id: string }>,
-  caseByEmail: Map<string, number>,
+  caseByEmail: EmailCaseMatches,
+  caseByReplyReference: ReplyReferenceMatches,
   deps: ProcessDeps,
 ): Promise<number> {
   let detailFailures = 0;
   for (const ref of refs) {
-    if (await deps.alreadyRecorded(ref.id)) continue;
-
     const msgResp = await deps.fetchDetail(ref.id);
     if (!msgResp.ok) {
       detailFailures += 1;
@@ -467,15 +513,44 @@ export async function processMessageRefs(
     const msg = (await msgResp.json()) as GmailMessage;
 
     const fromAddress = extractAddress(header(msg, "From"));
-    const caseId = caseByEmail.get(fromAddress);
-    if (!caseId) continue;
-
     const raw = findPlainText(msg.payload) ?? "";
+    // Approval replies are owned exclusively by the approval poller. This
+    // prevents an approver who is also another tenant's candidate from
+    // copying approval mail onto that candidate's timeline.
+    if (APPROVAL_REPLY_REF_RE.test(`${header(msg, "Subject")}\n${raw}`)) continue;
+    const references = candidateReplyReferences(raw);
+    const correlated = references.flatMap(
+      (reference) => caseByReplyReference.get(reference) ?? [],
+    );
+    const unique = new Map(
+      correlated.map((candidate) => [
+        `${candidate.organizationId}:${candidate.caseId}`,
+        candidate,
+      ]),
+    );
+    const candidate = unique.size === 1 ? [...unique.values()][0] : undefined;
+    const senderCandidates = caseByEmail.get(fromAddress);
+    const senderMatchesCandidate =
+      candidate !== undefined &&
+      (typeof senderCandidates === "number"
+        ? senderCandidates === candidate.caseId
+        : senderCandidates?.some(
+            (senderCandidate) =>
+              senderCandidate.caseId === candidate.caseId &&
+              senderCandidate.organizationId === candidate.organizationId,
+          ) === true);
+    if (
+      !candidate ||
+      !senderMatchesCandidate
+    ) continue;
+    if (await deps.alreadyRecorded(ref.id, candidate.organizationId)) continue;
+
     const body = stripQuotedReply(raw);
     if (!body) continue;
 
     const recorded = await deps.recordInbound({
-      caseId,
+        caseId: candidate.caseId,
+        organizationId: candidate.organizationId,
       channel: "email",
       fromAddress,
       subject: header(msg, "Subject") || null,
@@ -484,7 +559,7 @@ export async function processMessageRefs(
     });
     if (recorded) {
       console.log(
-        `[onboarding inbound-email] new reply from ${fromAddress} routed to case ${caseId} (gmail ${msg.id})`,
+          `[onboarding inbound-email] new reply from ${fromAddress} routed to case ${candidate.caseId} (gmail ${msg.id})`,
       );
     }
   }
@@ -492,18 +567,47 @@ export async function processMessageRefs(
 }
 
 async function pollOnce(): Promise<void> {
-  // Active cases only; map each email to its most recent active case.
+  // Active cases only; shared identities are intentionally ambiguous.
   const cases = await db
-    .select({ id: onbCases.id, workerEmail: onbCases.workerEmail })
+    .select({ id: onbCases.id, organizationId: onbCases.organizationId, workerEmail: onbCases.workerEmail })
     .from(onbCases)
-    .where(sql`${onbCases.lifecycleStage} not in ('complete')`)
-    .orderBy(desc(onbCases.id));
+    .where(sql`${onbCases.lifecycleStage} not in ('complete')`);
   if (cases.length === 0) return;
 
-  const caseByEmail = new Map<string, number>();
+  const caseByEmail = new Map<string, EmailCaseCandidate[]>();
   for (const c of cases) {
     const email = c.workerEmail.trim().toLowerCase();
-    if (!caseByEmail.has(email)) caseByEmail.set(email, c.id);
+    const matches = caseByEmail.get(email) ?? [];
+    matches.push({ caseId: c.id, organizationId: c.organizationId, workerEmail: email });
+    caseByEmail.set(email, matches);
+  }
+
+  const outbound = await db
+    .select({
+      body: onbCommunications.body,
+      caseId: onbCases.id,
+      organizationId: onbCases.organizationId,
+      workerEmail: onbCases.workerEmail,
+    })
+    .from(onbCommunications)
+    .innerJoin(onbCases, eq(onbCommunications.caseId, onbCases.id))
+    .where(and(
+      eq(onbCommunications.channel, "email"),
+      eq(onbCommunications.direction, "outbound"),
+      eq(onbCommunications.audience, "candidate"),
+      sql`${onbCases.lifecycleStage} not in ('complete')`,
+    ));
+  const caseByReplyReference: ReplyReferenceMatches = new Map();
+  for (const row of outbound) {
+    for (const reference of candidateReplyReferences(row.body)) {
+      const matches = caseByReplyReference.get(reference) ?? [];
+      matches.push({
+        caseId: row.caseId,
+        organizationId: row.organizationId,
+        workerEmail: row.workerEmail.trim().toLowerCase(),
+      });
+      caseByReplyReference.set(reference, matches);
+    }
   }
 
   const fromClause = Array.from(caseByEmail.keys())
@@ -523,7 +627,7 @@ async function pollOnce(): Promise<void> {
   }
   const list = (await listResp.json()) as { messages?: Array<{ id: string }> };
   const refs = list.messages ?? [];
-  const detailFailures = await processMessageRefs(refs, caseByEmail, {
+  const detailFailures = await processMessageRefs(refs, caseByEmail, caseByReplyReference, {
     fetchDetail: (id) =>
       connectors.proxy(
         "google-mail",
@@ -544,6 +648,61 @@ async function pollOnce(): Promise<void> {
 
 let startupRecoveryChecked = false;
 
+/** Tenants whose active cases depend on this shared inbox monitor. */
+async function monitoredOrganizations(): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ organizationId: onbCases.organizationId })
+    .from(onbCases)
+    .where(sql`${onbCases.lifecycleStage} not in ('complete')`);
+  return rows.map((row) => row.organizationId);
+}
+
+/** Tenants with a durable down transition that has not yet recovered. */
+async function organizationsAwaitingRecovery(): Promise<string[]> {
+  const rows = await db
+    .select({
+      organizationId: onbEvents.organizationId,
+      title: onbEvents.title,
+    })
+    .from(onbEvents)
+    .where(and(
+      isNull(onbEvents.caseId),
+      eq(onbEvents.engine, "system"),
+      inArray(onbEvents.title, [MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE]),
+    ))
+    .orderBy(desc(onbEvents.createdAt), desc(onbEvents.id));
+  const latest = new Map<string, string>();
+  for (const row of rows) {
+    if (!latest.has(row.organizationId)) {
+      latest.set(row.organizationId, row.title);
+    }
+  }
+  return [...latest.entries()]
+    .filter(([, title]) => title === MONITOR_DOWN_TITLE)
+    .map(([organizationId]) => organizationId);
+}
+
+async function writeMonitorTransitionForOrganizations(
+  organizations: string[],
+  kind: "down" | "recovered",
+  detail: string,
+): Promise<void> {
+  const title = kind === "down" ? MONITOR_DOWN_TITLE : MONITOR_RECOVERED_TITLE;
+  for (const organizationId of organizations) {
+    const write = planMonitorEventWrite(
+      kind === "down" ? "alert" : "recover",
+      await latestMonitorEventTitle(organizationId),
+    );
+    if (write !== kind) continue;
+    await persistThenNotify(kind, title, detail, {
+      persistEvent: (eventTitle, eventDetail) =>
+        logMonitorEvent(organizationId, eventTitle, eventDetail),
+      sendAlert: (alertKind, alertDetail) =>
+        sendMonitorAlertEmail(organizationId, alertKind, alertDetail),
+    });
+  }
+}
+
 /**
  * Run one inbox poll on demand, with the full outage-tracker accounting
  * (alert / recovery emails included). Never throws; when a poll is already
@@ -563,18 +722,17 @@ export const runInboundEmailTick = makeSharedTick(async () => {
     // recovery event even though this process never alerted.
     if (decision === "recover" || !startupRecoveryChecked) {
       startupRecoveryChecked = true;
-      const write = planMonitorEventWrite(
-        decision === "recover" ? "recover" : "startup-success",
-        await latestMonitorEventTitle(),
+      const detail =
+        "The Gmail reply monitor is polling successfully again. Replies from hires are being picked up.";
+      const organizations = new Set([
+        ...(await monitoredOrganizations()),
+        ...(await organizationsAwaitingRecovery()),
+      ]);
+      await writeMonitorTransitionForOrganizations(
+        [...organizations],
+        "recovered",
+        detail,
       );
-      if (write === "recovered") {
-        const detail =
-          "The Gmail reply monitor is polling successfully again. Replies from hires are being picked up.";
-        await persistThenNotify("recovered", MONITOR_RECOVERED_TITLE, detail, {
-          persistEvent: logMonitorEvent,
-          sendAlert: sendMonitorAlertEmail,
-        });
-      }
     }
   } catch (err) {
     monitorStatus.lastError = String(err).slice(0, 300);
@@ -585,18 +743,12 @@ export const runInboundEmailTick = makeSharedTick(async () => {
     );
     const { decision, consecutiveFailures } = outageTracker.recordFailure();
     if (decision === "alert") {
-      // Durable dedup: a restart mid-outage must not write a second alert.
-      const write = planMonitorEventWrite(
-        "alert",
-        await latestMonitorEventTitle(),
+      const detail = `The Gmail reply monitor has failed ${consecutiveFailures} polls in a row. Replies from hires are NOT being picked up. Latest error: ${monitorStatus.lastError}`;
+      await writeMonitorTransitionForOrganizations(
+        await monitoredOrganizations(),
+        "down",
+        detail,
       );
-      if (write === "down") {
-        const detail = `The Gmail reply monitor has failed ${consecutiveFailures} polls in a row. Replies from hires are NOT being picked up. Latest error: ${monitorStatus.lastError}`;
-        await persistThenNotify("down", MONITOR_DOWN_TITLE, detail, {
-          persistEvent: logMonitorEvent,
-          sendAlert: sendMonitorAlertEmail,
-        });
-      }
     }
   }
 });

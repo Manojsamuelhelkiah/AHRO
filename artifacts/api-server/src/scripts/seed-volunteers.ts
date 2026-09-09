@@ -9,6 +9,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
 import {
   saveVolunteers,
   seedVolunteerCases,
@@ -28,7 +29,7 @@ async function main() {
     process.exit(0);
   }
 
-  const saved = await saveVolunteers(rows);
+  const saved = await saveVolunteers(DEMO_ORGANIZATION_ID, rows);
   const personas = new Map(listPersonas().map((p) => [p.key, p]));
   for (const v of saved) {
     const problem = volunteerProblems(v);

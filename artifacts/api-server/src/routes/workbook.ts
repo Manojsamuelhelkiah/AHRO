@@ -10,17 +10,24 @@ import {
   loadAndValidateCurrentRateSet,
   type RateSetReference,
 } from "../lib/pricing-rate-sets";
+import {
+  getOrganizationId,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
 // 10 MB is generous for a filled-in workbook.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-async function sendWorkbook(inputs: ScenarioInputs, res: Parameters<Parameters<IRouter["post"]>[1]>[1]) {
-  await ensureBaselineRateSet();
+async function sendWorkbook(
+  inputs: ScenarioInputs,
+  organizationId: string,
+  res: Parameters<Parameters<IRouter["post"]>[1]>[1],
+) {
+  await ensureBaselineRateSet(organizationId);
   const [customIntents, currentRateSet] = await Promise.all([
-    loadActiveCustomIntents(),
-    loadAndValidateCurrentRateSet(),
+    loadActiveCustomIntents(organizationId),
+    loadAndValidateCurrentRateSet(organizationId),
   ]);
   validateScenarioInputs(inputs, new Set(customIntents.map((i) => i.key)));
   const rateSetReference: RateSetReference = {
@@ -56,6 +63,7 @@ router.get("/workbook/export", async (req, res, next) => {
           sector: "technology", companyType: "multi-country", isolationTier: "siloed",
           hrHourlyCostUsd: 45, hitlHourlyCostUsd: 35, countries: 3,
         } as ScenarioInputs,
+        getOrganizationId(req),
         res,
       );
       return;
@@ -67,7 +75,7 @@ router.get("/workbook/export", async (req, res, next) => {
       throw new InputValidationError("q parameter is not valid base64url-encoded JSON");
     }
     const body = ExportScenarioWorkbookBody.parse(parsedBody);
-    await sendWorkbook(body.inputs as ScenarioInputs, res);
+    await sendWorkbook(body.inputs as ScenarioInputs, getOrganizationId(req), res);
   } catch (err) {
     next(err);
   }
@@ -76,7 +84,7 @@ router.get("/workbook/export", async (req, res, next) => {
 router.post("/workbook/export", async (req, res, next) => {
   try {
     const body = ExportScenarioWorkbookBody.parse(req.body);
-    await sendWorkbook(body.inputs as ScenarioInputs, res);
+    await sendWorkbook(body.inputs as ScenarioInputs, getOrganizationId(req), res);
   } catch (err) {
     next(err);
   }
@@ -86,7 +94,7 @@ router.post("/workbook/import", upload.single("workbookFile"), async (req, res, 
   try {
     if (!req.file) throw new InputValidationError("No workbook file uploaded (field name must be workbookFile)");
     const inputs = await parseScenarioWorkbook(req.file.buffer);
-    const customIntents = await loadActiveCustomIntents();
+    const customIntents = await loadActiveCustomIntents(getOrganizationId(req));
     validateScenarioInputs(inputs, new Set(customIntents.map((i) => i.key)));
     res.json(ImportScenarioWorkbookResponse.parse({ inputs }));
   } catch (err) {

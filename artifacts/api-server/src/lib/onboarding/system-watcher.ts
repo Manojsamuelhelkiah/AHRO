@@ -151,12 +151,14 @@ export function getSystemWatcherHealth(): SystemConnectorHealth[] {
 
 async function logEvent(
   caseId: number,
+  organizationId: string,
   title: string,
   detail: string,
   ruleRef: string,
 ) {
   await db.insert(onbEvents).values({
     caseId,
+    organizationId,
     agent: WATCHER_AGENT,
     engine: "system",
     hitlPattern: "notify-only",
@@ -210,6 +212,7 @@ export async function completeCheck(
       .where(
         and(
           eq(onbSystemChecks.id, check.id),
+          eq(onbSystemChecks.organizationId, check.organizationId),
           sql`${onbSystemChecks.status} in ('pending', 'overdue')`,
           eq(onbSystemChecks.mode, expectedMode[source]),
         ),
@@ -220,7 +223,7 @@ export async function completeCheck(
     const [c] = await tx
       .select()
       .from(onbCases)
-      .where(eq(onbCases.id, check.caseId))
+      .where(and(eq(onbCases.id, check.caseId), eq(onbCases.organizationId, check.organizationId)))
       .for("update");
     let promoted = false;
     if (c) {
@@ -238,13 +241,14 @@ export async function completeCheck(
             updatedAt: new Date(),
             ...(promoted ? { lifecycleStage: "day1-review" } : {}),
           })
-          .where(eq(onbCases.id, check.caseId));
+          .where(and(eq(onbCases.id, check.caseId), eq(onbCases.organizationId, check.organizationId)));
       }
     }
 
     const events = [
       {
         caseId: check.caseId,
+        organizationId: check.organizationId,
         agent: WATCHER_AGENT,
         engine: "system" as const,
         hitlPattern: "notify-only",
@@ -256,6 +260,7 @@ export async function completeCheck(
         ? [
             {
               caseId: check.caseId,
+              organizationId: check.organizationId,
               agent: WATCHER_AGENT,
               engine: "system" as const,
               hitlPattern: "notify-only",
@@ -285,6 +290,7 @@ export async function escalateCheck(
     .where(
       and(
         eq(onbSystemChecks.id, check.id),
+        eq(onbSystemChecks.organizationId, check.organizationId),
         eq(onbSystemChecks.status, "pending"),
         ...(expectedMode ? [eq(onbSystemChecks.mode, expectedMode)] : []),
       ),
@@ -294,6 +300,7 @@ export async function escalateCheck(
 
   await logEvent(
     check.caseId,
+    check.organizationId,
     `${def.label} is late — SLA breached`,
     `${def.label} (${check.externalRef}) has not reported completion within its ${def.slaSeconds}s SLA. ${reason} Owner notified; the checklist item stays open until the source system confirms.`,
     def.slaRuleRef,
@@ -324,7 +331,7 @@ export async function maybeAutoEscalationCall(
   def: SystemDef,
   reason: string,
 ): Promise<void> {
-  if (!(await autoEscalationCallsEnabled())) return;
+  if (!(await autoEscalationCallsEnabled(check.organizationId))) return;
 
   // Has the hire replied on any messaging channel since we started
   // tracking this check? If so they're responsive — no surprise call.
@@ -334,6 +341,7 @@ export async function maybeAutoEscalationCall(
     .where(
       and(
         eq(onbCommunications.caseId, check.caseId),
+        eq(onbCommunications.organizationId, check.organizationId),
         eq(onbCommunications.direction, "inbound"),
         ne(onbCommunications.channel, "voice"),
         gt(onbCommunications.createdAt, check.requestedAt),
@@ -345,6 +353,7 @@ export async function maybeAutoEscalationCall(
   // Audit trail: record why the watcher is placing this call before dialing.
   await logEvent(
     check.caseId,
+    check.organizationId,
     "Automatic escalation call triggered",
     `${def.label} (${check.externalRef}) breached its SLA and the hire has not replied to any message since tracking began — auto escalation calls are enabled in Settings, so the System Watcher is placing the SLA escalation voice call. ${reason}`,
     def.slaRuleRef,
@@ -364,6 +373,7 @@ export async function maybeAutoEscalationCall(
   if (result.status === "failed") {
     await logEvent(
       check.caseId,
+      check.organizationId,
       "Automatic escalation call not placed",
       `The System Watcher tried to place the SLA escalation call but it was not placed: ${result.note}`,
       def.slaRuleRef,
@@ -391,7 +401,7 @@ export async function trackCaseSystems(
   const defs = applicableSystems(c).filter(
     (def) => !onlySystems || onlySystems.includes(def.key),
   );
-  const emailTracked = await emailTrackedConnectors();
+  const emailTracked = await emailTrackedConnectors(c.organizationId);
   for (const def of defs) {
     const useEmail = emailTracked.has(def.connectorKey);
     const mode = useEmail ? "email" : def.mode;
@@ -399,6 +409,7 @@ export async function trackCaseSystems(
       .insert(onbSystemChecks)
       .values({
         caseId,
+        organizationId: c.organizationId,
         system: def.key,
         mode,
         externalRef: makeExternalRef(def, caseId),
@@ -407,12 +418,17 @@ export async function trackCaseSystems(
         dueAt: new Date(now.getTime() + def.slaSeconds * 1000),
       })
       .onConflictDoNothing({
-        target: [onbSystemChecks.caseId, onbSystemChecks.system],
+        target: [
+          onbSystemChecks.organizationId,
+          onbSystemChecks.caseId,
+          onbSystemChecks.system,
+        ],
       })
       .returning({ id: onbSystemChecks.id });
     if (rows.length > 0) {
       await logEvent(
         caseId,
+        c.organizationId,
         `Watching ${def.label.toLowerCase()}`,
         `System Watcher is tracking ${def.label} (${makeExternalRef(def, caseId)}) via ${
           mode === "email"
@@ -454,12 +470,20 @@ export async function handleSystemWebhook(opts: {
   }
   const t = telemetry[def.key];
   try {
+    // The signed webhook contains no tenant identity; derive it from the
+    // owning case before touching a child check.
+    const [owner] = await db
+      .select({ organizationId: onbCases.organizationId })
+      .from(onbCases)
+      .where(eq(onbCases.id, opts.caseId));
+    if (!owner) return { ok: false, message: "Unknown case" };
     const [check] = await db
       .select()
       .from(onbSystemChecks)
       .where(
         and(
           eq(onbSystemChecks.caseId, opts.caseId),
+          eq(onbSystemChecks.organizationId, owner.organizationId),
           eq(onbSystemChecks.system, def.key),
         ),
       );
@@ -493,7 +517,7 @@ function schedulePush(check: typeof onbSystemChecks.$inferSelect): void {
     scheduledPushes.delete(check.id);
     void (async () => {
       // Vendor only pushes while its connector is connected.
-      const connected = await connectorConnected(def.connectorKey);
+      const connected = await connectorConnected(def.connectorKey, check.organizationId);
       if (!connected) return; // re-scheduled by the tick once reconnected
       await handleSystemWebhook({
         system: def.key,
@@ -510,20 +534,27 @@ function schedulePush(check: typeof onbSystemChecks.$inferSelect): void {
 }
 
 /** Connector keys currently switched to email (watch-mailbox) tracking. */
-export async function emailTrackedConnectors(): Promise<Set<string>> {
+export async function emailTrackedConnectors(organizationId: string): Promise<Set<string>> {
   const rows = await db
     .select({ key: onbConnectors.key })
     .from(onbConnectors)
-    .where(eq(onbConnectors.trackingMode, "email"));
+    .where(and(eq(onbConnectors.trackingMode, "email"), eq(onbConnectors.organizationId, organizationId)));
   return new Set(rows.map((r) => r.key));
 }
 
-async function connectorConnected(connectorKey: string): Promise<boolean> {
+async function connectorConnected(connectorKey: string, organizationId: string): Promise<boolean> {
   const [row] = await db
     .select({ status: onbConnectors.status })
     .from(onbConnectors)
-    .where(eq(onbConnectors.key, connectorKey));
+    .where(and(eq(onbConnectors.key, connectorKey), eq(onbConnectors.organizationId, organizationId)));
   return row?.status === "connected";
+}
+
+export function disconnectedCheckIsOverdue(
+  check: Pick<typeof onbSystemChecks.$inferSelect, "dueAt">,
+  now: number,
+): boolean {
+  return now > check.dueAt.getTime();
 }
 
 /* ------------------------------------------------------------------ */
@@ -546,7 +577,7 @@ export async function recoverUntrackedCaseSystems(
     .where(
       and(
         sql`${onbCases.lifecycleStage} in ('preboarding', 'day1-review')
-            and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id})`,
+            and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id} and sc.organization_id = ${onbCases.organizationId})`,
         onlyCaseId === undefined ? undefined : eq(onbCases.id, onlyCaseId),
       ),
     );
@@ -562,7 +593,12 @@ export async function recoverUntrackedCaseSystems(
 
 async function tickOnce(): Promise<void> {
   const now = Date.now();
-  await ensureConnectorsSeeded();
+  // Connector configuration is tenant-owned. Seed only organizations that
+  // own active work, never a global/default connector set.
+  const organizations = await db
+    .selectDistinct({ organizationId: onbCases.organizationId })
+    .from(onbCases);
+  await Promise.all(organizations.map(({ organizationId }) => ensureConnectorsSeeded(organizationId)));
   await sweepExpiredNonIdempotentEffects();
 
   // Self-heal: preboarding cases that somehow have no checks yet.
@@ -583,17 +619,20 @@ async function tickOnce(): Promise<void> {
       const mine = checks.filter(
         (c) => c.system === def.key && c.mode === "poll",
       );
-      const connected = await connectorConnected(def.connectorKey);
-      if (!connected) {
-        throw new Error(
-          `${def.label} connector ("${def.connectorKey}") is disconnected — status API unreachable`,
-        );
-      }
       for (const check of mine) {
+        const connected = await connectorConnected(def.connectorKey, check.organizationId);
+        if (!connected) {
+          // Disconnection explains a missed check, but is not itself an SLA
+          // breach. Preserve the check's deadline before escalating.
+          if (disconnectedCheckIsOverdue(check, now)) {
+            await escalateCheck(check, `${def.label} connector ("${def.connectorKey}") is disconnected — status API unreachable`, "poll");
+          }
+          continue;
+        }
         await db
           .update(onbSystemChecks)
           .set({ lastCheckedAt: new Date() })
-          .where(eq(onbSystemChecks.id, check.id));
+          .where(and(eq(onbSystemChecks.id, check.id), eq(onbSystemChecks.organizationId, check.organizationId)));
         const status = simulateVendorStatus(
           def,
           check.requestedAt,
@@ -627,7 +666,7 @@ async function tickOnce(): Promise<void> {
       );
       continue;
     }
-    const connected = await connectorConnected(def.connectorKey);
+    const connected = await connectorConnected(def.connectorKey, check.organizationId);
     await escalateCheck(
       check,
       connected

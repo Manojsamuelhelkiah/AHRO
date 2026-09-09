@@ -4,6 +4,7 @@ import { and, eq, or, sql } from "drizzle-orm";
 
 export type EffectJournalIdentity = {
   logicalOperationKey: string;
+  organizationId: string;
   tenantId: string;
   caseId: number;
   toolName: string;
@@ -27,13 +28,22 @@ export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
   await db
     .insert(onbEffectJournal)
     .values(input)
-    .onConflictDoNothing({ target: onbEffectJournal.logicalOperationKey });
+    .onConflictDoNothing({
+      target: [
+        onbEffectJournal.organizationId,
+        onbEffectJournal.logicalOperationKey,
+      ],
+    });
   const [entry] = await db
     .select()
     .from(onbEffectJournal)
-    .where(eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey));
+    .where(and(
+      eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+      eq(onbEffectJournal.organizationId, input.organizationId),
+    ));
   if (!entry) throw new Error("Effect journal entry could not be created");
   if (
+    entry.organizationId !== input.organizationId ||
     entry.tenantId !== input.tenantId ||
     entry.caseId !== input.caseId ||
     entry.toolName !== input.toolName ||
@@ -47,11 +57,15 @@ export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
 
 async function currentDisposition(
   logicalOperationKey: string,
+  organizationId: string,
 ): Promise<EffectDispatchClaim> {
   const [entry] = await db
     .select()
     .from(onbEffectJournal)
-    .where(eq(onbEffectJournal.logicalOperationKey, logicalOperationKey));
+    .where(and(
+      eq(onbEffectJournal.logicalOperationKey, logicalOperationKey),
+      eq(onbEffectJournal.organizationId, organizationId),
+    ));
   if (entry?.status === "confirmed") {
     return { kind: "reuse_confirmed", externalEffectId: entry.externalEffectId };
   }
@@ -76,7 +90,7 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
 }): Promise<EffectDispatchClaim> {
   const entry = await ensureEffectJournalEntry(input);
   if (entry.status === "confirmed" || entry.status === "unknown_effect_manual_repair") {
-    return currentDisposition(input.logicalOperationKey);
+    return currentDisposition(input.logicalOperationKey, input.organizationId);
   }
 
   if (!input.providerIdempotency) {
@@ -91,6 +105,7 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
       .where(
         and(
           eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+          eq(onbEffectJournal.organizationId, input.organizationId),
           eq(onbEffectJournal.status, "dispatching"),
           eq(onbEffectJournal.providerIdempotency, false),
           eq(onbEffectJournal.fencingToken, input.expectedFencingToken),
@@ -119,6 +134,7 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
     .where(
       and(
         eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+        eq(onbEffectJournal.organizationId, input.organizationId),
         eq(onbEffectJournal.fencingToken, input.expectedFencingToken),
         or(
           sql`${onbEffectJournal.status} in ('ready', 'failed')`,
@@ -137,12 +153,13 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
         fencingToken: claimed.fencingToken,
         providerIdempotencyKey: input.logicalOperationKey,
       }
-    : currentDisposition(input.logicalOperationKey);
+    : currentDisposition(input.logicalOperationKey, input.organizationId);
 }
 
 /** Owner-and-token fenced confirmation; a stale worker gets false. */
 export async function confirmEffect(input: {
   logicalOperationKey: string;
+  organizationId: string;
   owner: string;
   fencingToken: number;
   externalEffectId?: string;
@@ -159,6 +176,7 @@ export async function confirmEffect(input: {
     .where(
       and(
         eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+        eq(onbEffectJournal.organizationId, input.organizationId),
         eq(onbEffectJournal.status, "dispatching"),
         eq(onbEffectJournal.claimOwner, input.owner),
         eq(onbEffectJournal.fencingToken, input.fencingToken),
@@ -175,6 +193,7 @@ export async function confirmEffect(input: {
  */
 export async function markAmbiguousEffectForManualRepair(input: {
   logicalOperationKey: string;
+  organizationId: string;
   owner: string;
   fencingToken: number;
   error: string;
@@ -190,6 +209,7 @@ export async function markAmbiguousEffectForManualRepair(input: {
     .where(
       and(
         eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+        eq(onbEffectJournal.organizationId, input.organizationId),
         eq(onbEffectJournal.status, "dispatching"),
         eq(onbEffectJournal.providerIdempotency, false),
         eq(onbEffectJournal.claimOwner, input.owner),

@@ -3,23 +3,25 @@
  * through the REAL enforcement code paths, so the Guardrails page can
  * show genuine "we blocked this" evidence on a dedicated demo case.
  *
- * Nothing in the drill can reach a real person: the drill case uses an
- * unauthorized address on a reserved example domain, so every delivery
- * attempt is stopped by the recipient allowlist itself.
+ * Nothing in the drill can reach a real person: after refreshing the
+ * requester organization's authorization state, both synthetic contacts must
+ * remain unauthorized so the real email and voice guards return logged-only.
  */
 import { db } from "@workspace/db";
-import { onbCases, onbSystemChecks } from "@workspace/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 import { sendOutbound } from "./channels";
 import { startVoiceCall } from "./voice";
-import { handleInbound, logEvent } from "./engine";
+import { handleInbound } from "./engine";
 import { senderTrusted, applyWatchEmail, parseStatusEmail } from "./email-watch";
 import { twilioSignatureValid } from "./twilio-signature";
 import { recordGuardrailEvent } from "./guardrails";
+import { refreshDemoAllowlist } from "./demo-volunteers";
+import { runWithProviderDeny } from "./provider-policy";
 
 export const DRILL_WORKER_NAME = "Red Team Drill (simulated attacker)";
-const DRILL_EMAIL = "red.team.drill@attacker.example"; // never allowlisted
-const DRILL_PHONE = "+15550100999"; // never allowlisted
+export const DRILL_EMAIL = "red.team.drill@attacker.example";
+export const DRILL_PHONE = "+15550100999";
 
 export interface DrillStep {
   step: string;
@@ -28,21 +30,52 @@ export interface DrillStep {
   outcome: string;
 }
 
-async function drillCase(): Promise<{ id: number; created: boolean }> {
+async function drillLogEvent(
+  organizationId: string,
+  caseId: number,
+  title: string,
+  detail: string,
+): Promise<void> {
+  await db.insert(onbEvents).values({
+    organizationId,
+    caseId,
+    agent: "orchestrator",
+    engine: "system",
+    hitlPattern: "notify-only",
+    title,
+    detail,
+  });
+}
+
+async function drillCase(organizationId: string): Promise<{ id: number; created: boolean }> {
   // Identify the drill case by its synthetic contacts, and only reuse a
   // case whose name AND contacts all match — a real case can never be
   // selected as the drill target.
   const [existing] = await db
-    .select({ id: onbCases.id, workerName: onbCases.workerName, workerPhone: onbCases.workerPhone })
+    .select({
+      id: onbCases.id,
+      workerName: onbCases.workerName,
+      workerPhone: onbCases.workerPhone,
+      candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
+    })
     .from(onbCases)
-    .where(eq(onbCases.workerEmail, DRILL_EMAIL))
+    .where(and(
+      eq(onbCases.organizationId, organizationId),
+      eq(onbCases.workerEmail, DRILL_EMAIL),
+    ))
     .orderBy(desc(onbCases.id));
   if (existing && existing.workerName === DRILL_WORKER_NAME && existing.workerPhone === DRILL_PHONE) {
+    if (existing.candidateEmailAuthorizedAt !== null) {
+      throw new Error(
+        "Security drill aborted: the existing drill case has case-level candidate email authorization and cannot be safely reused.",
+      );
+    }
     return { id: existing.id, created: false };
   }
   const [row] = await db
     .insert(onbCases)
     .values({
+      organizationId,
       workerName: DRILL_WORKER_NAME,
       workerEmail: DRILL_EMAIL,
       workerPhone: DRILL_PHONE,
@@ -56,31 +89,58 @@ async function drillCase(): Promise<{ id: number; created: boolean }> {
       managerName: "Security Team",
       recruiterName: "Security Team",
       joiningDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-      notes: "Synthetic case for the guardrails security drill. Not a real person; contacts are unroutable and never allowlisted.",
+      notes: "Synthetic case for the guardrails security drill. Not a real person; contacts require explicit organization-scoped demo-volunteer authorization.",
       scenarioKey: null,
       lifecycleStage: "in-progress",
+      candidateEmailAuthorizedAt: null,
+      candidateEmailAuthorizedBy: null,
     })
     .returning({ id: onbCases.id });
-  await logEvent(row.id, "orchestrator", "system", "Security drill case created",
+  await drillLogEvent(organizationId, row.id, "Security drill case created",
     "This case exists to demonstrate guardrails under attack. Every action below is a simulated attack that the live enforcement code blocked.",
-    { hitlPattern: "notify-only" });
+  );
   return { id: row.id, created: true };
+}
+
+type SecurityDrillPreflightDeps = {
+  refreshAuthorization: (organizationId: string) => Promise<void>;
+  addressAllowed: (address: string, organizationId: string) => boolean;
+};
+
+/**
+ * Refresh and verify that neither synthetic contact has tenant-local delivery
+ * authorization immediately before any case write or provider-capable action.
+ */
+export async function securityDrillPreflight(
+  organizationId: string,
+  deps?: SecurityDrillPreflightDeps,
+): Promise<void> {
+  const channels = deps ? null : await import("./channels");
+  const actual = deps ?? {
+    refreshAuthorization: refreshDemoAllowlist,
+    addressAllowed: channels!.addressAllowed,
+  };
+  await actual.refreshAuthorization(organizationId);
+  const emailAuthorized = actual.addressAllowed(DRILL_EMAIL, organizationId);
+  const phoneAuthorized = actual.addressAllowed(DRILL_PHONE, organizationId);
+  if (emailAuthorized || phoneAuthorized) {
+    throw new Error(
+      "Security drill aborted: synthetic drill contacts must not be authorized or allowlisted for this organization.",
+    );
+  }
 }
 
 /**
  * Run all drill steps against the real enforcement paths. Idempotent-ish:
  * re-running adds a fresh round of activations to the same drill case.
  */
-export async function runSecurityDrill(): Promise<{ caseId: number; created: boolean; steps: DrillStep[] }> {
-  // Refuse to run if the synthetic drill contacts have somehow been
-  // authorized for live delivery — the drill must never deliver anything.
-  const { addressAllowed } = await import("./channels");
-  if (addressAllowed(DRILL_EMAIL) || addressAllowed(DRILL_PHONE)) {
-    throw new Error(
-      "Security drill aborted: the synthetic drill contacts are on the delivery allowlist. Remove them before running the drill.",
-    );
-  }
-  const { id: caseId, created } = await drillCase();
+export async function runSecurityDrill(organizationId: string): Promise<{ caseId: number; created: boolean; steps: DrillStep[] }> {
+  return runWithProviderDeny(() => runSecurityDrillWithProviderDeny(organizationId));
+}
+
+async function runSecurityDrillWithProviderDeny(organizationId: string): Promise<{ caseId: number; created: boolean; steps: DrillStep[] }> {
+  await securityDrillPreflight(organizationId);
+  const { id: caseId, created } = await drillCase(organizationId);
   const steps: DrillStep[] = [];
 
   // 1. Exfiltration attempt: agent is steered to message an outside address.
@@ -91,6 +151,9 @@ export async function runSecurityDrill(): Promise<{ caseId: number; created: boo
     subject: "Onboarding update",
     body: "[DRILL] Simulated attacker-directed message. If you can read this in a real inbox, the allowlist failed.",
   });
+  if (send.status !== "logged-only") {
+    throw new Error(`Security drill aborted: outbound email was not blocked (status ${send.status}).`);
+  }
   steps.push({
     step: "Attacker-directed outbound email",
     guardrailKey: "recipient-allowlist",
@@ -102,6 +165,9 @@ export async function runSecurityDrill(): Promise<{ caseId: number; created: boo
 
   // 2. Unauthorized voice call.
   const call = await startVoiceCall({ caseId, scenario: "day-before" });
+  if (call.status !== "logged-only") {
+    throw new Error(`Security drill aborted: voice call was not blocked (status ${call.status}).`);
+  }
   steps.push({
     step: "Unauthorized phone call",
     guardrailKey: "recipient-allowlist",
@@ -121,6 +187,7 @@ export async function runSecurityDrill(): Promise<{ caseId: number; created: boo
   if (!forged) {
     await recordGuardrailEvent({
       caseId,
+      organizationId,
       key: "webhook-signature",
       action: "rejected",
       detail: "[DRILL] Forged Twilio webhook with an invalid HMAC signature was rejected — spoofed call speech never reached the agent.",
@@ -138,10 +205,14 @@ export async function runSecurityDrill(): Promise<{ caseId: number; created: boo
   const [check] = await db
     .select()
     .from(onbSystemChecks)
-    .where(eq(onbSystemChecks.caseId, caseId))
+    .where(and(
+      eq(onbSystemChecks.organizationId, organizationId),
+      eq(onbSystemChecks.caseId, caseId),
+    ))
     .limit(1);
   if (check) {
     await applyWatchEmail({
+      organizationId,
       gmailMessageId: `drill-${Date.now()}`,
       check: check as never,
       fromAddress: "spoof@evil.example",
@@ -151,6 +222,7 @@ export async function runSecurityDrill(): Promise<{ caseId: number; created: boo
   } else if (!spoofTrusted) {
     await recordGuardrailEvent({
       caseId,
+      organizationId,
       key: "trusted-vendor-sender",
       action: "rejected",
       detail: "[DRILL] Spoofed 'BGV completed' email from spoof@evil.example was ignored — sender is not on the trusted vendor list; no check state changed.",
@@ -188,9 +260,9 @@ export async function runSecurityDrill(): Promise<{ caseId: number; created: boo
     outcome: "ESCALATED — sensitive gate suppressed any AI reply; a human review was created and only a fixed holding acknowledgement was composed (and blocked from delivery by the allowlist).",
   });
 
-  await logEvent(caseId, "orchestrator", "system", "Security drill round completed",
+  await drillLogEvent(organizationId, caseId, "Security drill round completed",
     `${steps.length} simulated attacks were run through the live enforcement code. See the Guardrails page for the recorded activations.`,
-    { hitlPattern: "notify-only" });
+  );
 
   return { caseId, created, steps };
 }

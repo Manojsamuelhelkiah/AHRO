@@ -337,6 +337,16 @@ export async function customFetch<T = unknown>(
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
 
+  // Clerk identifies the person; this application-level selector identifies
+  // which of their organization memberships owns the request.
+  if (
+    typeof window !== "undefined" &&
+    !headers.has("x-organization-id")
+  ) {
+    const organizationId = window.localStorage.getItem("activeOrganizationId");
+    if (organizationId) headers.set("x-organization-id", organizationId);
+  }
+
   if (
     typeof init.body === "string" &&
     !headers.has("content-type") &&

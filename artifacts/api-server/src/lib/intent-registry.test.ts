@@ -13,6 +13,7 @@ import type { CustomIntentRow } from "@workspace/db";
 function customRow(overrides: Partial<CustomIntentRow> = {}): CustomIntentRow {
   return {
     id: 1,
+    organizationId: "demo",
     key: "client-outcome",
     name: "Client Outcome",
     domain: "hire",

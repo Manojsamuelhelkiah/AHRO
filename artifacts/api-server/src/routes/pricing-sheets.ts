@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, pricingSheetsTable } from "@workspace/db";
 import {
   CreatePricingSheetBody,
@@ -16,6 +16,11 @@ import {
   type PricingInputs,
 } from "@workspace/pricing-model";
 import { InputValidationError } from "../lib/validate-inputs";
+import {
+  getOrganizationId,
+  organizationValues,
+  organizationWhere,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 const INTEGER_INPUT_KEYS = [
@@ -60,11 +65,12 @@ function validateAndNormalizeInputs(inputs: PricingInputs): PricingInputs {
   return normalizePricingInputs(inputs);
 }
 
-router.get("/pricing-sheets", async (_req, res, next): Promise<void> => {
+router.get("/pricing-sheets", async (req, res, next): Promise<void> => {
   try {
     const rows = await db
       .select()
       .from(pricingSheetsTable)
+      .where(organizationWhere(pricingSheetsTable, getOrganizationId(req)))
       .orderBy(pricingSheetsTable.updatedAt, pricingSheetsTable.id);
     res.json(ListPricingSheetsResponse.parse(rows.map(serialize)));
   } catch (err) {
@@ -75,6 +81,7 @@ router.get("/pricing-sheets", async (_req, res, next): Promise<void> => {
 router.post("/pricing-sheets", async (req, res, next): Promise<void> => {
   try {
     const body = CreatePricingSheetBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
     const inputs = validateAndNormalizeInputs(body.inputs);
     const [row] = await db
       .insert(pricingSheetsTable)
@@ -82,6 +89,7 @@ router.post("/pricing-sheets", async (req, res, next): Promise<void> => {
         name: body.name,
         inputs,
         recommendation: calculateRecommendation(inputs),
+        ...organizationValues(organizationId),
       })
       .returning();
     res.status(201).json(CreatePricingSheetResponse.parse(serialize(row!)));
@@ -96,7 +104,10 @@ router.get("/pricing-sheets/:id", async (req, res, next): Promise<void> => {
     const [row] = await db
       .select()
       .from(pricingSheetsTable)
-      .where(eq(pricingSheetsTable.id, id));
+      .where(and(
+        eq(pricingSheetsTable.id, id),
+        organizationWhere(pricingSheetsTable, getOrganizationId(req)),
+      ));
     if (!row) {
       res.status(404).json({ error: "Pricing sheet not found" });
       return;
@@ -121,7 +132,10 @@ router.patch("/pricing-sheets/:id", async (req, res, next): Promise<void> => {
     const [row] = await db
       .update(pricingSheetsTable)
       .set(updates)
-      .where(eq(pricingSheetsTable.id, id))
+      .where(and(
+        eq(pricingSheetsTable.id, id),
+        organizationWhere(pricingSheetsTable, getOrganizationId(req)),
+      ))
       .returning();
     if (!row) {
       res.status(404).json({ error: "Pricing sheet not found" });
@@ -138,7 +152,10 @@ router.delete("/pricing-sheets/:id", async (req, res, next): Promise<void> => {
     const id = parseId(req.params["id"]);
     const [row] = await db
       .delete(pricingSheetsTable)
-      .where(eq(pricingSheetsTable.id, id))
+      .where(and(
+        eq(pricingSheetsTable.id, id),
+        organizationWhere(pricingSheetsTable, getOrganizationId(req)),
+      ))
       .returning();
     if (!row) {
       res.status(404).json({ error: "Pricing sheet not found" });

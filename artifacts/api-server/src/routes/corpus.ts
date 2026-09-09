@@ -14,11 +14,12 @@ import { systems } from "../data/systems";
 import { profiles } from "../data/profiles";
 import { assumptions } from "../data/assumptions";
 import { modelCatalog } from "../data/model-catalog";
-import { loadActiveCustomIntents, rowToIntent } from "./custom-intents";
+import { rowToIntent } from "./custom-intents";
 import { db, customIntentsTable, type CustomIntentRow } from "@workspace/db";
 import type { Intent } from "../data/types";
 import { loadCurrentRateSet } from "../lib/pricing-rate-sets";
 import { buildIntentRegistry } from "../lib/intent-registry";
+import { getOrganizationId, organizationWhere } from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
@@ -27,8 +28,7 @@ const router: IRouter = Router();
  * Each intent is augmented with an `isCustom` boolean so clients can badge them.
  */
 export async function loadIntentCorpus(
-  loadCustomRows: () => Promise<CustomIntentRow[]> = async () =>
-    db.select().from(customIntentsTable),
+  loadCustomRows: () => Promise<CustomIntentRow[]>,
 ) {
   const referenceWithFlag = intents.map((it) => ({ ...it, isCustom: false }));
   try {
@@ -58,10 +58,17 @@ export async function loadIntentCorpus(
 }
 
 export function createListIntentsHandler(
-  loadCorpus = loadIntentCorpus,
+  loadCorpus?: () => ReturnType<typeof loadIntentCorpus>,
 ): RequestHandler {
   return async (req, res) => {
-    const corpus = await loadCorpus();
+    const corpus = await (loadCorpus
+      ? loadCorpus()
+      : loadIntentCorpus(() =>
+          db
+            .select()
+            .from(customIntentsTable)
+            .where(organizationWhere(customIntentsTable, getOrganizationId(req))),
+        ));
     if (!corpus.customIntentsAvailable) {
       req.log?.warn(
         { err: corpus.customStorageError },
@@ -86,9 +93,9 @@ router.get("/profiles", (_req, res) => {
   res.json(ListDistributionProfilesResponse.parse(profiles));
 });
 
-router.get("/model-catalog", async (_req, res, next) => {
+router.get("/model-catalog", async (req, res, next) => {
   try {
-    const currentRateSet = await loadCurrentRateSet();
+    const currentRateSet = await loadCurrentRateSet(getOrganizationId(req));
     if (currentRateSet) {
       // Overlay snapshot rates onto the catalog entries so the GET reflects current prices.
       const overlaid = modelCatalog.map((m) => {
@@ -115,8 +122,7 @@ router.get("/assumptions", (_req, res) => {
 });
 
 export async function loadCorpusSummary(
-  loadCustomRows: () => Promise<CustomIntentRow[]> = async () =>
-    db.select().from(customIntentsTable),
+  loadCustomRows: () => Promise<CustomIntentRow[]>,
 ) {
   let activeCustom: Intent[] = [];
   let customIntentsAvailable = true;
@@ -158,10 +164,17 @@ export async function loadCorpusSummary(
 }
 
 export function createCorpusSummaryHandler(
-  loadSummary = loadCorpusSummary,
+  loadSummary?: () => ReturnType<typeof loadCorpusSummary>,
 ): RequestHandler {
   return async (req, res) => {
-    const summary = await loadSummary();
+    const summary = await (loadSummary
+      ? loadSummary()
+      : loadCorpusSummary(() =>
+          db
+            .select()
+            .from(customIntentsTable)
+            .where(organizationWhere(customIntentsTable, getOrganizationId(req))),
+        ));
     if (!summary.customIntentsAvailable) {
       req.log?.warn(
         { err: summary.customStorageError },
@@ -174,9 +187,12 @@ export function createCorpusSummaryHandler(
 
 router.get("/summary", createCorpusSummaryHandler());
 
-router.get("/summary/routing", async (_req, res, next) => {
+router.get("/summary/routing", async (req, res, next) => {
   try {
-    const customRows = await db.select().from(customIntentsTable);
+    const customRows = await db
+      .select()
+      .from(customIntentsTable)
+      .where(organizationWhere(customIntentsTable, getOrganizationId(req)));
     const registry = buildIntentRegistry(customRows);
     res.json({
       registryVersion: registry.version,

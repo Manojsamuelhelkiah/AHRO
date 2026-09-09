@@ -14,6 +14,11 @@ import { db as _db, customIntentsTable } from "@workspace/db";
 import { eq as _eq } from "drizzle-orm";
 import { InputValidationError } from "../lib/validate-inputs";
 import type { FlowOverrideValues } from "../lib/rollup";
+import {
+  getOrganizationId,
+  organizationValues,
+  organizationWhere,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
@@ -33,11 +38,12 @@ function serialize(row: typeof flowOverridesTable.$inferSelect) {
   };
 }
 
-router.get("/flow-overrides", async (_req, res, next) => {
+router.get("/flow-overrides", async (req, res, next) => {
   try {
     const rows = await db
       .select()
       .from(flowOverridesTable)
+      .where(organizationWhere(flowOverridesTable, getOrganizationId(req)))
       .orderBy(desc(flowOverridesTable.createdAt));
     res.json(ListFlowOverridesResponse.parse(rows.map(serialize)));
   } catch (e) {
@@ -48,6 +54,7 @@ router.get("/flow-overrides", async (_req, res, next) => {
 router.post("/flow-overrides", async (req, res, next) => {
   try {
     const body = CreateFlowOverrideBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
     // Accept both reference corpus intents and active custom intents.
     const isReferenceIntent = !!intentMap[body.intentKey];
     const isCustomIntent = !isReferenceIntent
@@ -59,6 +66,7 @@ router.post("/flow-overrides", async (req, res, next) => {
               and(
                 _eq(customIntentsTable.key, body.intentKey),
                 _eq(customIntentsTable.status, "active"),
+                organizationWhere(customIntentsTable, organizationId),
               ),
             )
             .limit(1)
@@ -100,7 +108,10 @@ router.post("/flow-overrides", async (req, res, next) => {
     const [latest] = await db
       .select({ v: max(flowOverridesTable.version) })
       .from(flowOverridesTable)
-      .where(eq(flowOverridesTable.intentKey, body.intentKey));
+      .where(and(
+        eq(flowOverridesTable.intentKey, body.intentKey),
+        organizationWhere(flowOverridesTable, organizationId),
+      ));
     const version = (latest?.v ?? 0) + 1;
 
     const [row] = await db
@@ -115,6 +126,7 @@ router.post("/flow-overrides", async (req, res, next) => {
         ...(body.toBeHumanMin !== undefined && { toBeHumanMin: body.toBeHumanMin }),
         ...(body.actGetActions !== undefined && { actGetActions: body.actGetActions }),
         ...(body.actPutActions !== undefined && { actPutActions: body.actPutActions }),
+        ...organizationValues(organizationId),
       })
       .returning();
     res.json(CreateFlowOverrideResponse.parse(serialize(row!)));
@@ -126,6 +138,7 @@ router.post("/flow-overrides", async (req, res, next) => {
 router.delete("/flow-overrides/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
+    const organizationId = getOrganizationId(req);
     if (!Number.isInteger(id) || id <= 0) {
       throw new InputValidationError("id must be a positive integer");
     }
@@ -135,7 +148,10 @@ router.delete("/flow-overrides/:id", async (req, res, next) => {
       const [target] = await tx
         .select()
         .from(flowOverridesTable)
-        .where(eq(flowOverridesTable.id, id))
+        .where(and(
+          eq(flowOverridesTable.id, id),
+          organizationWhere(flowOverridesTable, organizationId),
+        ))
         .for("update");
       if (!target) return { notFound: true as const };
       if (target.status !== "draft") {
@@ -148,12 +164,16 @@ router.delete("/flow-overrides/:id", async (req, res, next) => {
           and(
             eq(flowOverridesTable.intentKey, target.intentKey),
             eq(flowOverridesTable.status, "approved"),
+            organizationWhere(flowOverridesTable, organizationId),
           ),
         );
       const [row] = await tx
         .update(flowOverridesTable)
         .set({ status: "approved" })
-        .where(eq(flowOverridesTable.id, id))
+        .where(and(
+          eq(flowOverridesTable.id, id),
+          organizationWhere(flowOverridesTable, organizationId),
+        ))
         .returning();
       return { row: row! };
     });
@@ -176,13 +196,17 @@ router.delete("/flow-overrides/:id", async (req, res, next) => {
 router.post("/flow-overrides/:id/revoke", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
+    const organizationId = getOrganizationId(req);
     if (!Number.isInteger(id) || id <= 0) {
       throw new InputValidationError("id must be a positive integer");
     }
     const [target] = await db
       .select()
       .from(flowOverridesTable)
-      .where(eq(flowOverridesTable.id, id));
+      .where(and(
+        eq(flowOverridesTable.id, id),
+        organizationWhere(flowOverridesTable, organizationId),
+      ));
     if (!target) {
       res.status(404).json({ error: "Flow override not found" });
       return;
@@ -194,7 +218,10 @@ router.post("/flow-overrides/:id/revoke", async (req, res, next) => {
     const [row] = await db
       .update(flowOverridesTable)
       .set({ status: "superseded" })
-      .where(eq(flowOverridesTable.id, id))
+      .where(and(
+        eq(flowOverridesTable.id, id),
+        organizationWhere(flowOverridesTable, organizationId),
+      ))
       .returning();
     res.json(RevokeFlowOverrideResponse.parse(serialize(row!)));
   } catch (e) {
@@ -205,13 +232,17 @@ router.post("/flow-overrides/:id/revoke", async (req, res, next) => {
 router.delete("/flow-overrides/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
+    const organizationId = getOrganizationId(req);
     if (!Number.isInteger(id) || id <= 0) {
       throw new InputValidationError("id must be a positive integer");
     }
     const [target] = await db
       .select()
       .from(flowOverridesTable)
-      .where(eq(flowOverridesTable.id, id));
+      .where(and(
+        eq(flowOverridesTable.id, id),
+        organizationWhere(flowOverridesTable, organizationId),
+      ));
     if (!target) {
       res.status(404).json({ error: "Flow override not found" });
       return;
@@ -223,7 +254,10 @@ router.delete("/flow-overrides/:id", async (req, res, next) => {
       });
       return;
     }
-    await db.delete(flowOverridesTable).where(eq(flowOverridesTable.id, id));
+    await db.delete(flowOverridesTable).where(and(
+      eq(flowOverridesTable.id, id),
+      organizationWhere(flowOverridesTable, organizationId),
+    ));
     res.status(204).end();
   } catch (e) {
     next(e);
@@ -234,13 +268,18 @@ router.delete("/flow-overrides/:id", async (req, res, next) => {
  * Latest approved override per intent, in the shape the roll-up engine
  * consumes. Later approvals supersede earlier ones (by version).
  */
-export async function loadActiveFlowOverrides(): Promise<Record<string, FlowOverrideValues>> {
+export async function loadActiveFlowOverrides(
+  organizationId: string,
+): Promise<Record<string, FlowOverrideValues>> {
   let rows: (typeof flowOverridesTable.$inferSelect)[];
   try {
     rows = await db
       .select()
       .from(flowOverridesTable)
-      .where(eq(flowOverridesTable.status, "approved"))
+      .where(and(
+        eq(flowOverridesTable.status, "approved"),
+        organizationWhere(flowOverridesTable, organizationId),
+      ))
       .orderBy(flowOverridesTable.intentKey, flowOverridesTable.version);
   } catch {
     // Table may not exist in this environment (schema not yet migrated)

@@ -1,4 +1,5 @@
-import { pgTable, serial, text, integer, real, timestamp } from "drizzle-orm/pg-core";
+import { foreignKey, pgTable, primaryKey, serial, text, integer, real, timestamp, unique } from "drizzle-orm/pg-core";
+import { organizationsTable } from "./organizations";
 
 /**
  * Client-specific intents that extend the fixed 60-intent reference corpus.
@@ -8,8 +9,11 @@ import { pgTable, serial, text, integer, real, timestamp } from "drizzle-orm/pg-
  */
 export const customIntentsTable = pgTable("custom_intents", {
   id: serial("id").primaryKey(),
-  /** URL-safe slug, unique across both custom_intents and the reference corpus. */
-  key: text("key").notNull().unique(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
+  /** URL-safe slug; uniqueness is enforced within the owning organization. */
+  key: text("key").notNull(),
   name: text("name").notNull(),
   domain: text("domain").notNull(),
   flowClass: text("flow_class").notNull(),
@@ -39,7 +43,10 @@ export const customIntentsTable = pgTable("custom_intents", {
   maturity: text("maturity").notNull().default("catalogued"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => [
+  unique("custom_intents_organization_key_unique").on(table.organizationId, table.key),
+  unique("custom_intents_organization_id_id_unique").on(table.organizationId, table.id),
+]);
 
 export type CustomIntentRow = typeof customIntentsTable.$inferSelect;
 
@@ -49,10 +56,18 @@ export type CustomIntentRow = typeof customIntentsTable.$inferSelect;
  * aliases while the JSON field remains the versioned contract payload.
  */
 export const customIntentRoutingLabelsTable = pgTable("custom_intent_routing_labels", {
-  label: text("label").primaryKey(),
-  customIntentId: integer("custom_intent_id")
+  label: text("label").notNull(),
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => customIntentsTable.id, { onDelete: "cascade" }),
+    .references(() => organizationsTable.id),
+  customIntentId: integer("custom_intent_id").notNull(),
   registryVersion: text("registry_version").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  primaryKey({ columns: [table.organizationId, table.label] }),
+  foreignKey({
+    columns: [table.organizationId, table.customIntentId],
+    foreignColumns: [customIntentsTable.organizationId, customIntentsTable.id],
+    name: "custom_intent_routing_labels_organization_custom_intent_fk",
+  }).onDelete("cascade"),
+]);

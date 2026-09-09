@@ -32,6 +32,7 @@ import {
 } from "./scheduling";
 import { logEvent, createApproval } from "./engine";
 import { maskPhone, addressAllowed } from "./channels";
+import { externalProviderDispatchDenied } from "./provider-policy";
 
 export type VoiceScenario = "day-before" | "sla-escalation";
 
@@ -46,6 +47,8 @@ type Decision =
 export type Session = {
   token: string;
   caseId: number;
+  /** Derived from the owning case at call creation; required for DB effects. */
+  organizationId?: string;
   scenario: VoiceScenario;
   reason: string | null;
   turns: Turn[];
@@ -94,7 +97,11 @@ const busyTokens = new Set<string>();
  */
 export async function getVoiceSession(token: string, callSid?: string): Promise<Session | undefined> {
   if (!token) return undefined;
-  const [row] = await db.select().from(onbVoiceSessions).where(eq(onbVoiceSessions.token, token));
+  const rows = await db.select().from(onbVoiceSessions).where(eq(onbVoiceSessions.token, token));
+  // Tokens are tenant-scoped. A public callback with a colliding token is
+  // ambiguous and must not bind or mutate either session.
+  if (rows.length !== 1) return undefined;
+  const row = rows[0];
   if (!row || row.finalized) return undefined;
   const s = rowToSession(row);
   if (s.startedAt < Date.now() - SESSION_TTL_MS) {
@@ -107,7 +114,7 @@ export async function getVoiceSession(token: string, callSid?: string): Promise<
       await db
         .update(onbVoiceSessions)
         .set({ callSid })
-        .where(eq(onbVoiceSessions.token, token));
+        .where(and(eq(onbVoiceSessions.token, token), eq(onbVoiceSessions.organizationId, s.organizationId!)));
     } else if (s.callSid !== callSid) return undefined;
   }
   return s;
@@ -210,6 +217,13 @@ async function caseFacts(caseId: number) {
   const docs = await listDocuments(caseId);
   const booked = await bookedCall(caseId);
   return { c, docs, booked };
+}
+
+async function organizationForSession(session: Session): Promise<string> {
+  if (session.organizationId) return session.organizationId;
+  const { c } = await caseFacts(session.caseId);
+  session.organizationId = c.organizationId;
+  return c.organizationId;
 }
 
 /**
@@ -322,7 +336,9 @@ ${transcript}
 export async function finalizeVoiceCall(session: Session, callOutcome: string): Promise<void> {
   if (session.finalized || finalizingTokens.has(session.token)) return;
   finalizingTokens.add(session.token);
+  let organizationId = session.organizationId ?? "";
   try {
+    organizationId = await organizationForSession(session);
     let progress: Record<string, boolean> = {};
     if (!session.simulated) {
       // Atomically claim a finalization LEASE at the DB level: exactly one
@@ -342,6 +358,7 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
         .where(
           and(
             eq(onbVoiceSessions.token, session.token),
+            eq(onbVoiceSessions.organizationId, organizationId),
             eq(onbVoiceSessions.finalized, false),
             or(isNull(onbVoiceSessions.finalizeLeaseAt), lt(onbVoiceSessions.finalizeLeaseAt, leaseCutoff)),
           ),
@@ -367,6 +384,7 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
         .where(
           and(
             eq(onbVoiceSessions.token, session.token),
+            eq(onbVoiceSessions.organizationId, organizationId),
             eq(onbVoiceSessions.finalized, false),
             eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
           ),
@@ -401,6 +419,7 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
           .where(
             and(
               eq(onbVoiceSessions.token, session.token),
+              eq(onbVoiceSessions.organizationId, organizationId),
               eq(onbVoiceSessions.finalized, false),
               eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
             ),
@@ -418,6 +437,7 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
             .where(
               and(
                 eq(onbVoiceSessions.token, session.token),
+                eq(onbVoiceSessions.organizationId, organizationId),
                 eq(onbVoiceSessions.finalized, false),
                 eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
               ),
@@ -446,12 +466,14 @@ export async function markOutcomeStep(
 ): Promise<void> {
   progress[step] = true;
   if (session.simulated) return;
+  const organizationId = await organizationForSession(session);
   const updated = await db
     .update(onbVoiceSessions)
     .set({ outcomeProgress: progress, finalizeLeaseAt: new Date() })
     .where(
       and(
         eq(onbVoiceSessions.token, session.token),
+        eq(onbVoiceSessions.organizationId, organizationId),
         eq(onbVoiceSessions.finalized, false),
         eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
       ),
@@ -470,6 +492,10 @@ async function persistCallOutcome(
   progress: Record<string, boolean> = {},
 ): Promise<void> {
   const { c } = await caseFacts(session.caseId);
+  if (session.organizationId && session.organizationId !== c.organizationId) {
+    throw new Error(`voice session ${session.token} organization does not own case ${session.caseId}`);
+  }
+  session.organizationId = c.organizationId;
   const transcript = session.turns
     .map((t) => `${t.role === "agent" ? "Assistant" : c.workerName.split(" ")[0]}: ${t.text}`)
     .join("\n");
@@ -480,6 +506,7 @@ async function persistCallOutcome(
       .insert(onbCommunications)
       .values({
         caseId: session.caseId,
+        organizationId: c.organizationId,
         channel: "voice",
         direction: "outbound",
         toAddress: c.workerPhone ? maskPhone(c.workerPhone) : "unknown",
@@ -492,7 +519,12 @@ async function persistCallOutcome(
         // crash, a retried insert conflicts here instead of duplicating.
         externalMessageId: session.simulated ? null : `voice-call:${session.token}`,
       })
-      .onConflictDoNothing({ target: onbCommunications.externalMessageId });
+      .onConflictDoNothing({
+        target: [
+          onbCommunications.organizationId,
+          onbCommunications.externalMessageId,
+        ],
+      });
     await markOutcomeStep(session, progress, "transcript");
   }
 
@@ -614,8 +646,8 @@ function withinCallRateLimit(): boolean {
   return true;
 }
 
-function phoneAllowed(phone: string): boolean {
-  return addressAllowed(phone);
+function phoneAllowed(phone: string, organizationId: string): boolean {
+  return addressAllowed(phone, organizationId);
 }
 
 async function voiceFromNumber(): Promise<string | null> {
@@ -642,10 +674,12 @@ async function voiceFromNumber(): Promise<string | null> {
  * must not dial. Exported for the concurrency tests.
  */
 export async function claimCallStart(session: Session): Promise<boolean> {
+  const organizationId = await organizationForSession(session);
   const inserted = await db
     .insert(onbVoiceSessions)
     .values({
       token: session.token,
+      organizationId,
       caseId: session.caseId,
       scenario: session.scenario,
       reason: session.reason,
@@ -672,6 +706,7 @@ export async function startVoiceCall(opts: {
   const session: Session = {
     token: randomBytes(16).toString("hex"),
     caseId: opts.caseId,
+    organizationId: c.organizationId,
     scenario: opts.scenario,
     reason: opts.reason ?? null,
     turns: [],
@@ -684,13 +719,15 @@ export async function startVoiceCall(opts: {
     lastResponse: null,
   };
 
+  let allowlistRefreshed = false;
   try {
     const { refreshDemoAllowlist } = await import("./demo-volunteers");
-    await refreshDemoAllowlist();
+    await refreshDemoAllowlist(c.organizationId);
+    allowlistRefreshed = true;
   } catch (err) {
     console.error("[voice] demo allowlist refresh failed:", err);
   }
-  if (!phoneAllowed(c.workerPhone)) {
+  if (!allowlistRefreshed || !phoneAllowed(c.workerPhone, c.organizationId)) {
     await logEvent(opts.caseId, "channel", "system", "Voice call withheld (allowlist)",
       `A ${label} call was requested, but ${maskPhone(c.workerPhone)} is not on the demo allowlist — no call placed (add the number to ONBOARDING_ALLOWED_RECIPIENTS to enable; trial Twilio also requires the number be verified). Use the simulated call to see the flow.`,
       { hitlPattern: "notify-only", ruleRef: "4.6 Communications Rules" });
@@ -740,7 +777,7 @@ export async function startVoiceCall(opts: {
     const [blocking] = await db
       .select()
       .from(onbVoiceSessions)
-      .where(and(eq(onbVoiceSessions.caseId, opts.caseId), eq(onbVoiceSessions.finalized, false)));
+      .where(and(eq(onbVoiceSessions.caseId, opts.caseId), eq(onbVoiceSessions.organizationId, c.organizationId), eq(onbVoiceSessions.finalized, false)));
     if (blocking && blocking.startedAt.getTime() < Date.now() - SESSION_TTL_MS) {
       try {
         await finalizeVoiceCall(rowToSession(blocking), "interrupted");
@@ -755,6 +792,19 @@ export async function startVoiceCall(opts: {
   }
 
   try {
+    if (externalProviderDispatchDenied()) {
+      await db.delete(onbVoiceSessions).where(and(
+        eq(onbVoiceSessions.token, session.token),
+        eq(onbVoiceSessions.organizationId, c.organizationId),
+      ));
+      await logEvent(opts.caseId, "channel", "system", "Voice call withheld (execution policy)",
+        `A ${label} call to ${maskPhone(c.workerPhone)} was blocked by the active execution safety policy — no provider call was made.`,
+        { hitlPattern: "notify-only", ruleRef: "4.6 Communications Rules" });
+      return {
+        status: "logged-only",
+        note: "External voice delivery is denied by the active execution safety policy — call logged, not placed.",
+      };
+    }
     const params = new URLSearchParams({
       From: from,
       To: c.workerPhone,
@@ -773,7 +823,7 @@ export async function startVoiceCall(opts: {
     });
     if (!resp.ok) {
       const detail = await resp.text();
-      await db.delete(onbVoiceSessions).where(eq(onbVoiceSessions.token, session.token));
+      await db.delete(onbVoiceSessions).where(and(eq(onbVoiceSessions.token, session.token), eq(onbVoiceSessions.organizationId, c.organizationId)));
       return { status: "failed", note: `Twilio rejected the call (${resp.status}): ${detail.slice(0, 200)}` };
     }
     await logEvent(opts.caseId, "channel", "orchestrator", `Voice call placed (${label})`,
@@ -781,7 +831,7 @@ export async function startVoiceCall(opts: {
       { hitlPattern: "act-then-review", ruleRef: "4.6 Communications Rules" });
     return { status: "calling", note: "Dialing now — transcript will appear on the case timeline when the call ends.", token: session.token };
   } catch (err) {
-    await db.delete(onbVoiceSessions).where(eq(onbVoiceSessions.token, session.token));
+    await db.delete(onbVoiceSessions).where(and(eq(onbVoiceSessions.token, session.token), eq(onbVoiceSessions.organizationId, c.organizationId)));
     return { status: "failed", note: `Call failed: ${String(err).slice(0, 200)}` };
   }
 }
@@ -812,6 +862,7 @@ export async function simulateVoiceCall(
   const session: Session = {
     token: randomBytes(8).toString("hex"),
     caseId,
+    organizationId: c.organizationId,
     scenario,
     reason: reason ?? null,
     turns: [{ role: "agent", text: voiceGreeting(scenario, c.workerName.split(" ")[0] ?? "there") }],
@@ -853,6 +904,7 @@ export async function saveSession(s: Session): Promise<boolean> {
     .where(
       and(
         eq(onbVoiceSessions.token, s.token),
+        eq(onbVoiceSessions.organizationId, await organizationForSession(s)),
         eq(onbVoiceSessions.finalized, false),
         // Once a finalizer claims the lease, turn writes are blocked: a
         // late turn can no longer slip in behind the finalizer's snapshot
@@ -870,6 +922,7 @@ function rowToSession(row: typeof onbVoiceSessions.$inferSelect): Session {
   return {
     token: row.token,
     caseId: row.caseId,
+    organizationId: row.organizationId,
     scenario: row.scenario as VoiceScenario,
     reason: row.reason,
     turns: row.turns as Turn[],

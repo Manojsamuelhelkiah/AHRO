@@ -18,6 +18,9 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   "35a6b5024fb088435f6fdec4388a19fbfe57ac839ac4079f8b2fc13a1b125d31",
   "9041c9eb9634af39f9bfc539593c93ee7f60429772690954121ed50aa6c9aa8b",
   "2e21a48e9f8297e25e5a6513697c57258b4b1f00f6c394033c38433ac2504d60",
+  // Security-reviewed organization backfill and tenant-constraint replacement.
+  // The exact hash pins the approved migration; any edit fails closed.
+  "877e19bb3df8758688ab44039bd0196eeaa4e51ff1b1587ac9c19366de1a5adf",
 ]);
 
 // These errors mean an old migration's individual DDL statement is already
@@ -1262,6 +1265,52 @@ export async function applyReviewedMigration(options = {}) {
       client.release();
       await pool.end();
     }
+  }
+}
+
+/**
+ * Adds only the fixed identity used by authenticated development smoke tests.
+ * The normal tenant middleware still has to resolve this persisted membership.
+ */
+export async function ensureDevelopmentSmokeMembership(options = {}) {
+  if (process.env.NODE_ENV !== "development") {
+    throw new Error(
+      "Development smoke membership can only be created when NODE_ENV is exactly development",
+    );
+  }
+  const connectionString = options.connectionString ?? process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL is required to create the development smoke membership",
+    );
+  }
+
+  const userId = "internal_intent_routing_smoke";
+  const organizationId = "demo";
+  const pool = new Pool({ connectionString });
+  try {
+    const organization = await pool.query(
+      `SELECT 1 FROM organizations WHERE id = $1`,
+      [organizationId],
+    );
+    if (organization.rowCount !== 1) {
+      throw new Error(
+        "The explicit demo organization is missing after database reconciliation",
+      );
+    }
+    await pool.query(
+      `
+        INSERT INTO organization_memberships
+          (organization_id, clerk_user_id, role)
+        VALUES ($1, $2, 'member')
+        ON CONFLICT (organization_id, clerk_user_id)
+        DO UPDATE SET role = EXCLUDED.role
+      `,
+      [organizationId, userId],
+    );
+    return { userId, organizationId };
+  } finally {
+    await pool.end();
   }
 }
 

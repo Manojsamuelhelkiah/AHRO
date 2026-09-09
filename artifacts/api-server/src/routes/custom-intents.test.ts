@@ -10,6 +10,7 @@ import {
   pool,
 } from "@workspace/db";
 import { errorHandler } from "../middlewares/error-handler";
+import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
 import customIntentsRouter, {
   setCustomIntentCreateAfterPreflightHookForTests,
 } from "./custom-intents";
@@ -19,6 +20,10 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    req.organizationId = DEMO_ORGANIZATION_ID;
+    next();
+  });
   app.use(customIntentsRouter);
   app.use(errorHandler);
 
@@ -68,6 +73,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
     const [created] = await db
       .insert(customIntentsTable)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         key,
         name: "Concurrent routing regression",
         domain: "hire",
@@ -105,8 +111,18 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
       });
     assert.ok(created);
     await db.insert(customIntentRoutingLabelsTable).values([
-      { label: key, customIntentId: created.id, registryVersion: "research-v1" },
-      { label: oldAlias, customIntentId: created.id, registryVersion: "research-v1" },
+      {
+        label: key,
+        organizationId: DEMO_ORGANIZATION_ID,
+        customIntentId: created.id,
+        registryVersion: "research-v1",
+      },
+      {
+        label: oldAlias,
+        organizationId: DEMO_ORGANIZATION_ID,
+        customIntentId: created.id,
+        registryVersion: "research-v1",
+      },
     ]);
 
     const patch = (body: Record<string, unknown>) => fetch(
@@ -192,6 +208,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
     const [created] = await db
       .insert(customIntentsTable)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         key,
         name: "Parent required regression",
         domain: "hire",
@@ -230,6 +247,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
     assert.ok(created);
     await db.insert(customIntentRoutingLabelsTable).values({
       label: key,
+      organizationId: DEMO_ORGANIZATION_ID,
       customIntentId: created.id,
       registryVersion: "research-v1",
     });

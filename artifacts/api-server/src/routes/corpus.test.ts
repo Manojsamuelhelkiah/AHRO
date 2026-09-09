@@ -12,6 +12,7 @@ import { intents } from "../data/intents.js";
 test("merges bundled and custom intents when custom storage is healthy", async () => {
   const customRow = {
     id: 72,
+    organizationId: "demo",
     key: "custom-test",
     name: "Custom Test",
     domain: "policy",
@@ -58,6 +59,7 @@ test("keeps bundled intents available when custom storage fails", async () => {
 test("summary merges active current-version custom intents when storage is healthy", async () => {
   const customRow = {
     id: 72,
+    organizationId: "demo",
     key: "custom-test",
     name: "Custom Test",
     domain: "policy",

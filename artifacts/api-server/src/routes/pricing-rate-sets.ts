@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, pricingRateSetsTable } from "@workspace/db";
 import {
   ListPricingRateSetsResponse,
@@ -19,6 +19,7 @@ import {
   loadCurrentRateSet,
   type PricingRateSnapshot,
 } from "../lib/pricing-rate-sets";
+import { getOrganizationId } from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
@@ -40,13 +41,15 @@ function serializeRow(row: typeof pricingRateSetsTable.$inferSelect) {
  */
 router.get("/pricing-rate-sets", requireAuth, async (req, res, next) => {
   try {
-    await ensureBaselineRateSet();
+    const organizationId = getOrganizationId(req);
+    await ensureBaselineRateSet(organizationId);
 
     const [current, allVersions, canManage] = await Promise.all([
-      loadCurrentRateSet(),
+      loadCurrentRateSet(organizationId),
       db
         .select()
         .from(pricingRateSetsTable)
+        .where(eq(pricingRateSetsTable.organizationId, organizationId))
         .orderBy(desc(pricingRateSetsTable.id)),
       userCanManagePricingRates(req.authUserId!),
     ]);
@@ -101,6 +104,7 @@ router.post(
     }
 
     const userId = req.authUserId!;
+    const organizationId = getOrganizationId(req);
     const createdBy = await resolveReviewerName(userId);
 
     const [row] = await db
@@ -110,6 +114,7 @@ router.post(
         rationale: body.rationale as string,
         rates: body.rates as Record<string, unknown>,
         createdBy,
+        organizationId,
       })
       .returning();
 

@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { classifyMonitor, createOutageTracker, planMonitorEventWrite, processMessageRefs, resolveHrAlertAddress, composeMonitorAlertEmail, persistThenNotify, MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE, type MonitorTelemetry, type InboundMessage } from "./inbound-email";
+import { candidateReplyReferences, classifyMonitor, createOutageTracker, planMonitorEventWrite, processMessageRefs, resolveUniqueEmailCase, resolveHrAlertAddress, composeMonitorAlertEmail, persistThenNotify, MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE, type MonitorTelemetry, type InboundMessage } from "./inbound-email";
 
 const INTERVAL = 60_000;
 const T0 = Date.parse("2026-08-13T10:00:00Z");
@@ -238,7 +238,13 @@ describe("persistThenNotify (email only after a confirmed durable write)", () =>
 });
 
 describe("processMessageRefs (detail-fetch failures fail the poll)", () => {
-  const caseByEmail = new Map([["hire@example.com", 7]]);
+  const caseByEmail = new Map([
+    ["hire@example.com", [{ caseId: 7, organizationId: "org-a" }]],
+  ]);
+  const replyRef = "CR-0123456789abcdef0123456789abcdef";
+  const caseByReplyReference = new Map([
+    [replyRef, [{ caseId: 7, organizationId: "org-a" }]],
+  ]);
   const detailOf = (id: string) => ({
     id,
     payload: {
@@ -247,7 +253,7 @@ describe("processMessageRefs (detail-fetch failures fail the poll)", () => {
         { name: "Subject", value: "Re: welcome" },
       ],
       mimeType: "text/plain",
-      body: { data: Buffer.from("thanks!").toString("base64url") },
+      body: { data: Buffer.from(`thanks!\n\n> [Reply reference: ${replyRef}]`).toString("base64url") },
     },
   });
 
@@ -256,6 +262,7 @@ describe("processMessageRefs (detail-fetch failures fail the poll)", () => {
     const failures = await processMessageRefs(
       [{ id: "a" }, { id: "b" }, { id: "c" }],
       caseByEmail,
+      caseByReplyReference,
       {
         fetchDetail: async () => ({ ok: false, json: async () => ({}) }),
         alreadyRecorded: async () => false,
@@ -271,6 +278,7 @@ describe("processMessageRefs (detail-fetch failures fail the poll)", () => {
     const failures = await processMessageRefs(
       [{ id: "ok1" }, { id: "bad" }, { id: "ok2" }],
       caseByEmail,
+      caseByReplyReference,
       {
         fetchDetail: async (id) =>
           id === "bad"
@@ -285,14 +293,60 @@ describe("processMessageRefs (detail-fetch failures fail the poll)", () => {
     assert.equal(recorded[0].caseId, 7);
   });
 
-  test("already-recorded messages are skipped without fetching", async () => {
+  test("already-recorded messages are skipped after deriving the matching organization", async () => {
     let fetched = 0;
-    const failures = await processMessageRefs([{ id: "dup" }], caseByEmail, {
+    const failures = await processMessageRefs([{ id: "dup" }], caseByEmail, caseByReplyReference, {
       fetchDetail: async () => (fetched++, { ok: true, json: async () => detailOf("dup") }),
-      alreadyRecorded: async () => true,
+      alreadyRecorded: async (_id, organizationId) => organizationId === "org-a",
       recordInbound: async () => true,
     });
     assert.equal(failures, 0);
-    assert.equal(fetched, 0);
+    // Message detail must be fetched first to derive the sender's tenant.
+    assert.equal(fetched, 1);
+  });
+});
+
+describe("tenant-safe candidate resolution", () => {
+  test("quarantines an email identity shared by two organizations", () => {
+    assert.equal(resolveUniqueEmailCase([
+      { caseId: 7, organizationId: "org-a" },
+      { caseId: 8, organizationId: "org-b" },
+    ]), undefined);
+  });
+
+  test("approval mail cannot route to another tenant where the approver is a candidate", async () => {
+    const ref = "CR-fedcba9876543210fedcba9876543210";
+    const recorded: InboundMessage[] = [];
+    const detail = {
+      id: "shared-gmail-id",
+      payload: {
+        headers: [
+          { name: "From", value: "Approver <shared@example.com>" },
+          { name: "Subject", value: "Re: [AP-42] Approval needed" },
+        ],
+        mimeType: "text/plain",
+        body: {
+          data: Buffer.from(`Approve\n> [Reply reference: ${ref}]`).toString("base64url"),
+        },
+      },
+    };
+    await processMessageRefs(
+      [{ id: detail.id }],
+      new Map([["shared@example.com", [{ caseId: 1, organizationId: "org-a" }]]]),
+      new Map([[ref, [{ caseId: 1, organizationId: "org-a" }]]]),
+      {
+        fetchDetail: async () => ({ ok: true, json: async () => detail }),
+        alreadyRecorded: async () => false,
+        recordInbound: async (message) => (recorded.push(message), true),
+      },
+    );
+    assert.deepEqual(recorded, []);
+  });
+
+  test("requires an exact case-bound reply reference, not sender identity alone", async () => {
+    assert.deepEqual(
+      candidateReplyReferences("CR-0123456789abcdef0123456789abcdef0"),
+      [],
+    );
   });
 });

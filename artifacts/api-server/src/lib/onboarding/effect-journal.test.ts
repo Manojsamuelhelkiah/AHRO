@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { db } from "@workspace/db";
-import { onbCases, onbEffectJournal } from "@workspace/db/schema";
+import { DEMO_ORGANIZATION_ID, onbCases, onbEffectJournal } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import {
   claimEffectDispatch,
@@ -18,6 +18,7 @@ const identity = (caseId: number, suffix: string, providerIdempotency = false) =
   keys.push(logicalOperationKey);
   return {
     logicalOperationKey,
+    organizationId: DEMO_ORGANIZATION_ID,
     tenantId: "test-tenant",
     caseId,
     toolName: "update-payroll",
@@ -40,6 +41,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
     const [created] = await db
       .insert(onbCases)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         workerName: "Effect Journal Test",
         workerEmail: `effect-${Date.now()}-${caseIds.length}@example.com`,
         hireType: "new-hire",
@@ -108,6 +110,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
     assert.equal(
       await confirmEffect({
         logicalOperationKey: operation.logicalOperationKey,
+        organizationId: operation.organizationId,
         owner: "worker-old",
         fencingToken: 1,
       }),
@@ -116,6 +119,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
     assert.equal(
       await confirmEffect({
         logicalOperationKey: operation.logicalOperationKey,
+        organizationId: operation.organizationId,
         owner: "worker-new",
         fencingToken: 2,
         externalEffectId: "provider-123",
@@ -136,6 +140,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
     );
     await confirmEffect({
       logicalOperationKey: operation.logicalOperationKey,
+      organizationId: operation.organizationId,
       owner: "worker-a",
       fencingToken: 1,
       externalEffectId: "remote-effect",
@@ -146,12 +151,46 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
     );
   });
 
+  test("a tenant cannot confirm or claim another tenant's journal entry", async () => {
+    const operation = identity(await createCase(), "tenant-bound", true);
+    const claim = await claimEffectDispatch({
+      ...operation,
+      owner: "worker-a",
+      expectedFencingToken: 0,
+    });
+    assert.equal(claim.kind, "claimed");
+    assert.equal(
+      await confirmEffect({
+        logicalOperationKey: operation.logicalOperationKey,
+        organizationId: "different-tenant",
+        owner: "worker-a",
+        fencingToken: 1,
+      }),
+      false,
+    );
+    await assert.rejects(
+      claimEffectDispatch({
+        ...operation,
+        organizationId: "different-tenant",
+        owner: "worker-b",
+        expectedFencingToken: 1,
+      }),
+      (error: unknown) => {
+        const cause = (error as { cause?: { code?: string } }).cause;
+        // The foreign-key rejection proves the cross-tenant claim failed
+        // closed before another organization's journal row could be created.
+        return cause?.code === "23503";
+      },
+    );
+  });
+
   test("ambiguous non-idempotent writes stop for manual repair", async () => {
     const operation = identity(await createCase(), "ambiguous");
     await claimEffectDispatch({ ...operation, owner: "worker-a", expectedFencingToken: 0 });
     assert.equal(
       await markAmbiguousEffectForManualRepair({
         logicalOperationKey: operation.logicalOperationKey,
+        organizationId: operation.organizationId,
         owner: "worker-a",
         fencingToken: 1,
         error: "provider timed out after request body was sent",

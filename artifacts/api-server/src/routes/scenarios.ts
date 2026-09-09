@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, scenariosTable, scenarioFilesTable, actualsOverlaysTable, objectCleanupJobsTable } from "@workspace/db";
 import {
   ListScenariosResponse,
@@ -24,12 +24,17 @@ import {
 import { CustomIntentStorageUnavailableError } from "../middlewares/error-handler";
 import { requireAuth } from "../middlewares/require-auth";
 import { processObjectCleanupJobs } from "../lib/scenario-file-lifecycle";
+import {
+  getOrganizationId,
+  organizationValues,
+  organizationWhere,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
-async function loadRequiredCustomIntents() {
+async function loadRequiredCustomIntents(organizationId: string) {
   try {
-    return await loadActiveCustomIntents();
+    return await loadActiveCustomIntents(organizationId);
   } catch (error) {
     throw new CustomIntentStorageUnavailableError({ cause: error });
   }
@@ -57,8 +62,9 @@ function serialize(row: typeof scenariosTable.$inferSelect, fileIds: number[] = 
 
 router.get("/scenarios", requireAuth, async (req, res, next) => {
   try {
+    const organizationId = getOrganizationId(req);
     const rows = await db.select().from(scenariosTable)
-      .where(or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId)))
+      .where(organizationWhere(scenariosTable, organizationId))
       .orderBy(scenariosTable.id);
     const fileRows = rows.length
       ? await db.select({ id: scenarioFilesTable.id, scenarioId: scenarioFilesTable.scenarioId })
@@ -75,9 +81,10 @@ router.get("/scenarios", requireAuth, async (req, res, next) => {
 router.post("/scenarios", requireAuth, async (req, res, next) => {
   try {
     const body = CreateScenarioBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
     const [overrides, customIntents] = await Promise.all([
-      loadActiveFlowOverrides(),
-      loadRequiredCustomIntents(),
+      loadActiveFlowOverrides(organizationId),
+      loadRequiredCustomIntents(organizationId),
     ]);
     const customKeys = new Set(customIntents.map((i) => i.key));
     validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
@@ -93,7 +100,13 @@ router.post("/scenarios", requireAuth, async (req, res, next) => {
         }
       }
       const [created] = await tx.insert(scenariosTable)
-        .values({ ownerUserId: req.authUserId!, name: body.name, inputs: body.inputs, setupData: body.setupData ?? null }).returning();
+        .values({
+          ownerUserId: req.authUserId!,
+          name: body.name,
+          inputs: body.inputs,
+          setupData: body.setupData ?? null,
+          ...organizationValues(organizationId),
+        }).returning();
       if (fileIds.length) {
         await tx.update(scenarioFilesTable).set({ scenarioId: created!.id, updatedAt: new Date() })
           .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, fileIds)));
@@ -109,10 +122,14 @@ router.post("/scenarios", requireAuth, async (req, res, next) => {
 router.get("/scenarios/:id", requireAuth, async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
+    const organizationId = getOrganizationId(req);
     const [row] = await db
       .select()
       .from(scenariosTable)
-      .where(and(eq(scenariosTable.id, id), or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId))));
+      .where(and(
+        eq(scenariosTable.id, id),
+        organizationWhere(scenariosTable, organizationId),
+      ));
     if (!row) {
       res.status(404).json({ error: "Scenario not found" });
       return;
@@ -128,9 +145,10 @@ router.get("/scenarios/:id", requireAuth, async (req, res, next) => {
 router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
+    const organizationId = getOrganizationId(req);
     const body = UpdateScenarioBody.parse(req.body);
     if (body.inputs !== undefined) {
-      const customIntents = await loadRequiredCustomIntents();
+      const customIntents = await loadRequiredCustomIntents(organizationId);
       const customKeys = new Set(customIntents.map((i) => i.key));
       validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
     }
@@ -141,7 +159,10 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
     const row = await db.transaction(async (tx) => {
       const [accessibleScenario] = await tx.select({ id: scenariosTable.id, ownerUserId: scenariosTable.ownerUserId })
         .from(scenariosTable)
-        .where(and(eq(scenariosTable.id, id), or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId))))
+        .where(and(
+          eq(scenariosTable.id, id),
+          organizationWhere(scenariosTable, organizationId),
+        ))
         .for("update");
       if (!accessibleScenario) return undefined;
       if (body.fileIds !== undefined) {
@@ -166,7 +187,10 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
           .where(and(eq(scenarioFilesTable.ownerUserId, req.authUserId!), inArray(scenarioFilesTable.id, body.fileIds)));
       }
       const [updated] = await tx.update(scenariosTable).set(updates)
-        .where(and(eq(scenariosTable.id, id), or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId))))
+        .where(and(
+          eq(scenariosTable.id, id),
+          organizationWhere(scenariosTable, organizationId),
+        ))
         .returning();
       return updated;
     });
@@ -185,10 +209,11 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
 router.delete("/scenarios/:id", requireAuth, async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
+    const organizationId = getOrganizationId(req);
     const row = await db.transaction(async (tx) => {
       const [accessible] = await tx.select().from(scenariosTable).where(and(
         eq(scenariosTable.id, id),
-        or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId)),
+        organizationWhere(scenariosTable, organizationId),
       )).for("update");
       if (!accessible) return undefined;
       const files = await tx.select().from(scenarioFilesTable).where(eq(scenarioFilesTable.scenarioId, id)).for("update");
@@ -197,7 +222,7 @@ router.delete("/scenarios/:id", requireAuth, async (req, res, next) => {
       }
       const [deleted] = await tx.delete(scenariosTable).where(and(
         eq(scenariosTable.id, id),
-        or(eq(scenariosTable.ownerUserId, req.authUserId!), isNull(scenariosTable.ownerUserId)),
+        organizationWhere(scenariosTable, organizationId),
       )).returning();
       return deleted;
     });
@@ -215,11 +240,12 @@ router.delete("/scenarios/:id", requireAuth, async (req, res, next) => {
 router.post("/rollup", async (req, res, next) => {
   try {
     const body = ComputeRollupBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
 
     // Seed baseline if no rate sets exist, then load and validate the current snapshot.
     // This must happen before any compute so both passes use exactly the same snapshot.
-    await ensureBaselineRateSet();
-    const currentRateSet = await loadAndValidateCurrentRateSet();
+    await ensureBaselineRateSet(organizationId);
+    const currentRateSet = await loadAndValidateCurrentRateSet(organizationId);
     const rateSetRef: RateSetReference = {
       rateSetId: currentRateSet.id,
       effectiveDate: currentRateSet.effectiveDate,
@@ -229,8 +255,8 @@ router.post("/rollup", async (req, res, next) => {
     };
 
     const [overrides, customIntents] = await Promise.all([
-      loadActiveFlowOverrides(),
-      loadRequiredCustomIntents(),
+      loadActiveFlowOverrides(organizationId),
+      loadRequiredCustomIntents(organizationId),
     ]);
     const inputs = body.inputs as ScenarioInputs;
     const customKeys = new Set(customIntents.map((i) => i.key));
@@ -242,7 +268,10 @@ router.post("/rollup", async (req, res, next) => {
       const [overlayRow] = await db
         .select()
         .from(actualsOverlaysTable)
-        .where(eq(actualsOverlaysTable.id, body.actualsOverlayId));
+        .where(and(
+          eq(actualsOverlaysTable.id, body.actualsOverlayId),
+          organizationWhere(actualsOverlaysTable, organizationId),
+        ));
       if (!overlayRow) {
         res.status(400).json({ error: `Actuals overlay ${body.actualsOverlayId} not found` });
         return;

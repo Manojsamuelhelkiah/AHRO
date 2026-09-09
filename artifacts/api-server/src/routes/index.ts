@@ -14,10 +14,28 @@ import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
 import intentRegistryRouter from "./intent-registry";
 import scenarioFilesRouter from "./scenario-files";
+import organizationsRouter from "./organizations";
+import { requireAuth } from "../middlewares/require-auth";
+import { requireTenantContext } from "../middlewares/tenant-context";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(organizationsRouter);
+router.use((req, res, next) => {
+  // Provider webhooks authenticate themselves and the demo-login bootstrap
+  // must remain reachable before a Clerk session exists.
+  if (
+    req.path.startsWith("/onboarding/webhooks/") ||
+    req.path === "/onboarding/demo-login"
+  ) {
+    next();
+    return;
+  }
+  requireAuth(req, res, () => {
+    void requireTenantContext(req, res, next);
+  });
+});
 router.use(corpusRouter);
 router.use(scenariosRouter);
 router.use(scenarioFilesRouter);

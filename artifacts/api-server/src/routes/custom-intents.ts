@@ -14,6 +14,11 @@ import {
   INTENT_REGISTRY_VERSION,
   validateCustomRoutingMetadata,
 } from "../lib/intent-registry";
+import {
+  getOrganizationId,
+  organizationValues,
+  organizationWhere,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
@@ -26,7 +31,11 @@ class CustomIntentVersionConflictError extends Error {
   }
 }
 /** Slug-ify a name and append a suffix if there is a collision. */
-async function generateKey(name: string, excludeId?: number): Promise<string> {
+async function generateKey(
+  name: string,
+  organizationId: string,
+  excludeId?: number,
+): Promise<string> {
   const base = name
     .toLowerCase()
     .trim()
@@ -41,8 +50,15 @@ async function generateKey(name: string, excludeId?: number): Promise<string> {
       .from(customIntentsTable)
       .where(
         excludeId !== undefined
-          ? and(eq(customIntentsTable.key, k), ne(customIntentsTable.id, excludeId))
-          : eq(customIntentsTable.key, k),
+          ? and(
+              eq(customIntentsTable.key, k),
+              ne(customIntentsTable.id, excludeId),
+              organizationWhere(customIntentsTable, organizationId),
+            )
+          : and(
+              eq(customIntentsTable.key, k),
+              organizationWhere(customIntentsTable, organizationId),
+            ),
       )
       .limit(1);
     if (existing.length === 0) return k;
@@ -223,9 +239,13 @@ function validateMergedRoutingFields(
 async function assertNoRoutingLabelCollision(
   key: string,
   aliases: string[],
+  organizationId: string,
   excludeId?: number,
 ) {
-  const rows = await db.select().from(customIntentsTable);
+  const rows = await db
+    .select()
+    .from(customIntentsTable)
+    .where(organizationWhere(customIntentsTable, organizationId));
   const otherRows = excludeId === undefined ? rows : rows.filter((row) => row.id !== excludeId);
   const occupied = new Set(
     buildIntentRegistry(otherRows).reference.flatMap((route) => [route.key, ...route.exactAliases]),
@@ -301,20 +321,22 @@ export function rowToIntent(row: typeof customIntentsTable.$inferSelect): Intent
 }
 
 /** Load all active custom intents as Intent objects for rollup injection. */
-export async function loadActiveCustomIntents(): Promise<Intent[]> {
+export async function loadActiveCustomIntents(organizationId: string): Promise<Intent[]> {
   const rows = await db
     .select()
     .from(customIntentsTable)
     .where(and(
       eq(customIntentsTable.status, "active"),
       eq(customIntentsTable.registryVersion, INTENT_REGISTRY_VERSION),
+      organizationWhere(customIntentsTable, organizationId),
     ));
   return rows.map(rowToIntent);
 }
 
-function routingLabels(key: string, aliases: string[]) {
+function routingLabels(key: string, aliases: string[], organizationId: string) {
   return [key, ...aliases].map((label) => ({
     label,
+    organizationId,
     registryVersion: INTENT_REGISTRY_VERSION,
   }));
 }
@@ -343,12 +365,19 @@ export function setCustomIntentCreateAfterPreflightHookForTests(
 router.get("/custom-intents", async (req, res, next) => {
   try {
     const statusFilter = req.query["status"] === "all" ? undefined : "active";
+    const organizationId = getOrganizationId(req);
     const rows = statusFilter
       ? await db
           .select()
           .from(customIntentsTable)
-          .where(eq(customIntentsTable.status, statusFilter))
-      : await db.select().from(customIntentsTable);
+          .where(and(
+            eq(customIntentsTable.status, statusFilter),
+            organizationWhere(customIntentsTable, organizationId),
+          ))
+      : await db
+          .select()
+          .from(customIntentsTable)
+          .where(organizationWhere(customIntentsTable, organizationId));
     res.json(rows.map(serialize));
   } catch (e) {
     next(e);
@@ -358,10 +387,15 @@ router.get("/custom-intents", async (req, res, next) => {
 router.post("/custom-intents", async (req, res, next) => {
   try {
     const body = req.body as Record<string, unknown>;
+    const organizationId = getOrganizationId(req);
     validateFields(body);
     const routingMetadata = validateMergedRoutingFields(body);
-    const key = await generateKey(String(body.name));
-    await assertNoRoutingLabelCollision(key, body.exactAliases as string[] | undefined ?? []);
+    const key = await generateKey(String(body.name), organizationId);
+    await assertNoRoutingLabelCollision(
+      key,
+      body.exactAliases as string[] | undefined ?? [],
+      organizationId,
+    );
     await createAfterPreflightHookForTests?.();
     const aliases = body.exactAliases as string[] | undefined ?? [];
     let row: typeof customIntentsTable.$inferSelect;
@@ -395,10 +429,14 @@ router.post("/custom-intents", async (req, res, next) => {
             actionSchema: JSON.stringify(body.actionSchema ?? defaultActionSchema()),
             evidenceContract: JSON.stringify(routingMetadata.evidenceContract),
             maturity: body.maturity ? String(body.maturity) : "catalogued",
+            ...organizationValues(organizationId),
           })
           .returning();
         await tx.insert(customIntentRoutingLabelsTable).values(
-          routingLabels(key, aliases).map((label) => ({ ...label, customIntentId: inserted!.id })),
+          routingLabels(key, aliases, organizationId).map((label) => ({
+            ...label,
+            customIntentId: inserted!.id,
+          })),
         );
         return inserted!;
       });
@@ -419,7 +457,10 @@ router.get("/custom-intents/:key", async (req, res, next) => {
     const [row] = await db
       .select()
       .from(customIntentsTable)
-      .where(eq(customIntentsTable.key, req.params["key"]!));
+      .where(and(
+        eq(customIntentsTable.key, req.params["key"]!),
+        organizationWhere(customIntentsTable, getOrganizationId(req)),
+      ));
     if (!row) {
       res.status(404).json({ error: "Custom intent not found" });
       return;
@@ -433,6 +474,7 @@ router.get("/custom-intents/:key", async (req, res, next) => {
 router.patch("/custom-intents/:key", async (req, res, next) => {
   try {
     const key = req.params["key"]!;
+    const organizationId = getOrganizationId(req);
     const body = req.body as Record<string, unknown>;
     if (body.expectedUpdatedAt === undefined) {
       throw new InputValidationError(
@@ -467,7 +509,10 @@ router.patch("/custom-intents/:key", async (req, res, next) => {
         const [existing] = await tx
           .select()
           .from(customIntentsTable)
-          .where(eq(customIntentsTable.key, key))
+          .where(and(
+            eq(customIntentsTable.key, key),
+            organizationWhere(customIntentsTable, organizationId),
+          ))
           .for("update");
         if (!existing) return null;
         if (existing.updatedAt.toISOString() !== String(body.expectedUpdatedAt)) {
@@ -509,13 +554,19 @@ router.patch("/custom-intents/:key", async (req, res, next) => {
         const [updated] = await tx
           .update(customIntentsTable)
           .set(update)
-          .where(eq(customIntentsTable.key, key))
+          .where(and(
+            eq(customIntentsTable.key, key),
+            organizationWhere(customIntentsTable, organizationId),
+          ))
           .returning();
         await tx
           .delete(customIntentRoutingLabelsTable)
           .where(eq(customIntentRoutingLabelsTable.customIntentId, existing.id));
         await tx.insert(customIntentRoutingLabelsTable).values(
-          routingLabels(key, aliases).map((label) => ({ ...label, customIntentId: existing.id })),
+          routingLabels(key, aliases, organizationId).map((label) => ({
+            ...label,
+            customIntentId: existing.id,
+          })),
         );
         return updated!;
       });
@@ -542,10 +593,14 @@ router.patch("/custom-intents/:key", async (req, res, next) => {
 router.post("/custom-intents/:key/retire", async (req, res, next) => {
   try {
     const key = req.params["key"]!;
+    const organizationId = getOrganizationId(req);
     const [existing] = await db
       .select()
       .from(customIntentsTable)
-      .where(eq(customIntentsTable.key, key));
+      .where(and(
+        eq(customIntentsTable.key, key),
+        organizationWhere(customIntentsTable, organizationId),
+      ));
     if (!existing) {
       res.status(404).json({ error: "Custom intent not found" });
       return;
@@ -557,7 +612,10 @@ router.post("/custom-intents/:key/retire", async (req, res, next) => {
     const [row] = await db
       .update(customIntentsTable)
       .set({ status: "retired", updatedAt: new Date() })
-      .where(eq(customIntentsTable.key, key))
+      .where(and(
+        eq(customIntentsTable.key, key),
+        organizationWhere(customIntentsTable, organizationId),
+      ))
       .returning();
     res.json(serialize(row!));
   } catch (e) {
@@ -568,10 +626,14 @@ router.post("/custom-intents/:key/retire", async (req, res, next) => {
 router.delete("/custom-intents/:key", async (req, res, next) => {
   try {
     const key = req.params["key"]!;
+    const organizationId = getOrganizationId(req);
     const [existing] = await db
       .select()
       .from(customIntentsTable)
-      .where(eq(customIntentsTable.key, key));
+      .where(and(
+        eq(customIntentsTable.key, key),
+        organizationWhere(customIntentsTable, organizationId),
+      ));
     if (!existing) {
       res.status(404).json({ error: "Custom intent not found" });
       return;
@@ -582,7 +644,10 @@ router.delete("/custom-intents/:key", async (req, res, next) => {
     const history = await db
       .select({ id: flowOverridesTable.id })
       .from(flowOverridesTable)
-      .where(eq(flowOverridesTable.intentKey, key))
+      .where(and(
+        eq(flowOverridesTable.intentKey, key),
+        organizationWhere(flowOverridesTable, organizationId),
+      ))
       .limit(1);
     if (history.length > 0) {
       res.status(409).json({
@@ -591,7 +656,10 @@ router.delete("/custom-intents/:key", async (req, res, next) => {
       });
       return;
     }
-    await db.delete(customIntentsTable).where(eq(customIntentsTable.key, key));
+    await db.delete(customIntentsTable).where(and(
+      eq(customIntentsTable.key, key),
+      organizationWhere(customIntentsTable, organizationId),
+    ));
     res.status(204).end();
   } catch (e) {
     next(e);

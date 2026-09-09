@@ -1,9 +1,13 @@
 import { index, integer, pgTable, serial, text, jsonb, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { organizationsTable } from "./organizations";
 
 export const scenariosTable = pgTable("scenarios", {
   id: serial("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   ownerUserId: text("owner_user_id"),
   name: text("name").notNull(),
   inputs: jsonb("inputs").notNull(),
@@ -70,6 +74,7 @@ export const objectCleanupJobsTable = pgTable(
 
 export const insertScenarioSchema = createInsertSchema(scenariosTable).omit({
   id: true,
+  organizationId: true,
   createdAt: true,
   updatedAt: true,
 });

@@ -1,6 +1,7 @@
-import { pgTable, serial, text, integer, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, real, timestamp, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { organizationsTable } from "./organizations";
 
 /**
  * Versioned SME adjustments to an intent's flow. Each save is a new version;
@@ -9,6 +10,9 @@ import { z } from "zod/v4";
  */
 export const flowOverridesTable = pgTable("flow_overrides", {
   id: serial("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
   intentKey: text("intent_key").notNull(),
   version: integer("version").notNull(),
   status: text("status").notNull().default("draft"), // draft | approved
@@ -19,10 +23,17 @@ export const flowOverridesTable = pgTable("flow_overrides", {
   actGetActions: integer("act_get_actions"),
   actPutActions: integer("act_put_actions"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  unique("flow_overrides_organization_intent_version_unique").on(
+    table.organizationId,
+    table.intentKey,
+    table.version,
+  ),
+]);
 
 export const insertFlowOverrideSchema = createInsertSchema(flowOverridesTable).omit({
   id: true,
+  organizationId: true,
   version: true,
   status: true,
   createdAt: true,

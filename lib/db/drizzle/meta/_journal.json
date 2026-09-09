@@ -183,6 +183,13 @@
       "when": 1788887340006,
       "tag": "0024_scenario_upload_cleanup_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788887340003,
+      "tag": "0021_application_organizations",
+      "breakpoints": true
     }
   ]
 }

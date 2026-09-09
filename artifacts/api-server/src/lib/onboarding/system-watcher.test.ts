@@ -1,8 +1,14 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { classifySystem, completeCheck, escalateCheck, handleSystemWebhook } from "./system-watcher";
+import {
+  classifySystem,
+  completeCheck,
+  disconnectedCheckIsOverdue,
+  escalateCheck,
+  handleSystemWebhook,
+} from "./system-watcher";
 import { setSetting, AUTO_ESCALATION_CALLS_KEY } from "./settings";
-import { onbCommunications } from "@workspace/db/schema";
+import { DEMO_ORGANIZATION_ID, onbCommunications } from "@workspace/db/schema";
 import { CONNECTOR_DEFAULTS } from "./connectors";
 import { db } from "@workspace/db";
 import { onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
@@ -85,6 +91,19 @@ describe("classifySystem", () => {
   });
 });
 
+describe("disconnected connector deadline", () => {
+  const dueAt = new Date(T0);
+
+  test("does not escalate a disconnected check before or at its deadline", () => {
+    assert.equal(disconnectedCheckIsOverdue({ dueAt }, T0 - 1), false);
+    assert.equal(disconnectedCheckIsOverdue({ dueAt }, T0), false);
+  });
+
+  test("escalates a disconnected check only after its deadline", () => {
+    assert.equal(disconnectedCheckIsOverdue({ dueAt }, T0 + 1), true);
+  });
+});
+
 describe("simulated external systems", () => {
   test("every watched system has a definition with SLA beyond its completion window", () => {
     for (const def of WATCHED_SYSTEMS) {
@@ -161,6 +180,7 @@ describe("concurrent completions (real DB)", () => {
     const [c] = await db
       .insert(onbCases)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         workerName: `Watcher Race Test ${Date.now()}`,
         workerEmail: "watcher-race@example.com",
         hireType: "new-hire",
@@ -184,8 +204,8 @@ describe("concurrent completions (real DB)", () => {
     const checks = await db
       .insert(onbSystemChecks)
       .values([
-        { caseId: c.id, system: "bgv", mode: "push", externalRef: `BGV-${c.id}`, requestedAt: now, dueAt: due },
-        { caseId: c.id, system: "itsm", mode: "poll", externalRef: `RITM-${c.id}`, requestedAt: now, dueAt: due },
+        { organizationId: DEMO_ORGANIZATION_ID, caseId: c.id, system: "bgv", mode: "push", externalRef: `BGV-${c.id}`, requestedAt: now, dueAt: due },
+        { organizationId: DEMO_ORGANIZATION_ID, caseId: c.id, system: "itsm", mode: "poll", externalRef: `RITM-${c.id}`, requestedAt: now, dueAt: due },
       ])
       .returning();
 
@@ -220,6 +240,7 @@ describe("concurrent completions (real DB)", () => {
     const [c] = await db
       .insert(onbCases)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         workerName: `Watcher Idem Test ${Date.now()}`,
         workerEmail: "watcher-idem@example.com",
         hireType: "new-hire",
@@ -240,6 +261,7 @@ describe("concurrent completions (real DB)", () => {
     const [check] = await db
       .insert(onbSystemChecks)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         caseId: c.id,
         system: "itsm",
         mode: "poll",
@@ -265,13 +287,14 @@ describe("automatic escalation calls (real DB)", () => {
   const created: number[] = [];
   after(async () => {
     for (const id of created) await db.delete(onbCases).where(eq(onbCases.id, id));
-    await setSetting(AUTO_ESCALATION_CALLS_KEY, null);
+    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, null);
   });
 
   async function makeCase(quietHire: boolean) {
     const [c] = await db
       .insert(onbCases)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         workerName: `Auto Call Test ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         workerEmail: "auto-call@example.com",
         // No workerPhone: startVoiceCall bails out with "failed" before any
@@ -295,6 +318,7 @@ describe("automatic escalation calls (real DB)", () => {
     const [check] = await db
       .insert(onbSystemChecks)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         caseId: c.id,
         system: "itsm",
         mode: "poll",
@@ -306,6 +330,7 @@ describe("automatic escalation calls (real DB)", () => {
     if (!quietHire) {
       await db.insert(onbCommunications).values({
         caseId: c.id,
+        organizationId: DEMO_ORGANIZATION_ID,
         channel: "email",
         direction: "inbound",
         toAddress: "onboarding@example.com",
@@ -323,7 +348,7 @@ describe("automatic escalation calls (real DB)", () => {
   }
 
   test("setting off: escalation never triggers a call", async () => {
-    await setSetting(AUTO_ESCALATION_CALLS_KEY, null);
+    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, null);
     const { check } = await makeCase(true);
     await escalateCheck(check, "Vendor still in progress.");
     const titles = await eventTitles(check.caseId);
@@ -332,7 +357,7 @@ describe("automatic escalation calls (real DB)", () => {
   });
 
   test("setting on + quiet hire: call is triggered and audit-trailed", async () => {
-    await setSetting(AUTO_ESCALATION_CALLS_KEY, "on");
+    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, "on");
     const { check } = await makeCase(true);
     await escalateCheck(check, "Vendor still in progress.");
     const titles = await eventTitles(check.caseId);
@@ -342,7 +367,7 @@ describe("automatic escalation calls (real DB)", () => {
   });
 
   test("setting on but hire replied since tracking began: no call", async () => {
-    await setSetting(AUTO_ESCALATION_CALLS_KEY, "on");
+    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, "on");
     const { check } = await makeCase(false);
     await escalateCheck(check, "Vendor still in progress.");
     const titles = await eventTitles(check.caseId);
@@ -351,7 +376,7 @@ describe("automatic escalation calls (real DB)", () => {
   });
 
   test("already-escalated check does not re-trigger a call", async () => {
-    await setSetting(AUTO_ESCALATION_CALLS_KEY, "on");
+    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, "on");
     const { check } = await makeCase(true);
     await escalateCheck(check, "Vendor still in progress.");
     const [escalated] = await db

@@ -117,19 +117,25 @@ export function formatSlotOffer(slots: Slot[]): string {
  * returned so downstream messaging always matches what was stored.
  */
 export async function proposeSlots(caseId: number, slots: Slot[], dedupeKey?: string): Promise<Slot[]> {
+  const [caseRow] = await db.select({ organizationId: onbCases.organizationId }).from(onbCases)
+    .where(eq(onbCases.id, caseId));
+  if (!caseRow) throw new Error(`case ${caseId} not found`);
+  const organizationId = caseRow.organizationId;
   return await db.transaction(async (tx) => {
     if (dedupeKey) {
       const inserted = await tx
         .insert(onbCallSlots)
-        .values({ caseId, slots, status: "proposed", dedupeKey })
-        .onConflictDoNothing({ target: onbCallSlots.dedupeKey })
+        .values({ organizationId, caseId, slots, status: "proposed", dedupeKey })
+        .onConflictDoNothing({
+          target: [onbCallSlots.organizationId, onbCallSlots.dedupeKey],
+        })
         .returning({ id: onbCallSlots.id });
       if (inserted.length === 0) {
         // Already proposed by an earlier (crashed) attempt — reuse its slots.
         const [existing] = await tx
           .select({ slots: onbCallSlots.slots })
           .from(onbCallSlots)
-          .where(eq(onbCallSlots.dedupeKey, dedupeKey));
+          .where(and(eq(onbCallSlots.organizationId, organizationId), eq(onbCallSlots.dedupeKey, dedupeKey)));
         return (existing?.slots ?? slots) as Slot[];
       }
       await tx
@@ -138,6 +144,7 @@ export async function proposeSlots(caseId: number, slots: Slot[], dedupeKey?: st
         .where(
           and(
             eq(onbCallSlots.caseId, caseId),
+            eq(onbCallSlots.organizationId, organizationId),
             eq(onbCallSlots.status, "proposed"),
             ne(onbCallSlots.id, inserted[0].id),
           ),
@@ -147,8 +154,8 @@ export async function proposeSlots(caseId: number, slots: Slot[], dedupeKey?: st
     await tx
       .update(onbCallSlots)
       .set({ status: "superseded" })
-      .where(and(eq(onbCallSlots.caseId, caseId), eq(onbCallSlots.status, "proposed")));
-    await tx.insert(onbCallSlots).values({ caseId, slots, status: "proposed" });
+      .where(and(eq(onbCallSlots.caseId, caseId), eq(onbCallSlots.organizationId, organizationId), eq(onbCallSlots.status, "proposed")));
+    await tx.insert(onbCallSlots).values({ organizationId, caseId, slots, status: "proposed" });
     return slots;
   });
 }

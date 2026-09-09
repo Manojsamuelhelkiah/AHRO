@@ -4,6 +4,7 @@ import { createHmac } from "node:crypto";
 import { twilioSignatureValid } from "./twilio-signature";
 import { stripQuotedReply, persistInbound, alreadyRecorded } from "./inbound-email";
 import { db } from "@workspace/db";
+import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
 import { onbCases, onbCommunications } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -92,6 +93,7 @@ describe("inbound dedup by provider message id", { skip: !hasDb }, () => {
     const [c] = await db
       .insert(onbCases)
       .values({
+        organizationId: DEMO_ORGANIZATION_ID,
         workerName: "__Test Inbound Dedup__",
         workerEmail: "dedup-test@example.com",
         hireType: "new-hire",
@@ -104,10 +106,11 @@ describe("inbound dedup by provider message id", { skip: !hasDb }, () => {
         recruiterName: "Rec",
         joiningDate: "2026-09-01",
       })
-      .returning({ id: onbCases.id });
+      .returning({ id: onbCases.id, organizationId: onbCases.organizationId });
     try {
       const msg = {
         caseId: c.id,
+        organizationId: c.organizationId,
         channel: "email" as const,
         fromAddress: "dedup-test@example.com",
         subject: "Test",
@@ -124,6 +127,7 @@ describe("inbound dedup by provider message id", { skip: !hasDb }, () => {
       const outboundId = `test-out-${Date.now()}`;
       await db.insert(onbCommunications).values({
         caseId: c.id,
+        organizationId: c.organizationId,
         channel: "email",
         direction: "outbound",
         toAddress: "de***@example.com",
@@ -132,7 +136,7 @@ describe("inbound dedup by provider message id", { skip: !hasDb }, () => {
         status: "sent",
         externalMessageId: outboundId,
       });
-      assert.equal(await alreadyRecorded(outboundId), true);
+      assert.equal(await alreadyRecorded(outboundId, c.organizationId), true);
       assert.equal(await persistInbound({ ...msg, externalMessageId: outboundId }), false);
     } finally {
       await db.delete(onbCases).where(eq(onbCases.id, c.id)); // cascades to communications

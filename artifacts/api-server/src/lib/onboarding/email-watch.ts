@@ -1,11 +1,12 @@
 import { db } from "@workspace/db";
 import {
   onbCases,
+  onbCommunications,
   onbSystemChecks,
   onbWatchEmails,
 } from "@workspace/db/schema";
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   classifyMonitor,
   extractAddress,
@@ -108,12 +109,17 @@ export function parseStatusEmail(text: string): ParsedStatus {
 }
 
 /** Find which open check's external ref is quoted in the email. Exported for tests. */
-export function matchCheckByRef<T extends { externalRef: string }>(
+export function matchCheckByRef<T extends { externalRef: string; organizationId?: string }>(
   checks: T[],
   text: string,
 ): T | undefined {
-  const upper = text.toUpperCase();
-  return checks.find((c) => upper.includes(c.externalRef.toUpperCase()));
+  const matches = checks.filter((c) => {
+    const escaped = c.externalRef.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^A-Z0-9])${escaped}(?![A-Z0-9])`, "i").test(text);
+  });
+  // A mailbox is shared infrastructure: a reference present in more than
+  // one tenant is ambiguous and must be quarantined, never first-match wins.
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 /* ------------------------------------------------------------------ */
@@ -147,6 +153,7 @@ export function senderTrusted(
  * emails are checked against WATCH_EMAIL_TRUSTED_SENDERS.
  */
 export async function applyWatchEmail(opts: {
+  organizationId?: string;
   gmailMessageId: string;
   check: OpenCheck;
   fromAddress: string;
@@ -154,10 +161,17 @@ export async function applyWatchEmail(opts: {
   bodyText: string;
   trusted?: boolean;
 }): Promise<string | null> {
+  // Public/request-driven callers must provide the authenticated tenant.
+  // Legacy internal probes without one fail closed.
+  if (!opts.organizationId || opts.check.organizationId !== opts.organizationId) {
+    return null;
+  }
+  const organizationId = opts.organizationId;
   const [seen] = await db
     .select({ id: onbWatchEmails.id })
     .from(onbWatchEmails)
-    .where(eq(onbWatchEmails.gmailMessageId, opts.gmailMessageId));
+    .where(sql`${onbWatchEmails.gmailMessageId} = ${opts.gmailMessageId}
+      and ${onbWatchEmails.organizationId} = ${organizationId}`);
   if (seen) return null; // already processed
 
   const trusted = opts.trusted ?? senderTrusted(opts.fromAddress);
@@ -167,10 +181,14 @@ export async function applyWatchEmail(opts: {
 
   // Re-fetch so the recorded action reflects the check's CURRENT state
   // (it may have been closed or retagged since it was read).
-  const [current] = await db
-    .select()
+  const [owned] = await db
+    .select({ check: onbSystemChecks })
     .from(onbSystemChecks)
-    .where(eq(onbSystemChecks.id, opts.check.id));
+    .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
+    .where(sql`${onbSystemChecks.id} = ${opts.check.id}
+      and ${onbSystemChecks.organizationId} = ${organizationId}
+      and ${onbCases.organizationId} = ${organizationId}`);
+  const current = owned?.check;
   const applicable =
     current !== undefined &&
     current.mode === "email" &&
@@ -207,7 +225,8 @@ export async function applyWatchEmail(opts: {
       await db
         .update(onbSystemChecks)
         .set({ lastCheckedAt: new Date() })
-        .where(eq(onbSystemChecks.id, opts.check.id));
+        .where(sql`${onbSystemChecks.id} = ${opts.check.id}
+          and ${onbSystemChecks.organizationId} = ${opts.check.organizationId}`);
     }
   }
 
@@ -215,6 +234,7 @@ export async function applyWatchEmail(opts: {
     .insert(onbWatchEmails)
     .values({
       gmailMessageId: opts.gmailMessageId,
+      organizationId,
       checkId: opts.check.id,
       caseId: opts.check.caseId,
       system: opts.check.system,
@@ -224,7 +244,9 @@ export async function applyWatchEmail(opts: {
       parsedStatus: parsed,
       action,
     })
-    .onConflictDoNothing({ target: onbWatchEmails.gmailMessageId })
+    .onConflictDoNothing({
+      target: [onbWatchEmails.organizationId, onbWatchEmails.gmailMessageId],
+    })
     .returning({ id: onbWatchEmails.id });
   if (rows.length === 0) return null; // lost a race with a concurrent apply
 
@@ -240,8 +262,59 @@ async function openEmailChecks(): Promise<OpenCheck[]> {
     .select()
     .from(onbSystemChecks)
     .where(
-      sql`${onbSystemChecks.mode} = 'email' and ${onbSystemChecks.status} in ('pending', 'overdue')`,
+      sql`${onbSystemChecks.mode} = 'email'
+        and ${onbSystemChecks.status} in ('pending', 'overdue')`,
     );
+}
+
+export type WatchPollDeps = {
+  fetchDetail: (id: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
+  alreadyRecorded: (id: string) => Promise<boolean>;
+  apply: (opts: {
+    organizationId: string;
+    gmailMessageId: string;
+    check: OpenCheck;
+    fromAddress: string;
+    subject: string | null;
+    bodyText: string;
+  }) => Promise<string | null>;
+};
+
+/** Process refs against the complete cross-tenant check set before ownership. */
+export async function processWatchMessageRefs(
+  refs: Array<{ id: string }>,
+  checks: OpenCheck[],
+  deps: WatchPollDeps,
+): Promise<number> {
+  let detailFailures = 0;
+  for (const ref of refs) {
+    const msgResp = await deps.fetchDetail(ref.id);
+    if (!msgResp.ok) {
+      detailFailures += 1;
+      continue;
+    }
+    const msg = (await msgResp.json()) as GmailMessage;
+    const subject = header(msg, "Subject") || null;
+    const body = stripQuotedReply(findPlainText(msg.payload) ?? "");
+    // Global exact-token matching happens before selecting a tenant. Duplicate
+    // references anywhere in the shared mailbox are quarantined.
+    const check = matchCheckByRef(checks, `${subject ?? ""}\n${body}`);
+    if (!check || await deps.alreadyRecorded(ref.id)) continue;
+    const action = await deps.apply({
+      organizationId: check.organizationId,
+      gmailMessageId: msg.id,
+      check,
+      fromAddress: extractAddress(header(msg, "From")),
+      subject,
+      bodyText: body,
+    });
+    if (action) {
+      console.log(
+        `[email-watch] ${check.externalRef} (case ${check.caseId}): ${action} (gmail ${msg.id})`,
+      );
+    }
+  }
+  return detailFailures;
 }
 
 async function pollOnce(): Promise<void> {
@@ -261,42 +334,26 @@ async function pollOnce(): Promise<void> {
     );
   }
   const list = (await listResp.json()) as { messages?: Array<{ id: string }> };
-  let detailFailures = 0;
-  for (const ref of list.messages ?? []) {
-    const [seen] = await db
-      .select({ id: onbWatchEmails.id })
-      .from(onbWatchEmails)
-      .where(eq(onbWatchEmails.gmailMessageId, ref.id));
-    if (seen) continue;
-
-    const msgResp = await connectors.proxy(
+  const detailFailures = await processWatchMessageRefs(list.messages ?? [], checks, {
+    fetchDetail: (id) => connectors.proxy(
       "google-mail",
-      `/gmail/v1/users/me/messages/${ref.id}?format=full`,
+      `/gmail/v1/users/me/messages/${id}?format=full`,
       { method: "GET" },
-    );
-    if (!msgResp.ok) {
-      detailFailures += 1;
-      continue;
-    }
-    const msg = (await msgResp.json()) as GmailMessage;
-    const subject = header(msg, "Subject") || null;
-    const body = stripQuotedReply(findPlainText(msg.payload) ?? "");
-    const check = matchCheckByRef(checks, `${subject ?? ""}\n${body}`);
-    if (!check) continue;
-
-    const action = await applyWatchEmail({
-      gmailMessageId: msg.id,
-      check,
-      fromAddress: extractAddress(header(msg, "From")),
-      subject,
-      bodyText: body,
-    });
-    if (action) {
-      console.log(
-        `[email-watch] ${check.externalRef} (case ${check.caseId}): ${action} (gmail ${msg.id})`,
-      );
-    }
-  }
+    ),
+    alreadyRecorded: async (id) => {
+      const [seen] = await db
+        .select({ id: onbWatchEmails.id })
+        .from(onbWatchEmails)
+        .where(eq(onbWatchEmails.gmailMessageId, id));
+      if (seen) return true;
+      const [communication] = await db
+        .select({ id: onbCommunications.id })
+        .from(onbCommunications)
+        .where(eq(onbCommunications.externalMessageId, id));
+      return Boolean(communication);
+    },
+    apply: applyWatchEmail as WatchPollDeps["apply"],
+  });
   if (detailFailures > 0) {
     throw new Error(
       `Watch-mailbox detail fetch failed for ${detailFailures} messages`,
@@ -314,6 +371,7 @@ async function pollOnce(): Promise<void> {
  * without a real vendor mailbox.
  */
 export async function simulateVendorEmail(opts: {
+  organizationId: string;
   caseId: number;
   system: string;
   outcome: "completed" | "exception";
@@ -322,7 +380,11 @@ export async function simulateVendorEmail(opts: {
     .select()
     .from(onbSystemChecks)
     .where(
-      sql`${onbSystemChecks.caseId} = ${opts.caseId} and ${onbSystemChecks.system} = ${opts.system}`,
+      and(
+        eq(onbSystemChecks.caseId, opts.caseId),
+        eq(onbSystemChecks.system, opts.system),
+        eq(onbSystemChecks.organizationId, opts.organizationId),
+      ),
     );
   if (!check)
     return { ok: false, message: "No tracked check for this case/system" };
@@ -339,7 +401,9 @@ export async function simulateVendorEmail(opts: {
   const [c] = await db
     .select({ workerName: onbCases.workerName })
     .from(onbCases)
-    .where(eq(onbCases.id, check.caseId));
+    .where(sql`${onbCases.id} = ${check.caseId}
+      and ${onbCases.organizationId} = ${opts.organizationId}`);
+  if (!c) return { ok: false, message: "Case not found" };
   const subject =
     opts.outcome === "completed"
       ? `[${check.externalRef}] ${def?.label ?? check.system} completed for ${c?.workerName ?? "worker"}`
@@ -350,6 +414,7 @@ export async function simulateVendorEmail(opts: {
       : `Automated status notification: reference ${check.externalRef} could not be processed — an exception was raised and requires review.`;
 
   const action = await applyWatchEmail({
+    organizationId: opts.organizationId,
     gmailMessageId: `simulated-${check.id}-${Date.now()}`,
     check,
     fromAddress: "no-reply@vendor-notifications.example",
@@ -388,18 +453,21 @@ export type EmailWatchStatus = {
   }>;
 };
 
-export async function getEmailWatchStatus(): Promise<EmailWatchStatus> {
+export async function getEmailWatchStatus(organizationId: string): Promise<EmailWatchStatus> {
   const iso = (d: Date | null) => (d ? d.toISOString() : null);
   const state = classifyMonitor(telemetry, Date.now(), POLL_INTERVAL_MS);
   const [openCount] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(onbSystemChecks)
     .where(
-      sql`${onbSystemChecks.mode} = 'email' and ${onbSystemChecks.status} in ('pending', 'overdue')`,
+      sql`${onbSystemChecks.organizationId} = ${organizationId}
+        and ${onbSystemChecks.mode} = 'email'
+        and ${onbSystemChecks.status} in ('pending', 'overdue')`,
     );
   const recent = await db
     .select()
     .from(onbWatchEmails)
+    .where(eq(onbWatchEmails.organizationId, organizationId))
     .orderBy(desc(onbWatchEmails.id))
     .limit(20);
   return {

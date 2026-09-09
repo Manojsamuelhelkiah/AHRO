@@ -62,15 +62,17 @@ test("senderIsApprover: nobody is trusted when no approver is configured", () =>
 import { addressAllowed, setDemoAllowlist } from "./channels";
 
 test("approver address is only deliverable once explicitly allowlisted", () => {
-  setDemoAllowlist([]);
+  const organizationId = "approver-test-org";
+  setDemoAllowlist(organizationId, []);
   // Unauthorized: an address not saved in Settings never receives live mail.
-  assert.equal(addressAllowed("approver@example.com"), false);
+  assert.equal(addressAllowed("approver@example.com", organizationId), false);
   // Saving the approver in Settings adds it to the allowlist (initDemoAllowlist).
-  setDemoAllowlist(["approver@example.com"]);
-  assert.equal(addressAllowed("Approver@Example.com"), true);
+  setDemoAllowlist(organizationId, ["approver@example.com"]);
+  assert.equal(addressAllowed("Approver@Example.com", organizationId), true);
+  assert.equal(addressAllowed("Approver@Example.com", "another-org"), false);
   // Clearing the setting revokes authorization again.
-  setDemoAllowlist([]);
-  assert.equal(addressAllowed("approver@example.com"), false);
+  setDemoAllowlist(organizationId, []);
+  assert.equal(addressAllowed("approver@example.com", organizationId), false);
 });
 
 /* ---------------------------- compose ---------------------------- */

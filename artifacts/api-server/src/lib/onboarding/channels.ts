@@ -5,6 +5,8 @@ import { recordGuardrailEvent } from "./guardrails";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandidateEmail } from "./channel-routing";
 import { isValidEmail } from "./settings";
+import { randomBytes } from "node:crypto";
+import { externalProviderDispatchDenied } from "./provider-policy";
 
 const connectors = new ReplitConnectors();
 
@@ -82,6 +84,13 @@ export async function sendEmail(
   subject: string,
   body: string,
 ): Promise<{ status: string; failureReason: string | null; externalMessageId: string | null }> {
+  if (externalProviderDispatchDenied()) {
+    return {
+      status: "logged-only",
+      failureReason: "External email delivery is denied by the active execution safety policy.",
+      externalMessageId: null,
+    };
+  }
   try {
     const rfc2822 = [
       `To: ${to}`,
@@ -131,6 +140,13 @@ async function sendWhatsApp(
   toPhone: string,
   body: string,
 ): Promise<{ status: string; failureReason: string | null; externalMessageId: string | null }> {
+  if (externalProviderDispatchDenied()) {
+    return {
+      status: "logged-only",
+      failureReason: "External WhatsApp delivery is denied by the active execution safety policy.",
+      externalMessageId: null,
+    };
+  }
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_WHATSAPP_FROM;
@@ -184,8 +200,8 @@ const MAX_LIVE_SENDS_PER_HOUR = 30;
 let sendWindowStart = Date.now();
 let sendWindowCount = 0;
 
-/** Admin-managed demo-volunteer addresses (set from the Settings screen). */
-let demoAllowed = new Set<string>();
+/** Admin-managed demo-volunteer addresses, isolated by tenant. */
+const demoAllowedByOrganization = new Map<string, ReadonlySet<string>>();
 
 function normalizeAddress(address: string): string {
   const base = address.trim().toLowerCase().replace(/^whatsapp:/, "");
@@ -195,20 +211,25 @@ function normalizeAddress(address: string): string {
   return /^\+?\d+$/.test(compact) ? compact : base;
 }
 
-/** Replace the demo-volunteer allowlist (emails + phone numbers). */
-export function setDemoAllowlist(addresses: string[]): void {
-  demoAllowed = new Set(addresses.map(normalizeAddress).filter(Boolean));
+/** Replace one tenant's demo-volunteer allowlist (emails + phone numbers). */
+export function setDemoAllowlist(organizationId: string, addresses: string[]): void {
+  demoAllowedByOrganization.set(
+    organizationId,
+    new Set(addresses.map(normalizeAddress).filter(Boolean)),
+  );
 }
 
 /** True when live delivery to this email/phone is permitted. */
-export function addressAllowed(address: string): boolean {
+export function addressAllowed(address: string, organizationId?: string): boolean {
   const configured = (process.env.ONBOARDING_ALLOWED_RECIPIENTS ?? "")
     .split(",")
     .map((s) => normalizeAddress(s))
     .filter(Boolean);
   const allowed = configured.length > 0 ? configured : DEFAULT_ALLOWED_RECIPIENTS;
   const normalized = normalizeAddress(address);
-  return allowed.includes(normalized) || demoAllowed.has(normalized);
+  return allowed.includes(normalized) ||
+    (organizationId !== undefined &&
+      demoAllowedByOrganization.get(organizationId)?.has(normalized) === true);
 }
 
 /** Unlike legacy demo defaults, system test delivery requires an explicit env allowlist entry. */
@@ -221,8 +242,13 @@ export function explicitlyConfiguredAddressAllowed(address: string): boolean {
 }
 
 /** Explicit demo-volunteer or environment authorization for legacy candidate cases. */
-export function explicitlyAllowlistedCandidateAddress(address: string): boolean {
-  return explicitlyConfiguredAddressAllowed(address) || demoAllowed.has(normalizeAddress(address));
+export function explicitlyAllowlistedCandidateAddress(
+  address: string,
+  organizationId?: string,
+): boolean {
+  return explicitlyConfiguredAddressAllowed(address) ||
+    (organizationId !== undefined &&
+      demoAllowedByOrganization.get(organizationId)?.has(normalizeAddress(address)) === true);
 }
 
 /** Email channel diagnostics never borrow a candidate address. */
@@ -231,8 +257,8 @@ export function systemEmailTestAddress(): string | null {
   return address && explicitlyConfiguredAddressAllowed(address) ? address : null;
 }
 
-function recipientAllowed(address: string): boolean {
-  return addressAllowed(address);
+function recipientAllowed(address: string, organizationId: string): boolean {
+  return addressAllowed(address, organizationId);
 }
 
 export type CandidateEmailAuthorization = {
@@ -272,24 +298,34 @@ export async function sendOutbound(opts: {
   sensitive?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
-  // Pick up any allowlist change saved on another process instance.
+  const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
+  if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  // Pick up this tenant's allowlist changes saved on another process instance.
+  let allowlistRefreshed = false;
   try {
     const { refreshDemoAllowlist } = await import("./demo-volunteers");
-    await refreshDemoAllowlist();
+    await refreshDemoAllowlist(caseRow.organizationId);
+    allowlistRefreshed = true;
   } catch (err) {
     console.error("[channels] demo allowlist refresh failed:", err);
   }
-  const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
-  if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
   const candidateEmail = opts.channel === "email" ? candidateEmailAuthorization(caseRow) : null;
   const actualAddress = candidateEmail?.address ?? opts.toAddress;
+  // Shared-inbox replies are attributed only through this unguessable,
+  // case-bound reference, never by sender address alone.
+  const body =
+    opts.channel === "email" && candidateEmail
+      ? `${opts.body}\n\n[Reply reference: CR-${randomBytes(16).toString("hex")}]`
+      : opts.body;
   // Preserve prior explicit demo/env authorization for a case candidate while
   // still deriving the target from the record. It is not a blanket bypass:
   // the address itself must be allowlisted and the case must allow email.
   const candidateMaySend = candidateEmail && candidateEmailMaySend({
     channelPreference: caseRow.channelPreference,
     caseAuthorized: candidateEmail.allowed,
-    explicitlyAllowlisted: explicitlyAllowlistedCandidateAddress(candidateEmail.address),
+    explicitlyAllowlisted: explicitlyConfiguredAddressAllowed(candidateEmail.address) ||
+      (allowlistRefreshed &&
+        explicitlyAllowlistedCandidateAddress(candidateEmail.address, caseRow.organizationId)),
     validEmail: isValidEmail(candidateEmail.address),
   });
   if (candidateEmail && !candidateMaySend) {
@@ -304,7 +340,11 @@ export async function sendOutbound(opts: {
       action: "blocked",
       detail: `Live email delivery to ${maskEmail(actualAddress)} withheld — case-scoped candidate authorization is absent. Message logged only.`,
     });
-  } else if (opts.channel !== "email" && !recipientAllowed(actualAddress)) {
+  } else if (
+    opts.channel !== "email" &&
+    !(explicitlyConfiguredAddressAllowed(actualAddress) ||
+      (allowlistRefreshed && recipientAllowed(actualAddress, caseRow.organizationId)))
+  ) {
     result = {
       status: "logged-only",
       failureReason:
@@ -330,22 +370,23 @@ export async function sendOutbound(opts: {
       detail: `Hourly live-send cap (${MAX_LIVE_SENDS_PER_HOUR}/h) reached — ${opts.channel} message logged, not delivered.`,
     });
   } else if (opts.channel === "email") {
-    result = await sendEmail(actualAddress, opts.subject ?? "Onboarding update", opts.body);
+    result = await sendEmail(actualAddress, opts.subject ?? "Onboarding update", body);
   } else {
-    result = await sendWhatsApp(actualAddress, opts.body);
+    result = await sendWhatsApp(actualAddress, body);
   }
   const masked =
     opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress);
   const [row] = await db
     .insert(onbCommunications)
     .values({
+      organizationId: caseRow.organizationId,
       caseId: opts.caseId,
       channel: opts.channel,
       direction: "outbound",
       audience: "candidate",
       toAddress: masked,
       subject: opts.subject ?? null,
-      body: opts.body,
+      body,
       status: result.status,
       failureReason: result.failureReason,
       sensitive: opts.sensitive ?? false,
@@ -362,14 +403,20 @@ export async function sendAdministrativeEmail(opts: {
   subject: string;
   body: string;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
+  const [caseRow] = await db.select({ organizationId: onbCases.organizationId }).from(onbCases)
+    .where(eq(onbCases.id, opts.caseId));
+  if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
+  let allowlistRefreshed = false;
   try {
     const { refreshDemoAllowlist } = await import("./demo-volunteers");
-    await refreshDemoAllowlist();
+    await refreshDemoAllowlist(caseRow.organizationId);
+    allowlistRefreshed = true;
   } catch (err) {
     console.error("[channels] admin allowlist refresh failed:", err);
   }
-  if (!recipientAllowed(opts.toAddress)) {
+  if (!(explicitlyConfiguredAddressAllowed(opts.toAddress) ||
+    (allowlistRefreshed && recipientAllowed(opts.toAddress, caseRow.organizationId)))) {
     result = { status: "logged-only", failureReason: "HR approver address is not on the administrative allowlist — notification logged, not delivered.", externalMessageId: null };
   } else if (!withinRateLimit()) {
     result = { status: "logged-only", failureReason: "Hourly live-send limit reached — notification logged, not delivered.", externalMessageId: null };
@@ -377,6 +424,7 @@ export async function sendAdministrativeEmail(opts: {
     result = await sendEmail(opts.toAddress, opts.subject, opts.body);
   }
   const [row] = await db.insert(onbCommunications).values({
+    organizationId: caseRow.organizationId,
     caseId: opts.caseId,
     channel: "email",
     direction: "outbound",
@@ -419,9 +467,11 @@ export async function retryCandidateEmail(
   }
   // Pick up explicit volunteer authorization changed on another process
   // before evaluating the legacy fallback path.
+  let allowlistRefreshed = false;
   try {
     const { refreshDemoAllowlist } = await import("./demo-volunteers");
-    await refreshDemoAllowlist();
+    await refreshDemoAllowlist(existing.candidate.organizationId);
+    allowlistRefreshed = true;
   } catch (err) {
     console.error("[channels] retry allowlist refresh failed:", err);
   }
@@ -429,7 +479,12 @@ export async function retryCandidateEmail(
   const retryAuthorized = candidateEmailMaySend({
     channelPreference: existing.candidate.channelPreference,
     caseAuthorized: authorization.allowed,
-    explicitlyAllowlisted: explicitlyAllowlistedCandidateAddress(authorization.address),
+    explicitlyAllowlisted: explicitlyConfiguredAddressAllowed(authorization.address) ||
+      (allowlistRefreshed &&
+        explicitlyAllowlistedCandidateAddress(
+          authorization.address,
+          existing.candidate.organizationId,
+        )),
     validEmail: isValidEmail(authorization.address),
   });
   if (!retryAuthorized) {

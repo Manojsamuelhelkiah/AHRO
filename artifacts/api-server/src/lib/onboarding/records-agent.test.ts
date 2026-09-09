@@ -4,6 +4,7 @@ import { applyStintFilter, executePlan, executePlanScoped, type StintFilter, typ
 
 const stint = (over: Partial<StintRow>): StintRow => ({
   id: 1,
+  organizationId: "demo",
   workerEmail: "x@example.com",
   workerName: "X",
   role: "Analyst",

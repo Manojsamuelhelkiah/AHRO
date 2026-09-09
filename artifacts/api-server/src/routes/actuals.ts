@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import multer from "multer";
 import { db, actualsOverlaysTable } from "@workspace/db";
 import {
@@ -16,6 +16,11 @@ import { aggregateCallLog } from "../lib/aggregate-log";
 import type { ActualsOverlay } from "../data/types";
 import { intentMap } from "../data/intents";
 import { CustomIntentStorageUnavailableError } from "../middlewares/error-handler";
+import {
+  getOrganizationId,
+  organizationValues,
+  organizationWhere,
+} from "../lib/organization-scope";
 
 const router: IRouter = Router();
 
@@ -25,19 +30,24 @@ export function overlayRequiresCustomIntentLookup(overlay: ActualsOverlay): bool
 
 export async function loadCustomIntentsWhenRequired(
   requiresLookup: boolean,
+  organizationId: string,
   load: typeof loadActiveCustomIntents = loadActiveCustomIntents,
 ) {
   if (!requiresLookup) return [];
   try {
-    return await load();
+    return await load(organizationId);
   } catch (error) {
     throw new CustomIntentStorageUnavailableError({ cause: error });
   }
 }
 
-async function customIntentKeysForOverlay(overlay: ActualsOverlay): Promise<Set<string>> {
+async function customIntentKeysForOverlay(
+  overlay: ActualsOverlay,
+  organizationId: string,
+): Promise<Set<string>> {
   const customIntents = await loadCustomIntentsWhenRequired(
     overlayRequiresCustomIntentLookup(overlay),
+    organizationId,
   );
   return new Set(customIntents.map((intent) => intent.key));
 }
@@ -67,11 +77,12 @@ function parseId(raw: string | undefined): number {
   return id;
 }
 
-router.get("/actuals", async (_req, res, next) => {
+router.get("/actuals", async (req, res, next) => {
   try {
     const rows = await db
       .select()
       .from(actualsOverlaysTable)
+      .where(organizationWhere(actualsOverlaysTable, getOrganizationId(req)))
       .orderBy(actualsOverlaysTable.id);
     res.json(ListActualsOverlaysResponse.parse(rows.map(serialize)));
   } catch (err) {
@@ -83,7 +94,7 @@ router.post("/actuals/validate", async (req, res, next) => {
   try {
     const body = ValidateActualsOverlayBody.parse(req.body);
     const overlay = body as ActualsOverlay;
-    const customKeys = await customIntentKeysForOverlay(overlay);
+    const customKeys = await customIntentKeysForOverlay(overlay, getOrganizationId(req));
     const result = validateActualsOverlay(overlay, customKeys);
     res.json(ValidateActualsOverlayResponse.parse(result));
   } catch (err) {
@@ -105,7 +116,7 @@ router.post(
         ? referenceResult
         : aggregateCallLog(
           csvText,
-          await loadCustomIntentsWhenRequired(true),
+           await loadCustomIntentsWhenRequired(true, getOrganizationId(req)),
         );
       res.json(result);
     } catch (err) {
@@ -118,7 +129,8 @@ router.post("/actuals", async (req, res, next) => {
   try {
     const body = CreateActualsOverlayBody.parse(req.body);
     const overlay = body as ActualsOverlay;
-    const customKeys = await customIntentKeysForOverlay(overlay);
+    const organizationId = getOrganizationId(req);
+    const customKeys = await customIntentKeysForOverlay(overlay, organizationId);
     validateActualsOverlayOrThrow(overlay, customKeys);
 
     const [row] = await db
@@ -128,6 +140,7 @@ router.post("/actuals", async (req, res, next) => {
         periodStart: overlay.periodStart ?? null,
         periodEnd: overlay.periodEnd ?? null,
         payload: overlay as Record<string, unknown>,
+         ...organizationValues(organizationId),
       })
       .returning();
     res.status(201).json(CreateActualsOverlayResponse.parse(serialize(row!)));
@@ -142,7 +155,10 @@ router.get("/actuals/:id", async (req, res, next) => {
     const [row] = await db
       .select()
       .from(actualsOverlaysTable)
-      .where(eq(actualsOverlaysTable.id, id));
+      .where(and(
+        eq(actualsOverlaysTable.id, id),
+        organizationWhere(actualsOverlaysTable, getOrganizationId(req)),
+      ));
     if (!row) {
       res.status(404).json({ error: "Actuals overlay not found" });
       return;
@@ -158,7 +174,10 @@ router.delete("/actuals/:id", async (req, res, next) => {
     const id = parseId(req.params["id"]);
     const [row] = await db
       .delete(actualsOverlaysTable)
-      .where(eq(actualsOverlaysTable.id, id))
+      .where(and(
+        eq(actualsOverlaysTable.id, id),
+        organizationWhere(actualsOverlaysTable, getOrganizationId(req)),
+      ))
       .returning();
     if (!row) {
       res.status(404).json({ error: "Actuals overlay not found" });

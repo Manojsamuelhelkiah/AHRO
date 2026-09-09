@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Request, Response } from "express";
 import {
+  createInternalSmokeSignature,
   createPricingRateManagerGuard,
+  createRequireAuth,
   hasCommercialRateManagerPermission,
   requireAuth,
   resolveReviewerName,
@@ -13,7 +15,17 @@ import {
  * `clerkMiddleware` provides and `getAuth` consumes, plus a response
  * recorder, then runs `requireAuth` against them.
  */
-function runRequireAuth(userId: string | null) {
+function runRequireAuth(
+  userId: string | null,
+  requestOptions: {
+    headers?: Record<string, string>;
+    method?: string;
+    originalUrl?: string;
+    nodeEnv?: string;
+    sessionSecret?: string;
+    now?: () => number;
+  } = {},
+) {
   // `getAuth` only accepts an auth handler branded by clerkMiddleware; use
   // the same global-registry symbol to brand the stub.
   const authHandler = Object.assign(
@@ -24,7 +36,15 @@ function runRequireAuth(userId: string | null) {
     }),
     { [Symbol.for("@clerk/express.auth")]: true },
   );
-  const req = { auth: authHandler } as unknown as Request;
+  const headers = requestOptions.headers ?? {};
+  const req = {
+    auth: authHandler,
+    method: requestOptions.method ?? "GET",
+    originalUrl: requestOptions.originalUrl ?? "/api/intents",
+    header(name: string) {
+      return headers[name.toLowerCase()];
+    },
+  } as unknown as Request;
 
   let statusCode: number | undefined;
   let jsonBody: unknown;
@@ -40,7 +60,17 @@ function runRequireAuth(userId: string | null) {
   } as unknown as Response;
 
   let nextCalled = false;
-  requireAuth(req, res, () => {
+  const authMiddleware =
+    requestOptions.nodeEnv === undefined &&
+    requestOptions.sessionSecret === undefined &&
+    requestOptions.now === undefined
+      ? requireAuth
+      : createRequireAuth({
+          nodeEnv: requestOptions.nodeEnv,
+          sessionSecret: requestOptions.sessionSecret,
+          now: requestOptions.now,
+        });
+  authMiddleware(req, res, () => {
     nextCalled = true;
   });
 
@@ -59,6 +89,98 @@ test("authenticated requests pass through with the signed-in user attached", () 
   assert.equal(statusCode, undefined);
   assert.equal(nextCalled, true);
   assert.equal(req.authUserId, "user_test_123");
+});
+
+const smokeNow = 1_750_000_000_000;
+const smokeSecret = "test-session-secret-with-sufficient-entropy";
+const smokeUserId = "internal_intent_routing_smoke";
+
+function smokeHeaders({
+  timestamp = smokeNow.toString(),
+  path = "/api/intents",
+  method = "GET",
+  userId = smokeUserId,
+} = {}) {
+  return {
+    "x-internal-smoke-user-id": userId,
+    "x-internal-smoke-timestamp": timestamp,
+    "x-internal-smoke-signature": createInternalSmokeSignature({
+      secret: smokeSecret,
+      method,
+      path,
+      timestamp,
+      userId,
+    }),
+  };
+}
+
+test("valid short-lived internal smoke signatures authenticate in development", () => {
+  const result = runRequireAuth(null, {
+    headers: smokeHeaders(),
+    nodeEnv: "development",
+    sessionSecret: smokeSecret,
+    now: () => smokeNow,
+  });
+  assert.equal(result.nextCalled, true);
+  assert.equal(result.req.authUserId, smokeUserId);
+});
+
+test("expired internal smoke signatures are rejected", () => {
+  const timestamp = (smokeNow - 60_001).toString();
+  const result = runRequireAuth(null, {
+    headers: smokeHeaders({ timestamp }),
+    nodeEnv: "development",
+    sessionSecret: smokeSecret,
+    now: () => smokeNow,
+  });
+  assert.equal(result.statusCode, 401);
+  assert.equal(result.nextCalled, false);
+});
+
+test("tampered internal smoke signatures are rejected", () => {
+  const headers = smokeHeaders();
+  headers["x-internal-smoke-user-id"] = "caller_controlled_user";
+  const result = runRequireAuth(null, {
+    headers,
+    nodeEnv: "development",
+    sessionSecret: smokeSecret,
+    now: () => smokeNow,
+  });
+  assert.equal(result.statusCode, 401);
+  assert.equal(result.nextCalled, false);
+});
+
+test("internal smoke signatures are rejected outside development", () => {
+  for (const nodeEnv of ["test", "staging", "developmnt", "production"]) {
+    const result = runRequireAuth(null, {
+      headers: smokeHeaders(),
+      nodeEnv,
+      sessionSecret: smokeSecret,
+      now: () => smokeNow,
+    });
+    assert.equal(result.statusCode, 401, `NODE_ENV=${nodeEnv}`);
+    assert.equal(result.nextCalled, false, `NODE_ENV=${nodeEnv}`);
+  }
+});
+
+test("internal smoke signatures are rejected when NODE_ENV is unset", () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  delete process.env.NODE_ENV;
+  try {
+    const result = runRequireAuth(null, {
+      headers: smokeHeaders(),
+      sessionSecret: smokeSecret,
+      now: () => smokeNow,
+    });
+    assert.equal(result.statusCode, 401);
+    assert.equal(result.nextCalled, false);
+  } finally {
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  }
 });
 
 test("resolveReviewerName never returns a client-controlled value and falls back to the user id", async () => {

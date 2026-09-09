@@ -28,7 +28,7 @@ import { assumptions } from "../data/assumptions";
 import { modelCatalog } from "../data/model-catalog";
 import { logger } from "../lib/logger";
 import { InputValidationError } from "../lib/validate-inputs";
-import { requireAuth } from "../middlewares/require-auth";
+import { getOrganizationId, organizationValues } from "../lib/organization-scope";
 
 const router: IRouter = Router();
 const PHASES = [
@@ -379,10 +379,11 @@ function serialize(row: typeof eaAssessmentsTable.$inferSelect) {
   };
 }
 
-function owned(id: number, ownerUserId: string) {
+function owned(id: number, ownerUserId: string, organizationId: string) {
   return and(
     eq(eaAssessmentsTable.id, id),
     eq(eaAssessmentsTable.ownerUserId, ownerUserId),
+    eq(eaAssessmentsTable.organizationId, organizationId),
   );
 }
 
@@ -431,7 +432,6 @@ function baselineBlock(
 
 router.get(
   "/enterprise-architecture/baseline",
-  requireAuth,
   async (_req, res, next): Promise<void> => {
     try {
       const result = {
@@ -537,14 +537,17 @@ router.get(
 
 router.get(
   "/enterprise-architecture/assessments",
-  requireAuth,
   async (req, res, next): Promise<void> => {
     try {
       const query = ListEaAssessmentsQueryParams.parse(req.query);
       const ownerFilter = eq(eaAssessmentsTable.ownerUserId, req.authUserId!);
+      const organizationFilter = eq(
+        eaAssessmentsTable.organizationId,
+        getOrganizationId(req),
+      );
       const where = query.status
-        ? and(ownerFilter, eq(eaAssessmentsTable.status, query.status))
-        : ownerFilter;
+        ? and(ownerFilter, organizationFilter, eq(eaAssessmentsTable.status, query.status))
+        : and(ownerFilter, organizationFilter);
       const rows = await db
         .select()
         .from(eaAssessmentsTable)
@@ -559,7 +562,6 @@ router.get(
 
 router.post(
   "/enterprise-architecture/assessments",
-  requireAuth,
   async (req, res, next): Promise<void> => {
     try {
       const body = CreateEaAssessmentBody.parse(req.body);
@@ -568,7 +570,11 @@ router.post(
       validateContentReferences(body.content as Record<string, any>);
       const [row] = await db
         .insert(eaAssessmentsTable)
-        .values({ ...body, ownerUserId: req.authUserId! })
+        .values({
+          ...body,
+          ownerUserId: req.authUserId!,
+          ...organizationValues(getOrganizationId(req)),
+        })
         .returning();
       logger.info(
         { assessmentId: row!.id, ownerUserId: req.authUserId },
@@ -583,7 +589,6 @@ router.post(
 
 router.get(
   "/enterprise-architecture/assessments/:id",
-  requireAuth,
   async (req, res, next): Promise<void> => {
     try {
       const { id } = GetEaAssessmentParams.parse(req.params);
@@ -591,7 +596,7 @@ router.get(
       const [row] = await db
         .select()
         .from(eaAssessmentsTable)
-        .where(owned(id, req.authUserId!));
+        .where(owned(id, req.authUserId!, getOrganizationId(req)));
       if (!row) {
         res.status(404).json({ error: "Enterprise architecture assessment not found" });
         return;
@@ -605,7 +610,6 @@ router.get(
 
 router.patch(
   "/enterprise-architecture/assessments/:id",
-  requireAuth,
   async (req, res, next): Promise<void> => {
     try {
       const { id } = UpdateEaAssessmentParams.parse(req.params);
@@ -622,7 +626,7 @@ router.patch(
           .from(eaAssessmentsTable)
           .where(
             and(
-              owned(id, req.authUserId!),
+              owned(id, req.authUserId!, getOrganizationId(req)),
               eq(eaAssessmentsTable.status, "active"),
               eq(eaAssessmentsTable.version, expectedVersion),
             ),
@@ -631,7 +635,7 @@ router.patch(
           const [existing] = await db
             .select({ status: eaAssessmentsTable.status, version: eaAssessmentsTable.version })
             .from(eaAssessmentsTable)
-            .where(owned(id, req.authUserId!));
+            .where(owned(id, req.authUserId!, getOrganizationId(req)));
           const rejection = getEaMutationRejection(existing, expectedVersion, "patch")!;
           res.status(rejection.status).json({ error: rejection.error });
           return;
@@ -654,7 +658,7 @@ router.patch(
         })
         .where(
           and(
-            owned(id, req.authUserId!),
+            owned(id, req.authUserId!, getOrganizationId(req)),
             eq(eaAssessmentsTable.status, "active"),
             eq(eaAssessmentsTable.version, expectedVersion),
           ),
@@ -664,7 +668,7 @@ router.patch(
         const [existing] = await db
           .select({ status: eaAssessmentsTable.status, version: eaAssessmentsTable.version })
           .from(eaAssessmentsTable)
-          .where(owned(id, req.authUserId!));
+          .where(owned(id, req.authUserId!, getOrganizationId(req)));
         const rejection = getEaMutationRejection(existing, expectedVersion, "patch")!;
         res.status(rejection.status).json({ error: rejection.error });
         return;
@@ -682,7 +686,6 @@ router.patch(
 
 router.delete(
   "/enterprise-architecture/assessments/:id",
-  requireAuth,
   async (req, res, next): Promise<void> => {
     try {
       const { id } = DeleteEaAssessmentParams.parse(req.params);
@@ -693,7 +696,7 @@ router.delete(
         .delete(eaAssessmentsTable)
         .where(
           and(
-            owned(id, req.authUserId!),
+            owned(id, req.authUserId!, getOrganizationId(req)),
             eq(eaAssessmentsTable.status, "active"),
             eq(eaAssessmentsTable.version, expectedVersion),
           ),
@@ -703,7 +706,7 @@ router.delete(
         const [existing] = await db
           .select({ status: eaAssessmentsTable.status, version: eaAssessmentsTable.version })
           .from(eaAssessmentsTable)
-          .where(owned(id, req.authUserId!));
+          .where(owned(id, req.authUserId!, getOrganizationId(req)));
         const rejection = getEaMutationRejection(existing, expectedVersion, "delete")!;
         res.status(rejection.status).json({ error: rejection.error });
         return;
@@ -721,7 +724,6 @@ router.delete(
 
 router.post(
   "/enterprise-architecture/assessments/:id/archive",
-  requireAuth,
   async (req, res, next): Promise<void> => {
     try {
       const { id } = ArchiveEaAssessmentParams.parse(req.params);
@@ -739,7 +741,7 @@ router.post(
         })
         .where(
           and(
-            owned(id, req.authUserId!),
+            owned(id, req.authUserId!, getOrganizationId(req)),
             eq(eaAssessmentsTable.status, "active"),
             eq(eaAssessmentsTable.version, expectedVersion),
           ),
@@ -749,7 +751,7 @@ router.post(
         const [existing] = await db
           .select()
           .from(eaAssessmentsTable)
-          .where(owned(id, req.authUserId!));
+          .where(owned(id, req.authUserId!, getOrganizationId(req)));
         if (!existing) {
           res.status(404).json({ error: "Enterprise architecture assessment not found" });
           return;
@@ -775,7 +777,6 @@ router.post(
 
 router.post(
   "/enterprise-architecture/assessments/:id/handoff",
-  requireAuth,
   async (req, res, next): Promise<void> => {
     try {
       const { id } = CreateEaAssessmentHandoffParams.parse(req.params);
@@ -790,7 +791,7 @@ router.post(
       const [row] = await db
         .select()
         .from(eaAssessmentsTable)
-        .where(owned(id, req.authUserId!));
+        .where(owned(id, req.authUserId!, getOrganizationId(req)));
       if (!row) {
         res.status(404).json({ error: "Enterprise architecture assessment not found" });
         return;

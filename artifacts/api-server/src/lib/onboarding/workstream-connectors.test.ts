@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { db } from "@workspace/db";
-import { onbCases, onbDocuments, onbSystemChecks } from "@workspace/db/schema";
+import { DEMO_ORGANIZATION_ID, onbCases, onbDocuments, onbSystemChecks } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import {
   BANK_CHANGE_APPROVAL_RULE,
@@ -29,6 +29,7 @@ async function createDatabaseCase(lifecycleStage: string) {
   const [created] = await db
     .insert(onbCases)
     .values({
+      organizationId: DEMO_ORGANIZATION_ID,
       workerName: `Connector Gate ${Date.now()}`,
       workerEmail: `connector-gate-${Date.now()}@example.test`,
       hireType: "external-fte",
@@ -55,6 +56,7 @@ function caseRow(
 ): WorkstreamConnectorCase {
   return {
     id: 42,
+    organizationId: "test-organization",
     workerEmail: "worker@example.com",
     workerCategory: "employee",
     hireType: "external-fte",

@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
@@ -21,6 +21,10 @@ import { SettingsPage } from './pages/settings';
 import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
 import { ClientSetupPage } from './pages/client-setup';
+import {
+  resolveOrganizationBootstrap,
+  type OrganizationBootstrapResponse,
+} from './lib/organization-bootstrap';
 
 const queryClient = new QueryClient();
 
@@ -134,9 +138,11 @@ function HomeRoute() {
   return (
     <>
       <Show when="signed-in">
-        <AppShell>
-          <DashboardPage />
-        </AppShell>
+        <OrganizationBootstrapGate>
+          <AppShell>
+            <DashboardPage />
+          </AppShell>
+        </OrganizationBootstrapGate>
       </Show>
       <Show when="signed-out">
         <LoginPage />
@@ -149,13 +155,86 @@ function Protected({ children }: { children: ReactNode }) {
   return (
     <>
       <Show when="signed-in">
-        <AppShell>{children}</AppShell>
+        <OrganizationBootstrapGate>
+          <AppShell>{children}</AppShell>
+        </OrganizationBootstrapGate>
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
       </Show>
     </>
   );
+}
+
+function getStoredOrganizationId(): string | null {
+  try {
+    return localStorage.getItem('activeOrganizationId');
+  } catch {
+    return null;
+  }
+}
+
+function OrganizationBootstrapGate({ children }: { children: ReactNode }) {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<'loading' | 'setup' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const storedOrganizationId = getStoredOrganizationId();
+    const headers = storedOrganizationId
+      ? { 'x-organization-id': storedOrganizationId }
+      : undefined;
+
+    setState('loading');
+    fetch('/api/organizations/current', {
+      credentials: 'include',
+      headers,
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(body.message || 'Could not load organization access');
+        }
+        return body as OrganizationBootstrapResponse;
+      })
+      .then((response) => {
+        if (!active) return;
+        const decision = resolveOrganizationBootstrap(response, storedOrganizationId);
+        if (decision.kind === 'setup') {
+          setState('setup');
+          return;
+        }
+        if (decision.selectorChanged) {
+          localStorage.setItem('activeOrganizationId', decision.organizationId);
+          queryClient.clear();
+        }
+        setState('ready');
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setError(caught instanceof Error ? caught.message : 'Could not load organization access');
+        setState('error');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  if (state === 'setup') return <Redirect to="/client-setup" />;
+  if (state === 'ready') return <>{children}</>;
+  if (state === 'error') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-4">
+        <p role="alert" className="text-sm text-red-600">{error}</p>
+        <button type="button" onClick={() => setAttempt((value) => value + 1)} className="rounded-md border px-4 py-2 text-sm font-semibold">
+          Retry
+        </button>
+      </div>
+    );
+  }
+  return <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Loading organization…</div>;
 }
 
 function AppShell({ children }: { children: ReactNode }) {
@@ -194,7 +273,10 @@ function Router() {
         <Protected><SettingsPage /></Protected>
       </Route>
       <Route path="/client-setup">
-        <Protected><ClientSetupPage /></Protected>
+        <>
+          <Show when="signed-in"><AppShell><ClientSetupPage /></AppShell></Show>
+          <Show when="signed-out"><Redirect to="/" /></Show>
+        </>
       </Route>
       <Route component={NotFound} />
     </Switch>

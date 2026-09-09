@@ -429,7 +429,7 @@ export function rateSnapshotAssumptionValue(
 // ─── Snapshot loading / resolution ─────────────────────────────────────────
 
 import { db, pricingRateSetsTable } from "@workspace/db";
-import { desc, lte, sql } from "drizzle-orm";
+import { and, desc, eq, lte, sql } from "drizzle-orm";
 
 /** Calendar date string for today in YYYY-MM-DD. */
 function todayString(): string {
@@ -441,7 +441,7 @@ function todayString(): string {
  * "Current" = latest effectiveDate <= today, then highest id.
  * If no row qualifies, returns null (caller may seed or fail).
  */
-export async function loadCurrentRateSet(): Promise<{
+export async function loadCurrentRateSet(organizationId: string): Promise<{
   id: number;
   effectiveDate: string;
   rationale: string;
@@ -453,7 +453,10 @@ export async function loadCurrentRateSet(): Promise<{
   const rows = await db
     .select()
     .from(pricingRateSetsTable)
-    .where(lte(pricingRateSetsTable.effectiveDate, today))
+    .where(and(
+      lte(pricingRateSetsTable.effectiveDate, today),
+      eq(pricingRateSetsTable.organizationId, organizationId),
+    ))
     .orderBy(desc(pricingRateSetsTable.effectiveDate), desc(pricingRateSetsTable.id))
     .limit(1);
 
@@ -474,7 +477,7 @@ export async function loadCurrentRateSet(): Promise<{
  * If no rate sets exist at all, inserts the baseline seeded from code constants.
  * Returns false if the table is empty, true if at least one row exists after the call.
  */
-export async function ensureBaselineRateSet(): Promise<void> {
+export async function ensureBaselineRateSet(organizationId: string): Promise<void> {
   await db.transaction(async (tx) => {
     // GET /pricing-rate-sets and POST /rollup can be the first requests after a
     // deployment. Serialize that one-time seed so concurrent requests cannot
@@ -483,6 +486,7 @@ export async function ensureBaselineRateSet(): Promise<void> {
     const [existing] = await tx
       .select({ id: pricingRateSetsTable.id })
       .from(pricingRateSetsTable)
+      .where(eq(pricingRateSetsTable.organizationId, organizationId))
       .limit(1);
     if (existing) return;
 
@@ -492,6 +496,7 @@ export async function ensureBaselineRateSet(): Promise<void> {
       rationale: "Initial baseline rate set seeded from code constants (v1).",
       rates: baseline as unknown as Record<string, unknown>,
       createdBy: "system",
+      organizationId,
     });
   });
 }
@@ -503,7 +508,7 @@ export async function ensureBaselineRateSet(): Promise<void> {
  *
  * This is the entry point for POST /rollup.
  */
-export async function loadAndValidateCurrentRateSet(): Promise<{
+export async function loadAndValidateCurrentRateSet(organizationId: string): Promise<{
   id: number;
   effectiveDate: string;
   rationale: string;
@@ -511,7 +516,7 @@ export async function loadAndValidateCurrentRateSet(): Promise<{
   createdBy: string;
   createdAt: Date;
 }> {
-  const rateSet = await loadCurrentRateSet();
+  const rateSet = await loadCurrentRateSet(organizationId);
   if (!rateSet) {
     throw new Error(
       "No current pricing rate set found. A rate set with effectiveDate <= today must exist before generating quotes.",

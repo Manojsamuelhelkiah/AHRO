@@ -57,7 +57,7 @@ test("call-log aggregation recognizes loaded custom intents", () => {
 
 test("reference-only calibration bypasses unavailable custom-intent storage", async () => {
   let loadCalled = false;
-  const intents = await loadCustomIntentsWhenRequired(false, async () => {
+  const intents = await loadCustomIntentsWhenRequired(false, "org-a", async () => {
     loadCalled = true;
     throw new Error("storage unavailable");
   });
@@ -68,7 +68,7 @@ test("reference-only calibration bypasses unavailable custom-intent storage", as
 
 test("custom-intent-dependent calibration maps storage failures to the availability error", async () => {
   await assert.rejects(
-    loadCustomIntentsWhenRequired(true, async () => {
+    loadCustomIntentsWhenRequired(true, "org-a", async () => {
       throw new Error("storage unavailable");
     }),
     CustomIntentStorageUnavailableError,
