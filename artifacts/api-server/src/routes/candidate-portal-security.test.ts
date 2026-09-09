@@ -13,6 +13,7 @@ import {
   onbConnectors,
   onbDocuments,
   onbEvents,
+  onbSettings,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
@@ -28,6 +29,7 @@ import {
   cleanupCandidateAccess,
   hashSecret,
 } from "../lib/onboarding/candidate-portal";
+import { CANDIDATE_LINK_RETENTION_DAYS_KEY, setSetting } from "../lib/onboarding/settings";
 
 const suffix = `${process.pid}-${Date.now()}-${randomUUID().slice(0, 8)}`;
 const orgA = `candidate-security-a-${suffix}`;
@@ -154,6 +156,7 @@ before(async () => {
 
 after(async () => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await db.delete(onbSettings).where(inArray(onbSettings.organizationId, [orgA, orgB]));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgA));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
   await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgA));
@@ -294,6 +297,28 @@ test("candidate access cleanup is tenant-safe, idempotent, and preserves active 
     .from(onbCandidateLinks)
     .where(eq(onbCandidateLinks.id, links[4].id));
   assert.equal(otherTenant.id, links[4].id);
+});
+
+test("candidate access cleanup honors each tenant retention policy without deleting active links", async () => {
+  const now = new Date();
+  await setSetting(orgA, CANDIDATE_LINK_RETENTION_DAYS_KEY, "30");
+  await setSetting(orgB, CANDIDATE_LINK_RETENTION_DAYS_KEY, "180");
+  const expired45DaysAgo = new Date(now.getTime() - 45 * 24 * 60 * 60_000);
+  const future = new Date(now.getTime() + 60_000);
+  const links = await db.insert(onbCandidateLinks).values([
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`policy-a-expired-${suffix}`), expiresAt: expired45DaysAgo, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`policy-a-active-${suffix}`), expiresAt: future, issuedBy: userId },
+    { organizationId: orgB, caseId: caseB, tokenHash: hashSecret(`policy-b-expired-${suffix}`), expiresAt: expired45DaysAgo, issuedBy: userId },
+  ]).returning({ id: onbCandidateLinks.id });
+
+  const cleanup = await cleanupCandidateAccess({ now });
+  assert.ok(cleanup.retainedLinksDeleted >= 1);
+  const survivors = await db.select({ id: onbCandidateLinks.id }).from(onbCandidateLinks)
+    .where(inArray(onbCandidateLinks.id, links.map((link) => link.id)));
+  assert.deepEqual(
+    new Set(survivors.map((link) => link.id)),
+    new Set([links[1].id, links[2].id]),
+  );
 });
 
 test("upload route enforces type and size boundaries before storage", async () => {

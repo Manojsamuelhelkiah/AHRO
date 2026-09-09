@@ -1998,7 +1998,7 @@ paths:
     get:
       operationId: getOnboardingSettings
       tags: [onboarding]
-      summary: App settings (HR alert email address and its effective resolution)
+      summary: Workspace onboarding and compliance settings
       responses:
         "200":
           description: Current settings
@@ -2009,7 +2009,7 @@ paths:
     put:
       operationId: updateOnboardingSettings
       tags: [onboarding]
-      summary: Update app settings (set or clear the HR alert email address)
+      summary: Update workspace onboarding and compliance settings
       requestBody:
         required: true
         content:
@@ -5383,7 +5383,11 @@ components:
             $ref: "#/components/schemas/OnbChecklistTemplateItem"
         day1LogisticsDefault:
           $ref: "#/components/schemas/OnbDay1Logistics"
-      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail, checklistVersion, day1Checklist, day1LogisticsDefault]
+        candidateLinkRetentionDays:
+          type: integer
+          enum: [30, 90, 180, 365]
+          description: Number of days expired or revoked candidate-link metadata is retained
+      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail, checklistVersion, day1Checklist, day1LogisticsDefault, candidateLinkRetentionDays]
     UpdateOnbSettings:
       type: object
       properties:
@@ -5410,6 +5414,10 @@ components:
             $ref: "#/components/schemas/OnbChecklistTemplateItem"
         day1LogisticsDefault:
           $ref: "#/components/schemas/OnbDay1Logistics"
+        candidateLinkRetentionDays:
+          type: integer
+          enum: [30, 90, 180, 365]
+          description: Approved candidate-link metadata retention period. Omit to leave unchanged.
     OnbDay1Logistics:
       type: object
       properties:

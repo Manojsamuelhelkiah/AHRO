@@ -18,6 +18,7 @@ import type {
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
+
 import type {
   ActualsLogParseResult,
   ActualsOverlayInput,
@@ -6630,7 +6631,7 @@ export const getGetOnboardingSettingsUrl = () => {
 }
 
 /**
- * @summary App settings (HR alert email address and its effective resolution)
+ * @summary Workspace onboarding and compliance settings
  */
 export const getOnboardingSettings = async ( options?: RequestInit): Promise<OnbSettings> => {
 
@@ -6677,7 +6678,7 @@ export type GetOnboardingSettingsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary App settings (HR alert email address and its effective resolution)
+ * @summary Workspace onboarding and compliance settings
  */
 
 export function useGetOnboardingSettings<TData = Awaited<ReturnType<typeof getOnboardingSettings>>, TError = ErrorType<unknown>>(
@@ -6707,7 +6708,7 @@ export const getUpdateOnboardingSettingsUrl = () => {
 }
 
 /**
- * @summary Update app settings (set or clear the HR alert email address)
+ * @summary Update workspace onboarding and compliance settings
  */
 export const updateOnboardingSettings = async (updateOnbSettings: UpdateOnbSettings, options?: RequestInit): Promise<OnbSettings> => {
 
@@ -6756,7 +6757,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateOnboardingSettingsMutationError = ErrorType<ErrorMessage>
 
     /**
- * @summary Update app settings (set or clear the HR alert email address)
+ * @summary Update workspace onboarding and compliance settings
  */
 export const useUpdateOnboardingSettings = <TError = ErrorType<ErrorMessage>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingSettings>>, TError,{data: BodyType<UpdateOnbSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -6916,3 +6917,4 @@ export const useCreatePricingRateSet = <TError = ErrorType<ErrorMessage>,
       > => {
       return useMutation(getCreatePricingRateSetMutationOptions(options));
     }
+

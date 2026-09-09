@@ -1,17 +1,24 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Request } from "express";
 import { db } from "@workspace/db";
 import {
   onbCandidateLinks,
   onbCandidateSessions,
   onbCases,
+  onbSettings,
 } from "@workspace/db/schema";
+import {
+  CANDIDATE_LINK_RETENTION_DAYS_KEY,
+  DEFAULT_CANDIDATE_LINK_RETENTION_DAYS,
+  getCandidateLinkRetentionDays,
+} from "./settings";
 
 export const CANDIDATE_COOKIE = "onb_candidate_session";
 export const MAX_CANDIDATE_FILE_BYTES = 10 * 1024 * 1024;
 
-export const CANDIDATE_LINK_RETENTION_MS = 90 * 24 * 60 * 60_000;
+export const CANDIDATE_LINK_RETENTION_MS =
+  DEFAULT_CANDIDATE_LINK_RETENTION_DAYS * 24 * 60 * 60_000;
 export const hashSecret = (value: string) => createHash("sha256").update(value).digest("hex");
 export const newSecret = () => randomBytes(32).toString("base64url");
 export const portalEmailRequested = (value: unknown) => value === true;
@@ -165,21 +172,56 @@ export async function cleanupCandidateAccess(input: {
     ))
     .returning({ idHash: onbCandidateSessions.idHash });
 
-  const retentionCutoff = new Date(now.getTime() - CANDIDATE_LINK_RETENTION_MS);
+  const retentionDays = input.organizationId
+    ? await getCandidateLinkRetentionDays(input.organizationId)
+    : undefined;
   const tenantLinkFilter = input.organizationId
     ? eq(onbCandidateLinks.organizationId, input.organizationId)
     : undefined;
+  const retainedLongEnough = retentionDays === undefined
+    ? or(
+        and(
+          isNull(onbCandidateLinks.revokedAt),
+          sql`${onbCandidateLinks.expiresAt} <= ${now}::timestamptz - (
+            case coalesce((
+              select ${onbSettings.value}
+              from ${onbSettings}
+              where ${onbSettings.organizationId} = ${onbCandidateLinks.organizationId}
+                and ${onbSettings.key} = ${CANDIDATE_LINK_RETENTION_DAYS_KEY}
+            ), ${String(DEFAULT_CANDIDATE_LINK_RETENTION_DAYS)})
+              when '30' then interval '30 days'
+              when '180' then interval '180 days'
+              when '365' then interval '365 days'
+              else interval '90 days'
+            end
+          )`,
+        ),
+        sql`${onbCandidateLinks.revokedAt} <= ${now}::timestamptz - (
+          case coalesce((
+            select ${onbSettings.value}
+            from ${onbSettings}
+            where ${onbSettings.organizationId} = ${onbCandidateLinks.organizationId}
+              and ${onbSettings.key} = ${CANDIDATE_LINK_RETENTION_DAYS_KEY}
+          ), ${String(DEFAULT_CANDIDATE_LINK_RETENTION_DAYS)})
+            when '30' then interval '30 days'
+            when '180' then interval '180 days'
+            when '365' then interval '365 days'
+            else interval '90 days'
+          end
+        )`,
+      )
+    : (() => {
+        const retentionCutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60_000);
+        return or(
+          and(isNull(onbCandidateLinks.revokedAt), lte(onbCandidateLinks.expiresAt, retentionCutoff)),
+          lte(onbCandidateLinks.revokedAt, retentionCutoff),
+        );
+      })();
   const retainedLinkIds = db
     .select({ id: onbCandidateLinks.id })
     .from(onbCandidateLinks)
     .where(and(
-      or(
-        and(
-          isNull(onbCandidateLinks.revokedAt),
-          lte(onbCandidateLinks.expiresAt, retentionCutoff),
-        ),
-        lte(onbCandidateLinks.revokedAt, retentionCutoff),
-      ),
+      retainedLongEnough,
       tenantLinkFilter,
     ))
     .limit(limit);

@@ -19,7 +19,7 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
-import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin } from 'lucide-react';
+import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -683,6 +683,25 @@ export function SettingsPage() {
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const toggleCalls = useUpdateOnboardingSettings();
   const [callsResult, setCallsResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [retentionResult, setRetentionResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const retentionUpdate = useUpdateOnboardingSettings();
+
+  const saveRetention = (days: 30 | 90 | 180 | 365) => {
+    setRetentionResult(null);
+    retentionUpdate.mutate(
+      { data: { candidateLinkRetentionDays: days } },
+      {
+        onSuccess: (updated) => {
+          queryClient.setQueryData(getGetOnboardingSettingsQueryKey(), updated);
+          setRetentionResult({ ok: true, message: `Candidate-link metadata will be retained for ${days} days after expiry or revocation.` });
+        },
+        onError: (err: any) => setRetentionResult({
+          ok: false,
+          message: err?.error ?? err?.message ?? 'Saving failed — please try again.',
+        }),
+      },
+    );
+  };
 
   const saveAutoCalls = (enabled: boolean) => {
     setCallsResult(null);
@@ -940,6 +959,51 @@ export function SettingsPage() {
               )}
               <p className="mt-0.5">{callsResult.message}</p>
             </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
+          <div className="flex items-start gap-3">
+            <IconTile icon={ShieldCheck} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
+            <div>
+              <h3 className="text-[var(--text-xs)] font-semibold uppercase tracking-[0.05em] text-[var(--text-primary)]">Candidate-link retention</h3>
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">
+                Keep expired or revoked candidate-link metadata for your approved audit period. Active links are never removed by retention cleanup.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="p-[var(--space-lg)]">
+          {isLoading ? <LoadingBlock>Loading retention policy...</LoadingBlock> : (
+            <>
+              <Label htmlFor="candidate-link-retention" className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Retention period
+              </Label>
+              <select
+                id="candidate-link-retention"
+                value={settings?.candidateLinkRetentionDays ?? 90}
+                disabled={retentionUpdate.isPending}
+                onChange={(event) => saveRetention(Number(event.target.value) as 30 | 90 | 180 | 365)}
+                className={cn(inputCls, 'mt-2 max-w-xs')}
+              >
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+                <option value={180}>180 days</option>
+                <option value={365}>365 days</option>
+              </select>
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-2">
+                A shorter policy may remove already-expired metadata on the next cleanup run. Unexpired links remain protected.
+              </p>
+              {retentionResult && (
+                <div className={cn('p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] flex items-start gap-3',
+                  retentionResult.ok ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]')}>
+                  {retentionResult.ok ? <Check className="w-5 h-5 shrink-0" /> : <X className="w-5 h-5 shrink-0" />}
+                  <p>{retentionResult.message}</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

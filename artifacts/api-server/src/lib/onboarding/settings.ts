@@ -39,6 +39,26 @@ export const HR_APPROVER_EMAIL_KEY = "hr_approver_email";
  */
 export const AUTO_ESCALATION_CALLS_KEY = "auto_escalation_calls";
 export const DAY1_LOGISTICS_DEFAULT_KEY = "day1_logistics_default";
+export const CANDIDATE_LINK_RETENTION_DAYS_KEY = "candidate_link_retention_days";
+export const DEFAULT_CANDIDATE_LINK_RETENTION_DAYS = 90;
+export const ALLOWED_CANDIDATE_LINK_RETENTION_DAYS = [30, 90, 180, 365] as const;
+export type CandidateLinkRetentionDays = typeof ALLOWED_CANDIDATE_LINK_RETENTION_DAYS[number];
+
+export function isAllowedCandidateLinkRetentionDays(value: unknown): value is CandidateLinkRetentionDays {
+  return typeof value === "number"
+    && Number.isInteger(value)
+    && ALLOWED_CANDIDATE_LINK_RETENTION_DAYS.includes(value as CandidateLinkRetentionDays);
+}
+
+export async function getCandidateLinkRetentionDays(
+  organizationId: string,
+): Promise<CandidateLinkRetentionDays> {
+  const stored = await getSetting(organizationId, CANDIDATE_LINK_RETENTION_DAYS_KEY);
+  const parsed = stored === null ? NaN : Number(stored);
+  return isAllowedCandidateLinkRetentionDays(parsed)
+    ? parsed
+    : DEFAULT_CANDIDATE_LINK_RETENTION_DAYS;
+}
 
 export const LEGACY_CHECKLIST_VERSION = 1;
 export const LEGACY_CHECKLIST: readonly OnbChecklistTemplateItem[] = [

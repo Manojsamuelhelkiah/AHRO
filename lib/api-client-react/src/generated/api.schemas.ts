@@ -7,6 +7,7 @@
  */
 export type EaAssessmentStatus = typeof EaAssessmentStatus[keyof typeof EaAssessmentStatus];
 
+
 export const EaAssessmentStatus = {
   active: 'active',
   archived: 'archived',
@@ -2830,6 +2831,19 @@ export interface OnbChannelTestResult {
 }
 
 /**
+ * Number of days expired or revoked candidate-link metadata is retained
+ */
+export type OnbSettingsCandidateLinkRetentionDays = typeof OnbSettingsCandidateLinkRetentionDays[keyof typeof OnbSettingsCandidateLinkRetentionDays];
+
+
+export const OnbSettingsCandidateLinkRetentionDays = {
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+  NUMBER_180: 180,
+  NUMBER_365: 365,
+} as const;
+
+/**
  * @nullable
  */
 export type OnbDay1LogisticsFormat = typeof OnbDay1LogisticsFormat[keyof typeof OnbDay1LogisticsFormat] | null;
@@ -2911,7 +2925,22 @@ export interface OnbSettings {
      */
   day1Checklist: OnbChecklistTemplateItem[];
   day1LogisticsDefault: OnbDay1Logistics;
+  /** Number of days expired or revoked candidate-link metadata is retained */
+  candidateLinkRetentionDays: OnbSettingsCandidateLinkRetentionDays;
 }
+
+/**
+ * Approved candidate-link metadata retention period. Omit to leave unchanged.
+ */
+export type UpdateOnbSettingsCandidateLinkRetentionDays = typeof UpdateOnbSettingsCandidateLinkRetentionDays[keyof typeof UpdateOnbSettingsCandidateLinkRetentionDays];
+
+
+export const UpdateOnbSettingsCandidateLinkRetentionDays = {
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+  NUMBER_180: 180,
+  NUMBER_365: 365,
+} as const;
 
 export interface UpdateOnbSettings {
   /** New HR alert address; null or empty string clears the stored value. Omit to leave unchanged. */
@@ -2931,6 +2960,8 @@ export interface UpdateOnbSettings {
      */
   day1Checklist?: OnbChecklistTemplateItem[];
   day1LogisticsDefault?: OnbDay1Logistics;
+  /** Approved candidate-link metadata retention period. Omit to leave unchanged. */
+  candidateLinkRetentionDays?: UpdateOnbSettingsCandidateLinkRetentionDays;
 }
 
 /**
@@ -3070,3 +3101,4 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
+

@@ -7,6 +7,7 @@
  */
 import * as zod from 'zod';
 
+
 /**
  * @summary Derive the reusable solution baseline from the current corpus
  */
@@ -7238,7 +7239,7 @@ export const TestOnboardingChannelResponse = zod.object({
 
 
 /**
- * @summary App settings (HR alert email address and its effective resolution)
+ * @summary Workspace onboarding and compliance settings
  */
 
 export const getOnboardingSettingsResponseDay1ChecklistItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
@@ -7290,12 +7291,13 @@ export const GetOnboardingSettingsResponse = zod.object({
   "meetingUrl": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultMeetingUrlMax).nullable(),
   "reportingContact": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax).nullable(),
   "arrivalInstructions": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax).nullable()
-})
+}),
+  "candidateLinkRetentionDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).describe('Number of days expired or revoked candidate-link metadata is retained')
 })
 
 
 /**
- * @summary Update app settings (set or clear the HR alert email address)
+ * @summary Update workspace onboarding and compliance settings
  */
 
 export const updateOnboardingSettingsBodyDay1ChecklistItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
@@ -7344,7 +7346,8 @@ export const UpdateOnboardingSettingsBody = zod.object({
   "meetingUrl": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultMeetingUrlMax).nullable(),
   "reportingContact": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultReportingContactMax).nullable(),
   "arrivalInstructions": zod.string().max(updateOnboardingSettingsBodyDay1LogisticsDefaultArrivalInstructionsMax).nullable()
-}).optional()
+}).optional(),
+  "candidateLinkRetentionDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).optional().describe('Approved candidate-link metadata retention period. Omit to leave unchanged.')
 })
 
 
@@ -7397,7 +7400,8 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "meetingUrl": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultMeetingUrlMax).nullable(),
   "reportingContact": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax).nullable(),
   "arrivalInstructions": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax).nullable()
-})
+}),
+  "candidateLinkRetentionDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).describe('Number of days expired or revoked candidate-link metadata is retained')
 })
 
 
@@ -7442,3 +7446,5 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
+
+

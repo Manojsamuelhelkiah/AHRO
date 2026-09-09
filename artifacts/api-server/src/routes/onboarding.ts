@@ -60,6 +60,9 @@ import {
   saveChecklistVersion,
   getDay1LogisticsDefault,
   setDay1LogisticsDefault,
+  getCandidateLinkRetentionDays,
+  isAllowedCandidateLinkRetentionDays,
+  CANDIDATE_LINK_RETENTION_DAYS_KEY,
 } from "../lib/onboarding/settings";
 import { logisticsForCase, validateDay1LogisticsDefault } from "../lib/onboarding/logistics-defaults";
 import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas, refreshDemoAllowlist } from "../lib/onboarding/demo-volunteers";
@@ -1198,9 +1201,10 @@ async function settingsPayload(organizationId: string) {
   const hrAlertEmail = stored && stored.trim().length > 0 ? stored.trim() : null;
   const envFallback = resolveHrAlertAddress(null);
   const effective = hrAlertEmail ?? envFallback;
-  const [checklist, day1LogisticsDefault] = await Promise.all([
+  const [checklist, day1LogisticsDefault, candidateLinkRetentionDays] = await Promise.all([
     getEffectiveChecklist(organizationId),
     getDay1LogisticsDefault(organizationId),
+    getCandidateLinkRetentionDays(organizationId),
   ]);
   return {
     hrAlertEmail,
@@ -1212,6 +1216,7 @@ async function settingsPayload(organizationId: string) {
     checklistVersion: checklist.version,
     day1Checklist: checklist.items,
     day1LogisticsDefault,
+    candidateLinkRetentionDays,
   };
 }
 
@@ -1258,6 +1263,13 @@ router.put("/onboarding/settings", async (req, res, next) => {
         return;
       }
     }
+    if (
+      body.candidateLinkRetentionDays !== undefined
+      && !isAllowedCandidateLinkRetentionDays(body.candidateLinkRetentionDays)
+    ) {
+      res.status(400).json({ error: "Candidate-link retention must be 30, 90, 180, or 365 days." });
+      return;
+    }
     if (body.day1Checklist !== undefined) {
       try {
         await saveChecklistVersion(
@@ -1289,6 +1301,13 @@ router.put("/onboarding/settings", async (req, res, next) => {
       // The approver address doubles as a live-delivery authorization —
       // apply the change to the in-process allowlist immediately.
       await refreshDemoAllowlist(organizationId);
+    }
+    if (body.candidateLinkRetentionDays !== undefined) {
+      await setSetting(
+        organizationId,
+        CANDIDATE_LINK_RETENTION_DAYS_KEY,
+        String(body.candidateLinkRetentionDays),
+      );
     }
     res.json(await settingsPayload(organizationId));
   } catch (err) {

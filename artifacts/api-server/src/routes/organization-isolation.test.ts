@@ -13,6 +13,7 @@ import {
   onbCases,
   onbEvents,
   onbGuardrailEvents,
+  onbSettings,
   organizationMembershipsTable,
   organizationsTable,
   pricingRateSetsTable,
@@ -39,6 +40,7 @@ import {
   createTenantContextMiddleware,
   lookupMembership,
 } from "../middlewares/tenant-context";
+import { errorHandler } from "../middlewares/error-handler";
 import { scenarioUploadObjectPath } from "../lib/objectStorage";
 
 const suffix = `${process.pid}-${Date.now()}`;
@@ -205,6 +207,7 @@ before(async () => {
   app.use(onboardingRouter);
   app.use(pricingSheetsRouter);
   app.use(enterpriseArchitectureRouter);
+  app.use(errorHandler);
   server = app.listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
@@ -218,6 +221,8 @@ after(async () => {
   );
   await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgA));
   await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgB));
+  await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgA));
+  await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgB));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgA));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
   await db.delete(eaAssessmentsTable).where(eq(eaAssessmentsTable.organizationId, orgA));
@@ -467,6 +472,49 @@ test("forged organization selectors are rejected before route access", async () 
     message: "You are not a member of the requested organization",
     code: "ORGANIZATION_ACCESS_DENIED",
   });
+});
+
+test("candidate-link retention settings are validated, persisted, and tenant-scoped", async () => {
+  const headers = {
+    "content-type": "application/json",
+    "x-test-user": "test-user-a",
+    "x-organization-id": orgA,
+  };
+  const invalid = await fetch(`${baseUrl}/onboarding/settings`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ candidateLinkRetentionDays: 45 }),
+  });
+  assert.equal(invalid.status, 400);
+
+  const saved = await fetch(`${baseUrl}/onboarding/settings`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ candidateLinkRetentionDays: 30 }),
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(
+    (await saved.json() as { candidateLinkRetentionDays: number }).candidateLinkRetentionDays,
+    30,
+  );
+
+  const [tenantA, tenantB] = await Promise.all([
+    fetch(`${baseUrl}/onboarding/settings`, { headers }),
+    fetch(`${baseUrl}/onboarding/settings`, {
+      headers: {
+        "x-test-user": "test-user-b",
+        "x-organization-id": orgB,
+      },
+    }),
+  ]);
+  assert.equal(
+    (await tenantA.json() as { candidateLinkRetentionDays: number }).candidateLinkRetentionDays,
+    30,
+  );
+  assert.equal(
+    (await tenantB.json() as { candidateLinkRetentionDays: number }).candidateLinkRetentionDays,
+    90,
+  );
 });
 
 test("another demo member cannot access an owner-bound historical scenario", async () => {
