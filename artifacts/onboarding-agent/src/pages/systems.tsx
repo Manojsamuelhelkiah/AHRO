@@ -185,7 +185,7 @@ export function SystemsPage() {
   );
 }
 
-function BlockedPublishBackupCard({ readiness }: { readiness: {
+export function BlockedPublishBackupCard({ readiness }: { readiness: {
   ready: boolean;
   destination: string | null;
   sender: string | null;
@@ -246,6 +246,18 @@ function BlockedPublishBackupCard({ readiness }: { readiness: {
           </p>
         </div>
       </div>
+      {readiness.missing.length > 0 && (
+        <div className="mt-4 rounded-[var(--radius-md)] bg-[var(--surface)] p-3">
+          <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Missing configuration
+          </p>
+          <ul className="mt-2 space-y-1 text-[var(--text-sm)] font-medium text-[var(--text-primary)]">
+            {readiness.missing.map((category) => (
+              <li key={category}>{category}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="mt-4 text-[var(--text-xs)] font-medium text-[var(--text-secondary)]">
         Readiness only — this check does not send an alert.
       </p>
