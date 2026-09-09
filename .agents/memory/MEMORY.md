@@ -24,3 +24,4 @@
 - [Connector effect fencing](connector-effect-fencing.md) — all future remote writes must use the durable journal; never reclaim an ambiguous non-idempotent dispatch.
 - [Degraded intent-corpus actions](degraded-intent-corpus-actions.md) — fail closed only for operations that may depend on unavailable custom intents; keep provably reference-only work available.
 - [React Hook Form runtime values](react-hook-form-runtime-values.md) — sync default loaders cannot use the async callback form; parse or register numeric values before API serialization.
+- [Clerk API smoke probes](clerk-api-smoke-probes.md) — API readiness checks must look like CORS/fetch requests; navigation headers can trigger Clerk handshake redirects.
