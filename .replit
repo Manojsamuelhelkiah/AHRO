@@ -46,23 +46,3 @@ channel = "stable-25_05"
 
 [userenv.shared]
 ONBOARDING_ALLOWED_RECIPIENTS = "helkiah@gmail.com,manojsamuel.helkiah@hcltech.com"
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 18940
-externalPort = 80
-
-[[ports]]
-localPort = 22888
-externalPort = 3000
-
-[[ports]]
-localPort = 24953
-externalPort = 3002
