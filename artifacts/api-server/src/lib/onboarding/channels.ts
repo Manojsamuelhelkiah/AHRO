@@ -7,7 +7,11 @@ import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandi
 import { isValidEmail } from "./settings";
 import { randomBytes } from "node:crypto";
 import { externalProviderDispatchDenied } from "./provider-policy";
-import { invalidBlockedPublishBackupCategories } from "../../../blocked-publish-backup-readiness.mjs";
+import {
+  blockedPublishBackupRequired,
+  invalidBlockedPublishBackupCategories,
+  missingBlockedPublishBackupCategories,
+} from "../../../blocked-publish-backup-readiness.mjs";
 
 const connectors = new ReplitConnectors();
 
@@ -24,6 +28,7 @@ export type ChannelInfo = {
 
 export type BlockedPublishBackupReadiness = {
   ready: boolean;
+  required: boolean;
   destination: string | null;
   sender: string | null;
   missing: string[];
@@ -80,24 +85,22 @@ export function blockedPublishBackupReadiness(): BlockedPublishBackupReadiness {
   const destination = whatsappPhone(
     process.env.ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP ?? ""
   );
-  const accountSid = (process.env.TWILIO_ACCOUNT_SID ?? "").trim();
-  const authToken = (process.env.TWILIO_AUTH_TOKEN ?? "").trim();
   const sender = whatsappPhone(process.env.TWILIO_WHATSAPP_FROM ?? "");
-  const missing: string[] = [];
+  const required = blockedPublishBackupRequired(process.env);
+  const missing = missingBlockedPublishBackupCategories(process.env);
   const invalid = invalidBlockedPublishBackupCategories(process.env);
-
-  if (!destination) missing.push("Backup WhatsApp destination");
-  if (!accountSid || !authToken) missing.push("Twilio account configuration");
-  if (!sender) missing.push("Twilio WhatsApp sender");
 
   return {
     ready: missing.length === 0 && invalid.length === 0,
+    required,
     destination: destination ? maskPhone(destination) : null,
     sender: sender ? maskPhone(sender) : null,
     missing,
     invalid,
     note:
-      missing.length === 0 && invalid.length === 0
+      !required
+        ? "Backup WhatsApp alerts are optional in this environment."
+        : missing.length === 0 && invalid.length === 0
         ? "Backup WhatsApp alerts are ready if Gmail rejects a blocked-release alert."
         : [
             missing.length > 0 ? `Configuration needed: ${missing.join(", ")}.` : null,

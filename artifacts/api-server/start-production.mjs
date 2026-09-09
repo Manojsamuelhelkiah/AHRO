@@ -3,7 +3,7 @@ import {
   STARTUP_FAILURE_REASONS,
   verifyTenantSafeguards,
 } from "./verify-tenant-safeguards.mjs";
-import { invalidBlockedPublishBackupCategories } from "./blocked-publish-backup-readiness.mjs";
+import { blockedPublishBackupBlockingCategories } from "./blocked-publish-backup-readiness.mjs";
 
 function startupBlockedError(reasonCategory, message, options) {
   const error = new Error(
@@ -46,19 +46,21 @@ async function runAlertWorkWithDeadline(operation, timeoutMs, label) {
 }
 
 export async function startProduction({
-  validateBackupAlertFormats = invalidBlockedPublishBackupCategories,
+  validateBackupAlertReadiness = blockedPublishBackupBlockingCategories,
   verify = verifyTenantSafeguards,
   alertBlockedPublish = defaultAlertBlockedPublish,
   clearBlockedPublishAlert = defaultClearBlockedPublishAlert,
   alertTimeoutMs = DEFAULT_ALERT_TIMEOUT_MS,
   startApi = () => import("./dist/index.mjs"),
 } = {}) {
-  const invalidBackupSettings = validateBackupAlertFormats();
-  if (invalidBackupSettings.length > 0) {
+  const blockingBackupSettings = validateBackupAlertReadiness();
+  if (blockingBackupSettings.length > 0) {
     throw startupBlockedError(
       STARTUP_FAILURE_REASONS.BACKUP_ALERT_CONFIGURATION,
-      "Backup alert configuration is invalid. " +
-        `Fix: ${invalidBackupSettings.join(", ")}. The API will not start.`,
+      "Required backup alert configuration is incomplete or invalid. " +
+        `Fix: ${blockingBackupSettings.join(", ")}. ` +
+        "If this environment intentionally does not require the backup channel, " +
+        "set ONBOARDING_BLOCKED_PUBLISH_BACKUP_REQUIRED=false. The API will not start.",
     );
   }
 

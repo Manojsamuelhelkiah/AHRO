@@ -118,6 +118,7 @@ test("a real stalled pg handshake exits promptly with a connection-timeout reaso
     )};
 
     startProduction({
+      validateBackupAlertReadiness: () => [],
       verify: () =>
         verifyTenantSafeguards({
           connectionTimeoutMs: 30,

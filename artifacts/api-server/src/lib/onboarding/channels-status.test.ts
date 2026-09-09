@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { blockedPublishBackupReadiness, explicitlyAllowlistedCandidateAddress, gmailAmbiguousFailure, gmailHttpFailure, systemEmailTestAddress, twilioAmbiguousFailure, twilioHttpFailure } from "./channels";
 
 const BACKUP_ENV_KEYS = [
+  "ONBOARDING_BLOCKED_PUBLISH_BACKUP_REQUIRED",
   "ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP",
   "TWILIO_ACCOUNT_SID",
   "TWILIO_AUTH_TOKEN",
@@ -89,6 +90,7 @@ test("blocked-publish backup readiness masks phone values and never exposes cred
     const status = blockedPublishBackupReadiness();
     assert.deepEqual(status, {
       ready: true,
+      required: true,
       destination: "+155•••67",
       sender: "+141•••86",
       missing: [],
@@ -106,6 +108,7 @@ test("blocked-publish backup readiness names only missing setting categories", (
   }, () => {
     const status = blockedPublishBackupReadiness();
     assert.equal(status.ready, false);
+    assert.equal(status.required, true);
     assert.deepEqual(status.missing, [
       "Twilio account configuration",
       "Twilio WhatsApp sender",
@@ -114,6 +117,19 @@ test("blocked-publish backup readiness names only missing setting categories", (
     assert.equal(status.sender, null);
     assert.deepEqual(status.invalid, []);
     assert.doesNotMatch(status.note, /SID|token|credential/i);
+  });
+});
+
+test("blocked-publish backup readiness reports an intentional opt-out", () => {
+  withBackupEnvironment({
+    ONBOARDING_BLOCKED_PUBLISH_BACKUP_REQUIRED: "false",
+  }, () => {
+    const status = blockedPublishBackupReadiness();
+    assert.equal(status.ready, true);
+    assert.equal(status.required, false);
+    assert.deepEqual(status.missing, []);
+    assert.deepEqual(status.invalid, []);
+    assert.match(status.note, /optional in this environment/i);
   });
 });
 
@@ -133,6 +149,7 @@ test("blocked-publish backup readiness rejects malformed phone formats without s
     try {
       const status = blockedPublishBackupReadiness();
       assert.equal(status.ready, false);
+      assert.equal(status.required, true);
       assert.deepEqual(status.missing, []);
       assert.deepEqual(status.invalid, [
         "Backup WhatsApp destination",

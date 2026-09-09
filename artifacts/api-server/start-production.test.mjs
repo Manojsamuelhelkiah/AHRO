@@ -3,7 +3,10 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { startProduction } from "./start-production.mjs";
+import { blockedPublishBackupBlockingCategories } from "./blocked-publish-backup-readiness.mjs";
 import { STARTUP_FAILURE_REASONS } from "./verify-tenant-safeguards.mjs";
+
+const backupReady = () => [];
 
 test("production publish startup uses the tenant safeguard gate", async () => {
   const artifactConfig = await readFile(
@@ -21,6 +24,7 @@ test("starts the API only after tenant safeguards pass", async () => {
   const calls = [];
 
   await startProduction({
+    validateBackupAlertReadiness: backupReady,
     verify: async () => {
       calls.push("verify");
       return { schema: "public", failures: [] };
@@ -45,7 +49,7 @@ for (const [settingCategory, privateValue] of [
 
     await assert.rejects(
       startProduction({
-        validateBackupAlertFormats: () => [settingCategory],
+        validateBackupAlertReadiness: () => [settingCategory],
         verify: async () => {
           calls.push("verify");
           return { schema: "public", failures: [] };
@@ -74,12 +78,84 @@ for (const [settingCategory, privateValue] of [
   });
 }
 
+for (const [settingCategory, configured] of [
+  [
+    "Backup WhatsApp destination",
+    {
+      TWILIO_ACCOUNT_SID: "AC-private-account",
+      TWILIO_AUTH_TOKEN: "private-auth-token",
+      TWILIO_WHATSAPP_FROM: "whatsapp:+14155238886",
+    },
+  ],
+  [
+    "Twilio account configuration",
+    {
+      ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP: "whatsapp:+15551234567",
+      TWILIO_WHATSAPP_FROM: "whatsapp:+14155238886",
+    },
+  ],
+  [
+    "Twilio WhatsApp sender",
+    {
+      ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP: "whatsapp:+15551234567",
+      TWILIO_ACCOUNT_SID: "AC-private-account",
+      TWILIO_AUTH_TOKEN: "private-auth-token",
+    },
+  ],
+]) {
+  test(`blocks API startup when required ${settingCategory.toLowerCase()} is missing`, async () => {
+    const calls = [];
+    await assert.rejects(
+      startProduction({
+        validateBackupAlertReadiness: () =>
+          blockedPublishBackupBlockingCategories(configured),
+        verify: async () => {
+          calls.push("verify");
+          return { schema: "public", failures: [] };
+        },
+        startApi: async () => calls.push("start"),
+      }),
+      (error) => {
+        assert.equal(
+          error.reasonCategory,
+          STARTUP_FAILURE_REASONS.BACKUP_ALERT_CONFIGURATION,
+        );
+        assert.match(error.message, new RegExp(settingCategory));
+        assert.doesNotMatch(
+          error.message,
+          /AC-private-account|private-auth-token|\+15551234567|\+14155238886/,
+        );
+        return true;
+      },
+    );
+    assert.deepEqual(calls, []);
+  });
+}
+
+test("explicit backup-channel opt-out allows production startup", async () => {
+  const calls = [];
+  await startProduction({
+    validateBackupAlertReadiness: () =>
+      blockedPublishBackupBlockingCategories({
+        ONBOARDING_BLOCKED_PUBLISH_BACKUP_REQUIRED: "false",
+      }),
+    verify: async () => {
+      calls.push("verify");
+      return { schema: "public", failures: [] };
+    },
+    clearBlockedPublishAlert: async () => calls.push("clear-alert"),
+    startApi: async () => calls.push("start"),
+  });
+  assert.deepEqual(calls, ["verify", "clear-alert", "start"]);
+});
+
 test("blocks API startup when tenant safeguards fail", async () => {
   let started = false;
   let alerts = 0;
 
   await assert.rejects(
     startProduction({
+      validateBackupAlertReadiness: backupReady,
       verify: async () => ({
         schema: "public",
         failures: ["foreign key missing: example"],
@@ -115,6 +191,7 @@ test("blocks API startup when verification cannot run", async () => {
 
   await assert.rejects(
     startProduction({
+      validateBackupAlertReadiness: backupReady,
       verify: async () => {
         throw new Error("read-only production connection unavailable");
       },
@@ -146,6 +223,7 @@ for (const [reasonCategory, timeoutTarget] of [
 
     await assert.rejects(
       startProduction({
+        validateBackupAlertReadiness: backupReady,
         verify: async () => {
           throw verificationError;
         },
@@ -177,6 +255,7 @@ for (const [reasonCategory, timeoutTarget] of [
 test("an alert delivery failure never replaces the safeguard failure", async () => {
   await assert.rejects(
     startProduction({
+      validateBackupAlertReadiness: backupReady,
       verify: async () => ({
         schema: "public",
         failures: ["tenant safeguard failed"],
@@ -193,6 +272,7 @@ test("a stalled alert cannot delay the original startup failure indefinitely", a
   const startedAt = Date.now();
   await assert.rejects(
     startProduction({
+      validateBackupAlertReadiness: backupReady,
       verify: async () => {
         throw new Error("tenant safeguards unavailable");
       },
@@ -209,6 +289,7 @@ test("a stalled alert reset cannot delay a verified API startup", async () => {
   let started = false;
   const startedAt = Date.now();
   await startProduction({
+    validateBackupAlertReadiness: backupReady,
     verify: async () => ({ schema: "public", failures: [] }),
     clearBlockedPublishAlert: async () => new Promise(() => {}),
     alertTimeoutMs: 10,
@@ -228,6 +309,7 @@ test("the production CLI exits after an alert timeout even with an active handle
     )};
     await runProductionCli({
       start: () => startProduction({
+        validateBackupAlertReadiness: () => [],
         verify: async () => { throw new Error("tenant safeguards unavailable"); },
         alertBlockedPublish: async () => {
           setInterval(() => {}, 1_000);
