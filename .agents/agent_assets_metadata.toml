@@ -200,3 +200,17 @@ mtime_ms = 1788894831682
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/e3067ba3-89c1-4ee6-8201-ea446ce34229/3d430011-27ff-4546-a811-f99d56a2ceec"
 storage_version_token = "1788894922161153"
 content_type = "text/csv"
+
+[[outputs]]
+id = "pY0QEjutPbBT44KiPYLs9"
+uri = "file://docs/hro-onboarding-tester-guide.md"
+type = "text"
+title = "HRO Onboarding End-to-End Tester Guide"
+description = "A tester-ready walkthrough with synthetic case data, exact steps, expected results, security checks, pass/fail evidence, defect reporting, cleanup, and optional negative tests."
+logical_id = "8b7ea741-f1c9-497a-b7f9-88d0da08b5e0"
+content_hash = "sha256:480276fb328817b594accc1f60119dbb9883b7ef1a988972a839cdfb962ca0ee"
+size = 13796
+mtime_ms = 1788963769343
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/8b7ea741-f1c9-497a-b7f9-88d0da08b5e0/64857337-bb7d-4412-b709-487bd5e2c0d3"
+storage_version_token = "1788963794801744"
+content_type = "text/markdown"
