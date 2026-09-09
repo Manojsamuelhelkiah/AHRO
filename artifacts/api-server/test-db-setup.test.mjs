@@ -1,8 +1,168 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Pool } from "pg";
+import { assertAutomaticMigrationIsSafe } from "./test-db-setup.mjs";
 import { loadCheckedInMigrations } from "./test-db-setup.mjs";
 import { prepareDatabaseBackedTests } from "./test-db-setup.mjs";
+import { splitMigration } from "./test-db-setup.mjs";
+
+function migrationWith(statement) {
+  return {
+    tag: "test_migration",
+    hash: "not-a-reviewed-hash",
+    statements: [statement],
+  };
+}
+
+test("allows additive migrations during automatic reconciliation", () => {
+  for (const statement of [
+    `CREATE TABLE "widgets" ("id" integer PRIMARY KEY)`,
+    `CREATE TABLE "children" (
+       "parent_id" integer REFERENCES "widgets"("id") ON DELETE SET NULL
+     )`,
+    `ALTER TABLE "widgets" ADD COLUMN "name" text`,
+    `ALTER TABLE "widgets"
+       ADD COLUMN "channel" text DEFAULT 'email' NOT NULL`,
+    `ALTER TABLE "widgets"
+       ADD COLUMN "created_at" timestamp DEFAULT now() NOT NULL`,
+    `ALTER TABLE "widgets" ADD CONSTRAINT "widgets_name_unique" UNIQUE ("name")`,
+    `ALTER TABLE "widgets"
+       ADD COLUMN "created_at" timestamp,
+       ADD COLUMN "updated_at" timestamp`,
+    `CREATE INDEX "widgets_name_idx" ON "widgets" ("name")`,
+  ]) {
+    assert.doesNotThrow(() =>
+      assertAutomaticMigrationIsSafe(migrationWith(statement)),
+    );
+  }
+});
+
+test("rejects destructive migrations during automatic reconciliation", () => {
+  for (const statement of [
+    `DROP TABLE "widgets"`,
+    `TRUNCATE TABLE "widgets"`,
+    `ALTER TABLE "widgets" DROP COLUMN "name"`,
+    `ALTER TABLE "widgets" ALTER COLUMN "id" TYPE bigint`,
+    `ALTER TABLE "widgets" ALTER "id" TYPE bigint`,
+    `ALTER TABLE "widgets" RENAME TO "old_widgets"`,
+    `ALTER TABLE "widgets"
+       ADD COLUMN "label" text,
+       ALTER "id" TYPE varchar(1) USING left("id"::text, 1)`,
+    `ALTER TABLE "widgets"
+       ADD COLUMN "label" text,
+       DISABLE TRIGGER ALL`,
+    `ALTER TABLE "widgets"
+       ADD COLUMN "sequence_value" bigint DEFAULT setval('widget_id_seq', 1)`,
+    `ALTER TABLE "widgets"
+       ADD COLUMN "sequence_ok" boolean
+       DEFAULT NOT (setval('widget_id_seq', 1) = 0)`,
+    `ALTER TABLE "widgets"
+       ADD CONSTRAINT "reset_sequence"
+       CHECK (setval('widget_id_seq', 1) > 0)`,
+    `ALTER TABLE "safe--name" DROP COLUMN "name"`,
+    `DELETE FROM "widgets"`,
+    `UPDATE "widgets" SET "id" = 1`,
+    `CREATE OR REPLACE VIEW "widget_view" AS SELECT * FROM "widgets"`,
+    `CREATE TABLE "deleted_widgets" AS
+       WITH deleted AS (DELETE FROM "widgets" RETURNING *)
+       SELECT * FROM deleted`,
+    `CREATE RULE "discard_widget_inserts" AS
+       ON INSERT TO "widgets" DO INSTEAD NOTHING`,
+    `CREATE TABLE "sequence_reset" AS
+       SELECT setval('widget_id_seq', 1)`,
+    `CREATE TABLE "sequence_reset" ("value") AS
+       SELECT setval('widget_id_seq', 1)`,
+    `CREATE TEMP TABLE "sequence_reset" ("value") AS
+       SELECT setval('widget_id_seq', 1)`,
+    `CREATE UNLOGGED TABLE "deleted_widgets" ("id") AS
+       WITH deleted AS (DELETE FROM "widgets" RETURNING "id")
+       SELECT "id" FROM deleted`,
+    `INSERT INTO "widgets" ("id") VALUES (1)`,
+    `INSERT INTO "widgets" ("id") VALUES (1)
+       ON CONFLICT ("id") DO UPDATE SET "id" = excluded."id"`,
+    `DO $$ BEGIN EXECUTE 'DROP TABLE widgets'; END $$`,
+    `CREATE FUNCTION unsafe() RETURNS void AS $$
+       BEGIN EXECUTE 'TRUNCATE widgets'; END
+     $$ LANGUAGE plpgsql`,
+  ]) {
+    assert.throws(
+      () => assertAutomaticMigrationIsSafe(migrationWith(statement)),
+      /refused destructive or unsupported migration test_migration.*separate reviewed migration process/,
+    );
+  }
+});
+
+test("does not mistake comments or string values for destructive SQL", () => {
+  assert.doesNotThrow(() =>
+    assertAutomaticMigrationIsSafe(
+      migrationWith(`
+        -- DROP TABLE "widgets"
+        CREATE TABLE "audit" ("message" text DEFAULT 'TRUNCATE widgets')
+      `),
+    ),
+  );
+});
+
+test("matches PostgreSQL string escaping when splitting migrations", () => {
+  const unsafeStatements = splitMigration(`
+    ALTER TABLE "widgets" ADD COLUMN "path" text DEFAULT 'C:\\';
+    DROP TABLE "widgets";
+  `);
+  assert.equal(unsafeStatements.length, 2);
+  assert.throws(
+    () =>
+      assertAutomaticMigrationIsSafe({
+        ...migrationWith(unsafeStatements[0]),
+        statements: unsafeStatements,
+      }),
+    /refused destructive or unsupported migration/,
+  );
+
+  const safeEscapeStringStatements = splitMigration(`
+    ALTER TABLE "widgets"
+      ADD COLUMN "message" text DEFAULT E'it\\'s safe; DROP TABLE widgets';
+  `);
+  assert.equal(safeEscapeStringStatements.length, 1);
+  assert.doesNotThrow(() =>
+    assertAutomaticMigrationIsSafe({
+      ...migrationWith(safeEscapeStringStatements[0]),
+      statements: safeEscapeStringStatements,
+    }),
+  );
+});
+
+test("matches PostgreSQL nested comments when splitting migrations", () => {
+  const statements = splitMigration(`
+    ALTER TABLE "widgets" ADD COLUMN "note" text
+      /* outer comment /* inner comment */ ' still outer */;
+    TRUNCATE TABLE "widgets";
+  `);
+  assert.equal(statements.length, 2);
+  assert.throws(
+    () =>
+      assertAutomaticMigrationIsSafe({
+        ...migrationWith(statements[0]),
+        statements,
+      }),
+    /refused destructive or unsupported migration/,
+  );
+});
+
+test("matches PostgreSQL carriage-return line comments", () => {
+  const statements = splitMigration(
+    'CREATE TABLE "safe" ("id" integer); -- hidden only to CR\r' +
+      'TRUNCATE TABLE "widgets";',
+  );
+  assert.equal(statements.length, 2);
+  assert.throws(
+    () =>
+      assertAutomaticMigrationIsSafe({
+        ...migrationWith(statements[0]),
+        statements,
+      }),
+    /refused destructive or unsupported migration/,
+  );
+});
 
 test("loads every journal migration with a stable hash", async () => {
   const migrations = await loadCheckedInMigrations();

@@ -8,6 +8,17 @@ const journalUrl = new URL("meta/_journal.json", migrationsUrl);
 const migrationTable = "__api_test_schema_migrations";
 const statementBreakpoint = "--> statement-breakpoint";
 const advisoryLockKey = 1_514_151;
+const reviewedAutomaticPolicyExceptionHashes = new Set([
+  // Historical destructive, procedural, or data migrations that predate the
+  // automatic post-merge safety policy. Exact hashes prevent edited files
+  // from inheriting an exception.
+  "5917622b3e4cf6bf7ee235d22cfd5aeed7efc2d4d078a59f9f284970522f1e21",
+  "bd63ae307e2188dd0e70798429b71724ad2f0e2992c77fa39171ad064c56906f",
+  "f92be340337e84401b9b5970daffde166d6ee63059edeaafb05c07bbbf5e2ef4",
+  "35a6b5024fb088435f6fdec4388a19fbfe57ac839ac4079f8b2fc13a1b125d31",
+  "9041c9eb9634af39f9bfc539593c93ee7f60429772690954121ed50aa6c9aa8b",
+  "2e21a48e9f8297e25e5a6513697c57258b4b1f00f6c394033c38433ac2504d60",
+]);
 
 // These errors mean an old migration's individual DDL statement is already
 // represented in a database that predates the test migration ledger.
@@ -21,10 +32,48 @@ function migrationHash(sql) {
   return createHash("sha256").update(sql).digest("hex");
 }
 
-function splitMigration(sql) {
+function singleQuoteUsesBackslashEscapes(sql, quoteIndex) {
+  if (sql[quoteIndex - 1]?.toUpperCase() !== "E") return false;
+  const beforePrefix = sql[quoteIndex - 2];
+  return beforePrefix == null || !/[A-Za-z0-9_$]/.test(beforePrefix);
+}
+
+function isSingleCharacterStringPrefix(sql, prefixIndex) {
+  if (!["B", "E", "N", "X"].includes(sql[prefixIndex]?.toUpperCase())) {
+    return false;
+  }
+  if (sql[prefixIndex + 1] !== "'") return false;
+  const beforePrefix = sql[prefixIndex - 1];
+  return beforePrefix == null || !/[A-Za-z0-9_$]/.test(beforePrefix);
+}
+
+function indexAfterBlockComment(sql, commentStart) {
+  let depth = 1;
+  let index = commentStart + 2;
+  while (index < sql.length && depth > 0) {
+    if (sql[index] === "/" && sql[index + 1] === "*") {
+      depth += 1;
+      index += 2;
+    } else if (sql[index] === "*" && sql[index + 1] === "/") {
+      depth -= 1;
+      index += 2;
+    } else {
+      index += 1;
+    }
+  }
+  return index;
+}
+
+function indexAfterLineComment(sql, commentStart) {
+  const lineEnd = sql.slice(commentStart + 2).search(/[\r\n]/);
+  return lineEnd === -1 ? sql.length : commentStart + 2 + lineEnd + 1;
+}
+
+export function splitMigration(sql) {
   const statements = [];
   let start = 0;
   let quote = null;
+  let backslashEscapes = false;
   let dollarQuote = null;
 
   for (let index = 0; index < sql.length; index += 1) {
@@ -37,8 +86,9 @@ function splitMigration(sql) {
           index += 1;
         } else {
           quote = null;
+          backslashEscapes = false;
         }
-      } else if (current === "\\" && quote === "'") {
+      } else if (current === "\\" && backslashEscapes) {
         index += 1;
       }
       continue;
@@ -54,6 +104,8 @@ function splitMigration(sql) {
 
     if (current === "'" || current === '"') {
       quote = current;
+      backslashEscapes =
+        current === "'" && singleQuoteUsesBackslashEscapes(sql, index);
       continue;
     }
     if (current === "$") {
@@ -65,13 +117,11 @@ function splitMigration(sql) {
       }
     }
     if (current === "-" && next === "-") {
-      const lineEnd = sql.indexOf("\n", index + 2);
-      index = lineEnd === -1 ? sql.length : lineEnd;
+      index = indexAfterLineComment(sql, index) - 1;
       continue;
     }
     if (current === "/" && next === "*") {
-      const commentEnd = sql.indexOf("*/", index + 2);
-      index = commentEnd === -1 ? sql.length : commentEnd + 1;
+      index = indexAfterBlockComment(sql, index) - 1;
       continue;
     }
     if (current === ";") {
@@ -90,6 +140,320 @@ function splitMigration(sql) {
     .trim();
   if (trailing) statements.push(trailing);
   return statements;
+}
+
+function sqlTokensForSafetyCheck(statement) {
+  const tokens = [];
+
+  for (let index = 0; index < statement.length; ) {
+    const current = statement[index];
+    const next = statement[index + 1];
+
+    if (current === "-" && next === "-") {
+      index = indexAfterLineComment(statement, index);
+      continue;
+    }
+    if (current === "/" && next === "*") {
+      index = indexAfterBlockComment(statement, index);
+      continue;
+    }
+    if (current === "'") {
+      const backslashEscapes = singleQuoteUsesBackslashEscapes(
+        statement,
+        index,
+      );
+      index += 1;
+      while (index < statement.length) {
+        if (statement[index] === "'" && statement[index + 1] === "'") {
+          index += 2;
+        } else if (statement[index] === "'") {
+          index += 1;
+          break;
+        } else if (statement[index] === "\\" && backslashEscapes) {
+          index += 2;
+        } else {
+          index += 1;
+        }
+      }
+      tokens.push("<STRING>");
+      continue;
+    }
+    if (current === '"') {
+      index += 1;
+      while (index < statement.length) {
+        if (statement[index] === '"' && statement[index + 1] === '"') {
+          index += 2;
+        } else if (statement[index] === '"') {
+          index += 1;
+          break;
+        } else {
+          index += 1;
+        }
+      }
+      tokens.push("<IDENTIFIER>");
+      continue;
+    }
+    if (current === "$") {
+      const match = statement
+        .slice(index)
+        .match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+      if (match) {
+        const bodyEnd = statement.indexOf(match[0], index + match[0].length);
+        index = bodyEnd === -1 ? statement.length : bodyEnd + match[0].length;
+        tokens.push("<STRING>");
+        continue;
+      }
+    }
+    if (isSingleCharacterStringPrefix(statement, index)) {
+      index += 1;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(current)) {
+      const match = statement.slice(index).match(/^[A-Za-z_][A-Za-z0-9_$]*/);
+      tokens.push(match[0].toUpperCase());
+      index += match[0].length;
+      continue;
+    }
+    if (/[0-9]/.test(current)) {
+      const match = statement
+        .slice(index)
+        .match(/^\d+(?:\.\d*)?(?:[eE][+-]?\d+)?/);
+      tokens.push("<NUMBER>");
+      index += match[0].length;
+      continue;
+    }
+    if (
+      current === "(" ||
+      current === ")" ||
+      current === "," ||
+      current === ";"
+    ) {
+      tokens.push(current);
+    }
+    index += 1;
+  }
+
+  return tokens;
+}
+
+function isAdditiveAlter(tokens) {
+  const subject = tokens[1];
+  if (subject !== "TABLE" && subject !== "TYPE") return false;
+
+  const alterActions = new Set([
+    "ADD",
+    "ALTER",
+    "ATTACH",
+    "CLUSTER",
+    "DETACH",
+    "DISABLE",
+    "DROP",
+    "ENABLE",
+    "FORCE",
+    "INHERIT",
+    "NO",
+    "NOT",
+    "OF",
+    "OWNER",
+    "RENAME",
+    "REPLICA",
+    "RESET",
+    "SET",
+    "VALIDATE",
+  ]);
+  const actionIndex = tokens.findIndex(
+    (token, index) => index >= 2 && alterActions.has(token),
+  );
+  if (actionIndex === -1) return false;
+
+  const subcommands = [];
+  let subcommand = [];
+  let depth = 0;
+  for (const token of tokens.slice(actionIndex)) {
+    if (token === "(") {
+      depth += 1;
+    } else if (token === ")") {
+      depth -= 1;
+    } else if (token === "," && depth === 0) {
+      subcommands.push(subcommand);
+      subcommand = [];
+      continue;
+    }
+    subcommand.push(token);
+  }
+  subcommands.push(subcommand);
+
+  return (
+    depth === 0 &&
+    subcommands.every((candidate) => isSafeAddSubcommand(candidate))
+  );
+}
+
+function isSafeAddSubcommand(tokens) {
+  if (tokens[0] !== "ADD") return false;
+  if (
+    tokens.some((token) =>
+      ["CHECK", "EXCLUDE", "GENERATED", "IDENTITY"].includes(token),
+    )
+  ) {
+    return false;
+  }
+
+  let index = 1;
+  if (tokens[index] === "CONSTRAINT") {
+    const constraintType = tokens[index + 2];
+    return ["FOREIGN", "PRIMARY", "UNIQUE"].includes(constraintType);
+  }
+  if (["FOREIGN", "PRIMARY", "UNIQUE"].includes(tokens[index])) return true;
+
+  if (tokens[index] === "COLUMN") index += 1;
+  if (
+    tokens[index] === "IF" &&
+    tokens[index + 1] === "NOT" &&
+    tokens[index + 2] === "EXISTS"
+  ) {
+    index += 3;
+  }
+  index += 1; // Column name.
+
+  const supportedColumnTypes = new Set([
+    "BIGINT",
+    "BIGSERIAL",
+    "BOOL",
+    "BOOLEAN",
+    "BYTEA",
+    "CHAR",
+    "CHARACTER",
+    "CIDR",
+    "DATE",
+    "DECIMAL",
+    "DOUBLE",
+    "INET",
+    "INTEGER",
+    "INTERVAL",
+    "JSON",
+    "JSONB",
+    "MACADDR",
+    "MONEY",
+    "NUMERIC",
+    "REAL",
+    "SERIAL",
+    "SMALLINT",
+    "SMALLSERIAL",
+    "TEXT",
+    "TIME",
+    "TIMESTAMP",
+    "TSQUERY",
+    "TSVECTOR",
+    "UUID",
+    "VARCHAR",
+    "XML",
+  ]);
+  if (!supportedColumnTypes.has(tokens[index])) return false;
+
+  const defaultIndex = tokens.indexOf("DEFAULT", index + 1);
+  if (defaultIndex === -1) return true;
+
+  const afterDefault = tokens.slice(defaultIndex + 1);
+  const singleTokenDefaults = new Set([
+    "<NUMBER>",
+    "<STRING>",
+    "CURRENT_DATE",
+    "CURRENT_TIME",
+    "CURRENT_TIMESTAMP",
+    "FALSE",
+    "LOCALTIME",
+    "LOCALTIMESTAMP",
+    "NULL",
+    "TRUE",
+  ]);
+  let expressionLength = 0;
+  if (singleTokenDefaults.has(afterDefault[0])) {
+    expressionLength = 1;
+  } else if (
+    afterDefault[0] === "NOW" &&
+    afterDefault[1] === "(" &&
+    afterDefault[2] === ")"
+  ) {
+    expressionLength = 3;
+  } else {
+    return false;
+  }
+
+  return hasSafeColumnConstraintSuffix(afterDefault.slice(expressionLength));
+}
+
+function hasSafeColumnConstraintSuffix(tokens) {
+  for (let index = 0; index < tokens.length; ) {
+    if (tokens[index] === "NOT" && tokens[index + 1] === "NULL") {
+      index += 2;
+    } else if (tokens[index] === "NULL" || tokens[index] === "UNIQUE") {
+      index += 1;
+    } else if (
+      tokens[index] === "PRIMARY" &&
+      tokens[index + 1] === "KEY"
+    ) {
+      index += 2;
+    } else if (
+      (tokens[index] === "COLLATE" || tokens[index] === "CONSTRAINT") &&
+      tokens[index + 1] != null
+    ) {
+      index += 2;
+    } else if (tokens[index] === "REFERENCES") {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isAllowedAutomaticStatement(tokens) {
+  if (tokens.length === 0) return true;
+  if (tokens.includes(";")) return false;
+
+  if (tokens[0] === "CREATE") {
+    const createsIndex =
+      tokens[1] === "INDEX" ||
+      (tokens[1] === "UNIQUE" && tokens[2] === "INDEX");
+    if (createsIndex) return true;
+
+    const tableIndex =
+      tokens[1] === "TABLE"
+        ? 1
+        : ["TEMP", "TEMPORARY", "UNLOGGED"].includes(tokens[1]) &&
+            tokens[2] === "TABLE"
+          ? 2
+          : -1;
+    if (tableIndex === -1) return false;
+
+    const definitionStart = tokens.indexOf("(", tableIndex + 1);
+    if (definitionStart === -1) return false;
+    const tableHeader = tokens.slice(tableIndex + 1, definitionStart);
+    return (
+      !tokens.includes("AS") &&
+      !tableHeader.some((token) => ["OF", "PARTITION"].includes(token))
+    );
+  }
+  if (tokens[0] === "ALTER") return isAdditiveAlter(tokens);
+  return false;
+}
+
+export function assertAutomaticMigrationIsSafe(migration) {
+  if (reviewedAutomaticPolicyExceptionHashes.has(migration.hash)) return;
+
+  for (const [index, statement] of migration.statements.entries()) {
+    const tokens = sqlTokensForSafetyCheck(statement);
+    if (!isAllowedAutomaticStatement(tokens)) {
+      throw new Error(
+        `Database test setup refused destructive or unsupported migration ${migration.tag} ` +
+          `(statement ${index + 1}). Automatic reconciliation permits additive ` +
+          "CREATE TABLE, CREATE INDEX, and ALTER ... ADD statements. Destructive " +
+          "DDL/DML, data migrations, procedural SQL, and other statement classes " +
+          "require a separate reviewed migration process.",
+      );
+    }
+  }
 }
 
 function quoteIdentifier(identifier) {
@@ -132,12 +496,14 @@ export async function loadCheckedInMigrations() {
       );
     }
     const sql = await readFile(new URL(filename, migrationsUrl), "utf8");
-    migrations.push({
+    const migration = {
       tag: entry.tag,
       createdAt: entry.when,
       hash: migrationHash(sql),
       statements: splitMigration(sql),
-    });
+    };
+    assertAutomaticMigrationIsSafe(migration);
+    migrations.push(migration);
   }
 
   if (sqlFiles.size > 0) {
@@ -375,6 +741,7 @@ export async function reconcileDevelopmentDatabase(options = {}) {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
+    await client.query("SET standard_conforming_strings = on");
     await client.query("SELECT pg_advisory_lock($1)", [advisoryLockKey]);
     const schemaResult = await client.query(
       "SELECT current_schema() AS schema_name",
