@@ -4,6 +4,20 @@
 command used by `scripts/post-merge.sh`. It intentionally accepts additive
 schema changes only and must never receive a destructive-policy bypass.
 
+After every production publish, run the tenant safeguard verification in an
+environment where `DATABASE_URL` is bound to that published database:
+
+```sh
+pnpm --filter @workspace/api-server run db:verify:tenant-safeguards
+```
+
+The command is read-only. It checks that every application tenant column has no
+default, verifies direct organization and watch-email composite foreign keys by
+their ordered column mappings (not their possibly PostgreSQL-shortened names),
+requires the `demo` organization, and counts organization, watch-case, and
+watch-check orphans. Any failed safeguard is named on stderr and makes the
+command exit non-zero; do not trust the publish until every check passes.
+
 For a deliberately reviewed destructive or otherwise unsupported migration:
 
 1. Check in the SQL file and journal entry.

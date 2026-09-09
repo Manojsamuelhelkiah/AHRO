@@ -13,6 +13,7 @@
     "test:post-merge": "bash ../../scripts/post-merge.test.sh",
     "db:reconcile": "node ./test-db-setup.mjs",
     "db:migrate:reviewed": "node ./run-reviewed-migration.mjs",
+    "db:verify:tenant-safeguards": "node ./verify-tenant-safeguards.mjs",
     "seed:volunteers": "node ./run-seed.mjs"
   },
   "dependencies": {

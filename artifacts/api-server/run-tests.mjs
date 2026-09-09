@@ -27,7 +27,13 @@ await build({
   format: "esm",
   target: "node20",
   outExtension: { ".js": ".mjs" },
-  external: ["node:*", ...builtinModules, "exceljs", "pg", "@replit/connectors-sdk"],
+  external: [
+    "node:*",
+    ...builtinModules,
+    "exceljs",
+    "pg",
+    "@replit/connectors-sdk",
+  ],
   banner: {
     js: 'import { createRequire as __createRequire } from "node:module"; import { fileURLToPath as __fileURLToPath } from "node:url"; import { dirname as __pathDirname } from "node:path"; const require = __createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __pathDirname(__filename);',
   },
@@ -38,6 +44,7 @@ const result = spawnSync(
   [
     "--test",
     path.join(dir, "test-db-setup.test.mjs"),
+    path.join(dir, "verify-tenant-safeguards.test.mjs"),
     ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).map((f) =>
       path.join(dir, f),
     ),
