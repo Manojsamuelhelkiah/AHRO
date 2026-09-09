@@ -67,3 +67,23 @@ test("blocks API startup when verification cannot run", async () => {
 
   assert.equal(started, false);
 });
+
+test("blocks API startup with a clear trust decision after verification timeout", async () => {
+  let started = false;
+
+  await assert.rejects(
+    startProduction({
+      verify: async () => {
+        throw new Error(
+          "tenant safeguard database connection timed out after 10ms; production is not trusted",
+        );
+      },
+      startApi: async () => {
+        started = true;
+      },
+    }),
+    /timed out after 10ms; production is not trusted/,
+  );
+
+  assert.equal(started, false);
+});

@@ -4,6 +4,7 @@ import {
   expectedForeignKeys,
   findTenantSafeguardFailures,
   tenantTables,
+  verifyTenantSafeguards,
 } from "./verify-tenant-safeguards.mjs";
 
 function passingSnapshot() {
@@ -63,4 +64,84 @@ test("clearly names every failed tenant safeguard", () => {
     "watch-case orphans found: expected 0, found 3",
     "watch-check orphans found: expected 0, found 4",
   ]);
+});
+
+test("fails a stalled database connection within the configured deadline", async () => {
+  const pool = {
+    connect: () => new Promise(() => {}),
+  };
+
+  await assert.rejects(
+    verifyTenantSafeguards({
+      connectionString: "postgres://unused",
+      pool,
+      connectionTimeoutMs: 5,
+    }),
+    /tenant safeguard database connection timed out after 5ms; production is not trusted/,
+  );
+});
+
+test("applies a client and server timeout to verification statements", async () => {
+  const queries = [];
+  const client = {
+    async query(config) {
+      queries.push(config);
+      if (config.text === "BEGIN TRANSACTION READ ONLY") return { rows: [] };
+      if (config.text === "SELECT set_config('statement_timeout', $1, true)") {
+        return { rows: [] };
+      }
+      throw new Error("query timeout");
+    },
+    release() {},
+  };
+
+  await assert.rejects(
+    verifyTenantSafeguards({
+      connectionString: "postgres://unused",
+      pool: { connect: async () => client },
+      statementTimeoutMs: 23,
+    }),
+    /query timeout/,
+  );
+
+  assert.deepEqual(queries[0], {
+    text: "BEGIN TRANSACTION READ ONLY",
+    values: undefined,
+    query_timeout: 23,
+  });
+  assert.deepEqual(queries[1], {
+    text: "SELECT set_config('statement_timeout', $1, true)",
+    values: ["23ms"],
+    query_timeout: 23,
+  });
+  assert.equal(queries.at(-1).text, "ROLLBACK");
+  assert.equal(queries.at(-1).query_timeout, 23);
+});
+
+test("fails a stalled statement within the configured deadline and discards its client", async () => {
+  let releasedWithError;
+  const client = {
+    async query(config) {
+      if (config.text === "BEGIN TRANSACTION READ ONLY") return { rows: [] };
+      if (config.text === "SELECT set_config('statement_timeout', $1, true)") {
+        return { rows: [] };
+      }
+      if (config.text === "ROLLBACK") return { rows: [] };
+      return new Promise(() => {});
+    },
+    release(error) {
+      releasedWithError = error;
+    },
+  };
+
+  await assert.rejects(
+    verifyTenantSafeguards({
+      connectionString: "postgres://unused",
+      pool: { connect: async () => client },
+      statementTimeoutMs: 5,
+    }),
+    /tenant safeguard database statement timed out after 5ms; production is not trusted/,
+  );
+
+  assert.equal(releasedWithError, true);
 });

@@ -7,6 +7,60 @@ import {
 
 export { expectedForeignKeys, tenantTables };
 
+export const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
+export const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
+
+function timeoutError(kind, timeoutMs) {
+  const error = new Error(
+    `tenant safeguard ${kind} timed out after ${timeoutMs}ms; production is not trusted`,
+  );
+  error.code = "TENANT_SAFEGUARD_TIMEOUT";
+  return error;
+}
+
+async function connectWithTimeout(pool, timeoutMs) {
+  let timer;
+  const connection = pool.connect();
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(timeoutError("database connection", timeoutMs)),
+      timeoutMs,
+    );
+    timer.unref?.();
+  });
+
+  try {
+    return await Promise.race([connection, timeout]);
+  } catch (error) {
+    connection.then((lateClient) => lateClient.release(), () => {});
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function queryWithTimeout(client, text, values, timeoutMs) {
+  let timer;
+  const query = client.query({
+    text,
+    values,
+    query_timeout: timeoutMs,
+  });
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(timeoutError("database statement", timeoutMs)),
+      timeoutMs,
+    );
+    timer.unref?.();
+  });
+
+  try {
+    return await Promise.race([query, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function sameColumns(actual, expected) {
   return (
     Array.isArray(actual) &&
@@ -99,28 +153,54 @@ const organizationOrphanQuery = `
 
 export async function verifyTenantSafeguards(options = {}) {
   const connectionString = options.connectionString ?? process.env.DATABASE_URL;
+  const connectionTimeoutMs =
+    options.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+  const statementTimeoutMs =
+    options.statementTimeoutMs ?? DEFAULT_STATEMENT_TIMEOUT_MS;
   if (!connectionString) {
     throw new Error(
       "DATABASE_URL is required to verify tenant safeguards against the target database",
     );
   }
 
-  const pool = options.pool ?? new Pool({ connectionString });
+  const pool =
+    options.pool ??
+    new Pool({
+      connectionString,
+      connectionTimeoutMillis: connectionTimeoutMs,
+      statement_timeout: statementTimeoutMs,
+    });
   const ownsPool = !options.pool;
-  const client = await pool.connect();
+  const client = await connectWithTimeout(pool, connectionTimeoutMs);
   let transactionOpen = false;
+  let discardClient = false;
   try {
-    await client.query("BEGIN TRANSACTION READ ONLY");
+    await queryWithTimeout(
+      client,
+      "BEGIN TRANSACTION READ ONLY",
+      undefined,
+      statementTimeoutMs,
+    );
     transactionOpen = true;
-    const schemaResult = await client.query(
+    await queryWithTimeout(
+      client,
+      "SELECT set_config('statement_timeout', $1, true)",
+      [`${statementTimeoutMs}ms`],
+      statementTimeoutMs,
+    );
+    const schemaResult = await queryWithTimeout(
+      client,
       "SELECT current_schema() AS schema_name",
+      undefined,
+      statementTimeoutMs,
     );
     const schema = schemaResult.rows[0]?.schema_name;
     if (!schema) {
       throw new Error("cannot determine the target database schema");
     }
 
-    const columns = await client.query(
+    const columns = await queryWithTimeout(
+      client,
       `
         SELECT table_name, column_default
         FROM information_schema.columns
@@ -129,8 +209,10 @@ export async function verifyTenantSafeguards(options = {}) {
           AND table_name = ANY($2::text[])
       `,
       [schema, tenantTables],
+      statementTimeoutMs,
     );
-    const foreignKeys = await client.query(
+    const foreignKeys = await queryWithTimeout(
+      client,
       `
         SELECT
           relation.relname AS table_name,
@@ -161,12 +243,23 @@ export async function verifyTenantSafeguards(options = {}) {
           AND constraint_record.contype = 'f'
       `,
       [schema],
+      statementTimeoutMs,
     );
-    const demoOrganization = await client.query(
+    const demoOrganization = await queryWithTimeout(
+      client,
       "SELECT count(*)::integer AS row_count FROM organizations WHERE id = 'demo'",
+      undefined,
+      statementTimeoutMs,
     );
-    const organizationOrphans = await client.query(organizationOrphanQuery);
-    const watchOrphans = await client.query(`
+    const organizationOrphans = await queryWithTimeout(
+      client,
+      organizationOrphanQuery,
+      undefined,
+      statementTimeoutMs,
+    );
+    const watchOrphans = await queryWithTimeout(
+      client,
+      `
       SELECT
         count(*) FILTER (
           WHERE watch.case_id IS NOT NULL AND parent_case.id IS NULL
@@ -181,7 +274,10 @@ export async function verifyTenantSafeguards(options = {}) {
       LEFT JOIN onb_system_checks parent_check
         ON parent_check.organization_id = watch.organization_id
        AND parent_check.id = watch.check_id
-    `);
+    `,
+      undefined,
+      statementTimeoutMs,
+    );
 
     const failures = findTenantSafeguardFailures({
       columns: columns.rows,
@@ -191,14 +287,32 @@ export async function verifyTenantSafeguards(options = {}) {
       watchCaseOrphanCount: watchOrphans.rows[0].case_orphan_count,
       watchCheckOrphanCount: watchOrphans.rows[0].check_orphan_count,
     });
-    await client.query("COMMIT");
+    await queryWithTimeout(
+      client,
+      "COMMIT",
+      undefined,
+      statementTimeoutMs,
+    );
     transactionOpen = false;
     return { schema, failures };
   } catch (error) {
-    if (transactionOpen) await client.query("ROLLBACK");
+    discardClient = error?.code === "TENANT_SAFEGUARD_TIMEOUT";
+    if (transactionOpen) {
+      try {
+        await queryWithTimeout(
+          client,
+          "ROLLBACK",
+          undefined,
+          statementTimeoutMs,
+        );
+      } catch {
+        // Preserve the verification failure; releasing the client discards
+        // unusable transaction state from this one-shot production gate.
+      }
+    }
     throw error;
   } finally {
-    client.release();
+    client.release(discardClient);
     if (ownsPool) await pool.end();
   }
 }
