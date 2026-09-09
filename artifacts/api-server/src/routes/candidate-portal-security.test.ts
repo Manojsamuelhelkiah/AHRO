@@ -4,7 +4,7 @@ import { request as httpRequest, type Server } from "node:http";
 import { after, before, test } from "node:test";
 import cookieParser from "cookie-parser";
 import express from "express";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import {
   db,
   onbCandidateLinks,
@@ -22,8 +22,10 @@ import {
   CANDIDATE_COOKIE,
   CANDIDATE_EXCHANGE_COOLDOWN_MS,
   CANDIDATE_EXCHANGE_FAILURE_LIMIT,
+  CANDIDATE_LINK_RETENTION_MS,
   MAX_CANDIDATE_FILE_BYTES,
   candidateExchangeRetryAfterMs,
+  cleanupCandidateAccess,
   hashSecret,
 } from "../lib/onboarding/candidate-portal";
 
@@ -256,6 +258,42 @@ test("expired sessions are rejected and revocation immediately ends active sessi
   });
   assert.equal(revoke.status, 204);
   assert.equal((await portal(secret)).status, 401);
+});
+
+test("candidate access cleanup is tenant-safe, idempotent, and preserves active and recently revoked links", async () => {
+  const now = new Date();
+  const old = new Date(now.getTime() - CANDIDATE_LINK_RETENTION_MS - 1);
+  const recent = new Date(now.getTime() - CANDIDATE_LINK_RETENTION_MS + 1);
+  const future = new Date(now.getTime() + 60_000);
+  const links = await db.insert(onbCandidateLinks).values([
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-old-expired-${suffix}`), expiresAt: old, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-old-revoked-${suffix}`), expiresAt: old, revokedAt: old, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-recent-revoked-${suffix}`), expiresAt: old, revokedAt: recent, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-active-${suffix}`), expiresAt: future, issuedBy: userId },
+    { organizationId: orgB, caseId: caseB, tokenHash: hashSecret(`cleanup-other-tenant-${suffix}`), expiresAt: old, issuedBy: userId },
+  ]).returning({ id: onbCandidateLinks.id });
+  const expiredSessionSecret = `cleanup-session-${suffix}`;
+  await createSession(expiredSessionSecret, orgA, caseA, links[3].id, old);
+
+  const cleanup = await cleanupCandidateAccess({ now, organizationId: orgA });
+  assert.ok(cleanup.expiredSessions >= 1);
+  assert.equal(cleanup.retainedLinksDeleted, 2);
+  assert.deepEqual(await cleanupCandidateAccess({ now, organizationId: orgA }), {
+    expiredSessions: 0,
+    retainedLinksDeleted: 0,
+  });
+
+  const survivors = await db.select({ id: onbCandidateLinks.id })
+    .from(onbCandidateLinks)
+    .where(and(
+      eq(onbCandidateLinks.organizationId, orgA),
+      inArray(onbCandidateLinks.id, [links[2].id, links[3].id]),
+    ));
+  assert.equal(survivors.length, 2);
+  const [otherTenant] = await db.select({ id: onbCandidateLinks.id })
+    .from(onbCandidateLinks)
+    .where(eq(onbCandidateLinks.id, links[4].id));
+  assert.equal(otherTenant.id, links[4].id);
 });
 
 test("upload route enforces type and size boundaries before storage", async () => {

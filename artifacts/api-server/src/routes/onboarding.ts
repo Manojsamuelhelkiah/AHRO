@@ -93,6 +93,7 @@ import {
 import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
 import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference, shouldAuthorizeCandidateEmail } from "../lib/onboarding/channel-routing";
+import { cleanupCandidateAccess } from "../lib/onboarding/candidate-portal";
 import { resolveReviewerName } from "../middlewares/require-auth";
 import { clerkClient } from "@clerk/express";
 import {
@@ -1141,12 +1142,13 @@ const watcherTick = async (req: Request, res: Response) => {
     res.json({ ran: false, reason: "throttled" });
     return;
   }
-  const [systemWatcher, emailWatch, inboundEmail, approverInbox, scenarioFiles] = await Promise.all([
+  const [systemWatcher, emailWatch, inboundEmail, approverInbox, scenarioFiles, candidateAccess] = await Promise.all([
     runSystemWatcherTick(),
     runEmailWatchTick(),
     runInboundEmailTick(),
     runApproverInboxTick(),
     runScenarioFileMaintenance(),
+    cleanupCandidateAccess(),
   ]);
   res.json({
     ran: true,
@@ -1156,6 +1158,7 @@ const watcherTick = async (req: Request, res: Response) => {
     inboundEmail,
     approverInbox,
     scenarioFiles,
+    candidateAccess,
   });
 };
 

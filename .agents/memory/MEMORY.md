@@ -33,3 +33,4 @@
 - [Pre-trust startup alerts](pre-trust-startup-alerts.md) — dedupe blocked-publish alerts outside the app DB; database access itself may be the failed safeguard.
 - [Day-1 logistics defaults](day1-logistics-defaults.md) — every case gets a copied editable tenant default; backfill missing rows once and never overwrite case-specific logistics.
 - [Approval handoff durability](approval-handoff-durability.md) — waiting state, decided approvals, and continuation claims need one recoverable reconciliation path; handle legacy null checkpoints.
+- [Indexes on optional recovery tables](optional-recovery-table-indexes.md) — automatic index migrations fail when historical recovery fixtures omit the table; procedural guards are intentionally forbidden.

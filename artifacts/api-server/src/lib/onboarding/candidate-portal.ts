@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 import type { Request } from "express";
 import { db } from "@workspace/db";
 import {
@@ -10,6 +10,8 @@ import {
 
 export const CANDIDATE_COOKIE = "onb_candidate_session";
 export const MAX_CANDIDATE_FILE_BYTES = 10 * 1024 * 1024;
+
+export const CANDIDATE_LINK_RETENTION_MS = 90 * 24 * 60 * 60_000;
 export const hashSecret = (value: string) => createHash("sha256").update(value).digest("hex");
 export const newSecret = () => randomBytes(32).toString("base64url");
 export const portalEmailRequested = (value: unknown) => value === true;
@@ -137,6 +139,63 @@ export async function exchangeToken(token: string) {
   return { secret, expiresAt: sessionExpiry };
 }
 
+export async function cleanupCandidateAccess(input: {
+  now?: Date;
+  organizationId?: string;
+  limit?: number;
+} = {}): Promise<{ expiredSessions: number; retainedLinksDeleted: number }> {
+  const now = input.now ?? new Date();
+  const limit = Math.max(
+    1,
+    Math.min(input.limit ?? CANDIDATE_ACCESS_CLEANUP_BATCH_SIZE, CANDIDATE_ACCESS_CLEANUP_BATCH_SIZE),
+  );
+  const tenantSessionFilter = input.organizationId
+    ? eq(onbCandidateSessions.organizationId, input.organizationId)
+    : undefined;
+  const expiredSessionIds = db
+    .select({ idHash: onbCandidateSessions.idHash })
+    .from(onbCandidateSessions)
+    .where(and(lte(onbCandidateSessions.expiresAt, now), tenantSessionFilter))
+    .limit(limit);
+  const deletedSessions = await db
+    .delete(onbCandidateSessions)
+    .where(and(
+      inArray(onbCandidateSessions.idHash, expiredSessionIds),
+      tenantSessionFilter,
+    ))
+    .returning({ idHash: onbCandidateSessions.idHash });
+
+  const retentionCutoff = new Date(now.getTime() - CANDIDATE_LINK_RETENTION_MS);
+  const tenantLinkFilter = input.organizationId
+    ? eq(onbCandidateLinks.organizationId, input.organizationId)
+    : undefined;
+  const retainedLinkIds = db
+    .select({ id: onbCandidateLinks.id })
+    .from(onbCandidateLinks)
+    .where(and(
+      or(
+        and(
+          isNull(onbCandidateLinks.revokedAt),
+          lte(onbCandidateLinks.expiresAt, retentionCutoff),
+        ),
+        lte(onbCandidateLinks.revokedAt, retentionCutoff),
+      ),
+      tenantLinkFilter,
+    ))
+    .limit(limit);
+  const deletedLinks = await db
+    .delete(onbCandidateLinks)
+    .where(and(
+      inArray(onbCandidateLinks.id, retainedLinkIds),
+      tenantLinkFilter,
+    ))
+    .returning({ id: onbCandidateLinks.id });
+
+  return {
+    expiredSessions: deletedSessions.length,
+    retainedLinksDeleted: deletedLinks.length,
+  };
+}
 export function candidateObjectPath(organizationId: string, caseId: number) {
   const org = hashSecret(organizationId).slice(0, 24);
   return `/objects/candidate-documents/${org}/${caseId}/${randomUUID()}`;
@@ -148,3 +207,5 @@ export function detectCandidateFile(bytes: Buffer): string | undefined {
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return "image/png";
   return undefined;
 }
+
+export const CANDIDATE_ACCESS_CLEANUP_BATCH_SIZE = 500;
