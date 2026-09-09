@@ -137,7 +137,10 @@ router.post("/onboarding/demo-login", async (req, res, next) => {
       return;
     }
     const demoUser = await ensureDemoUser();
-    const token = process.env.ONB_SYSTEM_WEBHOOK_TOKEN;
+    const token = await clerkClient.signInTokens.createSignInToken({
+      userId: demoUser.id,
+      expiresInSeconds: 120,
+    });
     res.json({ ticket: token.token });
   } catch (err) {
     next(err);
@@ -199,28 +202,23 @@ async function insertCaseAndStart(
   return row;
 }
 
-    const organizationId = getOrganizationId(req);
+/* ----------------------------- dashboard ----------------------------- */
 
-    const organizationId = getOrganizationId(req);
-
-    const organizationId = getOrganizationId(req);
-
-    const organizationId = getOrganizationId(req);
-
-    const organizationId = getOrganizationId(req);
-
+router.get("/onboarding/dashboard", async (req, res, next) => {
+  try {
     const organizationId = getOrganizationId(req);
     const cases = await db
       .select()
       .from(onbCases)
       .where(organizationWhere(onbCases, organizationId));
-
-    const approvalRows = await db
-      .select({ approval: onbApprovals })
+    const approvals = await db
+      .select()
       .from(onbApprovals)
       .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, organizationId));
-    const approvals = approvalRows.map(({ approval }) => approval);
+      .where(and(
+        eq(onbApprovals.status, "pending"),
+        organizationWhere(onbCases, organizationId),
+      ));
     const recent = await db
       .select({ event: onbEvents })
       .from(onbEvents)
@@ -275,7 +273,7 @@ router.get("/onboarding/scenarios", (_req, res) => {
 
 router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
   try {
-    const scenario = req.body?.scenario === "sla-escalation" ? "sla-escalation" : "day-before";
+    const scenario = getScenario(req.params.key);
     if (!scenario) {
       res.status(404).json({ message: `Unknown scenario "${req.params.key}"` });
       return;
@@ -285,7 +283,24 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
     )
       .toISOString()
       .slice(0, 10);
-    const row = result.communication;
+    const row = await insertCaseAndStart({
+      workerName: scenario.intake.workerName,
+      workerEmail: scenario.intake.workerEmail,
+      workerPhone: scenario.intake.workerPhone,
+      hireType: scenario.intake.hireType,
+      workerCategory: scenario.intake.workerCategory,
+      role: scenario.intake.role,
+      department: scenario.intake.department,
+      geography: scenario.intake.geography,
+      legalEntity: scenario.intake.legalEntity,
+      managerName: scenario.intake.managerName,
+      recruiterName: scenario.intake.recruiterName,
+      joiningDate,
+      primarySkill: scenario.intake.primarySkill,
+      skillCriticality: scenario.intake.skillCriticality,
+      notes: scenario.intake.notes,
+      scenarioKey: scenario.key,
+    }, getOrganizationId(req));
     res.status(201).json(serializeCase(row));
   } catch (err) {
     next(err);
@@ -297,11 +312,10 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
 router.get("/onboarding/cases", async (req, res, next) => {
   try {
     const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
-      .orderBy(desc(onbSystemChecks.id));
+      .select()
+      .from(onbCases)
+      .where(organizationWhere(onbCases, getOrganizationId(req)))
+      .orderBy(desc(onbCases.id));
     res.json(rows.map(serializeCase));
   } catch (err) {
     next(err);
@@ -310,7 +324,7 @@ router.get("/onboarding/cases", async (req, res, next) => {
 
 router.post("/onboarding/cases", async (req, res, next) => {
   try {
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = CreateOnboardingCaseBody.parse(req.body);
     const workerEmail = body.workerEmail.trim().toLowerCase();
     const channelPreference = normalizePreference(body.channelPreference);
     if (!isValidEmail(workerEmail)) {
@@ -334,20 +348,40 @@ router.post("/onboarding/cases", async (req, res, next) => {
       });
       return;
     }
-    const row = result.communication;
-    res.json({ ...row, createdAt: row.createdAt.toISOString(), retriedAt: iso(row.retriedAt) });
+    const row = await insertCaseAndStart({
+      workerName: body.workerName,
+      workerEmail,
+      workerPhone: body.workerPhone ?? null,
+      channelPreference,
+      hireType: body.hireType,
+      workerCategory: body.workerCategory,
+      role: body.role,
+      department: body.department,
+      geography: body.geography,
+      legalEntity: body.legalEntity,
+      managerName: body.managerName,
+      recruiterName: body.recruiterName,
+      joiningDate: body.joiningDate,
+      primarySkill: body.primarySkill ?? null,
+      skillCriticality: body.skillCriticality ?? null,
+      notes: body.notes ?? null,
+      scenarioKey: null,
+      candidateEmailAuthorizedAt: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? new Date() : null,
+      candidateEmailAuthorizedBy: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? req.authUserId! : null,
+    }, getOrganizationId(req));
+    res.status(201).json(serializeCase(row));
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
+router.get("/onboarding/cases/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [row] = await db
-      .select()
-      .from(onbConnectors)
-      .where(and(eq(onbConnectors.key, req.params.key), organizationWhere(onbConnectors, organizationId)));
+    const [row] = await db.select().from(onbCases).where(and(
+      eq(onbCases.id, id),
+      organizationWhere(onbCases, getOrganizationId(req)),
+    ));
     if (!row) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -361,55 +395,49 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
 router.get("/onboarding/cases/:id/events", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
-      eq(onbCases.id, id),
-      organizationWhere(onbCases, getOrganizationId(req)),
-    ));
+    const organizationId = getOrganizationId(req);
+    const [exists] = await db
+      .select({ id: onbCases.id })
+      .from(onbCases)
+      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId)));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
       return;
     }
     const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
-      .orderBy(desc(onbSystemChecks.id));
-    res.json(
-      rows.map((r) => ({
-        id: r.id,
-        caseId: r.caseId,
-        key: r.key,
-        label: r.label,
-        category: r.category,
-        status: r.status,
-        required: r.required,
-        note: r.note,
-        updatedAt: r.updatedAt.toISOString(),
-      })),
-    );
+      .select()
+      .from(onbEvents)
+      .where(and(
+        eq(onbEvents.caseId, id),
+        organizationWhere(onbEvents, organizationId),
+      ))
+      .orderBy(asc(onbEvents.createdAt), asc(onbEvents.id));
+    res.json(rows.map(serializeEvent));
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/onboarding/cases/:id/records", async (req, res, next) => {
+router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
-      eq(onbCases.id, id),
-      organizationWhere(onbCases, getOrganizationId(req)),
-    ));
+    const organizationId = getOrganizationId(req);
+    const [exists] = await db
+      .select({ id: onbCases.id })
+      .from(onbCases)
+      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId)));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
       return;
     }
     const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
-      .orderBy(desc(onbSystemChecks.id));
+      .select()
+      .from(onbCommunications)
+      .where(and(
+        eq(onbCommunications.caseId, id),
+        organizationWhere(onbCommunications, organizationId),
+      ))
+      .orderBy(asc(onbCommunications.createdAt), asc(onbCommunications.id));
     res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
   } catch (err) {
     next(err);
@@ -418,9 +446,12 @@ router.get("/onboarding/cases/:id/records", async (req, res, next) => {
 
 router.post("/onboarding/cases/:id/communications/:communicationId/retry", async (req, res, next) => {
   try {
-    const caseId = Number(req.body?.caseId);
+    const caseId = Number(req.params.id);
     const communicationId = Number(req.params.communicationId);
-
+    if (!Number.isInteger(caseId) || !Number.isInteger(communicationId)) {
+      res.status(400).json({ message: "Valid case and communication ids are required." });
+      return;
+    }
     const [ownedCase] = await db
       .select({ id: onbCases.id })
       .from(onbCases)
@@ -428,23 +459,14 @@ router.post("/onboarding/cases/:id/communications/:communicationId/retry", async
         eq(onbCases.id, caseId),
         organizationWhere(onbCases, getOrganizationId(req)),
       ));
+    if (!ownedCase) {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
     const reviewer = await resolveReviewerName(req.authUserId!);
-    const result = body.channel === "email"
-      ? await sendAdministrativeEmail({
-          caseId: anyCase.id,
-          toAddress: to,
-          subject: "Onboarding channel test",
-          body: testBody,
-        })
-      : await sendOutbound({
-          caseId: anyCase.id,
-          channel: "whatsapp",
-          toAddress: to,
-          subject: null,
-          body: testBody,
-        });
+    const result = await retryCandidateEmail(caseId, communicationId, reviewer);
     if (!result.ok) {
-    const status = String(req.body?.status ?? "");
+      const status = result.code === "not-found" ? 404 : result.code === "not-retryable" ? 409 : 403;
       res.status(status).json({ message: result.reason });
       return;
     }
@@ -458,20 +480,15 @@ router.post("/onboarding/cases/:id/communications/:communicationId/retry", async
 router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
-      eq(onbCases.id, id),
-      organizationWhere(onbCases, getOrganizationId(req)),
-    ));
+    const [exists] = await db
+      .select({ id: onbCases.id })
+      .from(onbCases)
+      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, getOrganizationId(req))));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
       return;
     }
-    const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
-      .orderBy(desc(onbSystemChecks.id));
+    const rows = await listDocuments(id);
     res.json(
       rows.map((r) => ({
         id: r.id,
@@ -493,10 +510,10 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
 router.get("/onboarding/cases/:id/records", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [c] = await db.select().from(onbCases).where(and(
-      eq(onbCases.id, a.caseId),
-      organizationWhere(onbCases, getOrganizationId(req)),
-    ));
+    const [c] = await db
+      .select({ id: onbCases.id, workerEmail: onbCases.workerEmail })
+      .from(onbCases)
+      .where(and(eq(onbCases.id, id), organizationWhere(onbCases, getOrganizationId(req))));
     if (!c) {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -527,24 +544,35 @@ router.get("/onboarding/cases/:id/records", async (req, res, next) => {
 router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = ReceiveOnboardingInboundBody.parse(req.body);
     if (body.channel !== "email" && body.channel !== "whatsapp") {
       res.status(400).json({ message: "channel must be 'email' or 'whatsapp'" });
       return;
     }
     const [c] = await db.select().from(onbCases).where(and(
-      eq(onbCases.id, a.caseId),
+      eq(onbCases.id, id),
       organizationWhere(onbCases, getOrganizationId(req)),
     ));
     if (!c) {
       res.status(404).json({ message: "Case not found" });
       return;
     }
-    const from = String(req.body?.From ?? "").replace(/^whatsapp:/, "");
+    const from =
+      body.channel === "whatsapp" && c.workerPhone ? c.workerPhone : c.workerEmail;
     const [row] = await db
-      .select()
-      .from(onbConnectors)
-      .where(and(eq(onbConnectors.key, req.params.key), organizationWhere(onbConnectors, organizationId)));
+      .insert(onbCommunications)
+      .values({
+        organizationId: c.organizationId,
+        caseId: id,
+        channel: body.channel,
+        direction: "inbound",
+        toAddress: from,
+        subject: null,
+        body: body.body,
+        status: "received",
+        sensitive: false,
+      })
+      .returning();
     handleInbound(id, body.channel as "email" | "whatsapp", body.body);
     res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
   } catch (err) {
@@ -584,7 +612,7 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
     }
     const from = String(req.body?.From ?? "").replace(/^whatsapp:/, "");
     const text = String(req.body?.Body ?? "").trim();
-      const messageSid = String(req.body?.MessageSid ?? "");
+    const messageSid = String(req.body?.MessageSid ?? "");
     const respondEmpty = () => {
       res.type("text/xml").send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
     };
@@ -596,20 +624,14 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
     // Signed delivery still has no tenant credential. Only route a phone
     // identity when it maps to exactly one active organization.
     const cases = await db
-      .select()
+      .select({ id: onbCases.id, organizationId: onbCases.organizationId, workerPhone: onbCases.workerPhone })
       .from(onbCases)
-      .where(organizationWhere(onbCases, organizationId));
-
-    const approvalRows = await db
-      .select({ approval: onbApprovals })
-      .from(onbApprovals)
-      .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, organizationId));
+      .where(sql`${onbCases.lifecycleStage} not in ('complete')`);
     const fromDigits = digitsOnly(from);
-
     const matches = cases.filter(
       (c) => c.workerPhone && digitsOnly(c.workerPhone) === fromDigits,
     );
+    if (matches.length === 1) {
       const match = matches[0];
       await recordInbound({
         caseId: match.id,
@@ -656,20 +678,7 @@ router.post("/onboarding/cases/:id/voice-call", async (req, res, next) => {
       });
       return;
     }
-    const result = body.channel === "email"
-      ? await sendAdministrativeEmail({
-          caseId: anyCase.id,
-          toAddress: to,
-          subject: "Onboarding channel test",
-          body: testBody,
-        })
-      : await sendOutbound({
-          caseId: anyCase.id,
-          channel: "whatsapp",
-          toAddress: to,
-          subject: null,
-          body: testBody,
-        });
+    const result = await startVoiceCall({ caseId: id, scenario });
     res.json({ status: result.status, note: result.note });
   } catch (err) {
     next(err);
@@ -790,7 +799,7 @@ router.post(
               .join(" — ")
               .slice(0, 300)
           : null;
-
+      // A provider id is only safe to mutate after it derives one tenant.
       const candidates = await db
         .select({ id: onbCommunications.id, organizationId: onbCommunications.organizationId })
         .from(onbCommunications)
@@ -799,13 +808,39 @@ router.post(
           eq(onbCommunications.direction, "outbound"),
           eq(onbCommunications.channel, "whatsapp"),
         ));
+      if (candidates.length === 1) await db
+        .update(onbCommunications)
+        .set({ status: finalStatus, failureReason })
+        .where(
+          and(
+            eq(onbCommunications.id, candidates[0].id),
+            eq(onbCommunications.organizationId, candidates[0].organizationId),
+            eq(onbCommunications.externalMessageId, messageSid),
+            eq(onbCommunications.direction, "outbound"),
+            eq(onbCommunications.channel, "whatsapp"),
+          ),
+        );
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ----------------------------- approvals ----------------------------- */
+
+router.get("/onboarding/approvals", async (req, res, next) => {
+  try {
     const wantAll = req.query.status === "all";
     const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
-      .orderBy(desc(onbSystemChecks.id));
+      .select({
+        approval: onbApprovals,
+        workerName: onbCases.workerName,
+      })
+      .from(onbApprovals)
+      .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
+      .where(organizationWhere(onbCases, getOrganizationId(req)))
+      .orderBy(desc(onbApprovals.createdAt), desc(onbApprovals.id));
     const filtered = wantAll
       ? rows
       : rows.filter((r) => r.approval.status === "pending");
@@ -835,7 +870,7 @@ router.post(
 router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const body = DecideOnboardingApprovalBody.parse(req.body);
     if (body.decision !== "approved" && body.decision !== "rejected") {
       res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
       return;
@@ -858,14 +893,18 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
     // Conditional update: only transitions from pending, so concurrent
     // decisions cannot both win and double-trigger orchestration.
     const [updated] = await db
-      .update(onbConnectors)
+      .update(onbApprovals)
       .set({
-        vendor: body.vendor ?? row.vendor,
-        status: body.status ?? row.status,
-        trackingMode: body.trackingMode ?? row.trackingMode,
-        lastSyncAt: new Date(),
+        status: body.decision,
+        decidedBy,
+        comment: body.comment ?? null,
+        decidedAt: new Date(),
       })
-      .where(and(eq(onbConnectors.key, req.params.key), organizationWhere(onbConnectors, organizationId)))
+      .where(and(
+        eq(onbApprovals.id, id),
+        eq(onbApprovals.status, "pending"),
+        organizationWhere(onbApprovals, getOrganizationId(req)),
+      ))
       .returning();
     if (!updated) {
       res.status(400).json({ message: "Approval already decided" });
@@ -875,21 +914,55 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       eq(onbCases.id, a.caseId),
       organizationWhere(onbCases, getOrganizationId(req)),
     ));
-    const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
-      .orderBy(desc(onbSystemChecks.id));
-    res.json(rows.map(serializeCase));
+    resumeAfterDecision({
+      caseId: a.caseId,
+      approved: body.decision === "approved",
+      decidedBy,
+      comment: body.comment ?? null,
+      recommendation: a.recommendation,
+      hitlPattern: a.hitlPattern,
+      resumeAction: a.resumeAction ?? "none",
+    });
+    res.json({
+      id: updated.id,
+      caseId: updated.caseId,
+      caseWorkerName: c?.workerName ?? "",
+      agent: updated.agent,
+      ruleRef: updated.ruleRef,
+      hitlPattern: updated.hitlPattern,
+      recommendation: updated.recommendation,
+      rationale: updated.rationale,
+      recordsEvidence: updated.recordsEvidence,
+      status: updated.status,
+      decidedBy: updated.decidedBy,
+      comment: updated.comment,
+      createdAt: updated.createdAt.toISOString(),
+      decidedAt: iso(updated.decidedAt),
+    });
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/onboarding/cases", async (req, res, next) => {
+/* ----------------------------- connectors ---------------------------- */
+
+router.get("/onboarding/connectors", async (req, res, next) => {
   try {
-    const body = TestOnboardingChannelBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
+    await ensureConnectorsSeeded(organizationId);
+    const rows = await db.select().from(onbConnectors)
+      .where(organizationWhere(onbConnectors, organizationId));
+    res.json(rows.map((r) => ({ ...r, lastSyncAt: iso(r.lastSyncAt) })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/onboarding/connectors/:key", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    await ensureConnectorsSeeded(organizationId);
+    const body = UpdateOnboardingConnectorBody.parse(req.body);
     const [row] = await db
       .select()
       .from(onbConnectors)
@@ -1028,21 +1101,11 @@ router.post(
   "/onboarding/systems/email-watch/simulate",
   async (req, res, next) => {
     try {
-    const body = TestOnboardingChannelBody.parse(req.body);
-    const result = body.channel === "email"
-      ? await sendAdministrativeEmail({
-          caseId: anyCase.id,
-          toAddress: to,
-          subject: "Onboarding channel test",
-          body: testBody,
-        })
-      : await sendOutbound({
-          caseId: anyCase.id,
-          channel: "whatsapp",
-          toAddress: to,
-          subject: null,
-          body: testBody,
-        });
+      const body = SimulateOnboardingWatchEmailBody.parse(req.body);
+      const result = await simulateVendorEmail({
+        ...body,
+        organizationId: getOrganizationId(req),
+      });
       res.status(result.ok ? 200 : 404).json(result);
     } catch (err) {
       next(err);
@@ -1077,8 +1140,12 @@ router.get("/onboarding/settings", async (req, res, next) => {
 
 router.put("/onboarding/settings", async (req, res, next) => {
   try {
-    const body = TestOnboardingChannelBody.parse(req.body);
-    const raw = Array.isArray(req.body?.volunteers) ? req.body.volunteers : [];
+    const body = UpdateOnboardingSettingsBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
+    // Only fields present in the request are touched — a toggle-only update
+    // must not clear the stored alert address (and vice versa).
+    if (body.hrAlertEmail !== undefined) {
+      const raw = (body.hrAlertEmail ?? "").trim();
       if (raw.length === 0) {
         await setSetting(organizationId, HR_ALERT_EMAIL_KEY, null);
       } else {
@@ -1093,7 +1160,7 @@ router.put("/onboarding/settings", async (req, res, next) => {
       await setSetting(organizationId, AUTO_ESCALATION_CALLS_KEY, body.autoEscalationCalls ? "on" : null);
     }
     if (body.hrApproverEmail !== undefined) {
-    const raw = Array.isArray(req.body?.volunteers) ? req.body.volunteers : [];
+      const raw = (body.hrApproverEmail ?? "").trim();
       if (raw.length === 0) {
         await setSetting(organizationId, HR_APPROVER_EMAIL_KEY, null);
       } else {
@@ -1149,11 +1216,22 @@ router.get("/onboarding/guardrails/:key/events", async (req, res, next) => {
       return;
     }
     const rows = await db
-      .select({ check: onbSystemChecks, workerName: onbCases.workerName })
-      .from(onbSystemChecks)
-      .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
-      .orderBy(desc(onbSystemChecks.id));
+      .select({
+        id: onbGuardrailEvents.id,
+        caseId: onbGuardrailEvents.caseId,
+        action: onbGuardrailEvents.action,
+        detail: onbGuardrailEvents.detail,
+        createdAt: onbGuardrailEvents.createdAt,
+        workerName: onbCases.workerName,
+      })
+      .from(onbGuardrailEvents)
+      .innerJoin(onbCases, eq(onbGuardrailEvents.caseId, onbCases.id))
+      .where(and(
+        eq(onbGuardrailEvents.guardrailKey, req.params.key),
+        organizationWhere(onbCases, getOrganizationId(req)),
+      ))
+      .orderBy(desc(onbGuardrailEvents.createdAt), desc(onbGuardrailEvents.id))
+      .limit(50);
     res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
   } catch (err) {
     next(err);
@@ -1161,20 +1239,17 @@ router.get("/onboarding/guardrails/:key/events", async (req, res, next) => {
 });
 
 const lastDrillAt = new Map<string, number>();
-    const result = body.channel === "email"
-      ? await sendAdministrativeEmail({
-          caseId: anyCase.id,
-          toAddress: to,
-          subject: "Onboarding channel test",
-          body: testBody,
-        })
-      : await sendOutbound({
-          caseId: anyCase.id,
-          channel: "whatsapp",
-          toAddress: to,
-          subject: null,
-          body: testBody,
-        });
+router.post("/onboarding/guardrails/drill", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    // One drill per 2 minutes: it exercises real enforcement paths, so
+    // repeated runs should not be able to churn quotas or flood audit logs.
+    if (Date.now() - (lastDrillAt.get(organizationId) ?? 0) < 120_000) {
+      res.status(429).json({ message: "A drill just ran — wait a couple of minutes before running another." });
+      return;
+    }
+    lastDrillAt.set(organizationId, Date.now());
+    const result = await runSecurityDrill(organizationId);
     res.status(201).json(result);
   } catch (err) {
     next(err);
@@ -1267,20 +1342,11 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
       res.status(400).json({ message: "caseId (number) and status are required" });
       return;
     }
-    const result = body.channel === "email"
-      ? await sendAdministrativeEmail({
-          caseId: anyCase.id,
-          toAddress: to,
-          subject: "Onboarding channel test",
-          body: testBody,
-        })
-      : await sendOutbound({
-          caseId: anyCase.id,
-          channel: "whatsapp",
-          toAddress: to,
-          subject: null,
-          body: testBody,
-        });
+    const result = await handleSystemWebhook({
+      system: req.params.system,
+      caseId,
+      status,
+    });
     res.status(result.ok ? 200 : 404).json({ message: result.message });
   } catch (err) {
     next(err);
@@ -1291,17 +1357,21 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
 
 const SUPPRESSION_THRESHOLD = 3;
 
+// In-memory cache for the analytics narrative so the endpoint never blocks on the LLM.
 type NarrativeCacheEntry = {
   signature: string | null;
   text: string | null;
   generatingFor: string | null;
 };
 const narrativeCache = new Map<string, NarrativeCacheEntry>();
+
+router.get("/onboarding/analytics", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
     const cases = await db
       .select()
       .from(onbCases)
       .where(organizationWhere(onbCases, organizationId));
-
     const approvalRows = await db
       .select({ approval: onbApprovals })
       .from(onbApprovals)
@@ -1370,12 +1440,67 @@ const narrativeCache = new Map<string, NarrativeCacheEntry>();
       readiness: Array.from(readinessMap.entries()),
     });
     let narrative: string | null = null;
-
+    if (cases.length > 0) {
       const cache = narrativeCache.get(organizationId) ?? {
         signature: null,
         text: null,
         generatingFor: null,
       };
+      narrativeCache.set(organizationId, cache);
+      if (cache.signature === signature) {
+        narrative = cache.text;
+      } else {
+        // Only serve stale narrative from this organization while regenerating.
+        narrative = cache.text;
+        if (cache.generatingFor !== signature) {
+          cache.generatingFor = signature;
+          void llmComplete(
+            "You are the intelligence layer of an autonomous HR operations platform. The data you receive covers the onboarding domain only — speak to that scope and do not claim insight into domains you have no data for. Write a 3-4 sentence executive insight for HR leadership: how much onboarding work is progressing autonomously, where human intervention is concentrated, and what deserves attention next. Only trend-level statements — never name or judge an individual. Plain text, clear enterprise language, no technical jargon.",
+            `Aggregate onboarding data: ${cases.length} cases. Skill inflow: ${Array.from(skillMap.entries()).map(([s, v]) => `${s} x${v.count} (${v.criticality})`).join("; ")}. Pending human reviews: ${approvals.filter((a) => a.status === "pending").length}. Readiness: ${Array.from(readinessMap.entries()).map(([k, v]) => `${k}=${v}`).join(", ")}. Suppression threshold: groups under ${SUPPRESSION_THRESHOLD} are not reported individually.`,
+            300,
+          )
+            .then((text) => {
+              cache.signature = signature;
+              cache.text = text;
+            })
+            .catch((err) => {
+              console.error("[analytics] narrative generation failed:", err);
+            })
+            .finally(() => {
+              if (cache.generatingFor === signature) cache.generatingFor = null;
+            });
+        }
+      }
+    }
+
+    res.json({
+      skillInflow,
+      bottlenecks,
+      cohortReadiness: Array.from(readinessMap.entries()).map(([key, count]) => ({ key, count })),
+      suppressionThreshold: SUPPRESSION_THRESHOLD,
+      narrative,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ------------------------------ channels ----------------------------- */
+
+router.get("/onboarding/channels", async (req, res, next) => {
+  try {
+    res.json({
+      email: emailChannelInfo(),
+      whatsapp: whatsappChannelInfo(),
+      inboundEmail: await getInboundEmailMonitorStatus(getOrganizationId(req)),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/channels/test", async (req, res, next) => {
+  try {
     const body = TestOnboardingChannelBody.parse(req.body);
     if (body.channel !== "email" && body.channel !== "whatsapp") {
       res.status(200).json({ ok: false, detail: "channel must be 'email' or 'whatsapp'" });

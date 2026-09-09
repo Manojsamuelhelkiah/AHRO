@@ -343,6 +343,7 @@ test(
       await adminPool.query(
         `
           INSERT INTO "${schema}".onb_watch_emails (
+            organization_id,
             gmail_message_id,
             system,
             from_address,
@@ -350,7 +351,7 @@ test(
             action,
             received_at
           )
-          VALUES ('migration-adoption-test', 'payroll', 'sender@example.test',
+          VALUES ('demo', 'migration-adoption-test', 'payroll', 'sender@example.test',
                   'update', 'recorded', $1::timestamptz)
         `,
         [receiptInstant],

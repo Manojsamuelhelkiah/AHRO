@@ -117,6 +117,13 @@ export function createRequireAuth(options: InternalSmokeAuthOptions = {}) {
     res: Response,
     next: NextFunction,
   ) {
+    // Allow a trusted upstream authentication middleware (including isolated
+    // route tests) to provide the already-verified principal.
+    if (req.authUserId) {
+      next();
+      return;
+    }
+
     const smokeUserId = getInternalSmokeUserId(req, options);
     if (smokeUserId) {
       req.authUserId = smokeUserId;

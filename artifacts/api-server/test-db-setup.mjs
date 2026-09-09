@@ -31,6 +31,22 @@ const adoptablePostgresErrors = new Set([
   "42710", // duplicate_object (constraints, types)
 ]);
 
+function isAdoptablePostgresError(migration, statement, error) {
+  if (adoptablePostgresErrors.has(error?.code)) return true;
+
+  // Migration 0021 deliberately replaced the old global label primary key
+  // with (organization_id, label). If an existing database loses only the
+  // 0018 ledger receipt, replaying 0018's historical ON CONFLICT target can no
+  // longer resolve that superseded constraint. The current schema receipt is
+  // verified independently after adoption, so this exact legacy DML conflict
+  // is safe to treat as already represented without weakening other errors.
+  return (
+    migration.tag === "0018_custom_intent_routing_contract" &&
+    error?.code === "42P10" &&
+    /ON\s+CONFLICT\s*\(\s*"label"\s*\)\s+DO\s+NOTHING\s*;?\s*$/i.test(statement)
+  );
+}
+
 function migrationHash(sql) {
   return createHash("sha256").update(sql).digest("hex");
 }
@@ -594,7 +610,7 @@ async function executeForAdoption(client, migration, statement, index) {
   } catch (error) {
     await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
     await client.query(`RELEASE SAVEPOINT ${savepoint}`);
-    if (!adoptablePostgresErrors.has(error?.code)) {
+    if (!isAdoptablePostgresError(migration, statement, error)) {
       throw new Error(
         `Database test setup could not apply ${migration.tag} (statement ${index + 1})`,
         { cause: error },
