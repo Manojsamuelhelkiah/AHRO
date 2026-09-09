@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Pool } from "pg";
 import { assertAutomaticMigrationIsSafe } from "./test-db-setup.mjs";
+import { applyReviewedMigration } from "./test-db-setup.mjs";
+import { assertReviewedMigrationKeepsTransactionControl } from "./test-db-setup.mjs";
 import { loadCheckedInMigrations } from "./test-db-setup.mjs";
 import { prepareDatabaseBackedTests } from "./test-db-setup.mjs";
+import { reconcileDevelopmentDatabase } from "./test-db-setup.mjs";
+import { reviewedMigrationApproval } from "./test-db-setup.mjs";
+import { selectReviewedMigration } from "./test-db-setup.mjs";
 import { splitMigration } from "./test-db-setup.mjs";
 
 function migrationWith(statement) {
@@ -90,6 +95,62 @@ test("rejects destructive migrations during automatic reconciliation", () => {
       /refused destructive or unsupported migration test_migration.*separate reviewed migration process/,
     );
   }
+});
+
+test("requires an exact tag-and-hash approval for a reviewed destructive migration", () => {
+  const migration = migrationWith(`DROP TABLE "widgets"`);
+  assert.throws(
+    () => selectReviewedMigration([migration], migration.tag),
+    /requires the exact approval APPLY:test_migration:not-a-reviewed-hash/,
+  );
+  assert.throws(
+    () =>
+      selectReviewedMigration(
+        [migration],
+        migration.tag,
+        "APPLY:test_migration:stale-hash",
+      ),
+    /requires the exact approval/,
+  );
+  assert.equal(
+    selectReviewedMigration(
+      [migration],
+      migration.tag,
+      reviewedMigrationApproval(migration),
+    ),
+    migration,
+  );
+  assert.throws(
+    () => assertAutomaticMigrationIsSafe(migration),
+    /refused destructive or unsupported migration/,
+  );
+});
+
+test("rejects transaction-control SQL before reviewed execution", () => {
+  for (const statement of [
+    "BEGIN",
+    "COMMIT",
+    "END",
+    "ROLLBACK",
+    "ABORT",
+    "SAVEPOINT unsafe",
+    "RELEASE SAVEPOINT unsafe",
+    "START TRANSACTION",
+    "PREPARE TRANSACTION 'unsafe'",
+  ]) {
+    assert.throws(
+      () =>
+        assertReviewedMigrationKeepsTransactionControl(
+          migrationWith(statement),
+        ),
+      /refused transaction-control SQL.*runner owns the transaction boundary/,
+    );
+  }
+  assert.doesNotThrow(() =>
+    assertReviewedMigrationKeepsTransactionControl(
+      migrationWith("SELECT 'COMMIT'"),
+    ),
+  );
 });
 
 test("does not mistake comments or string values for destructive SQL", () => {
@@ -184,6 +245,7 @@ test(
     const adminPool = new Pool({ connectionString: process.env.DATABASE_URL });
     const schema = `api_test_setup_${process.pid}`;
     const partialSchema = `${schema}_partial`;
+    const reviewedSchema = `${schema}_reviewed`;
     const schemaConnection = (schemaName) => {
       const url = new URL(process.env.DATABASE_URL);
       url.searchParams.set("options", `-csearch_path=${schemaName}`);
@@ -201,6 +263,7 @@ test(
     try {
       await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await adminPool.query(`DROP SCHEMA IF EXISTS "${partialSchema}" CASCADE`);
+      await adminPool.query(`DROP SCHEMA IF EXISTS "${reviewedSchema}" CASCADE`);
       await adminPool.query(`CREATE SCHEMA "${schema}"`);
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(schema),
@@ -313,6 +376,280 @@ test(
         receiptInstant,
       );
 
+      await adminPool.query(`CREATE SCHEMA "${reviewedSchema}"`);
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(reviewedSchema),
+      });
+      const reviewedTarget = `${reviewedSchema}.reviewed_target`;
+      await adminPool.query(
+        `CREATE TABLE "${reviewedSchema}".reviewed_target (id integer)`,
+      );
+      const reviewedMigration = {
+        tag: "9998_reviewed_drop",
+        hash: "reviewed-drop-hash",
+        createdAt: 9_998,
+        statements: [
+          `DROP TABLE "reviewed_target"`,
+          `CREATE TYPE "reviewed_status" AS ENUM ('ready', 'done')`,
+          `CREATE TABLE "reviewed_enum_table" (
+            id integer PRIMARY KEY,
+            status reviewed_status NOT NULL,
+            CONSTRAINT reviewed_status_check CHECK (status <> 'done'::reviewed_status)
+          )`,
+        ],
+      };
+      const reviewedMigrations = [...migrations, reviewedMigration];
+      await adminPool.query(
+        `DROP TABLE "${reviewedSchema}".scenarios CASCADE`,
+      );
+      await assert.rejects(
+        applyReviewedMigration({
+          connectionString: schemaConnection(reviewedSchema),
+          migrations: reviewedMigrations,
+          tag: reviewedMigration.tag,
+          approval: reviewedMigrationApproval(reviewedMigration),
+        }),
+        /incomplete or incompatible schema: missing table scenarios/,
+      );
+      assert.notEqual(
+        (
+          await adminPool.query("SELECT to_regclass($1) AS target", [
+            reviewedTarget,
+          ])
+        ).rows[0].target,
+        null,
+      );
+      await adminPool.query(`DROP SCHEMA "${reviewedSchema}" CASCADE`);
+      await adminPool.query(`CREATE SCHEMA "${reviewedSchema}"`);
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(reviewedSchema),
+      });
+      await adminPool.query(
+        `CREATE TABLE "${reviewedSchema}".reviewed_target (id integer)`,
+      );
+      await adminPool.query(
+        `
+          INSERT INTO "${reviewedSchema}".__api_test_schema_migrations
+            (tag, hash, created_at)
+          VALUES ('divergent_history', 'unknown-hash', 9997)
+        `,
+      );
+      await assert.rejects(
+        applyReviewedMigration({
+          connectionString: schemaConnection(reviewedSchema),
+          migrations: reviewedMigrations,
+          tag: reviewedMigration.tag,
+          approval: reviewedMigrationApproval(reviewedMigration),
+        }),
+        /applied migrations absent from the journal: divergent_history/,
+      );
+      assert.notEqual(
+        (
+          await adminPool.query("SELECT to_regclass($1) AS target", [
+            reviewedTarget,
+          ])
+        ).rows[0].target,
+        null,
+      );
+      const refusedReceipt = await adminPool.query(
+        `
+          SELECT tag
+          FROM "${reviewedSchema}".__api_test_schema_migrations
+          WHERE tag = $1
+        `,
+        [reviewedMigration.tag],
+      );
+      assert.equal(refusedReceipt.rowCount, 0);
+      await adminPool.query(
+        `
+          DELETE FROM "${reviewedSchema}".__api_test_schema_migrations
+          WHERE tag = 'divergent_history'
+        `,
+      );
+      await applyReviewedMigration({
+        connectionString: schemaConnection(reviewedSchema),
+        migrations: reviewedMigrations,
+        tag: reviewedMigration.tag,
+        approval: reviewedMigrationApproval(reviewedMigration),
+      });
+      assert.equal(
+        (
+          await adminPool.query("SELECT to_regclass($1) AS target", [
+            reviewedTarget,
+          ])
+        ).rows[0].target,
+        null,
+      );
+      await reconcileDevelopmentDatabase({
+        connectionString: schemaConnection(reviewedSchema),
+        migrations: reviewedMigrations,
+      });
+
+      await adminPool.query(
+        `CREATE TABLE "${reviewedSchema}".reviewed_shape (id text)`,
+      );
+      const additiveMigration = {
+        tag: "9999_additive_shape",
+        hash: "additive-shape-hash",
+        createdAt: 9_999,
+        statements: [
+          `CREATE TABLE IF NOT EXISTS "reviewed_shape" (id integer)`,
+        ],
+      };
+      await assert.rejects(
+        reconcileDevelopmentDatabase({
+          connectionString: schemaConnection(reviewedSchema),
+          migrations: [...reviewedMigrations, additiveMigration],
+        }),
+        /incompatible column reviewed_shape\.id/,
+      );
+      const additiveReceipt = await adminPool.query(
+        `
+          SELECT tag
+          FROM "${reviewedSchema}".__api_test_schema_migrations
+          WHERE tag = $1
+        `,
+        [additiveMigration.tag],
+      );
+      assert.equal(additiveReceipt.rowCount, 0);
+      await adminPool.query(
+        `DROP TABLE "${reviewedSchema}".reviewed_shape`,
+      );
+
+      const postReviewAdditiveMigration = {
+        tag: "9999_additive_after_review",
+        hash: "additive-after-review-hash",
+        createdAt: 9_999,
+        statements: [
+          `ALTER TABLE "scenarios" ADD COLUMN "reviewed_note" text`,
+          `CREATE TABLE "reviewed_enum_usage" (
+            id integer PRIMARY KEY,
+            status reviewed_status NOT NULL
+          )`,
+        ],
+      };
+      const postReviewedMigrations = [
+        ...reviewedMigrations,
+        postReviewAdditiveMigration,
+      ];
+      await reconcileDevelopmentDatabase({
+        connectionString: schemaConnection(reviewedSchema),
+        migrations: postReviewedMigrations,
+      });
+      const postReviewShape = await adminPool.query(
+        `
+          SELECT
+            (
+              SELECT data_type
+              FROM information_schema.columns
+              WHERE table_schema = $1
+                AND table_name = 'scenarios'
+                AND column_name = 'reviewed_note'
+            ) AS note_type,
+            (
+              SELECT udt_name
+              FROM information_schema.columns
+              WHERE table_schema = $1
+                AND table_name = 'reviewed_enum_usage'
+                AND column_name = 'status'
+            ) AS status_type
+        `,
+        [reviewedSchema],
+      );
+      assert.equal(postReviewShape.rows[0].note_type, "text");
+      assert.equal(postReviewShape.rows[0].status_type, "reviewed_status");
+
+      await adminPool.query(
+        `CREATE TABLE "${reviewedSchema}".rollback_target (id integer)`,
+      );
+      const failingMigration = {
+        tag: "10000_reviewed_failure",
+        hash: "reviewed-failure-hash",
+        createdAt: 10_000,
+        statements: [
+          `DROP TABLE "rollback_target"`,
+          `ALTER TABLE "missing_table" RENAME TO "still_missing"`,
+        ],
+      };
+      await assert.rejects(
+        applyReviewedMigration({
+          connectionString: schemaConnection(reviewedSchema),
+          migrations: [...postReviewedMigrations, failingMigration],
+          tag: failingMigration.tag,
+          approval: reviewedMigrationApproval(failingMigration),
+        }),
+        /could not apply 10000_reviewed_failure \(statement 2\)/,
+      );
+      assert.notEqual(
+        (
+          await adminPool.query("SELECT to_regclass($1) AS target", [
+            `${reviewedSchema}.rollback_target`,
+          ])
+        ).rows[0].target,
+        null,
+      );
+      const failedReceipt = await adminPool.query(
+        `
+          SELECT tag
+          FROM "${reviewedSchema}".__api_test_schema_migrations
+          WHERE tag = $1
+        `,
+        [failingMigration.tag],
+      );
+      assert.equal(failedReceipt.rowCount, 0);
+
+      await adminPool.query(
+        `CREATE TABLE "${reviewedSchema}".transaction_target (id integer)`,
+      );
+      const transactionEscapeMigration = {
+        tag: "10000_transaction_escape",
+        hash: "transaction-escape-hash",
+        createdAt: 10_000,
+        statements: [
+          `DROP TABLE "transaction_target"`,
+          `SET standard_conforming_strings = off`,
+          `SELECT '\\'; COMMIT; SELECT 'concealed'`,
+          `SELECT * FROM "missing_after_commit"`,
+        ],
+      };
+      await assert.rejects(
+        applyReviewedMigration({
+          connectionString: schemaConnection(reviewedSchema),
+          migrations: [...postReviewedMigrations, transactionEscapeMigration],
+          tag: transactionEscapeMigration.tag,
+          approval: reviewedMigrationApproval(transactionEscapeMigration),
+        }),
+        /refused transaction-control SQL.*statement 3/,
+      );
+      assert.notEqual(
+        (
+          await adminPool.query("SELECT to_regclass($1) AS target", [
+            `${reviewedSchema}.transaction_target`,
+          ])
+        ).rows[0].target,
+        null,
+      );
+      const escapedReceipt = await adminPool.query(
+        `
+          SELECT tag
+          FROM "${reviewedSchema}".__api_test_schema_migrations
+          WHERE tag = $1
+        `,
+        [transactionEscapeMigration.tag],
+      );
+      assert.equal(escapedReceipt.rowCount, 0);
+
+      await adminPool.query(
+        `DROP TABLE "${reviewedSchema}".scenarios CASCADE`,
+      );
+      await assert.rejects(
+        reconcileDevelopmentDatabase({
+          connectionString: schemaConnection(reviewedSchema),
+          migrations: postReviewedMigrations,
+        }),
+        /incomplete or incompatible schema: missing table scenarios/,
+      );
+
       await adminPool.query(`DROP TABLE "${schema}".scenarios CASCADE`);
       await assert.rejects(
         prepareDatabaseBackedTests({
@@ -345,6 +682,9 @@ test(
       await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await adminPool.query(
         `DROP SCHEMA IF EXISTS "${partialSchema}" CASCADE`,
+      );
+      await adminPool.query(
+        `DROP SCHEMA IF EXISTS "${reviewedSchema}" CASCADE`,
       );
       await adminPool.end();
     }

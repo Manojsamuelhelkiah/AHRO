@@ -456,6 +456,53 @@ export function assertAutomaticMigrationIsSafe(migration) {
   }
 }
 
+function isAutomaticMigrationSafe(migration) {
+  try {
+    assertAutomaticMigrationIsSafe(migration);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function assertNoUnknownAppliedMigrations(migrations, applied) {
+  const checkedInTags = new Set(migrations.map(({ tag }) => tag));
+  const unknownTags = [...applied.keys()].filter(
+    (tag) => !checkedInTags.has(tag),
+  );
+  if (unknownTags.length > 0) {
+    throw new Error(
+      `Database test setup found applied migrations absent from the journal: ${unknownTags.sort().join(", ")}`,
+    );
+  }
+}
+
+export function assertReviewedMigrationKeepsTransactionControl(migration) {
+  const transactionCommands = new Set([
+    "ABORT",
+    "BEGIN",
+    "COMMIT",
+    "END",
+    "RELEASE",
+    "ROLLBACK",
+    "SAVEPOINT",
+    "START",
+  ]);
+  for (const [index, statement] of migration.statements.entries()) {
+    const tokens = sqlTokensForSafetyCheck(statement);
+    if (
+      tokens.includes(";") ||
+      transactionCommands.has(tokens[0]) ||
+      (tokens[0] === "PREPARE" && tokens[1] === "TRANSACTION")
+    ) {
+      throw new Error(
+        `Reviewed migration runner refused transaction-control SQL in ${migration.tag} ` +
+          `(statement ${index + 1}); the runner owns the transaction boundary`,
+      );
+    }
+  }
+}
+
 function quoteIdentifier(identifier) {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
@@ -464,7 +511,7 @@ function rewritePublicSchema(statement, schema) {
   return statement.replaceAll('"public".', `${quoteIdentifier(schema)}.`);
 }
 
-export async function loadCheckedInMigrations() {
+export async function loadCheckedInMigrations(options = {}) {
   const [journalSource, directoryEntries] = await Promise.all([
     readFile(journalUrl, "utf8"),
     readdir(migrationsUrl),
@@ -502,7 +549,9 @@ export async function loadCheckedInMigrations() {
       hash: migrationHash(sql),
       statements: splitMigration(sql),
     };
-    assertAutomaticMigrationIsSafe(migration);
+    if (!options.allowReviewedDestructive) {
+      assertAutomaticMigrationIsSafe(migration);
+    }
     migrations.push(migration);
   }
 
@@ -513,6 +562,24 @@ export async function loadCheckedInMigrations() {
   }
 
   return migrations;
+}
+
+export function reviewedMigrationApproval(migration) {
+  return `APPLY:${migration.tag}:${migration.hash}`;
+}
+
+export function selectReviewedMigration(migrations, tag, approval) {
+  const migration = migrations.find((candidate) => candidate.tag === tag);
+  if (!migration) {
+    throw new Error(`Reviewed migration runner cannot find migration ${tag}`);
+  }
+  const expectedApproval = reviewedMigrationApproval(migration);
+  if (approval !== expectedApproval) {
+    throw new Error(
+      `Reviewed migration ${migration.tag} requires the exact approval ${expectedApproval}`,
+    );
+  }
+  return migration;
 }
 
 async function executeForAdoption(client, migration, statement, index) {
@@ -546,14 +613,40 @@ async function applyMigration(client, migration) {
   );
 }
 
-function normalizeSchemaReference(value, schema) {
-  if (value == null) return value;
-  return value
-    .replaceAll(`"${schema}".`, "")
-    .replaceAll(`${schema}.`, "");
+async function applyReviewedMigrationStrictly(client, migration) {
+  for (const [index, statement] of migration.statements.entries()) {
+    try {
+      await client.query("SET LOCAL standard_conforming_strings = on");
+      await client.query(statement);
+    } catch (error) {
+      throw new Error(
+        `Reviewed migration runner could not apply ${migration.tag} (statement ${index + 1})`,
+        { cause: error },
+      );
+    }
+  }
+  await client.query(
+    `
+      INSERT INTO ${migrationTable} (tag, hash, created_at)
+      VALUES ($1, $2, $3)
+    `,
+    [migration.tag, migration.hash, migration.createdAt],
+  );
 }
 
-async function describeSchema(client, schema) {
+function normalizeSchemaReference(value, schema) {
+  if (value == null) return value;
+  const schemas = Array.isArray(schema) ? schema : [schema];
+  return schemas.reduce(
+    (normalized, candidate) =>
+      normalized
+        .replaceAll(`"${candidate}".`, "")
+        .replaceAll(`${candidate}.`, ""),
+    value,
+  );
+}
+
+async function describeSchema(client, schema, normalizedSchemas = schema) {
   const tables = await client.query(
     `
       SELECT table_name
@@ -618,7 +711,10 @@ async function describeSchema(client, schema) {
           dataType: row.data_type,
           udtName: row.udt_name,
           nullable: row.is_nullable,
-          default: normalizeSchemaReference(row.column_default, schema),
+          default: normalizeSchemaReference(
+            row.column_default,
+            normalizedSchemas,
+          ),
           characterMaximumLength: row.character_maximum_length,
           numericPrecision: row.numeric_precision,
           numericScale: row.numeric_scale,
@@ -631,7 +727,10 @@ async function describeSchema(client, schema) {
         `${row.table_name}.${row.constraint_name}`,
         {
           type: row.constraint_type,
-          definition: normalizeSchemaReference(row.definition, schema),
+          definition: normalizeSchemaReference(
+            row.definition,
+            normalizedSchemas,
+          ),
         },
       ]),
     ),
@@ -641,8 +740,14 @@ async function describeSchema(client, schema) {
         {
           unique: row.is_unique,
           primary: row.is_primary,
-          definition: normalizeSchemaReference(row.definition, schema),
-          predicate: normalizeSchemaReference(row.predicate, schema),
+          definition: normalizeSchemaReference(
+            row.definition,
+            normalizedSchemas,
+          ),
+          predicate: normalizeSchemaReference(
+            row.predicate,
+            normalizedSchemas,
+          ),
         },
       ]),
     ),
@@ -666,18 +771,191 @@ function findSchemaDifferences(expected, actual) {
       const actualValue = actual[collection].get(key);
       if (!actualValue) {
         differences.push(`missing ${singularName} ${key}`);
-      } else if (
-        JSON.stringify(actualValue) !== JSON.stringify(expectedValue)
-      ) {
+      } else if (canonicalJson(actualValue) !== canonicalJson(expectedValue)) {
         differences.push(
           `incompatible ${singularName} ${key} ` +
-            `(expected ${JSON.stringify(expectedValue)}, found ${JSON.stringify(actualValue)})`,
+            `(expected ${canonicalJson(expectedValue)}, found ${canonicalJson(actualValue)})`,
         );
       }
     }
   }
 
   return differences;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function serializeSchema(schema) {
+  return {
+    tables: [...schema.tables],
+    columns: [...schema.columns],
+    constraints: [...schema.constraints],
+    indexes: [...schema.indexes],
+  };
+}
+
+function deserializeSchema(schema) {
+  if (
+    !schema ||
+    !Array.isArray(schema.tables) ||
+    !Array.isArray(schema.columns) ||
+    !Array.isArray(schema.constraints) ||
+    !Array.isArray(schema.indexes)
+  ) {
+    throw new Error(
+      "Database test setup found an invalid reviewed schema receipt",
+    );
+  }
+  return {
+    tables: new Set(schema.tables),
+    columns: new Map(schema.columns),
+    constraints: new Map(schema.constraints),
+    indexes: new Map(schema.indexes),
+  };
+}
+
+async function assertSchemaMatchesReceipt(client, schema, receipt) {
+  if (!receipt?.schema_snapshot) {
+    throw new Error(
+      `Database test setup cannot verify reviewed migration history at ${receipt?.tag ?? "unknown migration"}: schema receipt is missing`,
+    );
+  }
+  const expected = deserializeSchema(receipt.schema_snapshot);
+  const actual = await describeSchema(client, schema);
+  const differences = findSchemaDifferences(expected, actual);
+  if (differences.length > 0) {
+    const preview = differences.slice(0, 10).join(", ");
+    const remaining =
+      differences.length > 10 ? ` (and ${differences.length - 10} more)` : "";
+    throw new Error(
+      `Database test setup found an incomplete or incompatible schema: ${preview}${remaining}`,
+    );
+  }
+  return expected;
+}
+
+async function recordSchemaReceipt(client, migration, expectedSchema) {
+  const snapshot = serializeSchema(expectedSchema);
+  await client.query(
+    `
+      UPDATE ${migrationTable}
+      SET schema_snapshot = $1::jsonb
+      WHERE tag = $2 AND hash = $3
+    `,
+    [JSON.stringify(snapshot), migration.tag, migration.hash],
+  );
+}
+
+function deriveReviewedExpectedSchema(baseline, before, after) {
+  const tables = new Set(
+    [...after.tables].filter(
+      (table) => baseline.tables.has(table) || !before.tables.has(table),
+    ),
+  );
+  const deriveCollection = (collection) =>
+    new Map(
+      [...after[collection]].filter(
+        ([key]) =>
+          baseline[collection].has(key) || !before[collection].has(key),
+      ),
+    );
+  return {
+    tables,
+    columns: deriveCollection("columns"),
+    constraints: deriveCollection("constraints"),
+    indexes: deriveCollection("indexes"),
+  };
+}
+
+function splitSchemaKey(key) {
+  const separator = key.indexOf(".");
+  return [key.slice(0, separator), key.slice(separator + 1)];
+}
+
+async function buildExpectedSchemaFromReceipt(
+  client,
+  baseline,
+  migrations,
+  actualSchema,
+) {
+  const backendPid = await client.query("SELECT pg_backend_pid() AS pid");
+  const expectedSchema = `__api_test_receipt_${backendPid.rows[0].pid}`;
+  const quotedExpectedSchema = quoteIdentifier(expectedSchema);
+  const originalSearchPath = await client.query(
+    "SELECT current_setting('search_path') AS search_path",
+  );
+
+  await client.query("SAVEPOINT api_test_receipt_verification");
+  try {
+    await client.query(`CREATE SCHEMA ${quotedExpectedSchema}`);
+    await client.query(
+      "SELECT set_config('search_path', quote_ident($1) || ', ' || quote_ident($2), false)",
+      [expectedSchema, actualSchema],
+    );
+    for (const table of [...baseline.tables].sort()) {
+      await client.query(
+        `CREATE TABLE ${quotedExpectedSchema}.${quoteIdentifier(table)} ` +
+          `(LIKE ${quoteIdentifier(actualSchema)}.${quoteIdentifier(table)} ` +
+          "INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY INCLUDING STORAGE)",
+      );
+    }
+
+    const cloned = await describeSchema(client, expectedSchema, [
+      expectedSchema,
+      actualSchema,
+    ]);
+    for (const key of cloned.columns.keys()) {
+      if (baseline.columns.has(key)) continue;
+      const [table, column] = splitSchemaKey(key);
+      await client.query(
+        `ALTER TABLE ${quoteIdentifier(table)} DROP COLUMN ${quoteIdentifier(column)} CASCADE`,
+      );
+    }
+    for (const constraintType of ["p", "u", "c", "x", "f"]) {
+      for (const [key, constraint] of baseline.constraints) {
+        if (constraint.type !== constraintType) continue;
+        const [table, constraintName] = splitSchemaKey(key);
+        await client.query(
+          `ALTER TABLE ${quoteIdentifier(table)} ` +
+            `ADD CONSTRAINT ${quoteIdentifier(constraintName)} ${constraint.definition}`,
+        );
+      }
+    }
+    const constraintKeys = new Set(baseline.constraints.keys());
+    for (const [key, index] of baseline.indexes) {
+      if (index.primary || constraintKeys.has(key)) continue;
+      await client.query(index.definition);
+    }
+    for (const migration of migrations) {
+      for (const statement of migration.statements) {
+        await client.query(rewritePublicSchema(statement, expectedSchema));
+      }
+    }
+    return await describeSchema(client, expectedSchema, [
+      expectedSchema,
+      actualSchema,
+    ]);
+  } catch (error) {
+    await client.query("ROLLBACK TO SAVEPOINT api_test_receipt_verification");
+    throw error;
+  } finally {
+    await client.query("SELECT set_config('search_path', $1, false)", [
+      originalSearchPath.rows[0].search_path,
+    ]);
+    await client.query(`DROP SCHEMA IF EXISTS ${quotedExpectedSchema} CASCADE`);
+    await client.query("RELEASE SAVEPOINT api_test_receipt_verification");
+  }
 }
 
 async function verifyCheckedInSchema(client, migrations, actualSchema) {
@@ -687,6 +965,7 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
   const originalSearchPath = await client.query(
     "SELECT current_setting('search_path') AS search_path",
   );
+  let verifiedExpected;
 
   await client.query("SAVEPOINT api_test_schema_verification");
   try {
@@ -705,6 +984,7 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
       describeSchema(client, expectedSchema),
       describeSchema(client, actualSchema),
     ]);
+    verifiedExpected = expected;
     const differences = findSchemaDifferences(expected, actual);
     if (differences.length > 0) {
       const preview = differences.slice(0, 10).join(", ");
@@ -726,6 +1006,7 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
     await client.query(`DROP SCHEMA IF EXISTS ${quotedExpectedSchema} CASCADE`);
     await client.query("RELEASE SAVEPOINT api_test_schema_verification");
   }
+  return verifiedExpected;
 }
 
 export async function reconcileDevelopmentDatabase(options = {}) {
@@ -736,7 +1017,9 @@ export async function reconcileDevelopmentDatabase(options = {}) {
     );
   }
 
-  const migrations = await loadCheckedInMigrations();
+  const migrations =
+    options.migrations ??
+    (await loadCheckedInMigrations({ allowReviewedDestructive: true }));
   const pool = new Pool({ connectionString });
   const client = await pool.connect();
   let transactionOpen = false;
@@ -757,48 +1040,216 @@ export async function reconcileDevelopmentDatabase(options = {}) {
         tag text PRIMARY KEY NOT NULL,
         hash text NOT NULL,
         created_at bigint NOT NULL,
-        applied_at timestamp with time zone DEFAULT now() NOT NULL
+        applied_at timestamp with time zone DEFAULT now() NOT NULL,
+        schema_snapshot jsonb
       )
     `);
+    await client.query(
+      `ALTER TABLE ${migrationTable} ADD COLUMN IF NOT EXISTS schema_snapshot jsonb`,
+    );
     await client.query("BEGIN");
     transactionOpen = true;
 
     const appliedResult = await client.query(
-      `SELECT tag, hash, created_at FROM ${migrationTable}`,
+      `SELECT tag, hash, created_at, schema_snapshot FROM ${migrationTable}`,
     );
     const applied = new Map(appliedResult.rows.map((row) => [row.tag, row]));
-    const checkedInTags = new Set(migrations.map(({ tag }) => tag));
-    const unknownTags = [...applied.keys()].filter(
-      (tag) => !checkedInTags.has(tag),
+    assertNoUnknownAppliedMigrations(migrations, applied);
+    for (const migration of migrations) {
+      const existing = applied.get(migration.tag);
+      if (
+        existing &&
+        (existing.hash !== migration.hash ||
+          Number(existing.created_at) !== migration.createdAt)
+      ) {
+        throw new Error(
+          `Database test setup found a changed or partially recorded migration: ${migration.tag}`,
+        );
+      }
+    }
+    const pendingMigrations = migrations.filter(({ tag }) => !applied.has(tag));
+    const hasReviewedHistory = migrations.some(
+      (migration) =>
+        applied.has(migration.tag) && !isAutomaticMigrationSafe(migration),
     );
-    if (unknownTags.length > 0) {
-      throw new Error(
-        `Database test setup found applied migrations absent from the journal: ${unknownTags.sort().join(", ")}`,
+    let expectedSchema;
+    if (hasReviewedHistory) {
+      const latestAppliedMigration = migrations.findLast(({ tag }) =>
+        applied.has(tag),
+      );
+      expectedSchema = await assertSchemaMatchesReceipt(
+        client,
+        actualSchema,
+        applied.get(latestAppliedMigration.tag),
+      );
+    }
+    for (const migration of pendingMigrations) {
+      assertAutomaticMigrationIsSafe(migration);
+    }
+    if (hasReviewedHistory && pendingMigrations.length > 0) {
+      expectedSchema = await buildExpectedSchemaFromReceipt(
+        client,
+        expectedSchema,
+        pendingMigrations,
+        actualSchema,
       );
     }
 
-    for (const migration of migrations) {
-      const existing = applied.get(migration.tag);
-      if (existing) {
-        if (
-          existing.hash !== migration.hash ||
-          Number(existing.created_at) !== migration.createdAt
-        ) {
-          throw new Error(
-            `Database test setup found a changed or partially recorded migration: ${migration.tag}`,
-          );
-        }
-        continue;
-      }
+    for (const migration of pendingMigrations) {
       const rewrittenMigration = {
         ...migration,
         statements: migration.statements.map((statement) =>
           rewritePublicSchema(statement, actualSchema),
         ),
       };
-      await applyMigration(client, rewrittenMigration);
+      if (hasReviewedHistory) {
+        await applyReviewedMigrationStrictly(client, rewrittenMigration);
+      } else {
+        await applyMigration(client, rewrittenMigration);
+      }
     }
-    await verifyCheckedInSchema(client, migrations, actualSchema);
+    if (!hasReviewedHistory) {
+      expectedSchema = await verifyCheckedInSchema(
+        client,
+        migrations,
+        actualSchema,
+      );
+    } else if (pendingMigrations.length > 0) {
+      const actual = await describeSchema(client, actualSchema);
+      const differences = findSchemaDifferences(expectedSchema, actual);
+      if (differences.length > 0) {
+        const preview = differences.slice(0, 10).join(", ");
+        const remaining =
+          differences.length > 10
+            ? ` (and ${differences.length - 10} more)`
+            : "";
+        throw new Error(
+          `Database test setup found an incomplete or incompatible schema: ${preview}${remaining}`,
+        );
+      }
+    }
+    const latestMigration = migrations.at(-1);
+    if (latestMigration) {
+      await recordSchemaReceipt(client, latestMigration, expectedSchema);
+    }
+    await client.query("COMMIT");
+    transactionOpen = false;
+  } catch (error) {
+    if (transactionOpen) await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    try {
+      await client.query("SELECT pg_advisory_unlock($1)", [advisoryLockKey]);
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  }
+}
+
+export async function applyReviewedMigration(options = {}) {
+  const connectionString = options.connectionString ?? process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is required to apply a reviewed migration");
+  }
+
+  const migrations =
+    options.migrations ??
+    (await loadCheckedInMigrations({
+      allowReviewedDestructive: true,
+    }));
+  const migration = selectReviewedMigration(
+    migrations,
+    options.tag,
+    options.approval,
+  );
+  assertReviewedMigrationKeepsTransactionControl(migration);
+  const pool = new Pool({ connectionString });
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    await client.query("SET standard_conforming_strings = on");
+    await client.query("SELECT pg_advisory_lock($1)", [advisoryLockKey]);
+    const schemaResult = await client.query(
+      "SELECT current_schema() AS schema_name",
+    );
+    const actualSchema = schemaResult.rows[0]?.schema_name;
+    if (!actualSchema) {
+      throw new Error(
+        "Reviewed migration runner cannot determine the target database schema",
+      );
+    }
+    await client.query("BEGIN");
+    transactionOpen = true;
+    const ledgerExists = await client.query(
+      "SELECT to_regclass($1) AS ledger",
+      [migrationTable],
+    );
+    if (!ledgerExists.rows[0]?.ledger) {
+      throw new Error(
+        "Reviewed migration runner requires automatic reconciliation to initialize the migration ledger first",
+      );
+    }
+    await client.query(
+      `ALTER TABLE ${migrationTable} ADD COLUMN IF NOT EXISTS schema_snapshot jsonb`,
+    );
+    const appliedResult = await client.query(
+      `SELECT tag, hash, created_at, schema_snapshot FROM ${migrationTable}`,
+    );
+    const applied = new Map(appliedResult.rows.map((row) => [row.tag, row]));
+    assertNoUnknownAppliedMigrations(migrations, applied);
+    const targetIndex = migrations.findIndex(
+      (candidate) => candidate.tag === migration.tag,
+    );
+    const predecessors = migrations.slice(0, targetIndex);
+    for (const predecessor of predecessors) {
+      const existing = applied.get(predecessor.tag);
+      if (
+        !existing ||
+        existing.hash !== predecessor.hash ||
+        Number(existing.created_at) !== predecessor.createdAt
+      ) {
+        throw new Error(
+          `Reviewed migration ${migration.tag} cannot run before its predecessor ${predecessor.tag} is applied exactly`,
+        );
+      }
+    }
+    if (applied.has(migration.tag)) {
+      throw new Error(`Reviewed migration ${migration.tag} is already applied`);
+    }
+    const laterApplied = migrations
+      .slice(targetIndex + 1)
+      .find((candidate) => applied.has(candidate.tag));
+    if (laterApplied) {
+      throw new Error(
+        `Reviewed migration ${migration.tag} cannot run after later migration ${laterApplied.tag}`,
+      );
+    }
+
+    const reviewedPredecessor = predecessors.findLast(
+      (candidate) => !isAutomaticMigrationSafe(candidate),
+    );
+    const baselineExpected = reviewedPredecessor
+      ? await assertSchemaMatchesReceipt(
+          client,
+          actualSchema,
+          applied.get(predecessors.at(-1).tag),
+        )
+      : await verifyCheckedInSchema(client, predecessors, actualSchema);
+    const before = await describeSchema(client, actualSchema);
+    await applyReviewedMigrationStrictly(client, {
+      ...migration,
+      statements: migration.statements.map((statement) =>
+        rewritePublicSchema(statement, actualSchema),
+      ),
+    });
+    const after = await describeSchema(client, actualSchema);
+    const reviewedExpected = deriveReviewedExpectedSchema(
+      baselineExpected,
+      before,
+      after,
+    );
+    await recordSchemaReceipt(client, migration, reviewedExpected);
     await client.query("COMMIT");
     transactionOpen = false;
   } catch (error) {

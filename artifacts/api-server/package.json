@@ -10,6 +10,7 @@
     "typecheck": "tsc -b tsconfig.json",
     "test": "node ./run-tests.mjs",
     "db:reconcile": "node ./test-db-setup.mjs",
+    "db:migrate:reviewed": "node ./run-reviewed-migration.mjs",
     "seed:volunteers": "node ./run-seed.mjs"
   },
   "dependencies": {
