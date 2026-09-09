@@ -24,3 +24,8 @@ commit's own hunks may be internally scrambled too — don't copy them verbatim;
 reconstruct each feature's intent against the clean base. And never swallow
 typecheck output (`tsc -b . >/dev/null 2>&1;` hid the re-corruption); always
 inspect tsc's exit/output when re-verifying.
+
+An isolated task branch can already contain the same invalid interleaving before
+it reaches main. Treat that branch as evidence of intent, not as an automatically
+trustworthy restore source; use the last typechecked main version as the base and
+reapply only coherent behavior.

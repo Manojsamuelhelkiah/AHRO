@@ -1,8 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Request } from "express";
 import { db } from "@workspace/db";
 import {
+  onbCandidateExchangeFailures,
   onbCandidateLinks,
   onbCandidateSessions,
   onbCases,
@@ -13,7 +14,6 @@ import {
   DEFAULT_CANDIDATE_LINK_RETENTION_DAYS,
   getCandidateLinkRetentionDays,
 } from "./settings";
-import { and, count, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 export const CANDIDATE_COOKIE = "onb_candidate_session";
 export const MAX_CANDIDATE_FILE_BYTES = 10 * 1024 * 1024;
@@ -87,6 +87,7 @@ export class CandidateExchangeLimiter {
       .where(eq(onbCandidateExchangeFailures.clientKey, clientKey));
   }
 }
+
 export function validateLogistics(input: Record<string, unknown>) {
   const clean = (key: string, max: number) => {
     const value = input[key];

@@ -171,10 +171,10 @@ after(async () => {
 
 test("expired and revoked links cannot be exchanged", async () => {
   for (const token of [tokens.expired, tokens.revoked]) {
-    const response = await fetch(`${baseUrl}/onboarding/cases/${caseA2}/portal-links`, {
+    const response = await fetch(`${baseUrl}/candidate/session`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-organization-id": orgA },
-      body: JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
     });
     assert.equal(response.status, 401);
   }
@@ -191,10 +191,13 @@ test("mixed invalid token formats share one privacy-safe client throttle", async
     `unknown-${"x".repeat(40)}`,
   ];
   for (let index = 0; index < CANDIDATE_EXCHANGE_FAILURE_LIMIT; index += 1) {
-    const response = await fetch(`${baseUrl}/onboarding/cases/${caseA2}/portal-links`, {
+    const response = await fetch(`${baseUrl}/candidate/session`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-organization-id": orgA },
-      body: JSON.stringify(body),
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": `10.0.0.${index + 1}, ${clientAddress}`,
+      },
+      body: JSON.stringify({ token: invalidTokens[index % invalidTokens.length] }),
     });
     assert.equal(response.status, 401);
   }
@@ -221,10 +224,15 @@ test("mixed invalid token formats share one privacy-safe client throttle", async
   assert.equal(independent.status, 401);
 
   const key = hashSecret(clientAddress);
-
   const limiter = new CandidateExchangeLimiter();
+  assert.ok(await limiter.retryAfterMs(key, Date.now()) > 0);
+  assert.equal(
+    await limiter.retryAfterMs(key, Date.now() + CANDIDATE_EXCHANGE_COOLDOWN_MS + 1),
+    0,
+  );
+});
 
-  const limiter = new CandidateExchangeLimiter();
+test("sessions cannot cross organizations or cases", async () => {
   const crossOrg = `cross-org-${"d".repeat(40)}`;
   const crossCase = `cross-case-${"e".repeat(40)}`;
   await createSession(crossOrg, orgB, caseB);
@@ -246,7 +254,7 @@ test("expired sessions are rejected and revocation immediately ends active sessi
   assert.equal(exchange.status, 204);
   const cookie = exchange.headers.get("set-cookie");
   assert.ok(cookie);
-  const secret = `upload-session-${"h".repeat(40)}`;
+  const secret = /onb_candidate_session=([^;]+)/.exec(cookie)?.[1];
   assert.ok(secret);
   assert.equal((await portal(secret)).status, 200);
 
@@ -264,17 +272,29 @@ test("candidate access cleanup is tenant-safe, idempotent, and preserves active 
   const recent = new Date(now.getTime() - CANDIDATE_LINK_RETENTION_MS + 1);
   const future = new Date(now.getTime() + 60_000);
   const links = await db.insert(onbCandidateLinks).values([
-    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`policy-a-expired-${suffix}`), expiresAt: expired45DaysAgo, issuedBy: userId },
-    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`policy-a-active-${suffix}`), expiresAt: future, issuedBy: userId },
-    { organizationId: orgB, caseId: caseB, tokenHash: hashSecret(`policy-b-expired-${suffix}`), expiresAt: expired45DaysAgo, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-old-expired-${suffix}`), expiresAt: old, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-old-revoked-${suffix}`), expiresAt: old, revokedAt: old, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-recent-revoked-${suffix}`), expiresAt: old, revokedAt: recent, issuedBy: userId },
+    { organizationId: orgA, caseId: caseA, tokenHash: hashSecret(`cleanup-active-${suffix}`), expiresAt: future, issuedBy: userId },
+    { organizationId: orgB, caseId: caseB, tokenHash: hashSecret(`cleanup-other-tenant-${suffix}`), expiresAt: old, issuedBy: userId },
   ]).returning({ id: onbCandidateLinks.id });
   const expiredSessionSecret = `cleanup-session-${suffix}`;
   await createSession(expiredSessionSecret, orgA, caseA, links[3].id, old);
 
-  const cleanup = await cleanupCandidateAccess({ now });
-  assert.ok(cleanup.retainedLinksDeleted >= 1);
-  const survivors = await db.select({ id: onbCandidateLinks.id }).from(onbCandidateLinks)
-    .where(inArray(onbCandidateLinks.id, links.map((link) => link.id)));
+  const cleanup = await cleanupCandidateAccess({ now, organizationId: orgA });
+  assert.ok(cleanup.expiredSessions >= 1);
+  assert.equal(cleanup.retainedLinksDeleted, 2);
+  assert.deepEqual(await cleanupCandidateAccess({ now, organizationId: orgA }), {
+    expiredSessions: 0,
+    retainedLinksDeleted: 0,
+  });
+
+  const survivors = await db.select({ id: onbCandidateLinks.id })
+    .from(onbCandidateLinks)
+    .where(and(
+      eq(onbCandidateLinks.organizationId, orgA),
+      inArray(onbCandidateLinks.id, [links[2].id, links[3].id]),
+    ));
   assert.equal(survivors.length, 2);
   const [otherTenant] = await db.select({ id: onbCandidateLinks.id })
     .from(onbCandidateLinks)
@@ -362,14 +382,38 @@ test("issuing links with sendEmail omitted or false does not authorize or send e
   assert.equal(eventsAfter, eventsBefore);
 });
 
-  const clientKey = hashSecret(`expired-window-${suffix}`);
-
+test("candidate exchange throttling is shared across instances and replaces expired windows", async () => {
+  const clientKey = hashSecret(`shared-window-${suffix}`);
+  const now = Date.now();
   const firstInstance = new CandidateExchangeLimiter();
-
   const secondInstance = new CandidateExchangeLimiter();
+
+  await Promise.all(
+    Array.from({ length: CANDIDATE_EXCHANGE_FAILURE_LIMIT }, () =>
+      firstInstance.recordFailure(clientKey, now)),
+  );
+  assert.equal(
+    await secondInstance.retryAfterMs(clientKey, now),
+    CANDIDATE_EXCHANGE_COOLDOWN_MS,
+  );
 
   const [stored] = await db.select({
     failures: onbCandidateExchangeFailures.failures,
     expiresAt: onbCandidateExchangeFailures.expiresAt,
   }).from(onbCandidateExchangeFailures)
     .where(eq(onbCandidateExchangeFailures.clientKey, clientKey));
+  assert.equal(stored.failures, CANDIDATE_EXCHANGE_FAILURE_LIMIT);
+
+  const afterExpiry = stored.expiresAt.getTime() + 1;
+  await secondInstance.recordFailure(clientKey, afterExpiry);
+  const [renewed] = await db.select({
+    failures: onbCandidateExchangeFailures.failures,
+    expiresAt: onbCandidateExchangeFailures.expiresAt,
+  }).from(onbCandidateExchangeFailures)
+    .where(eq(onbCandidateExchangeFailures.clientKey, clientKey));
+  assert.equal(renewed.failures, 1);
+  assert.ok(renewed.expiresAt > stored.expiresAt);
+
+  await firstInstance.clear(clientKey);
+  assert.equal(await secondInstance.retryAfterMs(clientKey, afterExpiry), 0);
+});
