@@ -3,6 +3,10 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Pool } from "pg";
+import {
+  phaseBTenantTables,
+  tenantTables,
+} from "./tenant-safeguards-manifest.mjs";
 import { assertAutomaticMigrationIsSafe } from "./test-db-setup.mjs";
 import { applyReviewedMigration } from "./test-db-setup.mjs";
 import { assertReviewedMigrationKeepsTransactionControl } from "./test-db-setup.mjs";
@@ -20,6 +24,57 @@ function migrationWith(statement) {
     statements: [statement],
   };
 }
+
+function schemaTableBlocks(source) {
+  const blocks = [];
+  const tableStart = /\bpgTable\s*\(\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(tableStart)) {
+    let depth = 0;
+    let quote = null;
+    let escaped = false;
+    let end = match.index;
+    for (; end < source.length; end += 1) {
+      const character = source[end];
+      if (quote) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '"' || character === "'" || character === "`") {
+        quote = character;
+      } else if (character === "(") {
+        depth += 1;
+      } else if (character === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          end += 1;
+          break;
+        }
+      }
+    }
+    blocks.push({ table: match[1], source: source.slice(match.index, end) });
+  }
+  return blocks;
+}
+
+test("tenant safeguard manifest covers every organization-owned schema table", async () => {
+  const schemaDirectory = new URL("../../lib/db/src/schema/", import.meta.url);
+  const schemaIndex = await readFile(new URL("index.ts", schemaDirectory), "utf8");
+  const schemaFiles = [
+    ...schemaIndex.matchAll(/export \* from ["']\.\/([^"']+)["']/g),
+  ].map((match) => `${match[1]}.ts`);
+  const schemaSources = await Promise.all(
+    schemaFiles.map((file) => readFile(new URL(file, schemaDirectory), "utf8")),
+  );
+  const organizationOwnedTables = schemaSources
+    .flatMap(schemaTableBlocks)
+    .filter(({ source }) => /text\s*\(\s*["']organization_id["']\s*\)/.test(source))
+    .map(({ table }) => table)
+    .sort();
+
+  assert.deepEqual([...tenantTables].sort(), organizationOwnedTables);
+});
 
 test("allows additive migrations during automatic reconciliation", () => {
   for (const statement of [
@@ -262,30 +317,7 @@ test("tenant Phase A keeps the publish target data-preserving and legacy-compati
     /^\s*(?:DELETE|TRUNCATE|UPDATE|INSERT)\b/im,
   );
 
-  for (const table of [
-    "scenarios",
-    "custom_intents",
-    "actuals_overlays",
-    "flow_overrides",
-    "onb_cases",
-    "onb_events",
-    "onb_approvals",
-    "onb_communications",
-    "onb_system_checks",
-    "onb_settings",
-    "onb_connectors",
-    "onb_effect_journal",
-    "onb_documents",
-    "onb_call_slots",
-    "onb_voice_sessions",
-    "onb_watch_emails",
-    "onb_employee_records",
-    "onb_guardrail_events",
-    "custom_intent_routing_labels",
-    "pricing_rate_sets",
-    "pricing_sheets",
-    "ea_assessments",
-  ]) {
+  for (const table of phaseBTenantTables) {
     assert.match(
       phaseASql,
       new RegExp(
@@ -333,36 +365,11 @@ test("tenant Phase B restores fail-closed defaults and all deferred foreign keys
     ),
     "utf8",
   );
-  const tenantTables = [
-    "scenarios",
-    "custom_intents",
-    "actuals_overlays",
-    "flow_overrides",
-    "onb_cases",
-    "onb_events",
-    "onb_approvals",
-    "onb_communications",
-    "onb_system_checks",
-    "onb_settings",
-    "onb_connectors",
-    "onb_effect_journal",
-    "onb_documents",
-    "onb_call_slots",
-    "onb_voice_sessions",
-    "onb_watch_emails",
-    "onb_employee_records",
-    "onb_guardrail_events",
-    "custom_intent_routing_labels",
-    "pricing_rate_sets",
-    "pricing_sheets",
-    "ea_assessments",
-  ];
-
   assert.doesNotMatch(
     phaseBSql,
     /^\s*(?:DELETE|TRUNCATE|UPDATE|INSERT|DROP\s+TABLE|ALTER\s+TABLE\b.*\bDROP\s+COLUMN)\b/im,
   );
-  for (const table of tenantTables) {
+  for (const table of phaseBTenantTables) {
     assert.match(
       phaseBSql,
       new RegExp(
@@ -453,33 +460,13 @@ test(
         `,
         [
           schema,
-          [
-            "scenarios",
-            "custom_intents",
-            "actuals_overlays",
-            "flow_overrides",
-            "onb_cases",
-            "onb_events",
-            "onb_approvals",
-            "onb_communications",
-            "onb_system_checks",
-            "onb_settings",
-            "onb_connectors",
-            "onb_effect_journal",
-            "onb_documents",
-            "onb_call_slots",
-            "onb_voice_sessions",
-            "onb_watch_emails",
-            "onb_employee_records",
-            "onb_guardrail_events",
-            "custom_intent_routing_labels",
-            "pricing_rate_sets",
-            "pricing_sheets",
-            "ea_assessments",
-          ],
+          tenantTables,
         ],
       );
-      assert.equal(tenantEnforcement.rows[0].tenant_column_count, 22);
+      assert.equal(
+        tenantEnforcement.rows[0].tenant_column_count,
+        tenantTables.length,
+      );
       assert.equal(tenantEnforcement.rows[0].default_count, 0);
       await assert.rejects(
         adminPool.query(

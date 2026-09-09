@@ -1,0 +1,54 @@
+export const tenantSafeguards = [
+  { table: "organization_memberships", phaseB: false },
+  { table: "scenarios", phaseB: true },
+  { table: "scenario_files", phaseB: false },
+  { table: "scenario_upload_intents", phaseB: false },
+  { table: "custom_intents", phaseB: true },
+  { table: "actuals_overlays", phaseB: true },
+  { table: "flow_overrides", phaseB: true },
+  { table: "onb_cases", phaseB: true },
+  { table: "onb_events", phaseB: true },
+  { table: "onb_approvals", phaseB: true },
+  { table: "onb_communications", phaseB: true },
+  { table: "onb_system_checks", phaseB: true },
+  { table: "onb_settings", phaseB: true },
+  { table: "onb_connectors", phaseB: true },
+  { table: "onb_effect_journal", phaseB: true },
+  { table: "onb_documents", phaseB: true },
+  { table: "onb_call_slots", phaseB: true },
+  { table: "onb_voice_sessions", phaseB: true },
+  { table: "onb_watch_emails", phaseB: true },
+  { table: "onb_employee_records", phaseB: true },
+  { table: "onb_guardrail_events", phaseB: true },
+  { table: "custom_intent_routing_labels", phaseB: true },
+  { table: "pricing_rate_sets", phaseB: true },
+  { table: "pricing_sheets", phaseB: true },
+  { table: "ea_assessments", phaseB: true },
+];
+
+export const tenantTables = tenantSafeguards.map(({ table }) => table);
+
+export const phaseBTenantTables = tenantSafeguards
+  .filter(({ phaseB }) => phaseB)
+  .map(({ table }) => table);
+
+export const expectedForeignKeys = [
+  ...tenantTables.map((table) => ({
+    table,
+    columns: ["organization_id"],
+    referencedTable: "organizations",
+    referencedColumns: ["id"],
+  })),
+  {
+    table: "onb_watch_emails",
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_watch_emails",
+    columns: ["organization_id", "check_id"],
+    referencedTable: "onb_system_checks",
+    referencedColumns: ["organization_id", "id"],
+  },
+];

@@ -1,51 +1,11 @@
 import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
+import {
+  expectedForeignKeys,
+  tenantTables,
+} from "./tenant-safeguards-manifest.mjs";
 
-export const tenantTables = [
-  "scenarios",
-  "custom_intents",
-  "actuals_overlays",
-  "flow_overrides",
-  "onb_cases",
-  "onb_events",
-  "onb_approvals",
-  "onb_communications",
-  "onb_system_checks",
-  "onb_settings",
-  "onb_connectors",
-  "onb_effect_journal",
-  "onb_documents",
-  "onb_call_slots",
-  "onb_voice_sessions",
-  "onb_watch_emails",
-  "onb_employee_records",
-  "onb_guardrail_events",
-  "custom_intent_routing_labels",
-  "pricing_rate_sets",
-  "pricing_sheets",
-  "ea_assessments",
-];
-
-export const expectedForeignKeys = [
-  ...tenantTables.map((table) => ({
-    table,
-    columns: ["organization_id"],
-    referencedTable: "organizations",
-    referencedColumns: ["id"],
-  })),
-  {
-    table: "onb_watch_emails",
-    columns: ["organization_id", "case_id"],
-    referencedTable: "onb_cases",
-    referencedColumns: ["organization_id", "id"],
-  },
-  {
-    table: "onb_watch_emails",
-    columns: ["organization_id", "check_id"],
-    referencedTable: "onb_system_checks",
-    referencedColumns: ["organization_id", "id"],
-  },
-];
+export { expectedForeignKeys, tenantTables };
 
 function sameColumns(actual, expected) {
   return (
@@ -121,15 +81,10 @@ export function findTenantSafeguardFailures({
   return failures;
 }
 
-const organizationReferenceTables = [
-  "organization_memberships",
-  ...tenantTables,
-];
-
 const organizationOrphanQuery = `
   SELECT count(*)::integer AS orphan_count
   FROM (
-    ${organizationReferenceTables
+    ${tenantTables
       .map(
         (table) => `
           SELECT child.organization_id
