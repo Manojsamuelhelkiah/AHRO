@@ -281,6 +281,13 @@
       "when": 1788973740000,
       "tag": "0034_candidate_access_cleanup_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788973740001,
+      "tag": "0035_candidate_exchange_throttle",
+      "breakpoints": true
     }
   ]
 }

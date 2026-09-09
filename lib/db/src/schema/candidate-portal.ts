@@ -63,6 +63,14 @@ export const onbCandidateSessions = pgTable("onb_candidate_sessions", {
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id] }).onDelete("cascade"),
 ]);
 
+export const onbCandidateExchangeFailures = pgTable("onb_candidate_exchange_failures", {
+  clientKey: text("client_key").primaryKey(),
+  failures: integer("failures").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  check("onb_candidate_exchange_failures_count_check", sql`${t.failures} > 0`),
+  index("onb_candidate_exchange_failures_expires_at_idx").on(t.expiresAt),
+]);
 export const onbCandidateUploads = pgTable("onb_candidate_uploads", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id").notNull().references(() => organizationsTable.id),

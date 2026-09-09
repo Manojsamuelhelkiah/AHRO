@@ -13,6 +13,7 @@ import {
   DEFAULT_CANDIDATE_LINK_RETENTION_DAYS,
   getCandidateLinkRetentionDays,
 } from "./settings";
+import { and, count, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 export const CANDIDATE_COOKIE = "onb_candidate_session";
 export const MAX_CANDIDATE_FILE_BYTES = 10 * 1024 * 1024;
@@ -25,48 +26,67 @@ export const portalEmailRequested = (value: unknown) => value === true;
 
 export const CANDIDATE_EXCHANGE_FAILURE_LIMIT = 5;
 export const CANDIDATE_EXCHANGE_COOLDOWN_MS = 60_000;
-const MAX_CANDIDATE_EXCHANGE_CLIENTS = 10_000;
+export const MAX_CANDIDATE_EXCHANGE_CLIENTS = 10_000;
 
-type ExchangeFailureWindow = { failures: number; resetsAt: number };
-const exchangeFailures = new Map<string, ExchangeFailureWindow>();
-
+const CANDIDATE_EXCHANGE_LIMITER_LOCK = 224_000_001;
 export function candidateExchangeClientKey(req: Request) {
   return hashSecret(req.ip || req.socket.remoteAddress || "unknown");
 }
 
-export function candidateExchangeRetryAfterMs(clientKey: string, now = Date.now()) {
-  const window = exchangeFailures.get(clientKey);
-  if (!window) return 0;
-  if (window.resetsAt <= now) {
-    exchangeFailures.delete(clientKey);
+export class CandidateExchangeLimiter {
+  async retryAfterMs(clientKey: string, now = Date.now()) {
+    const at = new Date(now);
+    const [window] = await db.select({
+      failures: onbCandidateExchangeFailures.failures,
+      expiresAt: onbCandidateExchangeFailures.expiresAt,
+    }).from(onbCandidateExchangeFailures).where(and(
+      eq(onbCandidateExchangeFailures.clientKey, clientKey),
+      gt(onbCandidateExchangeFailures.expiresAt, at),
+    ));
+    if (window?.failures >= CANDIDATE_EXCHANGE_FAILURE_LIMIT) {
+      return Math.max(0, window.expiresAt.getTime() - now);
+    }
+
+    // When a rotating-address flood fills the fixed key budget, fail closed
+    // for unknown clients until the earliest short-lived row expires.
+    if (!window) {
+      const [capacity] = await db.select({
+        total: count(),
+        earliestExpiry: sql<Date | null>`min(${onbCandidateExchangeFailures.expiresAt})`,
+      }).from(onbCandidateExchangeFailures).where(gt(onbCandidateExchangeFailures.expiresAt, at));
+      if (capacity && capacity.total >= MAX_CANDIDATE_EXCHANGE_CLIENTS && capacity.earliestExpiry) {
+        return Math.max(0, new Date(capacity.earliestExpiry).getTime() - now);
+      }
+    }
     return 0;
   }
-  return window.failures >= CANDIDATE_EXCHANGE_FAILURE_LIMIT
-    ? window.resetsAt - now
-    : 0;
-}
 
-export function recordCandidateExchangeFailure(clientKey: string, now = Date.now()) {
-  const current = exchangeFailures.get(clientKey);
-  if (!current || current.resetsAt <= now) {
-    exchangeFailures.set(clientKey, {
-      failures: 1,
-      resetsAt: now + CANDIDATE_EXCHANGE_COOLDOWN_MS,
+  async recordFailure(clientKey: string, now = Date.now()) {
+    const at = new Date(now);
+    const expiresAt = new Date(now + CANDIDATE_EXCHANGE_COOLDOWN_MS);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${CANDIDATE_EXCHANGE_LIMITER_LOCK})`);
+      await tx.delete(onbCandidateExchangeFailures).where(lte(onbCandidateExchangeFailures.expiresAt, at));
+      const [current] = await tx.select({
+        failures: onbCandidateExchangeFailures.failures,
+      }).from(onbCandidateExchangeFailures).where(eq(onbCandidateExchangeFailures.clientKey, clientKey));
+      if (current) {
+        await tx.update(onbCandidateExchangeFailures)
+          .set({ failures: current.failures + 1 })
+          .where(eq(onbCandidateExchangeFailures.clientKey, clientKey));
+        return;
+      }
+      const [capacity] = await tx.select({ total: count() }).from(onbCandidateExchangeFailures);
+      if ((capacity?.total ?? 0) >= MAX_CANDIDATE_EXCHANGE_CLIENTS) return;
+      await tx.insert(onbCandidateExchangeFailures).values({ clientKey, failures: 1, expiresAt });
     });
-  } else {
-    current.failures += 1;
   }
-  while (exchangeFailures.size > MAX_CANDIDATE_EXCHANGE_CLIENTS) {
-    const oldest = exchangeFailures.keys().next().value;
-    if (oldest === undefined) break;
-    exchangeFailures.delete(oldest);
+
+  async clear(clientKey: string) {
+    await db.delete(onbCandidateExchangeFailures)
+      .where(eq(onbCandidateExchangeFailures.clientKey, clientKey));
   }
 }
-
-export function clearCandidateExchangeFailures(clientKey: string) {
-  exchangeFailures.delete(clientKey);
-}
-
 export function validateLogistics(input: Record<string, unknown>) {
   const clean = (key: string, max: number) => {
     const value = input[key];
@@ -251,3 +271,5 @@ export function detectCandidateFile(bytes: Buffer): string | undefined {
 }
 
 export const CANDIDATE_ACCESS_CLEANUP_BATCH_SIZE = 500;
+
+export const candidateExchangeLimiter = new CandidateExchangeLimiter();
