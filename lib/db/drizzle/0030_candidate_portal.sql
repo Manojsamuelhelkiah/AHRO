@@ -32,6 +32,14 @@ BEGIN
     "expires_at" timestamptz NOT NULL, "created_at" timestamptz NOT NULL DEFAULT now(),
     FOREIGN KEY ("organization_id","case_id") REFERENCES "onb_cases"("organization_id","id") ON DELETE CASCADE
   );
+  CREATE INDEX IF NOT EXISTS "onb_candidate_links_unrevoked_expires_idx"
+    ON "onb_candidate_links" ("expires_at")
+    WHERE "revoked_at" IS NULL;
+  CREATE INDEX IF NOT EXISTS "onb_candidate_links_revoked_at_idx"
+    ON "onb_candidate_links" ("revoked_at")
+    WHERE "revoked_at" IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS "onb_candidate_sessions_expires_at_idx"
+    ON "onb_candidate_sessions" ("expires_at");
   CREATE TABLE IF NOT EXISTS "onb_candidate_uploads" (
     "id" serial PRIMARY KEY, "organization_id" text NOT NULL REFERENCES "organizations"("id"),
     "case_id" integer NOT NULL, "document_id" integer NOT NULL, "object_path" text NOT NULL UNIQUE,

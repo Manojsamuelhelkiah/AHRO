@@ -41,10 +41,23 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   "89e944c53e96b6c118f5976aa711f394bce447d13225b5364898413f6786d484",
   // Candidate portal is conditional so historical recovery databases without
   // tenant tables can safely replay the forward migration.
-  "8f113f159680a086acc79b46cac772f7543f1cd72125f14921cc97ec113dc9af",
+  "224a8e52a4e3a251ed7d54009c23f378422a179c4382bec4c07e70a8afec0025",
+  // Candidate cleanup indexes are conditional because the same supported
+  // recovery databases intentionally omit the candidate portal tables.
+  "35b0d0ef27e915807387cf9613aea529ce8d1996bf6d206e5228f766285cf935",
   // Reviewed tenant-scoped seed and non-overwriting case-logistics backfill.
   // This forward reconciliation preserves both immutable historical 0030s.
   "e91d02fb842cf47f4a9e6c32957d16025b484fa99bb58afc35d008f39c91c411",
+]);
+const compatibleHistoricalMigrationHashes = new Map([
+  [
+    "0030_candidate_portal",
+    new Set([
+      // Exact predecessor before candidate cleanup indexes were added. The
+      // forward 0034 migration repairs databases that recorded this version.
+      "8f113f159680a086acc79b46cac772f7543f1cd72125f14921cc97ec113dc9af",
+    ]),
+  ],
 ]);
 
 // These errors mean an old migration's individual DDL statement is already
@@ -91,6 +104,15 @@ function shouldSkipSupersededMigrationStatement(migration, statement) {
 
 function migrationHash(sql) {
   return createHash("sha256").update(sql).digest("hex");
+}
+
+function migrationHashMatches(migration, appliedHash) {
+  return (
+    appliedHash === migration.hash ||
+    compatibleHistoricalMigrationHashes
+      .get(migration.tag)
+      ?.has(appliedHash) === true
+  );
 }
 
 function singleQuoteUsesBackslashEscapes(sql, quoteIndex) {
@@ -1294,7 +1316,7 @@ export async function reconcileDevelopmentDatabase(options = {}) {
       const existing = applied.get(migration.tag);
       if (
         existing &&
-        (existing.hash !== migration.hash ||
+        (!migrationHashMatches(migration, existing.hash) ||
           Number(existing.created_at) !== migration.createdAt)
       ) {
         throw new Error(

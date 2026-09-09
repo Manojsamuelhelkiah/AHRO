@@ -274,6 +274,13 @@
       "when": 1788887340015,
       "tag": "0033_day1_logistics_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788973740000,
+      "tag": "0034_candidate_access_cleanup_indexes",
+      "breakpoints": true
     }
   ]
 }

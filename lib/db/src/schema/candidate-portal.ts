@@ -1,6 +1,7 @@
 import {
   check,
   foreignKey,
+  index,
   integer,
   pgTable,
   serial,
@@ -41,6 +42,12 @@ export const onbCandidateLinks = pgTable("onb_candidate_links", {
   issuedBy: text("issued_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
+  index("onb_candidate_links_unrevoked_expires_idx")
+    .on(t.expiresAt)
+    .where(sql`${t.revokedAt} is null`),
+  index("onb_candidate_links_revoked_at_idx")
+    .on(t.revokedAt)
+    .where(sql`${t.revokedAt} is not null`),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id] }).onDelete("cascade"),
 ]);
 
@@ -52,6 +59,7 @@ export const onbCandidateSessions = pgTable("onb_candidate_sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
+  index("onb_candidate_sessions_expires_at_idx").on(t.expiresAt),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id] }).onDelete("cascade"),
 ]);
 

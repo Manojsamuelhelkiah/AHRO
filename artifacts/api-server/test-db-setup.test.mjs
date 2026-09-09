@@ -25,6 +25,16 @@ function migrationWith(statement) {
   };
 }
 
+function planIndexNames(plan) {
+  const names = new Set();
+  const visit = (node) => {
+    if (node?.["Index Name"]) names.add(node["Index Name"]);
+    for (const child of node?.Plans ?? []) visit(child);
+  };
+  visit(plan);
+  return names;
+}
+
 function schemaTableBlocks(source) {
   const blocks = [];
   const tableStart = /\bpgTable\s*\(\s*["']([^"']+)["']/g;
@@ -428,6 +438,19 @@ test(
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(schema),
       });
+      await adminPool.query(
+        `
+          UPDATE "${schema}".__api_test_schema_migrations
+          SET hash = $1
+          WHERE tag = '0030_candidate_portal'
+        `,
+        [
+          "8f113f159680a086acc79b46cac772f7543f1cd72125f14921cc97ec113dc9af",
+        ],
+      );
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(schema),
+      });
 
       const prepared = await adminPool.query(
         `
@@ -447,6 +470,74 @@ test(
         prepared.rows[0].migration_count,
         (await loadCheckedInMigrations()).length,
       );
+
+      const candidateIndexes = await adminPool.query(
+        `
+          SELECT indexname
+          FROM pg_indexes
+          WHERE schemaname = $1
+            AND indexname = ANY($2::text[])
+        `,
+        [
+          schema,
+          [
+            "onb_candidate_links_unrevoked_expires_idx",
+            "onb_candidate_links_revoked_at_idx",
+            "onb_candidate_sessions_expires_at_idx",
+          ],
+        ],
+      );
+      assert.deepEqual(
+        candidateIndexes.rows.map(({ indexname }) => indexname).sort(),
+        [
+          "onb_candidate_links_revoked_at_idx",
+          "onb_candidate_links_unrevoked_expires_idx",
+          "onb_candidate_sessions_expires_at_idx",
+        ],
+      );
+
+      const planClient = await adminPool.connect();
+      try {
+        await planClient.query("BEGIN");
+        await planClient.query("SET LOCAL enable_seqscan = off");
+        const sessionPlan = await planClient.query(
+          `
+            EXPLAIN (FORMAT JSON)
+            SELECT id_hash
+            FROM "${schema}".onb_candidate_sessions
+            WHERE expires_at <= now()
+            LIMIT 500
+          `,
+        );
+        assert.ok(
+          planIndexNames(sessionPlan.rows[0]["QUERY PLAN"][0].Plan).has(
+            "onb_candidate_sessions_expires_at_idx",
+          ),
+        );
+
+        const linkPlan = await planClient.query(
+          `
+            EXPLAIN (FORMAT JSON)
+            SELECT id
+            FROM "${schema}".onb_candidate_links
+            WHERE (
+              (revoked_at IS NULL AND expires_at <= now() - interval '90 days')
+              OR revoked_at <= now() - interval '90 days'
+            )
+            LIMIT 500
+          `,
+        );
+        const linkPlanIndexes = planIndexNames(
+          linkPlan.rows[0]["QUERY PLAN"][0].Plan,
+        );
+        assert.ok(
+          linkPlanIndexes.has("onb_candidate_links_unrevoked_expires_idx"),
+        );
+        assert.ok(linkPlanIndexes.has("onb_candidate_links_revoked_at_idx"));
+      } finally {
+        await planClient.query("ROLLBACK");
+        planClient.release();
+      }
 
       const tenantEnforcement = await adminPool.query(
         `
