@@ -295,6 +295,13 @@
       "when": 1788887340015,
       "tag": "0033_targeted_checklist_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788973740002,
+      "tag": "0036_document_validation_monitoring",
+      "breakpoints": true
     }
   ]
 }

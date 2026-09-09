@@ -106,6 +106,9 @@ test("a definite delivery rejection releases the claim for a later retry", async
   await assert.rejects(
     alertBlockedPublish({
       operatorEmail: "operator@example.com",
+      // Keep this test deterministic in workspaces that configure the optional
+      // backup channel; this case specifically exercises email-only rejection.
+      backupWhatsApp: "",
       marker: {
         save: async () => {},
         delete: async () => {

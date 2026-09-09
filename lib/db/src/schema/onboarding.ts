@@ -381,6 +381,9 @@ export const onbDocuments = pgTable(
     status: text("status").notNull().default("pending"),
     required: boolean("required").notNull().default(true),
     note: text("note"),
+    reminderCount: integer("reminder_count").notNull().default(0),
+    lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
+    reminderNextAt: timestamp("reminder_next_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

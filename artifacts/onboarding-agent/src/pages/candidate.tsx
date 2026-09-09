@@ -1,15 +1,24 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, FileUp, Monitor, Upload, ExternalLink, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { CalendarDays, FileUp, Monitor, Upload, ExternalLink, CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
 
 type Portal = {
   case: { workerName: string; role: string; department: string; joiningDate: string };
   logistics: null | Record<string, string | null>;
-  documents: Array<{ id: number; label: string; required: boolean; status: string; note?: string | null }>;
+  documents: Array<{
+    id: number;
+    label: string;
+    required: boolean;
+    status: string;
+    note?: string | null;
+    validationState: 'queued' | 'processing' | 'passed' | 'manual_review' | 'correction_requested' | 'rejected' | null;
+    correctionGuidance: string | null;
+  }>;
 };
 
 export function CandidatePage() {
   const [portal, setPortal] = useState<Portal | null>(null);
   const [error, setError] = useState('');
+  const [docErrors, setDocErrors] = useState<Record<number, string>>({});
   const [uploading, setUploading] = useState<number | null>(null);
 
   const load = async () => {
@@ -37,8 +46,36 @@ export function CandidatePage() {
     })().catch((caught) => setError(caught instanceof Error ? caught.message : 'Unable to open portal'));
   }, []);
 
+  const validationPending = portal?.documents.some(
+    (doc) => doc.validationState === 'queued' || doc.validationState === 'processing',
+  ) ?? false;
+
+  useEffect(() => {
+    if (!validationPending) return;
+    const timer = window.setInterval(() => {
+      void load().catch(() => undefined);
+    }, 3_000);
+    return () => window.clearInterval(timer);
+  }, [validationPending]);
+
   const upload = async (documentId: number, file?: File) => {
     if (!file) return;
+
+    // Preflight checks
+    if (file.size === 0) {
+      setDocErrors(prev => ({ ...prev, [documentId]: 'File is empty.' }));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setDocErrors(prev => ({ ...prev, [documentId]: 'File exceeds the 10MB limit.' }));
+      return;
+    }
+    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
+      setDocErrors(prev => ({ ...prev, [documentId]: 'Only PDF, JPEG, and PNG files are allowed.' }));
+      return;
+    }
+
+    setDocErrors(prev => ({ ...prev, [documentId]: '' }));
     setError(''); setUploading(documentId);
     try {
       const response = await fetch(`/api/candidate/documents/${documentId}/upload`, {
@@ -152,8 +189,47 @@ export function CandidatePage() {
               <div className="p-8 text-center text-sm text-slate-500">No documents required at this time.</div>
             )}
 
-            {portal.documents.map((doc) => (
-              <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 hover:bg-slate-50/50 transition-colors group">
+            {portal.documents.map((doc) => {
+              const vs = doc.validationState;
+              let label: string | null = vs;
+              let bgColor = 'bg-slate-50';
+              let textColor = 'text-slate-700';
+              let ringColor = 'ring-slate-600/20';
+              let icon = null;
+
+              if (vs === 'queued' || vs === 'processing') {
+                label = 'Validating...';
+                bgColor = 'bg-blue-50'; textColor = 'text-blue-700'; ringColor = 'ring-blue-600/20';
+                icon = <Loader2 className="h-3 w-3 animate-spin" />;
+              } else if (vs === 'passed') {
+                label = 'Verified';
+                bgColor = 'bg-green-50'; textColor = 'text-green-700'; ringColor = 'ring-green-600/20';
+                icon = <CheckCircle2 className="h-3 w-3" />;
+              } else if (vs === 'correction_requested') {
+                label = 'Correction Required';
+                bgColor = 'bg-amber-50'; textColor = 'text-amber-700'; ringColor = 'ring-amber-600/20';
+                icon = <AlertCircle className="h-3 w-3" />;
+              } else if (vs === 'manual_review') {
+                label = 'Under HR Review';
+                bgColor = 'bg-amber-50'; textColor = 'text-amber-700'; ringColor = 'ring-amber-600/20';
+                icon = <Clock className="h-3 w-3" />;
+              } else if (vs === 'rejected') {
+                label = 'Rejected — HR review required';
+                bgColor = 'bg-red-50'; textColor = 'text-red-700'; ringColor = 'ring-red-600/10';
+                icon = <AlertCircle className="h-3 w-3" />;
+              } else if (doc.status === 'pending') {
+                label = 'Pending';
+                bgColor = 'bg-amber-50'; textColor = 'text-amber-700'; ringColor = 'ring-amber-600/20';
+              } else if (doc.status === 'verified') {
+                label = 'Verified';
+                bgColor = 'bg-green-50'; textColor = 'text-green-700'; ringColor = 'ring-green-600/20';
+                icon = <CheckCircle2 className="h-3 w-3" />;
+              } else {
+                label = doc.status;
+              }
+
+              return (
+              <div key={doc.id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-4 hover:bg-slate-50/50 transition-colors group">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-slate-900 truncate">{doc.label}</p>
@@ -161,25 +237,34 @@ export function CandidatePage() {
                   </div>
 
                   <div className="mt-1 flex items-center gap-2">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                      doc.status === 'pending' ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20' :
-                      doc.status === 'approved' ? 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20' :
-                      doc.status === 'rejected' ? 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10' :
-                      'bg-slate-50 text-slate-700 ring-1 ring-inset ring-slate-600/20'
-                    }`}>
-                      {doc.status === 'approved' && <CheckCircle2 className="h-3 w-3" />}
-                      {doc.status === 'rejected' && <AlertCircle className="h-3 w-3" />}
-                      <span className="capitalize">{doc.status}</span>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${bgColor} ${textColor} ring-1 ring-inset ${ringColor}`}>
+                      {icon}
+                      <span className="capitalize">{label}</span>
                     </span>
                     {doc.note && <span className="text-xs text-slate-500 truncate" title={doc.note}>&middot; {doc.note}</span>}
                   </div>
+
+                  {vs === 'correction_requested' && doc.correctionGuidance && (
+                    <div className="mt-2 text-xs text-amber-800 bg-amber-50/50 border border-amber-100 rounded-md p-2 flex gap-1.5 items-start">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>{doc.correctionGuidance}</span>
+                    </div>
+                  )}
+
+                  {vs === 'passed' && (
+                    <p className="mt-1.5 text-[10px] text-slate-500">Automated checks passed. Authenticity may require HR/provider review.</p>
+                  )}
+
+                  {docErrors[doc.id] && (
+                    <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {docErrors[doc.id]}</p>
+                  )}
                 </div>
 
                 <label className={`
                   shrink-0 inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-1
                   ${uploading === doc.id
                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : doc.status === 'approved'
+                    : doc.status === 'verified'
                       ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-sm'
                       : 'bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-200 shadow-sm'
                   }
@@ -190,10 +275,10 @@ export function CandidatePage() {
                     <Upload className="h-3.5 w-3.5" />
                   )}
                   {uploading === doc.id ? 'Uploading...' : doc.status === 'pending' ? 'Upload File' : 'Replace File'}
-                  <input className="sr-only" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" disabled={uploading !== null} onChange={(event) => upload(doc.id, event.target.files?.[0])} />
+                  <input className="sr-only" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" disabled={uploading !== null} onChange={(event) => { upload(doc.id, event.target.files?.[0]); event.target.value = ''; }} />
                 </label>
               </div>
-            ))}
+            )})}
           </div>
         </section>
       </div>

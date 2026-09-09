@@ -11,6 +11,8 @@ import {
   onbCaseLogistics,
   onbSettings,
   onbSystemChecks,
+  onbCandidateUploads,
+  onbDocuments,
 } from "@workspace/db/schema";
 import {
   CreateOnboardingCaseBody,
@@ -24,6 +26,7 @@ import {
   CreateOnboardingChecklistProfileBody,
   UpdateOnboardingChecklistProfileBody,
   RecalculateOnboardingChecklistProfileBody,
+  DecideOnboardingEvidenceBody,
 } from "@workspace/api-zod";
 import {
   defaultReadiness,
@@ -110,6 +113,8 @@ import {
   runCandidateAccessCleanup,
 } from "../lib/onboarding/candidate-access-cleanup";
 import { resolveReviewerName } from "../middlewares/require-auth";
+import { normalizeBgvStatus } from "../lib/onboarding/document-validation";
+import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
 import { clerkClient } from "@clerk/express";
 import {
   getOrganizationId,
@@ -727,12 +732,92 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
         status: r.status,
         required: r.required,
         note: r.note,
+         reminderCount: r.reminderCount,
+         lastReminderAt: iso(r.lastReminderAt),
+         reminderNextAt: iso(r.reminderNextAt),
         updatedAt: r.updatedAt.toISOString(),
       })),
     );
   } catch (err) {
     next(err);
   }
+});
+
+/** Tenant-scoped evidence view: object paths and raw provider details are never returned. */
+router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
+  try {
+    const caseId = Number(req.params.id);
+    const organizationId = getOrganizationId(req);
+    const [owned] = await db.select({ id: onbCases.id }).from(onbCases)
+      .where(and(eq(onbCases.id, caseId), organizationWhere(onbCases, organizationId)));
+    if (!owned) return res.status(404).json({ message: "Case not found" });
+    const rows = await db.select({
+      id: onbCandidateUploads.id, documentId: onbCandidateUploads.documentId,
+      originalName: onbCandidateUploads.originalName, contentType: onbCandidateUploads.contentType,
+      sizeBytes: onbCandidateUploads.sizeBytes, checksumSha256: onbCandidateUploads.checksumSha256,
+      validationState: onbCandidateUploads.validationState, validationReasons: onbCandidateUploads.validationReasons,
+      validationStartedAt: onbCandidateUploads.validationStartedAt, validatedAt: onbCandidateUploads.validatedAt,
+      label: onbDocuments.label, category: onbDocuments.category, required: onbDocuments.required,
+      reminderCount: onbDocuments.reminderCount, reminderNextAt: onbDocuments.reminderNextAt,
+    }).from(onbCandidateUploads).innerJoin(onbDocuments, and(eq(onbDocuments.id, onbCandidateUploads.documentId), eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId))).where(and(eq(onbCandidateUploads.caseId, caseId), eq(onbCandidateUploads.organizationId, organizationId))).orderBy(desc(onbCandidateUploads.id));
+    return res.json(rows.map(({ checksumSha256, ...row }) => ({ ...row, fingerprint: checksumSha256?.slice(0, 12) ?? null })));
+  } catch (error) { return next(error); }
+});
+
+router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const caseId = Number(req.params.id);
+    const evidenceId = Number(req.params.evidenceId);
+    const organizationId = getOrganizationId(req);
+    const body = DecideOnboardingEvidenceBody.parse(req.body);
+    const decision = body.decision;
+    const reason = body.reason.trim();
+    const [upload] = await db.select().from(onbCandidateUploads).where(and(
+      eq(onbCandidateUploads.id, evidenceId), eq(onbCandidateUploads.caseId, caseId), eq(onbCandidateUploads.organizationId, organizationId),
+    ));
+    if (!upload) return res.status(404).json({ message: "Evidence not found" });
+    const state = decision === "approve" ? "passed" : decision === "reject" ? "rejected" : "correction_requested";
+    if (!["manual_review", "correction_requested"].includes(upload.validationState)) return res.status(409).json({ message: "Evidence is not awaiting manual review." });
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx.update(onbCandidateUploads).set({
+        validationState: state, validationReasons: [{ code: "hr_decision", message: reason }],
+        validatedAt: new Date(), validationClaimOwner: null, validationClaimUntil: null,
+      }).where(and(eq(onbCandidateUploads.id, evidenceId), eq(onbCandidateUploads.organizationId, organizationId), eq(onbCandidateUploads.caseId, caseId))).returning();
+      if (!row) throw new Error("Evidence decision lost its ownership fence");
+      await tx.update(onbDocuments).set({
+        status: decision === "approve" ? "verified" : "received",
+        note: decision === "approve" ? "Accepted by HR after manual review." : reason,
+        reminderNextAt: decision === "approve" ? null : new Date(),
+        updatedAt: new Date(),
+      }).where(and(eq(onbDocuments.id, upload.documentId), eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId)));
+      await tx.insert(onbEvents).values({
+        organizationId, caseId, agent: "hr-reviewer", engine: "human", hitlPattern: "approve-before-act",
+        ruleRef: "document-validation-manual-review", title: `Document ${decision.replace("_", " ")}`,
+        detail: reason, idempotencyKey: `document-decision:${evidenceId}:${row.validatedAt?.getTime()}`,
+      }).onConflictDoNothing();
+      return row;
+    });
+    await reconcileDocumentationReadiness(organizationId, caseId);
+    return res.json({ id: updated.id, validationState: updated.validationState, validationReasons: updated.validationReasons, validatedAt: updated.validatedAt });
+  } catch (error) { return next(error); }
+});
+
+router.get("/onboarding/cases/:id/bgv", async (req, res, next) => {
+  try {
+    const caseId = Number(req.params.id);
+    const [owned] = await db.select({ id: onbCases.id }).from(onbCases).where(and(eq(onbCases.id, caseId), organizationWhere(onbCases, getOrganizationId(req))));
+    if (!owned) return res.status(404).json({ message: "Case not found" });
+    const rows = await db.select({
+      id: onbSystemChecks.id, system: onbSystemChecks.system, externalRef: onbSystemChecks.externalRef,
+      status: onbSystemChecks.status, requestedAt: onbSystemChecks.requestedAt, dueAt: onbSystemChecks.dueAt,
+      completedAt: onbSystemChecks.completedAt, note: onbSystemChecks.note,
+    }).from(onbSystemChecks).where(and(eq(onbSystemChecks.caseId, caseId), eq(onbSystemChecks.organizationId, getOrganizationId(req)), eq(onbSystemChecks.system, "bgv")));
+    return res.json(rows.map((row) => ({
+      ...row,
+      status: normalizeBgvStatus(row.status),
+    })));
+  } catch (error) { return next(error); }
 });
 
 router.get("/onboarding/cases/:id/records", async (req, res, next) => {

@@ -19,7 +19,8 @@ import {
 
 import { CaseHeader, CaseHealthStrip, CaseTabs } from './detail/components';
 import { OverviewTab } from './detail/overview';
-import { TasksTab, DocumentsTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
+import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
+import { DocumentsTab } from './detail/documents-tab';
 import { PortalControls } from './detail/portal-controls';
 
 export function CaseDetailPage() {
@@ -109,7 +110,7 @@ export function CaseDetailPage() {
         )}
         
         {activeTab === 'Tasks' && <TasksTab c={c} />}
-        {activeTab === 'Documents' && <DocumentsTab docs={docs || []} />}
+        {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
         {activeTab === 'Activity' && <ActivityTab events={events || []} />}
         {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} />}
         {activeTab === 'Audit' && <AuditTab events={events || []} approvals={approvals} records={records || []} />}

@@ -1651,6 +1651,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/evidence:
+    get:
+      operationId: listOnboardingCaseEvidence
+      tags: [onboarding]
+      summary: List safe document validation evidence for a tenant-owned case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Evidence list without private object paths
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OnbDocumentEvidence" }
+  /onboarding/cases/{id}/evidence/{evidenceId}/decision:
+    post:
+      operationId: decideOnboardingEvidence
+      tags: [onboarding]
+      summary: Record an HR manual evidence decision
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: evidenceId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: "#/components/schemas/OnbEvidenceDecision"
+      responses:
+        "200": { description: Decision recorded }
+        "400": { description: Invalid decision }
+        "404": { description: Evidence not found }
+  /onboarding/cases/{id}/bgv:
+    get:
+      operationId: getOnboardingCaseBgv
+      tags: [onboarding]
+      summary: List normalized BGV monitoring status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: BGV checks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OnbBgvStatus" }
   /onboarding/cases/{id}/checklist/{itemId}:
     put:
       operationId: updateOnboardingChecklistItem
@@ -4997,7 +5057,54 @@ components:
           type: ["string", "null"]
         updatedAt:
           type: string
-      required: [id, caseId, key, label, category, status, required, note, updatedAt]
+        reminderCount:
+          type: integer
+        lastReminderAt:
+          type: ["string", "null"]
+        reminderNextAt:
+          type: ["string", "null"]
+      required: [id, caseId, key, label, category, status, required, note, updatedAt, reminderCount, lastReminderAt, reminderNextAt]
+    OnbDocumentEvidence:
+      type: object
+      properties:
+        id: { type: integer }
+        documentId: { type: integer }
+        originalName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        fingerprint: { type: ["string", "null"] }
+        label: { type: string }
+        category: { type: string }
+        required: { type: boolean }
+        reminderCount: { type: integer }
+        reminderNextAt: { type: ["string", "null"], format: date-time }
+        validationState:
+          type: string
+          enum: [queued, processing, passed, manual_review, correction_requested, rejected]
+        validationReasons:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              message: { type: string }
+              evidence: { type: string }
+            required: [code, message]
+        validationStartedAt: { type: ["string", "null"], format: date-time }
+        validatedAt: { type: ["string", "null"], format: date-time }
+      required: [id, documentId, originalName, contentType, sizeBytes, fingerprint, label, category, required, reminderCount, reminderNextAt, validationState, validationReasons]
+    OnbBgvStatus:
+      type: object
+      properties:
+        id: { type: integer }
+        system: { type: string }
+        externalRef: { type: string }
+        status: { type: string, enum: [pending, incomplete, rejected, overdue, clear, manual_review, done] }
+        requestedAt: { type: string, format: date-time }
+        dueAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        note: { type: ["string", "null"] }
+      required: [id, system, externalRef, status, requestedAt, dueAt, completedAt, note]
     OnbEmployeeRecord:
       type: object
       description: One archived past-employment stint from the employee-records archive (rehire evidence)
@@ -5127,6 +5234,16 @@ components:
         comment:
           type: string
       required: [decision]
+    OnbEvidenceDecision:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject, request_correction]
+        reason:
+          type: string
+          minLength: 3
+      required: [decision, reason]
     OnbCommunication:
       type: object
       properties:

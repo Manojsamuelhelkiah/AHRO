@@ -60,6 +60,7 @@ import type {
   OnbAnalytics,
   OnbApproval,
   OnbApprovalDecision,
+  OnbBgvStatus,
   OnbCase,
   OnbCaseIntake,
   OnbChannelStatus,
@@ -75,9 +76,11 @@ import type {
   OnbConnectorUpdate,
   OnbDashboard,
   OnbDocument,
+  OnbDocumentEvidence,
   OnbEmailWatch,
   OnbEmployeeRecord,
   OnbEvent,
+  OnbEvidenceDecision,
   OnbInboundMessage,
   OnbScenarioDef,
   OnbSettings,
@@ -5554,6 +5557,234 @@ export function useListOnboardingCaseDocuments<TData = Awaited<ReturnType<typeof
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListOnboardingCaseDocumentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListOnboardingCaseEvidenceUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/evidence`
+}
+
+/**
+ * @summary List safe document validation evidence for a tenant-owned case
+ */
+export const listOnboardingCaseEvidence = async (id: number, options?: RequestInit): Promise<OnbDocumentEvidence[]> => {
+
+  return customFetch<OnbDocumentEvidence[]>(getListOnboardingCaseEvidenceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingCaseEvidenceQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}/evidence`
+    ] as const;
+    }
+
+
+export const getListOnboardingCaseEvidenceQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingCaseEvidence>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingCaseEvidenceQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingCaseEvidence>>> = ({ signal }) => listOnboardingCaseEvidence(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseEvidence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingCaseEvidenceQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingCaseEvidence>>>
+export type ListOnboardingCaseEvidenceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List safe document validation evidence for a tenant-owned case
+ */
+
+export function useListOnboardingCaseEvidence<TData = Awaited<ReturnType<typeof listOnboardingCaseEvidence>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingCaseEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingCaseEvidenceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideOnboardingEvidenceUrl = (id: number,
+    evidenceId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/evidence/${evidenceId}/decision`
+}
+
+/**
+ * @summary Record an HR manual evidence decision
+ */
+export const decideOnboardingEvidence = async (id: number,
+    evidenceId: number,
+    onbEvidenceDecision: OnbEvidenceDecision, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDecideOnboardingEvidenceUrl(id,evidenceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbEvidenceDecision)
+  }
+);}
+
+
+
+
+
+export const getDecideOnboardingEvidenceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingEvidence>>, TError,{id: number;evidenceId: number;data: BodyType<OnbEvidenceDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingEvidence>>, TError,{id: number;evidenceId: number;data: BodyType<OnbEvidenceDecision>}, TContext> => {
+
+const mutationKey = ['decideOnboardingEvidence'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideOnboardingEvidence>>, {id: number;evidenceId: number;data: BodyType<OnbEvidenceDecision>}> = (props) => {
+          const {id,evidenceId,data} = props ?? {};
+
+          return  decideOnboardingEvidence(id,evidenceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideOnboardingEvidenceMutationResult = NonNullable<Awaited<ReturnType<typeof decideOnboardingEvidence>>>
+    export type DecideOnboardingEvidenceMutationBody = BodyType<OnbEvidenceDecision>
+    export type DecideOnboardingEvidenceMutationError = ErrorType<void>
+
+    /**
+ * @summary Record an HR manual evidence decision
+ */
+export const useDecideOnboardingEvidence = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingEvidence>>, TError,{id: number;evidenceId: number;data: BodyType<OnbEvidenceDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideOnboardingEvidence>>,
+        TError,
+        {id: number;evidenceId: number;data: BodyType<OnbEvidenceDecision>},
+        TContext
+      > => {
+      return useMutation(getDecideOnboardingEvidenceMutationOptions(options));
+    }
+
+export const getGetOnboardingCaseBgvUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/bgv`
+}
+
+/**
+ * @summary List normalized BGV monitoring status
+ */
+export const getOnboardingCaseBgv = async (id: number, options?: RequestInit): Promise<OnbBgvStatus[]> => {
+
+  return customFetch<OnbBgvStatus[]>(getGetOnboardingCaseBgvUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingCaseBgvQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}/bgv`
+    ] as const;
+    }
+
+
+export const getGetOnboardingCaseBgvQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingCaseBgv>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseBgv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingCaseBgvQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingCaseBgv>>> = ({ signal }) => getOnboardingCaseBgv(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseBgv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingCaseBgvQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingCaseBgv>>>
+export type GetOnboardingCaseBgvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List normalized BGV monitoring status
+ */
+
+export function useGetOnboardingCaseBgv<TData = Awaited<ReturnType<typeof getOnboardingCaseBgv>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseBgv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingCaseBgvQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

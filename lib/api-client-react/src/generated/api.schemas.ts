@@ -2417,6 +2417,77 @@ export interface OnbDocument {
   /** @nullable */
   note: string | null;
   updatedAt: string;
+  reminderCount: number;
+  /** @nullable */
+  lastReminderAt: string | null;
+  /** @nullable */
+  reminderNextAt: string | null;
+}
+
+export type OnbDocumentEvidenceValidationState = typeof OnbDocumentEvidenceValidationState[keyof typeof OnbDocumentEvidenceValidationState];
+
+
+export const OnbDocumentEvidenceValidationState = {
+  queued: 'queued',
+  processing: 'processing',
+  passed: 'passed',
+  manual_review: 'manual_review',
+  correction_requested: 'correction_requested',
+  rejected: 'rejected',
+} as const;
+
+export type OnbDocumentEvidenceValidationReasonsItem = {
+  code: string;
+  message: string;
+  evidence?: string;
+};
+
+export interface OnbDocumentEvidence {
+  id: number;
+  documentId: number;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  /** @nullable */
+  fingerprint: string | null;
+  label: string;
+  category: string;
+  required: boolean;
+  reminderCount: number;
+  /** @nullable */
+  reminderNextAt: string | null;
+  validationState: OnbDocumentEvidenceValidationState;
+  validationReasons: OnbDocumentEvidenceValidationReasonsItem[];
+  /** @nullable */
+  validationStartedAt?: string | null;
+  /** @nullable */
+  validatedAt?: string | null;
+}
+
+export type OnbBgvStatusStatus = typeof OnbBgvStatusStatus[keyof typeof OnbBgvStatusStatus];
+
+
+export const OnbBgvStatusStatus = {
+  pending: 'pending',
+  incomplete: 'incomplete',
+  rejected: 'rejected',
+  overdue: 'overdue',
+  clear: 'clear',
+  manual_review: 'manual_review',
+  done: 'done',
+} as const;
+
+export interface OnbBgvStatus {
+  id: number;
+  system: string;
+  externalRef: string;
+  status: OnbBgvStatusStatus;
+  requestedAt: string;
+  dueAt: string;
+  /** @nullable */
+  completedAt: string | null;
+  /** @nullable */
+  note: string | null;
 }
 
 /**
@@ -2529,6 +2600,21 @@ export interface OnbApprovalDecision {
   /** approved | rejected */
   decision: string;
   comment?: string;
+}
+
+export type OnbEvidenceDecisionDecision = typeof OnbEvidenceDecisionDecision[keyof typeof OnbEvidenceDecisionDecision];
+
+
+export const OnbEvidenceDecisionDecision = {
+  approve: 'approve',
+  reject: 'reject',
+  request_correction: 'request_correction',
+} as const;
+
+export interface OnbEvidenceDecision {
+  decision: OnbEvidenceDecisionDecision;
+  /** @minLength 3 */
+  reason: string;
 }
 
 /**
@@ -3130,6 +3216,7 @@ export type ListCustomIntentsParams = {
  */
 status?: string;
 };
+
 export type ExportScenarioWorkbookLinkParams = {
 /**
  * base64url-encoded JSON of {"inputs":ScenarioInputs}.

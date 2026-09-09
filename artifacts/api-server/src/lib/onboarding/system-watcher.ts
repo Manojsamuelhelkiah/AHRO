@@ -5,6 +5,7 @@ import {
   onbConnectors,
   onbEvents,
   onbSystemChecks,
+  onbDocuments,
   type OnbReadinessItemRow,
 } from "@workspace/db/schema";
 import { and, eq, gt, ne, or, sql } from "drizzle-orm";
@@ -31,6 +32,9 @@ import {
 import { ensureConnectorsSeeded } from "./connectors";
 import { makeSharedTick } from "./shared-tick";
 import { sweepExpiredNonIdempotentEffects } from "./effect-journal";
+import { runDocumentReminderTick, runDocumentValidationTick } from "./document-validation";
+import { logger } from "../logger";
+import { documentationGateReady } from "./document-validation-policy";
 
 /**
  * System Watcher agent.
@@ -235,8 +239,18 @@ export async function completeCheck(
       const readiness = c.readiness as OnbReadinessItemRow[];
       const item = readiness.find((r) => r.key === def.readinessKey);
       if (item) {
-        item.status = "ready";
-        item.note = noteBySystem[def.key];
+        if (def.key === "bgv") {
+          const requiredDocs = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, check.organizationId), eq(onbDocuments.caseId, check.caseId), eq(onbDocuments.required, true)));
+          const verifiedDocs = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, check.organizationId), eq(onbDocuments.caseId, check.caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified")));
+          const ready = documentationGateReady({ bgvApplicable: true, bgvClear: true, requiredDocuments: requiredDocs.length, verifiedDocuments: verifiedDocs.length });
+          item.status = ready ? "ready" : "in-progress";
+          item.note = ready
+            ? noteBySystem[def.key]
+            : `BGV is clear; required document verification is ${verifiedDocs.length}/${requiredDocs.length}.`;
+        } else {
+          item.status = "ready";
+          item.note = noteBySystem[def.key];
+        }
         const allReady = mandatoryChecklistReady({ ...c, readiness });
         // A gated case must resume through the exact orchestration boundary so
         // analytics/review work cannot be skipped. Direct promotion is retained
@@ -699,6 +713,14 @@ async function tickOnce(): Promise<void> {
     .from(onbCases);
   await Promise.all(organizations.map(({ organizationId }) => ensureConnectorsSeeded(organizationId)));
   await sweepExpiredNonIdempotentEffects();
+  // Document evidence is validated asynchronously from the shared heartbeat.
+  // Failures are isolated so an unavailable object/provider never stops BGV monitoring.
+  await runDocumentValidationTick().catch((error) => {
+    logger.error({ component: "document-validator", error: String(error).slice(0, 300) }, "document validation tick failed");
+  });
+  await runDocumentReminderTick().catch((error) => {
+    logger.error({ component: "document-reminder", error: String(error).slice(0, 300) }, "document reminder tick failed");
+  });
   await recoverChecklistOrchestrations();
   await recoverDecidedApprovalContinuations();
 

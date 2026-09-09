@@ -61,39 +61,6 @@ export function TasksTab({ c }: { c: any }) {
   );
 }
 
-export function DocumentsTab({ docs }: { docs: any[] }) {
-  return (
-    <div className="pb-12 max-w-4xl">
-      <Card>
-        <CardHeader className="pb-3 border-b">
-          <CardTitle className="text-[var(--text-base)] flex items-center gap-2"><FileText className="w-4 h-4 text-[var(--primary)]" /> Document Checklist</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4 space-y-3">
-          {(docs ?? []).length === 0 && <p className="text-[var(--text-sm)] text-[var(--text-muted)]">Documentation pack not issued yet.</p>}
-          {(docs ?? []).map((d: any) => (
-            <div key={d.key} className="flex items-start gap-4 p-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-alt)]">
-              <div className="mt-0.5 bg-[var(--surface)] p-2 rounded-full shadow-sm">
-                {d.status === 'verified' && <FileCheck2 className="w-4 h-4 text-[var(--status-green)]" />}
-                {d.status === 'received' && <Clock className="w-4 h-4 text-[var(--status-blue)]" />}
-                {d.status === 'pending' && <Clock className="w-4 h-4 text-[var(--text-muted)] opacity-50" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-[var(--text-sm)] font-bold leading-snug">
-                  {d.label}
-                  {!d.required && <span className="ml-2 text-[9px] uppercase tracking-wider bg-[var(--surface)] border px-1.5 py-0.5 rounded text-[var(--text-muted)] font-bold">optional</span>}
-                </p>
-                <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1">
-                  <span className={cn("font-bold uppercase tracking-wider text-[10px] mr-2")} style={{ color: d.status === 'verified' ? 'var(--status-green)' : d.status === 'received' ? 'var(--status-blue)' : 'var(--text-muted)' }}>{d.status}</span>
-                  {d.note}
-                </p>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 export function ActivityTab({ events }: { events: any[] }) {
   return (

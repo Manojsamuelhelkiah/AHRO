@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   onbCandidateUploads, onbCases, onbDocuments,
@@ -11,6 +12,7 @@ import {
   detectCandidateFile, exchangeToken,
 } from "../lib/onboarding/candidate-portal";
 import { ensureCaseLogistics } from "../lib/onboarding/case-logistics";
+import { actionableCorrectionReason } from "../lib/onboarding/document-validation-policy";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
@@ -49,13 +51,17 @@ router.get("/candidate/portal", async (req, res, next) => {
     const [c] = await db.select({ workerName: onbCases.workerName, role: onbCases.role, department: onbCases.department, joiningDate: onbCases.joiningDate })
       .from(onbCases).where(and(eq(onbCases.organizationId, ctx.organizationId), eq(onbCases.id, ctx.caseId)));
     if (!c) return invalid(res);
-    const [logistics, documents] = await Promise.all([
+    const [logistics, documents, uploads] = await Promise.all([
       ensureCaseLogistics(ctx.organizationId, ctx.caseId, c.joiningDate),
       db.select({ id: onbDocuments.id, label: onbDocuments.label, required: onbDocuments.required, status: onbDocuments.status, note: onbDocuments.note })
         .from(onbDocuments).where(and(eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId))).orderBy(onbDocuments.id),
+        db.select({ documentId: onbCandidateUploads.documentId, validationState: onbCandidateUploads.validationState, validationReasons: onbCandidateUploads.validationReasons })
+          .from(onbCandidateUploads).where(and(eq(onbCandidateUploads.organizationId, ctx.organizationId), eq(onbCandidateUploads.caseId, ctx.caseId))).orderBy(desc(onbCandidateUploads.id)),
     ]);
     res.setHeader("Cache-Control", "private, no-store");
-    res.json({ case: c, logistics, documents });
+     const latest = new Map<number, typeof uploads[number]>();
+     for (const upload of uploads) if (!latest.has(upload.documentId)) latest.set(upload.documentId, upload);
+     res.json({ case: c, logistics, documents: documents.map((doc) => ({ ...doc, validationState: latest.get(doc.id)?.validationState ?? null, correctionGuidance: latest.get(doc.id)?.validationReasons?.find(actionableCorrectionReason)?.message ?? null })) });
   } catch (error) { next(error); }
 });
 
@@ -93,7 +99,8 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
         const [created] = await db.transaction(async (tx) => {
           const inserted = await tx.insert(onbCandidateUploads).values({
             organizationId: ctx.organizationId, caseId: ctx.caseId, documentId,
-            objectPath, originalName, contentType: actualType, sizeBytes: size,
+             objectPath, originalName, contentType: actualType, sizeBytes: size,
+             checksumSha256: createHash("sha256").update(bytes).digest("hex"),
           }).returning();
           await tx.update(onbDocuments).set({ status: "received", note: "Submitted through the candidate portal", updatedAt: new Date() }).where(and(
             eq(onbDocuments.id, documentId), eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId),

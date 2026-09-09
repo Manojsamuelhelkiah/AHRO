@@ -8,6 +8,7 @@ import {
   text,
   timestamp,
   unique,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
@@ -80,8 +81,20 @@ export const onbCandidateUploads = pgTable("onb_candidate_uploads", {
   originalName: text("original_name").notNull(),
   contentType: text("content_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
+  checksumSha256: text("checksum_sha256"),
+  /** queued | processing | passed | manual_review | correction_requested | rejected */
+  validationState: text("validation_state").notNull().default("queued"),
+  validationReasons: jsonb("validation_reasons").$type<Array<{ code: string; message: string; evidence?: string }>>().notNull().default([]),
+  validationStartedAt: timestamp("validation_started_at", { withTimezone: true }),
+  validatedAt: timestamp("validated_at", { withTimezone: true }),
+  validationClaimOwner: text("validation_claim_owner"),
+  validationClaimUntil: timestamp("validation_claim_until", { withTimezone: true }),
+  validationAttempts: integer("validation_attempts").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   check("onb_candidate_upload_size_check", sql`${t.sizeBytes} > 0 and ${t.sizeBytes} <= 10485760`),
+  check("onb_candidate_upload_validation_state_check", sql`${t.validationState} in ('queued','processing','passed','manual_review','correction_requested','rejected')`),
+  check("onb_candidate_upload_validation_attempts_check", sql`${t.validationAttempts} >= 0`),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id] }).onDelete("cascade"),
+  index("onb_candidate_uploads_validation_queue_idx").on(t.validationState, t.validationClaimUntil),
 ]);

@@ -44,8 +44,15 @@ BEGIN
     "id" serial PRIMARY KEY, "organization_id" text NOT NULL REFERENCES "organizations"("id"),
     "case_id" integer NOT NULL, "document_id" integer NOT NULL, "object_path" text NOT NULL UNIQUE,
     "original_name" text NOT NULL, "content_type" text NOT NULL, "size_bytes" integer NOT NULL,
+    "checksum_sha256" text, "validation_state" text NOT NULL DEFAULT 'queued',
+    "validation_reasons" jsonb NOT NULL DEFAULT '[]',
+    "validation_started_at" timestamptz, "validated_at" timestamptz,
+    "validation_claim_owner" text, "validation_claim_until" timestamptz,
+    "validation_attempts" integer NOT NULL DEFAULT 0,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     CHECK ("size_bytes" > 0 AND "size_bytes" <= 10485760),
     FOREIGN KEY ("organization_id","case_id") REFERENCES "onb_cases"("organization_id","id") ON DELETE CASCADE
   );
+  CREATE INDEX IF NOT EXISTS "onb_candidate_uploads_validation_queue_idx"
+    ON "onb_candidate_uploads" ("validation_state", "validation_claim_until");
 END $$;

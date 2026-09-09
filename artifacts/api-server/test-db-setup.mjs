@@ -42,12 +42,18 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Candidate portal is conditional so historical recovery databases without
   // tenant tables can safely replay the forward migration.
   "224a8e52a4e3a251ed7d54009c23f378422a179c4382bec4c07e70a8afec0025",
+  // Candidate portal birth path now includes the validation queue shape so a
+  // recovery that restored it after 0036 no-op still receives every column.
+  "6e06caa77964ff1e851f28787a2b03f556ad4042dc1c9813ef4fa697dbca37ab",
   // Candidate cleanup indexes are conditional because the same supported
   // recovery databases intentionally omit the candidate portal tables.
   "35b0d0ef27e915807387cf9613aea529ce8d1996bf6d206e5228f766285cf935",
   // Reviewed tenant-scoped seed and non-overwriting case-logistics backfill.
   // This forward reconciliation preserves both immutable historical 0030s.
   "e91d02fb842cf47f4a9e6c32957d16025b484fa99bb58afc35d008f39c91c411",
+  // Document-validation repair is conditional because supported recovery
+  // schemas may intentionally omit the candidate portal tables.
+  "3f174d90efe5762cfe258e2522ca08c9e7de42410d1dcf12671c61fa0dd8d1e0",
 ]);
 const compatibleHistoricalMigrationHashes = new Map([
   [
@@ -56,6 +62,17 @@ const compatibleHistoricalMigrationHashes = new Map([
       // Exact predecessor before candidate cleanup indexes were added. The
       // forward 0034 migration repairs databases that recorded this version.
       "8f113f159680a086acc79b46cac772f7543f1cd72125f14921cc97ec113dc9af",
+      // Exact predecessor before validation queue columns were added to the
+      // conditional candidate-portal birth path.
+      "224a8e52a4e3a251ed7d54009c23f378422a179c4382bec4c07e70a8afec0025",
+    ]),
+  ],
+  [
+    "0036_document_validation_monitoring",
+    new Set([
+      // Exact additive predecessor applied during development before the
+      // conditional recovery guard was added.
+      "9101162883625d9693b214299c5b4cf5ae0a0e41936f397c9ae3a7584205e246",
     ]),
   ],
 ]);

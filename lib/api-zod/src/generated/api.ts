@@ -7150,9 +7150,83 @@ export const ListOnboardingCaseDocumentsResponseItem = zod.object({
   "status": zod.enum(['pending', 'received', 'verified']),
   "required": zod.boolean(),
   "note": zod.string().nullable(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "reminderCount": zod.number(),
+  "lastReminderAt": zod.string().nullable(),
+  "reminderNextAt": zod.string().nullable()
 }).describe('One item of a case\'s documentation pack (identity\/statutory\/contract\/policy)')
 export const ListOnboardingCaseDocumentsResponse = zod.array(ListOnboardingCaseDocumentsResponseItem)
+
+
+/**
+ * @summary List safe document validation evidence for a tenant-owned case
+ */
+export const ListOnboardingCaseEvidenceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListOnboardingCaseEvidenceResponseItem = zod.object({
+  "id": zod.number(),
+  "documentId": zod.number(),
+  "originalName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.number(),
+  "fingerprint": zod.string().nullable(),
+  "label": zod.string(),
+  "category": zod.string(),
+  "required": zod.boolean(),
+  "reminderCount": zod.number(),
+  "reminderNextAt": zod.coerce.date().nullable(),
+  "validationState": zod.enum(['queued', 'processing', 'passed', 'manual_review', 'correction_requested', 'rejected']),
+  "validationReasons": zod.array(zod.object({
+  "code": zod.string(),
+  "message": zod.string(),
+  "evidence": zod.string().optional()
+})),
+  "validationStartedAt": zod.coerce.date().nullish(),
+  "validatedAt": zod.coerce.date().nullish()
+})
+export const ListOnboardingCaseEvidenceResponse = zod.array(ListOnboardingCaseEvidenceResponseItem)
+
+
+/**
+ * @summary Record an HR manual evidence decision
+ */
+export const DecideOnboardingEvidenceParams = zod.object({
+  "id": zod.coerce.number(),
+  "evidenceId": zod.coerce.number()
+})
+
+export const decideOnboardingEvidenceBodyReasonMin = 3;
+
+
+
+export const DecideOnboardingEvidenceBody = zod.object({
+  "decision": zod.enum(['approve', 'reject', 'request_correction']),
+  "reason": zod.string().min(decideOnboardingEvidenceBodyReasonMin)
+})
+
+export const DecideOnboardingEvidenceResponse = zod.unknown()
+
+
+/**
+ * @summary List normalized BGV monitoring status
+ */
+export const GetOnboardingCaseBgvParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetOnboardingCaseBgvResponseItem = zod.object({
+  "id": zod.number(),
+  "system": zod.string(),
+  "externalRef": zod.string(),
+  "status": zod.enum(['pending', 'incomplete', 'rejected', 'overdue', 'clear', 'manual_review', 'done']),
+  "requestedAt": zod.coerce.date(),
+  "dueAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable(),
+  "note": zod.string().nullable()
+})
+export const GetOnboardingCaseBgvResponse = zod.array(GetOnboardingCaseBgvResponseItem)
 
 
 /**
