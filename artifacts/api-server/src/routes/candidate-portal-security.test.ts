@@ -10,6 +10,7 @@ import {
   onbCandidateLinks,
   onbCandidateExchangeFailures,
   onbCandidateSessions,
+  onbCaseLogistics,
   onbCases,
   onbConnectors,
   onbDocuments,
@@ -178,6 +179,28 @@ test("expired and revoked links cannot be exchanged", async () => {
     });
     assert.equal(response.status, 401);
   }
+});
+
+test("admin portal access snapshots defaults for a case with missing logistics", async () => {
+  await db.delete(onbCaseLogistics).where(and(
+    eq(onbCaseLogistics.organizationId, orgA),
+    eq(onbCaseLogistics.caseId, caseA2),
+  ));
+
+  const response = await fetch(`${baseUrl}/onboarding/cases/${caseA2}/portal`, {
+    headers: { "x-organization-id": orgA },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json() as { logistics: Record<string, string | null> };
+  assert.equal(body.logistics.orientationDate, "2030-01-01");
+  assert.equal(body.logistics.orientationTime, "09:30");
+  assert.equal(body.logistics.format, "hybrid");
+
+  const [stored] = await db.select().from(onbCaseLogistics).where(and(
+    eq(onbCaseLogistics.organizationId, orgA),
+    eq(onbCaseLogistics.caseId, caseA2),
+  ));
+  assert.equal(stored?.reportingContact, "Alex Example — Demo People Team");
 });
 
 test("mixed invalid token formats share one privacy-safe client throttle", async () => {

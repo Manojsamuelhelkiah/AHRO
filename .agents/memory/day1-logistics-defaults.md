@@ -7,4 +7,4 @@ Every onboarding case must have Day-1 logistics. Backfill existing cases that ha
 
 **Why:** the user confirmed that synthetic out-of-box logistics should be available across all existing and future cases as an editable default. Snapshotting preserves local HR edits and prevents a later tenant-default change from silently changing instructions already prepared for a hire.
 
-**How to apply:** keep logistics separate from checklist snapshots. Use a clearly synthetic default for new/demo tenants, resolve a blank default orientation date to the case joining date, backfill only missing rows, and continue to allow HR to edit each case independently.
+**How to apply:** keep logistics separate from checklist snapshots. Use a clearly synthetic default for new/demo tenants, resolve a blank default orientation date to the case joining date, backfill only missing rows, and continue to allow HR to edit each case independently. Do not assume migration data inserts reached production through Publish: initialize a missing case snapshot idempotently at the application boundary as well.

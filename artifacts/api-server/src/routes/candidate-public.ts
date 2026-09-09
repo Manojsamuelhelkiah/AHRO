@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
-  onbCandidateUploads, onbCaseLogistics, onbCases, onbDocuments,
+  onbCandidateUploads, onbCases, onbDocuments,
 } from "@workspace/db/schema";
 import { getPrivateFile } from "../lib/objectStorage";
 import {
@@ -10,6 +10,7 @@ import {
   candidateExchangeClientKey, candidateExchangeLimiter, candidateObjectPath,
   detectCandidateFile, exchangeToken,
 } from "../lib/onboarding/candidate-portal";
+import { ensureCaseLogistics } from "../lib/onboarding/case-logistics";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
@@ -45,16 +46,16 @@ router.get("/candidate/portal", async (req, res, next) => {
   try {
     const ctx = await candidateContext(req);
     if (!ctx) return invalid(res);
-    const [[c], [logistics], documents] = await Promise.all([
-      db.select({ workerName: onbCases.workerName, role: onbCases.role, department: onbCases.department, joiningDate: onbCases.joiningDate })
-        .from(onbCases).where(and(eq(onbCases.organizationId, ctx.organizationId), eq(onbCases.id, ctx.caseId))),
-      db.select().from(onbCaseLogistics).where(and(eq(onbCaseLogistics.organizationId, ctx.organizationId), eq(onbCaseLogistics.caseId, ctx.caseId))),
+    const [c] = await db.select({ workerName: onbCases.workerName, role: onbCases.role, department: onbCases.department, joiningDate: onbCases.joiningDate })
+      .from(onbCases).where(and(eq(onbCases.organizationId, ctx.organizationId), eq(onbCases.id, ctx.caseId)));
+    if (!c) return invalid(res);
+    const [logistics, documents] = await Promise.all([
+      ensureCaseLogistics(ctx.organizationId, ctx.caseId, c.joiningDate),
       db.select({ id: onbDocuments.id, label: onbDocuments.label, required: onbDocuments.required, status: onbDocuments.status, note: onbDocuments.note })
         .from(onbDocuments).where(and(eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId))).orderBy(onbDocuments.id),
     ]);
-    if (!c) return invalid(res);
     res.setHeader("Cache-Control", "private, no-store");
-    res.json({ case: c, logistics: logistics ?? null, documents });
+    res.json({ case: c, logistics, documents });
   } catch (error) { next(error); }
 });
 

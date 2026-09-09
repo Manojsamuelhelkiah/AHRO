@@ -5,6 +5,7 @@ import { onbCandidateLinks, onbCaseLogistics, onbCases } from "@workspace/db/sch
 import { getOrganizationId } from "../lib/organization-scope";
 import { newSecret, hashSecret, portalEmailRequested, validateLogistics } from "../lib/onboarding/candidate-portal";
 import { sendOutbound } from "../lib/onboarding/channels";
+import { ensureCaseLogistics } from "../lib/onboarding/case-logistics";
 
 const router: IRouter = Router();
 
@@ -25,14 +26,15 @@ function logisticsText(logistics: typeof onbCaseLogistics.$inferSelect | undefin
 router.get("/onboarding/cases/:id/portal", async (req, res, next) => {
   try {
     const caseId = Number(req.params.id); const organizationId = getOrganizationId(req);
-    const [[c], [logistics], [link]] = await Promise.all([
-      db.select({ id: onbCases.id }).from(onbCases).where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, organizationId))),
-      db.select().from(onbCaseLogistics).where(and(eq(onbCaseLogistics.caseId, caseId), eq(onbCaseLogistics.organizationId, organizationId))),
+    const [c] = await db.select({ id: onbCases.id, joiningDate: onbCases.joiningDate })
+      .from(onbCases).where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, organizationId)));
+    if (!c) { res.status(404).json({ message: "Case not found" }); return; }
+    const [logistics, [link]] = await Promise.all([
+      ensureCaseLogistics(organizationId, caseId, c.joiningDate),
       db.select({ id: onbCandidateLinks.id, expiresAt: onbCandidateLinks.expiresAt, revokedAt: onbCandidateLinks.revokedAt, createdAt: onbCandidateLinks.createdAt })
         .from(onbCandidateLinks).where(and(eq(onbCandidateLinks.caseId, caseId), eq(onbCandidateLinks.organizationId, organizationId), isNull(onbCandidateLinks.revokedAt)))
         .orderBy(desc(onbCandidateLinks.createdAt)).limit(1),
     ]);
-    if (!c) { res.status(404).json({ message: "Case not found" }); return; }
     res.json({ logistics: logistics ?? null, activeLink: link ?? null });
   } catch (error) { next(error); return; }
 });
@@ -79,7 +81,7 @@ router.post("/onboarding/cases/:id/portal-links", async (req, res, next) => {
         candidateEmailAuthorizedBy: req.authUserId!,
         updatedAt: new Date(),
       }).where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, organizationId)));
-      const [logistics] = await db.select().from(onbCaseLogistics).where(and(eq(onbCaseLogistics.caseId, caseId), eq(onbCaseLogistics.organizationId, organizationId)));
+      const logistics = await ensureCaseLogistics(organizationId, caseId, c.joiningDate);
       const emailBody = `Hello ${c.workerName},\n\nUse your private onboarding portal to review Day-1 details and submit requested documents:\n${portalUrl}\n\n${logisticsText(logistics)}\n\nThis link expires ${expiresAt.toISOString()} and should not be forwarded.\n\nThe Onboarding Team`;
       delivery = await sendOutbound({
         caseId, channel: "email", toAddress: c.workerEmail,
