@@ -100,7 +100,10 @@ import {
 import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
 import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference, shouldAuthorizeCandidateEmail } from "../lib/onboarding/channel-routing";
-import { cleanupCandidateAccess } from "../lib/onboarding/candidate-portal";
+import {
+  getCandidateAccessCleanupHealth,
+  runCandidateAccessCleanup,
+} from "../lib/onboarding/candidate-access-cleanup";
 import { resolveReviewerName } from "../middlewares/require-auth";
 import { clerkClient } from "@clerk/express";
 import {
@@ -1292,7 +1295,7 @@ const watcherTick = async (req: Request, res: Response) => {
     runInboundEmailTick(),
     runApproverInboxTick(),
     runScenarioFileMaintenance(),
-    cleanupCandidateAccess(),
+    runCandidateAccessCleanup(),
   ]);
   res.json({
     ran: true,
@@ -1342,10 +1345,16 @@ async function settingsPayload(organizationId: string) {
   const hrAlertEmail = stored && stored.trim().length > 0 ? stored.trim() : null;
   const envFallback = resolveHrAlertAddress(null);
   const effective = hrAlertEmail ?? envFallback;
-  const [checklist, day1LogisticsDefault, candidateLinkRetentionDays] = await Promise.all([
+  const [
+    checklist,
+    day1LogisticsDefault,
+    candidateLinkRetentionDays,
+    candidateAccessCleanup,
+  ] = await Promise.all([
     getEffectiveChecklist(organizationId),
     getDay1LogisticsDefault(organizationId),
     getCandidateLinkRetentionDays(organizationId),
+    getCandidateAccessCleanupHealth(),
   ]);
   return {
     hrAlertEmail,
@@ -1358,6 +1367,7 @@ async function settingsPayload(organizationId: string) {
     day1Checklist: checklist.items,
     day1LogisticsDefault,
     candidateLinkRetentionDays,
+    candidateAccessCleanup,
   };
 }
 

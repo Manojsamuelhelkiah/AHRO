@@ -2981,6 +2981,29 @@ export interface OnbDay1Logistics {
   arrivalInstructions: string | null;
 }
 
+export type CandidateAccessCleanupHealthState = typeof CandidateAccessCleanupHealthState[keyof typeof CandidateAccessCleanupHealthState];
+
+
+export const CandidateAccessCleanupHealthState = {
+  healthy: 'healthy',
+  delayed: 'delayed',
+  failed: 'failed',
+} as const;
+
+export interface CandidateAccessCleanupHealth {
+  state: CandidateAccessCleanupHealthState;
+  healthy: boolean;
+  /** @nullable */
+  lastAttemptAt: string | null;
+  /** @nullable */
+  lastSuccessAt: string | null;
+  expiredSessions: number;
+  retainedLinksDeleted: number;
+  consecutiveFailures: number;
+  /** @nullable */
+  lastErrorAt: string | null;
+}
+
 export interface OnbSettings {
   /** Address stored via the settings screen, or null when not set */
   hrAlertEmail: string | null;
@@ -3007,6 +3030,7 @@ export interface OnbSettings {
   day1LogisticsDefault: OnbDay1Logistics;
   /** Number of days expired or revoked candidate-link metadata is retained */
   candidateLinkRetentionDays: OnbSettingsCandidateLinkRetentionDays;
+  candidateAccessCleanup: CandidateAccessCleanupHealth;
 }
 
 /**
@@ -3106,7 +3130,6 @@ export type ListCustomIntentsParams = {
  */
 status?: string;
 };
-
 export type ExportScenarioWorkbookLinkParams = {
 /**
  * base64url-encoded JSON of {"inputs":ScenarioInputs}.

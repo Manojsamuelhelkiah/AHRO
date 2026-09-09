@@ -6,6 +6,7 @@ import { handleInbound } from "./engine";
 import { sendEmail } from "./channels";
 import { getSetting, HR_ALERT_EMAIL_KEY } from "./settings";
 import { makeSharedTick } from "./shared-tick";
+import { logger } from "../logger";
 
 /**
  * Gmail inbox polling — closes the loop on real email replies.
@@ -207,30 +208,38 @@ export function composeMonitorAlertEmail(
   };
 }
 
+export async function sendAdministrativeAlertEmail(
+  organizationId: string,
+  subject: string,
+  body: string,
+): Promise<boolean> {
+  const to = await hrAlertAddress(organizationId);
+  if (!to) return false;
+  try {
+    const result = await sendEmail(to, subject, body);
+    if (result.status !== "sent") {
+      logger.error(
+        { failureReason: result.failureReason ?? "unknown" },
+        "[onboarding administrative-alert] email failed",
+      );
+      return false;
+    } else {
+      logger.info("[onboarding administrative-alert] email sent");
+      return true;
+    }
+  } catch (err) {
+    logger.error({ error: String(err) }, "[onboarding administrative-alert] email failed");
+    return false;
+  }
+}
+
 async function sendMonitorAlertEmail(
   organizationId: string,
   kind: "down" | "recovered",
   detail: string,
 ): Promise<void> {
-  const to = await hrAlertAddress(organizationId);
-  if (!to) return;
-  try {
-    const { subject, body } = composeMonitorAlertEmail(kind, detail);
-    const result = await sendEmail(to, subject, body);
-    if (result.status !== "sent") {
-      console.error(
-        `[onboarding inbound-email] HR alert email (${kind}) failed: ${result.failureReason ?? "unknown"}`,
-      );
-    } else {
-      console.log(`[onboarding inbound-email] HR alert email (${kind}) sent`);
-    }
-  } catch (err) {
-    // Never let alerting break the poll loop itself.
-    console.error(
-      `[onboarding inbound-email] HR alert email (${kind}) failed:`,
-      String(err),
-    );
-  }
+  const { subject, body } = composeMonitorAlertEmail(kind, detail);
+  await sendAdministrativeAlertEmail(organizationId, subject, body);
 }
 
 /**

@@ -2,7 +2,7 @@
 
 - [Cost-explorer model conventions](cost-model-conventions.md) — assumptions register is the single source of truth; every input must move the result; reconcile rows/buckets/totals in tests.
 - [Scenario form/API mapping](scenario-form-mapping.md) — use the canonical mapper pair in `scenario-form.ts`; never spread raw API inputs into form state or stale overrides survive resets.
-- [Orval codegen max-constraint TDZ](orval-codegen-max-tdz.md) — `maximum` on additionalProperties in the OpenAPI spec breaks the generated zod module at import; validate ranges app-side.
+- [Orval numeric-constraint TDZ](orval-codegen-max-tdz.md) — referenced numeric constraints can break generated Zod initialization; validate generated output and prefer app-side ranges.
 - [Reasoning model token budget](reasoning-model-token-budget.md) — gpt-5 models return empty content when max_completion_tokens is too small; add ~+2500 buffer.
 - [DB schema reconciliation](db-schema-drift.md) — post-merge DB updates must be non-interactive, migration-ledger-backed, and verified against a schema rebuilt from migrations.
 - [Monitor alert dedup must be durable](monitor-alert-dedup.md) — one-alert-per-outage state belongs in the DB, not process memory; failed sub-requests must fail the poll.

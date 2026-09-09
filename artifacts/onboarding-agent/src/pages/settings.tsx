@@ -16,11 +16,13 @@ import {
   type OnbChecklistTemplateItem,
   type OnbChecklistEnforcementStage,
   type OnbDay1Logistics,
+  type OnbSettings,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
 import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
+import { formatDistanceToNowStrict } from 'date-fns';
 
 import { TargetedChecklistProfiles } from './settings-checklist-profiles';
 
@@ -51,6 +53,14 @@ function volunteerProblem(v: DemoVolunteer): string | null {
 
 const inputCls = 'block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] py-[6px] border border-input outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] bg-background shadow-sm';
 
+function relativeTime(value: string | null | undefined): string {
+  if (!value) return 'No successful run recorded';
+  try {
+    return formatDistanceToNowStrict(new Date(value), { addSuffix: true });
+  } catch {
+    return 'No successful run recorded';
+  }
+}
 function PersonaBrief({ persona, volunteerName }: { persona: DemoPersona | undefined; volunteerName: string }) {
   const [copied, setCopied] = useState(false);
   if (!persona) return null;
@@ -677,7 +687,13 @@ function Day1LogisticsSettingsCard() {
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
-  const { data: settings, isLoading } = useGetOnboardingSettings();
+  const { data: settings, isLoading } = useGetOnboardingSettings({
+    query: {
+      queryKey: getGetOnboardingSettingsQueryKey(),
+      refetchInterval: 60_000,
+      refetchIntervalInBackground: true,
+    },
+  });
   const update = useUpdateOnboardingSettings();
 
   const [draft, setDraft] = useState('');
@@ -780,6 +796,8 @@ export function SettingsPage() {
         title="Settings" 
         subtitle="Application-level configuration for the control tower." 
       />
+
+      <CandidateAccessCleanupCard settings={settings} isLoading={isLoading} />
 
       <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }} className="mt-2">
         <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
@@ -1078,5 +1096,66 @@ function ScenarioTestingCard() {
         )}
       </div>
     </div>
+  );
+}
+
+function CandidateAccessCleanupCard({ settings, isLoading }: {
+  settings: OnbSettings | undefined;
+  isLoading: boolean;
+}) {
+  const cleanup = settings?.candidateAccessCleanup;
+  const state = cleanup?.state ?? 'delayed';
+  const tone = state === 'healthy'
+    ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
+    : state === 'failed'
+      ? 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]'
+      : 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]';
+  const lastSuccess = relativeTime(cleanup?.lastSuccessAt);
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="flex items-start justify-between gap-4 p-[var(--space-lg)] border-b border-[var(--border)] bg-[var(--surface-alt)]">
+          <div className="flex items-center gap-3">
+            <IconTile icon={ShieldCheck} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
+            <div>
+              <h3 className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-primary)]">Candidate-access cleanup</h3>
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-0.5">Removes expired security records in the background without exposing candidate details.</p>
+            </div>
+          </div>
+          {!isLoading && <Badge className={cn('shadow-none uppercase', tone)}>{state}</Badge>}
+        </div>
+        <div className="p-[var(--space-lg)]">
+          {isLoading ? <LoadingBlock>Loading cleanup status...</LoadingBlock> : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="border border-[var(--border)] rounded-[var(--radius-md)] p-3 bg-[var(--surface-alt)]">
+                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last success</p>
+                <p className="text-[var(--text-sm)] font-medium text-[var(--text-primary)] mt-1">{lastSuccess}</p>
+              </div>
+              <div className="border border-[var(--border)] rounded-[var(--radius-md)] p-3 bg-[var(--surface-alt)]">
+                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Expired sessions removed</p>
+                <p className="text-[var(--text-lg)] font-semibold text-[var(--text-primary)] mt-1">{cleanup?.expiredSessions ?? 0}</p>
+                <p className="text-[var(--text-xs)] text-[var(--text-muted)]">Most recent successful run</p>
+              </div>
+              <div className="border border-[var(--border)] rounded-[var(--radius-md)] p-3 bg-[var(--surface-alt)]">
+                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Retained links removed</p>
+                <p className="text-[var(--text-lg)] font-semibold text-[var(--text-primary)] mt-1">{cleanup?.retainedLinksDeleted ?? 0}</p>
+                <p className="text-[var(--text-xs)] text-[var(--text-muted)]">Most recent successful run</p>
+              </div>
+            </div>
+          )}
+          {!isLoading && state === 'failed' && (
+            <p className="mt-3 p-3 rounded-[var(--radius-md)] bg-[var(--status-red-bg)] text-[var(--status-red-fg)] text-[var(--text-sm)]">
+              Cleanup failed {cleanup?.consecutiveFailures ?? 1} consecutive time{cleanup?.consecutiveFailures === 1 ? '' : 's'}. Administrative alerts are sent after repeated failures.
+            </p>
+          )}
+          {!isLoading && state === 'delayed' && (
+            <p className="mt-3 p-3 rounded-[var(--radius-md)] bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] text-[var(--text-sm)]">
+              Cleanup has not completed recently. Check the production heartbeat if this status persists.
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

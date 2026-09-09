@@ -7805,7 +7805,17 @@ export const GetOnboardingSettingsResponse = zod.object({
   "reportingContact": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax).nullable(),
   "arrivalInstructions": zod.string().max(getOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax).nullable()
 }),
-  "candidateLinkRetentionDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).describe('Number of days expired or revoked candidate-link metadata is retained')
+  "candidateLinkRetentionDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).describe('Number of days expired or revoked candidate-link metadata is retained'),
+  "candidateAccessCleanup": zod.object({
+  "state": zod.enum(['healthy', 'delayed', 'failed']),
+  "healthy": zod.boolean(),
+  "lastAttemptAt": zod.coerce.date().nullable(),
+  "lastSuccessAt": zod.coerce.date().nullable(),
+  "expiredSessions": zod.number(),
+  "retainedLinksDeleted": zod.number(),
+  "consecutiveFailures": zod.number(),
+  "lastErrorAt": zod.coerce.date().nullable()
+})
 })
 
 
@@ -7910,7 +7920,17 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "reportingContact": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax).nullable(),
   "arrivalInstructions": zod.string().max(updateOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax).nullable()
 }),
-  "candidateLinkRetentionDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).describe('Number of days expired or revoked candidate-link metadata is retained')
+  "candidateLinkRetentionDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).describe('Number of days expired or revoked candidate-link metadata is retained'),
+  "candidateAccessCleanup": zod.object({
+  "state": zod.enum(['healthy', 'delayed', 'failed']),
+  "healthy": zod.boolean(),
+  "lastAttemptAt": zod.coerce.date().nullable(),
+  "lastSuccessAt": zod.coerce.date().nullable(),
+  "expiredSessions": zod.number(),
+  "retainedLinksDeleted": zod.number(),
+  "consecutiveFailures": zod.number(),
+  "lastErrorAt": zod.coerce.date().nullable()
+})
 })
 
 

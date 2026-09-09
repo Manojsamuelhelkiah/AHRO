@@ -5614,7 +5614,33 @@ components:
           type: integer
           enum: [30, 90, 180, 365]
           description: Number of days expired or revoked candidate-link metadata is retained
-      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail, checklistVersion, day1Checklist, day1LogisticsDefault, candidateLinkRetentionDays]
+        candidateAccessCleanup:
+          $ref: "#/components/schemas/CandidateAccessCleanupHealth"
+      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail, checklistVersion, day1Checklist, day1LogisticsDefault, candidateLinkRetentionDays, candidateAccessCleanup]
+    CandidateAccessCleanupHealth:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [healthy, delayed, failed]
+        healthy:
+          type: boolean
+        lastAttemptAt:
+          type: [string, "null"]
+          format: date-time
+        lastSuccessAt:
+          type: [string, "null"]
+          format: date-time
+        expiredSessions:
+          type: integer
+        retainedLinksDeleted:
+          type: integer
+        consecutiveFailures:
+          type: integer
+        lastErrorAt:
+          type: [string, "null"]
+          format: date-time
+      required: [state, healthy, lastAttemptAt, lastSuccessAt, expiredSessions, retainedLinksDeleted, consecutiveFailures, lastErrorAt]
     UpdateOnbSettings:
       type: object
       properties:

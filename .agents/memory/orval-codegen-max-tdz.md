@@ -1,12 +1,12 @@
 ---
-name: Orval codegen max-constraint TDZ bug
-description: Spec fields with `maximum` on additionalProperties break the generated zod module at load time
+name: Orval codegen numeric-constraint TDZ bug
+description: Referenced numeric constraints can break the generated Zod module at load time
 ---
 
-# Orval codegen: `maximum` constraints cause a TDZ crash
+# Orval codegen: numeric constraints can cause a TDZ crash
 
-Rule: in `lib/api-spec/openapi.yaml`, avoid `maximum` (with `minimum`) on `additionalProperties` of record fields; enforce ranges in the app-layer form schema instead.
+Rule: treat generated Zod ordering as unsafe whenever OpenAPI numeric constraints are projected into reused or referenced schemas. Prefer app-layer validation when the constraint is not required for client input.
 
-**Why:** Orval emits `*MinN` constants inline before the schema, but defers `*MaxN` constants to end-of-file. Top-level schema consts reference them before declaration → TS2448/TS2454 and a runtime temporal-dead-zone ReferenceError when importing `@workspace/api-zod`, which can prevent the API server from starting.
+**Why:** Orval can emit `*Min` or `*Max` constants after eager top-level schemas that reference them. This causes TS2448/TS2454 and a runtime temporal-dead-zone ReferenceError when importing the generated Zod package, which can prevent the API server from starting.
 
-**How to apply:** When adding validated numeric ranges to the spec, either omit `maximum` and validate in `scenario-form.ts`-style app schemas, or verify after codegen that `lib/api-zod/src/generated/api.ts` typechecks and imports cleanly (grep for `Max` constants referenced before declaration).
+**How to apply:** After any constrained numeric schema change, run dependency-aware codegen/typechecking and smoke-import the generated Zod entrypoint. If ordering is unsafe, omit output-only constraints or enforce client-input ranges in an app-layer schema instead.
