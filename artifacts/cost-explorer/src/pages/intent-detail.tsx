@@ -52,9 +52,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AnimatePresence } from "framer-motion";
-import { FlowDiagram, FlowStepDetail, type FlowDiagramView } from "@/components/flow-diagram";
+import { FlowDiagram, FlowStepDetail } from "@/components/flow-diagram";
 import { CustomIntentRoutingEditor } from "@/components/custom-intent-routing-editor";
 import { IntentCorpusStatus } from "@/components/intent-corpus-status";
+import { useProcessViewPreference } from "@/hooks/use-process-view";
 const FLOW_CLASSES = [
   "fc1-deterministic",
   "fc2-policy",
@@ -77,7 +78,7 @@ export default function IntentDetail() {
   const intentKey = params?.key;
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
   const [showDiagram, setShowDiagram] = useState(true);
-  const [processView, setProcessView] = useState<FlowDiagramView>("bpmn");
+  const [processView, setProcessView] = useProcessViewPreference();
 
   const {
     data: corpus,

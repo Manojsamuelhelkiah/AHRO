@@ -57,7 +57,7 @@ import { DemarcationSplitStrip, BuildBreakdownTable } from "@/components/build-c
 import { IntentCorpusAvailability } from "@/components/intent-corpus-status";
 import { isIntentCorpusUnavailable } from "@/lib/intent-corpus-safety";
 import { fetchScenarioWorkbook } from "@/lib/workbook-export";
-
+import { useProcessViewPreference } from "@/hooks/use-process-view";
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 export default function Scenario() {
@@ -74,6 +74,7 @@ export default function Scenario() {
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [intentOverridesOpen, setIntentOverridesOpen] = useState(false);
   const [activeOverlayId, setActiveOverlayId] = useState<number | null>(parsedOverlayId);
+  const [processView, setProcessView] = useProcessViewPreference();
 
   // Local aliases for module-level helpers (defined after component).
   const formatCurrency = formatCurrencyLocal;
@@ -1115,6 +1116,8 @@ export default function Scenario() {
                               <FlowDiagram
                                 steps={fcSteps}
                                 fcKey={fc.key}
+                                 viewMode={processView}
+                                 onViewModeChange={setProcessView}
                                 annotations={{
                                   adoptionFraction: adoptFrac,
                                   containmentFraction: containFrac,

@@ -28,3 +28,4 @@
 - [Secure App Storage uploads](secure-app-storage-uploads.md) — the signer cannot bind size/type; strict limits need authenticated bounded writes plus a durable, fenced lifecycle.
 - [Application tenant boundaries](application-tenant-boundaries.md) — Clerk authenticates users; app-owned organizations isolate every client record with explicit, verified scope.
 - [Shared mailbox tenant attribution](shared-mailbox-tenant-attribution.md) — sender identity is insufficient; require exact case-bound references and quarantine ambiguous matches.
+- [Wouter query navigation](wouter-query-navigation.md) — pathname and search are separate reactive values; preserve both explicitly when replacing URL parameters.
