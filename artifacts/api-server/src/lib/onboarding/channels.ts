@@ -26,6 +26,7 @@ export type BlockedPublishBackupReadiness = {
   destination: string | null;
   sender: string | null;
   missing: string[];
+  invalid: string[];
   note: string;
 };
 
@@ -37,6 +38,14 @@ function maskEmail(email: string): string {
 
 export function maskPhone(phone: string): string {
   return phone.length > 4 ? `${phone.slice(0, 4)}•••${phone.slice(-2)}` : "•••";
+}
+
+function whatsappPhone(value: string): string {
+  return value.replace(/^whatsapp:/, "").trim();
+}
+
+function isE164Phone(value: string): boolean {
+  return /^\+[1-9]\d{7,14}$/.test(value);
 }
 
 export function emailChannelInfo(): ChannelInfo {
@@ -71,29 +80,36 @@ export function whatsappChannelInfo(): ChannelInfo {
 }
 
 export function blockedPublishBackupReadiness(): BlockedPublishBackupReadiness {
-  const destination = (
+  const destination = whatsappPhone(
     process.env.ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP ?? ""
-  ).trim();
+  );
   const accountSid = (process.env.TWILIO_ACCOUNT_SID ?? "").trim();
   const authToken = (process.env.TWILIO_AUTH_TOKEN ?? "").trim();
-  const sender = (process.env.TWILIO_WHATSAPP_FROM ?? "")
-    .replace(/^whatsapp:/, "")
-    .trim();
+  const sender = whatsappPhone(process.env.TWILIO_WHATSAPP_FROM ?? "");
   const missing: string[] = [];
+  const invalid: string[] = [];
 
   if (!destination) missing.push("Backup WhatsApp destination");
+  else if (!isE164Phone(destination)) invalid.push("Backup WhatsApp destination");
   if (!accountSid || !authToken) missing.push("Twilio account configuration");
   if (!sender) missing.push("Twilio WhatsApp sender");
+  else if (!isE164Phone(sender)) invalid.push("Twilio WhatsApp sender");
 
   return {
-    ready: missing.length === 0,
-    destination: destination ? maskPhone(destination.replace(/^whatsapp:/, "")) : null,
+    ready: missing.length === 0 && invalid.length === 0,
+    destination: destination ? maskPhone(destination) : null,
     sender: sender ? maskPhone(sender) : null,
     missing,
+    invalid,
     note:
-      missing.length === 0
+      missing.length === 0 && invalid.length === 0
         ? "Backup WhatsApp alerts are ready if Gmail rejects a blocked-release alert."
-        : `Configuration needed: ${missing.join(", ")}.`,
+        : [
+            missing.length > 0 ? `Configuration needed: ${missing.join(", ")}.` : null,
+            invalid.length > 0
+              ? `Fix ${invalid.join(" and ")} to use E.164 format (for example, +15551234567).`
+              : null,
+          ].filter(Boolean).join(" "),
   };
 }
 

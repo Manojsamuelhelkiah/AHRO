@@ -5010,9 +5010,14 @@ components:
           items:
             type: string
           description: Non-secret setting categories that still need configuration
+        invalid:
+          type: array
+          items:
+            type: string
+          description: Non-secret phone setting categories whose values are not valid E.164 numbers
         note:
           type: string
-      required: [ready, destination, sender, missing, note]
+      required: [ready, destination, sender, missing, invalid, note]
     OnbInboundEmailMonitor:
       type: object
       description: Health of the background Gmail inbox poller that ingests real email replies

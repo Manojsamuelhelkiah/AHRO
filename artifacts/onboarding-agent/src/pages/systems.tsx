@@ -190,6 +190,7 @@ export function BlockedPublishBackupCard({ readiness }: { readiness: {
   destination: string | null;
   sender: string | null;
   missing: string[];
+  invalid: string[];
   note: string;
 } }) {
   return (

@@ -7026,6 +7026,7 @@ export const GetOnboardingChannelsResponse = zod.object({
   "destination": zod.string().nullable().describe('Masked backup WhatsApp destination'),
   "sender": zod.string().nullable().describe('Masked Twilio WhatsApp sender'),
   "missing": zod.array(zod.string()).describe('Non-secret setting categories that still need configuration'),
+  "invalid": zod.array(zod.string()).describe('Non-secret phone setting categories whose values are not valid E.164 numbers'),
   "note": zod.string()
 }).describe('Side-effect-free readiness of the WhatsApp fallback for blocked-release alerts'),
   "inboundEmail": zod.object({

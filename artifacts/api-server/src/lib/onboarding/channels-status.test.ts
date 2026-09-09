@@ -92,6 +92,7 @@ test("blocked-publish backup readiness masks phone values and never exposes cred
       destination: "+155•••67",
       sender: "+141•••86",
       missing: [],
+      invalid: [],
       note: "Backup WhatsApp alerts are ready if Gmail rejects a blocked-release alert.",
     });
     const serialized = JSON.stringify(status);
@@ -111,6 +112,40 @@ test("blocked-publish backup readiness names only missing setting categories", (
     ]);
     assert.equal(status.destination, "+155•••67");
     assert.equal(status.sender, null);
+    assert.deepEqual(status.invalid, []);
     assert.doesNotMatch(status.note, /SID|token|credential/i);
+  });
+});
+
+test("blocked-publish backup readiness rejects malformed phone formats without sending", () => {
+  withBackupEnvironment({
+    ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP: "whatsapp:555-123-4567",
+    TWILIO_ACCOUNT_SID: "AC-private-account",
+    TWILIO_AUTH_TOKEN: "private-auth-token",
+    TWILIO_WHATSAPP_FROM: "whatsapp:+01234567890",
+  }, () => {
+    let fetchCalls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      throw new Error("readiness must not contact Twilio");
+    }) as typeof fetch;
+    try {
+      const status = blockedPublishBackupReadiness();
+      assert.equal(status.ready, false);
+      assert.deepEqual(status.missing, []);
+      assert.deepEqual(status.invalid, [
+        "Backup WhatsApp destination",
+        "Twilio WhatsApp sender",
+      ]);
+      assert.equal(status.destination, "555-•••67");
+      assert.equal(status.sender, "+012•••90");
+      assert.match(status.note, /E\.164 format/);
+      assert.equal(fetchCalls, 0);
+      const serialized = JSON.stringify(status);
+      assert.doesNotMatch(serialized, /555-123-4567|01234567890|AC-private-account|private-auth-token/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

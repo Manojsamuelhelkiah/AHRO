@@ -2578,6 +2578,8 @@ export interface OnbBlockedPublishBackupReadiness {
   sender: string | null;
   /** Non-secret setting categories that still need configuration */
   missing: string[];
+  /** Non-secret phone setting categories whose values are not valid E.164 numbers */
+  invalid: string[];
   note: string;
 }
 
