@@ -192,7 +192,7 @@ const [pageUrl, healthUrl] = await Promise.all([
     start: {
       name: "API server",
       command: ["--filter", "@workspace/api-server", "run", "dev"],
-      env: { PORT: localApiPort },
+      env: { PORT: localApiPort, API_VALIDATION_MODE: "true" },
     },
   }),
 ]);

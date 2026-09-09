@@ -9,6 +9,7 @@ import { recoverStaleVoiceSessions } from "./lib/onboarding/voice";
 import { startApproverInboxPolling } from "./lib/onboarding/approver-email";
 
 const rawPort = process.env["PORT"];
+const validationMode = process.env["API_VALIDATION_MODE"] === "true";
 
 if (!rawPort) {
   throw new Error(
@@ -28,7 +29,13 @@ app.listen(port, (err) => {
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  logger.info({ port, validationMode }, "Server listening");
+
+  if (validationMode) {
+    logger.info("Validation mode enabled; background automations are disabled");
+    return;
+  }
+
   startInboundEmailPolling();
   startSystemWatcher();
   startEmailWatch();
