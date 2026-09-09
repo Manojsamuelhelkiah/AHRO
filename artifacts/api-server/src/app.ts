@@ -14,6 +14,7 @@ import { logger } from "./lib/logger";
 import { errorHandler } from "./middlewares/error-handler";
 
 const app: Express = express();
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({

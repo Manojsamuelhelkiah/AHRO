@@ -20,7 +20,10 @@ import candidateAdminRouter from "./candidate-admin";
 import candidatePublicRouter from "./candidate-public";
 import {
   CANDIDATE_COOKIE,
+  CANDIDATE_EXCHANGE_COOLDOWN_MS,
+  CANDIDATE_EXCHANGE_FAILURE_LIMIT,
   MAX_CANDIDATE_FILE_BYTES,
+  candidateExchangeRetryAfterMs,
   hashSecret,
 } from "../lib/onboarding/candidate-portal";
 
@@ -130,6 +133,7 @@ before(async () => {
   ]).returning({ id: onbCandidateLinks.id })).map((row) => row.id);
 
   const app = express();
+  app.set("trust proxy", 1);
   app.use(cookieParser());
   app.use(express.json());
   app.use(candidatePublicRouter);
@@ -167,6 +171,57 @@ test("expired and revoked links cannot be exchanged", async () => {
     });
     assert.equal(response.status, 401);
   }
+});
+
+test("mixed invalid token formats share one privacy-safe client throttle", async () => {
+  const clientAddress = `198.51.100.${Math.floor(Math.random() * 100) + 1}`;
+  const otherClientAddress = "203.0.113.200";
+  const invalidTokens = [
+    "",
+    "short",
+    42,
+    null,
+    `unknown-${"x".repeat(40)}`,
+  ];
+  for (let index = 0; index < CANDIDATE_EXCHANGE_FAILURE_LIMIT; index += 1) {
+    const response = await fetch(`${baseUrl}/candidate/session`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": `10.0.0.${index + 1}, ${clientAddress}`,
+      },
+      body: JSON.stringify({ token: invalidTokens[index % invalidTokens.length] }),
+    });
+    assert.equal(response.status, 401);
+  }
+
+  const throttled = await fetch(`${baseUrl}/candidate/session`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": `192.0.2.99, ${clientAddress}`,
+    },
+    body: JSON.stringify({ token: `another-${"y".repeat(40)}` }),
+  });
+  assert.equal(throttled.status, 429);
+  assert.equal(throttled.headers.get("retry-after"), "60");
+
+  const independent = await fetch(`${baseUrl}/candidate/session`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": `192.0.2.99, ${otherClientAddress}`,
+    },
+    body: JSON.stringify({ token: "short" }),
+  });
+  assert.equal(independent.status, 401);
+
+  const key = hashSecret(clientAddress);
+  assert.ok(candidateExchangeRetryAfterMs(key, Date.now()) > 0);
+  assert.equal(
+    candidateExchangeRetryAfterMs(key, Date.now() + CANDIDATE_EXCHANGE_COOLDOWN_MS + 1),
+    0,
+  );
 });
 
 test("sessions cannot cross organizations or cases", async () => {

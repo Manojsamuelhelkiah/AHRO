@@ -14,6 +14,50 @@ export const hashSecret = (value: string) => createHash("sha256").update(value).
 export const newSecret = () => randomBytes(32).toString("base64url");
 export const portalEmailRequested = (value: unknown) => value === true;
 
+export const CANDIDATE_EXCHANGE_FAILURE_LIMIT = 5;
+export const CANDIDATE_EXCHANGE_COOLDOWN_MS = 60_000;
+const MAX_CANDIDATE_EXCHANGE_CLIENTS = 10_000;
+
+type ExchangeFailureWindow = { failures: number; resetsAt: number };
+const exchangeFailures = new Map<string, ExchangeFailureWindow>();
+
+export function candidateExchangeClientKey(req: Request) {
+  return hashSecret(req.ip || req.socket.remoteAddress || "unknown");
+}
+
+export function candidateExchangeRetryAfterMs(clientKey: string, now = Date.now()) {
+  const window = exchangeFailures.get(clientKey);
+  if (!window) return 0;
+  if (window.resetsAt <= now) {
+    exchangeFailures.delete(clientKey);
+    return 0;
+  }
+  return window.failures >= CANDIDATE_EXCHANGE_FAILURE_LIMIT
+    ? window.resetsAt - now
+    : 0;
+}
+
+export function recordCandidateExchangeFailure(clientKey: string, now = Date.now()) {
+  const current = exchangeFailures.get(clientKey);
+  if (!current || current.resetsAt <= now) {
+    exchangeFailures.set(clientKey, {
+      failures: 1,
+      resetsAt: now + CANDIDATE_EXCHANGE_COOLDOWN_MS,
+    });
+  } else {
+    current.failures += 1;
+  }
+  while (exchangeFailures.size > MAX_CANDIDATE_EXCHANGE_CLIENTS) {
+    const oldest = exchangeFailures.keys().next().value;
+    if (oldest === undefined) break;
+    exchangeFailures.delete(oldest);
+  }
+}
+
+export function clearCandidateExchangeFailures(clientKey: string) {
+  exchangeFailures.delete(clientKey);
+}
+
 export function validateLogistics(input: Record<string, unknown>) {
   const clean = (key: string, max: number) => {
     const value = input[key];

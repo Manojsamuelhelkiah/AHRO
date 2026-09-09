@@ -7,7 +7,9 @@ import {
 import { getPrivateFile } from "../lib/objectStorage";
 import {
   CANDIDATE_COOKIE, MAX_CANDIDATE_FILE_BYTES, candidateContext,
-  candidateObjectPath, detectCandidateFile, exchangeToken,
+  candidateExchangeClientKey, candidateExchangeRetryAfterMs, candidateObjectPath,
+  clearCandidateExchangeFailures, detectCandidateFile, exchangeToken,
+  recordCandidateExchangeFailure,
 } from "../lib/onboarding/candidate-portal";
 
 const router: IRouter = Router();
@@ -15,10 +17,23 @@ const invalid = (res: any) => res.status(401).json({ message: "This portal link 
 
 router.post("/candidate/session", async (req, res, next) => {
   try {
+    const clientKey = candidateExchangeClientKey(req);
+    const retryAfterMs = candidateExchangeRetryAfterMs(clientKey);
+    if (retryAfterMs > 0) {
+      res.setHeader("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
+      return res.status(429).json({ message: "Too many attempts. Try again shortly." });
+    }
     const token = typeof req.body?.token === "string" ? req.body.token : "";
-    if (token.length < 32 || token.length > 200) return invalid(res);
+    if (token.length < 32 || token.length > 200) {
+      recordCandidateExchangeFailure(clientKey);
+      return invalid(res);
+    }
     const session = await exchangeToken(token);
-    if (!session) return invalid(res);
+    if (!session) {
+      recordCandidateExchangeFailure(clientKey);
+      return invalid(res);
+    }
+    clearCandidateExchangeFailures(clientKey);
     res.cookie(CANDIDATE_COOKIE, session.secret, {
       httpOnly: true, secure: process.env.NODE_ENV === "production",
       sameSite: "strict", path: "/api/candidate", expires: session.expiresAt,
