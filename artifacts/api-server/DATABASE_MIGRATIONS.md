@@ -4,19 +4,24 @@
 command used by `scripts/post-merge.sh`. It intentionally accepts additive
 schema changes only and must never receive a destructive-policy bypass.
 
-After every production publish, run the tenant safeguard verification in an
-environment where `DATABASE_URL` is bound to that published database:
+Every production publish automatically runs the same tenant safeguard verifier
+before the API starts. Operators can also invoke it directly with:
 
 ```sh
 pnpm --filter @workspace/api-server run db:verify:tenant-safeguards
 ```
 
-The command is read-only. It checks that every application tenant column has no
+The startup environment binds `DATABASE_URL` to the published production
+database, and the verifier opens `BEGIN TRANSACTION READ ONLY`. It checks that
+every application tenant column has no
 default, verifies direct organization and watch-email composite foreign keys by
 their ordered column mappings (not their possibly PostgreSQL-shortened names),
 requires the `demo` organization, and counts organization, watch-case, and
 watch-check orphans. Any failed safeguard is named on stderr and makes the
-command exit non-zero; do not trust the publish until every check passes.
+command exit non-zero. A failure is printed in the deployment logs, blocks API
+startup, and prevents the startup health check from passing. Production must not
+be treated as trusted until a later publish starts successfully with a passing
+verification.
 
 For a deliberately reviewed destructive or otherwise unsupported migration:
 
