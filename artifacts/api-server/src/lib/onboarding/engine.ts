@@ -8,7 +8,7 @@ import {
   type OnbRecordsEvidenceItem,
   type OnbWorkstreamRow,
 } from "@workspace/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { sendOutbound } from "./channels";
 import { recordGuardrailEvent } from "./guardrails";
 import {
@@ -32,8 +32,20 @@ import {
 } from "./scheduling";
 import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
 import { isNonEmployee } from "./external-systems";
+import { randomUUID } from "node:crypto";
+import {
+  LEGACY_CHECKLIST,
+  mandatoryChecklistReady,
+  checklistStageBlockers,
+  readinessFromChecklist,
+} from "./settings";
+import type { OnbChecklistEnforcementStage, OnbChecklistTemplateItem } from "@workspace/db/schema";
 
 type CaseRow = typeof onbCases.$inferSelect;
+
+export function checkpointSkipsPlanApproval(checkpoint: string | null | undefined): boolean {
+  return checkpoint === "plan-approved";
+}
 
 /* ------------------------------------------------------------------ */
 /* Audit helpers                                                       */
@@ -118,8 +130,13 @@ export async function createApproval(opts: {
     .returning();
   // If the keyed approval already existed, its companion event (and the
   // approver notification) already happened too.
-  if (opts.idempotencyKey && inserted.length === 0) return;
-  const row = inserted[0];
+  const row = inserted[0] ?? (opts.idempotencyKey
+    ? (await db.select().from(onbApprovals).where(and(
+        eq(onbApprovals.organizationId, c.organizationId),
+        eq(onbApprovals.idempotencyKey, opts.idempotencyKey),
+      )))[0]
+    : undefined);
+  if (!row) throw new Error("Approval idempotency row disappeared");
   await logEvent(
     opts.caseId,
     opts.agent,
@@ -151,15 +168,90 @@ export async function createApproval(opts: {
 /* ------------------------------------------------------------------ */
 
 export function defaultReadiness(): OnbReadinessItemRow[] {
-  return [
-    { key: "profile", label: "Identity, role, manager & joining date confirmed", status: "pending" },
-    { key: "documentation", label: "Documents, statutory forms & work authorization", status: "pending" },
-    { key: "payroll", label: "Payroll, bank, tax, benefits & HRIS activation", status: "pending" },
-    { key: "access", label: "Identity, access, applications & email/collaboration", status: "pending" },
-    { key: "assets", label: "Device, workspace, ID card & remote kit", status: "pending" },
-    { key: "learning", label: "Induction, compliance learning, buddy & manager connect", status: "pending" },
-    { key: "checkpoints", label: "Day-1/30/60/90 readiness checkpoints in place", status: "pending" },
-  ];
+  return readinessFromChecklist(LEGACY_CHECKLIST);
+}
+
+/** Null/empty snapshots are pre-migration cases and deliberately retain the legacy contract. */
+export function checklistSnapshot(c: Pick<CaseRow, "checklistSnapshot">): OnbChecklistTemplateItem[] {
+  return c.checklistSnapshot.length
+    ? c.checklistSnapshot
+    : LEGACY_CHECKLIST.map((item) => ({ ...item }));
+}
+
+export function checklistBlockers(
+  c: Pick<CaseRow, "checklistSnapshot" | "readiness">,
+  stage: OnbChecklistEnforcementStage,
+): OnbChecklistTemplateItem[] {
+  return checklistStageBlockers(c, stage);
+}
+
+async function enforceChecklistGate(
+  caseId: number,
+  stage: OnbChecklistEnforcementStage,
+  claim?: OrchestrationClaim,
+): Promise<boolean> {
+  const blockers = await db.transaction(async (tx) => {
+    const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    if (!c) throw new Error(`case ${caseId} not found`);
+    if (
+      claim &&
+      (c.orchestrationClaimOwner !== claim.owner ||
+        c.orchestrationClaimToken !== claim.token)
+    ) {
+      throw new Error("Orchestration claim was fenced by a newer worker");
+    }
+    const current = checklistBlockers(c, stage);
+    if (current.length === 0) return current;
+    await tx.update(onbCases).set({
+      orchestrationStatus: "checklist-blocked",
+      orchestrationCheckpoint: `blocked:${stage}`,
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+      updatedAt: new Date(),
+    }).where(eq(onbCases.id, caseId));
+    return current;
+  });
+  if (blockers.length === 0) return true;
+  await logEvent(
+    caseId,
+    "orchestrator",
+    "rules",
+    "Mandatory Day-1 checklist gate blocked",
+    `${stage}: ${blockers.map((item) => item.label).join("; ")}. No downstream activity was initiated.`,
+    {
+      ruleRef: "Day-1 checklist gate",
+      idempotencyKey: `checklist-gate:${caseId}:${stage}`,
+    },
+  );
+  return false;
+}
+
+type OrchestrationClaim = { owner: string; token: number };
+
+async function fencedCaseUpdate(
+  caseId: number,
+  claim: OrchestrationClaim,
+  patch: Partial<typeof onbCases.$inferInsert>,
+): Promise<void> {
+  const [updated] = await db.update(onbCases).set({ ...patch, updatedAt: new Date() }).where(and(
+    eq(onbCases.id, caseId),
+    eq(onbCases.orchestrationClaimOwner, claim.owner),
+    eq(onbCases.orchestrationClaimToken, claim.token),
+  )).returning({ id: onbCases.id });
+  if (!updated) throw new Error("Orchestration claim was fenced by a newer worker");
+}
+
+async function renewOrchestrationClaim(caseId: number, claim: OrchestrationClaim): Promise<void> {
+  const [renewed] = await db.update(onbCases).set({
+    orchestrationClaimUntil: sql`now() + interval '15 minutes'`,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(onbCases.id, caseId),
+    eq(onbCases.orchestrationClaimOwner, claim.owner),
+    eq(onbCases.orchestrationClaimToken, claim.token),
+    sql`${onbCases.orchestrationClaimUntil} > now()`,
+  )).returning({ id: onbCases.id });
+  if (!renewed) throw new Error("Orchestration lease expired or was fenced");
 }
 
 export function defaultWorkstreams(): OnbWorkstreamRow[] {
@@ -180,6 +272,50 @@ function setReadiness(items: OnbReadinessItemRow[], key: string, status: string,
   }
 }
 
+async function mergeManagedReadiness(
+  caseId: number,
+  desired: OnbReadinessItemRow[],
+  managedKeys: readonly string[],
+  patch: Partial<typeof onbCases.$inferInsert>,
+  claim?: OrchestrationClaim,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [current] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    if (!current) throw new Error(`case ${caseId} not found`);
+    if (
+      claim &&
+      (current.orchestrationClaimOwner !== claim.owner ||
+        current.orchestrationClaimToken !== claim.token)
+    ) {
+      throw new Error("Orchestration claim was fenced by a newer worker");
+    }
+    const readiness = current.readiness.map((item) => ({ ...item }));
+    for (const key of managedKeys) {
+      const next = desired.find((item) => item.key === key);
+      const existing = readiness.find((item) => item.key === key);
+      if (!next || !existing) continue;
+      // External/manual completion wins over a stale stage worker. A stage may
+      // enrich a ready item but must never downgrade it to pending/in-progress.
+      if (existing.status === "ready" && next.status !== "ready") continue;
+      existing.status = next.status;
+      if (next.note !== undefined) existing.note = next.note;
+    }
+    await tx.update(onbCases).set({
+      ...patch,
+      readiness,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbCases.id, caseId),
+      ...(claim
+        ? [
+            eq(onbCases.orchestrationClaimOwner, claim.owner),
+            eq(onbCases.orchestrationClaimToken, claim.token),
+          ]
+        : []),
+    ));
+  });
+}
+
 function setWorkstream(
   ws: OnbWorkstreamRow[],
   key: string,
@@ -197,15 +333,18 @@ function setWorkstream(
 /* Stage 1 — Intake Agent (LDM rule table 4.1)                         */
 /* ------------------------------------------------------------------ */
 
-async function runIntake(caseId: number): Promise<"continue" | "paused"> {
+async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"continue" | "paused"> {
   const c = await getCase(caseId);
-  await updateCase(caseId, { orchestrationStatus: "running", lifecycleStage: "trigger-received" });
+  const write = (patch: Partial<typeof onbCases.$inferInsert>) =>
+    claim ? fencedCaseUpdate(caseId, claim, patch) : updateCase(caseId, patch);
+  await write({ orchestrationStatus: "running", lifecycleStage: "trigger-received" });
   await logEvent(
     caseId,
     "orchestrator",
     "orchestrator",
     "Onboarding trigger received",
     `Case created for ${c.workerName} (${c.hireType}, ${c.geography}). Routing to Intake Agent.`,
+    { idempotencyKey: `orchestration:${caseId}:intake:trigger` },
   );
 
   await logEvent(
@@ -214,7 +353,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
     "rules",
     "Case created & hire type classified",
     `Classified as ${c.hireType} / ${c.workerCategory} via deterministic intake rules. Recruiter and manager notified.`,
-    { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 1" },
+    { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 1", idempotencyKey: `orchestration:${caseId}:intake:classified` },
   );
 
   let paused = false;
@@ -229,6 +368,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
       recommendation: "Correct missing manager / role / location before onboarding proceeds",
       rationale: "Core onboarding data is missing or conflicting. The agent must not guess core data.",
       resumeAction: "continue-after-intake",
+      idempotencyKey: `orchestration:${caseId}:approval:intake-rule-10`,
     });
     paused = true;
   }
@@ -244,8 +384,9 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
         "Do not mark onboarding ready. Route BGV exception to TA, Legal and Compliance for human decision.",
       rationale: `BGV status flagged: "${c.notes}". No automated adverse decision is permitted.`,
       resumeAction: "continue-after-intake",
+      idempotencyKey: `orchestration:${caseId}:approval:intake-rule-8`,
     });
-    await updateCase(caseId, { lifecycleStage: "exception" });
+    await write({ lifecycleStage: "exception" });
     paused = true;
   }
 
@@ -254,7 +395,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
     (new Date(c.joiningDate).getTime() - Date.now()) / 86400000,
   );
   if (daysToJoin <= 7 && !paused) {
-    await updateCase(caseId, { urgency: "elevated" });
+    await write({ urgency: "elevated" });
     await createApproval({
       caseId,
       agent: "intake",
@@ -263,6 +404,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
       recommendation: `Set urgency = ELEVATED (${daysToJoin} days to joining) and fast-track readiness checks`,
       rationale: "Joining date is within short lead time; expedited handling prevents Day-1 disruption.",
       resumeAction: "continue-after-intake",
+      idempotencyKey: `orchestration:${caseId}:approval:intake-rule-2`,
     });
     paused = true;
   }
@@ -277,6 +419,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
       recommendation: "Use internal-movement pathway and preserve existing employee identity",
       rationale: "Internal transfer must re-scope access rather than duplicate identity.",
       resumeAction: "continue-after-intake",
+      idempotencyKey: `orchestration:${caseId}:approval:intake-rule-4`,
     });
     paused = true;
   }
@@ -344,7 +487,7 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
       "rules",
       "Routed to non-employee pathway",
       "Contractor/vendor checklist selected; employee-only benefits and payroll items excluded.",
-      { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 3" },
+      { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 3", idempotencyKey: `orchestration:${caseId}:intake:non-employee` },
     );
   }
 
@@ -356,22 +499,37 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
       "rules",
       "Client-facing role flagged",
       "Project-readiness flagged; Delivery Head added to case watchers.",
-      { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 11" },
+      { hitlPattern: "notify-only", ruleRef: "4.1 Intake Rule 11", idempotencyKey: `orchestration:${caseId}:intake:client-facing` },
     );
   }
 
-  const readiness = defaultReadiness();
+  // Preserve the immutable case snapshot and custom item statuses. Intake may
+  // only update the connector-owned profile item.
+  const readiness = (c.readiness.length ? c.readiness : defaultReadiness()) as OnbReadinessItemRow[];
   setReadiness(readiness, "profile", paused ? "in-progress" : "ready", paused ? "Awaiting human review" : "Confirmed by Intake Agent");
-  await updateCase(caseId, { readiness, lifecycleStage: paused ? (await getCase(caseId)).lifecycleStage : "profile-validated" });
+  await mergeManagedReadiness(
+    caseId,
+    readiness,
+    ["profile"],
+    { lifecycleStage: paused ? (await getCase(caseId)).lifecycleStage : "profile-validated" },
+    claim,
+  );
 
   if (paused) {
-    await updateCase(caseId, { orchestrationStatus: "waiting-approval" });
+    await write({
+      orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: "waiting:intake",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+    });
+    await reconcileDecidedApprovals(caseId);
     await logEvent(
       caseId,
       "orchestrator",
       "orchestrator",
       "Orchestration paused for human review",
       "One or more intake rules require human approval or hard-block resolution before the plan is generated.",
+      { idempotencyKey: `orchestration:${caseId}:intake:paused` },
     );
     return "paused";
   }
@@ -385,8 +543,11 @@ async function runIntake(caseId: number): Promise<"continue" | "paused"> {
 async function runPlanGeneration(
   caseId: number,
   resumingAfterPlanApproval = false,
+  claim?: OrchestrationClaim,
 ): Promise<"continue" | "paused"> {
   const c = await getCase(caseId);
+  const write = (patch: Partial<typeof onbCases.$inferInsert>) =>
+    claim ? fencedCaseUpdate(caseId, claim, patch) : updateCase(caseId, patch);
 
   // LDM checklist adjustments per rule table 4.2
   const adjustments: Array<{ rule: string; text: string; hitl: string }> = [];
@@ -424,6 +585,7 @@ async function runPlanGeneration(
     await logEvent(caseId, "plan", "rules", "Checklist adjustment applied", a.text, {
       hitlPattern: a.hitl,
       ruleRef: a.rule,
+      idempotencyKey: `orchestration:${caseId}:plan:auto:${a.rule}`,
     });
   }
 
@@ -437,12 +599,20 @@ async function runPlanGeneration(
         recommendation: a.text,
         rationale: "This checklist adjustment is governance-sensitive and requires human approval before it is applied and onboarding proceeds.",
         resumeAction: "continue-after-plan",
+        idempotencyKey: `orchestration:${caseId}:approval:plan:${a.rule}`,
       });
     }
-    await updateCase(caseId, { orchestrationStatus: "waiting-approval" });
+    await write({
+      orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: "waiting:plan",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+    });
+    await reconcileDecidedApprovals(caseId);
     await logEvent(caseId, "orchestrator", "orchestrator",
       "Orchestration paused for plan approval",
-      "One or more plan adjustments are approve-before-act; workstreams and communications are held until a human approves.");
+      "One or more plan adjustments are approve-before-act; workstreams and communications are held until a human approves.",
+      { idempotencyKey: `orchestration:${caseId}:plan:paused` });
     return "paused";
   }
 
@@ -450,6 +620,7 @@ async function runPlanGeneration(
     await logEvent(caseId, "plan", "rules", "Checklist adjustment applied (human-approved)", a.text, {
       hitlPattern: a.hitl,
       ruleRef: a.rule,
+      idempotencyKey: `orchestration:${caseId}:plan:approved:${a.rule}`,
     });
   }
 
@@ -460,14 +631,14 @@ async function runPlanGeneration(
   );
 
   if (plan) {
-    await updateCase(caseId, { planSummary: plan });
+    await write({ planSummary: plan });
     await logEvent(
       caseId,
       "plan",
       "llm",
       "Onboarding plan generated",
       "Personalised plan narrative drafted by the reasoning engine from the classified case profile and rule-based checklist adjustments.",
-      { hitlPattern: "act-then-review" },
+      { hitlPattern: "act-then-review", idempotencyKey: `orchestration:${caseId}:plan:narrative` },
     );
   } else {
     await logEvent(
@@ -476,10 +647,11 @@ async function runPlanGeneration(
       "system",
       "Plan narrative unavailable",
       "The reasoning engine call failed; rule-based checklist stands. Retry by re-running the scenario.",
+      { idempotencyKey: `orchestration:${caseId}:plan:narrative-unavailable` },
     );
   }
 
-  await updateCase(caseId, { lifecycleStage: "plan-generated" });
+  await write({ lifecycleStage: "plan-generated" });
   return "continue";
 }
 
@@ -487,7 +659,7 @@ async function runPlanGeneration(
 /* Stage 3 — Parallel workstream agents (LDM)                          */
 /* ------------------------------------------------------------------ */
 
-async function runWorkstreams(caseId: number) {
+async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
   const c = await getCase(caseId);
   const ws = (c.workstreams.length ? c.workstreams : defaultWorkstreams()) as OnbWorkstreamRow[];
   const readiness = c.readiness as OnbReadinessItemRow[];
@@ -513,7 +685,7 @@ async function runWorkstreams(caseId: number) {
   await dispatchWorkstreamConnectorMutations(c);
   await logEvent(caseId, "documentation", "rules", "Documentation pack issued",
     `Mandatory identity/statutory documents for ${c.geography} requested; completion tracked with owner notification on gaps.`,
-    { hitlPattern: "notify-only", ruleRef: "4.3 Documentation Rule 1" });
+     { hitlPattern: "notify-only", ruleRef: "4.3 Documentation Rule 1", idempotencyKey: `orchestration:${caseId}:workstreams:documentation` });
 
   // Access & System Readiness
   const accessDetail =
@@ -534,6 +706,7 @@ async function runWorkstreams(caseId: number) {
   await logEvent(caseId, "access", "rules", "Access readiness coordinated", accessDetail, {
     hitlPattern: "act-then-review",
     ruleRef: "4.4 Access Rules",
+    idempotencyKey: `orchestration:${caseId}:workstreams:access`,
   });
 
   // Asset & Workplace Readiness
@@ -541,7 +714,7 @@ async function runWorkstreams(caseId: number) {
   setReadiness(readiness, "assets", "ready", "Laptop, ID card and workspace scheduled for joining date");
   await logEvent(caseId, "assets", "rules", "Assets & workspace scheduled",
     "Device, ID card and workspace (or remote kit) booked against the joining date.",
-    { hitlPattern: "notify-only", ruleRef: "4.5 Asset Rules" });
+     { hitlPattern: "notify-only", ruleRef: "4.5 Asset Rules", idempotencyKey: `orchestration:${caseId}:workstreams:assets` });
 
   // Learning / Engagement
   setWorkstream(ws, "learning", "ready");
@@ -549,9 +722,15 @@ async function runWorkstreams(caseId: number) {
   setReadiness(readiness, "checkpoints", "ready", "Day-1/30/60/90 checkpoints scheduled");
   await logEvent(caseId, "learning", "rules", "Learning & engagement plan assigned",
     "Induction, compliance learning, buddy/mentor and manager-connect scheduled; Day-30/60/90 checkpoints created.",
-    { hitlPattern: "notify-only", ruleRef: "4.6 Learning Rules" });
+     { hitlPattern: "notify-only", ruleRef: "4.6 Learning Rules", idempotencyKey: `orchestration:${caseId}:workstreams:learning` });
 
-  await updateCase(caseId, { readiness, workstreams: ws, lifecycleStage: "preboarding" });
+  await mergeManagedReadiness(
+    caseId,
+    readiness,
+    ["documentation", "payroll", "access", "assets", "learning", "checkpoints"],
+    { workstreams: ws, lifecycleStage: "preboarding" },
+    claim,
+  );
 
   // The guarded connector dispatch above registered every applicable
   // externally-owned item with the System Watcher. The watcher closes each
@@ -577,14 +756,14 @@ async function runCommunications(caseId: number) {
   const routing = resolveWelcomeChannels(c.channelPreference, c.workerPhone);
   await logEvent(caseId, "channel", "rules", "Channel preference applied",
     `HR channel preference for this case is "${normalizePreference(c.channelPreference)}". Welcome communications are routed accordingly.`,
-    { hitlPattern: "notify-only" });
+    { hitlPattern: "notify-only", idempotencyKey: `orchestration:${caseId}:communications:channel` });
 
   if (routing.whatsappSkipped) {
     await logEvent(caseId, "channel", "system", "WhatsApp welcome skipped",
       routing.emailIsFallback
         ? "Channel preference is WhatsApp but the case has no phone number — welcome sent via email as fallback."
         : "Channel preference includes WhatsApp but the case has no phone number — email only.",
-      { hitlPattern: "notify-only" });
+      { hitlPattern: "notify-only", idempotencyKey: `orchestration:${caseId}:communications:whatsapp-skipped` });
   }
 
   if (routing.channels.includes("email")) {
@@ -594,11 +773,15 @@ async function runCommunications(caseId: number) {
       toAddress: c.workerEmail,
       subject: `Welcome, ${c.workerName.split(" ")[0]} — your onboarding has started`,
       body,
+      idempotencyKey: `orchestration:${caseId}:welcome:email`,
     });
+    if (email.status === "sending") {
+      throw new Error(email.failureReason ?? "Email delivery outcome is unknown and requires manual reconciliation");
+    }
     await logEvent(caseId, "channel", draft ? "llm" : "system",
       routing.emailIsFallback ? "Welcome email dispatched (fallback)" : "Welcome email dispatched",
       `Pre-boarding welcome drafted by the reasoning engine. Delivery status: ${email.status}${email.failureReason ? ` — ${email.failureReason}` : ""}.`,
-      { hitlPattern: "act-then-review" });
+      { hitlPattern: "act-then-review", idempotencyKey: `orchestration:${caseId}:welcome:email:event` });
   }
 
   if (routing.channels.includes("whatsapp") && c.workerPhone) {
@@ -607,14 +790,18 @@ async function runCommunications(caseId: number) {
       channel: "whatsapp",
       toAddress: c.workerPhone,
       body: `Hi ${c.workerName.split(" ")[0]}! This is your onboarding assistant. Your Day-1 checklist for ${c.joiningDate} is ready — reply here anytime with questions.`,
+      idempotencyKey: `orchestration:${caseId}:welcome:whatsapp`,
     });
+    if (wa.status === "sending") {
+      throw new Error(wa.failureReason ?? "WhatsApp delivery outcome is unknown and requires manual reconciliation");
+    }
     await logEvent(caseId, "channel", "system", "WhatsApp welcome dispatched",
       wa.status === "sent"
         ? "WhatsApp welcome delivered via Twilio."
         : wa.status === "logged-only"
           ? `WhatsApp welcome logged only${wa.failureReason ? ` — ${wa.failureReason}` : "."}`
           : `WhatsApp send failed: ${wa.failureReason}`,
-      { hitlPattern: "act-then-review" });
+      { hitlPattern: "act-then-review", idempotencyKey: `orchestration:${caseId}:welcome:whatsapp:event` });
   }
 }
 
@@ -622,62 +809,397 @@ async function runCommunications(caseId: number) {
 /* Stage 5 — Data & Analytics Agent + readiness review                 */
 /* ------------------------------------------------------------------ */
 
-async function runAnalyticsAndReview(caseId: number) {
+async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim) {
   const c = await getCase(caseId);
 
   if (c.skillCriticality === "scarce" || c.skillCriticality === "client-critical") {
     await logEvent(caseId, "analytics", "rules", "Critical skill inflow flagged",
       `Skill "${c.primarySkill}" (${c.skillCriticality}) entering the workforce. Aggregated insight routed to HR, Talent Planning and Delivery — individual-level judgement is never published.`,
-      { hitlPattern: "notify-only", ruleRef: "14.2 Analytics Rules" });
+      { hitlPattern: "notify-only", ruleRef: "14.2 Analytics Rules", idempotencyKey: `orchestration:${caseId}:analytics:critical-skill` });
   }
-  const ws = c.workstreams as OnbWorkstreamRow[];
-  setWorkstream(ws, "analytics", "ready");
-
-  const blockers = ws.flatMap((w) => w.blockers);
-  const allReady = (c.readiness as OnbReadinessItemRow[]).every(
-    (r) => r.status === "ready",
-  );
-
-  await updateCase(caseId, {
-    workstreams: ws,
-    lifecycleStage: allReady && blockers.length === 0 ? "day1-review" : "preboarding",
-    orchestrationStatus: "idle",
+  const review = await db.transaction(async (tx) => {
+    const [current] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    if (!current) throw new Error(`case ${caseId} not found`);
+    if (
+      claim &&
+      (current.orchestrationClaimOwner !== claim.owner ||
+        current.orchestrationClaimToken !== claim.token)
+    ) {
+      throw new Error("Orchestration claim was fenced by a concurrent checklist transition");
+    }
+    const ws = current.workstreams.map((item) => ({ ...item })) as OnbWorkstreamRow[];
+    setWorkstream(ws, "analytics", "ready");
+    const blockers = ws.flatMap((w) => w.blockers);
+    const allReady = mandatoryChecklistReady(current);
+    const promoted = allReady && blockers.length === 0;
+    const reviewPatch = promoted
+      ? {
+          workstreams: ws,
+          lifecycleStage: "day1-review",
+          orchestrationStatus: "idle",
+          updatedAt: new Date(),
+        }
+      : {
+          workstreams: ws,
+          lifecycleStage: "preboarding",
+          orchestrationStatus: "checklist-blocked",
+          orchestrationCheckpoint: "blocked:re-review",
+          orchestrationClaimOwner: null,
+          orchestrationClaimUntil: null,
+          updatedAt: new Date(),
+        };
+    const [updated] = await tx.update(onbCases).set(reviewPatch).where(and(
+      eq(onbCases.id, caseId),
+      ...(claim
+        ? [
+            eq(onbCases.orchestrationClaimOwner, claim.owner),
+            eq(onbCases.orchestrationClaimToken, claim.token),
+          ]
+        : []),
+    )).returning({ id: onbCases.id });
+    if (!updated) throw new Error("Orchestration review commit was fenced");
+    return { allReady, promoted };
   });
   await logEvent(caseId, "orchestrator", "orchestrator", "Readiness review complete",
-    allReady
-      ? "All 7 readiness checkpoints ready or exception-tagged. Case moves to Day-1 review; recommendation to complete will follow the joining date."
-      : "Pending items remain visible on the checklist; owners have been notified.",
-    { hitlPattern: "notify-only", ruleRef: "4.7 Readiness Rule 10" });
+    review.promoted
+      ? "All configured mandatory readiness items are complete. Case moves to Day-1 review; recommendation to complete will follow the joining date."
+      : "Configured mandatory items remain incomplete and visible on the checklist; owners have been notified.",
+    {
+      hitlPattern: "notify-only",
+      ruleRef: "4.7 Readiness Rule 10",
+      idempotencyKey: `orchestration:${caseId}:review:${review.promoted ? "complete" : "blocked"}`,
+    });
+  return review.promoted;
 }
 
 /* ------------------------------------------------------------------ */
 /* Public entry points                                                 */
 /* ------------------------------------------------------------------ */
 
-async function runFromPlan(caseId: number, resumingAfterPlanApproval = false) {
-  await updateCase(caseId, { orchestrationStatus: "running" });
-  const plan = await runPlanGeneration(caseId, resumingAfterPlanApproval);
+async function runFromPlan(
+  caseId: number,
+  resumingAfterPlanApproval = false,
+  claim?: OrchestrationClaim,
+) {
+  if (!claim) throw new Error("A durable orchestration claim is required");
+  await fencedCaseUpdate(caseId, claim, { orchestrationStatus: "running" });
+  const plan = await runPlanGeneration(caseId, resumingAfterPlanApproval, claim);
   if (plan === "paused") return;
-  await runWorkstreams(caseId);
+  await renewOrchestrationClaim(caseId, claim);
+  if (!(await enforceChecklistGate(caseId, "before-workstreams", claim))) return;
+  await runWorkstreams(caseId, claim);
+  await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
+  if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return;
+  await renewOrchestrationClaim(caseId, claim);
   await runCommunications(caseId);
-  await runAnalyticsAndReview(caseId);
+  await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "communications-complete" });
+  if (!(await enforceChecklistGate(caseId, "before-day1-review", claim))) return;
+  await renewOrchestrationClaim(caseId, claim);
+  if (!(await runAnalyticsAndReview(caseId, claim))) return;
+  await fencedCaseUpdate(caseId, claim, {
+    orchestrationCheckpoint: "review-complete",
+    orchestrationClaimOwner: null,
+    orchestrationClaimUntil: null,
+  });
 }
 
 /** Fire-and-forget orchestration for a freshly created case. */
 export function startOrchestration(caseId: number) {
   void (async () => {
+    let claim: OrchestrationClaim | undefined;
     try {
-      const intake = await runIntake(caseId);
+      const owner = randomUUID();
+      const [claimed] = await db.update(onbCases)
+        .set({
+          orchestrationStatus: "running",
+          orchestrationCheckpoint: "initial",
+          orchestrationClaimOwner: owner,
+          orchestrationClaimToken: sql`${onbCases.orchestrationClaimToken} + 1`,
+          orchestrationClaimUntil: sql`now() + interval '15 minutes'`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(onbCases.id, caseId), eq(onbCases.orchestrationStatus, "idle")))
+        .returning({ token: onbCases.orchestrationClaimToken });
+      if (!claimed) return;
+      claim = { owner, token: claimed.token };
+      const intake = await runIntake(caseId, claim);
       if (intake === "continue") {
-        await runFromPlan(caseId);
+        await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "plan" });
+        await runFromPlan(caseId, false, claim);
       }
     } catch (err) {
       console.error(`[onboarding engine] case ${caseId} failed:`, err);
-      await updateCase(caseId, { orchestrationStatus: "blocked" }).catch(() => {});
+      if (claim) {
+        await fencedCaseUpdate(caseId, claim, {
+          orchestrationStatus: "blocked",
+          orchestrationClaimOwner: null,
+          orchestrationClaimUntil: null,
+        }).catch(() => {});
+      }
       await logEvent(caseId, "orchestrator", "system", "Orchestration error",
         `Unexpected failure: ${String(err).slice(0, 300)}`).catch(() => {});
     }
   })();
+}
+
+/**
+ * Continue exactly after a checklist boundary. The conditional claim makes
+ * simultaneous item completions and retries collapse to one orchestration run.
+ */
+export async function resumeChecklistOrchestration(caseId: number): Promise<boolean> {
+  const owner = randomUUID();
+  const [claimed] = await db.update(onbCases)
+    .set({
+      orchestrationStatus: "running",
+      orchestrationClaimOwner: owner,
+      orchestrationClaimToken: sql`${onbCases.orchestrationClaimToken} + 1`,
+      orchestrationClaimUntil: sql`now() + interval '60 seconds'`,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(onbCases.id, caseId),
+      or(
+        eq(onbCases.orchestrationStatus, "checklist-blocked"),
+        and(
+          eq(onbCases.orchestrationStatus, "running"),
+          or(
+            sql`${onbCases.orchestrationClaimUntil} is null`,
+            sql`${onbCases.orchestrationClaimUntil} <= now()`,
+          ),
+        ),
+      ),
+      sql`${onbCases.orchestrationCheckpoint} in (
+        'blocked:before-workstreams',
+        'blocked:before-employee-communications',
+        'blocked:before-day1-review',
+        'blocked:re-review',
+        'initial',
+        'plan',
+        'intake-approved',
+        'plan-approved',
+        'workstreams-complete',
+        'communications-complete'
+      )`,
+    ))
+    .returning();
+  if (!claimed) return false;
+  const claim = { owner, token: claimed.orchestrationClaimToken };
+  const checkpoint = claimed.orchestrationCheckpoint;
+  try {
+    await renewOrchestrationClaim(caseId, claim);
+    if (checkpoint === "initial") {
+      const intake = await runIntake(caseId, claim);
+      if (intake === "continue") {
+        await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "plan" });
+        await runFromPlan(caseId, false, claim);
+      }
+      return true;
+    }
+    if (
+      checkpoint === "plan" ||
+      checkpoint === "intake-approved" ||
+      checkpoint === "plan-approved"
+    ) {
+      if (checkpoint === "intake-approved") {
+        const current = await getCase(caseId);
+        const readiness = current.readiness.map((item) => ({ ...item }));
+        setReadiness(readiness, "profile", "ready", "Human review completed and approved");
+        await mergeManagedReadiness(
+          caseId,
+          readiness,
+          ["profile"],
+          { lifecycleStage: "profile-validated" },
+          claim,
+        );
+      }
+      await runFromPlan(caseId, checkpointSkipsPlanApproval(checkpoint), claim);
+      return true;
+    }
+    if (checkpoint === "blocked:re-review") {
+      const current = await getCase(caseId);
+      if (!mandatoryChecklistReady(current)) {
+        await fencedCaseUpdate(caseId, claim, {
+          orchestrationStatus: "checklist-blocked",
+          orchestrationClaimOwner: null,
+          orchestrationClaimUntil: null,
+        });
+        return false;
+      }
+      if (!(await runAnalyticsAndReview(caseId, claim))) return false;
+      await fencedCaseUpdate(caseId, claim, {
+        orchestrationCheckpoint: "review-complete",
+        orchestrationClaimOwner: null,
+        orchestrationClaimUntil: null,
+      });
+      return true;
+    }
+    if (checkpoint === "blocked:before-workstreams") {
+      if (!(await enforceChecklistGate(caseId, "before-workstreams", claim))) return false;
+      await runWorkstreams(caseId, claim);
+      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
+      if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return true;
+    }
+    if (
+      checkpoint === "blocked:before-workstreams" ||
+      checkpoint === "blocked:before-employee-communications" ||
+      checkpoint === "workstreams-complete"
+    ) {
+      if (checkpoint !== "blocked:before-workstreams" &&
+          !(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return false;
+      await renewOrchestrationClaim(caseId, claim);
+      await runCommunications(caseId);
+      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "communications-complete" });
+      if (!(await enforceChecklistGate(caseId, "before-day1-review", claim))) return true;
+    }
+    if (
+      checkpoint === "blocked:before-day1-review" ||
+      checkpoint === "communications-complete"
+    ) {
+      if (!(await enforceChecklistGate(caseId, "before-day1-review", claim))) return false;
+    }
+    await renewOrchestrationClaim(caseId, claim);
+    if (!(await runAnalyticsAndReview(caseId, claim))) return false;
+    await fencedCaseUpdate(caseId, claim, {
+      orchestrationCheckpoint: "review-complete",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+    });
+    return true;
+  } catch (error) {
+    await db.update(onbCases).set({
+      orchestrationStatus: "checklist-blocked",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbCases.id, caseId),
+      eq(onbCases.orchestrationClaimOwner, claim.owner),
+      eq(onbCases.orchestrationClaimToken, claim.token),
+    ));
+    throw error;
+  }
+}
+
+type ApprovalContinuation = (
+  caseId: number,
+  planApprovalAlreadyGranted: boolean,
+  claim: OrchestrationClaim,
+) => Promise<void>;
+
+/**
+ * Durable lost-wakeup reconciler. The case row is the serialization point:
+ * exactly one caller can turn a fully-decided waiting approval set into a
+ * continuation claim, whether the caller is the decision request, the engine
+ * entering its wait state, or the watcher after a crash.
+ */
+export async function reconcileDecidedApprovals(
+  caseId: number,
+  continueRun: ApprovalContinuation = runFromPlan,
+): Promise<boolean> {
+  const owner = randomUUID();
+  const claimed = await db.transaction(async (tx) => {
+    const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    if (!c || c.orchestrationStatus !== "waiting-approval") return null;
+    const legacyNullCheckpoint = c.orchestrationCheckpoint === null;
+    let resumeAction =
+      c.orchestrationCheckpoint === "waiting:plan"
+        ? "continue-after-plan"
+        : c.orchestrationCheckpoint === "waiting:intake"
+          ? "continue-after-intake"
+          : null;
+    let approvals: Array<typeof onbApprovals.$inferSelect>;
+    if (resumeAction) {
+      approvals = await tx.select().from(onbApprovals).where(and(
+        eq(onbApprovals.caseId, caseId),
+        eq(onbApprovals.organizationId, c.organizationId),
+        eq(onbApprovals.resumeAction, resumeAction),
+      ));
+    } else if (c.orchestrationCheckpoint === null) {
+      // Legacy waiting rows predate stage checkpoints. Require every persisted
+      // pipeline approval to be decided (and none rejected), then infer the
+      // furthest reached stage. A plan approval can only be created after the
+      // intake set completed, so its presence distinguishes the plan wait.
+      approvals = (await tx.select().from(onbApprovals).where(and(
+        eq(onbApprovals.caseId, caseId),
+        eq(onbApprovals.organizationId, c.organizationId),
+      ))).filter((approval) => approval.resumeAction !== "none");
+      resumeAction = approvals.some(
+        (approval) => approval.resumeAction === "continue-after-plan",
+      )
+        ? "continue-after-plan"
+        : approvals.some((approval) => approval.resumeAction === "continue-after-intake")
+          ? "continue-after-intake"
+          : null;
+    } else {
+      return null;
+    }
+    if (!resumeAction) return null;
+    if (approvals.length === 0 || approvals.some((approval) => approval.status === "pending")) {
+      return null;
+    }
+    if (approvals.some((approval) => approval.status === "rejected")) {
+      await tx.update(onbCases).set({
+        orchestrationStatus: "blocked",
+        lifecycleStage: "exception",
+        orchestrationClaimOwner: null,
+        orchestrationClaimUntil: null,
+        updatedAt: new Date(),
+      }).where(eq(onbCases.id, caseId));
+      return null;
+    }
+    const checkpoint = resumeAction === "continue-after-plan" ? "plan-approved" : "intake-approved";
+    const repairLegacyPlanProfile =
+      legacyNullCheckpoint && resumeAction === "continue-after-plan";
+    const readiness = repairLegacyPlanProfile
+      ? (() => {
+          const merged = (c.readiness.length ? c.readiness : defaultReadiness()).map(
+            (item) => ({ ...item }),
+          );
+          let profile = merged.find((item) => item.key === "profile");
+          if (!profile) {
+            const legacyProfile = defaultReadiness().find((item) => item.key === "profile");
+            if (legacyProfile) {
+              profile = { ...legacyProfile };
+              merged.push(profile);
+            }
+          }
+          if (profile) {
+            profile.status = "ready";
+            profile.note = "Historical intake and plan approvals completed";
+          }
+          return merged;
+        })()
+      : undefined;
+    const [row] = await tx.update(onbCases).set({
+      orchestrationStatus: "running",
+      orchestrationCheckpoint: checkpoint,
+      orchestrationClaimOwner: owner,
+      orchestrationClaimToken: sql`${onbCases.orchestrationClaimToken} + 1`,
+      orchestrationClaimUntil: sql`now() + interval '15 minutes'`,
+      ...(readiness ? { readiness } : {}),
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbCases.id, caseId),
+      eq(onbCases.orchestrationStatus, "waiting-approval"),
+    )).returning({ token: onbCases.orchestrationClaimToken });
+    return row ? { checkpoint, token: row.token } : null;
+  });
+  if (!claimed) return false;
+  const claim = { owner, token: claimed.token };
+  if (claimed.checkpoint === "intake-approved") {
+    const current = await getCase(caseId);
+    const readiness = current.readiness.map((item) => ({ ...item }));
+    setReadiness(readiness, "profile", "ready", "Human review completed and approved");
+    await mergeManagedReadiness(
+      caseId,
+      readiness,
+      ["profile"],
+      { lifecycleStage: "profile-validated" },
+      claim,
+    );
+  }
+  await continueRun(caseId, claimed.checkpoint === "plan-approved", claim);
+  return true;
 }
 
 /** Resume after a human decision on an approval. */
@@ -711,26 +1233,7 @@ export function resumeAfterDecision(opts: {
       // resume the pipeline — the decision itself is the action.
       if (opts.resumeAction === "none") return;
 
-      // Any other approvals still pending on this case? Then keep waiting.
-      const all = await db
-        .select()
-        .from(onbApprovals)
-        .where(eq(onbApprovals.caseId, opts.caseId));
-      if (all.some((a) => a.status === "pending")) return;
-
-      // A single rejected gate holds the whole case, regardless of the order
-      // in which the remaining approvals were decided.
-      const anyRejected = all.some(
-        (a) => a.status === "rejected" && a.resumeAction !== "none",
-      );
-
-      if (opts.approved && !anyRejected) {
-        await runFromPlan(opts.caseId, opts.resumeAction === "continue-after-plan");
-      } else {
-        await updateCase(opts.caseId, { orchestrationStatus: "blocked", lifecycleStage: "exception" });
-        await logEvent(opts.caseId, "orchestrator", "orchestrator", "Case held after rejection",
-          "Human reviewer rejected the recommendation. Case remains in exception state under human ownership — no automated adverse action taken.");
-      }
+      await reconcileDecidedApprovals(opts.caseId);
     } catch (err) {
       console.error(`[onboarding engine] resume case ${opts.caseId} failed:`, err);
     }

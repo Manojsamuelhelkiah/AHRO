@@ -19,6 +19,7 @@ import {
   TestOnboardingChannelBody,
   UpdateOnboardingConnectorBody,
   UpdateOnboardingSettingsBody,
+  UpdateOnboardingChecklistItemBody,
 } from "@workspace/api-zod";
 import {
   defaultReadiness,
@@ -27,6 +28,7 @@ import {
   resumeAfterDecision,
   startOrchestration,
 } from "../lib/onboarding/engine";
+import { isChecklistAdministrator, setCustomChecklistItemStatus } from "../lib/onboarding/checklist";
 import { getScenario, SCENARIOS, DEMO_EMAIL } from "../lib/onboarding/scenarios";
 import { ensureConnectorsSeeded } from "../lib/onboarding/connectors";
 import {
@@ -52,6 +54,9 @@ import {
   AUTO_ESCALATION_CALLS_KEY,
   HR_APPROVER_EMAIL_KEY,
   autoEscalationCallsEnabled,
+  getEffectiveChecklist,
+  readinessFromChecklist,
+  saveChecklistVersion,
 } from "../lib/onboarding/settings";
 import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas, refreshDemoAllowlist } from "../lib/onboarding/demo-volunteers";
 import { runApproverInboxTick } from "../lib/onboarding/approver-email";
@@ -93,6 +98,12 @@ import {
 } from "../lib/organization-scope";
 
 const router: IRouter = Router();
+
+function requireHrChecklistRole(req: Request, res: Response): boolean {
+  if (isChecklistAdministrator(req.organizationRole)) return true;
+  res.status(403).json({ message: "Organization owner or admin role required for checklist administration." });
+  return false;
+}
 
 /**
  * One-click demo sign-in. The shared demo reviewer account uses an
@@ -175,6 +186,9 @@ function serializeCase(row: typeof onbCases.$inferSelect) {
     skillCriticality: row.skillCriticality,
     scenarioKey: row.scenarioKey,
     planSummary: row.planSummary,
+    checklistTemplateVersion: row.checklistTemplateVersion,
+    checklistSnapshot: row.checklistSnapshot,
+    orchestrationCheckpoint: row.orchestrationCheckpoint,
     candidateEmailAuthorized: Boolean(row.candidateEmailAuthorizedAt),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -189,14 +203,17 @@ async function insertCaseAndStart(
   values: Omit<typeof onbCases.$inferInsert, "organizationId">,
   organizationId: string,
 ) {
+  const checklist = await getEffectiveChecklist(organizationId);
   const [row] = await db
     .insert(onbCases)
     .values({
       ...values,
       ...organizationValues(organizationId),
-      readiness: defaultReadiness(),
+      checklistTemplateVersion: checklist.version,
+      checklistSnapshot: checklist.items,
+      readiness: readinessFromChecklist(checklist.items),
       workstreams: defaultWorkstreams(),
-      orchestrationStatus: "running",
+      orchestrationStatus: "idle",
     })
     .returning();
   startOrchestration(row.id);
@@ -391,6 +408,39 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
       return;
     }
     res.json(serializeCase(row));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const caseId = Number(req.params.id);
+    if (!Number.isInteger(caseId) || caseId < 1) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    const body = UpdateOnboardingChecklistItemBody.parse(req.body);
+    const result = await setCustomChecklistItemStatus({
+      organizationId: getOrganizationId(req),
+      caseId,
+      itemId: String(req.params.itemId),
+      status: body.status,
+      note: body.note,
+      reviewer: await resolveReviewerName(req.authUserId!),
+    });
+    if (!result.ok) {
+      const messages = {
+        "not-found": "Case or checklist item not found.",
+        "not-custom": "Connector-managed checklist items cannot be changed manually.",
+        disabled: "Disabled checklist items cannot be changed.",
+      };
+      res.status(result.code === "not-custom" || result.code === "disabled" ? 409 : 404)
+        .json({ message: messages[result.code] });
+      return;
+    }
+    res.json(serializeCase(result.case));
   } catch (err) {
     next(err);
   }
@@ -1130,6 +1180,7 @@ async function settingsPayload(organizationId: string) {
   const hrAlertEmail = stored && stored.trim().length > 0 ? stored.trim() : null;
   const envFallback = resolveHrAlertAddress(null);
   const effective = hrAlertEmail ?? envFallback;
+  const checklist = await getEffectiveChecklist(organizationId);
   return {
     hrAlertEmail,
     envFallback,
@@ -1137,6 +1188,8 @@ async function settingsPayload(organizationId: string) {
     source: hrAlertEmail ? "settings" : envFallback ? "environment" : null,
     autoEscalationCalls: await autoEscalationCallsEnabled(organizationId),
     hrApproverEmail: await getSetting(organizationId, HR_APPROVER_EMAIL_KEY),
+    checklistVersion: checklist.version,
+    day1Checklist: checklist.items,
   };
 }
 
@@ -1150,34 +1203,55 @@ router.get("/onboarding/settings", async (req, res, next) => {
 
 router.put("/onboarding/settings", async (req, res, next) => {
   try {
+    if (!requireHrChecklistRole(req, res)) return;
     const organizationId = getOrganizationId(req);
     const body = UpdateOnboardingSettingsBody.parse(req.body);
-    if (body.hrAlertEmail !== undefined) {
-      const raw = (body.hrAlertEmail ?? "").trim();
-      if (raw.length === 0) {
-        await setSetting(organizationId, HR_ALERT_EMAIL_KEY, null);
-      } else {
-        if (!isValidEmail(raw)) {
-          res.status(400).json({ error: "Enter a valid email address (e.g. hr@company.com)." });
+    const hrAlertEmail =
+      body.hrAlertEmail === undefined ? undefined : (body.hrAlertEmail ?? "").trim() || null;
+    const hrApproverEmail =
+      body.hrApproverEmail === undefined ? undefined : (body.hrApproverEmail ?? "").trim() || null;
+    // Validate the complete request before performing any write.
+    if (hrAlertEmail && !isValidEmail(hrAlertEmail)) {
+      res.status(400).json({ error: "Enter a valid email address (e.g. hr@company.com)." });
+      return;
+    }
+    if (hrApproverEmail && !isValidEmail(hrApproverEmail)) {
+      res.status(400).json({ error: "Enter a valid email address for the HR approver." });
+      return;
+    }
+    if (body.day1Checklist !== undefined && body.expectedChecklistVersion === undefined) {
+      res.status(400).json({ error: "expectedChecklistVersion is required when updating the checklist." });
+      return;
+    }
+    if (body.day1Checklist === undefined && body.expectedChecklistVersion !== undefined) {
+      res.status(400).json({ error: "day1Checklist is required with expectedChecklistVersion." });
+      return;
+    }
+    if (body.day1Checklist !== undefined) {
+      try {
+        await saveChecklistVersion(
+          organizationId,
+          body.expectedChecklistVersion!,
+          body.day1Checklist,
+          req.authUserId!,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.name === "ChecklistVersionConflict") {
+          res.status(409).json({ error: error.message });
           return;
         }
-        await setSetting(organizationId, HR_ALERT_EMAIL_KEY, raw);
+        res.status(400).json({ error: error instanceof Error ? error.message : "Invalid checklist." });
+        return;
       }
+    }
+    if (body.hrAlertEmail !== undefined) {
+      await setSetting(organizationId, HR_ALERT_EMAIL_KEY, hrAlertEmail ?? null);
     }
     if (body.autoEscalationCalls !== undefined) {
       await setSetting(organizationId, AUTO_ESCALATION_CALLS_KEY, body.autoEscalationCalls ? "on" : null);
     }
     if (body.hrApproverEmail !== undefined) {
-      const raw = (body.hrApproverEmail ?? "").trim();
-      if (raw.length === 0) {
-        await setSetting(organizationId, HR_APPROVER_EMAIL_KEY, null);
-      } else {
-        if (!isValidEmail(raw)) {
-          res.status(400).json({ error: "Enter a valid email address for the HR approver." });
-          return;
-        }
-        await setSetting(organizationId, HR_APPROVER_EMAIL_KEY, raw);
-      }
+      await setSetting(organizationId, HR_APPROVER_EMAIL_KEY, hrApproverEmail ?? null);
       // The approver address doubles as a live-delivery authorization —
       // apply the change to the in-process allowlist immediately.
       await refreshDemoAllowlist(organizationId);

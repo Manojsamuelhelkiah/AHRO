@@ -17,9 +17,28 @@ import { organizationsTable } from "./organizations";
 
 export type OnbReadinessItemRow = {
   key: string;
+  /** Stable template item id. `key` is retained for legacy connector code. */
+  id?: string;
   label: string;
   status: string;
   note?: string;
+  order?: number;
+  mandatory?: boolean;
+  enforcementStage?: OnbChecklistEnforcementStage;
+};
+
+export type OnbChecklistEnforcementStage =
+  | "before-workstreams"
+  | "before-employee-communications"
+  | "before-day1-review";
+
+export type OnbChecklistTemplateItem = {
+  id: string;
+  label: string;
+  order: number;
+  enabled: boolean;
+  mandatory: boolean;
+  enforcementStage: OnbChecklistEnforcementStage;
 };
 
 /** One archive Q&A pair attached to an escalation, with the structured stint scope. */
@@ -59,6 +78,14 @@ export const onbCases = pgTable("onb_cases", {
   urgency: text("urgency").notNull().default("standard"),
   lifecycleStage: text("lifecycle_stage").notNull().default("trigger-received"),
   orchestrationStatus: text("orchestration_status").notNull().default("idle"),
+  /** Immutable effective checklist copied at case creation. */
+  checklistTemplateVersion: integer("checklist_template_version").notNull().default(1),
+  checklistSnapshot: jsonb("checklist_snapshot").$type<OnbChecklistTemplateItem[]>().notNull().default([]),
+  /** Last safely completed orchestration boundary; also identifies a checklist pause. */
+  orchestrationCheckpoint: text("orchestration_checkpoint"),
+  orchestrationClaimOwner: text("orchestration_claim_owner"),
+  orchestrationClaimToken: integer("orchestration_claim_token").notNull().default(0),
+  orchestrationClaimUntil: timestamp("orchestration_claim_until", { withTimezone: true }),
   readiness: jsonb("readiness").$type<OnbReadinessItemRow[]>().notNull().default([]),
   workstreams: jsonb("workstreams").$type<OnbWorkstreamRow[]>().notNull().default([]),
   primarySkill: text("primary_skill"),
@@ -148,12 +175,15 @@ export const onbCommunications = pgTable("onb_communications", {
    * MessageSid). Used to deduplicate polling / webhook retries.
    */
   externalMessageId: text("external_message_id"),
+  /** Stable orchestration boundary key; retries reuse the same timeline row. */
+  idempotencyKey: text("idempotency_key"),
   /** The authenticated reviewer who claimed the latest manual retry. */
   retriedBy: text("retried_by"),
   retriedAt: timestamp("retried_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique("onb_communications_organization_external_message_id_unique").on(t.organizationId, t.externalMessageId),
+  unique("onb_communications_organization_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_communications_organization_case_fk" }).onDelete("cascade"),
 ]);
 
@@ -170,6 +200,20 @@ export const onbSettings = pgTable("onb_settings", {
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.organizationId, t.key] })]);
+
+/** Immutable history of organization checklist configurations. Highest version is effective. */
+export const onbChecklistTemplates = pgTable("onb_checklist_templates", {
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id),
+  version: integer("version").notNull(),
+  items: jsonb("items").$type<OnbChecklistTemplateItem[]>().notNull(),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.organizationId, t.version] }),
+  check("onb_checklist_templates_version_check", sql`${t.version} > 0`),
+]);
 /**
  * One tracked external-system checklist item per case (BGV clearance,
  * ITSM access provisioning, payroll setup). The System Watcher agent

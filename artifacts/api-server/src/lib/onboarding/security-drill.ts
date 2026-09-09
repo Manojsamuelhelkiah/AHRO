@@ -18,6 +18,7 @@ import { twilioSignatureValid } from "./twilio-signature";
 import { recordGuardrailEvent } from "./guardrails";
 import { refreshDemoAllowlist } from "./demo-volunteers";
 import { runWithProviderDeny } from "./provider-policy";
+import { getEffectiveChecklist, readinessFromChecklist } from "./settings";
 
 export const DRILL_WORKER_NAME = "Red Team Drill (simulated attacker)";
 export const DRILL_EMAIL = "red.team.drill@attacker.example";
@@ -72,6 +73,7 @@ async function drillCase(organizationId: string): Promise<{ id: number; created:
     }
     return { id: existing.id, created: false };
   }
+  const checklist = await getEffectiveChecklist(organizationId);
   const [row] = await db
     .insert(onbCases)
     .values({
@@ -90,6 +92,9 @@ async function drillCase(organizationId: string): Promise<{ id: number; created:
       recruiterName: "Security Team",
       joiningDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
       notes: "Synthetic case for the guardrails security drill. Not a real person; contacts require explicit organization-scoped demo-volunteer authorization.",
+      checklistTemplateVersion: checklist.version,
+      checklistSnapshot: checklist.items,
+      readiness: readinessFromChecklist(checklist.items),
       scenarioKey: null,
       lifecycleStage: "in-progress",
       candidateEmailAuthorizedAt: null,

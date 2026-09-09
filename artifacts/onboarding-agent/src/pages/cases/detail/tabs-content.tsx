@@ -56,27 +56,7 @@ export function TasksTab({ c }: { c: any }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3 border-b">
-          <CardTitle className="text-[var(--text-base)]">Readiness Detail</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4 space-y-3">
-          {c.readiness?.map((r: any) => (
-            <div key={r.key} className="flex items-start gap-3 p-3 hover:bg-[var(--surface-alt)] rounded-[var(--radius-md)] transition-colors border border-transparent hover:border-[var(--border)]">
-              <div className="mt-0.5">
-                {r.status === 'ready' && <CheckCircle2 className="w-4 h-4 text-[var(--status-green)]" />}
-                {r.status === 'pending' && <Clock className="w-4 h-4 text-[var(--text-muted)] opacity-50" />}
-                {r.status === 'in-progress' && <Clock className="w-4 h-4 text-[var(--status-blue)]" />}
-                {r.status === 'exception' && <XCircle className="w-4 h-4 text-[var(--status-red)]" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-[var(--text-sm)] font-bold">{r.label}</p>
-                {r.note && <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1">{r.note}</p>}
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+
     </div>
   );
 }

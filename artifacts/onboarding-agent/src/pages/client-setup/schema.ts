@@ -89,3 +89,49 @@ export const initialDraft: ClientSetupDraft = {
   ],
   notes: ''
 };
+
+export const demoDraft: ClientSetupDraft = {
+  clientName: 'Northstar Global Services — Synthetic Demo',
+  sector: 'Technology',
+  employees: 12500,
+  countries: 18,
+  annualTransactions: 920000,
+  companyType: 'global',
+  isolationTier: 'siloed',
+  landscapeMaturity: 'mixed',
+  hrHourlyCostUsd: 58,
+  hitlHourlyCostUsd: 78,
+  processMode: 'recommended',
+  selectedDomains: ['Hire', 'Pay', 'Leave', 'Benefits', 'Time', 'Mobility', 'Develop', 'Retire', 'Data/Admin', 'Policy'],
+  processFiles: [],
+  personas: [
+    { role: 'Implementation lead', name: 'Avery Chen', email: 'avery.chen@example.com' },
+    { role: 'HR process owner', name: 'Priya Raman', email: 'priya.raman@example.com' },
+    { role: 'IAM / security approver', name: 'Mateo Silva', email: 'mateo.silva@example.com' },
+  ],
+  systems: [
+    { domain: 'Intake', name: 'Greenhouse Recruiting', vendor: 'Greenhouse', mode: 'API', ownerEmail: 'recruiting.ops@example.com' },
+    { domain: 'Employee Master', name: 'Workday HCM', vendor: 'Workday', mode: 'API', ownerEmail: 'hris@example.com' },
+    { domain: 'IAM/Access', name: 'Microsoft Entra ID', vendor: 'Microsoft', mode: 'API', ownerEmail: 'identity@example.com' },
+    { domain: 'Learning', name: 'Cornerstone Learning', vendor: 'Cornerstone', mode: 'API', ownerEmail: 'learning@example.com' },
+    { domain: 'IT Assets', name: 'ServiceNow ITSM', vendor: 'ServiceNow', mode: 'API', ownerEmail: 'it.operations@example.com' },
+    { domain: 'Payroll/Benefits', name: 'SAP SuccessFactors Payroll', vendor: 'SAP', mode: 'API', ownerEmail: 'payroll@example.com' },
+    { domain: 'Leave', name: 'Workday Absence', vendor: 'Workday', mode: 'API', ownerEmail: 'leave.admin@example.com' },
+    { domain: 'Compliance', name: 'Northstar Policy Hub', vendor: 'Internal', mode: 'Manual', ownerEmail: 'compliance@example.com' },
+    { domain: 'Documents', name: 'SharePoint Records', vendor: 'Microsoft', mode: 'API', ownerEmail: 'records@example.com' },
+    { domain: 'Communications', name: 'Microsoft Teams', vendor: 'Microsoft', mode: 'API', ownerEmail: 'people.comms@example.com' },
+  ],
+  notes: 'Synthetic demonstration profile. Every person, address, volume, and system mapping is fictional and can be edited.',
+};
+
+export function resolveInitialDraft(
+  savedDraft: Partial<ClientSetupDraft> | null,
+  useSyntheticDemo: boolean,
+): ClientSetupDraft {
+  const baseline = useSyntheticDemo ? demoDraft : initialDraft;
+  const candidate = { ...baseline, ...(savedDraft ?? {}) };
+  if (useSyntheticDemo && !clientSetupSchema.safeParse(candidate).success) {
+    return demoDraft;
+  }
+  return candidate;
+}

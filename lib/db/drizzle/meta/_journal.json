@@ -246,6 +246,27 @@
       "when": 1788887340012,
       "tag": "0030_candidate_portal",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788887340012,
+      "tag": "0030_day1_checklist_gates",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788887340013,
+      "tag": "0031_onboarding_communication_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788887340014,
+      "tag": "0032_onboarding_orchestration_claims",
+      "breakpoints": true
     }
   ]
 }

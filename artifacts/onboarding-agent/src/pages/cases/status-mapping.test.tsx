@@ -10,6 +10,7 @@ test("statusOf maps blocked orchestration to Blocked (before waiting fallthrough
   assert.equal(statusOf({ lifecycleStage: "in-progress", orchestrationStatus: "blocked" }), "Blocked");
   assert.equal(statusOf({ lifecycleStage: "exception", orchestrationStatus: "idle" }), "Blocked");
   assert.equal(statusOf({ lifecycleStage: "exception", orchestrationStatus: "blocked" }), "Blocked");
+  assert.equal(statusOf({ lifecycleStage: "preboarding", orchestrationStatus: "checklist-blocked" }), "Blocked");
 });
 
 test("statusOf maps waiting-approval to Human Review", () => {

@@ -1,12 +1,16 @@
 import { db } from "@workspace/db";
-import { onbCases, onbCommunications } from "@workspace/db/schema";
+import { onbCases, onbCommunications, onbEffectJournal } from "@workspace/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { recordGuardrailEvent } from "./guardrails";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandidateEmail } from "./channel-routing";
 import { isValidEmail } from "./settings";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { externalProviderDispatchDenied } from "./provider-policy";
+import {
+  claimEffectDispatch,
+  ensureEffectJournalEntry,
+} from "./effect-journal";
 import {
   blockedPublishBackupRequired,
   invalidBlockedPublishBackupCategories,
@@ -83,7 +87,7 @@ export function whatsappChannelInfo(): ChannelInfo {
 
 export function blockedPublishBackupReadiness(): BlockedPublishBackupReadiness {
   const destination = whatsappPhone(
-    process.env.ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP ?? ""
+    process.env.ONBOARDING_BLOCKED_PUBLISH_BACKUP_WHATSAPP ?? "",
   );
   const sender = whatsappPhone(process.env.TWILIO_WHATSAPP_FROM ?? "");
   const required = blockedPublishBackupRequired(process.env);
@@ -101,13 +105,13 @@ export function blockedPublishBackupReadiness(): BlockedPublishBackupReadiness {
       !required
         ? "Backup WhatsApp alerts are optional in this environment."
         : missing.length === 0 && invalid.length === 0
-        ? "Backup WhatsApp alerts are ready if Gmail rejects a blocked-release alert."
-        : [
-            missing.length > 0 ? `Configuration needed: ${missing.join(", ")}.` : null,
-            invalid.length > 0
-              ? `Fix ${invalid.join(" and ")} to use E.164 format (for example, +15551234567).`
-              : null,
-          ].filter(Boolean).join(" "),
+          ? "Backup WhatsApp alerts are ready if Gmail rejects a blocked-release alert."
+          : [
+              missing.length > 0 ? `Configuration needed: ${missing.join(", ")}.` : null,
+              invalid.length > 0
+                ? `Fix ${invalid.join(" and ")} to use E.164 format (for example, +15551234567).`
+                : null,
+            ].filter(Boolean).join(" "),
   };
 }
 
@@ -350,6 +354,10 @@ function withinRateLimit(): boolean {
   return true;
 }
 
+export function addCandidateReplyReference(body: string): string {
+  return `${body}\n\n[Reply reference: CR-${randomBytes(16).toString("hex")}]`;
+}
+
 /**
  * Send an outbound message on a channel and persist it to the case timeline.
  * Never throws — delivery failures are recorded on the communication row.
@@ -363,6 +371,7 @@ export async function sendOutbound(opts: {
   /** Optional redacted timeline copy when the delivered body contains an ephemeral secret. */
   persistedBody?: string;
   sensitive?: boolean;
+  idempotencyKey?: string;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
@@ -380,10 +389,98 @@ export async function sendOutbound(opts: {
   const actualAddress = candidateEmail?.address ?? opts.toAddress;
   // Shared-inbox replies are attributed only through this unguessable,
   // case-bound reference, never by sender address alone.
-  const body =
+  let body =
     opts.channel === "email" && candidateEmail
-      ? `${opts.body}\n\n[Reply reference: CR-${randomBytes(16).toString("hex")}]`
+      ? addCandidateReplyReference(opts.body)
       : opts.body;
+  let subject = opts.subject ?? null;
+  const masked =
+    opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress);
+  let dispatch:
+    | { owner: string; fencingToken: number; logicalOperationKey: string; communicationId: number }
+    | undefined;
+  if (opts.idempotencyKey) {
+    const logicalOperationKey = `candidate-communication:${opts.idempotencyKey}`;
+    // The first caller durably freezes the exact payload before any effect
+    // identity or provider dispatch. Retries reuse it even if an LLM proposes
+    // different text.
+    await db.insert(onbCommunications).values({
+      organizationId: caseRow.organizationId,
+      caseId: opts.caseId,
+      channel: opts.channel,
+      direction: "outbound",
+      audience: "candidate",
+      toAddress: masked,
+      subject: opts.subject ?? null,
+      body,
+      status: "sending",
+      failureReason: null,
+      sensitive: opts.sensitive ?? false,
+      idempotencyKey: opts.idempotencyKey,
+    }).onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
+    });
+    const [payload] = await db.select().from(onbCommunications).where(and(
+      eq(onbCommunications.organizationId, caseRow.organizationId),
+      eq(onbCommunications.idempotencyKey, opts.idempotencyKey),
+    ));
+    if (!payload || payload.caseId !== opts.caseId || payload.channel !== opts.channel) {
+      throw new Error("Communication idempotency key is bound to another payload");
+    }
+    body = payload.body;
+    subject = payload.subject;
+    const argumentsHash = createHash("sha256").update(JSON.stringify({
+      channel: payload.channel,
+      toAddress: payload.toAddress,
+      subject: payload.subject,
+      body: payload.body,
+    })).digest("hex");
+    const identity = {
+      logicalOperationKey,
+      organizationId: caseRow.organizationId,
+      tenantId: caseRow.organizationId,
+      caseId: opts.caseId,
+      toolName: `send-${opts.channel}`,
+      argumentsHash,
+      providerIdempotency: false,
+    };
+    const entry = await ensureEffectJournalEntry(identity);
+    const owner = randomUUID();
+    const claim = await claimEffectDispatch({
+      ...identity,
+      owner,
+      expectedFencingToken: entry.fencingToken,
+    });
+    const ensureCommunication = async (failureReason: string | null) => {
+      if (failureReason) {
+        await db.update(onbCommunications).set({ failureReason }).where(eq(onbCommunications.id, payload.id));
+      }
+      return payload.id;
+    };
+    if (claim.kind === "reuse_confirmed") {
+      const id = await ensureCommunication(null);
+      const [existing] = await db.select().from(onbCommunications).where(eq(onbCommunications.id, id));
+      return { id, status: existing.status, failureReason: existing.failureReason };
+    }
+    if (claim.kind === "manual_repair_required") {
+      const id = await ensureCommunication("Delivery outcome unknown; manual reconciliation required. Automatic resend is disabled.");
+      await db.update(onbCommunications).set({
+        status: "sending",
+        failureReason: "Delivery outcome unknown; manual reconciliation required. Automatic resend is disabled.",
+      }).where(eq(onbCommunications.id, id));
+      return { id, status: "sending", failureReason: "Delivery outcome unknown; manual reconciliation required. Automatic resend is disabled." };
+    }
+    if (claim.kind !== "claimed") {
+      const id = await ensureCommunication("Delivery is currently being dispatched by another worker.");
+      return { id, status: "sending", failureReason: "Delivery is currently being dispatched by another worker." };
+    }
+    dispatch = {
+      owner,
+      fencingToken: claim.fencingToken,
+      logicalOperationKey,
+      communicationId: await ensureCommunication(null),
+    };
+  }
   // Preserve prior explicit demo/env authorization for a case candidate while
   // still deriving the target from the record. It is not a blanket bypass:
   // the address itself must be allowlisted and the case must allow email.
@@ -437,12 +534,54 @@ export async function sendOutbound(opts: {
       detail: `Hourly live-send cap (${MAX_LIVE_SENDS_PER_HOUR}/h) reached — ${opts.channel} message logged, not delivered.`,
     });
   } else if (opts.channel === "email") {
-    result = await sendEmail(actualAddress, opts.subject ?? "Onboarding update", body);
+    result = await sendEmail(actualAddress, subject ?? "Onboarding update", body);
   } else {
     result = await sendWhatsApp(actualAddress, body);
   }
-  const masked =
-    opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress);
+  if (dispatch) {
+    const ambiguous = result.status === "sending";
+    const committed = await db.transaction(async (tx) => {
+      const [effect] = await tx.update(onbEffectJournal).set(ambiguous
+        ? {
+            status: "unknown_effect_manual_repair",
+            lastError: result.failureReason ?? "Provider delivery outcome unknown",
+            claimUntil: null,
+            updatedAt: sql`now()`,
+          }
+        : {
+            status: "confirmed",
+            externalEffectId: result.externalMessageId,
+            confirmedAt: sql`now()`,
+            claimUntil: null,
+            updatedAt: sql`now()`,
+          }).where(and(
+            eq(onbEffectJournal.logicalOperationKey, dispatch!.logicalOperationKey),
+            eq(onbEffectJournal.organizationId, caseRow.organizationId),
+            eq(onbEffectJournal.status, "dispatching"),
+            eq(onbEffectJournal.claimOwner, dispatch!.owner),
+            eq(onbEffectJournal.fencingToken, dispatch!.fencingToken),
+          )).returning({ key: onbEffectJournal.logicalOperationKey });
+      if (!effect) return false;
+      await tx.update(onbCommunications).set({
+        status: result.status,
+        failureReason: result.failureReason,
+        externalMessageId: result.externalMessageId,
+      }).where(eq(onbCommunications.id, dispatch!.communicationId));
+      return true;
+    });
+    if (!committed) {
+      return {
+        id: dispatch.communicationId,
+        status: "sending",
+        failureReason: "Dispatch claim expired before confirmation; manual reconciliation required.",
+      };
+    }
+    return {
+      id: dispatch.communicationId,
+      status: result.status,
+      failureReason: result.failureReason,
+    };
+  }
   const [row] = await db
     .insert(onbCommunications)
     .values({
@@ -452,12 +591,13 @@ export async function sendOutbound(opts: {
       direction: "outbound",
       audience: "candidate",
       toAddress: masked,
-      subject: opts.subject ?? null,
+      subject,
       body: opts.persistedBody ?? body,
       status: result.status,
       failureReason: result.failureReason,
       sensitive: opts.sensitive ?? false,
       externalMessageId: result.externalMessageId,
+      idempotencyKey: null,
     })
     .returning({ id: onbCommunications.id });
   return { id: row.id, status: result.status, failureReason: result.failureReason };
@@ -469,10 +609,75 @@ export async function sendAdministrativeEmail(opts: {
   toAddress: string;
   subject: string;
   body: string;
+  idempotencyKey?: string;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   const [caseRow] = await db.select({ organizationId: onbCases.organizationId }).from(onbCases)
     .where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  if (opts.idempotencyKey) {
+    const [claimedRow] = await db.insert(onbCommunications).values({
+      organizationId: caseRow.organizationId,
+      caseId: opts.caseId,
+      channel: "email",
+      direction: "outbound",
+      audience: "admin",
+      toAddress: maskEmail(opts.toAddress),
+      subject: opts.subject,
+      body: opts.body,
+      status: "sending",
+      failureReason: null,
+      idempotencyKey: opts.idempotencyKey,
+    }).onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
+    }).returning();
+    if (!claimedRow) {
+      const [existing] = await db.select().from(onbCommunications).where(and(
+        eq(onbCommunications.organizationId, caseRow.organizationId),
+        eq(onbCommunications.idempotencyKey, opts.idempotencyKey),
+      ));
+      if (!existing) throw new Error("Administrative communication claim disappeared");
+      return { id: existing.id, status: existing.status, failureReason: existing.failureReason };
+    }
+    const logicalOperationKey = `administrative-communication:${opts.idempotencyKey}`;
+    const identity = {
+      logicalOperationKey,
+      organizationId: caseRow.organizationId,
+      tenantId: caseRow.organizationId,
+      caseId: opts.caseId,
+      toolName: "send-administrative-email",
+      argumentsHash: createHash("sha256").update(JSON.stringify({
+        toAddress: claimedRow.toAddress,
+        subject: claimedRow.subject,
+        body: claimedRow.body,
+      })).digest("hex"),
+      providerIdempotency: false,
+    };
+    const entry = await ensureEffectJournalEntry(identity);
+    const owner = randomUUID();
+    const effectClaim = await claimEffectDispatch({
+      ...identity,
+      owner,
+      expectedFencingToken: entry.fencingToken,
+    });
+    if (effectClaim.kind !== "claimed") {
+      await db.update(onbCommunications).set({
+        failureReason: "Administrative delivery requires manual reconciliation; automatic resend is disabled.",
+      }).where(eq(onbCommunications.id, claimedRow.id));
+      return {
+        id: claimedRow.id,
+        status: "sending",
+        failureReason: "Administrative delivery requires manual reconciliation; automatic resend is disabled.",
+      };
+    }
+    // Continue below as the sole durable dispatch owner; completion is
+    // atomically committed with the journal transition.
+    (opts as typeof opts & { __dispatch?: { owner: string; token: number; key: string; id: number } }).__dispatch = {
+      owner,
+      token: effectClaim.fencingToken,
+      key: logicalOperationKey,
+      id: claimedRow.id,
+    };
+  }
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   let allowlistRefreshed = false;
   try {
@@ -489,6 +694,37 @@ export async function sendAdministrativeEmail(opts: {
     result = { status: "logged-only", failureReason: "Hourly live-send limit reached — notification logged, not delivered.", externalMessageId: null };
   } else {
     result = await sendEmail(opts.toAddress, opts.subject, opts.body);
+  }
+  const dispatch = (opts as typeof opts & { __dispatch?: { owner: string; token: number; key: string; id: number } }).__dispatch;
+  if (dispatch) {
+    const committed = await db.transaction(async (tx) => {
+      const [effect] = await tx.update(onbEffectJournal).set({
+        status: result.status === "sending" ? "unknown_effect_manual_repair" : "confirmed",
+        externalEffectId: result.externalMessageId,
+        confirmedAt: result.status === "sending" ? null : sql`now()`,
+        claimUntil: null,
+        lastError: result.status === "sending" ? result.failureReason : null,
+        updatedAt: sql`now()`,
+      }).where(and(
+        eq(onbEffectJournal.logicalOperationKey, dispatch.key),
+        eq(onbEffectJournal.organizationId, caseRow.organizationId),
+        eq(onbEffectJournal.claimOwner, dispatch.owner),
+        eq(onbEffectJournal.fencingToken, dispatch.token),
+        eq(onbEffectJournal.status, "dispatching"),
+      )).returning({ key: onbEffectJournal.logicalOperationKey });
+      if (!effect) return false;
+      await tx.update(onbCommunications).set({
+        status: result.status,
+        failureReason: result.failureReason,
+        externalMessageId: result.externalMessageId,
+      }).where(eq(onbCommunications.id, dispatch.id));
+      return true;
+    });
+    return {
+      id: dispatch.id,
+      status: committed ? result.status : "sending",
+      failureReason: committed ? result.failureReason : "Administrative delivery outcome is unknown; manual reconciliation required.",
+    };
   }
   const [row] = await db.insert(onbCommunications).values({
     organizationId: caseRow.organizationId,

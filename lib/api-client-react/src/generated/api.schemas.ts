@@ -2020,16 +2020,63 @@ export interface ActualsValidationResult {
   measuredFields: string[];
 }
 
+export type OnbChecklistEnforcementStage = typeof OnbChecklistEnforcementStage[keyof typeof OnbChecklistEnforcementStage];
+
+
+export const OnbChecklistEnforcementStage = {
+  'before-workstreams': 'before-workstreams',
+  'before-employee-communications': 'before-employee-communications',
+  'before-day1-review': 'before-day1-review',
+} as const;
+
 /**
- * One entry of the 7-point Day-1 readiness checklist
+ * One enabled entry in the case's versioned Day-1 checklist snapshot
  */
 export interface OnbReadinessItem {
-  /** profile | documentation | payroll | access | assets | learning | checkpoints */
+  /** Stable item identifier; retained as key for legacy clients */
   key: string;
+  /** Stable template item identifier */
+  id?: string;
   label: string;
   /** pending | in-progress | ready | exception */
   status: string;
   note?: string;
+  /** @minimum 0 */
+  order?: number;
+  mandatory?: boolean;
+  enforcementStage?: OnbChecklistEnforcementStage;
+}
+
+export interface OnbChecklistTemplateItem {
+  /** @pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  label: string;
+  /** @minimum 0 */
+  order: number;
+  enabled: boolean;
+  mandatory: boolean;
+  enforcementStage: OnbChecklistEnforcementStage;
+}
+
+export type OnbChecklistItemStatusUpdateStatus = typeof OnbChecklistItemStatusUpdateStatus[keyof typeof OnbChecklistItemStatusUpdateStatus];
+
+
+export const OnbChecklistItemStatusUpdateStatus = {
+  ready: 'ready',
+  pending: 'pending',
+} as const;
+
+export interface OnbChecklistItemStatusUpdate {
+  status: OnbChecklistItemStatusUpdateStatus;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
 }
 
 /**
@@ -2087,7 +2134,7 @@ export interface OnbCase {
   urgency: string;
   /** trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused */
   lifecycleStage: string;
-  /** running | waiting-approval | blocked | idle | done */
+  /** running | waiting-approval | checklist-blocked | blocked | idle | done */
   orchestrationStatus: string;
   readiness: OnbReadinessItem[];
   workstreams: OnbWorkstream[];
@@ -2108,6 +2155,14 @@ export interface OnbCase {
      * @nullable
      */
   planSummary: string | null;
+  /** @minimum 1 */
+  checklistTemplateVersion: number;
+  checklistSnapshot: OnbChecklistTemplateItem[];
+  /**
+     * Last completed orchestration boundary, or the exact checklist gate currently blocking the case
+     * @nullable
+     */
+  orchestrationCheckpoint: string | null;
   /** Whether this manually-created case currently authorizes live email to its candidate record address */
   candidateEmailAuthorized: boolean;
   createdAt: string;
@@ -2788,6 +2843,16 @@ export interface OnbSettings {
   autoEscalationCalls: boolean;
   /** Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve/reject from that exact sender decides them */
   hrApproverEmail: string | null;
+  /**
+     * Effective immutable checklist template version
+     * @minimum 1
+     */
+  checklistVersion: number;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  day1Checklist: OnbChecklistTemplateItem[];
 }
 
 export interface UpdateOnbSettings {
@@ -2797,6 +2862,16 @@ export interface UpdateOnbSettings {
   autoEscalationCalls?: boolean;
   /** New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged. */
   hrApproverEmail?: string | null;
+  /**
+     * Required optimistic concurrency version when day1Checklist is supplied
+     * @minimum 1
+     */
+  expectedChecklistVersion?: number;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  day1Checklist?: OnbChecklistTemplateItem[];
 }
 
 /**

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbCases, onbEffectJournal } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { DEMO_ORGANIZATION_ID, onbApprovals, onbCases, onbCommunications, onbEffectJournal, onbEvents } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
+import { addCandidateReplyReference, sendOutbound } from "./channels";
+import { createApproval, defaultReadiness, reconcileDecidedApprovals } from "./engine";
+import { checklistStageBlockers } from "./settings";
 import {
   claimEffectDispatch,
   confirmEffect,
@@ -72,6 +75,345 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       .where(eq(onbEffectJournal.logicalOperationKey, operation.logicalOperationKey));
     assert.equal(rows.length, 1);
     assert.equal(rows[0].fencingToken, 1);
+  });
+
+  test("concurrent non-idempotent dispatchers invoke the provider at most once", async () => {
+    const operation = identity(await createCase(), "single-provider-call");
+    let providerCalls = 0;
+    const dispatch = async (owner: string) => {
+      const claim = await claimEffectDispatch({
+        ...operation,
+        owner,
+        expectedFencingToken: 0,
+      });
+      if (claim.kind !== "claimed") return claim.kind;
+      providerCalls += 1;
+      await confirmEffect({
+        logicalOperationKey: operation.logicalOperationKey,
+        organizationId: operation.organizationId,
+        owner,
+        fencingToken: claim.fencingToken,
+        externalEffectId: "provider-message",
+      });
+      return "dispatched";
+    };
+    await Promise.all([dispatch("sender-a"), dispatch("sender-b")]);
+    assert.equal(providerCalls, 1);
+  });
+
+  test("welcome retries reuse the first durably persisted payload", async () => {
+    const caseId = await createCase();
+    const key = `payload-source-${Date.now()}`;
+    const logicalKey = `candidate-communication:${key}`;
+    keys.push(logicalKey);
+    const firstBody = addCandidateReplyReference("First generated welcome");
+    const secondBody = addCandidateReplyReference("Different regenerated LLM welcome");
+    const [firstReference] = firstBody.match(/CR-[a-f0-9]{32}/g) ?? [];
+    const [secondReference] = secondBody.match(/CR-[a-f0-9]{32}/g) ?? [];
+    assert.ok(firstReference);
+    assert.ok(secondReference);
+    assert.notEqual(secondReference, firstReference);
+    const first = await sendOutbound({
+      caseId,
+      channel: "email",
+      toAddress: "never-deliver@example.invalid",
+      subject: "Frozen subject",
+      body: firstBody,
+      idempotencyKey: key,
+    });
+    const second = await sendOutbound({
+      caseId,
+      channel: "email",
+      toAddress: "never-deliver@example.invalid",
+      subject: "Different retry subject",
+      body: secondBody,
+      idempotencyKey: key,
+    });
+    assert.equal(second.id, first.id);
+    const rows = await db.select().from(onbCommunications).where(and(
+      eq(onbCommunications.caseId, caseId),
+      eq(onbCommunications.idempotencyKey, key),
+    ));
+    assert.equal(rows.length, 1);
+    assert.match(rows[0].body, /First generated welcome/);
+    assert.doesNotMatch(rows[0].body, /Different regenerated/);
+    assert.match(rows[0].body, new RegExp(firstReference));
+    assert.doesNotMatch(rows[0].body, new RegExp(secondReference));
+    assert.equal(rows[0].subject, "Frozen subject");
+    await db.delete(onbCommunications).where(eq(onbCommunications.id, first.id));
+  });
+
+  test("replayed intake approval creates one approval and one timeline event", async () => {
+    const caseId = await createCase();
+    const key = `approval-replay-${Date.now()}`;
+    const request = {
+      caseId,
+      agent: "intake",
+      ruleRef: "4.1 Intake Rule 2",
+      hitlPattern: "approve-before-act" as const,
+      recommendation: "Approve expedited onboarding",
+      rationale: "Short lead time",
+      resumeAction: "continue-after-intake",
+      idempotencyKey: key,
+    };
+    await createApproval(request);
+    await createApproval(request);
+    const approvals = await db.select().from(onbApprovals).where(and(
+      eq(onbApprovals.caseId, caseId),
+      eq(onbApprovals.idempotencyKey, key),
+    ));
+    const events = await db.select().from(onbEvents).where(and(
+      eq(onbEvents.caseId, caseId),
+      eq(onbEvents.idempotencyKey, `${key}:event`),
+    ));
+    assert.equal(approvals.length, 1);
+    assert.equal(events.length, 1);
+    await db.delete(onbEvents).where(eq(onbEvents.caseId, caseId));
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
+  });
+
+  test("an approval decided before waiting is reconciled exactly once as intake-approved", async () => {
+    const caseId = await createCase();
+    await db.update(onbCases).set({
+      readiness: defaultReadiness(),
+      orchestrationStatus: "running",
+      orchestrationCheckpoint: "initial",
+    }).where(eq(onbCases.id, caseId));
+    await db.insert(onbApprovals).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      caseId,
+      agent: "intake",
+      ruleRef: "test-intake",
+      hitlPattern: "approve-before-act",
+      recommendation: "Proceed",
+      rationale: "Approved early",
+      resumeAction: "continue-after-intake",
+      status: "approved",
+    });
+    let continuations = 0;
+    const continuation = async (_id: number, planApproved: boolean) => {
+      continuations += 1;
+      assert.equal(planApproved, false);
+    };
+    assert.equal(await reconcileDecidedApprovals(caseId, continuation), false);
+    await db.update(onbCases).set({
+      orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: "waiting:intake",
+    }).where(eq(onbCases.id, caseId));
+    await Promise.all([
+      reconcileDecidedApprovals(caseId, continuation),
+      reconcileDecidedApprovals(caseId, continuation),
+    ]);
+    const [c] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+    assert.equal(continuations, 1);
+    assert.equal(c.orchestrationCheckpoint, "intake-approved");
+    assert.equal(c.readiness.find((item) => item.key === "profile")?.status, "ready");
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
+  });
+
+  test("a decided plan approval is recovered after interruption without bypass confusion", async () => {
+    const caseId = await createCase();
+    await db.update(onbCases).set({
+      readiness: defaultReadiness(),
+      orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: "waiting:plan",
+    }).where(eq(onbCases.id, caseId));
+    await db.insert(onbApprovals).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      caseId,
+      agent: "plan",
+      ruleRef: "test-plan",
+      hitlPattern: "approve-before-act",
+      recommendation: "Apply finance gate",
+      rationale: "Approved before process interruption",
+      resumeAction: "continue-after-plan",
+      status: "approved",
+    });
+    let continuations = 0;
+    await reconcileDecidedApprovals(caseId, async (_id, planApproved) => {
+      continuations += 1;
+      assert.equal(planApproved, true);
+    });
+    await reconcileDecidedApprovals(caseId, async () => {
+      continuations += 1;
+    });
+    const [c] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+    assert.equal(continuations, 1);
+    assert.equal(c.orchestrationCheckpoint, "plan-approved");
+    assert.equal(c.readiness.find((item) => item.key === "profile")?.status, "pending");
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
+  });
+
+  test("legacy null-checkpoint intake wait is inferred and claimed exactly once", async () => {
+    const caseId = await createCase();
+    await db.update(onbCases).set({
+      readiness: defaultReadiness(),
+      checklistSnapshot: [],
+      orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: null,
+    }).where(eq(onbCases.id, caseId));
+    await db.insert(onbApprovals).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      caseId,
+      agent: "intake",
+      ruleRef: "legacy-intake",
+      hitlPattern: "approve-before-act",
+      recommendation: "Proceed",
+      rationale: "Legacy decision persisted before restart",
+      resumeAction: "continue-after-intake",
+      status: "approved",
+    });
+    let continuations = 0;
+    const continuation = async (_id: number, planApproved: boolean) => {
+      continuations += 1;
+      assert.equal(planApproved, false);
+    };
+    await Promise.all([
+      reconcileDecidedApprovals(caseId, continuation),
+      reconcileDecidedApprovals(caseId, continuation),
+    ]);
+    const [c] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+    assert.equal(continuations, 1);
+    assert.equal(c.orchestrationCheckpoint, "intake-approved");
+    assert.equal(c.readiness.find((item) => item.key === "profile")?.status, "ready");
+    assert.deepEqual(c.checklistSnapshot, []);
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
+  });
+
+  test("legacy null-checkpoint plan wait repairs old profile state before exactly-once continuation", async () => {
+    const caseId = await createCase();
+    const readiness = defaultReadiness();
+    const profile = readiness.find((item) => item.key === "profile");
+    assert.ok(profile);
+    profile.status = "in-progress";
+    profile.note = "Legacy intake approval did not update readiness";
+    await db.update(onbCases).set({
+      readiness,
+      checklistSnapshot: [],
+      orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: null,
+    }).where(eq(onbCases.id, caseId));
+    await db.insert(onbApprovals).values([
+      {
+        organizationId: DEMO_ORGANIZATION_ID,
+        caseId,
+        agent: "intake",
+        ruleRef: "legacy-completed-intake",
+        hitlPattern: "approve-before-act",
+        recommendation: "Intake approved",
+        rationale: "Historical approval",
+        resumeAction: "continue-after-intake",
+        status: "approved",
+      },
+      {
+        organizationId: DEMO_ORGANIZATION_ID,
+        caseId,
+        agent: "plan",
+        ruleRef: "legacy-plan",
+        hitlPattern: "approve-before-act",
+        recommendation: "Plan approved",
+        rationale: "Decision persisted before restart",
+        resumeAction: "continue-after-plan",
+        status: "pending",
+      },
+    ]);
+    let continuations = 0;
+    assert.equal(
+      await reconcileDecidedApprovals(caseId, async () => {
+        continuations += 1;
+      }),
+      false,
+    );
+    assert.equal(continuations, 0);
+    await db.update(onbApprovals).set({ status: "approved" }).where(and(
+      eq(onbApprovals.caseId, caseId),
+      eq(onbApprovals.resumeAction, "continue-after-plan"),
+    ));
+    await Promise.all([
+      reconcileDecidedApprovals(caseId, async (_id, planApproved) => {
+        continuations += 1;
+        assert.equal(planApproved, true);
+        const [duringContinuation] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+        assert.equal(
+          duringContinuation.readiness.find((item) => item.key === "profile")?.status,
+          "ready",
+        );
+        assert.equal(
+          checklistStageBlockers(duringContinuation, "before-workstreams").length,
+          0,
+        );
+      }),
+      reconcileDecidedApprovals(caseId, async () => {
+        continuations += 1;
+      }),
+    ]);
+    const [c] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+    assert.equal(continuations, 1);
+    assert.equal(c.orchestrationCheckpoint, "plan-approved");
+    assert.equal(c.readiness.find((item) => item.key === "profile")?.status, "ready");
+    assert.deepEqual(c.checklistSnapshot, []);
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
+  });
+
+  test("legacy plan claim atomically persists profile repair across continuation interruption", async () => {
+    const caseId = await createCase();
+    const readiness = defaultReadiness();
+    const profile = readiness.find((item) => item.key === "profile");
+    assert.ok(profile);
+    profile.status = "in-progress";
+    await db.update(onbCases).set({
+      readiness,
+      checklistSnapshot: [],
+      orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: null,
+    }).where(eq(onbCases.id, caseId));
+    await db.insert(onbApprovals).values([
+      {
+        organizationId: DEMO_ORGANIZATION_ID,
+        caseId,
+        agent: "intake",
+        ruleRef: "legacy-atomic-intake",
+        hitlPattern: "approve-before-act",
+        recommendation: "Intake approved",
+        rationale: "Historical",
+        resumeAction: "continue-after-intake",
+        status: "approved",
+      },
+      {
+        organizationId: DEMO_ORGANIZATION_ID,
+        caseId,
+        agent: "plan",
+        ruleRef: "legacy-atomic-plan",
+        hitlPattern: "approve-before-act",
+        recommendation: "Plan approved",
+        rationale: "Historical",
+        resumeAction: "continue-after-plan",
+        status: "approved",
+      },
+    ]);
+    let continuationAttempts = 0;
+    await assert.rejects(
+      reconcileDecidedApprovals(caseId, async () => {
+        continuationAttempts += 1;
+        throw new Error("simulated crash immediately after continuation claim commit");
+      }),
+      /simulated crash/,
+    );
+    const [afterCrash] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+    assert.equal(afterCrash.orchestrationCheckpoint, "plan-approved");
+    assert.equal(afterCrash.readiness.find((item) => item.key === "profile")?.status, "ready");
+    assert.equal(checklistStageBlockers(afterCrash, "before-workstreams").length, 0);
+    assert.deepEqual(afterCrash.checklistSnapshot, []);
+    // Waiting-state reconciliation cannot create a duplicate continuation;
+    // watcher recovery consumes the already durable plan-approved checkpoint.
+    assert.equal(
+      await reconcileDecidedApprovals(caseId, async () => {
+        continuationAttempts += 1;
+      }),
+      false,
+    );
+    assert.equal(continuationAttempts, 1);
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
   });
 
   test("expired handoff fences stale claim and commit", async () => {

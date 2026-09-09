@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
+import { CaseReadiness } from './CaseReadiness';
 import { CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { Button, cn } from '@/components/ui-shared';
 import { EngineBadge } from '@/components/engine-badge';
@@ -184,48 +185,6 @@ function DocumentsSummaryCard({ docs, setTab }: any) {
   );
 }
 
-function CaseReadiness({ c, setTab }: any) {
-  const workstreams = c.workstreams || [];
-  const readyCount = workstreams.filter((w: any) => w.status === 'ready').length;
-  const waitingCount = workstreams.filter((w: any) => w.status === 'in-progress' || w.status === 'pending').length;
-  const reviewCount = workstreams.filter((w: any) => w.status === 'blocked' || w.status === 'exception').length;
-
-  return (
-    <div className="mb-10">
-      <h2 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)] mb-4">Case Readiness</h2>
-      <div className="space-y-3">
-        {workstreams.map((w: any) => (
-          <div key={w.key} className="flex items-start gap-3 p-3 rounded-[var(--radius-md)] hover:bg-[var(--surface-alt)] transition-colors border border-transparent hover:border-[var(--border)]">
-            <div className="mt-0.5 shrink-0">
-               {w.status === 'ready' && <CheckCircle2 className="w-4 h-4 text-[var(--status-green)]" />}
-               {(w.status === 'pending' || w.status === 'in-progress') && <Clock className="w-4 h-4 text-[var(--status-blue)]" />}
-               {(w.status === 'blocked' || w.status === 'exception') && <AlertTriangle className="w-4 h-4 text-[var(--status-amber)]" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <h4 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{w.label}</h4>
-                <StatusBadgeText status={w.status} />
-              </div>
-              <p className="text-[var(--text-xs)] text-[var(--text-secondary)]">
-                {w.status === 'ready' ? 'Completed successfully.' : w.status === 'blocked' ? 'Requires intervention.' : 'In progress.'}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 flex items-center gap-3 text-[var(--text-xs)] font-semibold text-[var(--text-secondary)] bg-[var(--surface-alt)] p-3 rounded-[var(--radius-md)] border border-[var(--border)]">
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[var(--status-green)]"></span>{readyCount} complete</span>
-        <span className="text-[var(--border-strong)]">|</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[var(--status-blue)]"></span>{waitingCount} waiting</span>
-        <span className="text-[var(--border-strong)]">|</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[var(--status-amber)]"></span>{reviewCount} human review</span>
-      </div>
-      <button onClick={() => setTab('Tasks')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold mt-4 text-left hover:underline">
-        View tasks →
-      </button>
-    </div>
-  );
-}
 
 function NextActions({ c, pendingApprovals, setTab }: any) {
   const actions = [];

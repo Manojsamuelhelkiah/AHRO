@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useUser } from '@clerk/react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, initialDraft } from './schema';
+import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, resolveInitialDraft } from './schema';
 import {
   canNavigateOrCommit,
   createClientSetupDraftSession,
@@ -32,8 +32,9 @@ const STEPS = [
 
 function loadInitialDraft(
   draftSession: ClientSetupDraftSession<ClientSetupDraft>,
+  useSyntheticDemo: boolean,
 ): ClientSetupDraft {
-  return { ...initialDraft, ...draftSession.load() };
+  return resolveInitialDraft(draftSession.load(), useSyntheticDemo);
 }
 
 type OrganizationSummary = {
@@ -43,8 +44,10 @@ type OrganizationSummary = {
 };
 function ClientSetupWizard({
   draftSession,
+  useSyntheticDemo,
 }: {
   draftSession: ClientSetupDraftSession<ClientSetupDraft>;
+  useSyntheticDemo: boolean;
 }) {
   const savedScenarioId = Number(new URLSearchParams(window.location.search).get('scenarioId'));
   const [currentStep, setCurrentStep] = useState(0);
@@ -58,7 +61,7 @@ function ClientSetupWizard({
   
   const form = useForm<ClientSetupDraft>({
     resolver: zodResolver(clientSetupSchema),
-    defaultValues: loadInitialDraft(draftSession),
+    defaultValues: loadInitialDraft(draftSession, useSyntheticDemo),
   });
 
   const handleFileOperationPendingChange = React.useCallback((pending: boolean) => {
@@ -344,7 +347,12 @@ export function ClientSetupPage() {
   if (!user || !draftSession) {
     return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">Could not establish a private draft scope for this workspace.</div>;
   }
-  return <ClientSetupWizard draftSession={draftSession} />;
+  return (
+    <ClientSetupWizard
+      draftSession={draftSession}
+      useSyntheticDemo={organization.organizationId === 'demo'}
+    />
+  );
 }
 
 function OrganizationSetup({

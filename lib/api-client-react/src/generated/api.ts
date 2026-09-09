@@ -65,6 +65,7 @@ import type {
   OnbChannelStatus,
   OnbChannelTest,
   OnbChannelTestResult,
+  OnbChecklistItemStatusUpdate,
   OnbCommunication,
   OnbConnector,
   OnbConnectorUpdate,
@@ -5126,6 +5127,80 @@ export function useListOnboardingCaseDocuments<TData = Awaited<ReturnType<typeof
 
 
 
+
+export const getUpdateOnboardingChecklistItemUrl = (id: number,
+    itemId: string,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/checklist/${itemId}`
+}
+
+/**
+ * @summary Complete or reopen a custom item in a case's immutable checklist snapshot
+ */
+export const updateOnboardingChecklistItem = async (id: number,
+    itemId: string,
+    onbChecklistItemStatusUpdate: OnbChecklistItemStatusUpdate, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getUpdateOnboardingChecklistItemUrl(id,itemId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbChecklistItemStatusUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateOnboardingChecklistItemMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingChecklistItem>>, TError,{id: number;itemId: string;data: BodyType<OnbChecklistItemStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingChecklistItem>>, TError,{id: number;itemId: string;data: BodyType<OnbChecklistItemStatusUpdate>}, TContext> => {
+
+const mutationKey = ['updateOnboardingChecklistItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOnboardingChecklistItem>>, {id: number;itemId: string;data: BodyType<OnbChecklistItemStatusUpdate>}> = (props) => {
+          const {id,itemId,data} = props ?? {};
+
+          return  updateOnboardingChecklistItem(id,itemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOnboardingChecklistItemMutationResult = NonNullable<Awaited<ReturnType<typeof updateOnboardingChecklistItem>>>
+    export type UpdateOnboardingChecklistItemMutationBody = BodyType<OnbChecklistItemStatusUpdate>
+    export type UpdateOnboardingChecklistItemMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Complete or reopen a custom item in a case's immutable checklist snapshot
+ */
+export const useUpdateOnboardingChecklistItem = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingChecklistItem>>, TError,{id: number;itemId: string;data: BodyType<OnbChecklistItemStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOnboardingChecklistItem>>,
+        TError,
+        {id: number;itemId: string;data: BodyType<OnbChecklistItemStatusUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateOnboardingChecklistItemMutationOptions(options));
+    }
 
 export const getListOnboardingCaseRecordsUrl = (id: number,) => {
 

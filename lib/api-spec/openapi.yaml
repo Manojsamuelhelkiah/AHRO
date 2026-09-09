@@ -1532,6 +1532,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/checklist/{itemId}:
+    put:
+      operationId: updateOnboardingChecklistItem
+      tags: [onboarding]
+      summary: Complete or reopen a custom item in a case's immutable checklist snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbChecklistItemStatusUpdate"
+      responses:
+        "200":
+          description: Updated case, or the unchanged case for an idempotent retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCase"
+        "404":
+          description: Case or snapshot item not found in this organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Item is disabled or connector-managed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/cases/{id}/records:
     get:
       operationId: listOnboardingCaseRecords
@@ -4305,11 +4346,14 @@ components:
       required: [valid, errors, intentRowCount, measuredFields]
     OnbReadinessItem:
       type: object
-      description: One entry of the 7-point Day-1 readiness checklist
+      description: One enabled entry in the case's versioned Day-1 checklist snapshot
       properties:
         key:
           type: string
-          description: profile | documentation | payroll | access | assets | learning | checkpoints
+          description: Stable item identifier; retained as key for legacy clients
+        id:
+          type: string
+          description: Stable template item identifier
         label:
           type: string
         status:
@@ -4317,7 +4361,49 @@ components:
           description: pending | in-progress | ready | exception
         note:
           type: string
+        order:
+          type: integer
+          minimum: 0
+        mandatory:
+          type: boolean
+        enforcementStage:
+          $ref: "#/components/schemas/OnbChecklistEnforcementStage"
       required: [key, label, status]
+    OnbChecklistEnforcementStage:
+      type: string
+      enum: [before-workstreams, before-employee-communications, before-day1-review]
+    OnbChecklistTemplateItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+        label:
+          type: string
+          minLength: 1
+          maxLength: 200
+        order:
+          type: integer
+          minimum: 0
+        enabled:
+          type: boolean
+        mandatory:
+          type: boolean
+        enforcementStage:
+          $ref: "#/components/schemas/OnbChecklistEnforcementStage"
+      required: [id, label, order, enabled, mandatory, enforcementStage]
+    OnbChecklistItemStatusUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ready, pending]
+        note:
+          type: ["string", "null"]
+          maxLength: 500
+      required: [status]
     OnbWorkstream:
       type: object
       description: A parallel readiness workstream owned by one agent
@@ -4386,7 +4472,7 @@ components:
           description: trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused
         orchestrationStatus:
           type: string
-          description: running | waiting-approval | blocked | idle | done
+          description: running | waiting-approval | checklist-blocked | blocked | idle | done
         readiness:
           type: array
           items:
@@ -4406,6 +4492,16 @@ components:
         planSummary:
           type: ["string", "null"]
           description: LLM-generated onboarding plan narrative
+        checklistTemplateVersion:
+          type: integer
+          minimum: 1
+        checklistSnapshot:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbChecklistTemplateItem"
+        orchestrationCheckpoint:
+          type: ["string", "null"]
+          description: Last completed orchestration boundary, or the exact checklist gate currently blocking the case
         candidateEmailAuthorized:
           type: boolean
           description: Whether this manually-created case currently authorizes live email to its candidate record address
@@ -4437,6 +4533,9 @@ components:
         - skillCriticality
         - scenarioKey
         - planSummary
+        - checklistTemplateVersion
+        - checklistSnapshot
+        - orchestrationCheckpoint
         - candidateEmailAuthorized
         - createdAt
         - updatedAt
@@ -5272,7 +5371,17 @@ components:
           type: string
           nullable: true
           description: Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve/reject from that exact sender decides them
-      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail]
+        checklistVersion:
+          type: integer
+          minimum: 1
+          description: Effective immutable checklist template version
+        day1Checklist:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/OnbChecklistTemplateItem"
+      required: [hrAlertEmail, envFallback, effective, source, autoEscalationCalls, hrApproverEmail, checklistVersion, day1Checklist]
     UpdateOnbSettings:
       type: object
       properties:
@@ -5287,6 +5396,16 @@ components:
           type: string
           nullable: true
           description: New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged.
+        expectedChecklistVersion:
+          type: integer
+          minimum: 1
+          description: Required optimistic concurrency version when day1Checklist is supplied
+        day1Checklist:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/OnbChecklistTemplateItem"
     RateSetReference:
       type: object
       description: Metadata identifying which pricing rate set snapshot was used to generate a rollup or quote.

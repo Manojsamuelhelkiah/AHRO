@@ -6,6 +6,7 @@ import {
   disconnectedCheckIsOverdue,
   escalateCheck,
   handleSystemWebhook,
+  recoverChecklistRows,
 } from "./system-watcher";
 import { setSetting, AUTO_ESCALATION_CALLS_KEY } from "./settings";
 import { DEMO_ORGANIZATION_ID, onbCommunications } from "@workspace/db/schema";
@@ -25,6 +26,23 @@ import {
 
 const T0 = Date.parse("2026-08-13T10:00:00Z");
 const INTERVAL = 20_000;
+
+test("checklist recovery isolates one failed case and continues", async () => {
+  const attempted: number[] = [];
+  const suspended: number[] = [];
+  await recoverChecklistRows(
+    [{ id: 101 }, { id: 202 }, { id: 303 }],
+    async (id) => {
+      attempted.push(id);
+      if (id === 202) throw new Error("ambiguous delivery");
+    },
+    async (id) => {
+      suspended.push(id);
+    },
+  );
+  assert.deepEqual(attempted, [101, 202, 303]);
+  assert.deepEqual(suspended, [202]);
+});
 
 function telemetry(overrides: Partial<Parameters<typeof classifySystem>[1]> = {}) {
   return {

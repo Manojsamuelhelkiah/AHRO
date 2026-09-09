@@ -11,7 +11,7 @@ export function StatusBadgeText({ status }: { status: string }) {
   if (['completed', 'healthy', 'ready', 'verified', 'approved', 'delivered', 'done', 'complete'].includes(s)) colorClass = 'text-[var(--status-green)]';
   else if (['running', 'active', 'in-progress', 'received'].includes(s)) colorClass = 'text-[var(--status-blue)]';
   else if (['waiting-approval', 'human review', 'pending', 'attention'].includes(s)) colorClass = 'text-[var(--status-amber)]';
-  else if (['blocked', 'critical', 'exception', 'failed', 'rejected'].includes(s)) colorClass = 'text-[var(--status-red)]';
+  else if (['blocked', 'checklist-blocked', 'critical', 'exception', 'failed', 'rejected'].includes(s)) colorClass = 'text-[var(--status-red)]';
 
   return (
     <span className={cn("font-bold uppercase tracking-wider text-[10px]", colorClass)}>
@@ -26,7 +26,7 @@ export function StatusDot({ status }: { status: string }) {
   if (['completed', 'healthy', 'ready', 'verified', 'approved', 'delivered', 'done', 'complete'].includes(s)) bg = 'var(--status-green)';
   else if (['running', 'active', 'in-progress', 'received'].includes(s)) bg = 'var(--status-blue)';
   else if (['waiting-approval', 'human review', 'pending', 'attention'].includes(s)) bg = 'var(--status-amber)';
-  else if (['blocked', 'critical', 'exception', 'failed', 'rejected'].includes(s)) bg = 'var(--status-red)';
+  else if (['blocked', 'checklist-blocked', 'critical', 'exception', 'failed', 'rejected'].includes(s)) bg = 'var(--status-red)';
 
   return <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: bg }} />;
 }
@@ -111,10 +111,10 @@ export function CaseHealthStrip({ c, pendingApprovals }: { c: any, pendingApprov
   // Health maps the full orchestrationStatus domain truthfully — never claim
   // active execution for idle/done cases.
   const orch = c.orchestrationStatus as string;
-  const state = pendingApprovals.length > 0 ? 'attention' : orch === 'blocked' ? 'blocked' : orch === 'done' ? 'done' : orch === 'idle' ? 'idle' : 'healthy';
+  const state = pendingApprovals.length > 0 ? 'attention' : (orch === 'blocked' || orch === 'checklist-blocked') ? 'blocked' : orch === 'done' ? 'done' : orch === 'idle' ? 'idle' : 'healthy';
   const healthTitle = state === 'attention' ? 'Attention required' : state === 'blocked' ? 'Blocked' : state === 'done' ? 'Complete' : state === 'idle' ? 'Idle' : 'Healthy';
   const healthSub = state === 'attention' ? `${pendingApprovals.length} decision${pendingApprovals.length > 1 ? 's' : ''} require${pendingApprovals.length === 1 ? 's' : ''} review`
-    : state === 'blocked' ? 'Waiting for manual unblock'
+    : state === 'blocked' ? (orch === 'checklist-blocked' ? 'Waiting for mandatory checklist items' : 'Waiting for manual unblock')
     : state === 'done' ? 'Case processing complete'
     : state === 'idle' ? 'No execution in progress'
     : 'Automated execution active';

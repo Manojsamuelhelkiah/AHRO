@@ -349,4 +349,34 @@ describe("tenant-safe candidate resolution", () => {
       [],
     );
   });
+
+  test("rejects a fabricated well-formed reference even from the expected sender", async () => {
+    const fabricatedReference = "CR-11111111111111111111111111111111";
+    const persistedReference = "CR-22222222222222222222222222222222";
+    const recorded: InboundMessage[] = [];
+    const detail = {
+      id: "fabricated-reference",
+      payload: {
+        headers: [
+          { name: "From", value: "Candidate <candidate@example.com>" },
+          { name: "Subject", value: "Re: Welcome" },
+        ],
+        mimeType: "text/plain",
+        body: {
+          data: Buffer.from(`Here are my details.\n> [Reply reference: ${fabricatedReference}]`).toString("base64url"),
+        },
+      },
+    };
+    await processMessageRefs(
+      [{ id: detail.id }],
+      new Map([["candidate@example.com", [{ caseId: 7, organizationId: "org-a" }]]]),
+      new Map([[persistedReference, [{ caseId: 7, organizationId: "org-a" }]]]),
+      {
+        fetchDetail: async () => ({ ok: true, json: async () => detail }),
+        alreadyRecorded: async () => false,
+        recordInbound: async (message) => (recorded.push(message), true),
+      },
+    );
+    assert.deepEqual(recorded, []);
+  });
 });

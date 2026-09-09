@@ -85,7 +85,7 @@ export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatu
   const stage = (c.lifecycleStage || '').toLowerCase();
   const orch = (c.orchestrationStatus || '').toLowerCase();
   if (stage === 'completed' || stage === 'complete') return 'Completed';
-  if (orch === 'blocked' || orch === 'failed' || stage === 'exception') return 'Blocked';
+  if (orch === 'blocked' || orch === 'checklist-blocked' || orch === 'failed' || stage === 'exception') return 'Blocked';
   if (orch === 'waiting-approval') return 'Human Review';
   if (stage === 'trigger-received') return 'New';
   if (orch === 'running') return 'In Progress';

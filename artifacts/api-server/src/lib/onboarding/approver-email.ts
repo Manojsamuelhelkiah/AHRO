@@ -178,6 +178,7 @@ export async function notifyApproverOfApproval(approval: {
       toAddress: to,
       subject,
       body,
+      idempotencyKey: `approval-notification:${approval.id}`,
     });
     await logEvent(
       approval.caseId,
@@ -187,6 +188,7 @@ export async function notifyApproverOfApproval(approval: {
       result.status === "sent"
         ? `The pending approval ${approvalRef(approval.id)} was emailed to the configured HR approver. A reply containing "approve" or "reject" from that address will decide it.`
         : `Emailing the HR approver about ${approvalRef(approval.id)} failed: ${result.failureReason ?? "unknown"}. The approval remains available in the in-app queue.`,
+      { idempotencyKey: `approval-notification:${approval.id}:event` },
     );
   } catch (err) {
     console.error(`[approver-email] notify failed for approval ${approval.id}:`, String(err));

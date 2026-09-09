@@ -12,7 +12,8 @@ import { DEMO_ORGANIZATION_ID, onbCases } from "@workspace/db/schema";
 import { and, sql } from "drizzle-orm";
 import { getSetting, setSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { setDemoAllowlist } from "./channels";
-import { defaultReadiness, defaultWorkstreams, startOrchestration } from "./engine";
+import { defaultWorkstreams, startOrchestration } from "./engine";
+import { getEffectiveChecklist, readinessFromChecklist } from "./settings";
 import { SCENARIOS, getScenario } from "./scenarios";
 import { organizationValues, organizationWhere } from "../organization-scope";
 
@@ -168,6 +169,7 @@ export async function seedVolunteerCases(
   organizationId = DEMO_ORGANIZATION_ID,
 ): Promise<SeedResult[]> {
   const volunteers = await loadVolunteers(organizationId);
+  const checklist = await getEffectiveChecklist(organizationId);
   const results: SeedResult[] = [];
   for (const v of volunteers) {
     const problem = volunteerProblems(v);
@@ -213,9 +215,11 @@ export async function seedVolunteerCases(
         skillCriticality: scenario?.intake.skillCriticality ?? null,
         notes: scenario?.intake.notes ?? v.notes,
         scenarioKey: scenario?.key ?? null,
-        readiness: defaultReadiness(),
+        checklistTemplateVersion: checklist.version,
+        checklistSnapshot: checklist.items,
+        readiness: readinessFromChecklist(checklist.items),
         workstreams: defaultWorkstreams(),
-        orchestrationStatus: "running",
+        orchestrationStatus: "idle",
          ...organizationValues(organizationId),
       })
       .returning();

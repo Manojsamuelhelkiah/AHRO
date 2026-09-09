@@ -7,8 +7,12 @@ import {
   onbSystemChecks,
   type OnbReadinessItemRow,
 } from "@workspace/db/schema";
-import { and, eq, gt, ne, sql } from "drizzle-orm";
-import { autoEscalationCallsEnabled } from "./settings";
+import { and, eq, gt, ne, or, sql } from "drizzle-orm";
+import {
+  autoEscalationCallsEnabled,
+  checklistStageBlockers,
+  mandatoryChecklistReady,
+} from "./settings";
 import {
   applicableSystems,
   completionAt,
@@ -200,6 +204,7 @@ export async function completeCheck(
   // (e.g. a BGV webhook and an ITSM poll at the same instant) both rewrite
   // the whole readiness JSON array — without serialization one write wins
   // and the other completion is silently lost.
+  let checklistResumeReady = false;
   await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(onbSystemChecks)
@@ -232,8 +237,26 @@ export async function completeCheck(
       if (item) {
         item.status = "ready";
         item.note = noteBySystem[def.key];
-        const allReady = readiness.every((r) => r.status === "ready");
-        promoted = allReady && c.lifecycleStage === "preboarding";
+        const allReady = mandatoryChecklistReady({ ...c, readiness });
+        // A gated case must resume through the exact orchestration boundary so
+        // analytics/review work cannot be skipped. Direct promotion is retained
+        // only for compatible idle/pre-migration cases.
+        promoted =
+          allReady &&
+          c.lifecycleStage === "preboarding" &&
+          c.orchestrationStatus === "idle" &&
+          !c.orchestrationCheckpoint;
+        const blockedStage = c.orchestrationCheckpoint?.replace("blocked:", "") as
+          | "before-workstreams"
+          | "before-employee-communications"
+          | "before-day1-review"
+          | undefined;
+        checklistResumeReady =
+          c.orchestrationStatus === "checklist-blocked" &&
+          (blockedStage === "before-workstreams" ||
+            blockedStage === "before-employee-communications" ||
+            blockedStage === "before-day1-review") &&
+          checklistStageBlockers({ ...c, readiness }, blockedStage).length === 0;
         await tx
           .update(onbCases)
           .set({
@@ -274,6 +297,13 @@ export async function completeCheck(
     ];
     await tx.insert(onbEvents).values(events);
   });
+  if (checklistResumeReady) {
+    // Dynamic import avoids the engine -> workstream connector -> watcher
+    // module cycle while still making source-system completion resume the
+    // exact gated boundary through its DB-backed compare-and-set claim.
+    const { resumeChecklistOrchestration } = await import("./engine");
+    await resumeChecklistOrchestration(check.caseId);
+  }
 }
 
 /** Escalate a late/stuck check exactly once. Exported for the watch-mailbox tracker. */
@@ -591,6 +621,75 @@ export async function recoverUntrackedCaseSystems(
   }
 }
 
+/** Reclaim durable checklist boundaries abandoned by a crashed worker. */
+export async function recoverChecklistOrchestrations(): Promise<void> {
+  const rows = await db.select({ id: onbCases.id }).from(onbCases).where(
+    and(
+      sql`${onbCases.orchestrationCheckpoint} in (
+        'blocked:before-workstreams',
+        'blocked:before-employee-communications',
+        'blocked:before-day1-review',
+        'blocked:re-review',
+        'initial',
+        'plan',
+        'intake-approved',
+        'plan-approved',
+        'workstreams-complete',
+        'communications-complete'
+      )`,
+      or(
+        eq(onbCases.orchestrationStatus, "checklist-blocked"),
+        and(
+          eq(onbCases.orchestrationStatus, "running"),
+          sql`(${onbCases.orchestrationClaimUntil} is null or ${onbCases.orchestrationClaimUntil} <= now())`,
+        ),
+      ),
+    ),
+  );
+  if (rows.length === 0) return;
+  const { resumeChecklistOrchestration } = await import("./engine");
+  await recoverChecklistRows(
+    rows,
+    resumeChecklistOrchestration,
+    // resumeChecklistOrchestration already performs an owner+token-fenced
+    // transition for its own failed claim. The outer recovery loop must never
+    // write by case id alone because a successor or HR re-review may now own it.
+    async () => {},
+  );
+}
+
+export async function recoverDecidedApprovalContinuations(): Promise<void> {
+  const rows = await db.select({ id: onbCases.id }).from(onbCases).where(
+    eq(onbCases.orchestrationStatus, "waiting-approval"),
+  );
+  if (rows.length === 0) return;
+  const { reconcileDecidedApprovals } = await import("./engine");
+  for (const row of rows) {
+    try {
+      await reconcileDecidedApprovals(row.id);
+    } catch (error) {
+      console.error(`[system-watcher] approval continuation recovery failed for case ${row.id}:`, error);
+    }
+  }
+}
+
+export async function recoverChecklistRows(
+  rows: Array<{ id: number }>,
+  resume: (id: number) => Promise<unknown>,
+  suspend: (id: number, error: unknown) => Promise<void>,
+): Promise<void> {
+  for (const row of rows) {
+    try {
+      await resume(row.id);
+    } catch (error) {
+      // One poisoned/ambiguous effect must not abort the heartbeat or prevent
+      // recovery of another tenant. Leave an explicit suspended checkpoint.
+      await suspend(row.id, error).catch(() => {});
+      console.error(`[system-watcher] checklist recovery suspended case ${row.id}:`, error);
+    }
+  }
+}
+
 async function tickOnce(): Promise<void> {
   const now = Date.now();
   // Connector configuration is tenant-owned. Seed only organizations that
@@ -600,6 +699,8 @@ async function tickOnce(): Promise<void> {
     .from(onbCases);
   await Promise.all(organizations.map(({ organizationId }) => ensureConnectorsSeeded(organizationId)));
   await sweepExpiredNonIdempotentEffects();
+  await recoverChecklistOrchestrations();
+  await recoverDecidedApprovalContinuations();
 
   // Self-heal: preboarding cases that somehow have no checks yet.
   await recoverUntrackedCaseSystems();

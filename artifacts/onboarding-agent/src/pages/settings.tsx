@@ -13,10 +13,12 @@ import {
   getGetOnboardingDashboardQueryKey,
   type DemoVolunteer,
   type DemoPersona,
+  type OnbChecklistTemplateItem,
+  type OnbChecklistEnforcementStage,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
-import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play } from 'lucide-react';
+import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown } from 'lucide-react';
 import { useLocation } from 'wouter';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -375,6 +377,191 @@ function DemoVolunteersCard() {
   );
 }
 
+const ENFORCEMENT_STAGES: { value: OnbChecklistEnforcementStage, label: string, desc: string }[] = [
+  { value: 'before-workstreams', label: 'Before Workstreams', desc: 'Blocks all downstream IT/security workstreams' },
+  { value: 'before-employee-communications', label: 'Before Comms', desc: 'Blocks welcome emails and preboarding communications' },
+  { value: 'before-day1-review', label: 'Before Day-1', desc: 'Blocks the final Day-1 Readiness review milestone' }
+];
+
+function ChecklistSettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: settings, isLoading } = useGetOnboardingSettings();
+  const update = useUpdateOnboardingSettings();
+
+  const [items, setItems] = useState<OnbChecklistTemplateItem[]>([]);
+  const [touched, setTouched] = useState(false);
+  const [notice, setNotice] = useState<{ok: boolean; message: string} | null>(null);
+  const [baseVersion, setBaseVersion] = useState<number>(1);
+
+  useEffect(() => {
+    if (settings && !touched) {
+      const sorted = [...(settings.day1Checklist || [])].sort((a, b) => a.order - b.order);
+      setItems(sorted);
+      setBaseVersion(settings.checklistVersion || 1);
+    }
+  }, [settings, touched]);
+
+  const handleMove = (index: number, direction: -1 | 1) => {
+    if (index + direction < 0 || index + direction >= items.length) return;
+    const newItems = [...items];
+    [newItems[index], newItems[index + direction]] = [newItems[index + direction], newItems[index]];
+    const reordered = newItems.map((item, order) => ({ ...item, order }));
+
+    setItems(reordered);
+    setTouched(true);
+    setNotice(null);
+  };
+
+  const handleAdd = () => {
+    const newItem: OnbChecklistTemplateItem = {
+      id: `custom-${crypto.randomUUID()}`,
+      label: 'New Checklist Item',
+      order: items.length,
+      enabled: true,
+      mandatory: true,
+      enforcementStage: 'before-day1-review'
+    };
+    setItems([...items, newItem]);
+    setTouched(true);
+    setNotice(null);
+  };
+
+  const handleUpdate = (index: number, updates: Partial<OnbChecklistTemplateItem>) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], ...updates };
+    setItems(newItems);
+    setTouched(true);
+    setNotice(null);
+  };
+
+  const handleSave = () => {
+    update.mutate({
+      data: {
+        expectedChecklistVersion: baseVersion,
+        day1Checklist: items
+      }
+    }, {
+      onSuccess: (saved) => {
+        queryClient.setQueryData(getGetOnboardingSettingsQueryKey(), saved);
+        setItems([...saved.day1Checklist].sort((a, b) => a.order - b.order));
+        setTouched(false);
+        setBaseVersion(saved.checklistVersion);
+        setNotice({ ok: true, message: `Checklist updated to version ${saved.checklistVersion}.` });
+        queryClient.invalidateQueries({ queryKey: getGetOnboardingSettingsQueryKey() });
+      },
+      onError: (err: any) => {
+        setNotice({ ok: false, message: err?.message || 'Failed to save checklist. Version conflict?' });
+      }
+    });
+  };
+
+  return (
+    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }} className="mt-8">
+      <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <IconTile icon={Check} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
+            <div>
+              <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Day-1 Readiness Checklist</h3>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
+                Manage custom items that block onboarding progression until completed by HR.
+              </p>
+            </div>
+          </div>
+          {!isLoading && (
+            <Badge className="bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)] font-mono shadow-none">
+              v{baseVersion}
+            </Badge>
+          )}
+        </div>
+      </div>
+      <div className="p-[var(--space-lg)] bg-[var(--surface)]">
+        {isLoading ? (
+          <LoadingBlock>Loading checklist...</LoadingBlock>
+        ) : (
+          <div className="space-y-4">
+            <div className="hidden md:grid grid-cols-12 gap-3 mb-2 px-2 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+              <div className="col-span-1">Order</div>
+              <div className="col-span-4">Label</div>
+              <div className="col-span-2">Requirement</div>
+              <div className="col-span-3">Enforcement Stage</div>
+              <div className="col-span-2 text-right">Status</div>
+            </div>
+            <div className="space-y-2">
+              {items.map((item, index) => (
+                <div key={item.id} data-testid={`row-checklist-item-${item.id}`} className={cn("grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 rounded-[var(--radius-md)] border transition-colors", !item.enabled ? "bg-[var(--surface-alt)] border-[var(--border)] opacity-60" : "bg-[var(--surface)] border-[var(--border)]")}>
+                  <div className="md:col-span-1 flex md:flex-col gap-1">
+                    <button type="button" aria-label={`Move ${item.label} up`} data-testid={`button-move-checklist-up-${item.id}`} onClick={() => handleMove(index, -1)} disabled={index === 0} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:hover:text-[var(--text-muted)] p-1 rounded hover:bg-[var(--surface-alt)] transition-colors">
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <button type="button" aria-label={`Move ${item.label} down`} data-testid={`button-move-checklist-down-${item.id}`} onClick={() => handleMove(index, 1)} disabled={index === items.length - 1} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:hover:text-[var(--text-muted)] p-1 rounded hover:bg-[var(--surface-alt)] transition-colors">
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className="md:hidden text-[10px] font-bold uppercase text-[var(--text-muted)]" htmlFor={`checklist-label-${item.id}`}>Label</label>
+                    <input id={`checklist-label-${item.id}`} data-testid={`input-checklist-label-${item.id}`} aria-label={`Label for ${item.label}`} type="text" value={item.label} onChange={e => handleUpdate(index, { label: e.target.value })} disabled={!item.enabled} maxLength={200} className={cn("block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] py-[6px] border outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] shadow-sm", !item.enabled ? "bg-transparent border-transparent" : "bg-background border-input")} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="md:hidden text-[10px] font-bold uppercase text-[var(--text-muted)]" htmlFor={`checklist-requirement-${item.id}`}>Requirement</label>
+                    <select id={`checklist-requirement-${item.id}`} data-testid={`select-checklist-requirement-${item.id}`} aria-label={`Requirement for ${item.label}`} value={item.mandatory ? 'true' : 'false'} onChange={e => handleUpdate(index, { mandatory: e.target.value === 'true' })} disabled={!item.enabled} className={cn("block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] py-[6px] border outline-none shadow-sm font-medium", !item.enabled ? "bg-transparent border-transparent" : "bg-background border-input", item.mandatory ? "text-[var(--status-amber-fg)] bg-[var(--status-amber-bg)] border-[var(--status-amber)]/20" : "text-[var(--status-green-fg)] bg-[var(--status-green-bg)] border-[var(--status-green)]/20")}>
+                      <option value="true">Mandatory</option>
+                      <option value="false">Optional</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="md:hidden text-[10px] font-bold uppercase text-[var(--text-muted)]" htmlFor={`checklist-stage-${item.id}`}>Enforcement stage</label>
+                    <select id={`checklist-stage-${item.id}`} data-testid={`select-checklist-stage-${item.id}`} aria-label={`Enforcement stage for ${item.label}`} value={item.enforcementStage} onChange={e => handleUpdate(index, { enforcementStage: e.target.value as OnbChecklistEnforcementStage })} disabled={!item.enabled} className={cn("block w-full text-[var(--text-xs)] rounded-[var(--radius-md)] h-[32px] px-[10px] py-[6px] border outline-none shadow-sm", !item.enabled ? "bg-transparent border-transparent" : "bg-background border-input")} title={ENFORCEMENT_STAGES.find(s => s.value === item.enforcementStage)?.desc}>
+                      {ENFORCEMENT_STAGES.map(stage => (
+                        <option key={stage.value} value={stage.value} title={stage.desc}>{stage.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2 flex justify-end">
+                    <Button data-testid={`button-toggle-checklist-${item.id}`} variant={item.enabled ? "outline" : "secondary"} size="sm" onClick={() => handleUpdate(index, { enabled: !item.enabled })} className={item.enabled ? "text-[var(--status-red)] hover:bg-[var(--status-red-bg)] hover:text-[var(--status-red)] border-transparent hover:border-[var(--status-red)]/20" : ""}>
+                      {item.enabled ? 'Disable' : 'Restore'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {items.length === 0 && (
+                <div className="p-[var(--space-xl)] text-center border border-dashed border-[var(--border-strong)] rounded-[var(--radius-lg)]">
+                  <p className="text-[var(--text-sm)] text-[var(--text-muted)]">No checklist items configured.</p>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-[var(--border)]">
+              <Button data-testid="button-add-checklist-item" variant="secondary" onClick={handleAdd} className="gap-2">
+                <Plus className="w-4 h-4" /> Add Item
+              </Button>
+              <Button data-testid="button-save-checklist" onClick={handleSave} disabled={!touched || update.isPending} className="gap-2 ml-auto bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]">
+                <Check className="w-4 h-4" /> Save Checklist
+              </Button>
+            </div>
+            {notice && (
+              <div role="status" data-testid="status-checklist-save" className={cn('p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] border flex items-start gap-3', notice.ok ? 'bg-[var(--status-green-bg)] border-[var(--status-green)]/30 text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] border-[var(--status-red)]/30 text-[var(--status-red-fg)]')}>
+                {notice.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5" /> : <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />}
+                <p className="mt-0.5">{notice.message}</p>
+              </div>
+            )}
+            <div className="mt-6 bg-[var(--surface-alt)] p-4 rounded-[var(--radius-md)] border border-[var(--border)]">
+              <h4 className="text-[var(--text-xs)] font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3">Enforcement Stages</h4>
+              <div className="space-y-3">
+                {ENFORCEMENT_STAGES.map(stage => (
+                  <div key={stage.value} className="flex gap-3">
+                    <div className="shrink-0 w-36 text-[var(--text-sm)] font-semibold text-[var(--text-secondary)]">{stage.label}</div>
+                    <div className="text-[var(--text-sm)] text-[var(--text-muted)]">{stage.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useGetOnboardingSettings();
@@ -645,6 +832,8 @@ export function SettingsPage() {
           )}
         </div>
       </div>
+
+      <ChecklistSettingsCard />
 
       <DemoVolunteersCard />
 

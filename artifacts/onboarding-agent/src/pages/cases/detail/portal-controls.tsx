@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Copy, Link2, Save, Send, Unlink } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@/components/ui-shared';
+import { portalAdminRequest } from '@/lib/portal-admin-request';
 
 const fields = [
   ['orientationDate', 'Orientation / joining date', 'date'],
@@ -21,10 +22,7 @@ export function PortalControls({ caseId, joiningDate }: { caseId: number; joinin
   const [busy, setBusy] = useState(false);
 
   const request = async (url: string, init?: RequestInit) => {
-    const response = await fetch(url, { credentials: 'include', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
-    const body = response.status === 204 ? null : await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body?.message || 'Request failed');
-    return body;
+    return portalAdminRequest<any>(url, init);
   };
 
   useEffect(() => {
