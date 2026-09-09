@@ -1669,9 +1669,6 @@ export const CustomIntentRiskClass = {
   high: 'high',
   consequential: 'consequential',
 } as const;
-
-export type CustomIntentEvidenceContract = { [key: string]: unknown };
-
 export type CustomIntentMaturity = typeof CustomIntentMaturity[keyof typeof CustomIntentMaturity];
 
 
@@ -1713,7 +1710,7 @@ export interface CustomIntent {
   accountableSpecialist: string;
   riskClass: CustomIntentRiskClass;
   actionSchema: IntentActionSchema;
-  evidenceContract: CustomIntentEvidenceContract;
+  evidenceContract: IntentEvidenceContract;
   maturity: CustomIntentMaturity;
   createdAt: string;
   updatedAt: string;
@@ -1728,9 +1725,6 @@ export const CustomIntentInputRiskClass = {
   high: 'high',
   consequential: 'consequential',
 } as const;
-
-export type CustomIntentInputEvidenceContract = { [key: string]: unknown };
-
 export type CustomIntentInputMaturity = typeof CustomIntentInputMaturity[keyof typeof CustomIntentInputMaturity];
 
 
@@ -1765,7 +1759,7 @@ export interface CustomIntentInput {
   accountableSpecialist?: string;
   riskClass?: CustomIntentInputRiskClass;
   actionSchema?: IntentActionSchema;
-  evidenceContract?: CustomIntentInputEvidenceContract;
+  evidenceContract?: IntentEvidenceContract;
   maturity?: CustomIntentInputMaturity;
 }
 
@@ -1778,9 +1772,6 @@ export const CustomIntentUpdateRiskClass = {
   high: 'high',
   consequential: 'consequential',
 } as const;
-
-export type CustomIntentUpdateEvidenceContract = { [key: string]: unknown };
-
 export type CustomIntentUpdateMaturity = typeof CustomIntentUpdateMaturity[keyof typeof CustomIntentUpdateMaturity];
 
 
@@ -1796,6 +1787,8 @@ export const CustomIntentUpdateMaturity = {
  * Partial update for a custom intent (all fields optional)
  */
 export interface CustomIntentUpdate {
+  /** Updated timestamp read when the editor opened; prevents overwriting a newer change */
+  expectedUpdatedAt: string;
   name?: string;
   domain?: string;
   flowClass?: string;
@@ -1813,7 +1806,7 @@ export interface CustomIntentUpdate {
   accountableSpecialist?: string;
   riskClass?: CustomIntentUpdateRiskClass;
   actionSchema?: IntentActionSchema;
-  evidenceContract?: CustomIntentUpdateEvidenceContract;
+  evidenceContract?: IntentEvidenceContract;
   maturity?: CustomIntentUpdateMaturity;
 }
 
@@ -2855,4 +2848,3 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
-

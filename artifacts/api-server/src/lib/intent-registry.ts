@@ -62,6 +62,15 @@ const EXECUTORS: Readonly<Record<string, ExecutorRegistration>> = Object.freeze(
   },
 });
 
+const MATURITY_RANK: Readonly<Record<RegistryMaturity, number>> = Object.freeze({
+  catalogued: 0,
+  unsupported: 0,
+  simulated: 1,
+  integrated: 2,
+  verified: 3,
+});
+const PARENT_INTENT_KEYS = new Set(coverage.parentIntents.map((parent) => parent.key));
+
 export function getRegisteredExecutor(key: string): ExecutorRegistration | undefined {
   return EXECUTORS[key];
 }
@@ -148,6 +157,11 @@ function customRoute(row: CustomIntentRow): IntentRoute {
         typeof action === "object" && action !== null && typeof (action as { name?: unknown }).name === "string")
     : [];
   const evidence = safeJsonObject(row.evidenceContract, { required: [] });
+  const maturity = row.maturity as RegistryMaturity;
+  const evidenceContract = {
+    completionEvidence: typeof evidence.completionEvidence === "string" ? evidence.completionEvidence : row.description,
+    required: Array.isArray(evidence.required) ? evidence.required.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [],
+  };
   return {
     registryVersion: row.registryVersion,
     key: row.key,
@@ -157,17 +171,33 @@ function customRoute(row: CustomIntentRow): IntentRoute {
     accountableSpecialist: row.accountableSpecialist,
     riskClass: row.riskClass as RiskClass,
     actionSchema: { actions },
-    evidenceContract: {
-      completionEvidence: typeof evidence.completionEvidence === "string" ? evidence.completionEvidence : row.description,
-      required: Array.isArray(evidence.required) ? evidence.required.filter((item): item is string => typeof item === "string") : [],
-    },
-    maturity: row.maturity as RegistryMaturity,
+    evidenceContract,
+    maturity,
     source: "custom",
     status: row.status as "active" | "retired",
     routable: row.status === "active"
       && ["simulated", "integrated", "verified"].includes(row.maturity)
+      && Boolean(row.parentIntentKey && PARENT_INTENT_KEYS.has(row.parentIntentKey))
       && actions.length > 0
-      && actions.every((action) => Boolean(action.executorKey && EXECUTORS[action.executorKey])),
+      && Boolean(evidenceContract.completionEvidence.trim())
+      && evidenceContract.required.length > 0
+      && actions.every((action) => {
+        if (
+          !action.type?.trim()
+          || !action.name?.trim()
+          || !action.description?.trim()
+          || typeof action.inputSchema !== "object"
+          || action.inputSchema === null
+          || Array.isArray(action.inputSchema)
+        ) return false;
+        if (!action.executorKey) return false;
+        const executor = EXECUTORS[action.executorKey];
+        return Boolean(
+          executor
+          && executor.owner === row.accountableSpecialist
+          && MATURITY_RANK[maturity] <= MATURITY_RANK[executor.maximumMaturity],
+        );
+      }),
   };
 }
 
@@ -219,14 +249,7 @@ export function validateCustomRoutingMetadata(input: {
       if (executor.owner !== input.accountableSpecialist) {
         throw new Error(`Action ${candidate.name} executor is owned by ${executor.owner}, not ${input.accountableSpecialist}`);
       }
-      const maturityRank: Record<string, number> = {
-        catalogued: 0,
-        unsupported: 0,
-        simulated: 1,
-        integrated: 2,
-        verified: 3,
-      };
-      if (maturityRank[input.maturity]! > maturityRank[executor.maximumMaturity]!) {
+      if (MATURITY_RANK[input.maturity as RegistryMaturity] > MATURITY_RANK[executor.maximumMaturity]) {
         throw new Error(`Action ${candidate.name} executor is only proven to ${executor.maximumMaturity} maturity`);
       }
     }
@@ -235,6 +258,10 @@ export function validateCustomRoutingMetadata(input: {
     throw new Error("evidenceContract must be an object");
   }
   const required = (input.evidenceContract as { required?: unknown }).required;
+  const completionEvidence = (input.evidenceContract as { completionEvidence?: unknown }).completionEvidence;
+  if (typeof completionEvidence !== "string" || !completionEvidence.trim()) {
+    throw new Error("evidenceContract.completionEvidence must explain what proves the outcome is complete");
+  }
   if (!Array.isArray(required) || required.length === 0 || required.some((item) => typeof item !== "string" || !item.trim())) {
     throw new Error("evidenceContract.required must contain at least one evidence field");
   }

@@ -1,0 +1,61 @@
+## Canonical hierarchy
+- **Recruit and select**
+  - Requisition administration → *Create/amend/close a requisition*; *publish or withdraw a vacancy*; *assign hiring team and approvals*.
+  - Candidate administration → *Create/merge candidate profile*; *record application, consent, source, and communication preference*; *schedule/reschedule interview*; *record interview decision*; *progress, reject, or place candidate on hold*.
+  - Offer and contract → *Generate an approved offer*; *revise/withdraw/expire offer*; *capture offer acceptance/decline*; *generate, sign, amend, or countersign employment contract*.
+- **Preboard and establish work eligibility**
+  - Identity/right-to-work → *Request identity documents*; *complete eligibility verification*; *resolve verification discrepancy*; *schedule reverification*; *produce an inspection-ready verification record*.
+  - BGV and screening → *obtain screening disclosure/consent*; *initiate/track screening*; *collect supporting document*; *clear or escalate exception*; *issue pre-adverse/adverse-action notice*; *record candidate dispute and outcome*.
+  - Worker data and employment record → *collect/validate personal, emergency-contact, address, demographic, and work-location data*; *create contingent-worker or employee record*; *correct duplicate/data error*; *change hire date, job, location, manager, or legal entity before start*.
+- **Enroll worker and provision workplace**
+  - Payroll/tax/time/benefits → *capture tax withholding/direct deposit*; *enroll/waive benefits*; *set payroll, tax, time, leave, and pay-group eligibility*; *resolve enrollment exception*.
+  - IT identity/access → *create workforce identity*; *provision/deprovision role-based application access*; *approve privileged access exception*; *reset/reissue pre-hire access*.
+  - Equipment/facilities → *request/assign/ship/confirm equipment*; *provision badge, site, parking, desk, or visitor access*; *report missing/incorrect asset or access*.
+- **Orient, activate, and integrate**
+  - Learning/policy → *assign mandatory learning/policies*; *capture acknowledgement/e-signature*; *chase overdue requirement*; *record exemption or equivalency approval*.
+  - Manager/buddy communications → *send welcome and joining instructions*; *assign/change buddy*; *schedule required introductions/check-ins*; *publish day-one agenda*.
+  - Day-one readiness → *confirm all critical readiness gates*; *remediate an incomplete day-one item*; *record first-day attendance/no-show*; *activate employment on start date*.
+- **Early tenure, change, and exit from onboarding**
+  - Probation/early tenure → *create probation plan and milestones*; *record 30/60/90-day or probation check-in*; *extend/confirm/fail probation with decision evidence*.
+  - Onboarding change/cancellation → *pause/resume onboarding*; *cancel hire before start*; *revoke pre-hire access and recover assets*; *reopen/correct a completed task*; *transfer case after manager/location/legal-entity change*.
+
+## Agent and execution mapping
+- **Requisition, candidate, offer/contract leaves:** accountable Talent Acquisition Operations specialist; collaborators recruiter, hiring manager, HRBP, legal/compensation. Systems: ATS/CRM, interview scheduler, offer/e-signature, document repository, HRIS. Reads candidate/requisition/approval state; writes workflow stage, communications, offer and signed-document metadata. Human approvals: headcount, compensation bands, legal clauses, final selection. Evidence: approval trail, dated candidate disposition, delivered offer, acceptance/signature artifact.
+- **Identity/right-to-work and BGV leaves:** accountable People Compliance/Screening specialist; collaborators candidate, local HR, legal/privacy, background-screening vendor. Systems: verification case manager, secure vault, I-9/right-to-work tool, screening vendor. Reads jurisdiction/rule and submitted evidence; writes consent, verification result, expiry/reverification task, exception and notices. Human approval is mandatory for discrepancies, document review, adverse decision and jurisdictional exceptions; high privacy/discrimination risk. Evidence: time-stamped consent, verification result, immutable audit history, required notices, document-retention/inspection index. Electronic I-9 storage needs integrity, change-detection, audit-trail and QA controls.
+- **Worker data and employment-record leaves:** accountable HR Operations/employee-data specialist; collaborators candidate, HRBP, payroll, manager. Systems: HRIS/core HCM, master-data quality/identity-match service. Reads offer and legal-entity/job structures; writes validated worker/person/employment records and effective-dated changes. Human approval for material changes and duplicate merge. Evidence: effective-dated record, validation results, source/consent, change audit.
+- **Payroll, tax, time and benefits leaves:** accountable Payroll/Benefits Operations specialist; collaborators employee, payroll provider, benefits broker/carrier, finance, local HR. Systems: payroll, tax, time/leave, benefits administration, secure payment data service. Reads employment eligibility and local rules; writes withholding, bank/payment, benefit election/waiver and eligibility records. Human approval/risk: payroll cut-off, plan eligibility, tax/legal exceptions; banking and tax data are highly sensitive. Evidence: received W-4/tax declaration, confirmed elections, carrier/payroll acknowledgement, exception resolution. 
+- **IT identity/access and equipment/facilities leaves:** accountable IT Service Management (identity/access) and Workplace/Facilities Operations (assets/site access); collaborators security, manager, procurement, vendor. Systems: IAM/directory, ITSM, MDM, asset CMDB, badge/facilities system. Reads hire/start date and RBAC profile; writes accounts, entitlements, asset custody and badge status. Human approval required for privileged/nonstandard access and spend/security exceptions. Evidence: provisioning logs, manager attestation, asset handoff receipt, badge/access confirmation; cancellation must trigger revocation and recovery tasks.
+- **Learning, policy, communications and day-one leaves:** accountable Onboarding Operations specialist; collaborators manager, buddy, L&D, HRBP, communications. Systems: onboarding orchestration, LMS, policy/e-signature, calendar/email/SMS. Reads persona/location/program; writes assignments, acknowledgements, invitations, reminders and readiness gate state. Human approval for exemptions and sensitive communications; risk is incomplete mandatory compliance or premature activation. Evidence: signed acknowledgement, LMS completion, sent/delivered communications, agenda and all-gates-ready status. SAP explicitly supports role/location/job-code targeted task programs, completion status, notifications, buddy, meetings, day-one preparation and equipment tasks.
+- **Probation and cancellation leaves:** accountable HRBP/People Manager Operations; collaborators manager, HR/legal, payroll, IT, facilities, TA. Systems: HRIS, performance/check-in workflow, case management, IAM/ITSM. Reads start/probation policy and readiness state; writes check-ins, employment decision, cancellation reason, downstream reversal tasks. Human decision is required for probation outcome, withdrawal/cancellation and any employment-law exception. Evidence: documented check-in/decision, effective-dated status, completion confirmations for access/payroll/asset reversals.
+
+## Boundary and alias notes
+- “Onboarding,” “induction,” and “orientation” overlap; CIPD treats induction as learning the role/employer and notes the alternate terms. This taxonomy uses **preboarding** before start, **day-one readiness** at start, and **early tenure/probation** after start.
+- Recruiting owns pre-offer candidate progression; HR Operations owns worker master data after accepted offer; shared handoff must preserve candidate consent and offer terms without creating a duplicate person.
+- Background screening is not right-to-work verification; both may collect documents but have separate vendors, legal bases, notice rules, retention and adverse-decision controls.
+- Payroll/tax/benefits/time are enrollment outcomes, not generic “employee setup.” Local statutory and plan overlays own forms, deadlines, eligibility and approvals.
+- IAM provisions digital identity; Facilities owns physical access; asset custody is Workplace/IT Asset Management. All are dependencies of day-one readiness, not duplicates.
+- Exclude general performance management, recruiting marketing, and post-probation talent development except the discrete probation/check-in outcomes above.
+
+## Key facts
+- SAP’s official onboarding documentation defines programs as task collections with roles/responsibilities, can target responsible groups using job location/job code, and lists buddy assignment, meetings, goals, day-one preparation and equipment among tasks. Closed tasks are dashboard-visible and can notify participants. https://help.sap.com/docs/successfactors-onboarding/implementing-onboarding/onboarding-tasks
+- USCIS says employers must retain completed Form I-9 for applicable payroll/remunerated workers, protect personal information, and make forms available for inspection within three business days. Its electronic-storage controls include integrity, unauthorized-change prevention, accessible audit trail, QA and indexing. https://www.uscis.gov/i-9-central/completing-form-i-9/retention-and-storage
+- FTC states that, when a background reporting company is used, the employer must supply a standalone written disclosure and obtain written permission; before an adverse decision it must give the report and Summary of Rights, followed by prescribed adverse-action information. Local laws can add restrictions. https://consumer.ftc.gov/articles/employer-background-checks-your-rights
+- IRS search evidence states employers must retain a completed/signed Form W-4 for at least four years, supporting a discrete tax-document capture and retention outcome. https://www.irs.gov/taxtopics/tc753
+
+## Source quality assessment
+- **Tier 1:** USCIS (government compliance authority); FTC Consumer Advice (government FCRA rights guidance); IRS (government tax authority); CIPD (established professional body).
+- **Tier 2:** SAP Help Portal (official enterprise-product documentation; strong operational taxonomy evidence, not law).
+- **Tier 3:** None used.
+
+## Gaps and unanswered questions
+- Need jurisdiction-by-jurisdiction legal overlays: right-to-work, privacy/retention, background-check timing, e-signature, tax, mandatory training, benefits and probation rules.
+- Need organizational decisions on system-of-record, identity matching, data minimization, retention schedules, delegation limits, SLAs and escalation owners.
+- Need precise RBAC/SoD matrix for offers, verification, screening exceptions, bank data, privileged access and probation/cancellation decisions.
+- Need an evidence schema defining immutable event IDs, document hashes, delivery receipts, effective dates, source-system authority and acceptable manual attestations.
+
+## Sources
+1. **Onboarding Tasks | SAP Help Portal** — https://help.sap.com/docs/successfactors-onboarding/implementing-onboarding/onboarding-tasks — date/version not stated on page; fetched 2026-09-08 — Tier 2 — saved evidence: `research/sources/master-hire-01.md`.
+2. **Retention and Storage | USCIS** — https://www.uscis.gov/i-9-central/completing-form-i-9/retention-and-storage — last reviewed 2020-07-10 — Tier 1 — saved evidence: `research/sources/master-hire-02.md`.
+3. **Employer Background Checks and Your Rights | FTC Consumer Advice** — https://consumer.ftc.gov/articles/employer-background-checks-your-rights — August 2025 — Tier 1 — saved evidence: `research/sources/master-hire-03.md`.
+4. **Topic no. 753, Form W-4, Employees Withholding Certificate | IRS** — https://www.irs.gov/taxtopics/tc753 — date not captured — Tier 1 — saved snippet evidence: `research/sources/master-hire-03.md`.
+5. **Employee induction | CIPD** — https://www.cipd.org/en/knowledge/guides/employee-induction — date not captured — Tier 1 — saved snippet evidence: `research/sources/master-hire-01.md`.

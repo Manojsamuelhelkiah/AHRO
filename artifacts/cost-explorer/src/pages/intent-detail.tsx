@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import {
   useListIntents,
@@ -11,6 +11,8 @@ import {
   useRevokeFlowOverride,
   useUpdateCustomIntent,
   useRetireCustomIntent,
+  useGetCustomIntent,
+  getGetCustomIntentQueryKey,
   getListFlowOverridesQueryKey,
   getListIntentsQueryKey,
 } from "@workspace/api-client-react";
@@ -51,6 +53,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AnimatePresence } from "framer-motion";
 import { FlowDiagram, FlowStepDetail } from "@/components/flow-diagram";
+import { CustomIntentRoutingEditor } from "@/components/custom-intent-routing-editor";
 import { IntentCorpusStatus } from "@/components/intent-corpus-status";
 const FLOW_CLASSES = [
   "fc1-deterministic",
@@ -350,7 +353,9 @@ function CustomIntentActions({ intentKey, intent }: {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const retireMutation = useRetireCustomIntent();
+  const customIntentQuery = useGetCustomIntent(intentKey);
   const [editOpen, setEditOpen] = useState(false);
+  const [routingOpen, setRoutingOpen] = useState(false);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: getListIntentsQueryKey() });
@@ -372,6 +377,9 @@ function CustomIntentActions({ intentKey, intent }: {
 
   return (
     <div className="flex gap-2">
+      <Button size="sm" className="gap-1.5" onClick={() => setRoutingOpen(true)}>
+        <Zap className="w-3.5 h-3.5" /> Configure route
+      </Button>
       <Button
         size="sm"
         variant="outline"
@@ -410,7 +418,13 @@ function CustomIntentActions({ intentKey, intent }: {
         open={editOpen}
         onOpenChange={setEditOpen}
         intent={intent}
+        expectedUpdatedAt={customIntentQuery.data?.updatedAt}
         onSaved={refresh}
+      />
+      <CustomIntentRoutingEditor
+        intentKey={intentKey}
+        open={routingOpen}
+        onOpenChange={setRoutingOpen}
       />
     </div>
   );
@@ -422,15 +436,19 @@ function EditIntentDialog({
   open,
   onOpenChange,
   intent,
+  expectedUpdatedAt,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   intent: Intent;
+  expectedUpdatedAt?: string;
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const updateMutation = useUpdateCustomIntent();
+  const [editVersion, setEditVersion] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: intent.name,
     domain: intent.domain,
@@ -445,6 +463,14 @@ function EditIntentDialog({
     source: intent.source.name,
   });
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setEditVersion(null);
+    } else if (editVersion === null && expectedUpdatedAt) {
+      setEditVersion(expectedUpdatedAt);
+    }
+  }, [editVersion, expectedUpdatedAt, open]);
 
   const set = (field: keyof typeof form) => (val: string) =>
     setForm((prev) => ({ ...prev, [field]: val }));
@@ -463,7 +489,12 @@ function EditIntentDialog({
     setFormError(null);
 
     try {
+      if (!editVersion) {
+        setFormError("The latest edit version is still loading. Close this editor, then try again.");
+        return;
+      }
       const patch: CustomIntentUpdate = {
+        expectedUpdatedAt: editVersion,
         name: form.name.trim(),
         domain: form.domain.trim(),
         flowClass: form.flowClass,
@@ -476,12 +507,14 @@ function EditIntentDialog({
         systemsTouchedBase: Number(form.systemsTouchedBase),
         source: form.source.trim(),
       };
-      await updateMutation.mutateAsync({ key: intent.key, data: patch });
+      const saved = await updateMutation.mutateAsync({ key: intent.key, data: patch });
+      queryClient.setQueryData(getGetCustomIntentQueryKey(intent.key), saved);
       toast({ title: "Intent updated" });
       onSaved();
       onOpenChange(false);
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : "Update failed");
+      const apiError = e as { data?: { error?: string }; message?: string };
+      setFormError(apiError.data?.error ?? apiError.message ?? "Update failed");
     }
   };
 

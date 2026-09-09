@@ -130,3 +130,73 @@ mtime_ms = 1788892510547
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/f45b8e97-f351-4a54-a4f7-1037167dbbd3/e6be64f8-6218-469f-bf13-f7301199bf6b"
 storage_version_token = "1788892518031470"
 content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "e0OnOkY3zDQ9ExZl8VKPN"
+uri = "file://research/hro-master-taxonomy-notes.md"
+type = "text"
+title = "Comprehensive HRO Taxonomy Research Notes"
+description = "Live research plan, coverage checklist, and findings log for the expanded hire-to-retire intent corpus."
+logical_id = "5b7c94bf-3501-4598-afa6-700210b10e50"
+content_hash = "sha256:670843899f3d97a218e227cc85a90ad1fb56af0ba7e3b285da09902d418841a5"
+size = 2738
+mtime_ms = 1788893902578
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/5b7c94bf-3501-4598-afa6-700210b10e50/6d6cfa31-1128-45cf-9089-bbdce7863890"
+storage_version_token = "1788893908020844"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "ZVocVFfAlU_eIyxqBe56v"
+uri = "file://research/hro-master-intent-taxonomy.md"
+type = "text"
+title = "Comprehensive HRO Intent & Agent Report"
+description = "Full 17-journey, 88-service, 320-sub-intent hierarchy with agent mapping, current-vs-target coverage, rollout guidance, and sources."
+logical_id = "5dca3e3f-9a69-43cb-a35d-8150bc98f103"
+content_hash = "sha256:363bb9d6ce8af8a9b2a670ab9e99df3c7fd978b4f24a617dafe86d18fbc63b9d"
+size = 98645
+mtime_ms = 1788894831682
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/5dca3e3f-9a69-43cb-a35d-8150bc98f103/5424ed69-2983-47bd-ba29-88d22a781348"
+storage_version_token = "1788894918311809"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "BWkevah4T1r7bFEj4b77H"
+uri = "file://research/hro-master-intent-taxonomy.xlsx"
+type = "table"
+title = "HRO Master Intent Taxonomy Workbook"
+description = "Nine-sheet workbook covering all intents, 63 onboarding leaves, 41 agent capabilities, legacy mappings, governance, and sources."
+logical_id = "ea6bae0d-a807-4cc4-a6d6-36dfe09a3963"
+content_hash = "sha256:b613f65cb2fa921600cf72828518e0d1b3a8b8453d4fd9c9a1d0ea5886c8a940"
+size = 80220
+mtime_ms = 1788894831870
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/ea6bae0d-a807-4cc4-a6d6-36dfe09a3963/a7fc44a3-169c-4fba-ae8b-bb3282b11f26"
+storage_version_token = "1788894919610392"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "yjIiq0abuOZdVxP4rOYNr"
+uri = "file://research/hro-master-intent-taxonomy.json"
+type = "unspecified"
+title = "HRO Master Taxonomy JSON"
+description = "Canonical machine-readable hierarchy with actions, systems, risk, evidence, aliases, policy overlays, maturity, and validation results."
+logical_id = "42a3530b-4585-4794-a0e3-0d7ef39c1f04"
+content_hash = "sha256:6b802ee961582855a309569e12a2ad5f01a8c825005049173f6cc3b872f49e8a"
+size = 527101
+mtime_ms = 1788894620142
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/42a3530b-4585-4794-a0e3-0d7ef39c1f04/2d90e6c8-3b39-46eb-be73-fbf33cb346fd"
+storage_version_token = "1788894920895500"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "vJWQMaKyNM3EDhLExmFZL"
+uri = "file://research/hro-master-intent-taxonomy.csv"
+type = "table"
+title = "HRO Master Taxonomy CSV"
+description = "Flat import-oriented export with one row per atomic sub-intent."
+logical_id = "e3067ba3-89c1-4ee6-8201-ea446ce34229"
+content_hash = "sha256:7bb654bd5b1cc45ed4fcc0aca36262ca8f4a9720b8dc07481965acc5df6e6dc3"
+size = 227451
+mtime_ms = 1788894831682
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/e3067ba3-89c1-4ee6-8201-ea446ce34229/3d430011-27ff-4546-a811-f99d56a2ceec"
+storage_version_token = "1788894922161153"
+content_type = "text/csv"

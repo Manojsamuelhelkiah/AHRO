@@ -777,7 +777,7 @@ paths:
     patch:
       operationId: updateCustomIntent
       tags: [customIntents]
-      summary: Update a custom intent (last-writer-wins)
+      summary: Update a custom intent if it has not changed since the editor loaded it
       parameters:
         - name: key
           in: path
@@ -805,6 +805,12 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: The custom intent changed after the editor loaded it
           content:
             application/json:
               schema:
@@ -3666,8 +3672,7 @@ components:
         actionSchema:
           $ref: "#/components/schemas/IntentActionSchema"
         evidenceContract:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/IntentEvidenceContract"
         maturity:
           type: string
           enum: [catalogued, simulated, integrated, verified, unsupported]
@@ -3747,8 +3752,7 @@ components:
         actionSchema:
           $ref: "#/components/schemas/IntentActionSchema"
         evidenceContract:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/IntentEvidenceContract"
         maturity:
           type: string
           enum: [catalogued, simulated, integrated, verified, unsupported]
@@ -3768,6 +3772,10 @@ components:
       type: object
       description: Partial update for a custom intent (all fields optional)
       properties:
+        expectedUpdatedAt:
+          type: string
+          format: date-time
+          description: Updated timestamp read when the editor opened; prevents overwriting a newer change
         name:
           type: string
         domain:
@@ -3807,11 +3815,11 @@ components:
         actionSchema:
           $ref: "#/components/schemas/IntentActionSchema"
         evidenceContract:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/IntentEvidenceContract"
         maturity:
           type: string
           enum: [catalogued, simulated, integrated, verified, unsupported]
+      required: [expectedUpdatedAt]
     FlowOverride:
       type: object
       description: A versioned SME adjustment to an intent's flow; latest approved version per intent is applied to roll-ups

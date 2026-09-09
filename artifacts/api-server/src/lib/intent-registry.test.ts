@@ -87,7 +87,7 @@ test("custom executable actions require one registered executor owned by the acc
         executorKey: "onboarding-case-workflow",
       }],
     },
-    evidenceContract: { required: ["caseId"] },
+    evidenceContract: { completionEvidence: "The onboarding case is complete.", required: ["caseId"] },
   }));
   assert.throws(
     () => validateCustomRoutingMetadata({
@@ -104,7 +104,7 @@ test("custom executable actions require one registered executor owned by the acc
           executorKey: "onboarding-case-workflow",
         }],
       },
-      evidenceContract: { required: ["caseId"] },
+      evidenceContract: { completionEvidence: "The onboarding case is complete.", required: ["caseId"] },
     }),
     /not Payroll Operations Specialist/,
   );
@@ -123,9 +123,57 @@ test("custom executable actions require one registered executor owned by the acc
           executorKey: "onboarding-case-workflow",
         }],
       },
-      evidenceContract: { required: ["caseId"] },
+      evidenceContract: { completionEvidence: "The onboarding case is complete.", required: ["caseId"] },
     }),
     /only proven to simulated maturity/,
+  );
+});
+
+test("executable routes require completion evidence and fail closed if stored ownership drifts", () => {
+  assert.throws(
+    () => validateCustomRoutingMetadata({
+      accountableSpecialist: "Onboarding Coordinator",
+      riskClass: "medium",
+      maturity: "simulated",
+      exactAliases: [],
+      actionSchema: {
+        actions: [{
+          type: "workflow",
+          name: "run-onboarding",
+          description: "Run the bounded onboarding workflow.",
+          inputSchema: { type: "object" },
+          executorKey: "onboarding-case-workflow",
+        }],
+      },
+      evidenceContract: { completionEvidence: " ", required: ["caseId"] },
+    }),
+    /must explain what proves/,
+  );
+
+  const registry = buildIntentRegistry([
+    customRow({
+      parentIntentKey: "onboarding-case",
+      accountableSpecialist: "Payroll Operations Specialist",
+      maturity: "simulated",
+      actionSchema: JSON.stringify({
+        actions: [{
+          type: "workflow",
+          name: "run-onboarding",
+          description: "Stored route with drifted ownership.",
+          inputSchema: { type: "object" },
+          executorKey: "onboarding-case-workflow",
+        }],
+      }),
+      evidenceContract: JSON.stringify({
+        completionEvidence: "The onboarding case is complete.",
+        required: ["caseId"],
+      }),
+    }),
+  ]);
+  assert.equal(registry.custom[0]?.routable, false);
+  assert.throws(
+    () => registry.resolve("client-outcome"),
+    (error) => error instanceof IntentResolutionError && error.code === "UNSUPPORTED_OUTCOME",
   );
 });
 

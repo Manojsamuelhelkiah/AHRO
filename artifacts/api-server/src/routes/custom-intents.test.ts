@@ -60,7 +60,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
     await pool.end();
   });
 
-  test("overlapping PATCHes keep aliases reserved and reject an invalid owner/executor merge", async () => {
+  test("overlapping PATCHes accept only one edit version and preserve a valid routing contract", async () => {
     const suffix = `${process.pid}-${Date.now()}`;
     const key = `concurrent-routing-${suffix}`;
     const oldAlias = `concurrent_old_${suffix}`;
@@ -82,6 +82,7 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
         tags: '["custom"]',
         source: "integration-test",
         author: "integration-test",
+        parentIntentKey: "onboarding-case",
         exactAliases: JSON.stringify([oldAlias]),
         accountableSpecialist: "Onboarding Coordinator",
         actionSchema: JSON.stringify({
@@ -93,8 +94,15 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
             executorKey: null,
           }],
         }),
+        evidenceContract: JSON.stringify({
+          completionEvidence: "The specialist confirms the request is complete.",
+          required: ["caseId"],
+        }),
       })
-      .returning({ id: customIntentsTable.id });
+      .returning({
+        id: customIntentsTable.id,
+        updatedAt: customIntentsTable.updatedAt,
+      });
     assert.ok(created);
     await db.insert(customIntentRoutingLabelsTable).values([
       { label: key, customIntentId: created.id, registryVersion: "research-v1" },
@@ -106,7 +114,10 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          expectedUpdatedAt: created.updatedAt.toISOString(),
+          ...body,
+        }),
       },
     );
 
@@ -127,39 +138,127 @@ describe("custom intent concurrent routing updates", { skip: !hasDb }, () => {
           maturity: "simulated",
         }),
       ]);
-
-      assert.equal(aliasesResponse.status, 200);
-      const ownerActionStatuses = [ownerResponse.status, actionResponse.status].sort();
-      assert.deepEqual(ownerActionStatuses, [200, 400]);
+      const responses = [aliasesResponse, ownerResponse, actionResponse];
+      assert.deepEqual(responses.map(({ status }) => status).sort(), [200, 409, 409]);
+      for (const response of responses.filter(({ status }) => status === 409)) {
+        const payload = await response.json() as { error?: string };
+        assert.match(payload.error ?? "", /changed by someone else/i);
+      }
 
       const [stored] = await db
         .select()
         .from(customIntentsTable)
         .where(eq(customIntentsTable.id, created.id));
-      assert.ok(stored);
-      assert.deepEqual(JSON.parse(stored.exactAliases), [newAlias]);
 
+      const storedAliases = JSON.parse(stored.exactAliases) as string[];
       const labels = await db
         .select({ label: customIntentRoutingLabelsTable.label })
         .from(customIntentRoutingLabelsTable)
         .where(eq(customIntentRoutingLabelsTable.customIntentId, created.id));
       assert.deepEqual(
         labels.map(({ label }) => label).sort(),
-        [key, newAlias].sort(),
+        [key, ...storedAliases].sort(),
       );
 
       const actionSchema = JSON.parse(stored.actionSchema) as {
         actions: Array<{ executorKey: string | null }>;
       };
       const executorKey = actionSchema.actions[0]?.executorKey;
-      assert.ok(
-        (stored.accountableSpecialist === "BGV Specialist" && executorKey === null)
-          || (
-            stored.accountableSpecialist === "Onboarding Coordinator"
-            && executorKey === "onboarding-case-workflow"
-          ),
-        "the serialized winner must leave a valid owner/executor contract",
+      if (aliasesResponse.status === 200) {
+        assert.deepEqual(storedAliases, [newAlias]);
+        assert.equal(stored.accountableSpecialist, "Onboarding Coordinator");
+        assert.equal(executorKey, null);
+        assert.equal(stored.maturity, "catalogued");
+      } else if (ownerResponse.status === 200) {
+        assert.deepEqual(storedAliases, [oldAlias]);
+        assert.equal(stored.accountableSpecialist, "BGV Specialist");
+        assert.equal(executorKey, null);
+        assert.equal(stored.maturity, "catalogued");
+      } else {
+        assert.equal(actionResponse.status, 200);
+        assert.deepEqual(storedAliases, [oldAlias]);
+        assert.equal(stored.accountableSpecialist, "Onboarding Coordinator");
+        assert.equal(executorKey, "onboarding-case-workflow");
+        assert.equal(stored.maturity, "simulated");
+      }
+    } finally {
+      await db.delete(customIntentsTable).where(eq(customIntentsTable.id, created.id));
+    }
+  });
+
+  test("an executable route cannot remove its required parent", async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const key = `parent-required-${suffix}`;
+    const [created] = await db
+      .insert(customIntentsTable)
+      .values({
+        key,
+        name: "Parent required regression",
+        domain: "hire",
+        flowClass: "fc2-policy",
+        description: "Executable route with a valid parent.",
+        asIsHandlingMin: 10,
+        toBeHumanMin: 2,
+        baseWeight: 1,
+        actGetActions: 1,
+        actPutActions: 0,
+        systemsTouchedBase: 1,
+        tags: '["custom"]',
+        source: "integration-test",
+        author: "integration-test",
+        parentIntentKey: "onboarding-case",
+        accountableSpecialist: "Onboarding Coordinator",
+        maturity: "simulated",
+        actionSchema: JSON.stringify({
+          actions: [{
+            type: "workflow",
+            name: "run-onboarding",
+            description: "Run the onboarding workflow.",
+            inputSchema: { type: "object" },
+            executorKey: "onboarding-case-workflow",
+          }],
+        }),
+        evidenceContract: JSON.stringify({
+          completionEvidence: "The onboarding case is complete.",
+          required: ["caseId"],
+        }),
+      })
+      .returning({
+        id: customIntentsTable.id,
+        updatedAt: customIntentsTable.updatedAt,
+      });
+    assert.ok(created);
+    await db.insert(customIntentRoutingLabelsTable).values({
+      label: key,
+      customIntentId: created.id,
+      registryVersion: "research-v1",
+    });
+
+    try {
+      const response = await fetch(`${baseUrl}/custom-intents/${key}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedUpdatedAt: created.updatedAt.toISOString(),
+          parentIntentKey: null,
+        }),
+      });
+      assert.equal(response.status, 400);
+      assert.deepEqual(
+        await response.json(),
+        { error: "Executable outcomes require a parent outcome family" },
       );
+
+      const [stored] = await db
+        .select({
+          parentIntentKey: customIntentsTable.parentIntentKey,
+          updatedAt: customIntentsTable.updatedAt,
+        })
+        .from(customIntentsTable)
+        .where(eq(customIntentsTable.id, created.id));
+      assert.ok(stored);
+      assert.equal(stored.parentIntentKey, "onboarding-case");
+      assert.equal(stored.updatedAt.toISOString(), created.updatedAt.toISOString());
     } finally {
       await db.delete(customIntentsTable).where(eq(customIntentsTable.id, created.id));
     }

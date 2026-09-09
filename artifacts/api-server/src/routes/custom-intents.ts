@@ -17,6 +17,14 @@ import {
 
 const router: IRouter = Router();
 
+class CustomIntentVersionConflictError extends Error {
+  constructor() {
+    super(
+      "This outcome was changed by someone else while you were editing. Reload the latest version, review their changes, and try again.",
+    );
+    this.name = "CustomIntentVersionConflictError";
+  }
+}
 /** Slug-ify a name and append a suffix if there is a collision. */
 async function generateKey(name: string, excludeId?: number): Promise<string> {
   const base = name
@@ -135,6 +143,20 @@ function validateFields(body: Record<string, unknown>, partial = false) {
       throw new InputValidationError(`${field} must be an object`);
     }
   }
+  if (body.expectedUpdatedAt !== undefined) {
+    if (typeof body.expectedUpdatedAt !== "string" || Number.isNaN(Date.parse(body.expectedUpdatedAt))) {
+      throw new InputValidationError("The edit version is invalid. Reload this outcome and try again.");
+    }
+  }
+  if (body.parentIntentKey !== undefined && body.parentIntentKey !== null) {
+    if (typeof body.parentIntentKey !== "string" || !body.parentIntentKey.trim()) {
+      throw new InputValidationError("Choose a valid parent outcome family.");
+    }
+    const parentKeys = new Set(buildIntentRegistry().parents.map((parent) => parent.key));
+    if (!parentKeys.has(body.parentIntentKey)) {
+      throw new InputValidationError("The selected parent outcome family is no longer available. Reload and choose another.");
+    }
+  }
 }
 
 function defaultActionSchema() {
@@ -149,22 +171,53 @@ function defaultActionSchema() {
   };
 }
 
+function defaultEvidenceContract(description: string) {
+  return {
+    completionEvidence: description,
+    required: ["request", "actor", "recordedAt"],
+  };
+}
 function validateMergedRoutingFields(
   body: Record<string, unknown>,
   existing?: typeof customIntentsTable.$inferSelect,
 ) {
+  const description = String(body.description ?? existing?.description ?? "").trim();
+  const evidenceWasProvided = body.evidenceContract !== undefined;
+  const evidenceContract = body.evidenceContract
+    ?? (existing ? JSON.parse(existing.evidenceContract) : defaultEvidenceContract(description));
+  const suppliedCompletionEvidence = (evidenceContract as { completionEvidence?: unknown }).completionEvidence;
+  const normalizedEvidence = {
+    ...(evidenceContract as Record<string, unknown>),
+    completionEvidence:
+      evidenceWasProvided
+        ? suppliedCompletionEvidence
+        : typeof suppliedCompletionEvidence === "string" && suppliedCompletionEvidence.trim()
+          ? suppliedCompletionEvidence
+          : description,
+  };
+  const maturity = String(body.maturity ?? existing?.maturity ?? "catalogued");
+  const parentIntentKey = Object.prototype.hasOwnProperty.call(body, "parentIntentKey")
+    ? body.parentIntentKey
+    : existing?.parentIntentKey ?? null;
   try {
+    if (
+      ["simulated", "integrated", "verified"].includes(maturity)
+      && (typeof parentIntentKey !== "string" || !parentIntentKey.trim())
+    ) {
+      throw new Error("Executable outcomes require a parent outcome family");
+    }
     validateCustomRoutingMetadata({
       accountableSpecialist: String(body.accountableSpecialist ?? existing?.accountableSpecialist ?? "HRO Service Owner"),
       riskClass: String(body.riskClass ?? existing?.riskClass ?? "medium"),
-      maturity: String(body.maturity ?? existing?.maturity ?? "catalogued"),
+      maturity,
       exactAliases: body.exactAliases ?? (existing ? JSON.parse(existing.exactAliases) : []),
       actionSchema: body.actionSchema ?? (existing ? JSON.parse(existing.actionSchema) : defaultActionSchema()),
-      evidenceContract: body.evidenceContract ?? (existing ? JSON.parse(existing.evidenceContract) : { required: ["request", "actor", "recordedAt"] }),
+      evidenceContract: normalizedEvidence,
     });
   } catch (error) {
     throw new InputValidationError(error instanceof Error ? error.message : "Invalid routing contract");
   }
+  return { evidenceContract: normalizedEvidence };
 }
 
 async function assertNoRoutingLabelCollision(
@@ -187,6 +240,7 @@ async function assertNoRoutingLabelCollision(
 }
 
 function serialize(row: typeof customIntentsTable.$inferSelect) {
+  const evidenceContract = JSON.parse(row.evidenceContract) as Record<string, unknown>;
   return {
     id: row.id,
     key: row.key,
@@ -210,7 +264,16 @@ function serialize(row: typeof customIntentsTable.$inferSelect) {
     accountableSpecialist: row.accountableSpecialist,
     riskClass: row.riskClass,
     actionSchema: JSON.parse(row.actionSchema) as Record<string, unknown>,
-    evidenceContract: JSON.parse(row.evidenceContract) as Record<string, unknown>,
+    evidenceContract: {
+      ...evidenceContract,
+      completionEvidence:
+        typeof evidenceContract.completionEvidence === "string" && evidenceContract.completionEvidence.trim()
+          ? evidenceContract.completionEvidence
+          : row.description,
+      required: Array.isArray(evidenceContract.required)
+        ? evidenceContract.required.filter((item): item is string => typeof item === "string")
+        : [],
+    },
     maturity: row.maturity,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -296,7 +359,7 @@ router.post("/custom-intents", async (req, res, next) => {
   try {
     const body = req.body as Record<string, unknown>;
     validateFields(body);
-    validateMergedRoutingFields(body);
+    const routingMetadata = validateMergedRoutingFields(body);
     const key = await generateKey(String(body.name));
     await assertNoRoutingLabelCollision(key, body.exactAliases as string[] | undefined ?? []);
     await createAfterPreflightHookForTests?.();
@@ -330,7 +393,7 @@ router.post("/custom-intents", async (req, res, next) => {
               : "HRO Service Owner",
             riskClass: body.riskClass ? String(body.riskClass) : "medium",
             actionSchema: JSON.stringify(body.actionSchema ?? defaultActionSchema()),
-            evidenceContract: JSON.stringify(body.evidenceContract ?? { required: ["request", "actor", "recordedAt"] }),
+            evidenceContract: JSON.stringify(routingMetadata.evidenceContract),
             maturity: body.maturity ? String(body.maturity) : "catalogued",
           })
           .returning();
@@ -371,6 +434,11 @@ router.patch("/custom-intents/:key", async (req, res, next) => {
   try {
     const key = req.params["key"]!;
     const body = req.body as Record<string, unknown>;
+    if (body.expectedUpdatedAt === undefined) {
+      throw new InputValidationError(
+        "This edit is missing its version. Reload the latest outcome and try again.",
+      );
+    }
     validateFields(body, true);
     const update: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) update.name = String(body.name).trim();
@@ -402,8 +470,19 @@ router.patch("/custom-intents/:key", async (req, res, next) => {
           .where(eq(customIntentsTable.key, key))
           .for("update");
         if (!existing) return null;
+        if (existing.updatedAt.toISOString() !== String(body.expectedUpdatedAt)) {
+          throw new CustomIntentVersionConflictError();
+        }
 
-        validateMergedRoutingFields(body, existing);
+        const routingMetadata = validateMergedRoutingFields(body, existing);
+        const existingEvidence = JSON.parse(existing.evidenceContract) as Record<string, unknown>;
+        if (
+          body.evidenceContract !== undefined
+          || typeof existingEvidence.completionEvidence !== "string"
+          || !existingEvidence.completionEvidence.trim()
+        ) {
+          update.evidenceContract = JSON.stringify(routingMetadata.evidenceContract);
+        }
         const aliases = body.exactAliases as string[] | undefined
           ?? JSON.parse(existing.exactAliases) as string[];
         const referenceLabels = new Set(
@@ -452,6 +531,10 @@ router.patch("/custom-intents/:key", async (req, res, next) => {
     }
     res.json(serialize(row!));
   } catch (e) {
+    if (e instanceof CustomIntentVersionConflictError) {
+      res.status(409).json({ error: e.message });
+      return;
+    }
     next(e);
   }
 });
