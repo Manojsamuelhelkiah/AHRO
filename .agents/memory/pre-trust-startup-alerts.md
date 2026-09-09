@@ -13,11 +13,14 @@ trusted when missing tenant parents, foreign keys, or tenant columns caused the
 block. Process memory resets on each deployment retry.
 
 **How to apply:** Atomically create an App Storage marker before dispatch.
-Suppress retries while it exists, delete it after a definite provider rejection
-or successful verification, retain it after an ambiguous dispatch, and never
-include safeguard findings or database details in the operator message. Put a
-short overall deadline around both notification and marker reset: alert delays
-must not postpone the original startup failure, and reset delays must never
-block a verified release from serving. A deadline only stops awaiting work; the
-failed-startup CLI must explicitly exit nonzero afterward so SDK sockets or
-retry timers cannot keep an unsafe release alive.
+Suppress retries while it exists. An ordered backup channel may be attempted
+only after the primary returns a definite rejection; never fail over after a
+transport exception because the primary may have delivered. Delete the claim
+only after every configured channel definitely rejects, or after successful
+verification; retain it after an ambiguous dispatch on any attempted channel.
+Never include safeguard findings or database details in operator messages. Put
+a short overall deadline around both notification and marker reset: alert
+delays must not postpone the original startup failure, and reset delays must
+never block a verified release from serving. A deadline only stops awaiting
+work; the failed-startup CLI must explicitly exit nonzero afterward so SDK
+sockets or retry timers cannot keep an unsafe release alive.

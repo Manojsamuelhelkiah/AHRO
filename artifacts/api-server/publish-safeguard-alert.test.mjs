@@ -125,3 +125,186 @@ test("a definite delivery rejection releases the claim for a later retry", async
 
   assert.equal(deleted, 1);
 });
+
+test("a definite Gmail rejection uses the configured backup WhatsApp destination", async () => {
+  let deleted = 0;
+  let twilioRequest;
+  const result = await alertBlockedPublish({
+    operatorEmail: "operator@example.com",
+    backupWhatsApp: "+15551234567",
+    twilioAccountSid: "AC-test",
+    twilioAuthToken: "test-token",
+    twilioWhatsAppFrom: "+15557654321",
+    marker: {
+      save: async () => {},
+      delete: async () => {
+        deleted += 1;
+      },
+    },
+    connectors: {
+      proxy: async () => ({
+        ok: false,
+        status: 503,
+        text: async () => "private Gmail response",
+      }),
+    },
+    fetchImpl: async (_url, options) => {
+      twilioRequest = options;
+      return { ok: true };
+    },
+  });
+
+  assert.deepEqual(result, { claimed: true, sent: true });
+  assert.equal(deleted, 0);
+  const message = new URLSearchParams(twilioRequest.body);
+  assert.equal(message.get("To"), "whatsapp:+15551234567");
+  assert.match(message.get("Body"), /tenant safeguards could not be trusted/);
+  assert.doesNotMatch(message.get("Body"), /schema|foreign key|orphan|DATABASE_URL/i);
+});
+
+test("an ambiguous Gmail request never sends the backup channel", async () => {
+  let backupSends = 0;
+  let deleted = 0;
+  await assert.rejects(
+    alertBlockedPublish({
+      operatorEmail: "operator@example.com",
+      backupWhatsApp: "+15551234567",
+      twilioAccountSid: "AC-test",
+      twilioAuthToken: "test-token",
+      twilioWhatsAppFrom: "+15557654321",
+      marker: {
+        save: async () => {},
+        delete: async () => {
+          deleted += 1;
+        },
+      },
+      connectors: {
+        proxy: async () => {
+          throw new Error("connection reset");
+        },
+      },
+      fetchImpl: async () => {
+        backupSends += 1;
+        return { ok: true };
+      },
+    }),
+    /connection reset/,
+  );
+  assert.equal(backupSends, 0);
+  assert.equal(deleted, 0);
+});
+
+test("an ambiguous backup request retains the claim to prevent duplicate alerts", async () => {
+  let deleted = 0;
+  await assert.rejects(
+    alertBlockedPublish({
+      operatorEmail: "operator@example.com",
+      backupWhatsApp: "+15551234567",
+      twilioAccountSid: "AC-test",
+      twilioAuthToken: "test-token",
+      twilioWhatsAppFrom: "+15557654321",
+      marker: {
+        save: async () => {},
+        delete: async () => {
+          deleted += 1;
+        },
+      },
+      connectors: {
+        proxy: async () => ({
+          ok: false,
+          status: 503,
+          text: async () => "private Gmail response",
+        }),
+      },
+      fetchImpl: async () => {
+        throw new Error("Twilio connection reset");
+      },
+    }),
+    /Twilio connection reset/,
+  );
+  assert.equal(deleted, 0);
+});
+
+test("missing backup credentials release the claim so corrected configuration can retry", async () => {
+  let active = false;
+  let backupSends = 0;
+  const marker = {
+    async save() {
+      if (active) throw Object.assign(new Error("already exists"), { code: 412 });
+      active = true;
+    },
+    async delete() {
+      active = false;
+    },
+  };
+  const connectors = {
+    proxy: async () => ({
+      ok: false,
+      status: 503,
+      text: async () => "private Gmail response",
+    }),
+  };
+
+  await assert.rejects(
+    alertBlockedPublish({
+      operatorEmail: "operator@example.com",
+      backupWhatsApp: "+15551234567",
+      twilioAccountSid: "",
+      twilioAuthToken: "",
+      twilioWhatsAppFrom: "",
+      marker,
+      connectors,
+    }),
+    /configured without Twilio credentials/,
+  );
+  assert.equal(active, false);
+
+  const result = await alertBlockedPublish({
+    operatorEmail: "operator@example.com",
+    backupWhatsApp: "+15551234567",
+    twilioAccountSid: "AC-test",
+    twilioAuthToken: "test-token",
+    twilioWhatsAppFrom: "+15557654321",
+    marker,
+    connectors,
+    fetchImpl: async () => {
+      backupSends += 1;
+      return { ok: true };
+    },
+  });
+  assert.deepEqual(result, { claimed: true, sent: true });
+  assert.equal(backupSends, 1);
+});
+
+test("definite rejection by both providers releases the claim", async () => {
+  let deleted = 0;
+  await assert.rejects(
+    alertBlockedPublish({
+      operatorEmail: "operator@example.com",
+      backupWhatsApp: "+15551234567",
+      twilioAccountSid: "AC-test",
+      twilioAuthToken: "test-token",
+      twilioWhatsAppFrom: "+15557654321",
+      marker: {
+        save: async () => {},
+        delete: async () => {
+          deleted += 1;
+        },
+      },
+      connectors: {
+        proxy: async () => ({
+          ok: false,
+          status: 503,
+          text: async () => "private Gmail response",
+        }),
+      },
+      fetchImpl: async () => ({
+        ok: false,
+        status: 503,
+        text: async () => "private Twilio response",
+      }),
+    }),
+    /backup WhatsApp delivery failed \(503\)/,
+  );
+  assert.equal(deleted, 1);
+});

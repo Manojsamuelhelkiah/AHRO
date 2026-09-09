@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { explicitlyAllowlistedCandidateAddress, gmailAmbiguousFailure, gmailHttpFailure, systemEmailTestAddress } from "./channels";
+import { explicitlyAllowlistedCandidateAddress, gmailAmbiguousFailure, gmailHttpFailure, systemEmailTestAddress, twilioAmbiguousFailure, twilioHttpFailure } from "./channels";
 
 test("Gmail HTTP rejection is definitive failed with the provider reason", () => {
   const result = gmailHttpFailure(403, "recipient rejected");
@@ -13,6 +13,13 @@ test("Gmail transport exception remains ambiguous sending and is not auto-retrya
   assert.equal(result.status, "sending");
   assert.match(result.failureReason, /outcome unknown/i);
   assert.match(result.failureReason, /do not retry automatically/i);
+});
+
+test("Twilio distinguishes definite HTTP rejection from ambiguous transport failure", () => {
+  assert.equal(twilioHttpFailure(503, "provider rejected").status, "failed");
+  const ambiguous = twilioAmbiguousFailure(new Error("connection reset"));
+  assert.equal(ambiguous.status, "sending");
+  assert.match(ambiguous.failureReason, /do not retry automatically/i);
 });
 
 test("channel Settings test path requires a separate explicitly allowlisted system address", () => {

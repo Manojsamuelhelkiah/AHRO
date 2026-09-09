@@ -74,6 +74,22 @@ export function gmailAmbiguousFailure(err: unknown) {
   };
 }
 
+export function twilioHttpFailure(status: number, detail: string) {
+  return {
+    status: "failed",
+    failureReason: `Twilio ${status}: ${detail.slice(0, 300)}`,
+    externalMessageId: null,
+  };
+}
+
+export function twilioAmbiguousFailure(err: unknown) {
+  return {
+    status: "sending",
+    failureReason: `Delivery outcome unknown: Twilio request did not complete cleanly (${String(err).slice(0, 240)}). Do not retry automatically.`,
+    externalMessageId: null,
+  };
+}
+
 /**
  * Send a plain email via the connected Gmail account. Exported so system
  * alerting (e.g. the inbox-monitor outage notifier) can reuse the same
@@ -176,12 +192,12 @@ async function sendWhatsApp(
     );
     if (!resp.ok) {
       const detail = await resp.text();
-      return { status: "failed", failureReason: `Twilio ${resp.status}: ${detail.slice(0, 300)}`, externalMessageId: null };
+      return twilioHttpFailure(resp.status, detail);
     }
     const sent = (await resp.json().catch(() => null)) as { sid?: string } | null;
     return { status: "sent", failureReason: null, externalMessageId: sent?.sid ?? null };
   } catch (err) {
-    return { status: "failed", failureReason: String(err).slice(0, 300), externalMessageId: null };
+    return twilioAmbiguousFailure(err);
   }
 }
 
