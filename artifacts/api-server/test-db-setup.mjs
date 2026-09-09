@@ -24,6 +24,9 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Reviewed development-only transition from final 0021 to the temporary,
   // publish-safe Phase A shape. It changes constraints/defaults but no rows.
   "ad9006a05088bdeda2dfc687bad1de46453040064e25a1ce7c0bae4781cb136a",
+  // Security-reviewed Phase B removal of temporary tenant defaults and
+  // restoration of direct organization and deferred watch-email foreign keys.
+  "0937be5afda5af42fd3674d1d3c195fa822d8467709fe7b9b42ea5c41bdbdd9d",
 ]);
 
 // These errors mean an old migration's individual DDL statement is already

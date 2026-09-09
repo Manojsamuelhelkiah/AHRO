@@ -13,6 +13,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { organizationsTable } from "./organizations";
 
 export type OnbReadinessItemRow = {
   key: string;
@@ -41,7 +42,7 @@ export const onbCases = pgTable("onb_cases", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   workerName: text("worker_name").notNull(),
   workerEmail: text("worker_email").notNull(),
   workerPhone: text("worker_phone"),
@@ -79,7 +80,7 @@ export const onbEvents = pgTable("onb_events", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   // Nullable: system-level events (e.g. inbox-monitor outages) are not tied to a case.
   caseId: integer("case_id"),
   agent: text("agent").notNull(),
@@ -100,7 +101,7 @@ export const onbApprovals = pgTable("onb_approvals", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   caseId: integer("case_id")
     .notNull()
     ,
@@ -128,7 +129,7 @@ export const onbCommunications = pgTable("onb_communications", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   caseId: integer("case_id")
     .notNull()
     ,
@@ -165,7 +166,7 @@ export const onbSettings = pgTable("onb_settings", {
   key: text("key").notNull(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.organizationId, t.key] })]);
@@ -182,7 +183,7 @@ export const onbSystemChecks = pgTable(
     id: serial("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
-      .default("demo"),
+      .references(() => organizationsTable.id),
     caseId: integer("case_id")
       .notNull()
       ,
@@ -211,7 +212,7 @@ export const onbConnectors = pgTable("onb_connectors", {
   key: text("key").notNull(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   label: text("label").notNull(),
   vendor: text("vendor").notNull(),
   availableVendors: jsonb("available_vendors").$type<string[]>().notNull().default([]),
@@ -234,7 +235,7 @@ export const onbEffectJournal = pgTable(
     logicalOperationKey: text("logical_operation_key").notNull(),
     organizationId: text("organization_id")
       .notNull()
-      .default("demo"),
+      .references(() => organizationsTable.id),
     tenantId: text("tenant_id").notNull(),
     caseId: integer("case_id"),
     toolName: text("tool_name").notNull(),
@@ -281,7 +282,7 @@ export const onbDocuments = pgTable(
     id: serial("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
-      .default("demo"),
+      .references(() => organizationsTable.id),
     caseId: integer("case_id")
       .notNull()
       ,
@@ -311,7 +312,7 @@ export const onbCallSlots = pgTable("onb_call_slots", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   caseId: integer("case_id")
     .notNull()
     ,
@@ -341,7 +342,7 @@ export const onbVoiceSessions = pgTable("onb_voice_sessions", {
   token: text("token").notNull(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   caseId: integer("case_id")
     .notNull()
     ,
@@ -386,7 +387,7 @@ export const onbWatchEmails = pgTable("onb_watch_emails", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   gmailMessageId: text("gmail_message_id").notNull(),
   checkId: integer("check_id"),
   caseId: integer("case_id"),
@@ -401,6 +402,8 @@ export const onbWatchEmails = pgTable("onb_watch_emails", {
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique("onb_watch_emails_organization_gmail_message_id_unique").on(t.organizationId, t.gmailMessageId),
+  foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_watch_emails_organization_case_fk" }).onDelete("cascade"),
+  foreignKey({ columns: [t.organizationId, t.checkId], foreignColumns: [onbSystemChecks.organizationId, onbSystemChecks.id], name: "onb_watch_emails_organization_check_fk" }).onDelete("cascade"),
 ]);
 
 /**
@@ -412,7 +415,7 @@ export const onbEmployeeRecords = pgTable("onb_employee_records", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   /** Archive match key: the (re)hire's email, lowercased. */
   workerEmail: text("worker_email").notNull(),
   workerName: text("worker_name").notNull(),
@@ -442,7 +445,7 @@ export const onbGuardrailEvents = pgTable("onb_guardrail_events", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   /** Nullable: some guardrails fire outside any case (e.g. forged webhooks). */
   caseId: integer("case_id"),
   /** Key into the guardrails catalog (see api-server guardrails lib). */

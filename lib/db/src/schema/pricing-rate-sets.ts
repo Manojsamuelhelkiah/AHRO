@@ -1,6 +1,7 @@
 import { date, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { organizationsTable } from "./organizations";
 
 /**
  * Immutable versioned pricing rate register. Each row is a snapshot of all
@@ -13,7 +14,7 @@ export const pricingRateSetsTable = pgTable("pricing_rate_sets", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
-    .default("demo"),
+    .references(() => organizationsTable.id),
   /** Calendar date string YYYY-MM-DD: the date from which this rate set is in effect. */
   effectiveDate: date("effective_date", { mode: "string" }).notNull(),
   /** Mandatory human-readable rationale for this version. */

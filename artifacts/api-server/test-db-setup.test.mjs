@@ -325,6 +325,67 @@ test("tenant Phase A keeps the publish target data-preserving and legacy-compati
   );
 });
 
+test("tenant Phase B restores fail-closed defaults and all deferred foreign keys", async () => {
+  const phaseBSql = await readFile(
+    new URL(
+      "../../lib/db/drizzle/0023_application_organizations_phase_b.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const tenantTables = [
+    "scenarios",
+    "custom_intents",
+    "actuals_overlays",
+    "flow_overrides",
+    "onb_cases",
+    "onb_events",
+    "onb_approvals",
+    "onb_communications",
+    "onb_system_checks",
+    "onb_settings",
+    "onb_connectors",
+    "onb_effect_journal",
+    "onb_documents",
+    "onb_call_slots",
+    "onb_voice_sessions",
+    "onb_watch_emails",
+    "onb_employee_records",
+    "onb_guardrail_events",
+    "custom_intent_routing_labels",
+    "pricing_rate_sets",
+    "pricing_sheets",
+    "ea_assessments",
+  ];
+
+  assert.doesNotMatch(
+    phaseBSql,
+    /^\s*(?:DELETE|TRUNCATE|UPDATE|INSERT|DROP\s+TABLE|ALTER\s+TABLE\b.*\bDROP\s+COLUMN)\b/im,
+  );
+  for (const table of tenantTables) {
+    assert.match(
+      phaseBSql,
+      new RegExp(
+        `ALTER TABLE "${table}" ALTER COLUMN "organization_id" DROP DEFAULT`,
+      ),
+    );
+    assert.match(
+      phaseBSql,
+      new RegExp(
+        `ALTER TABLE "${table}" ADD CONSTRAINT "${table}_organization_id_organizations_id_fk" FOREIGN KEY \\("organization_id"\\) REFERENCES "organizations"\\("id"\\)`,
+      ),
+    );
+  }
+  assert.match(
+    phaseBSql,
+    /ADD CONSTRAINT "onb_watch_emails_organization_case_fk" FOREIGN KEY \("organization_id", "case_id"\) REFERENCES "onb_cases"\("organization_id", "id"\)/,
+  );
+  assert.match(
+    phaseBSql,
+    /ADD CONSTRAINT "onb_watch_emails_organization_check_fk" FOREIGN KEY \("organization_id", "check_id"\) REFERENCES "onb_system_checks"\("organization_id", "id"\)/,
+  );
+});
+
 const hasDb = Boolean(process.env.DATABASE_URL);
 
 test(
@@ -378,6 +439,85 @@ test(
       assert.equal(
         prepared.rows[0].migration_count,
         (await loadCheckedInMigrations()).length,
+      );
+
+      const tenantEnforcement = await adminPool.query(
+        `
+          SELECT
+            count(*) FILTER (WHERE column_default IS NOT NULL)::integer AS default_count,
+            count(*)::integer AS tenant_column_count
+          FROM information_schema.columns
+          WHERE table_schema = $1
+            AND column_name = 'organization_id'
+            AND table_name = ANY($2::text[])
+        `,
+        [
+          schema,
+          [
+            "scenarios",
+            "custom_intents",
+            "actuals_overlays",
+            "flow_overrides",
+            "onb_cases",
+            "onb_events",
+            "onb_approvals",
+            "onb_communications",
+            "onb_system_checks",
+            "onb_settings",
+            "onb_connectors",
+            "onb_effect_journal",
+            "onb_documents",
+            "onb_call_slots",
+            "onb_voice_sessions",
+            "onb_watch_emails",
+            "onb_employee_records",
+            "onb_guardrail_events",
+            "custom_intent_routing_labels",
+            "pricing_rate_sets",
+            "pricing_sheets",
+            "ea_assessments",
+          ],
+        ],
+      );
+      assert.equal(tenantEnforcement.rows[0].tenant_column_count, 22);
+      assert.equal(tenantEnforcement.rows[0].default_count, 0);
+      await assert.rejects(
+        adminPool.query(
+          `INSERT INTO "${schema}".scenarios (name, inputs) VALUES ('missing-tenant', '{}'::jsonb)`,
+        ),
+        /null value in column "organization_id"/,
+      );
+      await assert.rejects(
+        adminPool.query(
+          `INSERT INTO "${schema}".scenarios (organization_id, name, inputs) VALUES ('orphan', 'orphan-tenant', '{}'::jsonb)`,
+        ),
+        /violates foreign key constraint/,
+      );
+      await assert.rejects(
+        adminPool.query(
+          `
+            INSERT INTO "${schema}".onb_watch_emails (
+              organization_id, gmail_message_id, case_id, system,
+              from_address, parsed_status, action
+            )
+            VALUES ('demo', 'orphan-watch-case', -1, 'payroll',
+                    'sender@example.test', 'update', 'recorded')
+          `,
+        ),
+        /violates foreign key constraint "onb_watch_emails_organization_case_fk"/,
+      );
+      await assert.rejects(
+        adminPool.query(
+          `
+            INSERT INTO "${schema}".onb_watch_emails (
+              organization_id, gmail_message_id, check_id, system,
+              from_address, parsed_status, action
+            )
+            VALUES ('demo', 'orphan-watch-check', -1, 'payroll',
+                    'sender@example.test', 'update', 'recorded')
+          `,
+        ),
+        /violates foreign key constraint "onb_watch_emails_organization_check_fk"/,
       );
 
       const migrations = await loadCheckedInMigrations();

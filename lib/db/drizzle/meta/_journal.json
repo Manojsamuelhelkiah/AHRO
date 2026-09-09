@@ -197,6 +197,13 @@
       "when": 1788887340007,
       "tag": "0022_application_organizations_phase_a",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788887340008,
+      "tag": "0023_application_organizations_phase_b",
+      "breakpoints": true
     }
   ]
 }
