@@ -167,6 +167,11 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
     method: "POST", headers: { "x-test-role": "member" }, body: JSON.stringify({ decision: "approved" }),
   });
   assert.equal(readerDecision.status, 403);
+  const permissionError = await readerDecision.json() as { message: string };
+  assert.match(permissionError.message, /owners and admins.*acknowledge reviews/i);
+  const [unchangedApproval] = await db.select().from(onbApprovals).where(eq(onbApprovals.id, approval.id));
+  assert.equal(unchangedApproval.status, "pending");
+  assert.equal(unchangedApproval.version, 1);
   const crossTenant = await call(`/onboarding/cases/${caseRow.id}/offer-acceptance`, orgB, {
     method: "POST", body: JSON.stringify({ note: "wrong tenant" }),
   });

@@ -156,9 +156,13 @@ import {
 const router: IRouter = Router();
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
 
-function requireHrChecklistRole(req: Request, res: Response): boolean {
+function requireHrChecklistRole(
+  req: Request,
+  res: Response,
+  message = "Organization owner or admin role required for checklist administration.",
+): boolean {
   if (isChecklistAdministrator(req.organizationRole)) return true;
-  res.status(403).json({ message: "Organization owner or admin role required for checklist administration." });
+  res.status(403).json({ message });
   return false;
 }
 
@@ -1491,7 +1495,11 @@ router.get("/onboarding/approvals/:id/history", async (req, res, next) => {
 
 router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
   try {
-    if (!requireHrChecklistRole(req, res)) return;
+    if (!requireHrChecklistRole(
+      req,
+      res,
+      "Only organization owners and admins can approve, reject, or acknowledge reviews. Ask an owner or admin to review this request.",
+    )) return;
     const id = Number(req.params.id);
     const body = DecideOnboardingApprovalBody.parse(req.body);
     if (body.decision !== "approved" && body.decision !== "rejected") {

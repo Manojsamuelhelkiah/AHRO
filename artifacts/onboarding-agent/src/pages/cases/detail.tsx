@@ -27,6 +27,7 @@ import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tab
 import { DocumentsTab } from './detail/documents-tab';
 import { ExplainabilityTab } from './detail/explainability-tab';
 import { PortalControls } from './detail/portal-controls';
+import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 
 export function CaseDetailPage() {
   const { id } = useParams();
@@ -79,7 +80,12 @@ export function CaseDetailPage() {
   });
 
   const { data: approvalsRaw } = useListOnboardingApprovals({ status: 'all' }, {
-    query: { queryKey: getListOnboardingApprovalsQueryKey({ status: 'all' }) }
+    query: {
+      queryKey: getListOnboardingApprovalsQueryKey({ status: 'all' }),
+      // Email decisions can resolve a review in another session. Poll only
+      // while this finite queue contains pending approvals.
+      refetchInterval: (query) => getApprovalRefetchInterval(query.state.data),
+    }
   });
   
   const approvals = approvalsRaw?.filter((a: any) => a.caseId === caseId) || [];

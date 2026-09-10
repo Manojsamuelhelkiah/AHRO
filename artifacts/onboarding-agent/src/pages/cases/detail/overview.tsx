@@ -6,8 +6,11 @@ import { CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { Button, cn } from '@/components/ui-shared';
 import { EngineBadge } from '@/components/engine-badge';
 import { StatusBadgeText } from './components';
-import { useDecideOnboardingApproval, getListOnboardingApprovalsQueryKey, getGetOnboardingCaseQueryKey, getListOnboardingCaseEventsQueryKey } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useApprovalAction } from '../../../hooks/use-approval-action';
+import {
+  getApprovalVersionLabel,
+  isApprovalAcknowledgement,
+} from '../../../lib/approval-actions';
 
 export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
   return (
@@ -31,19 +34,8 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
 }
 
 function AttentionPanel({ approval, caseId }: any) {
-  const decide = useDecideOnboardingApproval();
-  const queryClient = useQueryClient();
+  const action = useApprovalAction(approval, { caseId });
   const [expanded, setExpanded] = useState(false);
-
-  const handle = (decision: string) => {
-    decide.mutate({ id: approval.id, data: { decision, expectedVersion: approval.version } }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey({ status: 'all' }) });
-        queryClient.invalidateQueries({ queryKey: getGetOnboardingCaseQueryKey(caseId) });
-        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEventsQueryKey(caseId) });
-      }
-    });
-  };
 
   if (!approval) {
     return (
@@ -57,6 +49,9 @@ function AttentionPanel({ approval, caseId }: any) {
     );
   }
 
+  const isAcknowledgement = isApprovalAcknowledgement(approval);
+  const versionLabel = getApprovalVersionLabel(approval);
+
   return (
     <div className="bg-[var(--surface)] border-2 border-[var(--status-amber)] rounded-[var(--radius-lg)] shadow-[var(--shadow-md)] overflow-hidden">
       <div className="bg-[var(--status-amber-bg)] px-4 py-3 border-b border-[var(--status-amber)] flex items-start justify-between gap-2">
@@ -65,7 +60,7 @@ function AttentionPanel({ approval, caseId }: any) {
           <p className="text-[var(--status-amber-fg)] font-semibold text-[var(--text-sm)]">{approval.recommendation}</p>
         </div>
         <div className="text-[9px] font-mono font-bold text-[var(--status-amber-fg)] opacity-80 uppercase bg-[var(--status-amber-bg)] px-1.5 py-0.5 rounded border border-[var(--status-amber)]">
-          AP-{approval.id}-V{approval.version ?? 1}
+          AP-{approval.id}-{versionLabel}
         </div>
       </div>
       <div className="p-4 space-y-4">
@@ -75,11 +70,60 @@ function AttentionPanel({ approval, caseId }: any) {
         </div>
         <div>
           <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Agent recommendation</p>
-          <p className="text-[var(--text-sm)] font-medium text-[var(--text-primary)]">Approve and continue execution.</p>
+          <p className="text-[var(--text-sm)] font-medium text-[var(--text-primary)]">
+            {isAcknowledgement
+              ? 'Acknowledge this review.'
+              : 'Approve this reviewed action.'}
+          </p>
         </div>
+        {isAcknowledgement && (
+          <p className="text-[var(--text-xs)] text-[var(--text-muted)] bg-[var(--surface-alt)] border border-[var(--border)] rounded-[var(--radius-sm)] p-2">
+            Acknowledgement records the review only; it does not complete assets or advance the case.
+          </p>
+        )}
+        {action.isRoleLoading && (
+          <p className="text-[var(--text-xs)] text-[var(--text-muted)]" role="status">
+            Checking organization permissions…
+          </p>
+        )}
+        {!action.isRoleLoading && !action.isAuthorized && (
+          <p className="text-[var(--text-xs)] text-[var(--status-red)]" role="alert">
+            Only organization owners/admins can approve or acknowledge reviews
+          </p>
+        )}
+        {!action.hasValidVersion && (
+          <p className="text-[var(--text-xs)] text-[var(--status-red)]" role="alert">
+            This review has no valid version. Reload the review before taking action.
+          </p>
+        )}
+        {action.actionError && (
+          <p className="text-[var(--text-xs)] text-[var(--status-red)]" role="alert">
+            {action.actionError}
+          </p>
+        )}
+        {action.notice && (
+          <p className="text-[var(--text-xs)] text-[var(--status-green-fg)]" role="status">
+            {action.notice}
+          </p>
+        )}
         <div className="flex items-center gap-2 pt-2">
-          <Button onClick={() => handle('approved')} disabled={decide.isPending} className="flex-1 bg-[var(--status-green)] hover:bg-[#1bbd72] text-white border-transparent">Approve</Button>
-          <Button onClick={() => handle('rejected')} disabled={decide.isPending} variant="outline" className="flex-1 text-[var(--status-red)] border-[var(--status-red)] hover:bg-[var(--status-red)] hover:text-white">Reject</Button>
+          <Button
+            onClick={() => action.submit('approved')}
+            disabled={!action.canAct}
+            className="flex-1 bg-[var(--status-green)] hover:bg-[#1bbd72] text-white border-transparent"
+          >
+            {action.actionLabel}
+          </Button>
+          {!isAcknowledgement && (
+            <Button
+              onClick={() => action.submit('rejected')}
+              disabled={!action.canAct}
+              variant="outline"
+              className="flex-1 text-[var(--status-red)] border-[var(--status-red)] hover:bg-[var(--status-red)] hover:text-white"
+            >
+              Reject
+            </Button>
+          )}
         </div>
         
         <button onClick={() => setExpanded(!expanded)} className="text-[var(--primary)] text-[var(--text-xs)] font-semibold flex items-center gap-1 mt-2 hover:underline">

@@ -1,19 +1,26 @@
 import React, { useState } from 'react';
-import { useListOnboardingApprovals, useDecideOnboardingApproval, getListOnboardingApprovalsQueryKey, useGetOnboardingApprovalHistory, getGetOnboardingApprovalHistoryQueryKey } from '@workspace/api-client-react';
+import { useListOnboardingApprovals, getListOnboardingApprovalsQueryKey, useGetOnboardingApprovalHistory, getGetOnboardingApprovalHistoryQueryKey, type OnbApproval } from '@workspace/api-client-react';
 import { Card, Button, Badge, cn, Input, Label, PageHeader } from '@/components/ui-shared';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useUser } from '@clerk/react';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
 import { ShieldAlert } from 'lucide-react';
 import { Link } from 'wouter';
-import { useOrganizationRole } from '../hooks/use-organization-role';
+import { useApprovalAction } from '../hooks/use-approval-action';
+import {
+  getApprovalRefetchInterval,
+  getApprovalVersionLabel,
+  isApprovalAcknowledgement,
+} from '../lib/approval-actions';
 
 export function ApprovalsPage() {
   const [showAll, setShowAll] = useState(false);
   const statusParam = showAll ? 'all' : 'pending';
   const { data: approvals, isLoading } = useListOnboardingApprovals({ status: statusParam }, {
-    query: { queryKey: getListOnboardingApprovalsQueryKey({ status: statusParam }) }
+    query: {
+      queryKey: getListOnboardingApprovalsQueryKey({ status: statusParam }),
+      refetchInterval: (query) => getApprovalRefetchInterval(query.state.data),
+    }
   });
 
   return (
@@ -65,27 +72,18 @@ export function scopeLabel(scope: { kind?: string; from?: number; to?: number } 
   }
 }
 
-function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: string }) {
-  const decide = useDecideOnboardingApproval();
-  const queryClient = useQueryClient();
+function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbApproval, statusParam: string }) {
   const [comment, setComment] = useState('');
   const { user } = useUser();
-  
-  const { role } = useOrganizationRole();
+  const action = useApprovalAction(approval);
 
   const handleDecide = (decision: string) => {
-    decide.mutate({
-      id: approval.id,
-      data: { decision, comment: comment || undefined, expectedVersion: approval.version }
-    }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey({ status: statusParam }) });
-      }
-    });
+    if (decision !== 'approved' && decision !== 'rejected') return;
+    action.submit(decision, comment || undefined);
   };
 
   const isPending = approval.status === 'pending';
-  const isHardBlock = approval.hitlPattern === 'hard-block';
+  const isAcknowledgement = isApprovalAcknowledgement(approval);
   
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: history, isLoading: historyLoading } = useGetOnboardingApprovalHistory(approval.id, {
@@ -210,31 +208,61 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
                   onFocus={e => e.currentTarget.style.borderColor = 'var(--primary)'}
                   onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
                 />
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>Decision will be recorded as <strong>{role || 'Reviewer'}</strong>.</p>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>Decision will be recorded as <strong>{action.role || 'Organization role unavailable'}</strong>.</p>
               </div>
               <div className="flex items-center gap-3 shrink-0 w-full lg:w-auto">
-                {!isHardBlock && (
+                {!isAcknowledgement && (
                   <button 
-                    style={{ height: '32px', borderRadius: 'var(--radius-md)', padding: '0 16px', fontSize: 'var(--text-sm)', fontWeight: 500, border: '1px solid var(--status-red)', color: 'var(--status-red)', backgroundColor: 'var(--surface)', cursor: decide.isPending ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}
+                    style={{ height: '32px', borderRadius: 'var(--radius-md)', padding: '0 16px', fontSize: 'var(--text-sm)', fontWeight: 500, border: '1px solid var(--status-red)', color: 'var(--status-red)', backgroundColor: 'var(--surface)', cursor: action.canAct ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}
                     onClick={() => handleDecide('rejected')} 
-                    disabled={decide.isPending}
-                    onMouseEnter={e => { if(!decide.isPending) { e.currentTarget.style.backgroundColor = 'var(--status-red)'; e.currentTarget.style.color = '#fff'; } }}
-                    onMouseLeave={e => { if(!decide.isPending) { e.currentTarget.style.backgroundColor = 'var(--surface)'; e.currentTarget.style.color = 'var(--status-red)'; } }}
+                    disabled={!action.canAct}
+                    onMouseEnter={e => { if(action.canAct) { e.currentTarget.style.backgroundColor = 'var(--status-red)'; e.currentTarget.style.color = '#fff'; } }}
+                    onMouseLeave={e => { if(action.canAct) { e.currentTarget.style.backgroundColor = 'var(--surface)'; e.currentTarget.style.color = 'var(--status-red)'; } }}
                   >
                     Reject Action
                   </button>
                 )}
                 <button 
-                  style={{ height: '32px', borderRadius: 'var(--radius-md)', padding: '0 16px', fontSize: 'var(--text-sm)', fontWeight: 500, backgroundColor: 'var(--status-green)', color: '#ffffff', border: 'none', cursor: decide.isPending ? 'not-allowed' : 'pointer' }}
+                  style={{ height: '32px', borderRadius: 'var(--radius-md)', padding: '0 16px', fontSize: 'var(--text-sm)', fontWeight: 500, backgroundColor: 'var(--status-green)', color: '#ffffff', border: 'none', cursor: action.canAct ? 'pointer' : 'not-allowed' }}
                   onClick={() => handleDecide('approved')} 
-                  disabled={decide.isPending}
-                  onMouseEnter={e => { if(!decide.isPending) e.currentTarget.style.opacity = '0.9' }}
-                  onMouseLeave={e => { if(!decide.isPending) e.currentTarget.style.opacity = '1' }}
+                  disabled={!action.canAct}
+                  onMouseEnter={e => { if(action.canAct) e.currentTarget.style.opacity = '0.9' }}
+                  onMouseLeave={e => { if(action.canAct) e.currentTarget.style.opacity = '1' }}
                 >
-                  {isHardBlock ? 'Acknowledge & Clear' : 'Approve Action'}
+                  {action.actionLabel}
                 </button>
               </div>
             </div>
+            {isAcknowledgement && (
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-3">
+                Acknowledgement records the review only; it does not complete assets or advance the case.
+              </p>
+            )}
+            {action.isRoleLoading && (
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-3" role="status">
+                Checking organization permissions…
+              </p>
+            )}
+            {!action.isRoleLoading && !action.isAuthorized && (
+              <p className="text-[var(--text-xs)] text-[var(--status-red)] mt-3" role="alert">
+                Only organization owners/admins can approve or acknowledge reviews
+              </p>
+            )}
+            {!action.hasValidVersion && (
+              <p className="text-[var(--text-xs)] text-[var(--status-red)] mt-3" role="alert">
+                This review has no valid version. Reload the review before taking action.
+              </p>
+            )}
+            {action.actionError && (
+              <p className="text-[var(--text-xs)] text-[var(--status-red)] mt-3" role="alert">
+                {action.actionError}
+              </p>
+            )}
+            {action.notice && (
+              <p className="text-[var(--text-xs)] text-[var(--status-green-fg)] mt-3" role="status">
+                {action.notice}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -247,7 +275,7 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
             {historyOpen ? 'Hide History' : 'Show History'}
           </button>
         </div>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>ID: AP-{approval.id}-V{approval.version ?? 1}</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>ID: AP-{approval.id}-{getApprovalVersionLabel(approval)}</span>
       </div>
     </Card>
   );
