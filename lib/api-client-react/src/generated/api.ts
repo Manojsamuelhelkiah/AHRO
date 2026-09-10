@@ -96,6 +96,8 @@ import type {
   OnbReadinessSlaView,
   OnbScenarioDef,
   OnbSettings,
+  OnbSyntheticResetEnvelope,
+  OnbSyntheticResetRequest,
   OnbSystemWatcher,
   OnbWatchEmailSimulate,
   OnbWatchEmailSimulateResult,
@@ -4547,6 +4549,156 @@ export function useListOnboardingScenarios<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getPreviewOnboardingSyntheticResetUrl = () => {
+
+
+
+
+  return `/api/onboarding/synthetic-reset`
+}
+
+/**
+ * Owner/admin only. Reads the explicit legacy manifest for the current organization and never mutates another workspace. A ready preview is required before the exact confirmation POST.
+ * @summary Preview the one-off, current-organization synthetic-case reset
+ */
+export const previewOnboardingSyntheticReset = async ( options?: RequestInit): Promise<OnbSyntheticResetEnvelope> => {
+
+  return customFetch<OnbSyntheticResetEnvelope>(getPreviewOnboardingSyntheticResetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewOnboardingSyntheticResetQueryKey = () => {
+    return [
+    `/api/onboarding/synthetic-reset`
+    ] as const;
+    }
+
+
+export const getPreviewOnboardingSyntheticResetQueryOptions = <TData = Awaited<ReturnType<typeof previewOnboardingSyntheticReset>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewOnboardingSyntheticReset>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPreviewOnboardingSyntheticResetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof previewOnboardingSyntheticReset>>> = ({ signal }) => previewOnboardingSyntheticReset({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof previewOnboardingSyntheticReset>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type PreviewOnboardingSyntheticResetQueryResult = NonNullable<Awaited<ReturnType<typeof previewOnboardingSyntheticReset>>>
+export type PreviewOnboardingSyntheticResetQueryError = ErrorType<void>
+
+
+/**
+ * @summary Preview the one-off, current-organization synthetic-case reset
+ */
+
+export function usePreviewOnboardingSyntheticReset<TData = Awaited<ReturnType<typeof previewOnboardingSyntheticReset>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewOnboardingSyntheticReset>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getPreviewOnboardingSyntheticResetQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getConfirmOnboardingSyntheticResetUrl = () => {
+
+
+
+
+  return `/api/onboarding/synthetic-reset`
+}
+
+/**
+ * Owner/admin only. The exact phrase is required. This atomically removes only the explicit legacy manifest rows, retains known effect journal history, preserves private object-storage bytes, and inserts six paused offline samples.
+ * @summary Confirm the one-off synthetic-case reset
+ */
+export const confirmOnboardingSyntheticReset = async (onbSyntheticResetRequest: OnbSyntheticResetRequest, options?: RequestInit): Promise<OnbSyntheticResetEnvelope> => {
+
+  return customFetch<OnbSyntheticResetEnvelope>(getConfirmOnboardingSyntheticResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbSyntheticResetRequest)
+  }
+);}
+
+
+
+
+
+export const getConfirmOnboardingSyntheticResetMutationOptions = <TError = ErrorType<void | OnbSyntheticResetEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmOnboardingSyntheticReset>>, TError,{data: BodyType<OnbSyntheticResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmOnboardingSyntheticReset>>, TError,{data: BodyType<OnbSyntheticResetRequest>}, TContext> => {
+
+const mutationKey = ['confirmOnboardingSyntheticReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmOnboardingSyntheticReset>>, {data: BodyType<OnbSyntheticResetRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  confirmOnboardingSyntheticReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmOnboardingSyntheticResetMutationResult = NonNullable<Awaited<ReturnType<typeof confirmOnboardingSyntheticReset>>>
+    export type ConfirmOnboardingSyntheticResetMutationBody = BodyType<OnbSyntheticResetRequest>
+    export type ConfirmOnboardingSyntheticResetMutationError = ErrorType<void | OnbSyntheticResetEnvelope>
+
+    /**
+ * @summary Confirm the one-off synthetic-case reset
+ */
+export const useConfirmOnboardingSyntheticReset = <TError = ErrorType<void | OnbSyntheticResetEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmOnboardingSyntheticReset>>, TError,{data: BodyType<OnbSyntheticResetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmOnboardingSyntheticReset>>,
+        TError,
+        {data: BodyType<OnbSyntheticResetRequest>},
+        TContext
+      > => {
+      return useMutation(getConfirmOnboardingSyntheticResetMutationOptions(options));
+    }
 
 export const getRunOnboardingScenarioUrl = (key: string,) => {
 

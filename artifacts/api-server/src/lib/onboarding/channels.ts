@@ -16,6 +16,11 @@ import {
   invalidBlockedPublishBackupCategories,
   missingBlockedPublishBackupCategories,
 } from "../../../blocked-publish-backup-readiness.mjs";
+import {
+  SYNTHETIC_OFFLINE_WARNING,
+  isSyntheticOfflineCase,
+} from "./synthetic-offline";
+import { withCaseDispatchGuard } from "./dispatch-guard";
 
 const connectors = new ReplitConnectors();
 
@@ -373,9 +378,58 @@ export async function sendOutbound(opts: {
   sensitive?: boolean;
   idempotencyKey?: string;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
+  const guarded = await withCaseDispatchGuard(opts.caseId, () =>
+    sendOutboundUnsafe(opts),
+    {
+      onOffline: () => sendOutboundUnsafe(opts),
+      isUnknownResult: (result) => result.status === "sending",
+    },
+  );
+  if (!guarded) throw new Error(`case ${opts.caseId} not found`);
+  return guarded;
+}
+
+async function sendOutboundUnsafe(opts: {
+  caseId: number;
+  channel: "email" | "whatsapp";
+  toAddress: string;
+  subject?: string | null;
+  body: string;
+  /** Optional redacted timeline copy when the delivered body contains an ephemeral secret. */
+  persistedBody?: string;
+  sensitive?: boolean;
+  idempotencyKey?: string;
+}): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  if (isSyntheticOfflineCase(caseRow)) {
+    if (opts.idempotencyKey) {
+      const [existing] = await db.select().from(onbCommunications).where(and(
+        eq(onbCommunications.organizationId, caseRow.organizationId),
+        eq(onbCommunications.idempotencyKey, opts.idempotencyKey),
+      ));
+      if (existing) {
+        return { id: existing.id, status: existing.status, failureReason: existing.failureReason };
+      }
+    }
+    const [blocked] = await db.insert(onbCommunications).values({
+      organizationId: caseRow.organizationId,
+      caseId: opts.caseId,
+      channel: opts.channel,
+      direction: "outbound",
+      audience: "candidate",
+      toAddress: opts.channel === "email" ? maskEmail(caseRow.workerEmail) : maskPhone(opts.toAddress),
+      subject: opts.subject ?? null,
+      body: opts.persistedBody ?? opts.body,
+      status: "blocked",
+      failureReason: SYNTHETIC_OFFLINE_WARNING,
+      sensitive: opts.sensitive ?? false,
+      idempotencyKey: opts.idempotencyKey ?? null,
+    }).returning({ id: onbCommunications.id });
+    if (!blocked) throw new Error("Synthetic offline communication was not recorded.");
+    return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
+  }
   // Pick up this tenant's allowlist changes saved on another process instance.
   let allowlistRefreshed = false;
   try {
@@ -613,9 +667,59 @@ export async function sendAdministrativeEmail(opts: {
   body: string;
   idempotencyKey?: string;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
-  const [caseRow] = await db.select({ organizationId: onbCases.organizationId }).from(onbCases)
+  const guarded = await withCaseDispatchGuard(opts.caseId, () =>
+    sendAdministrativeEmailUnsafe(opts),
+    {
+      onOffline: () => sendAdministrativeEmailUnsafe(opts),
+      isUnknownResult: (result) => result.status === "sending",
+    },
+  );
+  if (!guarded) throw new Error(`case ${opts.caseId} not found`);
+  return guarded;
+}
+
+async function sendAdministrativeEmailUnsafe(opts: {
+  caseId: number;
+  toAddress: string;
+  subject: string;
+  body: string;
+  idempotencyKey?: string;
+}): Promise<{ id: number; status: string; failureReason: string | null }> {
+  const [caseRow] = await db.select({
+    organizationId: onbCases.organizationId,
+    workerName: onbCases.workerName,
+    workerEmail: onbCases.workerEmail,
+    workerPhone: onbCases.workerPhone,
+    notes: onbCases.notes,
+  }).from(onbCases)
     .where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  if (isSyntheticOfflineCase(caseRow)) {
+    if (opts.idempotencyKey) {
+      const [existing] = await db.select().from(onbCommunications).where(and(
+        eq(onbCommunications.organizationId, caseRow.organizationId),
+        eq(onbCommunications.idempotencyKey, opts.idempotencyKey),
+      ));
+      if (existing) {
+        return { id: existing.id, status: existing.status, failureReason: existing.failureReason };
+      }
+    }
+    const [blocked] = await db.insert(onbCommunications).values({
+      organizationId: caseRow.organizationId,
+      caseId: opts.caseId,
+      channel: "email",
+      direction: "outbound",
+      audience: "admin",
+      toAddress: maskEmail(opts.toAddress),
+      subject: opts.subject,
+      body: opts.body,
+      status: "blocked",
+      failureReason: SYNTHETIC_OFFLINE_WARNING,
+      idempotencyKey: opts.idempotencyKey ?? null,
+    }).returning({ id: onbCommunications.id });
+    if (!blocked) throw new Error("Synthetic offline administrative communication was not recorded.");
+    return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
+  }
   if (opts.idempotencyKey) {
     const [claimedRow] = await db.insert(onbCommunications).values({
       organizationId: caseRow.organizationId,
@@ -760,6 +864,33 @@ export async function retryCandidateEmail(
   send: typeof sendEmail = sendEmail,
   claimLiveSend: () => boolean = withinRateLimit,
 ): Promise<RetryEmailResult> {
+  const guarded = await withCaseDispatchGuard(
+    caseId,
+    () => retryCandidateEmailUnsafe(caseId, communicationId, reviewer, send, claimLiveSend),
+    {
+      onOffline: async () => ({
+        ok: false as const,
+        code: "not-retryable" as const,
+        reason: SYNTHETIC_OFFLINE_WARNING,
+      }),
+      isUnknownResult: (result) =>
+        result.ok && result.communication.status === "sending",
+    },
+  );
+  return guarded ?? {
+    ok: false,
+    code: "not-found",
+    reason: "Communication not found.",
+  };
+}
+
+async function retryCandidateEmailUnsafe(
+  caseId: number,
+  communicationId: number,
+  reviewer: string,
+  send: typeof sendEmail = sendEmail,
+  claimLiveSend: () => boolean = withinRateLimit,
+): Promise<RetryEmailResult> {
   const [existing] = await db
     .select({ communication: onbCommunications, candidate: onbCases })
     .from(onbCommunications)
@@ -767,6 +898,13 @@ export async function retryCandidateEmail(
     .where(and(eq(onbCommunications.id, communicationId), eq(onbCommunications.caseId, caseId)));
   if (!existing) return { ok: false, code: "not-found", reason: "Communication not found." };
   const msg = existing.communication;
+  if (isSyntheticOfflineCase(existing.candidate)) {
+    return {
+      ok: false,
+      code: "not-retryable",
+      reason: SYNTHETIC_OFFLINE_WARNING,
+    };
+  }
   if (!isRetryableCandidateEmail(msg)) {
     return { ok: false, code: "not-retryable", reason: `Email with status "${msg.status}" is not safe to retry.` };
   }

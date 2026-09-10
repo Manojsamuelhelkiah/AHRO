@@ -36,6 +36,10 @@ import { getSetting, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { hrAlertAddress } from "./inbound-email";
 import { isValidEmail } from "./settings";
 import { calculateReadinessSlaActionTiming } from "./readiness-sla";
+import {
+  isSyntheticOfflineCase,
+  SYNTHETIC_OFFLINE_WARNING,
+} from "./synthetic-offline";
 
 export const CONTACT_ACTIONS = [
   "candidate-email",
@@ -990,6 +994,50 @@ export async function getOnboardingContactOptions(input: {
   }
   const c = await loadCase(input.caseId, input.organizationId);
   const goal = normalizeGoal(input.goal ?? input.context?.goal);
+  if (isSyntheticOfflineCase(c)) {
+    const scenario = input.scenario ?? "day-before";
+    const gate = gateFor(c, goal);
+    const context: ContactOption["context"] = {
+      scenario,
+      requiresSlaAction: scenario === "sla-escalation",
+      slaActionId: null,
+      snapshotRevision: null,
+      dueAt: null,
+      status: null,
+      candidateRelevant: scenario === "day-before",
+    };
+    const options = CONTACT_ACTIONS.map((action): ContactOption => ({
+      action,
+      audience: audienceFor(action),
+      channel: action === "candidate-call" ? "voice" : "email",
+      label: action,
+      available: false,
+      reasons: [SYNTHETIC_OFFLINE_WARNING],
+      recipient: null,
+      gate,
+      context,
+    }));
+    return {
+      operationId: "getOnboardingContactOptions",
+      caseId: c.id,
+      audienceLabels: {
+        candidate: "Candidate",
+        owner: "Action owner",
+        backup: "Backup owner",
+      },
+      contacts: {
+        candidateEmail: null,
+        candidatePhone: null,
+        ownerEmail: null,
+        backupEmail: null,
+      },
+      gate,
+      context,
+      activeCall: false,
+      recentContact: { present: false, at: null, channel: null },
+      options,
+    };
+  }
   const sla = await resolveAction(
     {
       action: "owner-email",
@@ -1772,6 +1820,21 @@ export async function sendOnboardingContextualContact(
     };
   }
   const { caseRow: c, goal, option, sla, claim } = prepared;
+  if (isSyntheticOfflineCase(c)) {
+    return {
+      operationId: "sendOnboardingContextualContact",
+      requestId: input.requestId,
+      action: input.action,
+      scenario: input.scenario,
+      status: "withheld",
+      delivery: "withheld",
+      withheldReason: SYNTHETIC_OFFLINE_WARNING,
+      failureReason: SYNTHETIC_OFFLINE_WARNING,
+      audience: option.audience,
+      recipient: null,
+      slaActionId: sla?.id ?? null,
+    };
+  }
   await revalidateClaimBeforeDispatch(input, claim);
 
   let result: ContactDeliveryResult;

@@ -6,8 +6,10 @@ import {
   onbCommunications,
 } from "@workspace/db/schema";
 import { sendOutbound } from "./channels";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
 import { ensureCaseLogistics } from "./case-logistics";
 import { hashSecret, newSecret } from "./candidate-portal";
+import { withCaseDispatchGuard } from "./dispatch-guard";
 
 export const AUTOMATED_PORTAL_EMAIL_KEY = (caseId: number) =>
   `orchestration:${caseId}:portal:email`;
@@ -35,6 +37,23 @@ export async function issueCandidatePortalLink(input: {
   authorizeEmail?: boolean;
   idempotencyKey?: string;
 }) {
+  return withCaseDispatchGuard(
+    input.caseId,
+    () => issueCandidatePortalLinkUnsafe(input),
+    { onOffline: () => issueCandidatePortalLinkUnsafe(input) },
+  );
+}
+
+async function issueCandidatePortalLinkUnsafe(input: {
+  organizationId: string;
+  caseId: number;
+  issuedBy: string;
+  publicBase: string;
+  expiresInHours?: number;
+  sendEmail: boolean;
+  authorizeEmail?: boolean;
+  idempotencyKey?: string;
+}) {
   const expiresInHours = input.expiresInHours ?? 168;
   if (!Number.isInteger(expiresInHours) || expiresInHours < 1 || expiresInHours > 720) {
     throw new Error("Expiry must be between 1 and 720 hours");
@@ -45,6 +64,7 @@ export async function issueCandidatePortalLink(input: {
     eq(onbCases.organizationId, input.organizationId),
   ));
   if (!c) return null;
+  if (isSyntheticOfflineCase(c)) return null;
   if (
     (c.hireType === "external-fte" || c.hireType === "contractor" || c.hireType === "rehire") &&
     !c.offerAcceptanceComplete

@@ -152,6 +152,15 @@ import {
   saveChecklistProfile,
   validateProfilesAgainstBase,
 } from "../lib/onboarding/checklist-profiles";
+import {
+  executeSyntheticReset,
+  inspectSyntheticReset,
+  SYNTHETIC_RESET_CONFIRMATION,
+} from "../lib/onboarding/synthetic-reset";
+import {
+  isSyntheticOfflineCase,
+  SYNTHETIC_OFFLINE_WARNING,
+} from "../lib/onboarding/synthetic-offline";
 
 const router: IRouter = Router();
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
@@ -430,6 +439,57 @@ router.get("/onboarding/scenarios", (_req, res) => {
   );
 });
 
+/**
+ * USERCONFIRMED one-off reset for the explicit legacy synthetic-case
+ * manifest.  Preview and mutation are deliberately in the current tenant
+ * router; neither endpoint accepts an organization id from the body.
+ */
+router.get("/onboarding/synthetic-reset", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const envelope = await inspectSyntheticReset(getOrganizationId(req));
+    res.json(envelope);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/synthetic-reset", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const expectedRevision =
+      typeof req.body?.expectedRevision === "string"
+        ? req.body.expectedRevision
+        : "";
+    const confirmation =
+      typeof req.body?.confirmation === "string"
+        ? req.body.confirmation
+        : "";
+    if (!expectedRevision) {
+      res.status(400).json({ message: "expectedRevision is required." });
+      return;
+    }
+    if (confirmation !== SYNTHETIC_RESET_CONFIRMATION) {
+      res.status(400).json({
+        message: `confirmation must exactly equal "${SYNTHETIC_RESET_CONFIRMATION}".`,
+      });
+      return;
+    }
+    const result = await executeSyntheticReset({
+      organizationId: getOrganizationId(req),
+      actorId: req.authUserId!,
+      expectedRevision,
+    });
+    if (result.kind === "conflict") {
+      res.status(409).json(result.envelope);
+      return;
+    }
+    res.json(result.envelope);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
   try {
     const scenario = getScenario(req.params.key);
@@ -590,7 +650,15 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
     const [before] = await db.select({
       offerAcceptanceComplete: onbCases.offerAcceptanceComplete,
       hireType: onbCases.hireType,
+      notes: onbCases.notes,
+      workerName: onbCases.workerName,
+      workerEmail: onbCases.workerEmail,
+      workerPhone: onbCases.workerPhone,
     }).from(onbCases).where(and(eq(onbCases.id, id), eq(onbCases.organizationId, organizationId)));
+    if (before && isSyntheticOfflineCase(before)) {
+      res.status(409).json({ message: SYNTHETIC_OFFLINE_WARNING });
+      return;
+    }
     if (before && offerAcceptanceRequired(before) && !before.offerAcceptanceComplete) {
       await enforceOfferAcceptanceGate(id);
     }
@@ -806,7 +874,13 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
 router.get("/onboarding/cases/:id/events", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+    const [exists] = await db.select({
+      id: onbCases.id,
+      notes: onbCases.notes,
+      workerName: onbCases.workerName,
+      workerEmail: onbCases.workerEmail,
+      workerPhone: onbCases.workerPhone,
+    }).from(onbCases).where(and(
       eq(onbCases.id, id),
       organizationWhere(onbCases, getOrganizationId(req)),
     ));

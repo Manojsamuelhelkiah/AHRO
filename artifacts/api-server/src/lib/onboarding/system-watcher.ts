@@ -41,6 +41,7 @@ import { logger } from "../logger";
 import { documentationGateReady } from "./document-validation-policy";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readiness-sla-policy";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
 
 /**
  * System Watcher agent.
@@ -217,6 +218,15 @@ export async function completeCheck(
   // and the other completion is silently lost.
   let checklistResumeReady = false;
   await db.transaction(async (tx) => {
+    const [caseForGuard] = await tx
+      .select()
+      .from(onbCases)
+      .where(and(
+        eq(onbCases.id, check.caseId),
+        eq(onbCases.organizationId, check.organizationId),
+      ))
+      .for("update");
+    if (caseForGuard && isSyntheticOfflineCase(caseForGuard)) return;
     const [updated] = await tx
       .update(onbSystemChecks)
       .set({

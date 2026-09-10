@@ -23,6 +23,8 @@ import {
   type ConnectorMutation,
 } from "./connector-adapters";
 import { trackCaseSystems } from "./system-watcher";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { withCaseDispatchGuard } from "./dispatch-guard";
 
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -39,7 +41,12 @@ export type WorkstreamConnectorCase = Pick<
   | "recruiterName"
   | "updatedAt"
   | "workstreams"
-> & { offerAcceptanceComplete?: boolean };
+> & {
+  offerAcceptanceComplete?: boolean;
+  workerName?: string;
+  workerPhone?: string | null;
+  notes?: string | null;
+};
 
 type DispatchAuthorization = {
   binding: ExecutableActionBinding;
@@ -211,6 +218,12 @@ export async function dispatchCaseConnectorMutation(input: {
       },
       deniedBlockers: blockersFor(input.c),
       now,
+      syntheticOffline: isSyntheticOfflineCase({
+        workerName: input.c.workerName ?? "",
+        workerEmail: input.c.workerEmail,
+        workerPhone: input.c.workerPhone ?? null,
+        notes: input.c.notes ?? null,
+      }),
     },
     write: (mutation) => write(mutation, input.c),
   });
@@ -264,6 +277,13 @@ export async function dispatchWorkstreamConnectorMutations(
   c: WorkstreamConnectorCase,
   dependencies?: WorkstreamConnectorDependencies,
 ): Promise<void> {
+  const syntheticOffline = isSyntheticOfflineCase({
+    workerName: c.workerName ?? "",
+    workerEmail: c.workerEmail,
+    workerPhone: c.workerPhone ?? null,
+    notes: c.notes ?? null,
+  });
+  if (syntheticOffline) return;
   // This is also called by watchdog recovery, so it must independently retain
   // Gate A rather than trusting the engine caller.
   if (
@@ -271,6 +291,9 @@ export async function dispatchWorkstreamConnectorMutations(
     c.offerAcceptanceComplete === false
   ) return;
   for (const mutation of workstreamMutations(c)) {
-    await dispatchCaseConnectorMutation({ c, mutation, dependencies });
+    await withCaseDispatchGuard(c.id, async (caseRow) => {
+      if (isSyntheticOfflineCase(caseRow)) return;
+      await dispatchCaseConnectorMutation({ c, mutation, dependencies });
+    }, { onOffline: async () => undefined });
   }
 }

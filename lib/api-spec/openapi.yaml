@@ -1322,6 +1322,56 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/OnbScenarioDef"
+  /onboarding/synthetic-reset:
+    get:
+      operationId: previewOnboardingSyntheticReset
+      tags: [onboarding]
+      summary: Preview the one-off, current-organization synthetic-case reset
+      description: >
+        Owner/admin only. Reads the explicit legacy manifest for the current
+        organization and never mutates another workspace. A ready preview is
+        required before the exact confirmation POST.
+      responses:
+        "200":
+          description: Synthetic reset inventory and blockers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbSyntheticResetEnvelope"
+        "403":
+          description: Organization owner or admin required
+    post:
+      operationId: confirmOnboardingSyntheticReset
+      tags: [onboarding]
+      summary: Confirm the one-off synthetic-case reset
+      description: >
+        Owner/admin only. The exact phrase is required. This atomically
+        removes only the explicit legacy manifest rows, retains known effect
+        journal history, preserves private object-storage bytes, and inserts
+        six paused offline samples.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbSyntheticResetRequest"
+      responses:
+        "200":
+          description: Completed reset inventory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbSyntheticResetEnvelope"
+        "400":
+          description: Invalid confirmation body
+        "403":
+          description: Organization owner or admin required
+        "409":
+          description: Stale preview, unsafe active work, unavailable organization, or repeated reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbSyntheticResetEnvelope"
   /onboarding/scenarios/{key}/run:
     post:
       operationId: runOnboardingScenario
@@ -5898,6 +5948,73 @@ components:
         expectedBehaviour:
           type: string
       required: [key, title, description, specRef, expectedBehaviour]
+    OnbSyntheticResetRequest:
+      type: object
+      properties:
+        expectedRevision:
+          type: string
+          minLength: 1
+        confirmation:
+          type: string
+          enum: ["REPLACE SYNTHETIC CASES"]
+      required: [expectedRevision, confirmation]
+    OnbSyntheticResetCandidate:
+      type: object
+      properties:
+        id:
+          type: integer
+        workerName:
+          type: string
+        scenarioKey:
+          type: ["string", "null"]
+      required: [id, workerName, scenarioKey]
+    OnbSyntheticResetReceipt:
+      type: object
+      properties:
+        deletedCaseIds:
+          type: array
+          items: { type: integer }
+        createdCaseIds:
+          type: array
+          items: { type: integer }
+        completedAt:
+          type: string
+          format: date-time
+        retainedUploadCount:
+          type: integer
+          minimum: 0
+      required: [deletedCaseIds, createdCaseIds, completedAt]
+    OnbSyntheticResetEnvelope:
+      type: object
+      properties:
+        organizationId:
+          type: string
+        status:
+          type: string
+          enum: [ready, blocked, completed, unavailable]
+        revision:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbSyntheticResetCandidate"
+        preservedCount:
+          type: integer
+          minimum: 0
+        replacementCount:
+          type: integer
+          const: 6
+        blockers:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        receipt:
+          oneOf:
+            - $ref: "#/components/schemas/OnbSyntheticResetReceipt"
+            - type: "null"
+      required: [organizationId, status, revision, candidates, preservedCount, replacementCount, blockers, warnings, receipt]
     OnbSkillInflowBucket:
       type: object
       properties:

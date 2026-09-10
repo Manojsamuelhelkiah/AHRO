@@ -34,6 +34,7 @@ import {
 import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { reopenApprovalInTransaction } from "./approval-version";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
 
 type CaseRow = typeof onbCases.$inferSelect;
 type SlaTx = Pick<OnboardingDbTransaction, "select" | "insert" | "update" | "execute">;
@@ -229,6 +230,7 @@ export async function ensureReadinessSlaEnrollment(
       eq(onbCases.organizationId, organizationId),
     )).for("update");
     if (!c) return null;
+    if (isSyntheticOfflineCase(c)) return null;
     const [existingState] = await tx.select().from(onbReadinessSlaCaseState).where(and(
       eq(onbReadinessSlaCaseState.caseId, caseId),
       eq(onbReadinessSlaCaseState.organizationId, organizationId),

@@ -36,6 +36,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       await db.delete(onbEffectJournal).where(eq(onbEffectJournal.logicalOperationKey, key));
     }
     for (const caseId of caseIds) {
+      await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, caseId));
       await db.delete(onbCases).where(eq(onbCases.id, caseId));
     }
   });

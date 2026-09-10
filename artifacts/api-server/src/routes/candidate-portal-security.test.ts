@@ -166,6 +166,7 @@ before(async () => {
 after(async () => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   await db.delete(onbSettings).where(inArray(onbSettings.organizationId, [orgA, orgB]));
+  await db.delete(onbEffectJournal).where(inArray(onbEffectJournal.organizationId, [orgA, orgB]));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgA));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
   await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgA));

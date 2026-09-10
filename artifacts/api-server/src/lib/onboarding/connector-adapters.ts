@@ -60,6 +60,8 @@ export type ConnectorDispatchContext = {
   };
   deniedBlockers: string[];
   now: Date;
+  /** Durable offline fixtures may never reach a connector writer. */
+  syntheticOffline?: boolean;
 };
 
 export function createConnectorProposal(input: {
@@ -213,6 +215,12 @@ export async function dispatchConnectorMutation<T>(input: {
   context: ConnectorDispatchContext;
   write: (mutation: Readonly<ConnectorMutation>) => Promise<T>;
 }): Promise<T> {
+  if (input.context.syntheticOffline) {
+    throw new ConnectorDispatchRejectedError(
+      input.mutation.connector,
+      "synthetic_offline_case",
+    );
+  }
   const mutation = immutableMutation(input.mutation);
   const policy = policyFor(mutation);
   assertMutationBound(mutation, input.context.proposal, policy);

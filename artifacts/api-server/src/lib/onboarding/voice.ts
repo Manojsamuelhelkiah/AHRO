@@ -33,6 +33,11 @@ import {
 import { logEvent, createApproval } from "./engine";
 import { maskPhone, addressAllowed } from "./channels";
 import { externalProviderDispatchDenied } from "./provider-policy";
+import {
+  isSyntheticOfflineCase,
+  SYNTHETIC_OFFLINE_WARNING,
+} from "./synthetic-offline";
+import { withCaseDispatchGuard } from "./dispatch-guard";
 
 export type VoiceScenario = "day-before" | "sla-escalation";
 
@@ -698,7 +703,27 @@ export async function startVoiceCall(opts: {
   /** Optional policy-generated goal supplied by contextual contact. */
   goal?: string;
 }): Promise<{ status: "calling" | "logged-only" | "failed"; note: string; token?: string }> {
+  const guarded = await withCaseDispatchGuard(opts.caseId, () =>
+    startVoiceCallUnsafe(opts),
+    {
+      onOffline: () => startVoiceCallUnsafe(opts),
+      isUnknownResult: (result) => result.status === "failed" && result.note.includes("unknown"),
+    },
+  );
+  if (!guarded) throw new Error(`case ${opts.caseId} not found`);
+  return guarded;
+}
+
+async function startVoiceCallUnsafe(opts: {
+  caseId: number;
+  scenario: VoiceScenario;
+  reason?: string;
+  goal?: string;
+}): Promise<{ status: "calling" | "logged-only" | "failed"; note: string; token?: string }> {
   const { c } = await caseFacts(opts.caseId);
+  if (isSyntheticOfflineCase(c)) {
+    return { status: "failed", note: SYNTHETIC_OFFLINE_WARNING };
+  }
   const label = opts.scenario === "day-before" ? "day-before check-in" : "SLA escalation";
   const contextualReason = [opts.reason, opts.goal && opts.goal !== opts.reason
     ? `Contextual action goal: ${opts.goal.slice(0, 500)}`
@@ -864,6 +889,9 @@ export async function simulateVoiceCall(
   reason?: string,
 ): Promise<{ transcript: Turn[]; decisions: { decision: Decision; note: string }[] }> {
   const { c } = await caseFacts(caseId);
+  if (isSyntheticOfflineCase(c)) {
+    return { transcript: [], decisions: [] };
+  }
   const session: Session = {
     token: randomBytes(8).toString("hex"),
     caseId,

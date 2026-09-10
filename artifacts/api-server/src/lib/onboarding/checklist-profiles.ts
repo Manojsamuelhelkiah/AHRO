@@ -17,7 +17,8 @@ import {
 type ChecklistProfileReadClient = Pick<typeof db, "select">;
 
 export type EmployeeChecklistAttributes = {
-  band: string;
+  /** A case may have no HR band; do not substitute worker category for it. */
+  band: string | null;
   role: string;
   employmentType: string;
   location: string;
@@ -25,8 +26,8 @@ export type EmployeeChecklistAttributes = {
 
 export type ChecklistProfileVersion = typeof onbChecklistProfiles.$inferSelect;
 
-export const normalizeCriterion = (value: string): string =>
-  value.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
+export const normalizeCriterion = (value: string | null | undefined): string =>
+  (value ?? "").trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
 
 export function normalizeCriteria(criteria: OnbChecklistProfileCriteria): OnbChecklistProfileCriteria {
   return Object.fromEntries(

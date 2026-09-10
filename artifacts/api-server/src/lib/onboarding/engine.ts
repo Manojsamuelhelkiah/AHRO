@@ -43,6 +43,7 @@ import {
 import { latestRequiredUploadMalwareBlockers } from "./document-readiness-guard";
 import type { OnbChecklistEnforcementStage, OnbChecklistTemplateItem } from "@workspace/db/schema";
 import { reopenApprovalInTransaction } from "./approval-version";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
 
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -1173,6 +1174,11 @@ export function startOrchestration(caseId: number) {
   void (async () => {
     let claim: OrchestrationClaim | undefined;
     try {
+      const [offlineCase] = await db
+        .select()
+        .from(onbCases)
+        .where(eq(onbCases.id, caseId));
+      if (offlineCase && isSyntheticOfflineCase(offlineCase)) return;
       const owner = randomUUID();
       const [claimed] = await db.update(onbCases)
         .set({
@@ -1213,6 +1219,11 @@ export function startOrchestration(caseId: number) {
  * simultaneous item completions and retries collapse to one orchestration run.
  */
 export async function resumeChecklistOrchestration(caseId: number): Promise<boolean> {
+  const [offlineCase] = await db
+    .select()
+    .from(onbCases)
+    .where(eq(onbCases.id, caseId));
+  if (offlineCase && isSyntheticOfflineCase(offlineCase)) return false;
   const owner = randomUUID();
   const [claimed] = await db.update(onbCases)
     .set({
@@ -1495,6 +1506,11 @@ export function resumeAfterDecision(opts: {
 }) {
   void (async () => {
     try {
+      const [offlineCase] = await db
+        .select()
+        .from(onbCases)
+        .where(eq(onbCases.id, opts.caseId));
+      if (offlineCase && isSyntheticOfflineCase(offlineCase)) return;
       const isHardBlock = opts.hitlPattern === "hard-block";
       const isDedicatedGatewayDecision = opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE ||
         opts.ruleRef === "Gate B — background verification" ||
@@ -1572,6 +1588,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
   void (async () => {
     try {
       const c = await getCase(caseId);
+      if (isSyntheticOfflineCase(c)) return;
       const sensitive = /salary|pay|compensation|visa|immigration|medical|health|legal|complaint|harass|grievance/i.test(body);
 
       if (sensitive) {

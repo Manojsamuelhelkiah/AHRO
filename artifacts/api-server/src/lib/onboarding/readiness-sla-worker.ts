@@ -27,6 +27,7 @@ import { approvalRef, approvalVersion, reopenApprovalInTransaction } from "./app
 import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { sendAdministrativeEmail } from "./channels";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
 
 export const READINESS_SLA_WORKER = "readiness-sla-worker";
 
@@ -527,6 +528,7 @@ export async function claimReadinessSlaOutbox(
       eq(onbCases.organizationId, candidate.organizationId),
       eq(onbCases.id, candidate.caseId),
     )).for("update");
+    if (c && isSyntheticOfflineCase(c)) return null;
     const [row] = c
       ? await tx.select().from(onbReadinessSlaOutbox).where(and(
           eq(onbReadinessSlaOutbox.organizationId, candidate.organizationId),

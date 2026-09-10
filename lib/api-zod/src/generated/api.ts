@@ -6254,6 +6254,78 @@ export const ListOnboardingScenariosResponse = zod.array(ListOnboardingScenarios
 
 
 /**
+ * Owner/admin only. Reads the explicit legacy manifest for the current organization and never mutates another workspace. A ready preview is required before the exact confirmation POST.
+ * @summary Preview the one-off, current-organization synthetic-case reset
+ */
+export const previewOnboardingSyntheticResetResponsePreservedCountMin = 0;
+
+export const previewOnboardingSyntheticResetResponseReceiptOneRetainedUploadCountMin = 0;
+
+
+
+export const PreviewOnboardingSyntheticResetResponse = zod.object({
+  "organizationId": zod.string(),
+  "status": zod.enum(['ready', 'blocked', 'completed', 'unavailable']),
+  "revision": zod.string(),
+  "candidates": zod.array(zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "scenarioKey": zod.string().nullable()
+})),
+  "preservedCount": zod.number().min(previewOnboardingSyntheticResetResponsePreservedCountMin),
+  "replacementCount": zod.number(),
+  "blockers": zod.array(zod.string()),
+  "warnings": zod.array(zod.string()),
+  "receipt": zod.union([zod.object({
+  "deletedCaseIds": zod.array(zod.number()),
+  "createdCaseIds": zod.array(zod.number()),
+  "completedAt": zod.coerce.date(),
+  "retainedUploadCount": zod.number().min(previewOnboardingSyntheticResetResponseReceiptOneRetainedUploadCountMin).optional()
+}),zod.null()])
+})
+
+
+/**
+ * Owner/admin only. The exact phrase is required. This atomically removes only the explicit legacy manifest rows, retains known effect journal history, preserves private object-storage bytes, and inserts six paused offline samples.
+ * @summary Confirm the one-off synthetic-case reset
+ */
+
+
+
+export const ConfirmOnboardingSyntheticResetBody = zod.object({
+  "expectedRevision": zod.string().min(1),
+  "confirmation": zod.enum(['REPLACE SYNTHETIC CASES'])
+})
+
+export const confirmOnboardingSyntheticResetResponsePreservedCountMin = 0;
+
+export const confirmOnboardingSyntheticResetResponseReceiptOneRetainedUploadCountMin = 0;
+
+
+
+export const ConfirmOnboardingSyntheticResetResponse = zod.object({
+  "organizationId": zod.string(),
+  "status": zod.enum(['ready', 'blocked', 'completed', 'unavailable']),
+  "revision": zod.string(),
+  "candidates": zod.array(zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "scenarioKey": zod.string().nullable()
+})),
+  "preservedCount": zod.number().min(confirmOnboardingSyntheticResetResponsePreservedCountMin),
+  "replacementCount": zod.number(),
+  "blockers": zod.array(zod.string()),
+  "warnings": zod.array(zod.string()),
+  "receipt": zod.union([zod.object({
+  "deletedCaseIds": zod.array(zod.number()),
+  "createdCaseIds": zod.array(zod.number()),
+  "completedAt": zod.coerce.date(),
+  "retainedUploadCount": zod.number().min(confirmOnboardingSyntheticResetResponseReceiptOneRetainedUploadCountMin).optional()
+}),zod.null()])
+})
+
+
+/**
  * @summary Launch a demo scenario — creates the case and starts orchestration asynchronously
  */
 export const RunOnboardingScenarioParams = zod.object({

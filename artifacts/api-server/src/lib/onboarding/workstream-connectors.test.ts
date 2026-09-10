@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { after, describe, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbCases, onbDocuments, onbSystemChecks } from "@workspace/db/schema";
+import { DEMO_ORGANIZATION_ID, onbCases, onbDocuments, onbEffectJournal, onbSystemChecks, organizationsTable } from "@workspace/db/schema";
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   BANK_CHANGE_APPROVAL_RULE,
@@ -18,9 +19,45 @@ import {
 import { recoverUntrackedCaseSystems } from "./system-watcher";
 
 const createdCaseIds: number[] = [];
+const unitOrganizationId = `workstream-guard-${process.pid}-${randomUUID()}`;
+let unitCaseId: number;
+
+before(async () => {
+  await db.insert(organizationsTable).values({
+    id: unitOrganizationId,
+    name: "Workstream connector guard test",
+    slug: unitOrganizationId,
+    joinCodeHash: `hash-${unitOrganizationId}`,
+    createdByUserId: "workstream-connector-test",
+  });
+  const [created] = await db.insert(onbCases).values({
+    organizationId: unitOrganizationId,
+    workerName: "Connector unit fixture",
+    workerEmail: "connector-unit@example.invalid",
+    workerCategory: "employee",
+    hireType: "external-fte",
+    role: "Engineer",
+    department: "Technology",
+    geography: "United Kingdom",
+    legalEntity: "Example Ltd",
+    managerName: "Manager",
+    recruiterName: "Recruiter",
+    joiningDate: "2030-01-01",
+    lifecycleStage: "plan-generated",
+    orchestrationStatus: "running",
+    offerAcceptanceComplete: true,
+    readiness: [],
+    workstreams: [],
+  }).returning({ id: onbCases.id });
+  unitCaseId = created.id;
+});
 
 after(async () => {
+  await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, unitOrganizationId));
+  await db.delete(onbCases).where(eq(onbCases.organizationId, unitOrganizationId));
+  await db.delete(organizationsTable).where(eq(organizationsTable.id, unitOrganizationId));
   for (const id of createdCaseIds) {
+    await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, id));
     await db.delete(onbCases).where(eq(onbCases.id, id));
   }
 });
@@ -56,8 +93,8 @@ function caseRow(
   patch: Partial<WorkstreamConnectorCase> = {},
 ): WorkstreamConnectorCase {
   return {
-    id: 42,
-    organizationId: "test-organization",
+    id: unitCaseId,
+    organizationId: unitOrganizationId,
     workerEmail: "worker@example.com",
     workerCategory: "employee",
     hireType: "external-fte",

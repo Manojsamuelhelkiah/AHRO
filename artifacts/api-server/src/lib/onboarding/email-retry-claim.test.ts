@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbCases, onbCommunications } from "@workspace/db/schema";
+import { DEMO_ORGANIZATION_ID, onbCases, onbCommunications, onbEffectJournal } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { retryCandidateEmail } from "./channels";
 import { DEMO_VOLUNTEERS_KEY, refreshDemoAllowlist } from "./demo-volunteers";
@@ -58,6 +58,7 @@ describe("email retry durable claim", { skip: !hasDb }, () => {
       assert.equal(stored.externalMessageId, "fake-message-id");
       assert.equal(stored.body, "Original durable body");
     } finally {
+      await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, c.id));
       await db.delete(onbCases).where(eq(onbCases.id, c.id));
     }
   });
@@ -112,6 +113,7 @@ describe("email retry durable claim", { skip: !hasDb }, () => {
       assert.equal(stored.failureReason, "Hourly live-send limit reached — message logged, not delivered.");
       assert.equal(stored.body, "Original capped body");
     } finally {
+      await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, c.id));
       await db.delete(onbCases).where(eq(onbCases.id, c.id));
     }
   });
@@ -168,6 +170,7 @@ describe("email retry durable claim", { skip: !hasDb }, () => {
       assert.equal(result.ok, true);
       assert.equal(deliveredTo, email);
     } finally {
+      await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, c.id));
       await db.delete(onbCases).where(eq(onbCases.id, c.id));
       await setSetting(DEMO_ORGANIZATION_ID, DEMO_VOLUNTEERS_KEY, previousVolunteers);
       await refreshDemoAllowlist(DEMO_ORGANIZATION_ID);

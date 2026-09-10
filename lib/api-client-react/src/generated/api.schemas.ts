@@ -2935,6 +2935,57 @@ export interface OnbScenarioDef {
   expectedBehaviour: string;
 }
 
+export type OnbSyntheticResetRequestConfirmation = typeof OnbSyntheticResetRequestConfirmation[keyof typeof OnbSyntheticResetRequestConfirmation];
+
+
+export const OnbSyntheticResetRequestConfirmation = {
+  REPLACE_SYNTHETIC_CASES: 'REPLACE SYNTHETIC CASES',
+} as const;
+
+export interface OnbSyntheticResetRequest {
+  /** @minLength 1 */
+  expectedRevision: string;
+  confirmation: OnbSyntheticResetRequestConfirmation;
+}
+
+export interface OnbSyntheticResetCandidate {
+  id: number;
+  workerName: string;
+  /** @nullable */
+  scenarioKey: string | null;
+}
+
+export interface OnbSyntheticResetReceipt {
+  deletedCaseIds: number[];
+  createdCaseIds: number[];
+  completedAt: string;
+  /** @minimum 0 */
+  retainedUploadCount?: number;
+}
+
+export type OnbSyntheticResetEnvelopeStatus = typeof OnbSyntheticResetEnvelopeStatus[keyof typeof OnbSyntheticResetEnvelopeStatus];
+
+
+export const OnbSyntheticResetEnvelopeStatus = {
+  ready: 'ready',
+  blocked: 'blocked',
+  completed: 'completed',
+  unavailable: 'unavailable',
+} as const;
+
+export interface OnbSyntheticResetEnvelope {
+  organizationId: string;
+  status: OnbSyntheticResetEnvelopeStatus;
+  revision: string;
+  candidates: OnbSyntheticResetCandidate[];
+  /** @minimum 0 */
+  preservedCount: number;
+  replacementCount: 6;
+  blockers: string[];
+  warnings: string[];
+  receipt: OnbSyntheticResetReceipt | null;
+}
+
 export interface OnbSkillInflowBucket {
   skill: string;
   count: number;

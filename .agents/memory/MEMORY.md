@@ -41,3 +41,4 @@
 - [Outcome KPI evidence](outcome-kpi-evidence.md) — historical outcomes need dated source evidence; live checklists and simulated completions must not become historical success rates.
 - [Readiness policy authority](readiness-policy-authority.md) — policy deadlines replace legacy timers; score never substitutes for final human authority; review cycles bind approval to evidence.
 - [Case explanation boundaries](case-explanation-boundaries.md) — explain recorded evidence, not hidden reasoning; current policy cannot prove historical rationale; chat stays read-only and scope-isolated.
+- [Synthetic case refresh](synthetic-case-refresh.md) — explicit inventory, authoritative offline mode, dispatch/deletion locking, and retained private file references protect real data and recipients.
