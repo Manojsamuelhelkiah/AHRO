@@ -46,3 +46,6 @@ channel = "stable-25_05"
 
 [userenv.shared]
 ONBOARDING_ALLOWED_RECIPIENTS = "helkiah@gmail.com,manojsamuel.helkiah@hcltech.com"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-b03aae0f-24bc-4583-a731-9788c26e9a34"
