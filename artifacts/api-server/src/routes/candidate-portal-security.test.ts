@@ -11,6 +11,7 @@ import {
   onbCandidateExchangeFailures,
   onbCandidateSessions,
   onbCaseLogistics,
+  onbCandidateUploads,
   onbCommunications,
   onbCases,
   onbConnectors,
@@ -440,6 +441,46 @@ test("upload route enforces type and size boundaries before storage", async () =
   });
   assert.equal(mismatched.status, 415);
   assert.equal(await oversizedUpload(secret), 413);
+});
+
+test("candidate metadata uses generic security guidance and hides scan details", async () => {
+  const [link] = await db.insert(onbCandidateLinks).values({
+    organizationId: orgA,
+    caseId: caseA,
+    tokenHash: hashSecret(`malware-guidance-${suffix}`),
+    expiresAt: new Date(Date.now() + 60 * 60_000),
+    issuedBy: userId,
+  }).returning({ id: onbCandidateLinks.id });
+  const secret = `malware-guidance-session-${"m".repeat(40)}`;
+  await createSession(secret, orgA, caseA, link.id);
+  await db.update(onbDocuments).set({ status: "verified" }).where(eq(onbDocuments.id, documentA));
+  await db.insert(onbCandidateUploads).values({
+    organizationId: orgA,
+    caseId: caseA,
+    documentId: documentA,
+    objectPath: `test/${suffix}/malware-guidance.pdf`,
+    originalName: "malware-guidance.pdf",
+    contentType: "application/pdf",
+    sizeBytes: 10,
+    validationState: "manual_review",
+    malwareScanState: "infected",
+    malwareScanId: "engine-private-id",
+    malwareScanSha256: null,
+    checksumSha256: "c".repeat(64),
+  });
+
+  const response = await portal(secret);
+  assert.equal(response.status, 200);
+  const body = await response.json() as {
+    documents: Array<Record<string, unknown>>;
+  };
+  const document = body.documents.find((item) => item.id === documentA);
+  assert.ok(document);
+  assert.equal(document.status, "received");
+  assert.match(String(document.malwareGuidance), /different copy/i);
+  assert.equal("malwareScanState" in document, false);
+  assert.equal("malwareScanId" in document, false);
+  assert.doesNotMatch(String(document.malwareGuidance), /infected|engine|scan id/i);
 });
 
 test("issuing links with sendEmail omitted or false does not authorize or send email", async () => {

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Clock, FileText, FileCheck2, Loader2, FileSearch, HardHat, ShieldCheck, ShieldAlert, FileMinus, Bell, Info } from 'lucide-react';
+import { Clock, FileText, FileCheck2, Loader2, FileSearch, HardHat, ShieldCheck, ShieldAlert, ShieldX, FileMinus, Bell, Info, LockKeyhole, RotateCcw } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, cn } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   useListOnboardingCaseEvidence, 
   getListOnboardingCaseEvidenceQueryKey,
   useDecideOnboardingEvidence,
+  useRetryOnboardingEvidenceMalwareScan,
   useGetOnboardingCaseBgv,
   getGetOnboardingCaseBgvQueryKey,
   getListOnboardingCaseDocumentsQueryKey,
@@ -169,6 +170,7 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
   
   const queryClient = useQueryClient();
   const decide = useDecideOnboardingEvidence();
+  const retryScan = useRetryOnboardingEvidenceMalwareScan();
 
   const handleDecision = (decision: 'approve' | 'reject' | 'request_correction') => {
     if (reason.trim().length < 3) {
@@ -197,10 +199,35 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
     });
   };
 
+  const retryMalwareScan = () => {
+    if (!evidence?.canRetryScan || retryScan.isPending) return;
+    setDecisionMessage(null);
+    retryScan.mutate({ id: caseId, evidenceId: evidence.id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEvidenceQueryKey(caseId) });
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseDocumentsQueryKey(caseId) });
+        setDecisionMessage({ kind: 'success', text: 'Security scan queued again.' });
+      },
+      onError: (error: any) => {
+        setDecisionMessage({ kind: 'error', text: error?.data?.message || error?.message || 'Unable to retry the security scan.' });
+      },
+    });
+  };
+
+  const retryingScan = retryScan.isPending;
   const hasEvidence = !!evidence;
-  const isReviewNeeded = hasEvidence && (evidence.validationState === 'manual_review' || evidence.validationState === 'correction_requested');
+  const malwareState = evidence?.malwareScanState as string | null | undefined;
+  const malwareClean = evidence?.malwareClean === true;
+  const malwareLocked = hasEvidence && !malwareClean;
+  const canReject = hasEvidence && evidence.isLatest === true
+    && (evidence.validationState === 'manual_review' || evidence.validationState === 'correction_requested');
+  const canRequestCorrection = hasEvidence && evidence.canRequestCorrection === true;
+  const isReviewNeeded = canRequestCorrection;
+  const approvalLocked = isReviewNeeded && evidence.canReview !== true;
   const isRejected = hasEvidence && evidence.validationState === 'rejected';
-  const isVerified = doc.status === 'verified' || (hasEvidence && evidence.validationState === 'passed');
+  const isVerified = !hasEvidence
+    ? doc.status === 'verified'
+    : malwareClean && (doc.status === 'verified' || evidence.validationState === 'passed');
   
   let docIcon = <FileMinus className="w-4 h-4 text-[var(--text-muted)] opacity-50" />;
   if (isVerified) docIcon = <FileCheck2 className="w-4 h-4 text-[var(--status-green)]" />;
@@ -262,6 +289,54 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
                 )}
               </div>
 
+              {(malwareLocked || approvalLocked) && (
+                <div className="mb-3 flex flex-col gap-2 rounded border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-2.5 text-[var(--text-xs)] text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-1.5">
+                    {malwareState === 'infected' ? (
+                      <ShieldX className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--status-red)]" />
+                    ) : (
+                      <LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--status-amber)]" />
+                    )}
+                    <span>
+                      <strong>Approval locked:</strong>{' '}
+                      {approvalLocked && !malwareLocked
+                        ? 'Only the latest upload for this document can be approved.'
+                        : malwareState === 'infected'
+                        ? 'This file is quarantined and cannot be opened or approved.'
+                        : malwareState === 'clean'
+                          ? 'The security result does not match this upload.'
+                          : malwareState === 'pending' || malwareState === 'scanning'
+                            ? 'Security scanning is still in progress.'
+                            : malwareState === 'unavailable' || malwareState === 'timeout' || malwareState === 'indeterminate'
+                              ? 'The security scan needs to be retried before approval.'
+                              : 'A security scan is required before approval.'}
+                    </span>
+                  </div>
+                  {evidence.canRetryScan && (
+                    <Button
+                      data-testid={`button-retry-malware-scan-${evidence.id}`}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void retryMalwareScan()}
+                      disabled={retryingScan}
+                      className="shrink-0"
+                    >
+                      <RotateCcw className={cn("mr-1.5 h-3.5 w-3.5", retryingScan && "animate-spin")} />
+                      {retryingScan ? 'Retrying...' : 'Retry security scan'}
+                    </Button>
+                  )}
+                </div>
+              )}
+              {!malwareLocked && !approvalLocked && malwareState === 'clean' && (
+                <div className="mb-3 flex items-center gap-1.5 rounded border border-[var(--status-green)] bg-[var(--status-green-bg)] p-2.5 text-[var(--text-xs)] text-[var(--status-green-fg)]">
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Security scan passed
+                    {evidence.malwareScannedAt ? ` on ${format(new Date(evidence.malwareScannedAt), 'MMM d, yyyy h:mm a')}` : ''}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
@@ -290,7 +365,8 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
                 </div>
 
                 {isReviewNeeded && (
-                  <Button 
+                  <Button
+                    data-testid={`button-open-document-review-${evidence.id}`}
                     size="sm" 
                     variant="outline" 
                     onClick={() => setDecisionOpen(!decisionOpen)}
@@ -305,6 +381,7 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
                 <div className="mt-4 pt-4 border-t border-[var(--border)]">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Manual Decision Required</p>
                   <textarea 
+                    data-testid={`input-document-decision-reason-${evidence.id}`}
                     className="w-full text-[var(--text-sm)] p-2 rounded border border-[var(--border)] bg-[var(--surface)] mb-3 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" 
                     rows={2}
                     placeholder="Enter reason for decision (required)..."
@@ -323,27 +400,31 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
                   )}
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button 
+                      data-testid={`button-approve-document-${evidence.id}`}
                       size="sm" 
                       className="bg-[var(--status-green)] hover:bg-[#1bbd72] text-white border-transparent flex-1"
-                      onClick={() => handleDecision('approve')}
-                      disabled={decide.isPending}
+                       onClick={() => handleDecision('approve')}
+                       disabled={decide.isPending || evidence.canReview !== true}
+                       title={!malwareClean ? 'Approval is locked until the latest upload has a clean, matching security result.' : undefined}
                     >
                        {decide.isPending && decide.variables?.data?.decision === 'approve' ? 'Saving...' : 'Approve after review'}
                     </Button>
                     <Button 
+                      data-testid={`button-request-document-correction-${evidence.id}`}
                       size="sm" 
                       className="bg-[var(--status-amber)] hover:bg-[#d97706] text-white border-transparent flex-1"
-                      onClick={() => handleDecision('request_correction')}
+                       onClick={() => handleDecision('request_correction')}
                       disabled={decide.isPending}
                     >
                       {decide.isPending && decide.variables?.data?.decision === 'request_correction' ? 'Saving...' : 'Request Correction'}
                     </Button>
                     <Button 
+                      data-testid={`button-reject-document-${evidence.id}`}
                       size="sm" 
                       variant="destructive"
                       className="flex-1"
                       onClick={() => handleDecision('reject')}
-                      disabled={decide.isPending}
+                       disabled={decide.isPending || !canReject}
                     >
                       {decide.isPending && decide.variables?.data?.decision === 'reject' ? 'Saving...' : 'Reject File'}
                     </Button>

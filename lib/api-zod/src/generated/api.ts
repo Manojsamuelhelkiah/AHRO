@@ -7184,7 +7184,14 @@ export const ListOnboardingCaseEvidenceResponseItem = zod.object({
   "evidence": zod.string().optional()
 })),
   "validationStartedAt": zod.coerce.date().nullish(),
-  "validatedAt": zod.coerce.date().nullish()
+  "validatedAt": zod.coerce.date().nullish(),
+  "malwareScanState": zod.enum(['pending', 'scanning', 'clean', 'infected', 'unavailable', 'timeout', 'indeterminate']),
+  "malwareScannedAt": zod.coerce.date().nullable(),
+  "malwareClean": zod.boolean(),
+  "isLatest": zod.boolean(),
+  "canReview": zod.boolean(),
+  "canRequestCorrection": zod.boolean(),
+  "canRetryScan": zod.boolean()
 })
 export const ListOnboardingCaseEvidenceResponse = zod.array(ListOnboardingCaseEvidenceResponseItem)
 
@@ -7207,6 +7214,22 @@ export const DecideOnboardingEvidenceBody = zod.object({
 })
 
 export const DecideOnboardingEvidenceResponse = zod.unknown()
+
+
+/**
+ * @summary Requeue the latest unavailable document malware scan
+ */
+export const RetryOnboardingEvidenceMalwareScanParams = zod.object({
+  "id": zod.coerce.number(),
+  "evidenceId": zod.coerce.number()
+})
+
+export const RetryOnboardingEvidenceMalwareScanResponse = zod.object({
+  "id": zod.number(),
+  "malwareScanState": zod.enum(['pending']),
+  "malwareScannedAt": zod.coerce.date().nullable(),
+  "canRetryScan": zod.boolean()
+})
 
 
 /**

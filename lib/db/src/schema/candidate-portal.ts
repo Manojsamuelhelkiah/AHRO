@@ -82,6 +82,12 @@ export const onbCandidateUploads = pgTable("onb_candidate_uploads", {
   contentType: text("content_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
   checksumSha256: text("checksum_sha256"),
+  malwareScanState: text("malware_scan_state").$type<"pending" | "scanning" | "clean" | "infected" | "unavailable" | "timeout" | "indeterminate">().notNull().default("pending"),
+  malwareScanId: text("malware_scan_id"),
+  malwareScanStartedAt: timestamp("malware_scan_started_at", { withTimezone: true }),
+  malwareScanDeadlineAt: timestamp("malware_scan_deadline_at", { withTimezone: true }),
+  malwareScannedAt: timestamp("malware_scanned_at", { withTimezone: true }),
+  malwareScanSha256: text("malware_scan_sha256"),
   /** queued | processing | passed | manual_review | correction_requested | rejected */
   validationState: text("validation_state").notNull().default("queued"),
   validationReasons: jsonb("validation_reasons").$type<Array<{ code: string; message: string; evidence?: string }>>().notNull().default([]),
@@ -97,4 +103,5 @@ export const onbCandidateUploads = pgTable("onb_candidate_uploads", {
   check("onb_candidate_upload_validation_attempts_check", sql`${t.validationAttempts} >= 0`),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id] }).onDelete("cascade"),
   index("onb_candidate_uploads_validation_queue_idx").on(t.validationState, t.validationClaimUntil),
+  index("onb_candidate_uploads_malware_queue_idx").on(t.malwareScanState, t.malwareScanDeadlineAt),
 ]);

@@ -1693,6 +1693,39 @@ paths:
         "200": { description: Decision recorded }
         "400": { description: Invalid decision }
         "404": { description: Evidence not found }
+        "409": { description: Evidence is stale, not reviewable, or blocked by malware policy }
+  /onboarding/cases/{id}/evidence/{evidenceId}/retry-malware-scan:
+    post:
+      operationId: retryOnboardingEvidenceMalwareScan
+      tags: [onboarding]
+      summary: Requeue the latest unavailable document malware scan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: evidenceId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Malware scan requeued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  malwareScanState:
+                    type: string
+                    enum: [pending]
+                  malwareScannedAt: { type: ["string", "null"], format: date-time }
+                  canRetryScan: { type: boolean }
+                required: [id, malwareScanState, malwareScannedAt, canRetryScan]
+        "403": { description: Organization owner or admin role required }
+        "404": { description: Case or evidence not found }
+        "409": { description: Evidence is stale or not retryable }
   /onboarding/cases/{id}/bgv:
     get:
       operationId: getOnboardingCaseBgv
@@ -5092,7 +5125,16 @@ components:
             required: [code, message]
         validationStartedAt: { type: ["string", "null"], format: date-time }
         validatedAt: { type: ["string", "null"], format: date-time }
-      required: [id, documentId, originalName, contentType, sizeBytes, fingerprint, label, category, required, reminderCount, reminderNextAt, validationState, validationReasons]
+        malwareScanState:
+          type: string
+          enum: [pending, scanning, clean, infected, unavailable, timeout, indeterminate]
+        malwareScannedAt: { type: ["string", "null"], format: date-time }
+        malwareClean: { type: boolean }
+        isLatest: { type: boolean }
+        canReview: { type: boolean }
+        canRequestCorrection: { type: boolean }
+        canRetryScan: { type: boolean }
+      required: [id, documentId, originalName, contentType, sizeBytes, fingerprint, label, category, required, reminderCount, reminderNextAt, validationState, validationReasons, malwareScanState, malwareScannedAt, malwareClean, isLatest, canReview, canRequestCorrection, canRetryScan]
     OnbBgvStatus:
       type: object
       properties:

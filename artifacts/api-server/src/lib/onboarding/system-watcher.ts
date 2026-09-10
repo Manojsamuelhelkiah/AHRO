@@ -33,6 +33,8 @@ import { ensureConnectorsSeeded } from "./connectors";
 import { makeSharedTick } from "./shared-tick";
 import { sweepExpiredNonIdempotentEffects } from "./effect-journal";
 import { runDocumentReminderTick, runDocumentValidationTick } from "./document-validation";
+import { runDocumentMalwareTick } from "./document-malware";
+import { documentMalwareGateSql } from "./document-malware-gate";
 import { logger } from "../logger";
 import { documentationGateReady } from "./document-validation-policy";
 
@@ -241,7 +243,7 @@ export async function completeCheck(
       if (item) {
         if (def.key === "bgv") {
           const requiredDocs = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, check.organizationId), eq(onbDocuments.caseId, check.caseId), eq(onbDocuments.required, true)));
-          const verifiedDocs = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, check.organizationId), eq(onbDocuments.caseId, check.caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified")));
+          const verifiedDocs = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, check.organizationId), eq(onbDocuments.caseId, check.caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified"), documentMalwareGateSql()));
           const ready = documentationGateReady({ bgvApplicable: true, bgvClear: true, requiredDocuments: requiredDocs.length, verifiedDocuments: verifiedDocs.length });
           item.status = ready ? "ready" : "in-progress";
           item.note = ready
@@ -715,6 +717,9 @@ async function tickOnce(): Promise<void> {
   await sweepExpiredNonIdempotentEffects();
   // Document evidence is validated asynchronously from the shared heartbeat.
   // Failures are isolated so an unavailable object/provider never stops BGV monitoring.
+  await runDocumentMalwareTick().catch(() => {
+    logger.error({ component: "document-malware-scanner" }, "document malware scan tick failed; files remain quarantined");
+  });
   await runDocumentValidationTick().catch((error) => {
     logger.error({ component: "document-validator", error: String(error).slice(0, 300) }, "document validation tick failed");
   });

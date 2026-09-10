@@ -39,6 +39,7 @@ import {
   checklistStageBlockers,
   readinessFromChecklist,
 } from "./settings";
+import { latestRequiredUploadMalwareBlockers } from "./document-readiness-guard";
 import type { OnbChecklistEnforcementStage, OnbChecklistTemplateItem } from "@workspace/db/schema";
 
 type CaseRow = typeof onbCases.$inferSelect;
@@ -185,12 +186,24 @@ export function checklistBlockers(
   return checklistStageBlockers(c, stage);
 }
 
+export function documentationGateConfigured(
+  c: Pick<CaseRow, "checklistSnapshot">,
+  stage?: OnbChecklistEnforcementStage,
+): boolean {
+  const documentation = checklistSnapshot(c).find((item) => item.id === "documentation");
+  return Boolean(
+    documentation?.enabled &&
+      documentation.mandatory &&
+      (stage === undefined || documentation.enforcementStage === stage),
+  );
+}
+
 async function enforceChecklistGate(
   caseId: number,
   stage: OnbChecklistEnforcementStage,
   claim?: OrchestrationClaim,
 ): Promise<boolean> {
-  const blockers = await db.transaction(async (tx) => {
+  const gate = await db.transaction(async (tx) => {
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!c) throw new Error(`case ${caseId} not found`);
     if (
@@ -200,8 +213,13 @@ async function enforceChecklistGate(
     ) {
       throw new Error("Orchestration claim was fenced by a newer worker");
     }
-    const current = checklistBlockers(c, stage);
-    if (current.length === 0) return current;
+    const blockers = checklistBlockers(c, stage);
+    const malwareBlockers = documentationGateConfigured(c, stage)
+      ? await latestRequiredUploadMalwareBlockers(tx, c.organizationId, caseId)
+      : [];
+    if (blockers.length === 0 && malwareBlockers.length === 0) {
+      return { blockers, malwareBlockers };
+    }
     await tx.update(onbCases).set({
       orchestrationStatus: "checklist-blocked",
       orchestrationCheckpoint: `blocked:${stage}`,
@@ -209,15 +227,21 @@ async function enforceChecklistGate(
       orchestrationClaimUntil: null,
       updatedAt: new Date(),
     }).where(eq(onbCases.id, caseId));
-    return current;
+    return { blockers, malwareBlockers };
   });
-  if (blockers.length === 0) return true;
+  if (gate.blockers.length === 0 && gate.malwareBlockers.length === 0) return true;
+  const reasons = [
+    ...gate.blockers.map((item) => item.label),
+    ...(gate.malwareBlockers.length > 0
+      ? [`${gate.malwareBlockers.length} required candidate upload(s) are pending or failed the malware gate`]
+      : []),
+  ];
   await logEvent(
     caseId,
     "orchestrator",
     "rules",
     "Mandatory Day-1 checklist gate blocked",
-    `${stage}: ${blockers.map((item) => item.label).join("; ")}. No downstream activity was initiated.`,
+    `${stage}: ${reasons.join("; ")}. No downstream activity was initiated.`,
     {
       ruleRef: "Day-1 checklist gate",
       idempotencyKey: `checklist-gate:${caseId}:${stage}`,
@@ -812,11 +836,6 @@ async function runCommunications(caseId: number) {
 async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim) {
   const c = await getCase(caseId);
 
-  if (c.skillCriticality === "scarce" || c.skillCriticality === "client-critical") {
-    await logEvent(caseId, "analytics", "rules", "Critical skill inflow flagged",
-      `Skill "${c.primarySkill}" (${c.skillCriticality}) entering the workforce. Aggregated insight routed to HR, Talent Planning and Delivery — individual-level judgement is never published.`,
-      { hitlPattern: "notify-only", ruleRef: "14.2 Analytics Rules", idempotencyKey: `orchestration:${caseId}:analytics:critical-skill` });
-  }
   const review = await db.transaction(async (tx) => {
     const [current] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!current) throw new Error(`case ${caseId} not found`);
@@ -826,6 +845,23 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
         current.orchestrationClaimToken !== claim.token)
     ) {
       throw new Error("Orchestration claim was fenced by a concurrent checklist transition");
+    }
+    const malwareBlockers = documentationGateConfigured(current)
+      ? await latestRequiredUploadMalwareBlockers(tx, current.organizationId, caseId)
+      : [];
+    if (malwareBlockers.length > 0) {
+      await tx.update(onbCases).set({
+        orchestrationStatus: "checklist-blocked",
+        orchestrationCheckpoint: "blocked:re-review",
+        orchestrationClaimOwner: null,
+        orchestrationClaimUntil: null,
+        updatedAt: new Date(),
+      }).where(eq(onbCases.id, caseId));
+      return {
+        allReady: false,
+        promoted: false,
+        malwareBlockers,
+      };
     }
     const ws = current.workstreams.map((item) => ({ ...item })) as OnbWorkstreamRow[];
     setWorkstream(ws, "analytics", "ready");
@@ -858,10 +894,20 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
         : []),
     )).returning({ id: onbCases.id });
     if (!updated) throw new Error("Orchestration review commit was fenced");
-    return { allReady, promoted };
+    return { allReady, promoted, malwareBlockers: [] as number[] };
   });
+  if (
+    c.skillCriticality === "scarce" ||
+    c.skillCriticality === "client-critical"
+  ) {
+    await logEvent(caseId, "analytics", "rules", "Critical skill inflow flagged",
+      `Skill "${c.primarySkill}" (${c.skillCriticality}) entering the workforce. Aggregated insight routed to HR, Talent Planning and Delivery — individual-level judgement is never published.`,
+      { hitlPattern: "notify-only", ruleRef: "14.2 Analytics Rules", idempotencyKey: `orchestration:${caseId}:analytics:critical-skill` });
+  }
   await logEvent(caseId, "orchestrator", "orchestrator", "Readiness review complete",
-    review.promoted
+    review.malwareBlockers.length > 0
+      ? `${review.malwareBlockers.length} required candidate upload(s) are pending or failed the malware gate. Case remains blocked until the latest upload is cleared and documentation readiness is reconciled.`
+      : review.promoted
       ? "All configured mandatory readiness items are complete. Case moves to Day-1 review; recommendation to complete will follow the joining date."
       : "Configured mandatory items remain incomplete and visible on the checklist; owners have been notified.",
     {
@@ -1016,8 +1062,21 @@ export async function resumeChecklistOrchestration(caseId: number): Promise<bool
       return true;
     }
     if (checkpoint === "blocked:re-review") {
-      const current = await getCase(caseId);
-      if (!mandatoryChecklistReady(current)) {
+      const ready = await db.transaction(async (tx) => {
+        const [current] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+        if (!current) throw new Error(`case ${caseId} not found`);
+        if (
+          current.orchestrationClaimOwner !== claim.owner ||
+          current.orchestrationClaimToken !== claim.token
+        ) {
+          throw new Error("Orchestration claim was fenced by a newer worker");
+        }
+        const malwareBlockers = documentationGateConfigured(current)
+          ? await latestRequiredUploadMalwareBlockers(tx, current.organizationId, caseId)
+          : [];
+        return malwareBlockers.length === 0 && mandatoryChecklistReady(current);
+      });
+      if (!ready) {
         await fencedCaseUpdate(caseId, claim, {
           orchestrationStatus: "checklist-blocked",
           orchestrationClaimOwner: null,

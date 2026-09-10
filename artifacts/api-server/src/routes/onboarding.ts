@@ -115,6 +115,8 @@ import {
 import { resolveReviewerName } from "../middlewares/require-auth";
 import { normalizeBgvStatus } from "../lib/onboarding/document-validation";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
+import { requeueDocumentMalwareScan } from "../lib/onboarding/document-malware";
+import { malwareScanRetryable, malwareUploadIsClean } from "../lib/onboarding/malware-policy";
 import { clerkClient } from "@clerk/express";
 import {
   getOrganizationId,
@@ -134,6 +136,7 @@ import {
 } from "../lib/onboarding/checklist-profiles";
 
 const router: IRouter = Router();
+const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
 
 function requireHrChecklistRole(req: Request, res: Response): boolean {
   if (isChecklistAdministrator(req.organizationRole)) return true;
@@ -722,21 +725,38 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
       return;
     }
     const rows = await listDocuments(id);
+    const uploads = await db.select({
+      id: onbCandidateUploads.id,
+      documentId: onbCandidateUploads.documentId,
+      checksumSha256: onbCandidateUploads.checksumSha256,
+      malwareScanState: onbCandidateUploads.malwareScanState,
+      malwareScanSha256: onbCandidateUploads.malwareScanSha256,
+    }).from(onbCandidateUploads).where(and(
+      eq(onbCandidateUploads.caseId, id),
+      eq(onbCandidateUploads.organizationId, getOrganizationId(req)),
+    )).orderBy(desc(onbCandidateUploads.id));
+    const latestUploads = new Map<number, typeof uploads[number]>();
+    for (const upload of uploads) if (!latestUploads.has(upload.documentId)) latestUploads.set(upload.documentId, upload);
     res.json(
-      rows.map((r) => ({
-        id: r.id,
-        caseId: r.caseId,
-        key: r.key,
-        label: r.label,
-        category: r.category,
-        status: r.status,
-        required: r.required,
-        note: r.note,
-         reminderCount: r.reminderCount,
-         lastReminderAt: iso(r.lastReminderAt),
-         reminderNextAt: iso(r.reminderNextAt),
-        updatedAt: r.updatedAt.toISOString(),
-      })),
+      rows.map((r) => {
+        const latest = latestUploads.get(r.id);
+        const securityBlocked = !!latest && !malwareUploadIsClean(latest);
+        const status = securityBlocked && r.status === "verified" ? "received" : r.status;
+        return {
+          id: r.id,
+          caseId: r.caseId,
+          key: r.key,
+          label: r.label,
+          category: r.category,
+          status,
+          required: r.required,
+          note: securityBlocked ? "Security scan must be clean before this document can be verified." : r.note,
+          reminderCount: r.reminderCount,
+          lastReminderAt: iso(r.lastReminderAt),
+          reminderNextAt: iso(r.reminderNextAt),
+          updatedAt: r.updatedAt.toISOString(),
+        };
+      }),
     );
   } catch (err) {
     next(err);
@@ -757,10 +777,31 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
       sizeBytes: onbCandidateUploads.sizeBytes, checksumSha256: onbCandidateUploads.checksumSha256,
       validationState: onbCandidateUploads.validationState, validationReasons: onbCandidateUploads.validationReasons,
       validationStartedAt: onbCandidateUploads.validationStartedAt, validatedAt: onbCandidateUploads.validatedAt,
+      malwareScanState: onbCandidateUploads.malwareScanState,
+      malwareScannedAt: onbCandidateUploads.malwareScannedAt,
+      malwareScanSha256: onbCandidateUploads.malwareScanSha256,
       label: onbDocuments.label, category: onbDocuments.category, required: onbDocuments.required,
       reminderCount: onbDocuments.reminderCount, reminderNextAt: onbDocuments.reminderNextAt,
     }).from(onbCandidateUploads).innerJoin(onbDocuments, and(eq(onbDocuments.id, onbCandidateUploads.documentId), eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId))).where(and(eq(onbCandidateUploads.caseId, caseId), eq(onbCandidateUploads.organizationId, organizationId))).orderBy(desc(onbCandidateUploads.id));
-    return res.json(rows.map(({ checksumSha256, ...row }) => ({ ...row, fingerprint: checksumSha256?.slice(0, 12) ?? null })));
+    const latestByDocument = new Map<number, typeof rows[number]>();
+    for (const row of rows) if (!latestByDocument.has(row.documentId)) latestByDocument.set(row.documentId, row);
+    return res.json(rows.map(({ checksumSha256, malwareScanSha256, ...row }) => {
+      const isLatest = latestByDocument.get(row.documentId)?.id === row.id;
+      const malwareClean = malwareUploadIsClean({ malwareScanState: row.malwareScanState, checksumSha256, malwareScanSha256 });
+      return {
+        ...row,
+        fingerprint: checksumSha256?.slice(0, 12) ?? null,
+        malwareScannedAt: iso(row.malwareScannedAt),
+        malwareClean,
+        isLatest,
+        canReview: isLatest && ["manual_review", "correction_requested"].includes(row.validationState) && malwareClean,
+        canRequestCorrection: isLatest && (
+          ["manual_review", "correction_requested"].includes(row.validationState) ||
+          (!malwareClean && row.validationState !== "rejected")
+        ),
+        canRetryScan: isLatest && malwareScanCanRetry(row.malwareScanState),
+      };
+    }));
   } catch (error) { return next(error); }
 });
 
@@ -773,13 +814,39 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
     const body = DecideOnboardingEvidenceBody.parse(req.body);
     const decision = body.decision;
     const reason = body.reason.trim();
-    const [upload] = await db.select().from(onbCandidateUploads).where(and(
-      eq(onbCandidateUploads.id, evidenceId), eq(onbCandidateUploads.caseId, caseId), eq(onbCandidateUploads.organizationId, organizationId),
-    ));
-    if (!upload) return res.status(404).json({ message: "Evidence not found" });
     const state = decision === "approve" ? "passed" : decision === "reject" ? "rejected" : "correction_requested";
-    if (!["manual_review", "correction_requested"].includes(upload.validationState)) return res.status(409).json({ message: "Evidence is not awaiting manual review." });
-    const updated = await db.transaction(async (tx) => {
+    const [target] = await db.select({ documentId: onbCandidateUploads.documentId }).from(onbCandidateUploads).where(and(
+      eq(onbCandidateUploads.id, evidenceId),
+      eq(onbCandidateUploads.caseId, caseId),
+      eq(onbCandidateUploads.organizationId, organizationId),
+    ));
+    if (!target) return res.status(404).json({ message: "Evidence not found" });
+    const result = await db.transaction(async (tx) => {
+      // Keep the lock order identical to candidate replacement and worker
+      // transitions: document first, then the upload row(s).
+      await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(
+        eq(onbDocuments.id, target.documentId),
+        eq(onbDocuments.caseId, caseId),
+        eq(onbDocuments.organizationId, organizationId),
+      )).for("update");
+      const [upload] = await tx.select().from(onbCandidateUploads).where(and(
+        eq(onbCandidateUploads.id, evidenceId), eq(onbCandidateUploads.caseId, caseId), eq(onbCandidateUploads.organizationId, organizationId),
+      )).for("update");
+      if (!upload) return { kind: "not_found" as const };
+      const [latest] = await tx.select({ id: onbCandidateUploads.id }).from(onbCandidateUploads).where(and(
+        eq(onbCandidateUploads.documentId, upload.documentId),
+        eq(onbCandidateUploads.caseId, caseId),
+        eq(onbCandidateUploads.organizationId, organizationId),
+      )).orderBy(desc(onbCandidateUploads.id)).limit(1).for("update");
+      if (!latest || latest.id !== upload.id) return { kind: "stale" as const };
+      const malwareClean = malwareUploadIsClean(upload);
+      if (!["manual_review", "correction_requested"].includes(upload.validationState)
+        && !(decision === "request_correction" && !malwareClean && upload.validationState !== "rejected")) {
+        return { kind: "not_reviewable" as const };
+      }
+      if (decision === "approve") {
+        if (!malwareClean) return { kind: "malware_blocked" as const };
+      }
       const [row] = await tx.update(onbCandidateUploads).set({
         validationState: state, validationReasons: [{ code: "hr_decision", message: reason }],
         validatedAt: new Date(), validationClaimOwner: null, validationClaimUntil: null,
@@ -796,10 +863,51 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
         ruleRef: "document-validation-manual-review", title: `Document ${decision.replace("_", " ")}`,
         detail: reason, idempotencyKey: `document-decision:${evidenceId}:${row.validatedAt?.getTime()}`,
       }).onConflictDoNothing();
-      return row;
+      return { kind: "updated" as const, row };
     });
+    if (result.kind === "not_found") return res.status(404).json({ message: "Evidence not found" });
+    if (result.kind === "not_reviewable") return res.status(409).json({ message: "Evidence is not awaiting manual review." });
+    if (result.kind === "stale") return res.status(409).json({ message: "Only the latest upload for this document can be used for this decision." });
+    if (result.kind === "malware_blocked") return res.status(409).json({ message: "Approval is locked until the latest upload passes its security scan." });
     await reconcileDocumentationReadiness(organizationId, caseId);
-    return res.json({ id: updated.id, validationState: updated.validationState, validationReasons: updated.validationReasons, validatedAt: updated.validatedAt });
+    return res.json({ id: result.row.id, validationState: result.row.validationState, validationReasons: result.row.validationReasons, validatedAt: result.row.validatedAt });
+  } catch (error) { return next(error); }
+});
+
+router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const caseId = Number(req.params.id);
+    const evidenceId = Number(req.params.evidenceId);
+    if (!Number.isInteger(caseId) || !Number.isInteger(evidenceId)) {
+      return res.status(400).json({ message: "Valid case and evidence ids are required." });
+    }
+    const organizationId = getOrganizationId(req);
+    const [owned] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+      eq(onbCases.id, caseId),
+      organizationWhere(onbCases, organizationId),
+    ));
+    if (!owned) return res.status(404).json({ message: "Case not found" });
+    const [upload] = await db.select().from(onbCandidateUploads).where(and(
+      eq(onbCandidateUploads.id, evidenceId),
+      eq(onbCandidateUploads.caseId, caseId),
+      eq(onbCandidateUploads.organizationId, organizationId),
+    ));
+    if (!upload) return res.status(404).json({ message: "Evidence not found" });
+    const [latest] = await db.select({ id: onbCandidateUploads.id }).from(onbCandidateUploads).where(and(
+      eq(onbCandidateUploads.documentId, upload.documentId),
+      eq(onbCandidateUploads.caseId, caseId),
+      eq(onbCandidateUploads.organizationId, organizationId),
+    )).orderBy(desc(onbCandidateUploads.id)).limit(1);
+    if (!latest || latest.id !== evidenceId) {
+      return res.status(409).json({ message: "Only the latest upload for this document can be rescanned." });
+    }
+    if (!malwareScanCanRetry(upload.malwareScanState)) {
+      return res.status(409).json({ message: "This security scan cannot be retried in its current state." });
+    }
+    const requeued = await requeueDocumentMalwareScan(organizationId, caseId, evidenceId);
+    if (!requeued) return res.status(409).json({ message: "This security scan could not be queued again." });
+    return res.json({ id: evidenceId, malwareScanState: "pending", malwareScannedAt: null, canRetryScan: false });
   } catch (error) { return next(error); }
 });
 

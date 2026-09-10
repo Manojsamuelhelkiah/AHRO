@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, FileUp, Monitor, Upload, ExternalLink, CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
+import { CalendarDays, FileUp, Monitor, Upload, ExternalLink, CheckCircle2, AlertCircle, Loader2, Clock, LockKeyhole } from 'lucide-react';
 
 type Portal = {
   case: { workerName: string; role: string; department: string; joiningDate: string };
@@ -12,6 +12,9 @@ type Portal = {
     note?: string | null;
     validationState: 'queued' | 'processing' | 'passed' | 'manual_review' | 'correction_requested' | 'rejected' | null;
     correctionGuidance: string | null;
+    malwareGuidance: string | null;
+    malwareCheckPending: boolean;
+    malwareScannedAt: string | null;
   }>;
 };
 
@@ -47,7 +50,7 @@ export function CandidatePage() {
   }, []);
 
   const validationPending = portal?.documents.some(
-    (doc) => doc.validationState === 'queued' || doc.validationState === 'processing',
+    (doc) => doc.validationState === 'queued' || doc.validationState === 'processing' || doc.malwareCheckPending,
   ) ?? false;
 
   useEffect(() => {
@@ -197,7 +200,15 @@ export function CandidatePage() {
               let ringColor = 'ring-slate-600/20';
               let icon = null;
 
-              if (vs === 'queued' || vs === 'processing') {
+               if (doc.malwareCheckPending) {
+                 label = 'Security check in progress';
+                 bgColor = 'bg-blue-50'; textColor = 'text-blue-700'; ringColor = 'ring-blue-600/20';
+                 icon = <LockKeyhole className="h-3 w-3" />;
+               } else if (doc.malwareGuidance && vs !== 'passed') {
+                 label = 'Security review required';
+                 bgColor = 'bg-amber-50'; textColor = 'text-amber-700'; ringColor = 'ring-amber-600/20';
+                 icon = <LockKeyhole className="h-3 w-3" />;
+               } else if (vs === 'queued' || vs === 'processing') {
                 label = 'Validating...';
                 bgColor = 'bg-blue-50'; textColor = 'text-blue-700'; ringColor = 'ring-blue-600/20';
                 icon = <Loader2 className="h-3 w-3 animate-spin" />;
@@ -244,7 +255,17 @@ export function CandidatePage() {
                     {doc.note && <span className="text-xs text-slate-500 truncate" title={doc.note}>&middot; {doc.note}</span>}
                   </div>
 
-                  {vs === 'correction_requested' && doc.correctionGuidance && (
+                   {doc.malwareGuidance && (
+                     <div
+                       data-testid={`status-security-check-${doc.id}`}
+                       className="mt-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-2 flex gap-1.5 items-start"
+                     >
+                       <LockKeyhole className="h-4 w-4 shrink-0 mt-0.5 text-slate-500" />
+                       <span>{doc.malwareGuidance}</span>
+                     </div>
+                   )}
+
+                   {vs === 'correction_requested' && doc.correctionGuidance && (
                     <div className="mt-2 text-xs text-amber-800 bg-amber-50/50 border border-amber-100 rounded-md p-2 flex gap-1.5 items-start">
                       <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>{doc.correctionGuidance}</span>
@@ -255,7 +276,7 @@ export function CandidatePage() {
                     <p className="mt-1.5 text-[10px] text-slate-500">Automated checks passed. Authenticity may require HR/provider review.</p>
                   )}
 
-                  {docErrors[doc.id] && (
+                   {docErrors[doc.id] && (
                     <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {docErrors[doc.id]}</p>
                   )}
                 </div>
@@ -275,7 +296,14 @@ export function CandidatePage() {
                     <Upload className="h-3.5 w-3.5" />
                   )}
                   {uploading === doc.id ? 'Uploading...' : doc.status === 'pending' ? 'Upload File' : 'Replace File'}
-                  <input className="sr-only" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" disabled={uploading !== null} onChange={(event) => { upload(doc.id, event.target.files?.[0]); event.target.value = ''; }} />
+                   <input
+                     data-testid={`input-upload-document-${doc.id}`}
+                     className="sr-only"
+                     type="file"
+                     accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                     disabled={uploading !== null}
+                     onChange={(event) => { upload(doc.id, event.target.files?.[0]); event.target.value = ''; }}
+                   />
                 </label>
               </div>
             )})}

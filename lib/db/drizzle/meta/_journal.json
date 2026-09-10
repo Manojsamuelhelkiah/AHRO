@@ -302,6 +302,13 @@
       "when": 1788973740002,
       "tag": "0036_document_validation_monitoring",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789026000000,
+      "tag": "0037_document_malware_quarantine",
+      "breakpoints": true
     }
   ]
 }

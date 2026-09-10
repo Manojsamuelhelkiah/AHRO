@@ -36,3 +36,4 @@
 - [Indexes on optional recovery tables](optional-recovery-table-indexes.md) — automatic index migrations fail when historical recovery fixtures omit the table; procedural guards are intentionally forbidden.
 - [Versioned policy snapshot replacement](versioned-policy-snapshot-replacement.md) — serialize policy writes; fence active snapshot replacement against claims, stale revisions, and passed gates.
 - [Document verification boundaries](document-verification-boundaries.md) — local file checks are not source authentication; unavailable, uncertain, rejected, or adverse results require human review.
+- [Document malware boundaries](document-malware-boundaries.md) — keep candidate scans private; authenticity cannot override quarantine, and cached readiness cannot replace live evidence checks.

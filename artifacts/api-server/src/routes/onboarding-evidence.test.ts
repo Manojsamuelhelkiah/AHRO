@@ -71,6 +71,8 @@ before(async () => {
     organizationId: orgA, caseId: caseA, documentId: documentA,
     objectPath: `test/${suffix}/id-proof.pdf`, originalName: "id-proof.pdf",
     contentType: "application/pdf", sizeBytes: 10, validationState: "manual_review",
+    checksumSha256: "a".repeat(64), malwareScanState: "clean", malwareScanSha256: "a".repeat(64),
+    malwareScannedAt: new Date(),
     validationReasons: [{ code: "manual_review", message: "Needs HR review." }],
   }).returning({ id: onbCandidateUploads.id })).map((row) => row.id);
   await db.insert(onbSystemChecks).values({
@@ -120,6 +122,16 @@ test("HR evidence decisions atomically update upload and document, with role and
   });
   assert.equal(crossTenant.status, 404);
 
+  const metadata = await call(`/onboarding/cases/${caseA}/evidence`, orgA);
+  assert.equal(metadata.status, 200);
+  const [metadataRow] = await metadata.json() as Array<Record<string, unknown>>;
+  assert.equal(metadataRow.malwareScanState, "clean");
+  assert.equal(metadataRow.canReview, true);
+  assert.equal(metadataRow.isLatest, true);
+  assert.equal(metadataRow.canRequestCorrection, true);
+  assert.ok(metadataRow.malwareScannedAt);
+  assert.equal("malwareScanId" in metadataRow, false);
+
   const approved = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
     method: "POST", body: JSON.stringify({ decision: "approve", reason: "Looks good." }),
   });
@@ -143,4 +155,76 @@ test("HR evidence decisions atomically update upload and document, with role and
   assert.equal(correctedUpload.validationState, "correction_requested");
   assert.equal(correctedDocument.status, "received");
   assert.equal(correctedDocument.note, "Please upload a clearer copy.");
+
+  await db.update(onbCandidateUploads).set({
+    validationState: "queued",
+    malwareScanState: "infected",
+    malwareScanSha256: null,
+  }).where(eq(onbCandidateUploads.id, uploadA));
+  const malwareCorrection = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
+    method: "POST", body: JSON.stringify({ decision: "request_correction", reason: "Please submit a different file." }),
+  });
+  assert.equal(malwareCorrection.status, 200);
+
+  const deniedMalwareStates = [
+    "infected", "pending", "scanning", "unavailable", "timeout", "indeterminate",
+  ] as const;
+  for (const malwareScanState of deniedMalwareStates) {
+    await db.update(onbCandidateUploads).set({
+      validationState: "manual_review",
+      malwareScanState,
+      malwareScanSha256: null,
+      checksumSha256: "a".repeat(64),
+    }).where(eq(onbCandidateUploads.id, uploadA));
+    await db.update(onbDocuments).set({ status: "received" }).where(eq(onbDocuments.id, documentA));
+    const deniedMalware = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
+      method: "POST", body: JSON.stringify({ decision: "approve", reason: `Blocked by ${malwareScanState}.` }),
+    });
+    assert.equal(deniedMalware.status, 409, `malware state ${malwareScanState} must block approval`);
+  }
+
+  await db.update(onbCandidateUploads).set({
+    validationState: "manual_review",
+    malwareScanState: "clean",
+    checksumSha256: null,
+    malwareScanSha256: null,
+  }).where(eq(onbCandidateUploads.id, uploadA));
+  await db.update(onbDocuments).set({ status: "received" }).where(eq(onbDocuments.id, documentA));
+  const legacyDenied = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
+    method: "POST", body: JSON.stringify({ decision: "approve", reason: "Legacy upload without a bound checksum." }),
+  });
+  assert.equal(legacyDenied.status, 409);
+
+  const [newerUpload] = await db.insert(onbCandidateUploads).values({
+    organizationId: orgA, caseId: caseA, documentId: documentA,
+    objectPath: `test/${suffix}/id-proof-new.pdf`, originalName: "id-proof-new.pdf",
+    contentType: "application/pdf", sizeBytes: 10, validationState: "manual_review",
+    checksumSha256: "b".repeat(64), malwareScanState: "clean", malwareScanSha256: "b".repeat(64),
+    malwareScannedAt: new Date(),
+  }).returning({ id: onbCandidateUploads.id });
+  const staleDenied = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
+    method: "POST", body: JSON.stringify({ decision: "approve", reason: "Stale upload must not be approved." }),
+  });
+  assert.equal(staleDenied.status, 409);
+  const staleCorrectionDenied = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
+    method: "POST", body: JSON.stringify({ decision: "request_correction", reason: "Obsolete upload must not alter the checklist." }),
+  });
+  assert.equal(staleCorrectionDenied.status, 409);
+
+  await db.update(onbCandidateUploads).set({
+    malwareScanState: "unavailable", malwareScanSha256: null, validationState: "manual_review",
+  }).where(eq(onbCandidateUploads.id, newerUpload.id));
+  const retryDenied = await call(`/onboarding/cases/${caseA}/evidence/${newerUpload.id}/retry-malware-scan`, orgA, {
+    method: "POST", headers: { "x-test-role": "member" },
+  });
+  assert.equal(retryDenied.status, 403);
+  const retryCrossTenant = await call(`/onboarding/cases/${caseA}/evidence/${newerUpload.id}/retry-malware-scan`, orgB, {
+    method: "POST",
+  });
+  assert.equal(retryCrossTenant.status, 404);
+  const retry = await call(`/onboarding/cases/${caseA}/evidence/${newerUpload.id}/retry-malware-scan`, orgA, {
+    method: "POST",
+  });
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json() as { malwareScanState: string }).malwareScanState, "pending");
 });

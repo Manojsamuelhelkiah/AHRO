@@ -2442,6 +2442,19 @@ export type OnbDocumentEvidenceValidationReasonsItem = {
   evidence?: string;
 };
 
+export type OnbDocumentEvidenceMalwareScanState = typeof OnbDocumentEvidenceMalwareScanState[keyof typeof OnbDocumentEvidenceMalwareScanState];
+
+
+export const OnbDocumentEvidenceMalwareScanState = {
+  pending: 'pending',
+  scanning: 'scanning',
+  clean: 'clean',
+  infected: 'infected',
+  unavailable: 'unavailable',
+  timeout: 'timeout',
+  indeterminate: 'indeterminate',
+} as const;
+
 export interface OnbDocumentEvidence {
   id: number;
   documentId: number;
@@ -2462,6 +2475,14 @@ export interface OnbDocumentEvidence {
   validationStartedAt?: string | null;
   /** @nullable */
   validatedAt?: string | null;
+  malwareScanState: OnbDocumentEvidenceMalwareScanState;
+  /** @nullable */
+  malwareScannedAt: string | null;
+  malwareClean: boolean;
+  isLatest: boolean;
+  canReview: boolean;
+  canRequestCorrection: boolean;
+  canRetryScan: boolean;
 }
 
 export type OnbBgvStatusStatus = typeof OnbBgvStatusStatus[keyof typeof OnbBgvStatusStatus];
@@ -3232,6 +3253,21 @@ export type ImportScenarioWorkbookBody = {
 export type ParseActualsLogBody = {
   /** Raw call-log CSV file (max 20 MB). */
   logFile: Blob;
+};
+
+export type RetryOnboardingEvidenceMalwareScan200MalwareScanState = typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState[keyof typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState];
+
+
+export const RetryOnboardingEvidenceMalwareScan200MalwareScanState = {
+  pending: 'pending',
+} as const;
+
+export type RetryOnboardingEvidenceMalwareScan200 = {
+  id: number;
+  malwareScanState: RetryOnboardingEvidenceMalwareScan200MalwareScanState;
+  /** @nullable */
+  malwareScannedAt: string | null;
+  canRetryScan: boolean;
 };
 
 export type GetDemoVolunteers200 = {

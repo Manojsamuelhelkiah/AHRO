@@ -96,6 +96,7 @@ import type {
   PricingSheetUpdate,
   ResolveIntentRouteInput,
   ResolvedIntentRoute,
+  RetryOnboardingEvidenceMalwareScan200,
   Rollup,
   RollupRequest,
   RoutingSummary,
@@ -5718,6 +5719,79 @@ export const useDecideOnboardingEvidence = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDecideOnboardingEvidenceMutationOptions(options));
+    }
+
+export const getRetryOnboardingEvidenceMalwareScanUrl = (id: number,
+    evidenceId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/evidence/${evidenceId}/retry-malware-scan`
+}
+
+/**
+ * @summary Requeue the latest unavailable document malware scan
+ */
+export const retryOnboardingEvidenceMalwareScan = async (id: number,
+    evidenceId: number, options?: RequestInit): Promise<RetryOnboardingEvidenceMalwareScan200> => {
+
+  return customFetch<RetryOnboardingEvidenceMalwareScan200>(getRetryOnboardingEvidenceMalwareScanUrl(id,evidenceId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetryOnboardingEvidenceMalwareScanMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryOnboardingEvidenceMalwareScan>>, TError,{id: number;evidenceId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryOnboardingEvidenceMalwareScan>>, TError,{id: number;evidenceId: number}, TContext> => {
+
+const mutationKey = ['retryOnboardingEvidenceMalwareScan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryOnboardingEvidenceMalwareScan>>, {id: number;evidenceId: number}> = (props) => {
+          const {id,evidenceId} = props ?? {};
+
+          return  retryOnboardingEvidenceMalwareScan(id,evidenceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryOnboardingEvidenceMalwareScanMutationResult = NonNullable<Awaited<ReturnType<typeof retryOnboardingEvidenceMalwareScan>>>
+
+    export type RetryOnboardingEvidenceMalwareScanMutationError = ErrorType<void>
+
+    /**
+ * @summary Requeue the latest unavailable document malware scan
+ */
+export const useRetryOnboardingEvidenceMalwareScan = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryOnboardingEvidenceMalwareScan>>, TError,{id: number;evidenceId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryOnboardingEvidenceMalwareScan>>,
+        TError,
+        {id: number;evidenceId: number},
+        TContext
+      > => {
+      return useMutation(getRetryOnboardingEvidenceMalwareScanMutationOptions(options));
     }
 
 export const getGetOnboardingCaseBgvUrl = (id: number,) => {
