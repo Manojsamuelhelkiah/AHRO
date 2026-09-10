@@ -4,12 +4,13 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn, Pag
 import { useQueryClient } from '@tanstack/react-query';
 import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle, Eye, Webhook, RefreshCw, Clock, Inbox, FlaskConical } from 'lucide-react';
 import { format } from 'date-fns';
+import { MalwareScannerStatus } from '@/components/malware-scanner-status';
 
 export function SystemsPage() {
   const queryClient = useQueryClient();
   const { data: connectors, isLoading: loadingConn } = useListOnboardingConnectors();
   const { data: channels, isLoading: loadingChan } = useGetOnboardingChannels({ query: { queryKey: getGetOnboardingChannelsQueryKey(), refetchInterval: 30_000 } });
-  const { data: watcher, isLoading: loadingWatcher } = useGetOnboardingSystemWatcher({ query: { queryKey: getGetOnboardingSystemWatcherQueryKey(), refetchInterval: 15_000 } });
+  const { data: watcher, isLoading: loadingWatcher, isError: watcherError } = useGetOnboardingSystemWatcher({ query: { queryKey: getGetOnboardingSystemWatcherQueryKey(), refetchInterval: 15_000 } });
   const { data: emailWatch, isLoading: loadingEmailWatch } = useGetOnboardingEmailWatch({ query: { queryKey: getGetOnboardingEmailWatchQueryKey(), refetchInterval: 15_000 } });
   const updateConnector = useUpdateOnboardingConnector();
   const testChannel = useTestOnboardingChannel();
@@ -130,6 +131,13 @@ export function SystemsPage() {
             </div>
           </>
         ) : null}
+        <div className="mt-6">
+          <MalwareScannerStatus
+            status={watcher?.malwareScanner}
+            loading={loadingWatcher}
+            error={watcherError}
+          />
+        </div>
       </div>
 
       <div className="space-y-4 pt-4">

@@ -5783,7 +5783,93 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OnbSystemCheck"
+        malwareScanner:
+          $ref: "#/components/schemas/OnbMalwareScannerMonitorHealth"
       required: [connectors, checks]
+    OnbMalwareScannerHealth:
+      type: object
+      description: Safe private malware scanner probe result; endpoint and daemon details are never returned
+      properties:
+        connectivity:
+          type: string
+          enum: [connected, unavailable, timeout, indeterminate, not_configured]
+        signatures:
+          type: string
+          enum: [current, stale, unknown]
+        signatureUpdatedAt:
+          type: ["string", "null"]
+        signatureAgeHours:
+          type: ["number", "null"]
+        maxSignatureAgeHours:
+          type: number
+        checkedAt:
+          type: string
+      required: [connectivity, signatures, signatureUpdatedAt, signatureAgeHours, maxSignatureAgeHours, checkedAt]
+    OnbMalwareScannerNotificationSummary:
+      type: object
+      description: Safe delivery state summary without recipient, provider, or error details
+      properties:
+        state:
+          type: string
+          enum: [none, pending, sending, sent, failed, ambiguous, not_configured]
+        attemptedAt:
+          type: ["string", "null"]
+        sentAt:
+          type: ["string", "null"]
+        retryAt:
+          type: ["string", "null"]
+      required: [state, attemptedAt, sentAt, retryAt]
+    OnbMalwareScannerIncident:
+      type: object
+      properties:
+        active:
+          type: boolean
+        kind:
+          type: ["string", "null"]
+          enum: [outage, stale-signature, null]
+        startedAt:
+          type: ["string", "null"]
+        notification:
+          $ref: "#/components/schemas/OnbMalwareScannerNotificationSummary"
+      required: [active, kind, startedAt, notification]
+    OnbMalwareScannerRecovery:
+      type: object
+      properties:
+        outstanding:
+          type: boolean
+        incidentStartedAt:
+          type: ["string", "null"]
+        recoveredAt:
+          type: ["string", "null"]
+        outageNotification:
+          $ref: "#/components/schemas/OnbMalwareScannerNotificationSummary"
+        notification:
+          $ref: "#/components/schemas/OnbMalwareScannerNotificationSummary"
+      required: [outstanding, incidentStartedAt, recoveredAt, outageNotification, notification]
+    OnbMalwareScannerMonitorHealth:
+      type: object
+      description: Safe private malware scanner monitor status; no scanner endpoint, recipient, or provider details
+      properties:
+        health:
+          oneOf:
+            - $ref: "#/components/schemas/OnbMalwareScannerHealth"
+            - type: "null"
+        lastCheckedAt:
+          type: ["string", "null"]
+        stale:
+          type: boolean
+        status:
+          type: string
+          enum: [healthy, outage, stale-signatures, indeterminate, not_configured, initializing, stale-data]
+        healthy:
+          type: boolean
+        operatorConfigured:
+          type: boolean
+        incident:
+          $ref: "#/components/schemas/OnbMalwareScannerIncident"
+        recovery:
+          $ref: "#/components/schemas/OnbMalwareScannerRecovery"
+      required: [health, lastCheckedAt, stale, status, healthy, operatorConfigured, incident, recovery]
     OnbWatchEmail:
       type: object
       description: One vendor status email matched by the watch-mailbox tracker

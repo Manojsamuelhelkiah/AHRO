@@ -3021,9 +3021,128 @@ export interface OnbSystemCheck {
   note: string | null;
 }
 
+export type OnbMalwareScannerHealthConnectivity = typeof OnbMalwareScannerHealthConnectivity[keyof typeof OnbMalwareScannerHealthConnectivity];
+
+
+export const OnbMalwareScannerHealthConnectivity = {
+  connected: 'connected',
+  unavailable: 'unavailable',
+  timeout: 'timeout',
+  indeterminate: 'indeterminate',
+  not_configured: 'not_configured',
+} as const;
+
+export type OnbMalwareScannerHealthSignatures = typeof OnbMalwareScannerHealthSignatures[keyof typeof OnbMalwareScannerHealthSignatures];
+
+
+export const OnbMalwareScannerHealthSignatures = {
+  current: 'current',
+  stale: 'stale',
+  unknown: 'unknown',
+} as const;
+
+/**
+ * Safe private malware scanner probe result; endpoint and daemon details are never returned
+ */
+export interface OnbMalwareScannerHealth {
+  connectivity: OnbMalwareScannerHealthConnectivity;
+  signatures: OnbMalwareScannerHealthSignatures;
+  /** @nullable */
+  signatureUpdatedAt: string | null;
+  /** @nullable */
+  signatureAgeHours: number | null;
+  maxSignatureAgeHours: number;
+  checkedAt: string;
+}
+
+export type OnbMalwareScannerMonitorHealthStatus = typeof OnbMalwareScannerMonitorHealthStatus[keyof typeof OnbMalwareScannerMonitorHealthStatus];
+
+
+export const OnbMalwareScannerMonitorHealthStatus = {
+  healthy: 'healthy',
+  outage: 'outage',
+  'stale-signatures': 'stale-signatures',
+  indeterminate: 'indeterminate',
+  not_configured: 'not_configured',
+  initializing: 'initializing',
+  'stale-data': 'stale-data',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnbMalwareScannerIncidentKind = typeof OnbMalwareScannerIncidentKind[keyof typeof OnbMalwareScannerIncidentKind] | null;
+
+
+export const OnbMalwareScannerIncidentKind = {
+  outage: 'outage',
+  'stale-signature': 'stale-signature',
+} as const;
+
+export type OnbMalwareScannerNotificationSummaryState = typeof OnbMalwareScannerNotificationSummaryState[keyof typeof OnbMalwareScannerNotificationSummaryState];
+
+
+export const OnbMalwareScannerNotificationSummaryState = {
+  none: 'none',
+  pending: 'pending',
+  sending: 'sending',
+  sent: 'sent',
+  failed: 'failed',
+  ambiguous: 'ambiguous',
+  not_configured: 'not_configured',
+} as const;
+
+/**
+ * Safe delivery state summary without recipient, provider, or error details
+ */
+export interface OnbMalwareScannerNotificationSummary {
+  state: OnbMalwareScannerNotificationSummaryState;
+  /** @nullable */
+  attemptedAt: string | null;
+  /** @nullable */
+  sentAt: string | null;
+  /** @nullable */
+  retryAt: string | null;
+}
+
+export interface OnbMalwareScannerIncident {
+  active: boolean;
+  /** @nullable */
+  kind: OnbMalwareScannerIncidentKind;
+  /** @nullable */
+  startedAt: string | null;
+  notification: OnbMalwareScannerNotificationSummary;
+}
+
+export interface OnbMalwareScannerRecovery {
+  outstanding: boolean;
+  /** @nullable */
+  incidentStartedAt: string | null;
+  /** @nullable */
+  recoveredAt: string | null;
+  outageNotification: OnbMalwareScannerNotificationSummary;
+  notification: OnbMalwareScannerNotificationSummary;
+}
+
+/**
+ * Safe private malware scanner monitor status; no scanner endpoint, recipient, or provider details
+ */
+export interface OnbMalwareScannerMonitorHealth {
+  health: OnbMalwareScannerHealth | null;
+  /** @nullable */
+  lastCheckedAt: string | null;
+  stale: boolean;
+  status: OnbMalwareScannerMonitorHealthStatus;
+  healthy: boolean;
+  operatorConfigured: boolean;
+  incident: OnbMalwareScannerIncident;
+  recovery: OnbMalwareScannerRecovery;
+}
+
 export interface OnbSystemWatcher {
   connectors: OnbSystemConnectorHealth[];
   checks: OnbSystemCheck[];
+  malwareScanner?: OnbMalwareScannerMonitorHealth;
 }
 
 /**
@@ -3449,4 +3568,3 @@ export const GetOnboardingOutcomeKpisDomain = {
   Onboarding: 'Onboarding',
   All_domains: 'All domains',
 } as const;
-

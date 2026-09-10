@@ -119,6 +119,7 @@ import {
   getCandidateAccessCleanupHealth,
   runCandidateAccessCleanup,
 } from "../lib/onboarding/candidate-access-cleanup";
+import { getMalwareScannerMonitorHealth } from "../lib/onboarding/malware-scanner-monitor";
 import { resolveReviewerName } from "../middlewares/require-auth";
 import { normalizeBgvStatus } from "../lib/onboarding/document-validation";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
@@ -2075,6 +2076,7 @@ router.get("/onboarding/systems/watcher", async (_req, res, next) => {
       .orderBy(desc(onbSystemChecks.id));
     res.json({
       connectors: getSystemWatcherHealth(),
+      malwareScanner: await getMalwareScannerMonitorHealth(),
       checks: rows.map(({ check: c, workerName }) => ({
         id: c.id,
         caseId: c.caseId,

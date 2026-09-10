@@ -8022,7 +8022,50 @@ export const GetOnboardingSystemWatcherResponse = zod.object({
   "lastCheckedAt": zod.string().nullable(),
   "escalatedAt": zod.string().nullable(),
   "note": zod.string().nullable()
-}).describe('One tracked external-system checklist item for a case'))
+}).describe('One tracked external-system checklist item for a case')),
+  "malwareScanner": zod.object({
+  "health": zod.union([zod.object({
+  "connectivity": zod.enum(['connected', 'unavailable', 'timeout', 'indeterminate', 'not_configured']),
+  "signatures": zod.enum(['current', 'stale', 'unknown']),
+  "signatureUpdatedAt": zod.string().nullable(),
+  "signatureAgeHours": zod.number().nullable(),
+  "maxSignatureAgeHours": zod.number(),
+  "checkedAt": zod.string()
+}).describe('Safe private malware scanner probe result; endpoint and daemon details are never returned'),zod.null()]),
+  "lastCheckedAt": zod.string().nullable(),
+  "stale": zod.boolean(),
+  "status": zod.enum(['healthy', 'outage', 'stale-signatures', 'indeterminate', 'not_configured', 'initializing', 'stale-data']),
+  "healthy": zod.boolean(),
+  "operatorConfigured": zod.boolean(),
+  "incident": zod.object({
+  "active": zod.boolean(),
+  "kind": zod.union([zod.literal('outage'),zod.literal('stale-signature'),zod.literal(null)]).nullable(),
+  "startedAt": zod.string().nullable(),
+  "notification": zod.object({
+  "state": zod.enum(['none', 'pending', 'sending', 'sent', 'failed', 'ambiguous', 'not_configured']),
+  "attemptedAt": zod.string().nullable(),
+  "sentAt": zod.string().nullable(),
+  "retryAt": zod.string().nullable()
+}).describe('Safe delivery state summary without recipient, provider, or error details')
+}),
+  "recovery": zod.object({
+  "outstanding": zod.boolean(),
+  "incidentStartedAt": zod.string().nullable(),
+  "recoveredAt": zod.string().nullable(),
+  "outageNotification": zod.object({
+  "state": zod.enum(['none', 'pending', 'sending', 'sent', 'failed', 'ambiguous', 'not_configured']),
+  "attemptedAt": zod.string().nullable(),
+  "sentAt": zod.string().nullable(),
+  "retryAt": zod.string().nullable()
+}).describe('Safe delivery state summary without recipient, provider, or error details'),
+  "notification": zod.object({
+  "state": zod.enum(['none', 'pending', 'sending', 'sent', 'failed', 'ambiguous', 'not_configured']),
+  "attemptedAt": zod.string().nullable(),
+  "sentAt": zod.string().nullable(),
+  "retryAt": zod.string().nullable()
+}).describe('Safe delivery state summary without recipient, provider, or error details')
+})
+}).optional().describe('Safe private malware scanner monitor status; no scanner endpoint, recipient, or provider details')
 })
 
 
@@ -8345,5 +8388,3 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
-
-

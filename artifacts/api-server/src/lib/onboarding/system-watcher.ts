@@ -36,6 +36,7 @@ import { sweepExpiredNonIdempotentEffects } from "./effect-journal";
 import { runDocumentReminderTick, runDocumentValidationTick } from "./document-validation";
 import { runDocumentMalwareTick } from "./document-malware";
 import { documentMalwareGateSql } from "./document-malware-gate";
+import { runMalwareScannerMonitorTick } from "./malware-scanner-monitor";
 import { logger } from "../logger";
 import { documentationGateReady } from "./document-validation-policy";
 
@@ -866,6 +867,15 @@ async function tickOnce(): Promise<void> {
   // Failures are isolated so an unavailable object/provider never stops BGV monitoring.
   await runDocumentMalwareTick().catch(() => {
     logger.error({ component: "document-malware-scanner" }, "document malware scan tick failed; files remain quarantined");
+  });
+  // Scanner operational health is driven by the same awaited heartbeat as the
+  // watcher. It has durable claims and stale-data detection, so autoscale
+  // pauses and concurrent instances cannot silently leave a green result.
+  await runMalwareScannerMonitorTick().catch(() => {
+    logger.error(
+      { component: "malware-scanner-monitor" },
+      "malware scanner monitor tick failed; persisted health may become stale",
+    );
   });
   await runDocumentValidationTick().catch((error) => {
     logger.error({ component: "document-validator", error: String(error).slice(0, 300) }, "document validation tick failed");
