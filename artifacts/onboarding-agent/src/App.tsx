@@ -23,6 +23,8 @@ import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
 import { ClientSetupPage } from './pages/client-setup';
 import { CandidatePage } from './pages/candidate';
+import { DemoControllerIndexPage } from './pages/demo-controller';
+import { DemoControllerDetailPage } from './pages/demo-controller/detail';
 import {
   resolveOrganizationBootstrap,
   type OrganizationBootstrapResponse,
@@ -281,6 +283,12 @@ function Router() {
       </Route>
       <Route path="/settings">
         <Protected><SettingsPage /></Protected>
+      </Route>
+      <Route path="/demo-controller">
+        <Protected><DemoControllerIndexPage /></Protected>
+      </Route>
+      <Route path="/demo-controller/:id">
+        <Protected><DemoControllerDetailPage /></Protected>
       </Route>
       <Route path="/client-setup">
         <>

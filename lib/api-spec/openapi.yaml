@@ -24,7 +24,148 @@ tags:
     description: Immutable versioned pricing rate register for quote-critical Azure, AI, implementation, and support unit rates
   - name: enterpriseArchitecture
     description: Owner-scoped enterprise architecture assessments and reusable solution baseline
+  - name: demoController
+    description: Isolated, synthetic onboarding demonstrations with explicit simulated or approved live communications
 paths:
+  /onboarding/demo-controller:
+    get:
+      operationId: getOnboardingDemoController
+      tags: [demoController]
+      summary: Get demo-controller capabilities and available scenarios
+      description: Returns the capability boundary for the selected tenant. Only Demo Organization members with owner or admin role may create or mutate runs.
+      responses:
+        "200":
+          description: Demo-controller capabilities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoControllerCapabilities"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/demo-runs:
+    post:
+      operationId: createOnboardingDemoRun
+      tags: [demoController]
+      summary: Create a fresh synthetic onboarding demonstration run
+      description: Creates a new run-owned synthetic case. The case remains blocked from ordinary orchestration and outbound automation; mode defaults to hybrid and never enables HRIS, access, assets, payroll, or learning connectors.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoRunInput"
+      responses:
+        "201":
+          description: Created demonstration run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoRun"
+        "403":
+          description: Demo organization owner or admin required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/demo-runs/{runId}:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+    get:
+      operationId: getOnboardingDemoRun
+      tags: [demoController]
+      summary: Get a demonstration run
+      responses:
+        "200":
+          description: Demonstration run detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoRun"
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/demo-runs/{runId}/actions:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+    post:
+      operationId: applyOnboardingDemoRunAction
+      tags: [demoController]
+      summary: Apply one optimistic-versioned action to a demonstration run
+      description: Every action is explicitly requested, UUID-idempotent, and scoped to its run. Provider calls, if explicitly authorized, happen outside the database transaction after a durable claim.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoRunAction"
+      responses:
+        "200":
+          description: Updated demonstration run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoRun"
+        "400":
+          description: Invalid action or unsafe live request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Stale version or duplicate action with a different payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/demo-runs/{runId}/documents:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+    get:
+      operationId: downloadOnboardingDemoRunDocuments
+      tags: [demoController]
+      summary: Download a watermarked synthetic documentation pack
+      description: Generates a plain-text synthetic pack from run metadata. No document bytes are persisted.
+      responses:
+        "200":
+          description: Synthetic documentation pack
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /enterprise-architecture/baseline:
     get:
       operationId: getEnterpriseArchitectureBaseline
@@ -6834,3 +6975,226 @@ components:
           additionalProperties: true
           description: Complete pricing rate snapshot. All quote-critical keys are required; missing or unsafe values block save.
       required: [effectiveDate, rationale, rates]
+    DemoScenarioChoice:
+      type: object
+      additionalProperties: false
+      properties:
+        key: { type: string, minLength: 1, maxLength: 80 }
+        title: { type: string }
+        description: { type: string }
+        expectedBehaviour: { type: string }
+      required: [key, title, description, expectedBehaviour]
+    DemoControllerVolunteer:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          description: Server-derived stable identifier; clients cannot use it to change volunteer records.
+        name: { type: string }
+        email: { type: string }
+        phone: { type: ["string", "null"] }
+        channelPreference:
+          type: string
+          enum: [email, whatsapp, both]
+        approved:
+          type: boolean
+        liveEmailAvailable: { type: boolean }
+        liveCallAvailable: { type: boolean }
+        capabilityReason: { type: ["string", "null"] }
+      required: [id, name, email, phone, channelPreference, approved, liveEmailAvailable, liveCallAvailable, capabilityReason]
+    DemoControllerCapabilities:
+      type: object
+      additionalProperties: false
+      properties:
+        available: { type: boolean }
+        reason: { type: ["string", "null"] }
+        organizationId: { type: string }
+        canCreateRuns: { type: boolean }
+        canDispatchLive: { type: boolean }
+        defaultMode:
+          type: string
+          enum: [hybrid]
+        allowedSystems:
+          type: array
+          items:
+            type: string
+            enum: [bgv, hris, access, assets, payroll, learning]
+        scenarios:
+          type: array
+          items: { $ref: "#/components/schemas/DemoScenarioChoice" }
+        approvedVolunteers:
+          type: array
+          items: { $ref: "#/components/schemas/DemoControllerVolunteer" }
+        existingSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/DemoRunSummary"
+      required: [available, reason, organizationId, canCreateRuns, canDispatchLive, defaultMode, allowedSystems, scenarios, approvedVolunteers, existingSessions]
+    DemoRunInput:
+      type: object
+      additionalProperties: false
+      properties:
+        scenario: { type: string, minLength: 1, maxLength: 80 }
+        volunteerId:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 200
+        mode:
+          type: string
+          enum: [hybrid]
+          default: hybrid
+      required: [scenario]
+    DemoRunSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        runId: { type: string }
+        caseId: { type: integer, minimum: 1 }
+        caseName: { type: string }
+        scenario: { type: string }
+        status:
+          type: string
+          enum: [active, completed, blocked, restarted]
+        version: { type: integer, minimum: 0 }
+        mode:
+          type: string
+          enum: [hybrid]
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        selectedVolunteerId: { type: ["string", "null"] }
+      required: [runId, caseId, caseName, scenario, status, version, mode, createdAt, updatedAt, selectedVolunteerId]
+    DemoWorkflowCheckpoint:
+      type: object
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          enum: [offer, documents, bgv, systems, hr-approval, day1]
+        status:
+          type: string
+          enum: [pending, completed, overridden, blocked]
+        reason: { type: ["string", "null"] }
+      required: [key, status, reason]
+    DemoSystemState:
+      type: object
+      additionalProperties: false
+      properties:
+        system:
+          type: string
+          enum: [bgv, hris, access, assets, payroll, learning]
+        status:
+          type: string
+          enum: [pending, complete, exception, overdue]
+        outcome:
+          type: ["string", "null"]
+          enum: [pending, complete, exception, overdue, null]
+        simulated: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+        note: { type: ["string", "null"] }
+      required: [system, status, outcome, simulated, updatedAt, note]
+    DemoClock:
+      type: object
+      additionalProperties: false
+      properties:
+        now: { type: string, format: date-time }
+        offsetHours: { type: integer, minimum: 0, maximum: 8760 }
+      required: [now, offsetHours]
+    DemoActivity:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        kind: { type: string }
+        provenance:
+          type: string
+          enum: [simulated, live]
+        message: { type: string }
+        transcript: { type: ["string", "null"] }
+        providerStatus: { type: ["string", "null"] }
+      required: [id, at, actor, kind, provenance, message, transcript, providerStatus]
+    DemoCaseMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        caseId: { type: integer, minimum: 1 }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: ["string", "null"] }
+        role: { type: string }
+        department: { type: string }
+        geography: { type: string }
+        joiningDate: { type: string, format: date }
+        offlineMarker: { type: string }
+      required: [caseId, name, email, phone, role, department, geography, joiningDate, offlineMarker]
+    DemoRun:
+      type: object
+      additionalProperties: false
+      properties:
+        runId: { type: string }
+        caseId: { type: integer, minimum: 1 }
+        caseName: { type: string }
+        scenario: { type: string }
+        mode:
+          type: string
+          enum: [hybrid]
+        status:
+          type: string
+          enum: [active, completed, blocked, restarted]
+        version: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        metadata: { $ref: "#/components/schemas/DemoCaseMetadata" }
+        checkpoints:
+          type: array
+          items: { $ref: "#/components/schemas/DemoWorkflowCheckpoint" }
+        systems:
+          type: array
+          items: { $ref: "#/components/schemas/DemoSystemState" }
+        clock: { $ref: "#/components/schemas/DemoClock" }
+        activity:
+          type: array
+          items: { $ref: "#/components/schemas/DemoActivity" }
+        liveCapabilityReason: { type: ["string", "null"] }
+        selectedVolunteerId: { type: ["string", "null"] }
+        selectedVolunteer:
+          allOf:
+            - $ref: "#/components/schemas/DemoControllerVolunteer"
+          nullable: true
+      required: [runId, caseId, caseName, scenario, mode, status, version, createdAt, updatedAt, metadata, checkpoints, systems, clock, activity, liveCapabilityReason, selectedVolunteerId, selectedVolunteer]
+    DemoRunAction:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        requestId: { type: string, minLength: 36, maxLength: 36, pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' }
+        kind:
+          type: string
+          enum: [load-documents, system-outcome, advance-time, advance, override-step, communication, restart]
+        system:
+          type: ["string", "null"]
+          enum: [bgv, hris, access, assets, payroll, learning, null]
+        outcome:
+          type: ["string", "null"]
+          enum: [pending, complete, exception, overdue, null]
+        step:
+          type: ["string", "null"]
+          enum: [offer, documents, bgv, systems, hr-approval, day1, null]
+        reason: { type: ["string", "null"], maxLength: 1000 }
+        hours:
+          type: ["integer", "null"]
+          minimum: 0
+          maximum: 8760
+        channel:
+          type: ["string", "null"]
+          enum: [email, call, null]
+        mode:
+          type: ["string", "null"]
+          enum: [live, simulated, null]
+        liveConfirmation:
+          type: ["string", "null"]
+          enum: [I_UNDERSTAND_LIVE_DEMO, null]
+      required: [expectedVersion, requestId, kind]

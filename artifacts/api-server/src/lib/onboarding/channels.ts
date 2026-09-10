@@ -6,7 +6,11 @@ import { ReplitConnectors } from "@replit/connectors-sdk";
 import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandidateEmail } from "./channel-routing";
 import { isValidEmail } from "./settings";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { externalProviderDispatchDenied } from "./provider-policy";
+import {
+  demoControllerLiveAllowed,
+  demoControllerLiveContextValid,
+  externalProviderDispatchDenied,
+} from "./provider-policy";
 import {
   claimEffectDispatch,
   ensureEffectJournalEntry,
@@ -66,6 +70,121 @@ export function emailChannelInfo(): ChannelInfo {
     target: "He***@gmail.com",
     note: "Outbound email is live via the connected Gmail account.",
   };
+}
+
+export type DemoEmailReadiness = {
+  configured: boolean;
+  reason: string;
+};
+
+const DEMO_EMAIL_READINESS_TTL_MS = 15_000;
+const DEMO_EMAIL_READINESS_FAILURE_TTL_MS = 5_000;
+const DEMO_EMAIL_READINESS_TIMEOUT_MS = 2_500;
+let demoEmailReadinessCache: { value: DemoEmailReadiness; expiresAt: number } | null = null;
+let demoEmailReadinessInFlight: Promise<DemoEmailReadiness> | null = null;
+
+/**
+ * Pure, non-sensitive interpretation of the Gmail profile response. The
+ * profile address is intentionally never returned to callers.
+ */
+export function classifyDemoEmailReadiness(
+  responseOk: boolean,
+  profile: unknown,
+): DemoEmailReadiness {
+  if (!responseOk) {
+    return {
+      configured: false,
+      reason: "The connected Gmail provider is unavailable.",
+    };
+  }
+  if (
+    !profile ||
+    typeof profile !== "object" ||
+    typeof (profile as { emailAddress?: unknown }).emailAddress !== "string" ||
+    !(profile as { emailAddress: string }).emailAddress.trim()
+  ) {
+    return {
+      configured: false,
+      reason: "The Gmail readiness response was unavailable or invalid.",
+    };
+  }
+  return {
+    configured: true,
+    reason: "The connected Gmail provider is ready.",
+  };
+}
+
+async function probeDemoEmailReadiness(): Promise<DemoEmailReadiness> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const response = await Promise.race([
+      connectors.proxy(
+        "google-mail",
+        "/gmail/v1/users/me/profile",
+        { method: "GET" },
+      ),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), DEMO_EMAIL_READINESS_TIMEOUT_MS);
+      }),
+    ]);
+    if (response === null) {
+      return {
+        configured: false,
+        reason: "The Gmail readiness check timed out.",
+      };
+    }
+    let profile: unknown = null;
+    try {
+      profile = await response.json();
+    } catch {
+      // A successful HTTP response without a parseable profile is unknown,
+      // and therefore fail-closed.
+      profile = null;
+    }
+    return classifyDemoEmailReadiness(response.ok, profile);
+  } catch {
+    return {
+      configured: false,
+      reason: "The connected Gmail provider is unavailable.",
+    };
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+/**
+ * Read-only, bounded Gmail readiness for DemoController capabilities.
+ * This never sends a probe message and never exposes the connected profile
+ * address or provider response. Results are cached briefly to avoid turning a
+ * capabilities request into repeated provider traffic.
+ */
+export async function getDemoEmailReadiness(): Promise<DemoEmailReadiness> {
+  if (externalProviderDispatchDenied()) {
+    return {
+      configured: false,
+      reason: "Gmail readiness checks are denied by the active execution safety policy.",
+    };
+  }
+  const now = Date.now();
+  if (demoEmailReadinessCache && demoEmailReadinessCache.expiresAt > now) {
+    return demoEmailReadinessCache.value;
+  }
+  if (!demoEmailReadinessInFlight) {
+    demoEmailReadinessInFlight = probeDemoEmailReadiness().then((value) => {
+      demoEmailReadinessCache = {
+        value,
+        expiresAt: Date.now() + (
+          value.configured
+            ? DEMO_EMAIL_READINESS_TTL_MS
+            : DEMO_EMAIL_READINESS_FAILURE_TTL_MS
+        ),
+      };
+      return value;
+    }).finally(() => {
+      demoEmailReadinessInFlight = null;
+    });
+  }
+  return demoEmailReadinessInFlight;
 }
 
 export function whatsappChannelInfo(): ChannelInfo {
@@ -403,33 +522,15 @@ async function sendOutboundUnsafe(opts: {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
-  if (isSyntheticOfflineCase(caseRow)) {
-    if (opts.idempotencyKey) {
-      const [existing] = await db.select().from(onbCommunications).where(and(
-        eq(onbCommunications.organizationId, caseRow.organizationId),
-        eq(onbCommunications.idempotencyKey, opts.idempotencyKey),
-      ));
-      if (existing) {
-        return { id: existing.id, status: existing.status, failureReason: existing.failureReason };
-      }
-    }
-    const [blocked] = await db.insert(onbCommunications).values({
-      organizationId: caseRow.organizationId,
-      caseId: opts.caseId,
-      channel: opts.channel,
-      direction: "outbound",
-      audience: "candidate",
-      toAddress: opts.channel === "email" ? maskEmail(caseRow.workerEmail) : maskPhone(opts.toAddress),
-      subject: opts.subject ?? null,
-      body: opts.persistedBody ?? opts.body,
-      status: "blocked",
-      failureReason: SYNTHETIC_OFFLINE_WARNING,
-      sensitive: opts.sensitive ?? false,
-      idempotencyKey: opts.idempotencyKey ?? null,
-    }).returning({ id: onbCommunications.id });
-    if (!blocked) throw new Error("Synthetic offline communication was not recorded.");
-    return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
-  }
+  // Authorize the address supplied by the caller first.  It is only a
+  // capability check; candidateEmailAuthorization below is still the source
+  // of the actual case recipient.
+  const demoCallerAuthorized = opts.channel === "email" && demoControllerLiveAllowed(
+    caseRow.organizationId,
+    caseRow.id,
+    "email",
+    opts.toAddress,
+  );
   // Pick up this tenant's allowlist changes saved on another process instance.
   let allowlistRefreshed = false;
   try {
@@ -441,6 +542,72 @@ async function sendOutboundUnsafe(opts: {
   }
   const candidateEmail = opts.channel === "email" ? candidateEmailAuthorization(caseRow) : null;
   const actualAddress = candidateEmail?.address ?? opts.toAddress;
+  // Revalidate against the final case-derived address, not the caller's
+  // proposed address.  This is deliberately repeated at the provider
+  // boundary below: a volunteer can be revoked or edited while this
+  // operation is preparing its payload.
+  const demoLiveEmail = demoCallerAuthorized && await demoControllerLiveContextValid(
+    caseRow.organizationId,
+    caseRow.id,
+    "email",
+    actualAddress,
+  );
+  const demoLiveAtProvider = demoLiveEmail && await demoControllerLiveContextValid(
+    caseRow.organizationId,
+    caseRow.id,
+    "email",
+    actualAddress,
+  );
+  // Keep the offline guard before the effect journal/provider claim. A prior
+  // interrupted attempt may have left its timeline row in `sending`; the
+  // authoritative offline decision must close that row as `blocked` rather
+  // than replaying the unknown state forever.
+  if (isSyntheticOfflineCase(caseRow) && !demoLiveAtProvider) {
+    if (opts.idempotencyKey) {
+      const [existing] = await db.select().from(onbCommunications).where(and(
+        eq(onbCommunications.organizationId, caseRow.organizationId),
+        eq(onbCommunications.idempotencyKey, opts.idempotencyKey),
+      ));
+      if (existing) {
+        if (existing.caseId !== opts.caseId || existing.channel !== opts.channel) {
+          throw new Error("Communication idempotency key is bound to another payload");
+        }
+        if (existing.status === "sending") {
+          const [blockedExisting] = await db.update(onbCommunications).set({
+            status: "blocked",
+            failureReason: SYNTHETIC_OFFLINE_WARNING,
+          }).where(and(
+            eq(onbCommunications.id, existing.id),
+            eq(onbCommunications.organizationId, caseRow.organizationId),
+          )).returning({ id: onbCommunications.id });
+          if (blockedExisting) {
+            return {
+              id: blockedExisting.id,
+              status: "blocked",
+              failureReason: SYNTHETIC_OFFLINE_WARNING,
+            };
+          }
+        }
+        return { id: existing.id, status: existing.status, failureReason: existing.failureReason };
+      }
+    }
+    const [blocked] = await db.insert(onbCommunications).values({
+      organizationId: caseRow.organizationId,
+      caseId: opts.caseId,
+      channel: opts.channel,
+      direction: "outbound",
+      audience: "candidate",
+      toAddress: opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress),
+      subject: opts.subject ?? null,
+      body: opts.persistedBody ?? opts.body,
+      status: "blocked",
+      failureReason: SYNTHETIC_OFFLINE_WARNING,
+      sensitive: opts.sensitive ?? false,
+      idempotencyKey: opts.idempotencyKey ?? null,
+    }).returning({ id: onbCommunications.id });
+    if (!blocked) throw new Error("Synthetic offline communication was not recorded.");
+    return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
+  }
   // Shared-inbox replies are attributed only through this unguessable,
   // case-bound reference, never by sender address alone.
   let body =

@@ -9,7 +9,7 @@ import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
 import { format } from 'date-fns';
-import { Plus, Search, SlidersHorizontal, Bot, User, X, FlaskConical, Check, AlertTriangle, Clock } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Bot, User, X, FlaskConical, Check, AlertTriangle, Clock, Presentation } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 type OnbCase = ApiOnbCase;
@@ -325,6 +325,9 @@ export function CasesPage() {
             <FlaskConical className="h-4 w-4" />
             {isSeeding ? 'Adding test cases…' : missingSyntheticKeys.length === 0 ? 'Test set ready' : `Add test set (${missingSyntheticKeys.length})`}
           </Button>
+          <Link href="/demo-controller" className="inline-flex items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-soft)] h-9 px-4 py-2 gap-2">
+            <Presentation className="h-4 w-4" /> Demo Center
+          </Link>
           <Button onClick={() => setShowNew(!showNew)} className="gap-2">
             <Plus className="h-4 w-4" /> New Case
           </Button>

@@ -28,6 +28,10 @@ import type {
   CustomIntent,
   CustomIntentInput,
   CustomIntentUpdate,
+  DemoControllerCapabilities,
+  DemoRun,
+  DemoRunAction,
+  DemoRunInput,
   DemoVolunteerList,
   DistributionProfile,
   EaArchiveRequest,
@@ -157,6 +161,384 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetOnboardingDemoControllerUrl = () => {
+
+
+
+
+  return `/api/onboarding/demo-controller`
+}
+
+/**
+ * Returns the capability boundary for the selected tenant. Only Demo Organization members with owner or admin role may create or mutate runs.
+ * @summary Get demo-controller capabilities and available scenarios
+ */
+export const getOnboardingDemoController = async ( options?: RequestInit): Promise<DemoControllerCapabilities> => {
+
+  return customFetch<DemoControllerCapabilities>(getGetOnboardingDemoControllerUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingDemoControllerQueryKey = () => {
+    return [
+    `/api/onboarding/demo-controller`
+    ] as const;
+    }
+
+
+export const getGetOnboardingDemoControllerQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingDemoController>>, TError = ErrorType<ErrorMessage>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDemoController>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingDemoControllerQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingDemoController>>> = ({ signal }) => getOnboardingDemoController({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDemoController>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingDemoControllerQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingDemoController>>>
+export type GetOnboardingDemoControllerQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get demo-controller capabilities and available scenarios
+ */
+
+export function useGetOnboardingDemoController<TData = Awaited<ReturnType<typeof getOnboardingDemoController>>, TError = ErrorType<ErrorMessage>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDemoController>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingDemoControllerQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateOnboardingDemoRunUrl = () => {
+
+
+
+
+  return `/api/onboarding/demo-runs`
+}
+
+/**
+ * Creates a new run-owned synthetic case. The case remains blocked from ordinary orchestration and outbound automation; mode defaults to hybrid and never enables HRIS, access, assets, payroll, or learning connectors.
+ * @summary Create a fresh synthetic onboarding demonstration run
+ */
+export const createOnboardingDemoRun = async (demoRunInput: DemoRunInput, options?: RequestInit): Promise<DemoRun> => {
+
+  return customFetch<DemoRun>(getCreateOnboardingDemoRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(demoRunInput)
+  }
+);}
+
+
+
+
+
+export const getCreateOnboardingDemoRunMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingDemoRun>>, TError,{data: BodyType<DemoRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createOnboardingDemoRun>>, TError,{data: BodyType<DemoRunInput>}, TContext> => {
+
+const mutationKey = ['createOnboardingDemoRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createOnboardingDemoRun>>, {data: BodyType<DemoRunInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createOnboardingDemoRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateOnboardingDemoRunMutationResult = NonNullable<Awaited<ReturnType<typeof createOnboardingDemoRun>>>
+    export type CreateOnboardingDemoRunMutationBody = BodyType<DemoRunInput>
+    export type CreateOnboardingDemoRunMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Create a fresh synthetic onboarding demonstration run
+ */
+export const useCreateOnboardingDemoRun = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingDemoRun>>, TError,{data: BodyType<DemoRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createOnboardingDemoRun>>,
+        TError,
+        {data: BodyType<DemoRunInput>},
+        TContext
+      > => {
+      return useMutation(getCreateOnboardingDemoRunMutationOptions(options));
+    }
+
+export const getGetOnboardingDemoRunUrl = (runId: string,) => {
+
+
+
+
+  return `/api/onboarding/demo-runs/${runId}`
+}
+
+/**
+ * @summary Get a demonstration run
+ */
+export const getOnboardingDemoRun = async (runId: string, options?: RequestInit): Promise<DemoRun> => {
+
+  return customFetch<DemoRun>(getGetOnboardingDemoRunUrl(runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingDemoRunQueryKey = (runId: string,) => {
+    return [
+    `/api/onboarding/demo-runs/${runId}`
+    ] as const;
+    }
+
+
+export const getGetOnboardingDemoRunQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingDemoRun>>, TError = ErrorType<ErrorMessage>>(runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDemoRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingDemoRunQueryKey(runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingDemoRun>>> = ({ signal }) => getOnboardingDemoRun(runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDemoRun>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingDemoRunQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingDemoRun>>>
+export type GetOnboardingDemoRunQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get a demonstration run
+ */
+
+export function useGetOnboardingDemoRun<TData = Awaited<ReturnType<typeof getOnboardingDemoRun>>, TError = ErrorType<ErrorMessage>>(
+ runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingDemoRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingDemoRunQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApplyOnboardingDemoRunActionUrl = (runId: string,) => {
+
+
+
+
+  return `/api/onboarding/demo-runs/${runId}/actions`
+}
+
+/**
+ * Every action is explicitly requested, UUID-idempotent, and scoped to its run. Provider calls, if explicitly authorized, happen outside the database transaction after a durable claim.
+ * @summary Apply one optimistic-versioned action to a demonstration run
+ */
+export const applyOnboardingDemoRunAction = async (runId: string,
+    demoRunAction: DemoRunAction, options?: RequestInit): Promise<DemoRun> => {
+
+  return customFetch<DemoRun>(getApplyOnboardingDemoRunActionUrl(runId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(demoRunAction)
+  }
+);}
+
+
+
+
+
+export const getApplyOnboardingDemoRunActionMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingDemoRunAction>>, TError,{runId: string;data: BodyType<DemoRunAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingDemoRunAction>>, TError,{runId: string;data: BodyType<DemoRunAction>}, TContext> => {
+
+const mutationKey = ['applyOnboardingDemoRunAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyOnboardingDemoRunAction>>, {runId: string;data: BodyType<DemoRunAction>}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  applyOnboardingDemoRunAction(runId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyOnboardingDemoRunActionMutationResult = NonNullable<Awaited<ReturnType<typeof applyOnboardingDemoRunAction>>>
+    export type ApplyOnboardingDemoRunActionMutationBody = BodyType<DemoRunAction>
+    export type ApplyOnboardingDemoRunActionMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Apply one optimistic-versioned action to a demonstration run
+ */
+export const useApplyOnboardingDemoRunAction = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingDemoRunAction>>, TError,{runId: string;data: BodyType<DemoRunAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyOnboardingDemoRunAction>>,
+        TError,
+        {runId: string;data: BodyType<DemoRunAction>},
+        TContext
+      > => {
+      return useMutation(getApplyOnboardingDemoRunActionMutationOptions(options));
+    }
+
+export const getDownloadOnboardingDemoRunDocumentsUrl = (runId: string,) => {
+
+
+
+
+  return `/api/onboarding/demo-runs/${runId}/documents`
+}
+
+/**
+ * Generates a plain-text synthetic pack from run metadata. No document bytes are persisted.
+ * @summary Download a watermarked synthetic documentation pack
+ */
+export const downloadOnboardingDemoRunDocuments = async (runId: string, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getDownloadOnboardingDemoRunDocumentsUrl(runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadOnboardingDemoRunDocumentsQueryKey = (runId: string,) => {
+    return [
+    `/api/onboarding/demo-runs/${runId}/documents`
+    ] as const;
+    }
+
+
+export const getDownloadOnboardingDemoRunDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof downloadOnboardingDemoRunDocuments>>, TError = ErrorType<ErrorMessage>>(runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingDemoRunDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadOnboardingDemoRunDocumentsQueryKey(runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadOnboardingDemoRunDocuments>>> = ({ signal }) => downloadOnboardingDemoRunDocuments(runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingDemoRunDocuments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadOnboardingDemoRunDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof downloadOnboardingDemoRunDocuments>>>
+export type DownloadOnboardingDemoRunDocumentsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Download a watermarked synthetic documentation pack
+ */
+
+export function useDownloadOnboardingDemoRunDocuments<TData = Awaited<ReturnType<typeof downloadOnboardingDemoRunDocuments>>, TError = ErrorType<ErrorMessage>>(
+ runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingDemoRunDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadOnboardingDemoRunDocumentsQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetEnterpriseArchitectureBaselineUrl = () => {
 

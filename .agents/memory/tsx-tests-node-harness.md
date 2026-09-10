@@ -23,3 +23,9 @@ Mounted page tests that use Wouter or form libraries also need the happy-dom `lo
 **Why:** those libraries read browser globals directly rather than consistently through `window`; a partial DOM shim renders shared components but fails only when a routed page mounts.
 
 **How to apply:** mirror the complete browser-global setup from existing mounted page suites whenever a test imports routing, forms, dialogs, or query-driven pages.
+
+Development-mode server test bundles must leave Pino and its worker-backed transport packages external, unless the harness explicitly builds their worker assets.
+
+**Why:** assertions can all pass while a bundled development logger later crashes on a missing worker module. Switching to production mode can silently skip development-only database tests, so it is not a valid workaround.
+
+**How to apply:** externalize the logger and transport dependencies for focused esbuild test bundles, preserve the intended test environment, and require a clean process exit as well as passing assertions.

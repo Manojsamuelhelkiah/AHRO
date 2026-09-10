@@ -42,3 +42,4 @@
 - [Readiness policy authority](readiness-policy-authority.md) — policy deadlines replace legacy timers; score never substitutes for final human authority; review cycles bind approval to evidence.
 - [Case explanation boundaries](case-explanation-boundaries.md) — explain recorded evidence, not hidden reasoning; current policy cannot prove historical rationale; chat stays read-only and scope-isolated.
 - [Synthetic case refresh](synthetic-case-refresh.md) — explicit inventory, authoritative offline mode, dispatch/deletion locking, and retained private file references protect real data and recipients.
+- [Hybrid demo boundaries](demo-controller-boundaries.md) — Demo Organization run scope, explicit volunteer outreach, and truthful simulation without changing real employment evidence.

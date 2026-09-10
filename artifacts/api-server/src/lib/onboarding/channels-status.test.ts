@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { blockedPublishBackupReadiness, explicitlyAllowlistedCandidateAddress, gmailAmbiguousFailure, gmailHttpFailure, systemEmailTestAddress, twilioAmbiguousFailure, twilioHttpFailure } from "./channels";
+import {
+  blockedPublishBackupReadiness,
+  classifyDemoEmailReadiness,
+  explicitlyAllowlistedCandidateAddress,
+  gmailAmbiguousFailure,
+  gmailHttpFailure,
+  systemEmailTestAddress,
+  twilioAmbiguousFailure,
+  twilioHttpFailure,
+} from "./channels";
 
 const BACKUP_ENV_KEYS = [
   "ONBOARDING_BLOCKED_PUBLISH_BACKUP_REQUIRED",
@@ -47,6 +56,27 @@ test("Twilio distinguishes definite HTTP rejection from ambiguous transport fail
   const ambiguous = twilioAmbiguousFailure(new Error("connection reset"));
   assert.equal(ambiguous.status, "sending");
   assert.match(ambiguous.failureReason, /do not retry automatically/i);
+});
+
+test("Demo email readiness is pure, non-sensitive, and fail-closed for fake profiles", () => {
+  assert.deepEqual(
+    classifyDemoEmailReadiness(true, { emailAddress: "connected@example.com" }),
+    { configured: true, reason: "The connected Gmail provider is ready." },
+  );
+  assert.deepEqual(
+    classifyDemoEmailReadiness(true, { unexpected: "shape" }),
+    {
+      configured: false,
+      reason: "The Gmail readiness response was unavailable or invalid.",
+    },
+  );
+  assert.deepEqual(
+    classifyDemoEmailReadiness(false, { emailAddress: "must-not-be-exposed@example.com" }),
+    {
+      configured: false,
+      reason: "The connected Gmail provider is unavailable.",
+    },
+  );
 });
 
 test("channel Settings test path requires a separate explicitly allowlisted system address", () => {

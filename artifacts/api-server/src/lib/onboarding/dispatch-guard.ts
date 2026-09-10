@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, onbCases, onbEffectJournal } from "@workspace/db";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { demoControllerLiveCaseAllowed } from "./provider-policy";
 
 type DispatchGuardContext = {
   caseId: number;
@@ -55,7 +56,7 @@ export async function withCaseDispatchGuard<T>(
         eq(onbCases.organizationId, inherited.organizationId),
       ));
     if (!caseRow) return undefined;
-    if (isSyntheticOfflineCase(caseRow)) {
+    if (isSyntheticOfflineCase(caseRow) && !demoControllerLiveCaseAllowed(caseRow.organizationId, caseRow.id)) {
       return options.onOffline
         ? options.onOffline(caseRow)
         : undefined;
@@ -72,7 +73,7 @@ export async function withCaseDispatchGuard<T>(
       .where(eq(onbCases.id, caseId))
       .for("key share");
     if (!caseRow) return { kind: "missing" as const };
-    if (isSyntheticOfflineCase(caseRow)) {
+    if (isSyntheticOfflineCase(caseRow) && !demoControllerLiveCaseAllowed(caseRow.organizationId, caseRow.id)) {
       return { kind: "offline" as const, caseRow };
     }
     await tx.insert(onbEffectJournal).values({

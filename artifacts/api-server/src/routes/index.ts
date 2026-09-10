@@ -20,6 +20,7 @@ import scenarioFilesRouter from "./scenario-files";
 import organizationsRouter from "./organizations";
 import candidatePublicRouter from "./candidate-public";
 import candidateAdminRouter from "./candidate-admin";
+import onboardingDemoControllerRouter from "./onboarding-demo-controller";
 import { requireAuth } from "../middlewares/require-auth";
 import { requireTenantContext } from "../middlewares/tenant-context";
 
@@ -53,6 +54,7 @@ router.use(sensitivityRouter);
 router.use(pricingSheetsRouter);
 router.use(slideDeckRouter);
 router.use(onboardingRouter);
+router.use(onboardingDemoControllerRouter);
 router.use(onboardingSlaRouter);
 router.use(onboardingContactRouter);
 router.use(onboardingCaseExplainabilityRouter);

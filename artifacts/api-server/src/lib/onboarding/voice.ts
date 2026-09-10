@@ -1,13 +1,11 @@
 /**
- * Outbound AI voice calls (Twilio Programmable Voice, turn-based).
+ * Outbound voice calls (Twilio Programmable Voice, turn-based).
  *
- * The call is a spoken conversation driven by the same reasoning engine as
- * email: each hire utterance (Twilio <Gather input="speech">) is answered by
- * an LLM turn grounded in the case's recorded state. The agent may take a
- * small set of allowed decisions (confirm readiness, offer to reschedule,
- * flag a blocker); anything else escalates to a human via the approvals
- * queue. The full transcript lands on the case timeline as a "voice"
- * communication, and every decision is logged to the audit trail.
+ * Ordinary calls are a spoken conversation driven by the same reasoning
+ * engine as email: each hire utterance (Twilio <Gather input="speech">) is
+ * answered by an LLM turn grounded in the case's recorded state. The
+ * DemoController path uses a separate deterministic script and never enters
+ * that engine.
  *
  * Guardrails mirror the messaging channels: real calls are only placed to
  * allow-listed numbers (ONBOARDING_ALLOWED_RECIPIENTS — same list as email/
@@ -15,10 +13,10 @@
  * A simulate mode runs the identical turn engine over scripted hire replies
  * so the flow can be demonstrated without a phone.
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import { recordGuardrailEvent } from "./guardrails";
-import { onbCases, onbCommunications, onbVoiceSessions } from "@workspace/db/schema";
+import { onbCases, onbCommunications, onbEffectJournal, onbVoiceSessions } from "@workspace/db/schema";
 import { and, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { llmCompleteJson } from "./llm";
 import { listDocuments, documentsSummary } from "./documents";
@@ -32,7 +30,16 @@ import {
 } from "./scheduling";
 import { logEvent, createApproval } from "./engine";
 import { maskPhone, addressAllowed } from "./channels";
-import { externalProviderDispatchDenied } from "./provider-policy";
+import {
+  demoControllerLiveContextValid,
+  externalProviderDispatchDenied,
+} from "./provider-policy";
+import {
+  claimEffectDispatch,
+  confirmEffect,
+  ensureEffectJournalEntry,
+  markAmbiguousEffectForManualRepair,
+} from "./effect-journal";
 import {
   isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
@@ -63,6 +70,15 @@ export type Session = {
   startedAt: number;
   /** Twilio CallSid, bound on the first webhook; later callbacks must match. */
   callSid: string | null;
+  /** Stable local identity written before any provider I/O. */
+  localCallId?: string | null;
+  /** Demo Controller run correlation, when this is an isolated demo call. */
+  runId?: string | null;
+  /** Stable request identity for the effect journal. */
+  requestId?: string | null;
+  /** accepted | unknown_effect_manual_repair | terminal provider status. */
+  providerStatus?: string | null;
+  providerFailureReason?: string | null;
   /** Last hire utterance + the answer we gave — replayed identical requests get the same answer. */
   lastSpeech: string | null;
   lastResponse: { say: string; done: boolean } | null;
@@ -79,6 +95,10 @@ export class FencedFinalizationError extends Error {
 }
 const MAX_TURNS = 8;
 const SESSION_TTL_MS = 30 * 60_000;
+const MANUAL_RECONCILIATION_STATUSES = new Set([
+  "accepted",
+  "unknown_effect_manual_repair",
+]);
 
 /** How long a finalizer may hold the finalize lease before a crash is assumed. */
 const FINALIZE_LEASE_MS = 2 * 60_000;
@@ -109,17 +129,36 @@ export async function getVoiceSession(token: string, callSid?: string): Promise<
   const row = rows[0];
   if (!row || row.finalized) return undefined;
   const s = rowToSession(row);
-  if (s.startedAt < Date.now() - SESSION_TTL_MS) {
+  if (
+    s.startedAt < Date.now() - SESSION_TTL_MS &&
+    !MANUAL_RECONCILIATION_STATUSES.has(s.providerStatus ?? "")
+  ) {
     await finalizeVoiceCall(s, "expired");
     return undefined;
   }
   if (callSid) {
     if (s.callSid === null) {
-      s.callSid = callSid;
-      await db
+      const [bound] = await db
         .update(onbVoiceSessions)
         .set({ callSid })
-        .where(and(eq(onbVoiceSessions.token, token), eq(onbVoiceSessions.organizationId, s.organizationId!)));
+        .where(and(
+          eq(onbVoiceSessions.token, token),
+          eq(onbVoiceSessions.organizationId, s.organizationId!),
+          eq(onbVoiceSessions.finalized, false),
+          isNull(onbVoiceSessions.callSid),
+        ))
+        .returning({ callSid: onbVoiceSessions.callSid });
+      if (!bound) {
+        const [current] = await db
+          .select({ callSid: onbVoiceSessions.callSid })
+          .from(onbVoiceSessions)
+          .where(and(
+            eq(onbVoiceSessions.token, token),
+            eq(onbVoiceSessions.organizationId, s.organizationId!),
+          ));
+        if (current?.callSid !== callSid) return undefined;
+      }
+      s.callSid = callSid;
     } else if (s.callSid !== callSid) return undefined;
   }
   return s;
@@ -151,6 +190,10 @@ export async function recoverStaleVoiceSessions(): Promise<number> {
     );
   let recovered = 0;
   for (const row of rows) {
+    // An accepted/unknown non-idempotent provider request is deliberately
+    // not finalized by a timer. It remains the one-call blocker until a
+    // signed terminal callback or an operator reconciles it.
+    if (MANUAL_RECONCILIATION_STATUSES.has(row.providerStatus)) continue;
     try {
       await finalizeVoiceCall(rowToSession(row), "interrupted");
       recovered += 1;
@@ -240,6 +283,10 @@ export async function voiceTurn(
   session: Session,
   hireSpeech: string,
 ): Promise<{ say: string; done: boolean }> {
+  // Demo Controller calls are deliberately not allowed through the ordinary
+  // case-facts/LLM decision engine.  Keep this branch here as a second fence
+  // for callers that invoke voiceTurn directly instead of the webhook route.
+  if (session.runId) return demoVoiceTurn(session, hireSpeech);
   const speech = hireSpeech.slice(0, 500);
   // Twilio retry of the same request: answer identically, don't re-reason.
   if (session.lastSpeech === speech && session.lastResponse) {
@@ -266,6 +313,53 @@ export async function voiceTurn(
       };
     }
     return out;
+  } finally {
+    busyTokens.delete(session.token);
+  }
+}
+
+const DEMO_VOICE_SCRIPT = [
+  "[DEMO] Thank you. This is an isolated onboarding demonstration. Is there anything you would like the team to note?",
+  "[DEMO] Thank you for taking part in this demonstration. We will record your words for the selected demo run. Goodbye.",
+] as const;
+
+/**
+ * Deterministic script for a hybrid DemoController call.  It records the
+ * caller's actual speech but never invokes the ordinary voice LLM, engine,
+ * payroll, approvals, or case decision paths.
+ */
+export async function demoVoiceTurn(
+  session: Session,
+  callerSpeech: string,
+): Promise<{ say: string; done: boolean }> {
+  if (!session.runId) {
+    throw new Error("demo voice script requires a DemoController runId");
+  }
+  const speech = callerSpeech.trim().slice(0, 4000);
+  if (session.lastSpeech === speech && session.lastResponse) {
+    return session.lastResponse;
+  }
+  if (busyTokens.has(session.token)) {
+    return { say: "[DEMO] One moment please.", done: false };
+  }
+  busyTokens.add(session.token);
+  try {
+    session.turns.push({ role: "hire", text: speech });
+    const hireTurns = session.turns.filter((turn) => turn.role === "hire").length;
+    const done = hireTurns >= DEMO_VOICE_SCRIPT.length;
+    const say = DEMO_VOICE_SCRIPT[Math.min(hireTurns, DEMO_VOICE_SCRIPT.length) - 1] ??
+      DEMO_VOICE_SCRIPT[DEMO_VOICE_SCRIPT.length - 1];
+    session.turns.push({ role: "agent", text: say });
+    session.lastSpeech = speech;
+    session.lastResponse = { say, done };
+    const saved = await saveSession(session);
+    if (!saved) {
+      return {
+        say: "[DEMO] The demo run has been recorded. Goodbye.",
+        done: true,
+      };
+    }
+    return { say, done };
   } finally {
     busyTokens.delete(session.token);
   }
@@ -378,7 +472,11 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
       session.decisions = claimed.decisions as { decision: Decision; note: string }[];
       progress = claimed.outcomeProgress ?? {};
     }
-    await persistCallOutcome(session, callOutcome, progress);
+    if (session.runId) {
+      await persistDemoCallOutcome(session, callOutcome, progress);
+    } else {
+      await persistCallOutcome(session, callOutcome, progress);
+    }
     if (!session.simulated) {
       // Terminal flag is owner-fenced: if a slow finalizer outlived its
       // lease and someone else reclaimed it, this write is a no-op and we
@@ -405,6 +503,29 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
       return;
     }
     console.error(`[voice] finalize failed for case ${session.caseId}:`, err);
+    if (session.runId) {
+      // A DemoRun callback failure must remain retryable and isolated. In
+      // particular, do not create an ordinary onboarding approval for a
+      // synthetic call; the run-owned callback is the reconciliation path.
+      if (!session.simulated) {
+        try {
+          await db
+            .update(onbVoiceSessions)
+            .set({ finalizeLeaseAt: null, finalizeOwner: null })
+            .where(
+              and(
+                eq(onbVoiceSessions.token, session.token),
+                eq(onbVoiceSessions.organizationId, organizationId),
+                eq(onbVoiceSessions.finalized, false),
+                eq(onbVoiceSessions.finalizeOwner, session.finalizeOwner ?? ""),
+              ),
+            );
+        } catch (releaseErr) {
+          console.error(`[voice] failed to release demo finalize lease for token ${session.token}:`, releaseErr);
+        }
+      }
+      return;
+    }
     try {
       await createApproval({
         caseId: session.caseId,
@@ -486,6 +607,77 @@ export async function markOutcomeStep(
     .returning({ token: onbVoiceSessions.token });
   if (updated.length === 0) throw new FencedFinalizationError(session.token);
 }
+
+/**
+ * Demo calls have no ordinary onboarding decisions. Their only durable
+ * effects are the timeline transcript and the DemoRun callback, which owns
+ * its own run lock. Keeping this separate from persistCallOutcome prevents a
+ * demo webhook from reaching approvals, scheduling, payroll, or connectors.
+ */
+async function persistDemoCallOutcome(
+  session: Session,
+  callOutcome: string,
+  progress: Record<string, boolean>,
+): Promise<void> {
+  const [c] = await db
+    .select()
+    .from(onbCases)
+    .where(eq(onbCases.id, session.caseId));
+  if (!c || c.organizationId !== session.organizationId) {
+    throw new Error(`demo voice session ${session.token} does not own case ${session.caseId}`);
+  }
+  const transcript = session.turns
+    .map((turn) => `${turn.role === "agent" ? "Demo assistant" : "Caller"}: ${turn.text}`)
+    .join("\n");
+  const callId = session.localCallId ?? session.token;
+  const requestId = session.requestId ?? session.token;
+  if (!progress["demo-transcript"]) {
+    await db
+      .insert(onbCommunications)
+      .values({
+        caseId: session.caseId,
+        organizationId: c.organizationId,
+        channel: "voice",
+        direction: "outbound",
+        audience: "candidate",
+        toAddress: c.workerPhone ? maskPhone(c.workerPhone) : "unknown",
+        subject: "[DEMO] Isolated voice demonstration",
+        body: transcript || "(call not answered)",
+        status: callOutcome,
+        failureReason: null,
+        sensitive: false,
+        externalMessageId: `demo-voice-call:${callId}`,
+        idempotencyKey: `demo-voice:${requestId}:transcript`,
+      })
+      .onConflictDoNothing({
+        target: [onbCommunications.organizationId, onbCommunications.externalMessageId],
+      });
+    await markOutcomeStep(session, progress, "demo-transcript");
+  }
+  if (progress["demo-run-callback"]) return;
+  // Avoid a static circular import (demo-controller imports voice). The
+  // callback is required for a demo session and is invoked only after the
+  // actual caller transcript/status has been persisted.
+  const controller = await import("./demo-controller") as typeof import("./demo-controller") & {
+    recordDemoVoiceOutcome?: (input: {
+      caseId: number;
+      callId: string;
+      transcript: string;
+      status: string;
+    }) => Promise<void>;
+  };
+  if (typeof controller.recordDemoVoiceOutcome !== "function") {
+    throw new Error("Demo Controller voice outcome callback is unavailable");
+  }
+  await controller.recordDemoVoiceOutcome({
+    caseId: session.caseId,
+    callId,
+    transcript,
+    status: callOutcome,
+  });
+  await markOutcomeStep(session, progress, "demo-run-callback");
+}
+
 /**
  * Persist the transcript and execute decisions, step by step, skipping any
  * step already recorded in `progress` — so a finalizer resumed after a
@@ -515,7 +707,7 @@ async function persistCallOutcome(
         channel: "voice",
         direction: "outbound",
         toAddress: c.workerPhone ? maskPhone(c.workerPhone) : "unknown",
-        subject: `${label}${session.simulated ? " (simulated)" : ""}`,
+        subject: `${isSyntheticOfflineCase(c) ? "[DEMO] " : ""}${label}${session.simulated ? " (simulated)" : ""}`,
         body: transcript || "(call not answered)",
         status: callOutcome,
         failureReason: null,
@@ -530,6 +722,10 @@ async function persistCallOutcome(
           onbCommunications.externalMessageId,
         ],
       });
+    // A controller-authorized synthetic call may retain its transcript, but
+    // inbound webhooks must never promote it into ordinary engine decisions,
+    // approvals, payroll, or connector work after finalization.
+    if (isSyntheticOfflineCase(c) && !session.simulated) return;
     await markOutcomeStep(session, progress, "transcript");
   }
 
@@ -686,6 +882,11 @@ export async function claimCallStart(session: Session): Promise<boolean> {
       token: session.token,
       organizationId,
       caseId: session.caseId,
+      localCallId: session.localCallId ?? null,
+      runId: session.runId ?? null,
+      requestId: session.requestId ?? null,
+      providerStatus: session.providerStatus ?? "pending",
+      providerFailureReason: session.providerFailureReason ?? null,
       scenario: session.scenario,
       reason: session.reason,
       turns: session.turns,
@@ -702,6 +903,10 @@ export async function startVoiceCall(opts: {
   reason?: string;
   /** Optional policy-generated goal supplied by contextual contact. */
   goal?: string;
+  /** DemoController correlation; ordinary calls leave these unset. */
+  runId?: string;
+  requestId?: string;
+  localCallId?: string;
 }): Promise<{ status: "calling" | "logged-only" | "failed"; note: string; token?: string }> {
   const guarded = await withCaseDispatchGuard(opts.caseId, () =>
     startVoiceCallUnsafe(opts),
@@ -719,9 +924,15 @@ async function startVoiceCallUnsafe(opts: {
   scenario: VoiceScenario;
   reason?: string;
   goal?: string;
+  runId?: string;
+  requestId?: string;
+  localCallId?: string;
 }): Promise<{ status: "calling" | "logged-only" | "failed"; note: string; token?: string }> {
   const { c } = await caseFacts(opts.caseId);
-  if (isSyntheticOfflineCase(c)) {
+  const demoLiveCall = c.workerPhone
+    ? await demoControllerLiveContextValid(c.organizationId, c.id, "call", c.workerPhone)
+    : false;
+  if (isSyntheticOfflineCase(c) && !demoLiveCall) {
     return { status: "failed", note: SYNTHETIC_OFFLINE_WARNING };
   }
   const label = opts.scenario === "day-before" ? "day-before check-in" : "SLA escalation";
@@ -745,6 +956,11 @@ async function startVoiceCallUnsafe(opts: {
     simulated: false,
     startedAt: Date.now(),
     callSid: null,
+    localCallId: opts.localCallId ?? randomUUID(),
+    runId: opts.runId ?? null,
+    requestId: opts.requestId ?? randomUUID(),
+    providerStatus: "pending",
+    providerFailureReason: null,
     lastSpeech: null,
     lastResponse: null,
   };
@@ -785,15 +1001,16 @@ async function startVoiceCallUnsafe(opts: {
     return { status: "failed", note: "Hourly live-call limit reached — try again later or use a simulated call." };
   }
 
-  const from = await voiceFromNumber();
   const base = publicBase();
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
-  if (!from || !base || !sid || !token) {
+  if (!base || !sid || !token) {
     return { status: "failed", note: "Twilio voice is not fully configured (no voice-capable number or public URL)." };
   }
 
-  const greeting = voiceGreeting(opts.scenario, c.workerName.split(" ")[0] ?? "there");
+  const greeting = session.runId
+    ? "[DEMO] This is an isolated onboarding demonstration call. Your actual words will be recorded only on this demo run. Is this a good time?"
+    : voiceGreeting(opts.scenario, c.workerName.split(" ")[0] ?? "there");
   session.turns.push({ role: "agent", text: greeting });
   // Atomic call-start claim, persisted before dialing: the partial unique
   // index (one unfinalized session per case) makes exactly ONE concurrent
@@ -808,7 +1025,12 @@ async function startVoiceCallUnsafe(opts: {
       .select()
       .from(onbVoiceSessions)
       .where(and(eq(onbVoiceSessions.caseId, opts.caseId), eq(onbVoiceSessions.organizationId, c.organizationId), eq(onbVoiceSessions.finalized, false)));
-    if (blocking && blocking.startedAt.getTime() < Date.now() - SESSION_TTL_MS) {
+    if (
+      blocking &&
+      blocking.startedAt.getTime() < Date.now() - SESSION_TTL_MS &&
+      !MANUAL_RECONCILIATION_STATUSES.has(blocking.providerStatus) &&
+      !blocking.runId
+    ) {
       try {
         await finalizeVoiceCall(rowToSession(blocking), "interrupted");
       } catch (err) {
@@ -817,24 +1039,145 @@ async function startVoiceCallUnsafe(opts: {
       claimed = await claimCallStart(session);
     }
     if (!claimed) {
+      if (
+        blocking &&
+        (MANUAL_RECONCILIATION_STATUSES.has(blocking.providerStatus) || Boolean(blocking.runId))
+      ) {
+        return {
+          status: "failed",
+          note: `${blocking.providerFailureReason ?? "Demo call outcome is not yet reconciled."} Automatic retry is disabled.`,
+        };
+      }
       return { status: "failed", note: "A call for this hire is already in progress." };
     }
   }
 
+  if (externalProviderDispatchDenied() || !demoLiveCall && isSyntheticOfflineCase(c)) {
+    await db.delete(onbVoiceSessions).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    await logEvent(opts.caseId, "channel", "system", "Voice call withheld (execution policy)",
+      `A ${label} call to ${maskPhone(c.workerPhone)} was blocked by the active execution safety policy — no provider call was made.`,
+      { hitlPattern: "notify-only", ruleRef: "4.6 Communications Rules" });
+    return {
+      status: "logged-only",
+      note: "External voice delivery is denied by the active execution safety policy — call logged, not placed.",
+    };
+  }
+
+  const logicalOperationKey = `voice-call:${session.requestId}`;
+  const effectIdentity = {
+    logicalOperationKey,
+    organizationId: c.organizationId,
+    tenantId: c.organizationId,
+    caseId: c.id,
+    toolName: "twilio-voice-call",
+    argumentsHash: createHash("sha256").update(JSON.stringify({
+      to: c.workerPhone,
+      scenario: opts.scenario,
+      runId: session.runId ?? null,
+      localCallId: session.localCallId,
+    })).digest("hex"),
+    // Twilio's Calls API does not provide a portable idempotency key. An
+    // unknown transport result is therefore terminal/manual-reconciliation.
+    providerIdempotency: false,
+  } as const;
+  const entry = await ensureEffectJournalEntry(effectIdentity);
+  const effectOwner = randomUUID();
+  const effectClaim = await claimEffectDispatch({
+    ...effectIdentity,
+    owner: effectOwner,
+    expectedFencingToken: entry.fencingToken,
+  });
+  if (effectClaim.kind === "reuse_confirmed") {
+    session.providerStatus = "accepted";
+    return {
+      status: "calling",
+      note: "This call request was already accepted by the provider; waiting for its signed status callback.",
+      token: session.token,
+    };
+  }
+  if (effectClaim.kind === "manual_repair_required") {
+    session.providerStatus = "unknown_effect_manual_repair";
+    session.providerFailureReason = "Delivery outcome unknown; manual reconciliation required. Automatic retry is disabled.";
+    await db.update(onbVoiceSessions).set({
+      providerStatus: session.providerStatus,
+      providerFailureReason: session.providerFailureReason,
+    }).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return {
+      status: "failed",
+      note: `${session.providerFailureReason} Call remains blocked.`,
+      token: session.token,
+    };
+  }
+  if (effectClaim.kind !== "claimed") {
+    session.providerStatus = "unknown_effect_manual_repair";
+    session.providerFailureReason = "Call dispatch is already in progress; manual reconciliation is required.";
+    return {
+      status: "failed",
+      note: `${session.providerFailureReason} Automatic retry is disabled.`,
+      token: session.token,
+    };
+  }
+
+  // The local session and effect journal are committed before either of the
+  // Twilio HTTP requests below. A process restart can therefore reconcile the
+  // exact request without opening a second live call.
+  const from = await voiceFromNumber();
+  if (!from) {
+    await db.update(onbEffectJournal).set({
+      status: "failed",
+      lastError: "Twilio has no voice-capable originating number",
+      claimUntil: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbEffectJournal.organizationId, c.organizationId),
+      eq(onbEffectJournal.logicalOperationKey, logicalOperationKey),
+      eq(onbEffectJournal.status, "dispatching"),
+      eq(onbEffectJournal.claimOwner, effectOwner),
+      eq(onbEffectJournal.fencingToken, effectClaim.fencingToken),
+    ));
+    await db.delete(onbVoiceSessions).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return { status: "failed", note: "Twilio voice is not fully configured (no voice-capable number)." };
+  }
+  // The volunteer/run claim can change while Twilio's originating-number
+  // lookup is in flight. Revalidate the final recipient immediately before
+  // the mutating Calls API request; a revoked or edited volunteer blocks.
+  if (
+    session.runId &&
+    !(await demoControllerLiveContextValid(c.organizationId, c.id, "call", c.workerPhone))
+  ) {
+    await db.update(onbEffectJournal).set({
+      status: "failed",
+      lastError: "Demo volunteer/run authorization changed before provider dispatch",
+      claimUntil: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbEffectJournal.organizationId, c.organizationId),
+      eq(onbEffectJournal.logicalOperationKey, logicalOperationKey),
+      eq(onbEffectJournal.status, "dispatching"),
+      eq(onbEffectJournal.claimOwner, effectOwner),
+      eq(onbEffectJournal.fencingToken, effectClaim.fencingToken),
+    ));
+    await db.delete(onbVoiceSessions).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return {
+      status: "logged-only",
+      note: "The selected volunteer or demo run changed before provider dispatch; no call was placed.",
+    };
+  }
+
+  let resp: Response;
   try {
-    if (externalProviderDispatchDenied()) {
-      await db.delete(onbVoiceSessions).where(and(
-        eq(onbVoiceSessions.token, session.token),
-        eq(onbVoiceSessions.organizationId, c.organizationId),
-      ));
-      await logEvent(opts.caseId, "channel", "system", "Voice call withheld (execution policy)",
-        `A ${label} call to ${maskPhone(c.workerPhone)} was blocked by the active execution safety policy — no provider call was made.`,
-        { hitlPattern: "notify-only", ruleRef: "4.6 Communications Rules" });
-      return {
-        status: "logged-only",
-        note: "External voice delivery is denied by the active execution safety policy — call logged, not placed.",
-      };
-    }
     const params = new URLSearchParams({
       From: from,
       To: c.workerPhone,
@@ -843,7 +1186,7 @@ async function startVoiceCallUnsafe(opts: {
       StatusCallbackEvent: "completed",
       Timeout: "25",
     });
-    const resp = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
+    resp = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
       method: "POST",
       headers: {
         Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
@@ -851,19 +1194,131 @@ async function startVoiceCallUnsafe(opts: {
       },
       body: params.toString(),
     });
-    if (!resp.ok) {
-      const detail = await resp.text();
-      await db.delete(onbVoiceSessions).where(and(eq(onbVoiceSessions.token, session.token), eq(onbVoiceSessions.organizationId, c.organizationId)));
-      return { status: "failed", note: `Twilio rejected the call (${resp.status}): ${detail.slice(0, 200)}` };
-    }
+  } catch (err) {
+    const reason = `Delivery outcome unknown; Twilio request may have been accepted (${String(err).slice(0, 240)}). Do not retry automatically.`;
+    session.providerStatus = "unknown_effect_manual_repair";
+    session.providerFailureReason = reason;
+    await markAmbiguousEffectForManualRepair({
+      logicalOperationKey,
+      organizationId: c.organizationId,
+      owner: effectOwner,
+      fencingToken: effectClaim.fencingToken,
+      error: reason,
+    });
+    await db.update(onbVoiceSessions).set({
+      providerStatus: session.providerStatus,
+      providerFailureReason: reason,
+    }).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return { status: "failed", note: reason, token: session.token };
+  }
+  if (!resp.ok) {
+    const detail = await resp.text();
+    await db.update(onbEffectJournal).set({
+      status: "failed",
+      lastError: `Twilio ${resp.status}: ${detail.slice(0, 300)}`,
+      claimUntil: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbEffectJournal.organizationId, c.organizationId),
+      eq(onbEffectJournal.logicalOperationKey, logicalOperationKey),
+      eq(onbEffectJournal.status, "dispatching"),
+      eq(onbEffectJournal.claimOwner, effectOwner),
+      eq(onbEffectJournal.fencingToken, effectClaim.fencingToken),
+    ));
+    await db.delete(onbVoiceSessions).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return { status: "failed", note: `Twilio rejected the call (${resp.status}): ${detail.slice(0, 200)}` };
+  }
+  const twilio = (await resp.json().catch(() => null)) as { sid?: string } | null;
+  if (!twilio?.sid) {
+    const reason = "Delivery outcome unknown; Twilio accepted a response without a CallSid. Manual reconciliation required. Do not retry automatically.";
+    session.providerStatus = "unknown_effect_manual_repair";
+    session.providerFailureReason = reason;
+    await markAmbiguousEffectForManualRepair({
+      logicalOperationKey,
+      organizationId: c.organizationId,
+      owner: effectOwner,
+      fencingToken: effectClaim.fencingToken,
+      error: reason,
+    });
+    await db.update(onbVoiceSessions).set({
+      providerStatus: session.providerStatus,
+      providerFailureReason: reason,
+    }).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return { status: "failed", note: reason, token: session.token };
+  }
+  session.callSid = twilio.sid;
+  session.providerStatus = "accepted";
+  session.providerFailureReason = null;
+  let confirmed = false;
+  try {
+    await db.update(onbVoiceSessions).set({
+      callSid: twilio.sid,
+      providerStatus: "accepted",
+      providerFailureReason: null,
+    }).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+      eq(onbVoiceSessions.finalized, false),
+    ));
+    confirmed = await confirmEffect({
+      logicalOperationKey,
+      organizationId: c.organizationId,
+      owner: effectOwner,
+      fencingToken: effectClaim.fencingToken,
+      externalEffectId: twilio.sid,
+    });
+  } catch (err) {
+    const reason = `Twilio accepted the call but durable confirmation failed (${String(err).slice(0, 200)}). Manual reconciliation required. Do not retry automatically.`;
+    await markAmbiguousEffectForManualRepair({
+      logicalOperationKey,
+      organizationId: c.organizationId,
+      owner: effectOwner,
+      fencingToken: effectClaim.fencingToken,
+      error: reason,
+    }).catch(() => undefined);
+    await db.update(onbVoiceSessions).set({
+      providerStatus: "unknown_effect_manual_repair",
+      providerFailureReason: reason,
+    }).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+      eq(onbVoiceSessions.finalized, false),
+    )).catch(() => undefined);
+    return { status: "failed", note: reason, token: session.token };
+  }
+  if (!confirmed) {
+    // The provider accepted the call but our fencing write lost a race. Keep
+    // the durable session as a blocker and require manual reconciliation.
+    const reason = "Twilio accepted the call but confirmation fencing was lost; manual reconciliation required. Do not retry automatically.";
+    await db.update(onbVoiceSessions).set({
+      providerStatus: "unknown_effect_manual_repair",
+      providerFailureReason: reason,
+    }).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+      eq(onbVoiceSessions.finalized, false),
+    ));
+    return { status: "failed", note: reason, token: session.token };
+  }
+  try {
     await logEvent(opts.caseId, "channel", "orchestrator", `Voice call placed (${label})`,
       `Outbound AI call dialing ${maskPhone(c.workerPhone)}. The conversation transcript and any decisions will land on this timeline when the call ends.`,
       { hitlPattern: "act-then-review", ruleRef: "4.6 Communications Rules" });
-    return { status: "calling", note: "Dialing now — transcript will appear on the case timeline when the call ends.", token: session.token };
-  } catch (err) {
-    await db.delete(onbVoiceSessions).where(and(eq(onbVoiceSessions.token, session.token), eq(onbVoiceSessions.organizationId, c.organizationId)));
-    return { status: "failed", note: `Call failed: ${String(err).slice(0, 200)}` };
+  } catch {
+    // The provider effect is already confirmed. Do not erase the session on
+    // a post-acceptance timeline failure; the signed callback still owns
+    // finalization and recovery can reconcile the timeline later.
   }
+  return { status: "calling", note: "Call request accepted; transcript and final delivery status will appear after the signed callback.", token: session.token };
 }
 
 /* ------------------------------------------------------------------ */
@@ -929,6 +1384,8 @@ export async function saveSession(s: Session): Promise<boolean> {
     .update(onbVoiceSessions)
     .set({
       callSid: s.callSid,
+      providerStatus: s.providerStatus ?? undefined,
+      providerFailureReason: s.providerFailureReason ?? undefined,
       turns: s.turns,
       decisions: s.decisions,
       lastSpeech: s.lastSpeech,
@@ -964,6 +1421,11 @@ function rowToSession(row: typeof onbVoiceSessions.$inferSelect): Session {
     simulated: false,
     startedAt: row.startedAt.getTime(),
     callSid: row.callSid,
+    localCallId: row.localCallId,
+    runId: row.runId,
+    requestId: row.requestId,
+    providerStatus: row.providerStatus,
+    providerFailureReason: row.providerFailureReason,
     lastSpeech: row.lastSpeech,
     lastResponse: row.lastResponse,
   };

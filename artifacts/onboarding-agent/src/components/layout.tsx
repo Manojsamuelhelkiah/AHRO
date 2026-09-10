@@ -5,7 +5,7 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
-import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass } from 'lucide-react';
+import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
   {
@@ -27,6 +27,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     label: 'Platform',
     items: [
       { path: '/systems', label: 'Systems', icon: Server },
+      { path: '/demo-controller', label: 'Demo Center', icon: Presentation },
       { path: '/settings', label: 'Settings', icon: Settings },
       { path: '/client-setup', label: 'Client Setup', icon: Compass },
     ],

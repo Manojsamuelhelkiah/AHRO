@@ -16,6 +16,7 @@ import {
   onbSystemChecks,
   onbCandidateUploads,
   onbDocuments,
+  onbVoiceSessions,
   onbWatchEmails,
 } from "@workspace/db/schema";
 import {
@@ -100,6 +101,7 @@ import {
   simulateVoiceCall,
   getVoiceSession,
   voiceTurn,
+  demoVoiceTurn,
   finalizeVoiceCall,
   gatherTwiml,
   hangupTwiml,
@@ -1404,9 +1406,14 @@ router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => 
       res.type("text/xml").send(gatherTwiml("Sorry, I didn't catch that — could you say it again?", session.token));
       return;
     }
-    const { say, done } = await voiceTurn(session, speech);
+    const { say, done } = session.runId
+      ? await demoVoiceTurn(session, speech)
+      : await voiceTurn(session, speech);
     if (done) {
-      await finalizeVoiceCall(session, "completed");
+      // For a demo call the provider's signed status callback is the source
+      // of truth for completion.  An accepted/connected call is not silently
+      // promoted to delivered/completed by the script response.
+      if (!session.runId) await finalizeVoiceCall(session, "completed");
       res.type("text/xml").send(hangupTwiml(say));
     } else {
       res.type("text/xml").send(gatherTwiml(say, session.token));
@@ -1425,8 +1432,24 @@ router.post("/onboarding/webhooks/twilio/voice-status", async (req, res, next) =
       return;
     }
     const session = await getVoiceSession(String(req.query.token ?? ""), String(req.body?.CallSid ?? "") || undefined);
-    if (session && !session.finalized) {
-      await finalizeVoiceCall(session, String(req.body?.CallStatus ?? "completed"));
+    const callStatus = String(req.body?.CallStatus ?? "").trim().toLowerCase();
+    const terminalStatuses = new Set(["completed", "busy", "failed", "no-answer", "canceled"]);
+    if (session && !session.finalized && callStatus) {
+      await db.update(onbVoiceSessions).set({
+        providerStatus: callStatus,
+      }).where(and(
+        eq(onbVoiceSessions.token, session.token),
+        eq(onbVoiceSessions.organizationId, session.organizationId ?? ""),
+        eq(onbVoiceSessions.finalized, false),
+      ));
+      session.providerStatus = callStatus;
+      if (terminalStatuses.has(callStatus)) {
+        await finalizeVoiceCall(session, callStatus);
+      } else {
+        // queued/ringing/in-progress/accepted are provider observations, not
+        // delivery or completion. Persist them while leaving the session
+        // live for the terminal signed callback.
+      }
     }
     res.status(204).end();
   } catch (err) {
@@ -2146,6 +2169,10 @@ router.post("/onboarding/guardrails/drill", async (req, res, next) => {
 
 router.get("/onboarding/demo/volunteers", async (req, res, next) => {
   try {
+    if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isChecklistAdministrator(req.organizationRole)) {
+      res.status(403).json({ message: "Demo volunteers require a Demo Organization owner or admin." });
+      return;
+    }
     res.json({ volunteers: await loadVolunteers(getOrganizationId(req)), personas: listPersonas() });
   } catch (err) {
     next(err);
@@ -2154,6 +2181,10 @@ router.get("/onboarding/demo/volunteers", async (req, res, next) => {
 
 router.put("/onboarding/demo/volunteers", async (req, res, next) => {
   try {
+    if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isChecklistAdministrator(req.organizationRole)) {
+      res.status(403).json({ message: "Demo volunteers require a Demo Organization owner or admin." });
+      return;
+    }
     const raw = Array.isArray(req.body?.volunteers) ? req.body.volunteers : [];
     const volunteers = await saveVolunteers(getOrganizationId(req), raw);
     res.json({ volunteers });
@@ -2162,9 +2193,13 @@ router.put("/onboarding/demo/volunteers", async (req, res, next) => {
   }
 });
 
-router.post("/onboarding/demo/volunteers/seed", async (_req, res, next) => {
+router.post("/onboarding/demo/volunteers/seed", async (req, res, next) => {
   try {
-    res.json({ results: await seedVolunteerCases(getOrganizationId(_req)) });
+    if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isChecklistAdministrator(req.organizationRole)) {
+      res.status(403).json({ message: "Demo volunteer seeding requires a Demo Organization owner or admin." });
+      return;
+    }
+    res.json({ results: await seedVolunteerCases(DEMO_ORGANIZATION_ID) });
   } catch (err) {
     next(err);
   }
@@ -2294,10 +2329,14 @@ router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
       ...(parsed.data.hireType ? [eq(onbCases.hireType, parsed.data.hireType)] : []),
     ];
     const cases = supportedDomain
-      ? await db
+      ? (await db
           .select()
           .from(onbCases)
-          .where(and(...caseFilters))
+          .where(and(...caseFilters)))
+          // Synthetic reset and demo-controller cases are deliberately not
+          // evidence of a genuine onboarding outcome. Keep their simulated
+          // activity visible on their own run timeline, never in KPI cohorts.
+          .filter((candidate) => !isSyntheticOfflineCase(candidate))
       : [];
 
     const caseIds = cases.map((row) => row.id);

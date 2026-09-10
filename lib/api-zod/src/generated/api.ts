@@ -9,6 +9,359 @@ import * as zod from 'zod';
 
 
 /**
+ * Returns the capability boundary for the selected tenant. Only Demo Organization members with owner or admin role may create or mutate runs.
+ * @summary Get demo-controller capabilities and available scenarios
+ */
+export const getOnboardingDemoControllerResponseScenariosItemKeyMax = 80;
+
+
+
+export const getOnboardingDemoControllerResponseExistingSessionsItemVersionMin = 0;
+
+
+
+export const GetOnboardingDemoControllerResponse = zod.object({
+  "available": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "organizationId": zod.string(),
+  "canCreateRuns": zod.boolean(),
+  "canDispatchLive": zod.boolean(),
+  "defaultMode": zod.enum(['hybrid']),
+  "allowedSystems": zod.array(zod.enum(['bgv', 'hris', 'access', 'assets', 'payroll', 'learning'])),
+  "scenarios": zod.array(zod.object({
+  "key": zod.string().min(1).max(getOnboardingDemoControllerResponseScenariosItemKeyMax),
+  "title": zod.string(),
+  "description": zod.string(),
+  "expectedBehaviour": zod.string()
+})),
+  "approvedVolunteers": zod.array(zod.object({
+  "id": zod.string().min(1).describe('Server-derived stable identifier; clients cannot use it to change volunteer records.'),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
+  "approved": zod.boolean(),
+  "liveEmailAvailable": zod.boolean(),
+  "liveCallAvailable": zod.boolean(),
+  "capabilityReason": zod.string().nullable()
+})),
+  "existingSessions": zod.array(zod.object({
+  "runId": zod.string(),
+  "caseId": zod.number().min(1),
+  "caseName": zod.string(),
+  "scenario": zod.string(),
+  "status": zod.enum(['active', 'completed', 'blocked', 'restarted']),
+  "version": zod.number().min(getOnboardingDemoControllerResponseExistingSessionsItemVersionMin),
+  "mode": zod.enum(['hybrid']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "selectedVolunteerId": zod.string().nullable()
+}))
+})
+
+
+/**
+ * Creates a new run-owned synthetic case. The case remains blocked from ordinary orchestration and outbound automation; mode defaults to hybrid and never enables HRIS, access, assets, payroll, or learning connectors.
+ * @summary Create a fresh synthetic onboarding demonstration run
+ */
+export const createOnboardingDemoRunBodyScenarioMax = 80;
+
+export const createOnboardingDemoRunBodyVolunteerIdMax = 200;
+
+export const createOnboardingDemoRunBodyModeDefault = `hybrid`;
+
+export const CreateOnboardingDemoRunBody = zod.object({
+  "scenario": zod.string().min(1).max(createOnboardingDemoRunBodyScenarioMax),
+  "volunteerId": zod.string().min(1).max(createOnboardingDemoRunBodyVolunteerIdMax).nullish(),
+  "mode": zod.enum(['hybrid']).default(createOnboardingDemoRunBodyModeDefault)
+})
+
+
+export const createOnboardingDemoRunResponseVersionMin = 0;
+
+
+export const createOnboardingDemoRunResponseClockOffsetHoursMin = 0;
+export const createOnboardingDemoRunResponseClockOffsetHoursMax = 8760;
+
+
+
+
+export const CreateOnboardingDemoRunResponse = zod.object({
+  "runId": zod.string(),
+  "caseId": zod.number().min(1),
+  "caseName": zod.string(),
+  "scenario": zod.string(),
+  "mode": zod.enum(['hybrid']),
+  "status": zod.enum(['active', 'completed', 'blocked', 'restarted']),
+  "version": zod.number().min(createOnboardingDemoRunResponseVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "metadata": zod.object({
+  "caseId": zod.number().min(1),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string(),
+  "joiningDate": zod.coerce.date(),
+  "offlineMarker": zod.string()
+}),
+  "checkpoints": zod.array(zod.object({
+  "key": zod.enum(['offer', 'documents', 'bgv', 'systems', 'hr-approval', 'day1']),
+  "status": zod.enum(['pending', 'completed', 'overridden', 'blocked']),
+  "reason": zod.string().nullable()
+})),
+  "systems": zod.array(zod.object({
+  "system": zod.enum(['bgv', 'hris', 'access', 'assets', 'payroll', 'learning']),
+  "status": zod.enum(['pending', 'complete', 'exception', 'overdue']),
+  "outcome": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal('exception'),zod.literal('overdue'),zod.literal(null)]).nullable(),
+  "simulated": zod.boolean(),
+  "updatedAt": zod.coerce.date(),
+  "note": zod.string().nullable()
+})),
+  "clock": zod.object({
+  "now": zod.coerce.date(),
+  "offsetHours": zod.number().min(createOnboardingDemoRunResponseClockOffsetHoursMin).max(createOnboardingDemoRunResponseClockOffsetHoursMax)
+}),
+  "activity": zod.array(zod.object({
+  "id": zod.string(),
+  "at": zod.coerce.date(),
+  "actor": zod.string(),
+  "kind": zod.string(),
+  "provenance": zod.enum(['simulated', 'live']),
+  "message": zod.string(),
+  "transcript": zod.string().nullable(),
+  "providerStatus": zod.string().nullable()
+})),
+  "liveCapabilityReason": zod.string().nullable(),
+  "selectedVolunteerId": zod.string().nullable(),
+  "selectedVolunteer": zod.object({
+  "id": zod.string().min(1).describe('Server-derived stable identifier; clients cannot use it to change volunteer records.'),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
+  "approved": zod.boolean(),
+  "liveEmailAvailable": zod.boolean(),
+  "liveCallAvailable": zod.boolean(),
+  "capabilityReason": zod.string().nullable()
+}).nullable()
+})
+
+
+/**
+ * @summary Get a demonstration run
+ */
+export const getOnboardingDemoRunPathRunIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+
+
+export const GetOnboardingDemoRunParams = zod.object({
+  "runId": zod.coerce.string().regex(getOnboardingDemoRunPathRunIdRegExp)
+})
+
+
+export const getOnboardingDemoRunResponseVersionMin = 0;
+
+
+export const getOnboardingDemoRunResponseClockOffsetHoursMin = 0;
+export const getOnboardingDemoRunResponseClockOffsetHoursMax = 8760;
+
+
+
+
+export const GetOnboardingDemoRunResponse = zod.object({
+  "runId": zod.string(),
+  "caseId": zod.number().min(1),
+  "caseName": zod.string(),
+  "scenario": zod.string(),
+  "mode": zod.enum(['hybrid']),
+  "status": zod.enum(['active', 'completed', 'blocked', 'restarted']),
+  "version": zod.number().min(getOnboardingDemoRunResponseVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "metadata": zod.object({
+  "caseId": zod.number().min(1),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string(),
+  "joiningDate": zod.coerce.date(),
+  "offlineMarker": zod.string()
+}),
+  "checkpoints": zod.array(zod.object({
+  "key": zod.enum(['offer', 'documents', 'bgv', 'systems', 'hr-approval', 'day1']),
+  "status": zod.enum(['pending', 'completed', 'overridden', 'blocked']),
+  "reason": zod.string().nullable()
+})),
+  "systems": zod.array(zod.object({
+  "system": zod.enum(['bgv', 'hris', 'access', 'assets', 'payroll', 'learning']),
+  "status": zod.enum(['pending', 'complete', 'exception', 'overdue']),
+  "outcome": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal('exception'),zod.literal('overdue'),zod.literal(null)]).nullable(),
+  "simulated": zod.boolean(),
+  "updatedAt": zod.coerce.date(),
+  "note": zod.string().nullable()
+})),
+  "clock": zod.object({
+  "now": zod.coerce.date(),
+  "offsetHours": zod.number().min(getOnboardingDemoRunResponseClockOffsetHoursMin).max(getOnboardingDemoRunResponseClockOffsetHoursMax)
+}),
+  "activity": zod.array(zod.object({
+  "id": zod.string(),
+  "at": zod.coerce.date(),
+  "actor": zod.string(),
+  "kind": zod.string(),
+  "provenance": zod.enum(['simulated', 'live']),
+  "message": zod.string(),
+  "transcript": zod.string().nullable(),
+  "providerStatus": zod.string().nullable()
+})),
+  "liveCapabilityReason": zod.string().nullable(),
+  "selectedVolunteerId": zod.string().nullable(),
+  "selectedVolunteer": zod.object({
+  "id": zod.string().min(1).describe('Server-derived stable identifier; clients cannot use it to change volunteer records.'),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
+  "approved": zod.boolean(),
+  "liveEmailAvailable": zod.boolean(),
+  "liveCallAvailable": zod.boolean(),
+  "capabilityReason": zod.string().nullable()
+}).nullable()
+})
+
+
+/**
+ * Every action is explicitly requested, UUID-idempotent, and scoped to its run. Provider calls, if explicitly authorized, happen outside the database transaction after a durable claim.
+ * @summary Apply one optimistic-versioned action to a demonstration run
+ */
+export const applyOnboardingDemoRunActionPathRunIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+
+
+export const ApplyOnboardingDemoRunActionParams = zod.object({
+  "runId": zod.coerce.string().regex(applyOnboardingDemoRunActionPathRunIdRegExp)
+})
+
+export const applyOnboardingDemoRunActionBodyExpectedVersionMin = 0;
+
+export const applyOnboardingDemoRunActionBodyRequestIdMin = 36;
+export const applyOnboardingDemoRunActionBodyRequestIdMax = 36;
+
+
+export const applyOnboardingDemoRunActionBodyRequestIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+export const applyOnboardingDemoRunActionBodyReasonMax = 1000;
+
+export const applyOnboardingDemoRunActionBodyHoursMin = 0;
+export const applyOnboardingDemoRunActionBodyHoursMax = 8760;
+
+
+
+export const ApplyOnboardingDemoRunActionBody = zod.object({
+  "expectedVersion": zod.number().min(applyOnboardingDemoRunActionBodyExpectedVersionMin),
+  "requestId": zod.string().min(applyOnboardingDemoRunActionBodyRequestIdMin).max(applyOnboardingDemoRunActionBodyRequestIdMax).regex(applyOnboardingDemoRunActionBodyRequestIdRegExp),
+  "kind": zod.enum(['load-documents', 'system-outcome', 'advance-time', 'advance', 'override-step', 'communication', 'restart']),
+  "system": zod.union([zod.literal('bgv'),zod.literal('hris'),zod.literal('access'),zod.literal('assets'),zod.literal('payroll'),zod.literal('learning'),zod.literal(null)]).nullish(),
+  "outcome": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal('exception'),zod.literal('overdue'),zod.literal(null)]).nullish(),
+  "step": zod.union([zod.literal('offer'),zod.literal('documents'),zod.literal('bgv'),zod.literal('systems'),zod.literal('hr-approval'),zod.literal('day1'),zod.literal(null)]).nullish(),
+  "reason": zod.string().max(applyOnboardingDemoRunActionBodyReasonMax).nullish(),
+  "hours": zod.number().min(applyOnboardingDemoRunActionBodyHoursMin).max(applyOnboardingDemoRunActionBodyHoursMax).nullish(),
+  "channel": zod.union([zod.literal('email'),zod.literal('call'),zod.literal(null)]).nullish(),
+  "mode": zod.union([zod.literal('live'),zod.literal('simulated'),zod.literal(null)]).nullish(),
+  "liveConfirmation": zod.union([zod.literal('I_UNDERSTAND_LIVE_DEMO'),zod.literal(null)]).nullish()
+})
+
+
+export const applyOnboardingDemoRunActionResponseVersionMin = 0;
+
+
+export const applyOnboardingDemoRunActionResponseClockOffsetHoursMin = 0;
+export const applyOnboardingDemoRunActionResponseClockOffsetHoursMax = 8760;
+
+
+
+
+export const ApplyOnboardingDemoRunActionResponse = zod.object({
+  "runId": zod.string(),
+  "caseId": zod.number().min(1),
+  "caseName": zod.string(),
+  "scenario": zod.string(),
+  "mode": zod.enum(['hybrid']),
+  "status": zod.enum(['active', 'completed', 'blocked', 'restarted']),
+  "version": zod.number().min(applyOnboardingDemoRunActionResponseVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "metadata": zod.object({
+  "caseId": zod.number().min(1),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string(),
+  "joiningDate": zod.coerce.date(),
+  "offlineMarker": zod.string()
+}),
+  "checkpoints": zod.array(zod.object({
+  "key": zod.enum(['offer', 'documents', 'bgv', 'systems', 'hr-approval', 'day1']),
+  "status": zod.enum(['pending', 'completed', 'overridden', 'blocked']),
+  "reason": zod.string().nullable()
+})),
+  "systems": zod.array(zod.object({
+  "system": zod.enum(['bgv', 'hris', 'access', 'assets', 'payroll', 'learning']),
+  "status": zod.enum(['pending', 'complete', 'exception', 'overdue']),
+  "outcome": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal('exception'),zod.literal('overdue'),zod.literal(null)]).nullable(),
+  "simulated": zod.boolean(),
+  "updatedAt": zod.coerce.date(),
+  "note": zod.string().nullable()
+})),
+  "clock": zod.object({
+  "now": zod.coerce.date(),
+  "offsetHours": zod.number().min(applyOnboardingDemoRunActionResponseClockOffsetHoursMin).max(applyOnboardingDemoRunActionResponseClockOffsetHoursMax)
+}),
+  "activity": zod.array(zod.object({
+  "id": zod.string(),
+  "at": zod.coerce.date(),
+  "actor": zod.string(),
+  "kind": zod.string(),
+  "provenance": zod.enum(['simulated', 'live']),
+  "message": zod.string(),
+  "transcript": zod.string().nullable(),
+  "providerStatus": zod.string().nullable()
+})),
+  "liveCapabilityReason": zod.string().nullable(),
+  "selectedVolunteerId": zod.string().nullable(),
+  "selectedVolunteer": zod.object({
+  "id": zod.string().min(1).describe('Server-derived stable identifier; clients cannot use it to change volunteer records.'),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
+  "approved": zod.boolean(),
+  "liveEmailAvailable": zod.boolean(),
+  "liveCallAvailable": zod.boolean(),
+  "capabilityReason": zod.string().nullable()
+}).nullable()
+})
+
+
+/**
+ * Generates a plain-text synthetic pack from run metadata. No document bytes are persisted.
+ * @summary Download a watermarked synthetic documentation pack
+ */
+export const downloadOnboardingDemoRunDocumentsPathRunIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+
+
+export const DownloadOnboardingDemoRunDocumentsParams = zod.object({
+  "runId": zod.coerce.string().regex(downloadOnboardingDemoRunDocumentsPathRunIdRegExp)
+})
+
+export const DownloadOnboardingDemoRunDocumentsResponse = zod.string()
+
+
+/**
  * @summary Derive the reusable solution baseline from the current corpus
  */
 export const getEnterpriseArchitectureBaselineResponseViewpointsMin = 8;

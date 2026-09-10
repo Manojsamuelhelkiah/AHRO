@@ -15,8 +15,12 @@ import {
   getListOnboardingCaseRecordsQueryKey,
   useGetOnboardingChannels,
   getGetOnboardingChannelsQueryKey,
-  getPinnedOrganizationIdForPage
+  getPinnedOrganizationIdForPage,
+  useGetOnboardingDemoController,
+  getGetOnboardingDemoControllerQueryKey
 } from '@workspace/api-client-react';
+import { Link } from 'wouter';
+import { Presentation } from 'lucide-react';
 
 import { useUser } from '@clerk/react';
 import { CaseHeader, CaseHealthStrip, CaseTabs } from './detail/components';
@@ -95,11 +99,32 @@ export function CaseDetailPage() {
     query: { enabled: !!caseId && c?.hireType === 'rehire', queryKey: getListOnboardingCaseRecordsQueryKey(caseId) }
   });
 
+  const { data: caps } = useGetOnboardingDemoController({
+    query: {
+      enabled: !!caseId,
+      queryKey: getGetOnboardingDemoControllerQueryKey(),
+      retry: false
+    }
+  });
+
   if (isLoading || isHRLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading case workspace...</div>;
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
 
+  const demoSession = caps?.available ? caps.existingSessions.find((s: any) => s.caseId === caseId) : undefined;
+
   return (
     <div className="max-w-7xl mx-auto px-6 md:px-8">
+      {demoSession && (
+        <div className="mb-4 p-3 bg-[var(--primary-light)] border border-[var(--primary)] border-opacity-30 rounded-md flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-2 text-[var(--primary-dark)] text-sm font-medium">
+            <Presentation className="h-4 w-4" />
+            This is a simulated demo case ({demoSession.scenario}).
+          </div>
+          <Link href={`/demo-controller/${demoSession.runId}`} className="text-xs font-semibold bg-[var(--surface)] text-[var(--primary-dark)] px-3 py-1.5 rounded shadow-sm border border-[var(--primary)] border-opacity-20 hover:bg-[var(--primary-light)] transition-colors">
+            Open Control Tower
+          </Link>
+        </div>
+      )}
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
       
       <GatewaysStrip c={c} isHR={isHR} />

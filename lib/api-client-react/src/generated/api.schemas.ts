@@ -3922,6 +3922,415 @@ export interface PricingRateSetInput {
   rates: PricingRateSetInputRates;
 }
 
+export interface DemoScenarioChoice {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  key: string;
+  title: string;
+  description: string;
+  expectedBehaviour: string;
+}
+
+export type DemoControllerVolunteerChannelPreference = typeof DemoControllerVolunteerChannelPreference[keyof typeof DemoControllerVolunteerChannelPreference];
+
+
+export const DemoControllerVolunteerChannelPreference = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+  both: 'both',
+} as const;
+
+export interface DemoControllerVolunteer {
+  /**
+     * Server-derived stable identifier; clients cannot use it to change volunteer records.
+     * @minLength 1
+     */
+  id: string;
+  name: string;
+  email: string;
+  /** @nullable */
+  phone: string | null;
+  channelPreference: DemoControllerVolunteerChannelPreference;
+  approved: boolean;
+  liveEmailAvailable: boolean;
+  liveCallAvailable: boolean;
+  /** @nullable */
+  capabilityReason: string | null;
+}
+
+export type DemoControllerCapabilitiesDefaultMode = typeof DemoControllerCapabilitiesDefaultMode[keyof typeof DemoControllerCapabilitiesDefaultMode];
+
+
+export const DemoControllerCapabilitiesDefaultMode = {
+  hybrid: 'hybrid',
+} as const;
+
+export type DemoControllerCapabilitiesAllowedSystemsItem = typeof DemoControllerCapabilitiesAllowedSystemsItem[keyof typeof DemoControllerCapabilitiesAllowedSystemsItem];
+
+
+export const DemoControllerCapabilitiesAllowedSystemsItem = {
+  bgv: 'bgv',
+  hris: 'hris',
+  access: 'access',
+  assets: 'assets',
+  payroll: 'payroll',
+  learning: 'learning',
+} as const;
+
+export type DemoRunSummaryStatus = typeof DemoRunSummaryStatus[keyof typeof DemoRunSummaryStatus];
+
+
+export const DemoRunSummaryStatus = {
+  active: 'active',
+  completed: 'completed',
+  blocked: 'blocked',
+  restarted: 'restarted',
+} as const;
+
+export type DemoRunSummaryMode = typeof DemoRunSummaryMode[keyof typeof DemoRunSummaryMode];
+
+
+export const DemoRunSummaryMode = {
+  hybrid: 'hybrid',
+} as const;
+
+export interface DemoRunSummary {
+  runId: string;
+  /** @minimum 1 */
+  caseId: number;
+  caseName: string;
+  scenario: string;
+  status: DemoRunSummaryStatus;
+  /** @minimum 0 */
+  version: number;
+  mode: DemoRunSummaryMode;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  selectedVolunteerId: string | null;
+}
+
+export interface DemoControllerCapabilities {
+  available: boolean;
+  /** @nullable */
+  reason: string | null;
+  organizationId: string;
+  canCreateRuns: boolean;
+  canDispatchLive: boolean;
+  defaultMode: DemoControllerCapabilitiesDefaultMode;
+  allowedSystems: DemoControllerCapabilitiesAllowedSystemsItem[];
+  scenarios: DemoScenarioChoice[];
+  approvedVolunteers: DemoControllerVolunteer[];
+  existingSessions: DemoRunSummary[];
+}
+
+export type DemoRunInputMode = typeof DemoRunInputMode[keyof typeof DemoRunInputMode];
+
+
+export const DemoRunInputMode = {
+  hybrid: 'hybrid',
+} as const;
+
+export interface DemoRunInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  scenario: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     * @nullable
+     */
+  volunteerId?: string | null;
+  mode?: DemoRunInputMode;
+}
+
+export type DemoWorkflowCheckpointKey = typeof DemoWorkflowCheckpointKey[keyof typeof DemoWorkflowCheckpointKey];
+
+
+export const DemoWorkflowCheckpointKey = {
+  offer: 'offer',
+  documents: 'documents',
+  bgv: 'bgv',
+  systems: 'systems',
+  'hr-approval': 'hr-approval',
+  day1: 'day1',
+} as const;
+
+export type DemoWorkflowCheckpointStatus = typeof DemoWorkflowCheckpointStatus[keyof typeof DemoWorkflowCheckpointStatus];
+
+
+export const DemoWorkflowCheckpointStatus = {
+  pending: 'pending',
+  completed: 'completed',
+  overridden: 'overridden',
+  blocked: 'blocked',
+} as const;
+
+export interface DemoWorkflowCheckpoint {
+  key: DemoWorkflowCheckpointKey;
+  status: DemoWorkflowCheckpointStatus;
+  /** @nullable */
+  reason: string | null;
+}
+
+export type DemoSystemStateSystem = typeof DemoSystemStateSystem[keyof typeof DemoSystemStateSystem];
+
+
+export const DemoSystemStateSystem = {
+  bgv: 'bgv',
+  hris: 'hris',
+  access: 'access',
+  assets: 'assets',
+  payroll: 'payroll',
+  learning: 'learning',
+} as const;
+
+export type DemoSystemStateStatus = typeof DemoSystemStateStatus[keyof typeof DemoSystemStateStatus];
+
+
+export const DemoSystemStateStatus = {
+  pending: 'pending',
+  complete: 'complete',
+  exception: 'exception',
+  overdue: 'overdue',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DemoSystemStateOutcome = typeof DemoSystemStateOutcome[keyof typeof DemoSystemStateOutcome] | null;
+
+
+export const DemoSystemStateOutcome = {
+  pending: 'pending',
+  complete: 'complete',
+  exception: 'exception',
+  overdue: 'overdue',
+} as const;
+
+export interface DemoSystemState {
+  system: DemoSystemStateSystem;
+  status: DemoSystemStateStatus;
+  /** @nullable */
+  outcome: DemoSystemStateOutcome;
+  simulated: boolean;
+  updatedAt: string;
+  /** @nullable */
+  note: string | null;
+}
+
+export interface DemoClock {
+  now: string;
+  /**
+     * @minimum 0
+     * @maximum 8760
+     */
+  offsetHours: number;
+}
+
+export type DemoActivityProvenance = typeof DemoActivityProvenance[keyof typeof DemoActivityProvenance];
+
+
+export const DemoActivityProvenance = {
+  simulated: 'simulated',
+  live: 'live',
+} as const;
+
+export interface DemoActivity {
+  id: string;
+  at: string;
+  actor: string;
+  kind: string;
+  provenance: DemoActivityProvenance;
+  message: string;
+  /** @nullable */
+  transcript: string | null;
+  /** @nullable */
+  providerStatus: string | null;
+}
+
+export interface DemoCaseMetadata {
+  /** @minimum 1 */
+  caseId: number;
+  name: string;
+  email: string;
+  /** @nullable */
+  phone: string | null;
+  role: string;
+  department: string;
+  geography: string;
+  joiningDate: string;
+  offlineMarker: string;
+}
+
+export type DemoRunMode = typeof DemoRunMode[keyof typeof DemoRunMode];
+
+
+export const DemoRunMode = {
+  hybrid: 'hybrid',
+} as const;
+
+export type DemoRunStatus = typeof DemoRunStatus[keyof typeof DemoRunStatus];
+
+
+export const DemoRunStatus = {
+  active: 'active',
+  completed: 'completed',
+  blocked: 'blocked',
+  restarted: 'restarted',
+} as const;
+
+export interface DemoRun {
+  runId: string;
+  /** @minimum 1 */
+  caseId: number;
+  caseName: string;
+  scenario: string;
+  mode: DemoRunMode;
+  status: DemoRunStatus;
+  /** @minimum 0 */
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  metadata: DemoCaseMetadata;
+  checkpoints: DemoWorkflowCheckpoint[];
+  systems: DemoSystemState[];
+  clock: DemoClock;
+  activity: DemoActivity[];
+  /** @nullable */
+  liveCapabilityReason: string | null;
+  /** @nullable */
+  selectedVolunteerId: string | null;
+  selectedVolunteer: DemoControllerVolunteer | null;
+}
+
+export type DemoRunActionKind = typeof DemoRunActionKind[keyof typeof DemoRunActionKind];
+
+
+export const DemoRunActionKind = {
+  'load-documents': 'load-documents',
+  'system-outcome': 'system-outcome',
+  'advance-time': 'advance-time',
+  advance: 'advance',
+  'override-step': 'override-step',
+  communication: 'communication',
+  restart: 'restart',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DemoRunActionSystem = typeof DemoRunActionSystem[keyof typeof DemoRunActionSystem] | null;
+
+
+export const DemoRunActionSystem = {
+  bgv: 'bgv',
+  hris: 'hris',
+  access: 'access',
+  assets: 'assets',
+  payroll: 'payroll',
+  learning: 'learning',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DemoRunActionOutcome = typeof DemoRunActionOutcome[keyof typeof DemoRunActionOutcome] | null;
+
+
+export const DemoRunActionOutcome = {
+  pending: 'pending',
+  complete: 'complete',
+  exception: 'exception',
+  overdue: 'overdue',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DemoRunActionStep = typeof DemoRunActionStep[keyof typeof DemoRunActionStep] | null;
+
+
+export const DemoRunActionStep = {
+  offer: 'offer',
+  documents: 'documents',
+  bgv: 'bgv',
+  systems: 'systems',
+  'hr-approval': 'hr-approval',
+  day1: 'day1',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DemoRunActionChannel = typeof DemoRunActionChannel[keyof typeof DemoRunActionChannel] | null;
+
+
+export const DemoRunActionChannel = {
+  email: 'email',
+  call: 'call',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DemoRunActionMode = typeof DemoRunActionMode[keyof typeof DemoRunActionMode] | null;
+
+
+export const DemoRunActionMode = {
+  live: 'live',
+  simulated: 'simulated',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DemoRunActionLiveConfirmation = typeof DemoRunActionLiveConfirmation[keyof typeof DemoRunActionLiveConfirmation] | null;
+
+
+export const DemoRunActionLiveConfirmation = {
+  I_UNDERSTAND_LIVE_DEMO: 'I_UNDERSTAND_LIVE_DEMO',
+} as const;
+
+export interface DemoRunAction {
+  /** @minimum 0 */
+  expectedVersion: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
+     */
+  requestId: string;
+  kind: DemoRunActionKind;
+  /** @nullable */
+  system?: DemoRunActionSystem;
+  /** @nullable */
+  outcome?: DemoRunActionOutcome;
+  /** @nullable */
+  step?: DemoRunActionStep;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  reason?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 8760
+     * @nullable
+     */
+  hours?: number | null;
+  /** @nullable */
+  channel?: DemoRunActionChannel;
+  /** @nullable */
+  mode?: DemoRunActionMode;
+  /** @nullable */
+  liveConfirmation?: DemoRunActionLiveConfirmation;
+}
+
 export type ListEaAssessmentsParams = {
 status?: EaAssessmentStatus;
 };

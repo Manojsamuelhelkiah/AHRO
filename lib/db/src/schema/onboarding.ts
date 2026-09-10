@@ -446,6 +446,17 @@ export const onbVoiceSessions = pgTable("onb_voice_sessions", {
   caseId: integer("case_id")
     .notNull()
     ,
+  /**
+   * Local call identity and controller correlation are written before any
+   * provider request.  They remain nullable for rows created by the legacy
+   * voice path and old migrations; new starts always populate them.
+   */
+  localCallId: text("local_call_id"),
+  runId: text("run_id"),
+  requestId: text("request_id"),
+  /** pending | accepted | unknown_effect_manual_repair | terminal status */
+  providerStatus: text("provider_status").notNull().default("pending"),
+  providerFailureReason: text("provider_failure_reason"),
   /** day-before | sla-escalation */
   scenario: text("scenario").notNull(),
   reason: text("reason"),
