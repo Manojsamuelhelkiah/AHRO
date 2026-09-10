@@ -39,3 +39,5 @@
 - [Document malware boundaries](document-malware-boundaries.md) — keep candidate scans private; authenticity cannot override quarantine, and cached readiness cannot replace live evidence checks.
 - [Onboarding gateway authority](onboarding-gateway-authority.md) — acceptance precedes onboarding effects; final readiness needs fresh HR authority after safety evidence reopens.
 - [Outcome KPI evidence](outcome-kpi-evidence.md) — historical outcomes need dated source evidence; live checklists and simulated completions must not become historical success rates.
+- [Readiness policy authority](readiness-policy-authority.md) — policy deadlines replace legacy timers; score never substitutes for final human authority; review cycles bind approval to evidence.
+- [Case explanation boundaries](case-explanation-boundaries.md) — explain recorded evidence, not hidden reasoning; current policy cannot prove historical rationale; chat stays read-only and scope-isolated.

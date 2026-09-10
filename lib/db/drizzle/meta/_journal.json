@@ -316,6 +316,27 @@
       "when": 1789026000001,
       "tag": "0038_onboarding_three_gateways",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789026000002,
+      "tag": "0039_weighted_readiness_sla",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1789026000003,
+      "tag": "0040_versioned_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1789026000004,
+      "tag": "0041_readiness_snapshot_joining_date",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useListOnboardingApprovals, useDecideOnboardingApproval, getListOnboardingApprovalsQueryKey } from '@workspace/api-client-react';
+import { useListOnboardingApprovals, useDecideOnboardingApproval, getListOnboardingApprovalsQueryKey, useGetOnboardingApprovalHistory, getGetOnboardingApprovalHistoryQueryKey } from '@workspace/api-client-react';
 import { Card, Button, Badge, cn, Input, Label, PageHeader } from '@/components/ui-shared';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useUser } from '@clerk/react';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
@@ -76,7 +76,7 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
   const handleDecide = (decision: string) => {
     decide.mutate({
       id: approval.id,
-      data: { decision, comment: comment || undefined }
+      data: { decision, comment: comment || undefined, expectedVersion: approval.version }
     }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey({ status: statusParam }) });
@@ -86,6 +86,14 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
 
   const isPending = approval.status === 'pending';
   const isHardBlock = approval.hitlPattern === 'hard-block';
+  
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { data: history, isLoading: historyLoading } = useGetOnboardingApprovalHistory(approval.id, {
+    query: {
+      queryKey: getGetOnboardingApprovalHistoryQueryKey(approval.id),
+      enabled: historyOpen
+    }
+  });
 
   return (
     <Card 
@@ -108,6 +116,12 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
             
             <div style={{ backgroundColor: 'var(--surface-alt)', border: '1px solid var(--border)', borderLeft: '3px solid var(--primary)', borderRadius: 'var(--radius-md)', padding: '12px 16px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
               {approval.rationale}
+              {approval.ruleRef?.includes('sla') && (
+                <div className="mt-3 pt-3 border-t border-[var(--border)] flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-mono">
+                  <span className="text-[var(--primary)]">SLA Monitor Active</span>
+                  <span className="text-[var(--text-muted)]">Check specific case SLA for ledger email delivery details.</span>
+                </div>
+              )}
             </div>
             
             {Array.isArray(approval.recordsEvidence) && approval.recordsEvidence.length > 0 && (
@@ -154,6 +168,35 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
           )}
         </div>
 
+        {historyOpen && (
+          <div className="mt-4 pt-4 border-t border-[var(--border)]">
+            <h4 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Cycle History</h4>
+            {historyLoading ? (
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)]">Loading history...</p>
+            ) : history?.length === 0 ? (
+              <p className="text-[var(--text-xs)] text-[var(--text-muted)]">No previous cycles for this approval.</p>
+            ) : (
+              <div className="space-y-3 pl-3 border-l-2 border-[var(--border-strong)]">
+                {history?.map((h: any) => (
+                  <div key={h.id} className="relative text-[var(--text-sm)] bg-[var(--surface-alt)] p-3 rounded-[var(--radius-md)] border border-[var(--border)]">
+                    <div className="absolute -left-[19px] top-4 w-2.5 h-2.5 rounded-full bg-[var(--surface-alt)] border-[1.5px] border-[var(--primary)]"></div>
+                    <div className="flex justify-between gap-4">
+                      <div>
+                        <span className="font-bold text-[10px] uppercase tracking-wider bg-[var(--primary-light)] text-[var(--primary)] px-1.5 py-0.5 rounded mr-2">V{h.version}</span>
+                        <span className="font-semibold text-[var(--text-primary)]">{h.eventType === 'decided' ? `Decided: ${h.status}` : 'Reopened'}</span>
+                      </div>
+                      <span className="text-[10px] text-[var(--text-muted)] whitespace-nowrap">{format(new Date(h.createdAt), 'MMM d, HH:mm')}</span>
+                    </div>
+                    {h.decidedBy && <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1">By: {h.decidedBy}</p>}
+                    {h.reason && <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1 italic">Reason: {h.reason}</p>}
+                    {h.comment && <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1 italic border-l-2 pl-2 border-[var(--border)]">"{h.comment}"</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {isPending && (
           <div style={{ borderTop: '1px solid var(--border)', marginTop: '16px', paddingTop: '16px' }}>
             <div className="flex flex-col lg:flex-row items-start lg:items-end gap-6">
@@ -196,10 +239,15 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
         )}
       </div>
       <div style={{ backgroundColor: 'var(--surface-alt)', padding: '12px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link href={`/cases/${approval.caseId}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600 }} className="hover:underline">
-          Open Full Case Context →
-        </Link>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>ID: APP-{approval.id}</span>
+        <div className="flex items-center gap-4">
+          <Link href={`/cases/${approval.caseId}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600 }} className="hover:underline">
+            Open Full Case Context →
+          </Link>
+          <button onClick={() => setHistoryOpen(!historyOpen)} className="text-[var(--text-xs)] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+            {historyOpen ? 'Hide History' : 'Show History'}
+          </button>
+        </div>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>ID: AP-{approval.id}-V{approval.version ?? 1}</span>
       </div>
     </Card>
   );

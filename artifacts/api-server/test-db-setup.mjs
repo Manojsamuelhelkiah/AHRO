@@ -1140,7 +1140,11 @@ async function buildExpectedSchemaFromReceipt(
         `ALTER TABLE ${quoteIdentifier(table)} DROP COLUMN ${quoteIdentifier(column)} CASCADE`,
       );
     }
-    for (const constraintType of ["p", "u", "c", "x", "f"]) {
+    // Recreate primary/unique/check constraints before indexes and foreign
+    // keys.  A current approval FK references (organization_id, id), which
+    // is backed by a standalone unique index rather than a unique constraint.
+    // PostgreSQL requires that index to exist before the FK is added.
+    for (const constraintType of ["p", "u", "c", "x"]) {
       for (const [key, constraint] of baseline.constraints) {
         if (constraint.type !== constraintType) continue;
         const [table, constraintName] = splitSchemaKey(key);
@@ -1154,6 +1158,14 @@ async function buildExpectedSchemaFromReceipt(
     for (const [key, index] of baseline.indexes) {
       if (index.primary || constraintKeys.has(key)) continue;
       await client.query(index.definition);
+    }
+    for (const [key, constraint] of baseline.constraints) {
+      if (constraint.type !== "f") continue;
+      const [table, constraintName] = splitSchemaKey(key);
+      await client.query(
+        `ALTER TABLE ${quoteIdentifier(table)} ` +
+          `ADD CONSTRAINT ${quoteIdentifier(constraintName)} ${constraint.definition}`,
+      );
     }
     for (const migration of migrations) {
       for (const statement of migration.statements) {

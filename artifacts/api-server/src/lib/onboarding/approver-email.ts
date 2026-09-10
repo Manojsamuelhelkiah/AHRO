@@ -11,10 +11,17 @@ import {
   stripQuotedReply,
   type GmailMessage,
 } from "./inbound-email";
-import { sendAdministrativeEmail } from "./channels";
 import { getSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
-import { logEvent, resumeAfterDecision } from "./engine";
+import { logEvent } from "./engine";
 import { makeSharedTick } from "./shared-tick";
+import {
+  approvalRef as versionedApprovalRef,
+  parseApprovalReference,
+} from "./approval-version";
+import {
+  decideApproval,
+  enqueueApprovalRequestNotification,
+} from "./approval-decisions";
 
 /**
  * Remote HR approver over email — lets a demo volunteer play the
@@ -60,15 +67,26 @@ export async function approverEmailAddress(organizationId: string): Promise<stri
 /* Pure helpers (exported for tests)                                   */
 /* ------------------------------------------------------------------ */
 
-/** The reference the approver's reply must quote, e.g. "AP-42". */
-export function approvalRef(approvalId: number): string {
-  return `AP-${approvalId}`;
+/** The reference the approver's reply must quote, e.g. "AP-42-V2". */
+export function approvalRef(approvalId: number, version?: number): string {
+  // Preserve the historical pure-helper contract for callers that omitted a
+  // cycle. Every outbound composer passes an explicit version and therefore
+  // emits the unambiguous AP-<id>-V<version> form.
+  return version === undefined ? `AP-${approvalId}` : versionedApprovalRef(approvalId, version);
 }
 
 /** Extract the approval id from an "AP-<id>" reference in the text, or null. */
 export function matchApprovalRef(text: string): number | null {
-  const m = text.match(/\bAP-(\d{1,9})\b/i);
-  return m ? Number(m[1]) : null;
+  return parseApprovalReference(text)?.approvalId ?? null;
+}
+
+/** Parse an approval id and cycle, rejecting contradictory references. */
+export function matchApprovalVersionRef(text: string): {
+  approvalId: number;
+  version: number;
+  legacy: boolean;
+} | null {
+  return parseApprovalReference(text);
 }
 
 export type ApproverDecision = "approved" | "rejected";
@@ -100,6 +118,7 @@ export function senderIsApprover(fromAddress: string, approver: string | null): 
 /** Compose the notification email for a new pending approval (pure). */
 export function composeApprovalEmail(opts: {
   approvalId: number;
+  version?: number;
   workerName: string;
   caseId: number;
   agent: string;
@@ -107,15 +126,23 @@ export function composeApprovalEmail(opts: {
   recommendation: string;
   rationale: string;
 }): { subject: string; body: string } {
-  const ref = approvalRef(opts.approvalId);
+  const version = opts.version ?? 1;
+  const ref = approvalRef(opts.approvalId, version);
+  // Keep a harmless legacy alias beside V1 for older inbox rules. It is
+  // never emitted for reopened cycles, where an old bare reference would be
+  // ambiguous.
+  const subjectRef = version === 1
+    ? `AP-${opts.approvalId}] [${ref}`
+    : ref;
   const kind = opts.hitlPattern === "hard-block" ? "HARD-BLOCK" : "Approval needed";
   return {
-    subject: `[${ref}] ${kind}: ${opts.workerName} (case #${opts.caseId})`,
+    subject: `[${subjectRef}] ${kind}: ${opts.workerName} (case #${opts.caseId})`,
     body: [
       `The onboarding agent has escalated a decision to you.`,
       ``,
       `Case: #${opts.caseId} — ${opts.workerName}`,
       `Raised by: ${opts.agent} agent (${opts.hitlPattern})`,
+      `Approval cycle: ${ref}`,
       ``,
       `Recommendation: ${opts.recommendation}`,
       `Rationale: ${opts.rationale}`,
@@ -143,6 +170,7 @@ export async function notifyApproverOfApproval(approval: {
   id: number;
   caseId: number;
   organizationId: string;
+  version?: number | null;
   agent: string;
   hitlPattern: string;
   recommendation: string;
@@ -158,36 +186,18 @@ export async function notifyApproverOfApproval(approval: {
         eq(onbCases.id, approval.caseId),
         eq(onbCases.organizationId, approval.organizationId),
       ));
-    const { subject, body } = composeApprovalEmail({
-      approvalId: approval.id,
-      workerName: c?.workerName ?? "worker",
-      caseId: approval.caseId,
-      agent: approval.agent,
-      hitlPattern: approval.hitlPattern,
-      recommendation: approval.recommendation,
-      rationale: approval.rationale,
-    });
-    // Goes through sendOutbound so the established safe-delivery boundary
-    // applies: recipient allowlist (the approver address is only on it
-    // because it was explicitly saved in Settings), hourly live-send rate
-    // limit, and the persisted communication row (whose stored Gmail
-    // message id also keeps a same-account demo inbox from echoing this
-    // notification back as an inbound reply).
-    const result = await sendAdministrativeEmail({
-      caseId: approval.caseId,
-      toAddress: to,
-      subject,
-      body,
-      idempotencyKey: `approval-notification:${approval.id}`,
+    // Queue first. The heartbeat-owned worker applies the existing
+    // administrative allowlist, rate limit, and ambiguous-send fencing.
+    await enqueueApprovalRequestNotification({
+      ...approval,
+      version: approval.version ?? 1,
     });
     await logEvent(
       approval.caseId,
       "channel",
       "system",
-      result.status === "sent" ? "HR approver emailed" : "HR approver email failed",
-      result.status === "sent"
-        ? `The pending approval ${approvalRef(approval.id)} was emailed to the configured HR approver. A reply containing "approve" or "reject" from that address will decide it.`
-        : `Emailing the HR approver about ${approvalRef(approval.id)} failed: ${result.failureReason ?? "unknown"}. The approval remains available in the in-app queue.`,
+      "HR approver notification queued",
+      `The pending approval ${approvalRef(approval.id, approval.version ?? 1)} is queued for the configured HR approver. A reply containing "approve" or "reject" from that address will decide it.`,
       { idempotencyKey: `approval-notification:${approval.id}:event` },
     );
   } catch (err) {
@@ -205,6 +215,7 @@ export type ApplyReplyResult =
   | "no-decision"
   | "not-found"
   | "already-decided"
+  | "stale"
   | "decided";
 
 /**
@@ -219,6 +230,7 @@ export async function applyApproverReply(opts: {
   subject: string | null;
   bodyText: string;
   approver: string | null;
+  sourceMessageId: string;
 }): Promise<{ outcome: ApplyReplyResult; approvalId: number | null }> {
   // 1. Allowlist check FIRST — nobody but the configured approver may act.
   const configuredApprover = await approverEmailAddress(opts.organizationId);
@@ -229,8 +241,9 @@ export async function applyApproverReply(opts: {
     return { outcome: "not-approver", approvalId: null };
   }
   const text = `${opts.subject ?? ""}\n${opts.bodyText}`;
-  const approvalId = matchApprovalRef(text);
-  if (approvalId === null) return { outcome: "no-ref", approvalId: null };
+  const reference = matchApprovalVersionRef(text);
+  if (reference === null) return { outcome: "no-ref", approvalId: null };
+  const approvalId = reference.approvalId;
 
   const decision = parseApproverDecision(opts.bodyText || (opts.subject ?? ""));
 
@@ -246,40 +259,29 @@ export async function applyApproverReply(opts: {
       "channel",
       "system",
       "Approver reply not understood",
-      `An email reply from the HR approver referenced ${approvalRef(approvalId)} but contained no clear "approve" or "reject" — no decision applied. They can reply again with a single clear word.`,
+      `An email reply from the HR approver referenced ${approvalRef(approvalId, reference.version)} but contained no clear "approve" or "reject" — no decision applied. They can reply again with a single clear word.`,
     );
     return { outcome: "no-decision", approvalId };
   }
 
   const decidedBy = `${opts.approver} (HR approver via email)`;
-  // 2. Status-guarded conditional update: only transitions from pending,
-  // so a concurrent in-app decision or a duplicate delivery cannot both win.
-  const [updated] = await db
-    .update(onbApprovals)
-    .set({
-      status: decision,
-      decidedBy,
-      comment: opts.bodyText ? opts.bodyText.slice(0, 500) : null,
-      decidedAt: new Date(),
-    })
-    .where(and(
-      eq(onbApprovals.id, approvalId),
-      eq(onbApprovals.organizationId, opts.organizationId),
-      eq(onbApprovals.status, "pending"),
-    ))
-    .returning();
-  if (!updated) return { outcome: "already-decided", approvalId };
-
-  resumeAfterDecision({
-    caseId: a.caseId,
-    approved: decision === "approved",
+  const result = await decideApproval({
+    organizationId: opts.organizationId,
+    approvalId,
+    decision,
+    expectedVersion: reference.version,
     decidedBy,
     comment: opts.bodyText ? opts.bodyText.slice(0, 500) : null,
-    recommendation: a.recommendation,
-    ruleRef: a.ruleRef,
-    hitlPattern: a.hitlPattern,
-    resumeAction: a.resumeAction ?? "none",
+    sourceMessageId: opts.sourceMessageId,
+    sourceAddress: opts.fromAddress,
   });
+  if (result.outcome === "not-found") return { outcome: "not-found", approvalId };
+  if (result.outcome === "stale") {
+    return {
+      outcome: result.reason === "already-decided" ? "already-decided" : "stale",
+      approvalId,
+    };
+  }
   return { outcome: "decided", approvalId };
 }
 
@@ -323,6 +325,7 @@ async function pollOnce(organizationId: string): Promise<void> {
       subject,
       bodyText,
       approver,
+      sourceMessageId: msg.id,
     });
     // Messages that can't belong to any approval are left unrecorded (they
     // may be a hire reply handled by the main inbound poller). Everything
@@ -330,7 +333,11 @@ async function pollOnce(organizationId: string): Promise<void> {
     if (outcome === "not-approver" || outcome === "no-ref" || outcome === "not-found") continue;
 
     const [a] = await db
-      .select({ caseId: onbApprovals.caseId, organizationId: onbApprovals.organizationId })
+      .select({
+        caseId: onbApprovals.caseId,
+        organizationId: onbApprovals.organizationId,
+        version: onbApprovals.version,
+      })
       .from(onbApprovals)
       .where(and(
         eq(onbApprovals.id, approvalId!),
@@ -347,7 +354,7 @@ async function pollOnce(organizationId: string): Promise<void> {
       externalMessageId: msg.id,
     });
     console.log(
-      `[approver-email] reply from approver for ${approvalRef(approvalId!)}: ${outcome} (gmail ${msg.id})`,
+      `[approver-email] reply from approver for ${approvalRef(approvalId!, a.version ?? 1)}: ${outcome} (gmail ${msg.id})`,
     );
   }
 }

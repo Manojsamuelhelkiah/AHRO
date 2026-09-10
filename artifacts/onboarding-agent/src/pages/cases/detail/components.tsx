@@ -4,6 +4,7 @@ import { ChevronDown, Mail, Phone, PhoneCall } from 'lucide-react';
 import { Badge, Button, cn } from '@/components/ui-shared';
 import { useStartOnboardingVoiceCall, getListOnboardingCaseCommunicationsQueryKey, getListOnboardingCaseEventsQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { ContactDialog } from './ContactDialog';
 
 export function StatusBadgeText({ status }: { status: string }) {
   const s = status.toLowerCase();
@@ -31,9 +32,10 @@ export function StatusDot({ status }: { status: string }) {
   return <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: bg }} />;
 }
 
-export function CaseHeader({ c, caseId }: { c: any, caseId: number }) {
+export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setTab?: (t: string) => void }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [actionOpen, setActionOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const startCall = useStartOnboardingVoiceCall();
   const queryClient = useQueryClient();
 
@@ -81,7 +83,14 @@ export function CaseHeader({ c, caseId }: { c: any, caseId: number }) {
            )}
         </div>
          <div className="flex shrink-0 items-center gap-2 self-start lg:self-auto relative">
-          <Button variant="secondary" className="gap-2"><Mail className="w-4 h-4"/> Contact</Button>
+          {setTab && (
+            <Button variant="outline" className="gap-2 text-[var(--primary)] border-[var(--primary)] hover:bg-[var(--primary-light-bg)]" onClick={() => setTab('Ask AI')}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sparkles"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+              Ask about this case
+            </Button>
+          )}
+          <Button variant="secondary" className="gap-2" onClick={() => setContactOpen(true)}><Mail className="w-4 h-4"/> Contact</Button>
+          <ContactDialog caseId={caseId} open={contactOpen} onOpenChange={setContactOpen} />
           <div className="relative">
             <Button onClick={() => setActionOpen(!actionOpen)} className="gap-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] border-transparent">
               Take Action <ChevronDown className="w-4 h-4" />
@@ -158,7 +167,7 @@ export function CaseHealthStrip({ c, pendingApprovals }: { c: any, pendingApprov
 }
 
 export function CaseTabs({ activeTab, setTab }: { activeTab: string, setTab: (t: string) => void }) {
-  const tabs = ['Overview', 'Tasks', 'Documents', 'Activity', 'Communications', 'Audit'];
+  const tabs = ['Overview', 'Tasks', 'Documents', 'Activity', 'Communications', 'Audit', 'Ask AI'];
   return (
     <div className="flex overflow-x-auto border-b border-[var(--border)] mb-6 hide-scrollbar -mx-6 md:mx-0 px-6 md:px-0">
       {tabs.map(t => (
@@ -169,7 +178,8 @@ export function CaseTabs({ activeTab, setTab }: { activeTab: string, setTab: (t:
             "px-4 py-3 text-[var(--text-sm)] font-semibold whitespace-nowrap border-b-2 transition-colors",
             activeTab === t 
               ? "border-[var(--primary)] text-[var(--primary)]" 
-              : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]"
+              : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]",
+            t === 'Ask AI' && activeTab !== t ? "text-[var(--primary)] font-bold" : ""
           )}
         >
           {t}

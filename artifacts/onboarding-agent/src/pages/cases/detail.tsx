@@ -14,7 +14,8 @@ import {
   getListOnboardingApprovalsQueryKey,
   getListOnboardingCaseRecordsQueryKey,
   useGetOnboardingChannels,
-  getGetOnboardingChannelsQueryKey
+  getGetOnboardingChannelsQueryKey,
+  getPinnedOrganizationIdForPage
 } from '@workspace/api-client-react';
 
 import { useUser } from '@clerk/react';
@@ -24,6 +25,7 @@ import { useOrganizationRole } from '../../hooks/use-organization-role';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
 import { DocumentsTab } from './detail/documents-tab';
+import { ExplainabilityTab } from './detail/explainability-tab';
 import { PortalControls } from './detail/portal-controls';
 
 export function CaseDetailPage() {
@@ -92,7 +94,7 @@ export function CaseDetailPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 md:px-8">
-      <CaseHeader c={c} caseId={caseId} />
+      <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
       
       <GatewaysStrip c={c} isHR={isHR} />
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} />
@@ -120,6 +122,7 @@ export function CaseDetailPage() {
         {activeTab === 'Activity' && <ActivityTab events={events || []} />}
         {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} />}
         {activeTab === 'Audit' && <AuditTab events={events || []} approvals={approvals} records={records || []} />}
+        {activeTab === 'Ask AI' && <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />}
       </div>
     </div>
   );

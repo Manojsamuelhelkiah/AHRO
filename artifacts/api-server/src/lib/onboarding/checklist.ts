@@ -1,8 +1,9 @@
 import { db } from "@workspace/db";
-import { onbApprovals, onbCases, onbEvents, type OnbReadinessItemRow } from "@workspace/db/schema";
+import { onbCases, onbEvents, type OnbReadinessItemRow } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { LEGACY_CHECKLIST, mandatoryChecklistReady } from "./settings";
 import { resumeChecklistOrchestration } from "./engine";
+import { reopenApprovalInTransaction } from "./approval-version";
 
 const CONNECTOR_MANAGED_IDS = new Set(LEGACY_CHECKLIST.map((item) => item.id));
 
@@ -50,15 +51,13 @@ export async function setCustomChecklistItemStatus(opts: {
       definition.mandatory &&
       (c.lifecycleStage === "day1-review" || c.lifecycleStage === "complete");
     if (shouldDemote) {
-      await tx.update(onbApprovals).set({
-        status: "pending", decidedAt: null, decidedBy: null,
-        comment: "Automatically reopened because a mandatory readiness item changed; fresh final review is required.",
-      }).where(and(
-        eq(onbApprovals.organizationId, opts.organizationId),
-        eq(onbApprovals.caseId, opts.caseId),
-        eq(onbApprovals.status, "approved"),
-        eq(onbApprovals.idempotencyKey, `gateway-c:${opts.caseId}:human-queue`),
-      ));
+      await reopenApprovalInTransaction(tx, {
+        organizationId: opts.organizationId,
+        caseId: opts.caseId,
+        idempotencyKey: `gateway-c:${opts.caseId}:human-queue`,
+        reason: "Automatically reopened because a mandatory readiness item changed; fresh final review is required.",
+        actor: opts.reviewer,
+      });
     }
     const [updated] = await tx.update(onbCases).set({
       readiness,

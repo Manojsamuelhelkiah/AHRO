@@ -695,9 +695,14 @@ export async function startVoiceCall(opts: {
   caseId: number;
   scenario: VoiceScenario;
   reason?: string;
+  /** Optional policy-generated goal supplied by contextual contact. */
+  goal?: string;
 }): Promise<{ status: "calling" | "logged-only" | "failed"; note: string; token?: string }> {
   const { c } = await caseFacts(opts.caseId);
   const label = opts.scenario === "day-before" ? "day-before check-in" : "SLA escalation";
+  const contextualReason = [opts.reason, opts.goal && opts.goal !== opts.reason
+    ? `Contextual action goal: ${opts.goal.slice(0, 500)}`
+    : null].filter(Boolean).join(" — ") || null;
 
   if (!c.workerPhone) {
     return { status: "failed", note: "This hire has no phone number on file." };
@@ -708,7 +713,7 @@ export async function startVoiceCall(opts: {
     caseId: opts.caseId,
     organizationId: c.organizationId,
     scenario: opts.scenario,
-    reason: opts.reason ?? null,
+    reason: contextualReason,
     turns: [],
     decisions: [],
     finalized: false,

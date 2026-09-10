@@ -2281,6 +2281,110 @@ export interface OnbCase {
   updatedAt: string;
 }
 
+export type OnbCaseExplanationHistoryEntryRole = typeof OnbCaseExplanationHistoryEntryRole[keyof typeof OnbCaseExplanationHistoryEntryRole];
+
+
+export const OnbCaseExplanationHistoryEntryRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export interface OnbCaseExplanationHistoryEntry {
+  role: OnbCaseExplanationHistoryEntryRole;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  content: string;
+}
+
+/**
+ * A bounded question and untrusted in-memory conversation context; history is never evidence.
+ */
+export interface OnbCaseExplanationInput {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  question: string;
+  /** @maxItems 8 */
+  history?: OnbCaseExplanationHistoryEntry[];
+}
+
+export type OnbCaseExplanationParagraphKind = typeof OnbCaseExplanationParagraphKind[keyof typeof OnbCaseExplanationParagraphKind];
+
+
+export const OnbCaseExplanationParagraphKind = {
+  supported: 'supported',
+  'not-recorded': 'not-recorded',
+} as const;
+
+export interface OnbCaseExplanationParagraph {
+  /**
+     * @minLength 1
+     * @maxLength 1500
+     */
+  text: string;
+  /**
+     * @maxItems 12
+     * @items.minLength 1
+     * @items.maxLength 160
+     */
+  sourceIds: string[];
+  kind: OnbCaseExplanationParagraphKind;
+}
+
+export type OnbCaseExplanationSourceTab = typeof OnbCaseExplanationSourceTab[keyof typeof OnbCaseExplanationSourceTab];
+
+
+export const OnbCaseExplanationSourceTab = {
+  overview: 'overview',
+  activity: 'activity',
+  communications: 'communications',
+  documents: 'documents',
+  approvals: 'approvals',
+} as const;
+
+export interface OnbCaseExplanationSource {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  kind: string;
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  excerpt: string;
+  /** @nullable */
+  occurredAt: string | null;
+  tab: OnbCaseExplanationSourceTab;
+}
+
+export interface OnbCaseExplanation {
+  asOf: string;
+  /**
+     * @minItems 1
+     * @maxItems 12
+     */
+  paragraphs: OnbCaseExplanationParagraph[];
+  /** @maxItems 100 */
+  sources: OnbCaseExplanationSource[];
+  /** @items.maxLength 500 */
+  limitations: string[];
+  truncated: boolean;
+}
+
 export interface OnbOfferAcceptanceConfirmation {
   /** @minLength 1 */
   note: string;
@@ -2633,6 +2737,8 @@ export interface OnbRecordsEvidenceItem {
 
 export interface OnbApproval {
   id: number;
+  /** @minimum 1 */
+  version: number;
   caseId: number;
   caseWorkerName: string;
   agent: string;
@@ -2662,6 +2768,39 @@ export interface OnbApprovalDecision {
   /** approved | rejected */
   decision: string;
   comment?: string;
+  /** @minimum 1 */
+  expectedVersion: number;
+}
+
+export type OnbApprovalHistoryEventType = typeof OnbApprovalHistoryEventType[keyof typeof OnbApprovalHistoryEventType];
+
+
+export const OnbApprovalHistoryEventType = {
+  decision: 'decision',
+  reopened: 'reopened',
+} as const;
+
+export type OnbApprovalHistorySnapshot = { [key: string]: unknown };
+
+export interface OnbApprovalHistory {
+  id: number;
+  organizationId: string;
+  approvalId: number;
+  caseId: number;
+  /** @minimum 1 */
+  version: number;
+  eventType: OnbApprovalHistoryEventType;
+  status: string;
+  /** @nullable */
+  decidedBy: string | null;
+  /** @nullable */
+  comment: string | null;
+  /** @nullable */
+  decidedAt: string | null;
+  /** @nullable */
+  reason: string | null;
+  snapshot: OnbApprovalHistorySnapshot;
+  createdAt: string;
 }
 
 export type OnbEvidenceDecisionDecision = typeof OnbEvidenceDecisionDecision[keyof typeof OnbEvidenceDecisionDecision];
@@ -3388,6 +3527,298 @@ export interface UpdateOnbSettings {
   candidateLinkRetentionDays?: UpdateOnbSettingsCandidateLinkRetentionDays;
 }
 
+export type OnbReadinessSlaStreamKey = typeof OnbReadinessSlaStreamKey[keyof typeof OnbReadinessSlaStreamKey];
+
+
+export const OnbReadinessSlaStreamKey = {
+  documentation: 'documentation',
+  bgv: 'bgv',
+  hris: 'hris',
+  'it-assets': 'it-assets',
+  payroll: 'payroll',
+} as const;
+
+export interface OnbReadinessSlaStream {
+  key: OnbReadinessSlaStreamKey;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  label: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  weight: number;
+}
+
+export type OnbReadinessSlaActionStreamKey = typeof OnbReadinessSlaActionStreamKey[keyof typeof OnbReadinessSlaActionStreamKey];
+
+
+export const OnbReadinessSlaActionStreamKey = {
+  documentation: 'documentation',
+  bgv: 'bgv',
+  hris: 'hris',
+  'it-assets': 'it-assets',
+  payroll: 'payroll',
+} as const;
+
+export type OnbReadinessSlaActionAnchor = typeof OnbReadinessSlaActionAnchor[keyof typeof OnbReadinessSlaActionAnchor];
+
+
+export const OnbReadinessSlaActionAnchor = {
+  joining: 'joining',
+  'action-start': 'action-start',
+  'payroll-cutoff': 'payroll-cutoff',
+} as const;
+
+export type OnbReadinessSlaActionCalendar = typeof OnbReadinessSlaActionCalendar[keyof typeof OnbReadinessSlaActionCalendar];
+
+
+export const OnbReadinessSlaActionCalendar = {
+  days: 'days',
+  businessDays: 'businessDays',
+} as const;
+
+export interface OnbReadinessSlaAction {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  key: string;
+  streamKey: OnbReadinessSlaActionStreamKey;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  label: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  owner: string;
+  /** @nullable */
+  backupEmail: string | null;
+  enabled: boolean;
+  mandatory: boolean;
+  anchor: OnbReadinessSlaActionAnchor;
+  /**
+     * @minimum -3650
+     * @maximum 3650
+     */
+  offsetDays: number;
+  /** @pattern ^(?:[01]\d|2[0-3]):[0-5]\d$ */
+  deadlineLocalTime: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  timezone: string;
+  calendar: OnbReadinessSlaActionCalendar;
+  /** @items.pattern ^\d{4}-\d{2}-\d{2}$ */
+  holidayDates: string[];
+  /**
+     * @minimum 0
+     * @maximum 8760
+     */
+  warnHours: number;
+  /**
+     * @minimum 0
+     * @maximum 8760
+     */
+  escalationAfterHours: number;
+  notifyInApp: boolean;
+  notifyEmail: boolean;
+}
+
+export interface OnbReadinessSlaPolicy {
+  /**
+     * @minItems 5
+     * @maxItems 5
+     */
+  streams: OnbReadinessSlaStream[];
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  actions: OnbReadinessSlaAction[];
+}
+
+export interface OnbReadinessSlaPolicyView {
+  /** @minimum 0 */
+  version: number;
+  policy: OnbReadinessSlaPolicy;
+}
+
+export interface OnbReadinessSlaPolicyUpdate {
+  /** @minimum 0 */
+  expectedVersion: number;
+  policy: OnbReadinessSlaPolicy;
+}
+
+export type OnbReadinessSlaStreamViewKey = typeof OnbReadinessSlaStreamViewKey[keyof typeof OnbReadinessSlaStreamViewKey];
+
+
+export const OnbReadinessSlaStreamViewKey = {
+  documentation: 'documentation',
+  bgv: 'bgv',
+  hris: 'hris',
+  'it-assets': 'it-assets',
+  payroll: 'payroll',
+} as const;
+
+export type OnbReadinessSlaStreamViewStatus = typeof OnbReadinessSlaStreamViewStatus[keyof typeof OnbReadinessSlaStreamViewStatus];
+
+
+export const OnbReadinessSlaStreamViewStatus = {
+  complete: 'complete',
+  incomplete: 'incomplete',
+  'not-applicable': 'not-applicable',
+  'needs-configuration': 'needs-configuration',
+} as const;
+
+export interface OnbReadinessSlaStreamView {
+  key: OnbReadinessSlaStreamViewKey;
+  label: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  weight: number;
+  applicable: boolean;
+  status: OnbReadinessSlaStreamViewStatus;
+  /** @minimum 0 */
+  includedWeight: number;
+  /** @minimum 0 */
+  earnedWeight: number;
+  reason: string;
+  /** @nullable */
+  completedAt: string | null;
+}
+
+export type OnbReadinessSlaActionViewStatus = typeof OnbReadinessSlaActionViewStatus[keyof typeof OnbReadinessSlaActionViewStatus];
+
+
+export const OnbReadinessSlaActionViewStatus = {
+  scheduled: 'scheduled',
+  warning: 'warning',
+  breach: 'breach',
+  escalated: 'escalated',
+  resolved: 'resolved',
+  'needs-configuration': 'needs-configuration',
+} as const;
+
+export interface OnbReadinessSlaActionView {
+  key: string;
+  streamKey: string;
+  label: string;
+  owner: string;
+  /** @nullable */
+  backupEmail: string | null;
+  notifyEmail: boolean;
+  notifyInApp: boolean;
+  mandatory: boolean;
+  status: OnbReadinessSlaActionViewStatus;
+  /** @nullable */
+  dueAt: string | null;
+  /** @nullable */
+  warningAt: string | null;
+  /** @nullable */
+  escalationAt: string | null;
+  reason: string;
+}
+
+export interface OnbReadinessSlaHistory {
+  actionKey: string;
+  state: string;
+  at: string;
+  rationale: string;
+}
+
+export type OnbReadinessSlaViewBand = typeof OnbReadinessSlaViewBand[keyof typeof OnbReadinessSlaViewBand];
+
+
+export const OnbReadinessSlaViewBand = {
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+} as const;
+
+export type OnbReadinessSlaViewThresholds = {
+  green: number;
+  amberMinimum: number;
+};
+
+export interface OnbReadinessSlaView {
+  /** @minimum 1 */
+  caseId: number;
+  enrolled: boolean;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  snapshotVersion: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  policyVersion: number | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  score: number;
+  band: OnbReadinessSlaViewBand;
+  passes: boolean;
+  thresholds: OnbReadinessSlaViewThresholds;
+  streams: OnbReadinessSlaStreamView[];
+  actions: OnbReadinessSlaActionView[];
+  /** @nullable */
+  payrollCutoff: string | null;
+  history: OnbReadinessSlaHistory[];
+  reason: string;
+}
+
+export interface OnbReadinessSlaPayrollCutoffInput {
+  /** @minimum 1 */
+  expectedSnapshotVersion: number;
+  payrollCutoff: string;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
+}
+
+export type OnbReadinessSlaAttestationInputStream = typeof OnbReadinessSlaAttestationInputStream[keyof typeof OnbReadinessSlaAttestationInputStream];
+
+
+export const OnbReadinessSlaAttestationInputStream = {
+  hris: 'hris',
+} as const;
+
+export interface OnbReadinessSlaAttestationInput {
+  stream: OnbReadinessSlaAttestationInputStream;
+  complete: boolean;
+  /** @minimum 1 */
+  expectedSnapshotVersion: number;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
+}
+
+export interface OnbReadinessSlaRebaseInput {
+  /** @minimum 1 */
+  expectedSnapshotVersion: number;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
+}
+
 /**
  * Complete pricing rate snapshot (all quote-critical rates).
  */
@@ -3568,3 +3999,4 @@ export const GetOnboardingOutcomeKpisDomain = {
   Onboarding: 'Onboarding',
   All_domains: 'All domains',
 } as const;
+

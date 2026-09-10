@@ -526,17 +526,24 @@ function ActivityRow({ event, last }: { event: OnbEvent; last: boolean }) {
 }
 
 function AttentionRow({ approval, last }: { approval: OnbApproval; last: boolean }) {
-  const priority = approval.hitlPattern === 'hard-block' ? 'High priority' : 'Medium priority';
+  const isSla = approval.ruleRef?.includes('sla') || approval.ruleRef?.includes('readiness') || approval.agent === 'readiness-watcher' || approval.agent === 'system-watcher';
+  const isBreached = approval.recommendation?.toLowerCase().includes('breach') || approval.rationale?.toLowerCase().includes('breach');
+  const priority = isBreached || approval.hitlPattern === 'hard-block' ? 'High priority' : 'Medium priority';
+  const pColor = isBreached || approval.hitlPattern === 'hard-block' ? 'var(--status-red)' : 'var(--status-amber)';
+
   return (
     <li>
-      <Link href={`/approvals`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open intervention for ${approval.caseWorkerName}`}>
+      <Link href={isSla ? `/cases/${approval.caseId}` : `/approvals`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open intervention for ${approval.caseWorkerName}`}>
         <div style={{ padding: '10px var(--space-lg)', borderBottom: last ? 'none' : '1px solid var(--border)' }}>
-          <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {approval.hitlPattern === 'hard-block' ? 'Decision required' : 'Approval required'} — {approval.caseWorkerName}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {isSla ? (isBreached ? 'SLA Breached' : 'SLA Action Due') : (approval.hitlPattern === 'hard-block' ? 'Decision required' : 'Approval required')} — {approval.caseWorkerName}
+            </p>
+            {isSla && <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)] border border-[var(--border)] px-1.5 py-0.5 rounded bg-[var(--surface)] shrink-0">SLA Alert</span>}
+          </div>
           <p className="line-clamp-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{approval.recommendation}</p>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
-            Onboarding · <span style={{ color: approval.hitlPattern === 'hard-block' ? 'var(--status-red)' : 'var(--status-amber)', fontWeight: 600 }}>{priority}</span> · {ago(approval.createdAt)}
+            Onboarding · <span style={{ color: pColor, fontWeight: 600 }}>{priority}</span> · {ago(approval.createdAt)}
           </p>
         </div>
       </Link>

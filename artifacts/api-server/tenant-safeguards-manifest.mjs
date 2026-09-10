@@ -31,6 +31,15 @@ export const tenantSafeguards = [
   { table: "pricing_rate_sets", phaseB: true },
   { table: "pricing_sheets", phaseB: true },
   { table: "ea_assessments", phaseB: true },
+  // Added after the historical Phase A/B migration pair; born fail-closed.
+  { table: "onb_readiness_sla_policies", phaseB: false },
+  { table: "onb_readiness_sla_snapshots", phaseB: false },
+  { table: "onb_readiness_sla_case_state", phaseB: false },
+  { table: "onb_readiness_sla_attestations", phaseB: false },
+  { table: "onb_readiness_sla_ledger", phaseB: false },
+  { table: "onb_readiness_sla_outbox", phaseB: false },
+  { table: "onb_approval_history", phaseB: false },
+  { table: "onb_approval_notifications", phaseB: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -58,4 +67,24 @@ export const expectedForeignKeys = [
     referencedTable: "onb_system_checks",
     referencedColumns: ["organization_id", "id"],
   },
+  ...[
+    "onb_readiness_sla_snapshots",
+    "onb_readiness_sla_case_state",
+    "onb_readiness_sla_attestations",
+    "onb_readiness_sla_ledger",
+    "onb_readiness_sla_outbox",
+    "onb_approval_history",
+    "onb_approval_notifications",
+  ].map((table) => ({
+    table,
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  })),
+  ...["onb_approval_history", "onb_approval_notifications"].map((table) => ({
+    table,
+    columns: ["organization_id", "approval_id"],
+    referencedTable: "onb_approvals",
+    referencedColumns: ["organization_id", "id"],
+  })),
 ];

@@ -61,8 +61,11 @@ import type {
   OnbAnalytics,
   OnbApproval,
   OnbApprovalDecision,
+  OnbApprovalHistory,
   OnbBgvStatus,
   OnbCase,
+  OnbCaseExplanation,
+  OnbCaseExplanationInput,
   OnbCaseIntake,
   OnbChannelStatus,
   OnbChannelTest,
@@ -85,6 +88,12 @@ import type {
   OnbInboundMessage,
   OnbOfferAcceptanceConfirmation,
   OnbOutcomeKpis,
+  OnbReadinessSlaAttestationInput,
+  OnbReadinessSlaPayrollCutoffInput,
+  OnbReadinessSlaPolicyUpdate,
+  OnbReadinessSlaPolicyView,
+  OnbReadinessSlaRebaseInput,
+  OnbReadinessSlaView,
   OnbScenarioDef,
   OnbSettings,
   OnbSystemWatcher,
@@ -4835,6 +4844,78 @@ export function useGetOnboardingCase<TData = Awaited<ReturnType<typeof getOnboar
 
 
 
+export const getExplainOnboardingCaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/explain`
+}
+
+/**
+ * @summary Explain a case from a fresh, read-only, server-curated evidence context
+ */
+export const explainOnboardingCase = async (id: number,
+    onbCaseExplanationInput: OnbCaseExplanationInput, options?: RequestInit): Promise<OnbCaseExplanation> => {
+
+  return customFetch<OnbCaseExplanation>(getExplainOnboardingCaseUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbCaseExplanationInput)
+  }
+);}
+
+
+
+
+
+export const getExplainOnboardingCaseMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof explainOnboardingCase>>, TError,{id: number;data: BodyType<OnbCaseExplanationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof explainOnboardingCase>>, TError,{id: number;data: BodyType<OnbCaseExplanationInput>}, TContext> => {
+
+const mutationKey = ['explainOnboardingCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof explainOnboardingCase>>, {id: number;data: BodyType<OnbCaseExplanationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  explainOnboardingCase(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExplainOnboardingCaseMutationResult = NonNullable<Awaited<ReturnType<typeof explainOnboardingCase>>>
+    export type ExplainOnboardingCaseMutationBody = BodyType<OnbCaseExplanationInput>
+    export type ExplainOnboardingCaseMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Explain a case from a fresh, read-only, server-curated evidence context
+ */
+export const useExplainOnboardingCase = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof explainOnboardingCase>>, TError,{id: number;data: BodyType<OnbCaseExplanationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof explainOnboardingCase>>,
+        TError,
+        {id: number;data: BodyType<OnbCaseExplanationInput>},
+        TContext
+      > => {
+      return useMutation(getExplainOnboardingCaseMutationOptions(options));
+    }
+
 export const getConfirmOnboardingOfferAcceptanceUrl = (id: number,) => {
 
 
@@ -6841,6 +6922,83 @@ export const useDecideOnboardingApproval = <TError = ErrorType<ErrorMessage>,
       return useMutation(getDecideOnboardingApprovalMutationOptions(options));
     }
 
+export const getGetOnboardingApprovalHistoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/approvals/${id}/history`
+}
+
+/**
+ * @summary Immutable versioned audit history for a human approval
+ */
+export const getOnboardingApprovalHistory = async (id: number, options?: RequestInit): Promise<OnbApprovalHistory[]> => {
+
+  return customFetch<OnbApprovalHistory[]>(getGetOnboardingApprovalHistoryUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingApprovalHistoryQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/approvals/${id}/history`
+    ] as const;
+    }
+
+
+export const getGetOnboardingApprovalHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingApprovalHistory>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingApprovalHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingApprovalHistoryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingApprovalHistory>>> = ({ signal }) => getOnboardingApprovalHistory(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingApprovalHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingApprovalHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingApprovalHistory>>>
+export type GetOnboardingApprovalHistoryQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Immutable versioned audit history for a human approval
+ */
+
+export function useGetOnboardingApprovalHistory<TData = Awaited<ReturnType<typeof getOnboardingApprovalHistory>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingApprovalHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingApprovalHistoryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getListOnboardingConnectorsUrl = () => {
 
 
@@ -7672,6 +7830,518 @@ export const useUpdateOnboardingSettings = <TError = ErrorType<ErrorMessage>,
       return useMutation(getUpdateOnboardingSettingsMutationOptions(options));
     }
 
+export const getGetOnboardingReadinessSlaPolicyUrl = () => {
+
+
+
+
+  return `/api/onboarding/readiness-sla/policy`
+}
+
+/**
+ * @summary Get the effective weighted onboarding readiness SLA policy
+ */
+export const getOnboardingReadinessSlaPolicy = async ( options?: RequestInit): Promise<OnbReadinessSlaPolicyView> => {
+
+  return customFetch<OnbReadinessSlaPolicyView>(getGetOnboardingReadinessSlaPolicyUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingReadinessSlaPolicyQueryKey = () => {
+    return [
+    `/api/onboarding/readiness-sla/policy`
+    ] as const;
+    }
+
+
+export const getGetOnboardingReadinessSlaPolicyQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingReadinessSlaPolicy>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingReadinessSlaPolicy>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingReadinessSlaPolicyQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingReadinessSlaPolicy>>> = ({ signal }) => getOnboardingReadinessSlaPolicy({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingReadinessSlaPolicy>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingReadinessSlaPolicyQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingReadinessSlaPolicy>>>
+export type GetOnboardingReadinessSlaPolicyQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the effective weighted onboarding readiness SLA policy
+ */
+
+export function useGetOnboardingReadinessSlaPolicy<TData = Awaited<ReturnType<typeof getOnboardingReadinessSlaPolicy>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingReadinessSlaPolicy>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingReadinessSlaPolicyQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateOnboardingReadinessSlaPolicyUrl = () => {
+
+
+
+
+  return `/api/onboarding/readiness-sla/policy`
+}
+
+/**
+ * @summary Publish a serialized organization readiness SLA policy version
+ */
+export const updateOnboardingReadinessSlaPolicy = async (onbReadinessSlaPolicyUpdate: OnbReadinessSlaPolicyUpdate, options?: RequestInit): Promise<OnbReadinessSlaPolicyView> => {
+
+  return customFetch<OnbReadinessSlaPolicyView>(getUpdateOnboardingReadinessSlaPolicyUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbReadinessSlaPolicyUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateOnboardingReadinessSlaPolicyMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingReadinessSlaPolicy>>, TError,{data: BodyType<OnbReadinessSlaPolicyUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingReadinessSlaPolicy>>, TError,{data: BodyType<OnbReadinessSlaPolicyUpdate>}, TContext> => {
+
+const mutationKey = ['updateOnboardingReadinessSlaPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOnboardingReadinessSlaPolicy>>, {data: BodyType<OnbReadinessSlaPolicyUpdate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateOnboardingReadinessSlaPolicy(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOnboardingReadinessSlaPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof updateOnboardingReadinessSlaPolicy>>>
+    export type UpdateOnboardingReadinessSlaPolicyMutationBody = BodyType<OnbReadinessSlaPolicyUpdate>
+    export type UpdateOnboardingReadinessSlaPolicyMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Publish a serialized organization readiness SLA policy version
+ */
+export const useUpdateOnboardingReadinessSlaPolicy = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingReadinessSlaPolicy>>, TError,{data: BodyType<OnbReadinessSlaPolicyUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOnboardingReadinessSlaPolicy>>,
+        TError,
+        {data: BodyType<OnbReadinessSlaPolicyUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateOnboardingReadinessSlaPolicyMutationOptions(options));
+    }
+
+export const getGetOnboardingCaseReadinessSlaUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/readiness-sla`
+}
+
+/**
+ * @summary Get the case-scoped weighted readiness score and stream details
+ */
+export const getOnboardingCaseReadinessSla = async (id: number, options?: RequestInit): Promise<OnbReadinessSlaView> => {
+
+  return customFetch<OnbReadinessSlaView>(getGetOnboardingCaseReadinessSlaUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingCaseReadinessSlaQueryKey = (id: number,) => {
+    return [
+    `/api/onboarding/cases/${id}/readiness-sla`
+    ] as const;
+    }
+
+
+export const getGetOnboardingCaseReadinessSlaQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingCaseReadinessSla>>, TError = ErrorType<ErrorMessage>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseReadinessSla>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingCaseReadinessSlaQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingCaseReadinessSla>>> = ({ signal }) => getOnboardingCaseReadinessSla(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseReadinessSla>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingCaseReadinessSlaQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingCaseReadinessSla>>>
+export type GetOnboardingCaseReadinessSlaQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get the case-scoped weighted readiness score and stream details
+ */
+
+export function useGetOnboardingCaseReadinessSla<TData = Awaited<ReturnType<typeof getOnboardingCaseReadinessSla>>, TError = ErrorType<ErrorMessage>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseReadinessSla>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingCaseReadinessSlaQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getEnrollOnboardingCaseReadinessSlaUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/readiness-sla/enrollment`
+}
+
+/**
+ * @summary Explicitly enroll an active case in a readiness SLA snapshot
+ */
+export const enrollOnboardingCaseReadinessSla = async (id: number, options?: RequestInit): Promise<OnbReadinessSlaView> => {
+
+  return customFetch<OnbReadinessSlaView>(getEnrollOnboardingCaseReadinessSlaUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getEnrollOnboardingCaseReadinessSlaMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enrollOnboardingCaseReadinessSla>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof enrollOnboardingCaseReadinessSla>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['enrollOnboardingCaseReadinessSla'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof enrollOnboardingCaseReadinessSla>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  enrollOnboardingCaseReadinessSla(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EnrollOnboardingCaseReadinessSlaMutationResult = NonNullable<Awaited<ReturnType<typeof enrollOnboardingCaseReadinessSla>>>
+
+    export type EnrollOnboardingCaseReadinessSlaMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Explicitly enroll an active case in a readiness SLA snapshot
+ */
+export const useEnrollOnboardingCaseReadinessSla = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enrollOnboardingCaseReadinessSla>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof enrollOnboardingCaseReadinessSla>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getEnrollOnboardingCaseReadinessSlaMutationOptions(options));
+    }
+
+export const getSetOnboardingPayrollCutoffUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/readiness-sla/payroll-cutoff`
+}
+
+/**
+ * @summary Set an explicit, audited payroll cutoff for a case
+ */
+export const setOnboardingPayrollCutoff = async (id: number,
+    onbReadinessSlaPayrollCutoffInput: OnbReadinessSlaPayrollCutoffInput, options?: RequestInit): Promise<OnbReadinessSlaView> => {
+
+  return customFetch<OnbReadinessSlaView>(getSetOnboardingPayrollCutoffUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbReadinessSlaPayrollCutoffInput)
+  }
+);}
+
+
+
+
+
+export const getSetOnboardingPayrollCutoffMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setOnboardingPayrollCutoff>>, TError,{id: number;data: BodyType<OnbReadinessSlaPayrollCutoffInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setOnboardingPayrollCutoff>>, TError,{id: number;data: BodyType<OnbReadinessSlaPayrollCutoffInput>}, TContext> => {
+
+const mutationKey = ['setOnboardingPayrollCutoff'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setOnboardingPayrollCutoff>>, {id: number;data: BodyType<OnbReadinessSlaPayrollCutoffInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setOnboardingPayrollCutoff(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetOnboardingPayrollCutoffMutationResult = NonNullable<Awaited<ReturnType<typeof setOnboardingPayrollCutoff>>>
+    export type SetOnboardingPayrollCutoffMutationBody = BodyType<OnbReadinessSlaPayrollCutoffInput>
+    export type SetOnboardingPayrollCutoffMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Set an explicit, audited payroll cutoff for a case
+ */
+export const useSetOnboardingPayrollCutoff = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setOnboardingPayrollCutoff>>, TError,{id: number;data: BodyType<OnbReadinessSlaPayrollCutoffInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setOnboardingPayrollCutoff>>,
+        TError,
+        {id: number;data: BodyType<OnbReadinessSlaPayrollCutoffInput>},
+        TContext
+      > => {
+      return useMutation(getSetOnboardingPayrollCutoffMutationOptions(options));
+    }
+
+export const getAttestOnboardingReadinessUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/readiness-sla/attestations`
+}
+
+/**
+ * @summary Record a separate HRIS readiness attestation
+ */
+export const attestOnboardingReadiness = async (id: number,
+    onbReadinessSlaAttestationInput: OnbReadinessSlaAttestationInput, options?: RequestInit): Promise<OnbReadinessSlaView> => {
+
+  return customFetch<OnbReadinessSlaView>(getAttestOnboardingReadinessUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbReadinessSlaAttestationInput)
+  }
+);}
+
+
+
+
+
+export const getAttestOnboardingReadinessMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attestOnboardingReadiness>>, TError,{id: number;data: BodyType<OnbReadinessSlaAttestationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof attestOnboardingReadiness>>, TError,{id: number;data: BodyType<OnbReadinessSlaAttestationInput>}, TContext> => {
+
+const mutationKey = ['attestOnboardingReadiness'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof attestOnboardingReadiness>>, {id: number;data: BodyType<OnbReadinessSlaAttestationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  attestOnboardingReadiness(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AttestOnboardingReadinessMutationResult = NonNullable<Awaited<ReturnType<typeof attestOnboardingReadiness>>>
+    export type AttestOnboardingReadinessMutationBody = BodyType<OnbReadinessSlaAttestationInput>
+    export type AttestOnboardingReadinessMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Record a separate HRIS readiness attestation
+ */
+export const useAttestOnboardingReadiness = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attestOnboardingReadiness>>, TError,{id: number;data: BodyType<OnbReadinessSlaAttestationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof attestOnboardingReadiness>>,
+        TError,
+        {id: number;data: BodyType<OnbReadinessSlaAttestationInput>},
+        TContext
+      > => {
+      return useMutation(getAttestOnboardingReadinessMutationOptions(options));
+    }
+
+export const getRebaseOnboardingReadinessSlaUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/readiness-sla/rebase`
+}
+
+/**
+ * @summary Explicitly rebase a case readiness policy snapshot with an audit reason
+ */
+export const rebaseOnboardingReadinessSla = async (id: number,
+    onbReadinessSlaRebaseInput: OnbReadinessSlaRebaseInput, options?: RequestInit): Promise<OnbReadinessSlaView> => {
+
+  return customFetch<OnbReadinessSlaView>(getRebaseOnboardingReadinessSlaUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbReadinessSlaRebaseInput)
+  }
+);}
+
+
+
+
+
+export const getRebaseOnboardingReadinessSlaMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rebaseOnboardingReadinessSla>>, TError,{id: number;data: BodyType<OnbReadinessSlaRebaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rebaseOnboardingReadinessSla>>, TError,{id: number;data: BodyType<OnbReadinessSlaRebaseInput>}, TContext> => {
+
+const mutationKey = ['rebaseOnboardingReadinessSla'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rebaseOnboardingReadinessSla>>, {id: number;data: BodyType<OnbReadinessSlaRebaseInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rebaseOnboardingReadinessSla(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RebaseOnboardingReadinessSlaMutationResult = NonNullable<Awaited<ReturnType<typeof rebaseOnboardingReadinessSla>>>
+    export type RebaseOnboardingReadinessSlaMutationBody = BodyType<OnbReadinessSlaRebaseInput>
+    export type RebaseOnboardingReadinessSlaMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Explicitly rebase a case readiness policy snapshot with an audit reason
+ */
+export const useRebaseOnboardingReadinessSla = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rebaseOnboardingReadinessSla>>, TError,{id: number;data: BodyType<OnbReadinessSlaRebaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rebaseOnboardingReadinessSla>>,
+        TError,
+        {id: number;data: BodyType<OnbReadinessSlaRebaseInput>},
+        TContext
+      > => {
+      return useMutation(getRebaseOnboardingReadinessSlaMutationOptions(options));
+    }
+
 export const getListPricingRateSetsUrl = () => {
 
 
@@ -7819,3 +8489,4 @@ export const useCreatePricingRateSet = <TError = ErrorType<ErrorMessage>,
       > => {
       return useMutation(getCreatePricingRateSetMutationOptions(options));
     }
+

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   approvalRef,
   matchApprovalRef,
+  matchApprovalVersionRef,
   parseApproverDecision,
   senderIsApprover,
   composeApprovalEmail,
@@ -20,6 +21,22 @@ test("matchApprovalRef ignores text without a ref", () => {
   assert.equal(matchApprovalRef("I approve this"), null);
   assert.equal(matchApprovalRef("case #42 looks fine"), null);
   assert.equal(matchApprovalRef("MAP-42 is a codename"), null); // word boundary
+});
+
+test("versioned references fail closed when an email mixes cycles", () => {
+  assert.deepEqual(matchApprovalVersionRef("Re: [AP-42-V2]"), {
+    approvalId: 42,
+    version: 2,
+    legacy: false,
+  });
+  assert.deepEqual(matchApprovalVersionRef("Re: [AP-42]"), {
+    approvalId: 42,
+    version: 1,
+    legacy: true,
+  });
+  assert.equal(matchApprovalVersionRef("AP-42-V2 AP-42-V3"), null);
+  assert.equal(matchApprovalVersionRef("AP-42-V2 AP-42"), null);
+  assert.equal(matchApprovalVersionRef("AP-42 AP-43"), null);
 });
 
 /* --------------------------- decisions --------------------------- */

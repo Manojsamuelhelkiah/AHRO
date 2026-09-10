@@ -6699,6 +6699,74 @@ export const GetOnboardingCaseResponse = zod.object({
 
 
 /**
+ * @summary Explain a case from a fresh, read-only, server-curated evidence context
+ */
+
+
+
+export const ExplainOnboardingCaseParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const explainOnboardingCaseBodyQuestionMax = 2000;
+
+export const explainOnboardingCaseBodyHistoryItemContentMax = 4000;
+
+export const explainOnboardingCaseBodyHistoryMax = 8;
+
+
+
+export const ExplainOnboardingCaseBody = zod.object({
+  "question": zod.string().min(1).max(explainOnboardingCaseBodyQuestionMax),
+  "history": zod.array(zod.object({
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string().min(1).max(explainOnboardingCaseBodyHistoryItemContentMax)
+})).max(explainOnboardingCaseBodyHistoryMax).optional()
+}).describe('A bounded question and untrusted in-memory conversation context; history is never evidence.')
+
+export const explainOnboardingCaseResponseParagraphsItemTextMax = 1500;
+
+export const explainOnboardingCaseResponseParagraphsItemSourceIdsItemMax = 160;
+
+export const explainOnboardingCaseResponseParagraphsItemSourceIdsMax = 12;
+
+export const explainOnboardingCaseResponseParagraphsMax = 12;
+
+export const explainOnboardingCaseResponseSourcesItemIdMax = 160;
+
+export const explainOnboardingCaseResponseSourcesItemKindMax = 80;
+
+export const explainOnboardingCaseResponseSourcesItemTitleMax = 240;
+
+export const explainOnboardingCaseResponseSourcesItemExcerptMax = 1000;
+
+export const explainOnboardingCaseResponseSourcesMax = 100;
+
+export const explainOnboardingCaseResponseLimitationsItemMax = 500;
+
+
+
+export const ExplainOnboardingCaseResponse = zod.object({
+  "asOf": zod.coerce.date(),
+  "paragraphs": zod.array(zod.object({
+  "text": zod.string().min(1).max(explainOnboardingCaseResponseParagraphsItemTextMax),
+  "sourceIds": zod.array(zod.string().min(1).max(explainOnboardingCaseResponseParagraphsItemSourceIdsItemMax)).max(explainOnboardingCaseResponseParagraphsItemSourceIdsMax),
+  "kind": zod.enum(['supported', 'not-recorded'])
+})).min(1).max(explainOnboardingCaseResponseParagraphsMax),
+  "sources": zod.array(zod.object({
+  "id": zod.string().min(1).max(explainOnboardingCaseResponseSourcesItemIdMax),
+  "kind": zod.string().min(1).max(explainOnboardingCaseResponseSourcesItemKindMax),
+  "title": zod.string().min(1).max(explainOnboardingCaseResponseSourcesItemTitleMax),
+  "excerpt": zod.string().min(1).max(explainOnboardingCaseResponseSourcesItemExcerptMax),
+  "occurredAt": zod.coerce.date().nullable(),
+  "tab": zod.enum(['overview', 'activity', 'communications', 'documents', 'approvals'])
+})).max(explainOnboardingCaseResponseSourcesMax),
+  "limitations": zod.array(zod.string().max(explainOnboardingCaseResponseLimitationsItemMax)),
+  "truncated": zod.boolean()
+})
+
+
+/**
  * @summary Record the HR confirmation of the candidate's offer-acceptance package and release Gate A
  */
 
@@ -7820,8 +7888,12 @@ export const ListOnboardingApprovalsQueryParams = zod.object({
   "status": zod.coerce.string().optional()
 })
 
+
+
+
 export const ListOnboardingApprovalsResponseItem = zod.object({
   "id": zod.number(),
+  "version": zod.number().min(1),
   "caseId": zod.number(),
   "caseWorkerName": zod.string(),
   "agent": zod.string(),
@@ -7854,13 +7926,21 @@ export const DecideOnboardingApprovalParams = zod.object({
   "id": zod.coerce.number()
 })
 
+
+
+
 export const DecideOnboardingApprovalBody = zod.object({
   "decision": zod.string().describe('approved | rejected'),
-  "comment": zod.string().optional()
+  "comment": zod.string().optional(),
+  "expectedVersion": zod.number().min(1)
 })
+
+
+
 
 export const DecideOnboardingApprovalResponse = zod.object({
   "id": zod.number(),
+  "version": zod.number().min(1),
   "caseId": zod.number(),
   "caseWorkerName": zod.string(),
   "agent": zod.string(),
@@ -7883,6 +7963,37 @@ export const DecideOnboardingApprovalResponse = zod.object({
   "createdAt": zod.string(),
   "decidedAt": zod.string().nullable()
 })
+
+
+/**
+ * @summary Immutable versioned audit history for a human approval
+ */
+
+
+
+export const GetOnboardingApprovalHistoryParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+
+export const GetOnboardingApprovalHistoryResponseItem = zod.object({
+  "id": zod.number(),
+  "organizationId": zod.string(),
+  "approvalId": zod.number(),
+  "caseId": zod.number(),
+  "version": zod.number().min(1),
+  "eventType": zod.enum(['decision', 'reopened']),
+  "status": zod.string(),
+  "decidedBy": zod.string().nullable(),
+  "comment": zod.string().nullable(),
+  "decidedAt": zod.coerce.date().nullable(),
+  "reason": zod.string().nullable(),
+  "snapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+})
+export const GetOnboardingApprovalHistoryResponse = zod.array(GetOnboardingApprovalHistoryResponseItem)
 
 
 /**
@@ -8348,6 +8459,611 @@ export const UpdateOnboardingSettingsResponse = zod.object({
 
 
 /**
+ * @summary Get the effective weighted onboarding readiness SLA policy
+ */
+export const getOnboardingReadinessSlaPolicyResponseVersionMin = 0;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyStreamsItemLabelMax = 200;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMin = 0;
+export const getOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMax = 100;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyStreamsMin = 5;
+export const getOnboardingReadinessSlaPolicyResponsePolicyStreamsMax = 5;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemKeyMax = 64;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemLabelMax = 200;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemOwnerMax = 200;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMin = -3650;
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMax = 3650;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemDeadlineLocalTimeRegExp = new RegExp('^(?:[01]\\d|2[0-3]):[0-5]\\d$');
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemTimezoneMax = 100;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemHolidayDatesItemRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMin = 0;
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMax = 8760;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMin = 0;
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMax = 8760;
+
+export const getOnboardingReadinessSlaPolicyResponsePolicyActionsMax = 50;
+
+
+
+export const GetOnboardingReadinessSlaPolicyResponse = zod.object({
+  "version": zod.number().min(getOnboardingReadinessSlaPolicyResponseVersionMin),
+  "policy": zod.object({
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string().min(1).max(getOnboardingReadinessSlaPolicyResponsePolicyStreamsItemLabelMax),
+  "weight": zod.number().min(getOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMin).max(getOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMax)
+})).min(getOnboardingReadinessSlaPolicyResponsePolicyStreamsMin).max(getOnboardingReadinessSlaPolicyResponsePolicyStreamsMax),
+  "actions": zod.array(zod.object({
+  "key": zod.string().min(1).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemKeyMax),
+  "streamKey": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string().min(1).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemLabelMax),
+  "owner": zod.string().min(1).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemOwnerMax),
+  "backupEmail": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "anchor": zod.enum(['joining', 'action-start', 'payroll-cutoff']),
+  "offsetDays": zod.number().min(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMin).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMax),
+  "deadlineLocalTime": zod.string().regex(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemDeadlineLocalTimeRegExp),
+  "timezone": zod.string().min(1).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemTimezoneMax),
+  "calendar": zod.enum(['days', 'businessDays']),
+  "holidayDates": zod.array(zod.string().regex(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemHolidayDatesItemRegExp)),
+  "warnHours": zod.number().min(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMin).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMax),
+  "escalationAfterHours": zod.number().min(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMin).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMax),
+  "notifyInApp": zod.boolean(),
+  "notifyEmail": zod.boolean()
+})).min(1).max(getOnboardingReadinessSlaPolicyResponsePolicyActionsMax)
+})
+})
+
+
+/**
+ * @summary Publish a serialized organization readiness SLA policy version
+ */
+export const updateOnboardingReadinessSlaPolicyBodyExpectedVersionMin = 0;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyStreamsItemLabelMax = 200;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyStreamsItemWeightMin = 0;
+export const updateOnboardingReadinessSlaPolicyBodyPolicyStreamsItemWeightMax = 100;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyStreamsMin = 5;
+export const updateOnboardingReadinessSlaPolicyBodyPolicyStreamsMax = 5;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemKeyMax = 64;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemLabelMax = 200;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemOwnerMax = 200;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemOffsetDaysMin = -3650;
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemOffsetDaysMax = 3650;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemDeadlineLocalTimeRegExp = new RegExp('^(?:[01]\\d|2[0-3]):[0-5]\\d$');
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemTimezoneMax = 100;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemHolidayDatesItemRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemWarnHoursMin = 0;
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemWarnHoursMax = 8760;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemEscalationAfterHoursMin = 0;
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemEscalationAfterHoursMax = 8760;
+
+export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsMax = 50;
+
+
+
+export const UpdateOnboardingReadinessSlaPolicyBody = zod.object({
+  "expectedVersion": zod.number().min(updateOnboardingReadinessSlaPolicyBodyExpectedVersionMin),
+  "policy": zod.object({
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyBodyPolicyStreamsItemLabelMax),
+  "weight": zod.number().min(updateOnboardingReadinessSlaPolicyBodyPolicyStreamsItemWeightMin).max(updateOnboardingReadinessSlaPolicyBodyPolicyStreamsItemWeightMax)
+})).min(updateOnboardingReadinessSlaPolicyBodyPolicyStreamsMin).max(updateOnboardingReadinessSlaPolicyBodyPolicyStreamsMax),
+  "actions": zod.array(zod.object({
+  "key": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemKeyMax),
+  "streamKey": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemLabelMax),
+  "owner": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemOwnerMax),
+  "backupEmail": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "anchor": zod.enum(['joining', 'action-start', 'payroll-cutoff']),
+  "offsetDays": zod.number().min(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemOffsetDaysMin).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemOffsetDaysMax),
+  "deadlineLocalTime": zod.string().regex(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemDeadlineLocalTimeRegExp),
+  "timezone": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemTimezoneMax),
+  "calendar": zod.enum(['days', 'businessDays']),
+  "holidayDates": zod.array(zod.string().regex(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemHolidayDatesItemRegExp)),
+  "warnHours": zod.number().min(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemWarnHoursMin).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemWarnHoursMax),
+  "escalationAfterHours": zod.number().min(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemEscalationAfterHoursMin).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemEscalationAfterHoursMax),
+  "notifyInApp": zod.boolean(),
+  "notifyEmail": zod.boolean()
+})).min(1).max(updateOnboardingReadinessSlaPolicyBodyPolicyActionsMax)
+})
+})
+
+export const updateOnboardingReadinessSlaPolicyResponseVersionMin = 0;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyStreamsItemLabelMax = 200;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMin = 0;
+export const updateOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMax = 100;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyStreamsMin = 5;
+export const updateOnboardingReadinessSlaPolicyResponsePolicyStreamsMax = 5;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemKeyMax = 64;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemLabelMax = 200;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemOwnerMax = 200;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMin = -3650;
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMax = 3650;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemDeadlineLocalTimeRegExp = new RegExp('^(?:[01]\\d|2[0-3]):[0-5]\\d$');
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemTimezoneMax = 100;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemHolidayDatesItemRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMin = 0;
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMax = 8760;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMin = 0;
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMax = 8760;
+
+export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsMax = 50;
+
+
+
+export const UpdateOnboardingReadinessSlaPolicyResponse = zod.object({
+  "version": zod.number().min(updateOnboardingReadinessSlaPolicyResponseVersionMin),
+  "policy": zod.object({
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyResponsePolicyStreamsItemLabelMax),
+  "weight": zod.number().min(updateOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMin).max(updateOnboardingReadinessSlaPolicyResponsePolicyStreamsItemWeightMax)
+})).min(updateOnboardingReadinessSlaPolicyResponsePolicyStreamsMin).max(updateOnboardingReadinessSlaPolicyResponsePolicyStreamsMax),
+  "actions": zod.array(zod.object({
+  "key": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemKeyMax),
+  "streamKey": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemLabelMax),
+  "owner": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemOwnerMax),
+  "backupEmail": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "anchor": zod.enum(['joining', 'action-start', 'payroll-cutoff']),
+  "offsetDays": zod.number().min(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMin).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemOffsetDaysMax),
+  "deadlineLocalTime": zod.string().regex(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemDeadlineLocalTimeRegExp),
+  "timezone": zod.string().min(1).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemTimezoneMax),
+  "calendar": zod.enum(['days', 'businessDays']),
+  "holidayDates": zod.array(zod.string().regex(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemHolidayDatesItemRegExp)),
+  "warnHours": zod.number().min(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMin).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemWarnHoursMax),
+  "escalationAfterHours": zod.number().min(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMin).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationAfterHoursMax),
+  "notifyInApp": zod.boolean(),
+  "notifyEmail": zod.boolean()
+})).min(1).max(updateOnboardingReadinessSlaPolicyResponsePolicyActionsMax)
+})
+})
+
+
+/**
+ * @summary Get the case-scoped weighted readiness score and stream details
+ */
+
+
+
+export const GetOnboardingCaseReadinessSlaParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+export const getOnboardingCaseReadinessSlaResponsePolicyVersionMin = 0;
+
+export const getOnboardingCaseReadinessSlaResponseScoreMin = 0;
+export const getOnboardingCaseReadinessSlaResponseScoreMax = 100;
+
+export const getOnboardingCaseReadinessSlaResponseStreamsItemWeightMin = 0;
+export const getOnboardingCaseReadinessSlaResponseStreamsItemWeightMax = 100;
+
+export const getOnboardingCaseReadinessSlaResponseStreamsItemIncludedWeightMin = 0;
+
+export const getOnboardingCaseReadinessSlaResponseStreamsItemEarnedWeightMin = 0;
+
+
+
+export const GetOnboardingCaseReadinessSlaResponse = zod.object({
+  "caseId": zod.number().min(1),
+  "enrolled": zod.boolean(),
+  "snapshotVersion": zod.number().min(1).nullable(),
+  "policyVersion": zod.number().min(getOnboardingCaseReadinessSlaResponsePolicyVersionMin).nullable(),
+  "score": zod.number().min(getOnboardingCaseReadinessSlaResponseScoreMin).max(getOnboardingCaseReadinessSlaResponseScoreMax),
+  "band": zod.enum(['green', 'amber', 'red']),
+  "passes": zod.boolean(),
+  "thresholds": zod.object({
+  "green": zod.number(),
+  "amberMinimum": zod.number()
+}),
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string(),
+  "weight": zod.number().min(getOnboardingCaseReadinessSlaResponseStreamsItemWeightMin).max(getOnboardingCaseReadinessSlaResponseStreamsItemWeightMax),
+  "applicable": zod.boolean(),
+  "status": zod.enum(['complete', 'incomplete', 'not-applicable', 'needs-configuration']),
+  "includedWeight": zod.number().min(getOnboardingCaseReadinessSlaResponseStreamsItemIncludedWeightMin),
+  "earnedWeight": zod.number().min(getOnboardingCaseReadinessSlaResponseStreamsItemEarnedWeightMin),
+  "reason": zod.string(),
+  "completedAt": zod.coerce.date().nullable()
+})),
+  "actions": zod.array(zod.object({
+  "key": zod.string(),
+  "streamKey": zod.string(),
+  "label": zod.string(),
+  "owner": zod.string(),
+  "backupEmail": zod.string().nullable(),
+  "notifyEmail": zod.boolean(),
+  "notifyInApp": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "status": zod.enum(['scheduled', 'warning', 'breach', 'escalated', 'resolved', 'needs-configuration']),
+  "dueAt": zod.coerce.date().nullable(),
+  "warningAt": zod.coerce.date().nullable(),
+  "escalationAt": zod.coerce.date().nullable(),
+  "reason": zod.string()
+})),
+  "payrollCutoff": zod.coerce.date().nullable(),
+  "history": zod.array(zod.object({
+  "actionKey": zod.string(),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "rationale": zod.string()
+})),
+  "reason": zod.string()
+})
+
+
+/**
+ * @summary Explicitly enroll an active case in a readiness SLA snapshot
+ */
+
+
+
+export const EnrollOnboardingCaseReadinessSlaParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+export const enrollOnboardingCaseReadinessSlaResponsePolicyVersionMin = 0;
+
+export const enrollOnboardingCaseReadinessSlaResponseScoreMin = 0;
+export const enrollOnboardingCaseReadinessSlaResponseScoreMax = 100;
+
+export const enrollOnboardingCaseReadinessSlaResponseStreamsItemWeightMin = 0;
+export const enrollOnboardingCaseReadinessSlaResponseStreamsItemWeightMax = 100;
+
+export const enrollOnboardingCaseReadinessSlaResponseStreamsItemIncludedWeightMin = 0;
+
+export const enrollOnboardingCaseReadinessSlaResponseStreamsItemEarnedWeightMin = 0;
+
+
+
+export const EnrollOnboardingCaseReadinessSlaResponse = zod.object({
+  "caseId": zod.number().min(1),
+  "enrolled": zod.boolean(),
+  "snapshotVersion": zod.number().min(1).nullable(),
+  "policyVersion": zod.number().min(enrollOnboardingCaseReadinessSlaResponsePolicyVersionMin).nullable(),
+  "score": zod.number().min(enrollOnboardingCaseReadinessSlaResponseScoreMin).max(enrollOnboardingCaseReadinessSlaResponseScoreMax),
+  "band": zod.enum(['green', 'amber', 'red']),
+  "passes": zod.boolean(),
+  "thresholds": zod.object({
+  "green": zod.number(),
+  "amberMinimum": zod.number()
+}),
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string(),
+  "weight": zod.number().min(enrollOnboardingCaseReadinessSlaResponseStreamsItemWeightMin).max(enrollOnboardingCaseReadinessSlaResponseStreamsItemWeightMax),
+  "applicable": zod.boolean(),
+  "status": zod.enum(['complete', 'incomplete', 'not-applicable', 'needs-configuration']),
+  "includedWeight": zod.number().min(enrollOnboardingCaseReadinessSlaResponseStreamsItemIncludedWeightMin),
+  "earnedWeight": zod.number().min(enrollOnboardingCaseReadinessSlaResponseStreamsItemEarnedWeightMin),
+  "reason": zod.string(),
+  "completedAt": zod.coerce.date().nullable()
+})),
+  "actions": zod.array(zod.object({
+  "key": zod.string(),
+  "streamKey": zod.string(),
+  "label": zod.string(),
+  "owner": zod.string(),
+  "backupEmail": zod.string().nullable(),
+  "notifyEmail": zod.boolean(),
+  "notifyInApp": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "status": zod.enum(['scheduled', 'warning', 'breach', 'escalated', 'resolved', 'needs-configuration']),
+  "dueAt": zod.coerce.date().nullable(),
+  "warningAt": zod.coerce.date().nullable(),
+  "escalationAt": zod.coerce.date().nullable(),
+  "reason": zod.string()
+})),
+  "payrollCutoff": zod.coerce.date().nullable(),
+  "history": zod.array(zod.object({
+  "actionKey": zod.string(),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "rationale": zod.string()
+})),
+  "reason": zod.string()
+})
+
+
+/**
+ * @summary Set an explicit, audited payroll cutoff for a case
+ */
+
+
+
+export const SetOnboardingPayrollCutoffParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+export const setOnboardingPayrollCutoffBodyReasonMax = 1000;
+
+
+
+export const SetOnboardingPayrollCutoffBody = zod.object({
+  "expectedSnapshotVersion": zod.number().min(1),
+  "payrollCutoff": zod.coerce.date(),
+  "reason": zod.string().min(1).max(setOnboardingPayrollCutoffBodyReasonMax)
+})
+
+
+
+export const setOnboardingPayrollCutoffResponsePolicyVersionMin = 0;
+
+export const setOnboardingPayrollCutoffResponseScoreMin = 0;
+export const setOnboardingPayrollCutoffResponseScoreMax = 100;
+
+export const setOnboardingPayrollCutoffResponseStreamsItemWeightMin = 0;
+export const setOnboardingPayrollCutoffResponseStreamsItemWeightMax = 100;
+
+export const setOnboardingPayrollCutoffResponseStreamsItemIncludedWeightMin = 0;
+
+export const setOnboardingPayrollCutoffResponseStreamsItemEarnedWeightMin = 0;
+
+
+
+export const SetOnboardingPayrollCutoffResponse = zod.object({
+  "caseId": zod.number().min(1),
+  "enrolled": zod.boolean(),
+  "snapshotVersion": zod.number().min(1).nullable(),
+  "policyVersion": zod.number().min(setOnboardingPayrollCutoffResponsePolicyVersionMin).nullable(),
+  "score": zod.number().min(setOnboardingPayrollCutoffResponseScoreMin).max(setOnboardingPayrollCutoffResponseScoreMax),
+  "band": zod.enum(['green', 'amber', 'red']),
+  "passes": zod.boolean(),
+  "thresholds": zod.object({
+  "green": zod.number(),
+  "amberMinimum": zod.number()
+}),
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string(),
+  "weight": zod.number().min(setOnboardingPayrollCutoffResponseStreamsItemWeightMin).max(setOnboardingPayrollCutoffResponseStreamsItemWeightMax),
+  "applicable": zod.boolean(),
+  "status": zod.enum(['complete', 'incomplete', 'not-applicable', 'needs-configuration']),
+  "includedWeight": zod.number().min(setOnboardingPayrollCutoffResponseStreamsItemIncludedWeightMin),
+  "earnedWeight": zod.number().min(setOnboardingPayrollCutoffResponseStreamsItemEarnedWeightMin),
+  "reason": zod.string(),
+  "completedAt": zod.coerce.date().nullable()
+})),
+  "actions": zod.array(zod.object({
+  "key": zod.string(),
+  "streamKey": zod.string(),
+  "label": zod.string(),
+  "owner": zod.string(),
+  "backupEmail": zod.string().nullable(),
+  "notifyEmail": zod.boolean(),
+  "notifyInApp": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "status": zod.enum(['scheduled', 'warning', 'breach', 'escalated', 'resolved', 'needs-configuration']),
+  "dueAt": zod.coerce.date().nullable(),
+  "warningAt": zod.coerce.date().nullable(),
+  "escalationAt": zod.coerce.date().nullable(),
+  "reason": zod.string()
+})),
+  "payrollCutoff": zod.coerce.date().nullable(),
+  "history": zod.array(zod.object({
+  "actionKey": zod.string(),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "rationale": zod.string()
+})),
+  "reason": zod.string()
+})
+
+
+/**
+ * @summary Record a separate HRIS readiness attestation
+ */
+
+
+
+export const AttestOnboardingReadinessParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+export const attestOnboardingReadinessBodyReasonMax = 1000;
+
+
+
+export const AttestOnboardingReadinessBody = zod.object({
+  "stream": zod.enum(['hris']),
+  "complete": zod.boolean(),
+  "expectedSnapshotVersion": zod.number().min(1),
+  "reason": zod.string().min(1).max(attestOnboardingReadinessBodyReasonMax)
+})
+
+
+
+export const attestOnboardingReadinessResponsePolicyVersionMin = 0;
+
+export const attestOnboardingReadinessResponseScoreMin = 0;
+export const attestOnboardingReadinessResponseScoreMax = 100;
+
+export const attestOnboardingReadinessResponseStreamsItemWeightMin = 0;
+export const attestOnboardingReadinessResponseStreamsItemWeightMax = 100;
+
+export const attestOnboardingReadinessResponseStreamsItemIncludedWeightMin = 0;
+
+export const attestOnboardingReadinessResponseStreamsItemEarnedWeightMin = 0;
+
+
+
+export const AttestOnboardingReadinessResponse = zod.object({
+  "caseId": zod.number().min(1),
+  "enrolled": zod.boolean(),
+  "snapshotVersion": zod.number().min(1).nullable(),
+  "policyVersion": zod.number().min(attestOnboardingReadinessResponsePolicyVersionMin).nullable(),
+  "score": zod.number().min(attestOnboardingReadinessResponseScoreMin).max(attestOnboardingReadinessResponseScoreMax),
+  "band": zod.enum(['green', 'amber', 'red']),
+  "passes": zod.boolean(),
+  "thresholds": zod.object({
+  "green": zod.number(),
+  "amberMinimum": zod.number()
+}),
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string(),
+  "weight": zod.number().min(attestOnboardingReadinessResponseStreamsItemWeightMin).max(attestOnboardingReadinessResponseStreamsItemWeightMax),
+  "applicable": zod.boolean(),
+  "status": zod.enum(['complete', 'incomplete', 'not-applicable', 'needs-configuration']),
+  "includedWeight": zod.number().min(attestOnboardingReadinessResponseStreamsItemIncludedWeightMin),
+  "earnedWeight": zod.number().min(attestOnboardingReadinessResponseStreamsItemEarnedWeightMin),
+  "reason": zod.string(),
+  "completedAt": zod.coerce.date().nullable()
+})),
+  "actions": zod.array(zod.object({
+  "key": zod.string(),
+  "streamKey": zod.string(),
+  "label": zod.string(),
+  "owner": zod.string(),
+  "backupEmail": zod.string().nullable(),
+  "notifyEmail": zod.boolean(),
+  "notifyInApp": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "status": zod.enum(['scheduled', 'warning', 'breach', 'escalated', 'resolved', 'needs-configuration']),
+  "dueAt": zod.coerce.date().nullable(),
+  "warningAt": zod.coerce.date().nullable(),
+  "escalationAt": zod.coerce.date().nullable(),
+  "reason": zod.string()
+})),
+  "payrollCutoff": zod.coerce.date().nullable(),
+  "history": zod.array(zod.object({
+  "actionKey": zod.string(),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "rationale": zod.string()
+})),
+  "reason": zod.string()
+})
+
+
+/**
+ * @summary Explicitly rebase a case readiness policy snapshot with an audit reason
+ */
+
+
+
+export const RebaseOnboardingReadinessSlaParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+export const rebaseOnboardingReadinessSlaBodyReasonMax = 1000;
+
+
+
+export const RebaseOnboardingReadinessSlaBody = zod.object({
+  "expectedSnapshotVersion": zod.number().min(1),
+  "reason": zod.string().min(1).max(rebaseOnboardingReadinessSlaBodyReasonMax)
+})
+
+
+
+export const rebaseOnboardingReadinessSlaResponsePolicyVersionMin = 0;
+
+export const rebaseOnboardingReadinessSlaResponseScoreMin = 0;
+export const rebaseOnboardingReadinessSlaResponseScoreMax = 100;
+
+export const rebaseOnboardingReadinessSlaResponseStreamsItemWeightMin = 0;
+export const rebaseOnboardingReadinessSlaResponseStreamsItemWeightMax = 100;
+
+export const rebaseOnboardingReadinessSlaResponseStreamsItemIncludedWeightMin = 0;
+
+export const rebaseOnboardingReadinessSlaResponseStreamsItemEarnedWeightMin = 0;
+
+
+
+export const RebaseOnboardingReadinessSlaResponse = zod.object({
+  "caseId": zod.number().min(1),
+  "enrolled": zod.boolean(),
+  "snapshotVersion": zod.number().min(1).nullable(),
+  "policyVersion": zod.number().min(rebaseOnboardingReadinessSlaResponsePolicyVersionMin).nullable(),
+  "score": zod.number().min(rebaseOnboardingReadinessSlaResponseScoreMin).max(rebaseOnboardingReadinessSlaResponseScoreMax),
+  "band": zod.enum(['green', 'amber', 'red']),
+  "passes": zod.boolean(),
+  "thresholds": zod.object({
+  "green": zod.number(),
+  "amberMinimum": zod.number()
+}),
+  "streams": zod.array(zod.object({
+  "key": zod.enum(['documentation', 'bgv', 'hris', 'it-assets', 'payroll']),
+  "label": zod.string(),
+  "weight": zod.number().min(rebaseOnboardingReadinessSlaResponseStreamsItemWeightMin).max(rebaseOnboardingReadinessSlaResponseStreamsItemWeightMax),
+  "applicable": zod.boolean(),
+  "status": zod.enum(['complete', 'incomplete', 'not-applicable', 'needs-configuration']),
+  "includedWeight": zod.number().min(rebaseOnboardingReadinessSlaResponseStreamsItemIncludedWeightMin),
+  "earnedWeight": zod.number().min(rebaseOnboardingReadinessSlaResponseStreamsItemEarnedWeightMin),
+  "reason": zod.string(),
+  "completedAt": zod.coerce.date().nullable()
+})),
+  "actions": zod.array(zod.object({
+  "key": zod.string(),
+  "streamKey": zod.string(),
+  "label": zod.string(),
+  "owner": zod.string(),
+  "backupEmail": zod.string().nullable(),
+  "notifyEmail": zod.boolean(),
+  "notifyInApp": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "status": zod.enum(['scheduled', 'warning', 'breach', 'escalated', 'resolved', 'needs-configuration']),
+  "dueAt": zod.coerce.date().nullable(),
+  "warningAt": zod.coerce.date().nullable(),
+  "escalationAt": zod.coerce.date().nullable(),
+  "reason": zod.string()
+})),
+  "payrollCutoff": zod.coerce.date().nullable(),
+  "history": zod.array(zod.object({
+  "actionKey": zod.string(),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "rationale": zod.string()
+})),
+  "reason": zod.string()
+})
+
+
+/**
  * @summary Get the pricing rate register (current version and full history)
  */
 export const ListPricingRateSetsResponse = zod.object({
@@ -8388,3 +9104,5 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
+
+

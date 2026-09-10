@@ -1,4 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
+import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
+import { ensureReadinessSlaEnrollment } from "../lib/onboarding/readiness-sla-policy";
 import { and, desc, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -37,7 +40,6 @@ import {
   handleInbound,
   enforceOfferAcceptanceGate,
   offerAcceptanceRequired,
-  resumeAfterDecision,
   startOrchestration,
 } from "../lib/onboarding/engine";
 import { isChecklistAdministrator, setCustomChecklistItemStatus } from "../lib/onboarding/checklist";
@@ -528,6 +530,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       offerAcceptanceCompletedAt: body.offerAcceptanceComplete ? new Date() : null,
       offerAcceptanceCompletedBy: body.offerAcceptanceComplete ? await resolveReviewerName(req.authUserId!) : null,
     }, getOrganizationId(req));
+    await ensureReadinessSlaEnrollment(getOrganizationId(req), row.id);
     // Gate A owns the first candidate contact only on new/rehire pathways.
     // Unrelated onboarding pathways retain their established portal behavior.
     if (row.candidateEmailAuthorizedAt && (row.offerAcceptanceComplete || !offerAcceptanceRequired(row))) {
@@ -1257,6 +1260,7 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
  */
 router.post("/onboarding/cases/:id/voice-call", async (req, res, next) => {
   try {
+    if (!requireHrChecklistRole(req, res)) return;
     const id = Number(req.params.id);
     const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
       eq(onbCases.id, id),
@@ -1453,12 +1457,33 @@ router.get("/onboarding/approvals", async (req, res, next) => {
         rationale: a.rationale,
         recordsEvidence: a.recordsEvidence,
         status: a.status,
+        version: a.version,
         decidedBy: a.decidedBy,
         comment: a.comment,
         createdAt: a.createdAt.toISOString(),
         decidedAt: iso(a.decidedAt),
       })),
     );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/approvals/:id/history", async (req, res, next) => {
+  try {
+    const approvalId = Number(req.params.id);
+    if (!Number.isSafeInteger(approvalId) || approvalId < 1) {
+      res.status(400).json({ message: "A valid approval id is required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const [approval] = await db.select({ id: onbApprovals.id }).from(onbApprovals)
+      .where(and(eq(onbApprovals.id, approvalId), eq(onbApprovals.organizationId, organizationId)));
+    if (!approval) {
+      res.status(404).json({ message: "Approval not found" });
+      return;
+    }
+    res.json(await getApprovalHistory({ organizationId, approvalId }));
   } catch (err) {
     next(err);
   }
@@ -1487,20 +1512,27 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       return;
     }
     const decidedBy = await resolveReviewerName(req.authUserId!);
-    const [updated] = await db
-      .update(onbApprovals)
-      .set({
-        status: body.decision,
-        decidedBy,
-        comment: body.comment ?? null,
-        decidedAt: new Date(),
-      })
-      .where(and(eq(onbApprovals.id, id), eq(onbApprovals.status, "pending")))
-      .returning();
-    if (!updated) {
-      res.status(400).json({ message: "Approval already decided" });
+    const result = await decideApproval({
+      organizationId: getOrganizationId(req),
+      approvalId: id,
+      expectedVersion: body.expectedVersion,
+      decision: body.decision,
+      decidedBy,
+      comment: body.comment ?? null,
+    });
+    if (result.outcome === "not-found") {
+      res.status(404).json({ message: "Approval not found" });
       return;
     }
+    if (result.outcome === "stale") {
+      res.status(409).json({
+        message: "This approval was already decided or replaced. Refresh to review the current request.",
+        currentVersion: result.currentVersion,
+        reason: result.reason,
+      });
+      return;
+    }
+    const updated = result.approval;
     const [c] = await db
       .select()
       .from(onbCases)
@@ -1508,18 +1540,9 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
         eq(onbCases.id, a.caseId),
         organizationWhere(onbCases, getOrganizationId(req)),
       ));
-    resumeAfterDecision({
-      caseId: a.caseId,
-      approved: body.decision === "approved",
-      decidedBy,
-      comment: body.comment ?? null,
-      recommendation: a.recommendation,
-      ruleRef: a.ruleRef,
-      hitlPattern: a.hitlPattern,
-      resumeAction: a.resumeAction ?? "none",
-    });
     res.json({
       id: updated.id,
+      version: updated.version,
       caseId: updated.caseId,
       caseWorkerName: c?.workerName ?? "",
       agent: updated.agent,
@@ -1663,13 +1686,14 @@ const watcherTick = async (req: Request, res: Response) => {
     res.json({ ran: false, reason: "throttled" });
     return;
   }
-  const [systemWatcher, emailWatch, inboundEmail, approverInbox, scenarioFiles, candidateAccess] = await Promise.all([
+  const [systemWatcher, emailWatch, inboundEmail, approverInbox, scenarioFiles, candidateAccess, connectedReadiness] = await Promise.all([
     runSystemWatcherTick(),
     runEmailWatchTick(),
     runInboundEmailTick(),
     runApproverInboxTick(),
     runScenarioFileMaintenance(),
     runCandidateAccessCleanup(),
+    runConnectedReadinessTick(),
   ]);
   res.json({
     ran: true,
@@ -1680,6 +1704,7 @@ const watcherTick = async (req: Request, res: Response) => {
     approverInbox,
     scenarioFiles,
     candidateAccess,
+    connectedReadiness,
   });
 };
 

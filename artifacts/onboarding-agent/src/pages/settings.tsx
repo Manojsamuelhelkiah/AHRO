@@ -25,6 +25,7 @@ import { useLocation } from 'wouter';
 import { formatDistanceToNowStrict } from 'date-fns';
 
 import { TargetedChecklistProfiles } from './settings-checklist-profiles';
+import { ReadinessSlaSettingsCard } from './settings-readiness-sla';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -796,6 +797,11 @@ export function SettingsPage() {
         title="Settings" 
         subtitle="Application-level configuration for the control tower." 
       />
+
+      <DemoVolunteersCard />
+      <ReadinessSlaSettingsCard />
+      <ChecklistSettingsCard />
+      <TargetedChecklistProfiles />
 
       <CandidateAccessCleanupCard settings={settings} isLoading={isLoading} />
 

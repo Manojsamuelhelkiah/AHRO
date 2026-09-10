@@ -175,10 +175,13 @@ export const onbApprovals = pgTable("onb_approvals", {
   resumeAction: text("resume_action"),
   /** Optional dedupe key: a crash-resumed writer inserting the same key is a no-op. */
   idempotencyKey: text("idempotency_key"),
+  /** Monotonic human-decision cycle. Legacy approvals are version 1. */
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
 }, (t) => [
   unique("onb_approvals_organization_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+  unique("onb_approvals_organization_id_id_unique").on(t.organizationId, t.id),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_approvals_organization_case_fk" }).onDelete("cascade"),
 ]);
 

@@ -39,6 +39,8 @@ import { documentMalwareGateSql } from "./document-malware-gate";
 import { runMalwareScannerMonitorTick } from "./malware-scanner-monitor";
 import { logger } from "../logger";
 import { documentationGateReady } from "./document-validation-policy";
+import { reopenApprovalInTransaction } from "./approval-version";
+import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readiness-sla-policy";
 
 /**
  * System Watcher agent.
@@ -358,15 +360,13 @@ export async function escalateCheck(
       )).for("update");
       if (!c) return;
       if (c.lifecycleStage === "complete" || c.lifecycleStage === "day1-review") {
-        await tx.update(onbApprovals).set({
-          status: "pending", decidedAt: null, decidedBy: null,
-          comment: "Automatically reopened because BGV status regressed; fresh final readiness review is required.",
-        }).where(and(
-          eq(onbApprovals.organizationId, c.organizationId),
-          eq(onbApprovals.caseId, c.id),
-          sql`${onbApprovals.idempotencyKey} = ${`gateway-c:${c.id}:human-queue`}`,
-          eq(onbApprovals.status, "approved"),
-        ));
+        await reopenApprovalInTransaction(tx, {
+          organizationId: c.organizationId,
+          caseId: c.id,
+          idempotencyKey: `gateway-c:${c.id}:human-queue`,
+          reason: "Automatically reopened because BGV status regressed; fresh final readiness review is required.",
+          actor: WATCHER_AGENT,
+        });
       }
       const readiness = c.readiness.map((item) => ({ ...item }));
       const documentation = readiness.find((item) => item.key === "documentation");
@@ -520,6 +520,10 @@ export async function trackCaseSystems(
   for (const def of defs) {
     const useEmail = emailTracked.has(def.connectorKey);
     const mode = useEmail ? "email" : def.mode;
+    const policyManaged = await hasReadinessSlaEnrollment(c.organizationId, caseId);
+    const policyDueAt = policyManaged
+      ? await readinessSlaDueAtForSystem(c.organizationId, caseId, def.key)
+      : null;
     const rows = await db
       .insert(onbSystemChecks)
       .values({
@@ -530,7 +534,10 @@ export async function trackCaseSystems(
         externalRef: makeExternalRef(def, caseId),
         status: "pending",
         requestedAt: now,
-        dueAt: new Date(now.getTime() + def.slaSeconds * 1000),
+        // Legacy display storage requires an instant. Missing payroll cut-off
+        // is shown as needs-configuration in the policy view; the old timed
+        // sweep is disabled for this enrolled case, so this is not a deadline.
+        dueAt: policyDueAt ?? (policyManaged ? now : new Date(now.getTime() + def.slaSeconds * 1000)),
       })
       .onConflictDoNothing({
         target: [
@@ -551,7 +558,7 @@ export async function trackCaseSystems(
             : def.mode === "push"
               ? "vendor webhook push"
               : `scheduled polling every ${POLL_INTERVAL_MS / 1000}s`
-        }; SLA ${def.slaSeconds}s.`,
+        }; ${policyManaged ? (policyDueAt ? `policy deadline ${policyDueAt.toISOString()}` : "deadline needs policy configuration") : `SLA ${def.slaSeconds}s`}.`,
         def.completionRuleRef,
       );
     }
@@ -912,7 +919,8 @@ async function tickOnce(): Promise<void> {
         if (!connected) {
           // Disconnection explains a missed check, but is not itself an SLA
           // breach. Preserve the check's deadline before escalating.
-          if (disconnectedCheckIsOverdue(check, now)) {
+          if (disconnectedCheckIsOverdue(check, now) &&
+              !(await hasReadinessSlaEnrollment(check.organizationId, check.caseId))) {
             await escalateCheck(check, `${def.label} connector ("${def.connectorKey}") is disconnected — status API unreachable`, "poll");
           }
           continue;
@@ -944,6 +952,9 @@ async function tickOnce(): Promise<void> {
   // SLA sweep across every mode: late or stuck → escalate once.
   for (const check of await openChecks()) {
     if (check.status !== "pending") continue;
+    // Enrolled cases have one deadline authority: their policy snapshot.
+    // Vendor exceptions/regressions above still independently require review.
+    if (await hasReadinessSlaEnrollment(check.organizationId, check.caseId)) continue;
     if (now <= check.dueAt.getTime()) continue;
     const def = systemDef(check.system);
     if (!def) continue;

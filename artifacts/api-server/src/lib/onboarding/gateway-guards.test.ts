@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { db, DEMO_ORGANIZATION_ID, onbApprovals, onbCases, onbCommunications, onbEvents } from "@workspace/db";
+import {
+  db,
+  DEMO_ORGANIZATION_ID,
+  onbApprovals,
+  onbCases,
+  onbCommunications,
+  onbEvents,
+  onbReadinessSlaAttestations,
+  onbSystemChecks,
+} from "@workspace/db";
 import { LEGACY_CHECKLIST, readinessFromChecklist } from "./settings";
 import {
   completeDay1ReadinessGate,
@@ -10,6 +19,7 @@ import {
   offerAcceptanceRequired,
   resumeChecklistOrchestration,
 } from "./engine";
+import { ensureReadinessSlaEnrollment } from "./readiness-sla-policy";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `gateway-guards-${process.pid}-${randomUUID()}`;
@@ -94,6 +104,32 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       checklistSnapshot: LEGACY_CHECKLIST.map((item) => ({ ...item })),
     }).returning();
     caseIds.push(c.id);
+    // The weighted Gate C hook is fail-closed for active un-enrolled cases.
+    // Keep this legacy gateway fixture explicit: enroll the current snapshot
+    // and attest the source HRIS stream while preserving the test's readiness
+    // variation for the mandatory-item regression below.
+    const enrollment = await ensureReadinessSlaEnrollment(DEMO_ORGANIZATION_ID, c.id, "gateway-guards-test");
+    assert.ok(enrollment);
+    await db.insert(onbReadinessSlaAttestations).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      caseId: c.id,
+      snapshotVersion: enrollment.state.snapshotVersion,
+      streamKey: "hris",
+      complete: true,
+      reason: "Gateway test fixture has current HRIS completion evidence",
+      attestedBy: "gateway-guards-test",
+      attestedRole: "hr-owner",
+    });
+    await db.insert(onbSystemChecks).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      caseId: c.id,
+      system: "payroll",
+      mode: "poll",
+      externalRef: `gateway-payroll-${c.id}`,
+      status: "done",
+      dueAt: new Date("2029-01-01T00:00:00.000Z"),
+      completedAt: new Date("2029-01-01T00:00:00.000Z"),
+    });
     await db.insert(onbApprovals).values({
       organizationId: DEMO_ORGANIZATION_ID,
       caseId: c.id,
@@ -115,8 +151,10 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       completeDay1ReadinessGate(id),
       completeDay1ReadinessGate(id),
     ]);
-    assert.equal(first, true);
-    assert.equal(second, true);
+    // The case lock grants one completion claim. The loser observes the
+    // terminal case and returns false rather than replaying an old approval;
+    // both calls must still converge to one successful audited completion.
+    assert.equal([first, second].filter(Boolean).length, 1);
     const [current] = await db.select().from(onbCases).where(eq(onbCases.id, id));
     const events = await db.select().from(onbEvents).where(and(
       eq(onbEvents.organizationId, DEMO_ORGANIZATION_ID),

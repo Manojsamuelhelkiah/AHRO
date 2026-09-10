@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CaseReadiness } from './CaseReadiness';
+import { ConnectedReadinessSla } from './ConnectedReadinessSla';
 import { CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { Button, cn } from '@/components/ui-shared';
 import { EngineBadge } from '@/components/engine-badge';
@@ -12,6 +13,7 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
   return (
     <div className="flex flex-col md:flex-row gap-8 pb-12">
       <div className="flex-1 min-w-0">
+        <ConnectedReadinessSla caseId={caseId} />
         <CaseReadiness c={c} setTab={setTab} />
         <NextActions c={c} pendingApprovals={pendingApprovals} setTab={setTab} />
         <RecentActivitySummary events={events} />
@@ -34,7 +36,7 @@ function AttentionPanel({ approval, caseId }: any) {
   const [expanded, setExpanded] = useState(false);
 
   const handle = (decision: string) => {
-    decide.mutate({ id: approval.id, data: { decision } }, {
+    decide.mutate({ id: approval.id, data: { decision, expectedVersion: approval.version } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey({ status: 'all' }) });
         queryClient.invalidateQueries({ queryKey: getGetOnboardingCaseQueryKey(caseId) });
@@ -57,9 +59,14 @@ function AttentionPanel({ approval, caseId }: any) {
 
   return (
     <div className="bg-[var(--surface)] border-2 border-[var(--status-amber)] rounded-[var(--radius-lg)] shadow-[var(--shadow-md)] overflow-hidden">
-      <div className="bg-[var(--status-amber-bg)] px-4 py-3 border-b border-[var(--status-amber)]">
-        <h3 className="text-[var(--status-amber-fg)] font-bold text-[10px] uppercase tracking-wider mb-1">Approval Required</h3>
-        <p className="text-[var(--status-amber-fg)] font-semibold text-[var(--text-sm)]">{approval.recommendation}</p>
+      <div className="bg-[var(--status-amber-bg)] px-4 py-3 border-b border-[var(--status-amber)] flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-[var(--status-amber-fg)] font-bold text-[10px] uppercase tracking-wider mb-1">Approval Required</h3>
+          <p className="text-[var(--status-amber-fg)] font-semibold text-[var(--text-sm)]">{approval.recommendation}</p>
+        </div>
+        <div className="text-[9px] font-mono font-bold text-[var(--status-amber-fg)] opacity-80 uppercase bg-[var(--status-amber-bg)] px-1.5 py-0.5 rounded border border-[var(--status-amber)]">
+          AP-{approval.id}-V{approval.version ?? 1}
+        </div>
       </div>
       <div className="p-4 space-y-4">
         <div>

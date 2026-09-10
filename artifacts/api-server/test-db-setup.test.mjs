@@ -1059,7 +1059,10 @@ test(
           tag !== "0027_quarantine_scenario_file_ownership" &&
            tag !== "0028_restore_staged_scenario_context" &&
            tag !== "0030_candidate_portal" &&
-           tag !== "0037_document_malware_quarantine",
+           tag !== "0037_document_malware_quarantine" &&
+           tag !== "0039_weighted_readiness_sla" &&
+           tag !== "0040_versioned_approvals" &&
+           tag !== "0041_readiness_snapshot_joining_date",
       );
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(),

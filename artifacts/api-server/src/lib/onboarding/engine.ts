@@ -42,6 +42,7 @@ import {
 } from "./settings";
 import { latestRequiredUploadMalwareBlockers } from "./document-readiness-guard";
 import type { OnbChecklistEnforcementStage, OnbChecklistTemplateItem } from "@workspace/db/schema";
+import { reopenApprovalInTransaction } from "./approval-version";
 
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -1033,6 +1034,9 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
   return db.transaction(async (tx) => {
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!c) return false;
+    // Enrollment is additive: a legacy complete case must not be replayed by
+    // the approval recovery worker merely because it has an old approved row.
+    if (c.lifecycleStage === "complete") return false;
     const [approval] = await tx.select({ id: onbApprovals.id }).from(onbApprovals).where(and(
       eq(onbApprovals.organizationId, c.organizationId),
       eq(onbApprovals.caseId, caseId),
@@ -1048,32 +1052,53 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
       eq(onbSystemChecks.caseId, caseId),
       eq(onbSystemChecks.system, "bgv"),
     ));
+    // The weighted readiness policy is optional during rollout. When the SLA
+    // agent exports its hook, evaluate it inside this same final-review
+    // transaction so the score and the approval cannot observe different
+    // evidence. Historical complete cases intentionally bypass enrollment.
+    let weightedReadinessPass = true;
+    if (c.lifecycleStage !== "complete") {
+      try {
+        const slaModule = await import("./readiness-sla-policy");
+        const gate = (slaModule as unknown as {
+          readinessSlaGateForCase?: (tx: unknown, organizationId: string, caseId: number) => Promise<{ passes: boolean }>;
+        }).readinessSlaGateForCase;
+        if (gate) {
+          const weighted = await gate(tx, c.organizationId, caseId);
+          weightedReadinessPass = weighted.passes;
+        }
+      } catch (error) {
+        // The policy worker is a separately enrolled rollout. Preserve the
+        // existing Gate C authority until its module/schema is present, but do
+        // not hide failures from an installed policy hook.
+        const detail = String(error);
+        if (!/does not provide an export|Cannot find module|ERR_MODULE_NOT_FOUND/i.test(detail)) {
+          throw error;
+        }
+      }
+    }
     // BGV is required only where the configured documentation gate and case
     // pathway make it applicable. In that boundary, absence is not a green
     // result; a configured live check must exist and be done.
     const bgvRequired = documentationGateConfigured(c) && applicableSystems(c).some((system) => system.key === "bgv");
-    if (!mandatoryChecklistReady(c) || malwareBlockers.length > 0 || (bgvRequired && (!bgv || bgv.status !== "done"))) {
+    if (!weightedReadinessPass || !mandatoryChecklistReady(c) || malwareBlockers.length > 0 || (bgvRequired && (!bgv || bgv.status !== "done"))) {
       // A previous Gate C approval authorizes only the readiness state that was
       // reviewed. Reopening evidence/checks revokes that authority; recovery
       // must never turn an old approval into a later automatic completion.
-      const [reopened] = await tx.update(onbApprovals).set({
-        status: "pending",
-        decidedAt: null,
-        decidedBy: null,
-        comment: "Automatically reopened because live readiness evidence changed; fresh HR confirmation is required.",
-      }).where(and(
-        eq(onbApprovals.organizationId, c.organizationId),
-        eq(onbApprovals.caseId, caseId),
-        eq(onbApprovals.idempotencyKey, `gateway-c:${caseId}:human-queue`),
-        eq(onbApprovals.status, "approved"),
-      )).returning({ id: onbApprovals.id });
-      if (reopened) {
+      const reopened = await reopenApprovalInTransaction(tx, {
+        organizationId: c.organizationId,
+        caseId,
+        idempotencyKey: `gateway-c:${caseId}:human-queue`,
+        reason: "Automatically reopened because live readiness evidence changed; fresh HR confirmation is required.",
+        actor: "day1-readiness-gate",
+      });
+      if (reopened.reopened) {
         await tx.insert(onbEvents).values({
           organizationId: c.organizationId, caseId, agent: "day1-readiness-gate",
           engine: "rules", hitlPattern: "approve-before-act", ruleRef: DAY1_READINESS_GATE_RULE,
           title: "Gate C approval invalidated by changed live readiness evidence",
           detail: "A fresh HR final-review decision is required; the prior approval was not reused.",
-          idempotencyKey: `gateway-c:${caseId}:reopened`,
+          idempotencyKey: `gateway-c:${caseId}:reopened:v${reopened.version}`,
         }).onConflictDoNothing({ target: [onbEvents.organizationId, onbEvents.idempotencyKey] });
       }
       await tx.update(onbCases).set({
@@ -1471,19 +1496,29 @@ export function resumeAfterDecision(opts: {
   void (async () => {
     try {
       const isHardBlock = opts.hitlPattern === "hard-block";
+      const isDedicatedGatewayDecision = opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE ||
+        opts.ruleRef === "Gate B — background verification" ||
+        opts.ruleRef === DAY1_READINESS_GATE_RULE;
+      const isStandaloneAcknowledgement = opts.resumeAction === "none" && !isDedicatedGatewayDecision;
+      const decisionTitle = isStandaloneAcknowledgement
+        ? "Review acknowledged — source completion/mandatory gates still required"
+        : opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
+        ? "Gate A review decision recorded — dedicated confirmation still required"
+        : isHardBlock
+        ? opts.approved
+          ? "Hard-block resolved by human owner"
+          : "Hard-block upheld by human owner"
+        : opts.approved
+        ? "Approved by human reviewer"
+        : "Rejected by human reviewer";
+      const decisionDetail = isStandaloneAcknowledgement
+        ? `${opts.decidedBy} acknowledged the ${opts.approved ? "approval" : "rejection"} review for ${opts.ruleRef ?? "the standalone escalation"}: "${opts.recommendation}"${opts.comment ? ` — ${opts.comment}` : ""}. Review acknowledged; source completion/mandatory gates still required. No lifecycle transition or downstream authorization occurred.`
+        : opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
+        ? `${opts.decidedBy} recorded a Gate A review decision. The offer package remains blocked until the dedicated HR confirmation action records completion; no onboarding continuation occurred.`
+        : `${opts.decidedBy} ${opts.approved ? (isHardBlock ? "resolved the hard-block and authorised onboarding to proceed" : "approved") : (isHardBlock ? "upheld the hard-block" : "rejected")}: "${opts.recommendation}"${opts.comment ? ` — ${opts.comment}` : ""}. ${isHardBlock ? "Decision made under human authority; no automated adverse action was taken." : ""}`;
       await logEvent(opts.caseId, "human", "human",
-        opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
-          ? "Gate A review decision recorded — dedicated confirmation still required"
-          : isHardBlock
-          ? opts.approved
-            ? "Hard-block resolved by human owner"
-            : "Hard-block upheld by human owner"
-          : opts.approved
-            ? "Approved by human reviewer"
-            : "Rejected by human reviewer",
-        opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
-          ? `${opts.decidedBy} recorded a Gate A review decision. The offer package remains blocked until the dedicated HR confirmation action records completion; no onboarding continuation occurred.`
-          : `${opts.decidedBy} ${opts.approved ? (isHardBlock ? "resolved the hard-block and authorised onboarding to proceed" : "approved") : (isHardBlock ? "upheld the hard-block" : "rejected")}: "${opts.recommendation}"${opts.comment ? ` — ${opts.comment}` : ""}. ${isHardBlock ? "Decision made under human authority; no automated adverse action was taken." : ""}`,
+        decisionTitle,
+        decisionDetail,
         { hitlPattern: opts.hitlPattern });
       // Gate A can only be released by its tenant-scoped, audited
       // /offer-acceptance confirmation route. An approval decision may record
@@ -1493,9 +1528,10 @@ export function resumeAfterDecision(opts: {
         opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE ||
         opts.ruleRef === "Gate B — background verification"
       ) return;
-      if (isHardBlock && opts.approved) {
-        await updateCase(opts.caseId, { lifecycleStage: "profile-validated" });
-      }
+      // SLA/source-completion acknowledgements are records only. In
+      // particular, a hard-block acknowledgement must not promote the case
+      // before the source stream and mandatory gateway checks complete.
+      if (isStandaloneAcknowledgement) return;
 
       // Only the dedicated Gate C decision can complete Day-1 review. Generic
       // approvals (including an approved BGV exception) are never a shortcut
@@ -1515,6 +1551,9 @@ export function resumeAfterDecision(opts: {
           }
         }
         return;
+      }
+      if (isHardBlock && opts.approved) {
+        await updateCase(opts.caseId, { lifecycleStage: "profile-validated" });
       }
 
       // Standalone escalations (e.g. sensitive inbound message review) never

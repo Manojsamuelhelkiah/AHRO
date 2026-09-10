@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
-  onbApprovals, onbCandidateUploads, onbCases, onbDocuments,
+  onbCandidateUploads, onbCases, onbDocuments,
 } from "@workspace/db/schema";
 import { getPrivateFile } from "../lib/objectStorage";
 import {
@@ -15,6 +15,7 @@ import { ensureCaseLogistics } from "../lib/onboarding/case-logistics";
 import { actionableCorrectionReason } from "../lib/onboarding/document-validation-policy";
 import { malwareUploadIsClean } from "../lib/onboarding/malware-policy";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
+import { reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
@@ -171,17 +172,13 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
             // A replacement invalidates the evidence that Gate C approved.
             // Reopen inside the same case lock so a scan that later becomes
             // clean cannot let the old HR decision auto-complete the case.
-            await tx.update(onbApprovals).set({
-              status: "pending",
-              decidedAt: null,
-              decidedBy: null,
-              comment: "Automatically reopened because a required document was replaced; fresh final review is required.",
-            }).where(and(
-              eq(onbApprovals.organizationId, ctx.organizationId),
-              eq(onbApprovals.caseId, ctx.caseId),
-              eq(onbApprovals.idempotencyKey, `gateway-c:${ctx.caseId}:human-queue`),
-              eq(onbApprovals.status, "approved"),
-            ));
+            await reopenApprovalInTransaction(tx, {
+              organizationId: ctx.organizationId,
+              caseId: ctx.caseId,
+              idempotencyKey: `gateway-c:${ctx.caseId}:human-queue`,
+              reason: "Automatically reopened because a required document was replaced; fresh final review is required.",
+              actor: "candidate-portal",
+            });
             await tx.update(onbCases).set({
               readiness: currentCase.readiness.map((item) => item.key === "documentation"
                 ? { ...item, status: "in-progress" as const, note: "Required document quarantined pending security scan and verification." }

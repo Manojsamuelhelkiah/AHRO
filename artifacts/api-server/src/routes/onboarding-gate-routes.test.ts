@@ -4,7 +4,16 @@ import type { Server } from "node:http";
 import { after, before, test } from "node:test";
 import express from "express";
 import { and, eq, inArray } from "drizzle-orm";
-import { db, onbApprovals, onbCases, onbEffectJournal, onbEvents, organizationsTable } from "@workspace/db";
+import {
+  db,
+  onbApprovals,
+  onbCases,
+  onbConnectors,
+  onbEffectJournal,
+  onbEvents,
+  onbReadinessSlaPolicies,
+  organizationsTable,
+} from "@workspace/db";
 import onboardingRouter from "./onboarding";
 
 const suffix = `${process.pid}-${randomUUID()}`;
@@ -52,11 +61,31 @@ before(async () => {
 after(async () => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   // The route deliberately starts asynchronous orchestration. Fixtures use a
-  // deterministic intake hard-block below; let that short handoff settle
-  // before removing its case-owned rows.
+  // deterministic intake hard-block below; wait for the claim to release
+  // before removing its case-owned rows so a late event cannot race deletion.
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const rows = await db.select({
+      orchestrationStatus: onbCases.orchestrationStatus,
+      orchestrationClaimOwner: onbCases.orchestrationClaimOwner,
+    }).from(onbCases).where(inArray(onbCases.organizationId, [orgA, orgB]));
+    if (!rows.some((row) => row.orchestrationStatus === "running" || row.orchestrationClaimOwner)) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
   await new Promise((resolve) => setTimeout(resolve, 100));
   if (caseIds.length) await db.delete(onbCases).where(inArray(onbCases.id, caseIds));
+  // If a route fails before returning its case id (for example while an
+  // enrollment service is being rolled out), still remove every fixture case
+  // before dropping the temporary organizations.
+  await db.delete(onbCases).where(inArray(onbCases.organizationId, [orgA, orgB]));
   await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, orgA));
+  await db.delete(onbConnectors).where(inArray(onbConnectors.organizationId, [orgA, orgB]));
+  // SLA policy rows are organization-scoped without ON DELETE CASCADE;
+  // remove them after case-owned snapshots/ledger rows cascade and before the
+  // temporary test organizations are dropped.
+  await db.delete(onbReadinessSlaPolicies).where(inArray(
+    onbReadinessSlaPolicies.organizationId,
+    [orgA, orgB],
+  ));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
 });
 

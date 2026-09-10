@@ -8,6 +8,7 @@ import { backfillDocumentPacks } from "./lib/onboarding/documents";
 import { initDemoAllowlist } from "./lib/onboarding/demo-volunteers";
 import { recoverStaleVoiceSessions } from "./lib/onboarding/voice";
 import { startApproverInboxPolling } from "./lib/onboarding/approver-email";
+import { startConnectedReadinessAutomation } from "./lib/onboarding/connected-readiness-automation";
 
 const rawPort = process.env["PORT"];
 const validationMode = process.env["API_VALIDATION_MODE"] === "true";
@@ -41,6 +42,7 @@ app.listen(port, (err) => {
   startSystemWatcher();
   startEmailWatch();
   startApproverInboxPolling();
+  startConnectedReadinessAutomation();
   backfillDocumentPacks().catch((err) =>
     logger.error({ err }, "document pack backfill failed"),
   );
