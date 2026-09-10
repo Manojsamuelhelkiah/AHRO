@@ -37,3 +37,5 @@
 - [Versioned policy snapshot replacement](versioned-policy-snapshot-replacement.md) — serialize policy writes; fence active snapshot replacement against claims, stale revisions, and passed gates.
 - [Document verification boundaries](document-verification-boundaries.md) — local file checks are not source authentication; unavailable, uncertain, rejected, or adverse results require human review.
 - [Document malware boundaries](document-malware-boundaries.md) — keep candidate scans private; authenticity cannot override quarantine, and cached readiness cannot replace live evidence checks.
+- [Onboarding gateway authority](onboarding-gateway-authority.md) — acceptance precedes onboarding effects; final readiness needs fresh HR authority after safety evidence reopens.
+- [Outcome KPI evidence](outcome-kpi-evidence.md) — historical outcomes need dated source evidence; live checklists and simulated completions must not become historical success rates.

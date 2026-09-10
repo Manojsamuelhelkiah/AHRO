@@ -67,7 +67,6 @@ export function LoginPage() {
       }
       if (signIn.status !== 'complete') throw new Error('additional verification required');
       localStorage.setItem('hro_authed', 'true');
-      localStorage.setItem('hro_role', 'Reviewer');
       // Keep the branded "Authenticating…" moment visible (~1.5s total).
       const remaining = 1500 - (Date.now() - startedAt);
       if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));

@@ -121,6 +121,14 @@ export const onbCases = pgTable("onb_cases", {
    */
   candidateEmailAuthorizedAt: timestamp("candidate_email_authorized_at", { withTimezone: true }),
   candidateEmailAuthorizedBy: text("candidate_email_authorized_by"),
+  /**
+   * Gate A is an explicit HR attestation, never inferred from a historical
+   * case row or a generic approval. The nullable audit fields distinguish an
+   * unconfirmed legacy/active case from a completed package.
+   */
+  offerAcceptanceComplete: boolean("offer_acceptance_complete").notNull().default(false),
+  offerAcceptanceCompletedAt: timestamp("offer_acceptance_completed_at", { withTimezone: true }),
+  offerAcceptanceCompletedBy: text("offer_acceptance_completed_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [unique("onb_cases_organization_id_id_unique").on(t.organizationId, t.id)]);

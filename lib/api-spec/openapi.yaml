@@ -1413,6 +1413,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/offer-acceptance:
+    post:
+      operationId: confirmOnboardingOfferAcceptance
+      tags: [onboarding]
+      summary: Record the HR confirmation of the candidate's offer-acceptance package and release Gate A
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbOfferAcceptanceConfirmation"
+      responses:
+        "200":
+          description: Confirmed onboarding case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbCase"
+        "403":
+          description: Organization owner or admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Case not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/cases/{id}/checklist-profile:
     post:
       operationId: recalculateOnboardingChecklistProfile
@@ -1693,7 +1728,7 @@ paths:
         "200": { description: Decision recorded }
         "400": { description: Invalid decision }
         "404": { description: Evidence not found }
-        "409": { description: Evidence is stale, not reviewable, or blocked by malware policy }
+        "409": { description: "Evidence is stale, not reviewable, or blocked by malware policy" }
   /onboarding/cases/{id}/evidence/{evidenceId}/retry-malware-scan:
     post:
       operationId: retryOnboardingEvidenceMalwareScan
@@ -2128,6 +2163,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OnbAnalytics"
+  /onboarding/analytics/outcome-kpis:
+    get:
+      operationId: getOnboardingOutcomeKpis
+      tags: [onboarding]
+      summary: Recorded onboarding outcome KPIs for cases created in the selected period
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["7", "30", "90", "All"]
+            default: "30"
+          description: Case-created-at window; this is not a joining-date cohort
+        - name: region
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: hireType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Onboarding, "All domains"]
+      responses:
+        "200":
+          description: Outcome KPI summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbOutcomeKpis"
   /onboarding/systems/watcher:
     get:
       operationId: getOnboardingSystemWatcher
@@ -4816,6 +4888,22 @@ components:
         candidateEmailAuthorized:
           type: boolean
           description: Whether this manually-created case currently authorizes live email to its candidate record address
+        offerAcceptanceComplete:
+          type: boolean
+          description: HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.
+        offerAcceptanceCompletedAt:
+          type: ["string", "null"]
+          format: date-time
+        offerAcceptanceCompletedBy:
+          type: ["string", "null"]
+        gateways:
+          type: object
+          description: Server-derived live onboarding gate status; human-review always denotes a real human queue item.
+          properties:
+            a: { $ref: "#/components/schemas/OnbGateway" }
+            b: { $ref: "#/components/schemas/OnbGateway" }
+            c: { $ref: "#/components/schemas/OnbGateway" }
+          required: [a, b, c]
         createdAt:
           type: string
         updatedAt:
@@ -4854,8 +4942,30 @@ components:
         - checklistMatchExplanation
         - orchestrationCheckpoint
         - candidateEmailAuthorized
+        - offerAcceptanceComplete
+        - offerAcceptanceCompletedAt
+        - offerAcceptanceCompletedBy
+        - gateways
         - createdAt
         - updatedAt
+    OnbGateway:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [complete, blocked, pending, human-review, not-applicable]
+        label:
+          type: string
+        reason:
+          type: string
+      required: [status, label, reason]
+    OnbOfferAcceptanceConfirmation:
+      type: object
+      properties:
+        note:
+          type: string
+          minLength: 1
+      required: [note]
     OnbCaseIntake:
       type: object
       description: Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.
@@ -4900,6 +5010,10 @@ components:
         notes:
           type: string
           description: Unstructured recruiter notes; treated as evidence, not instructions
+        offerAcceptanceComplete:
+          type: boolean
+          default: false
+          description: HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation.
       required:
         - workerName
         - workerEmail
@@ -5466,6 +5580,57 @@ components:
           type: ["string", "null"]
           description: LLM-written aggregated insight for HR/workforce planning
       required: [skillInflow, bottlenecks, cohortReadiness, suppressionThreshold, narrative]
+    OnbOutcomeKpi:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        definition:
+          type: string
+        baseline:
+          type: string
+          description: Baseline remains TBD until a formally approved baseline source exists
+        targetLabel:
+          type: string
+        targetValue:
+          type: number
+        direction:
+          type: string
+          enum: [at-most, at-least]
+        unit:
+          type: string
+          enum: [days, percent, score]
+        value:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [met, missed, insufficient-data, not-collected]
+        sampleSize:
+          type: integer
+        eligibleCount:
+          type: integer
+        unknownCount:
+          type: integer
+        note:
+          type: string
+      required: [id, label, definition, baseline, targetLabel, targetValue, direction, unit, value, status, sampleSize, eligibleCount, unknownCount, note]
+    OnbOutcomeKpis:
+      type: object
+      properties:
+        asOf:
+          type: string
+          format: date-time
+        cohortLabel:
+          type: string
+        caseCount:
+          type: integer
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbOutcomeKpi"
+      required: [asOf, cohortLabel, caseCount, metrics]
     OnbChannelStatus:
       type: object
       properties:

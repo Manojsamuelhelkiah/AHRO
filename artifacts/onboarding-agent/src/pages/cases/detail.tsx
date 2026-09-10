@@ -17,7 +17,10 @@ import {
   getGetOnboardingChannelsQueryKey
 } from '@workspace/api-client-react';
 
+import { useUser } from '@clerk/react';
 import { CaseHeader, CaseHealthStrip, CaseTabs } from './detail/components';
+import { GatewaysStrip } from './detail/gateways-strip';
+import { useOrganizationRole } from '../../hooks/use-organization-role';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
 import { DocumentsTab } from './detail/documents-tab';
@@ -26,6 +29,8 @@ import { PortalControls } from './detail/portal-controls';
 export function CaseDetailPage() {
   const { id } = useParams();
   const caseId = Number(id);
+  const { user } = useUser();
+  const { isHR, loading: isHRLoading } = useOrganizationRole();
   
   const [activeTab, setActiveTab] = useState('Overview');
 
@@ -35,7 +40,7 @@ export function CaseDetailPage() {
       queryKey: getGetOnboardingCaseQueryKey(caseId),
       refetchInterval: (query: any) => {
         const status = query?.state?.data?.orchestrationStatus;
-        return (status === 'running' || status === 'waiting-approval') ? 2500 : false;
+        return (status === 'running' || status === 'waiting-approval' || status === 'blocked' || status === 'checklist-blocked' || status === 'idle') ? 2500 : false;
       }
     }
   });
@@ -44,8 +49,8 @@ export function CaseDetailPage() {
     query: {
       enabled: !!caseId,
       queryKey: getListOnboardingCaseEventsQueryKey(caseId),
-      refetchInterval: (query: any) => {
-        return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval') ? 2500 : false;
+      refetchInterval: () => {
+        return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval' || c?.orchestrationStatus === 'blocked' || c?.orchestrationStatus === 'checklist-blocked' || c?.orchestrationStatus === 'idle') ? 2500 : false;
       }
     }
   });
@@ -61,8 +66,8 @@ export function CaseDetailPage() {
     query: {
       enabled: !!caseId,
       queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId),
-      refetchInterval: (query: any) => {
-        return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval') ? 2500 : false;
+      refetchInterval: () => {
+        return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval' || c?.orchestrationStatus === 'blocked' || c?.orchestrationStatus === 'checklist-blocked' || c?.orchestrationStatus === 'idle') ? 2500 : false;
       }
     }
   });
@@ -82,13 +87,14 @@ export function CaseDetailPage() {
     query: { enabled: !!caseId && c?.hireType === 'rehire', queryKey: getListOnboardingCaseRecordsQueryKey(caseId) }
   });
 
-  if (isLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading case workspace...</div>;
+  if (isLoading || isHRLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading case workspace...</div>;
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-6 md:px-8">
       <CaseHeader c={c} caseId={caseId} />
       
+      <GatewaysStrip c={c} isHR={isHR} />
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} />
       <PortalControls caseId={caseId} joiningDate={c.joiningDate} />
       

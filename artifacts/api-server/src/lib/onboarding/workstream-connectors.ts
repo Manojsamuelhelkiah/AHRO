@@ -39,7 +39,7 @@ export type WorkstreamConnectorCase = Pick<
   | "recruiterName"
   | "updatedAt"
   | "workstreams"
->;
+> & { offerAcceptanceComplete?: boolean };
 
 type DispatchAuthorization = {
   binding: ExecutableActionBinding;
@@ -264,6 +264,12 @@ export async function dispatchWorkstreamConnectorMutations(
   c: WorkstreamConnectorCase,
   dependencies?: WorkstreamConnectorDependencies,
 ): Promise<void> {
+  // This is also called by watchdog recovery, so it must independently retain
+  // Gate A rather than trusting the engine caller.
+  if (
+    (c.hireType === "external-fte" || c.hireType === "contractor" || c.hireType === "rehire") &&
+    c.offerAcceptanceComplete === false
+  ) return;
   for (const mutation of workstreamMutations(c)) {
     await dispatchCaseConnectorMutation({ c, mutation, dependencies });
   }

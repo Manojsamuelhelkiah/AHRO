@@ -68,6 +68,26 @@ export function DashboardPage() {
     return { active, completed, blocked, humanReview, atRisk, autonomousPct, autonomousSplit };
   }, [cases, approvals, approvalsQ.isSuccess]);
 
+  const gateMetrics = useMemo(() => {
+    const active = cases.filter(isActive);
+    const agg = {
+      a: { pending: 0, 'human-review': 0, blocked: 0 },
+      b: { pending: 0, 'human-review': 0, blocked: 0 },
+      c: { pending: 0, 'human-review': 0, blocked: 0 },
+    };
+    active.forEach(c => {
+      if (!c.gateways) return;
+      ['a', 'b', 'c'].forEach(k => {
+        const key = k as 'a'|'b'|'c';
+        const st = c.gateways[key]?.status;
+        if (st === 'pending' || st === 'human-review' || st === 'blocked') {
+          agg[key][st]++;
+        }
+      });
+    });
+    return agg;
+  }, [cases]);
+
   // Unique cases needing human judgment: union of cases with pending approvals
   // and cases currently in Human Review.
   const interventionCount = useMemo(() => {
@@ -168,6 +188,26 @@ export function DashboardPage() {
             </>
           )}
         </div>
+        )}
+      </section>
+
+      {/* Gateways */}
+      <section aria-labelledby="gateways-heading">
+        <SectionHeading id="gateways-heading" title="Onboarding Gateways" subtitle="Active cases moving through preboarding control points." />
+        {casesQ.isError ? (
+          <div className="mt-3"><SectionError label="Gateways unavailable" onRetry={() => casesQ.refetch()} /></div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+            {casesQ.isLoading ? (
+              Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} height={100} />)
+            ) : (
+              <>
+                <GatewayCard title="Gateway A: Offer & Intake" metrics={gateMetrics.a} />
+                <GatewayCard title="Gateway B: Background Checks" metrics={gateMetrics.b} />
+                <GatewayCard title="Gateway C: Day-1 Readiness" metrics={gateMetrics.c} />
+              </>
+            )}
+          </div>
         )}
       </section>
 
@@ -431,6 +471,28 @@ function AgentCard({ name, state, workload }: { name: string; state: AgentState;
         <AgentStateBadge state={state} />
       </div>
       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{workload}</div>
+    </Card>
+  );
+}
+
+function GatewayCard({ title, metrics }: { title: string; metrics: { pending: number; 'human-review': number; blocked: number; } }) {
+  return (
+    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="shadow-sm flex flex-col gap-3">
+      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</div>
+      <div className="flex gap-4">
+        <div className="flex flex-col">
+          <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--primary)' }}>{metrics.pending}</span>
+          <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', fontWeight: 600 }}>Pending</span>
+        </div>
+        <div className="flex flex-col">
+          <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--status-amber)' }}>{metrics['human-review']}</span>
+          <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', fontWeight: 600 }}>Review</span>
+        </div>
+        <div className="flex flex-col">
+          <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--status-red)' }}>{metrics.blocked}</span>
+          <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', fontWeight: 600 }}>Blocked</span>
+        </div>
+      </div>
     </Card>
   );
 }

@@ -45,6 +45,7 @@ import type {
   FlowOverrideInput,
   GetDemoVolunteers200,
   GetOnboardingGuardrails200,
+  GetOnboardingOutcomeKpisParams,
   GlobalAssumption,
   GuardrailEvent,
   HealthStatus,
@@ -82,6 +83,8 @@ import type {
   OnbEvent,
   OnbEvidenceDecision,
   OnbInboundMessage,
+  OnbOfferAcceptanceConfirmation,
+  OnbOutcomeKpis,
   OnbScenarioDef,
   OnbSettings,
   OnbSystemWatcher,
@@ -4832,6 +4835,78 @@ export function useGetOnboardingCase<TData = Awaited<ReturnType<typeof getOnboar
 
 
 
+export const getConfirmOnboardingOfferAcceptanceUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/offer-acceptance`
+}
+
+/**
+ * @summary Record the HR confirmation of the candidate's offer-acceptance package and release Gate A
+ */
+export const confirmOnboardingOfferAcceptance = async (id: number,
+    onbOfferAcceptanceConfirmation: OnbOfferAcceptanceConfirmation, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getConfirmOnboardingOfferAcceptanceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbOfferAcceptanceConfirmation)
+  }
+);}
+
+
+
+
+
+export const getConfirmOnboardingOfferAcceptanceMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmOnboardingOfferAcceptance>>, TError,{id: number;data: BodyType<OnbOfferAcceptanceConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmOnboardingOfferAcceptance>>, TError,{id: number;data: BodyType<OnbOfferAcceptanceConfirmation>}, TContext> => {
+
+const mutationKey = ['confirmOnboardingOfferAcceptance'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmOnboardingOfferAcceptance>>, {id: number;data: BodyType<OnbOfferAcceptanceConfirmation>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  confirmOnboardingOfferAcceptance(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmOnboardingOfferAcceptanceMutationResult = NonNullable<Awaited<ReturnType<typeof confirmOnboardingOfferAcceptance>>>
+    export type ConfirmOnboardingOfferAcceptanceMutationBody = BodyType<OnbOfferAcceptanceConfirmation>
+    export type ConfirmOnboardingOfferAcceptanceMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Record the HR confirmation of the candidate's offer-acceptance package and release Gate A
+ */
+export const useConfirmOnboardingOfferAcceptance = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmOnboardingOfferAcceptance>>, TError,{id: number;data: BodyType<OnbOfferAcceptanceConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmOnboardingOfferAcceptance>>,
+        TError,
+        {id: number;data: BodyType<OnbOfferAcceptanceConfirmation>},
+        TContext
+      > => {
+      return useMutation(getConfirmOnboardingOfferAcceptanceMutationOptions(options));
+    }
+
 export const getRecalculateOnboardingChecklistProfileUrl = (id: number,) => {
 
 
@@ -6992,6 +7067,90 @@ export function useGetOnboardingAnalytics<TData = Awaited<ReturnType<typeof getO
 
 
 
+export const getGetOnboardingOutcomeKpisUrl = (params?: GetOnboardingOutcomeKpisParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/analytics/outcome-kpis?${stringifiedParams}` : `/api/onboarding/analytics/outcome-kpis`
+}
+
+/**
+ * @summary Recorded onboarding outcome KPIs for cases created in the selected period
+ */
+export const getOnboardingOutcomeKpis = async (params?: GetOnboardingOutcomeKpisParams, options?: RequestInit): Promise<OnbOutcomeKpis> => {
+
+  return customFetch<OnbOutcomeKpis>(getGetOnboardingOutcomeKpisUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingOutcomeKpisQueryKey = (params?: GetOnboardingOutcomeKpisParams,) => {
+    return [
+    `/api/onboarding/analytics/outcome-kpis`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetOnboardingOutcomeKpisQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingOutcomeKpis>>, TError = ErrorType<unknown>>(params?: GetOnboardingOutcomeKpisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOutcomeKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingOutcomeKpisQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingOutcomeKpis>>> = ({ signal }) => getOnboardingOutcomeKpis(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOutcomeKpis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingOutcomeKpisQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingOutcomeKpis>>>
+export type GetOnboardingOutcomeKpisQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Recorded onboarding outcome KPIs for cases created in the selected period
+ */
+
+export function useGetOnboardingOutcomeKpis<TData = Awaited<ReturnType<typeof getOnboardingOutcomeKpis>>, TError = ErrorType<unknown>>(
+ params?: GetOnboardingOutcomeKpisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOutcomeKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingOutcomeKpisQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetOnboardingSystemWatcherUrl = () => {
 
 
@@ -7660,3 +7819,4 @@ export const useCreatePricingRateSet = <TError = ErrorType<ErrorMessage>,
       > => {
       return useMutation(getCreatePricingRateSetMutationOptions(options));
     }
+

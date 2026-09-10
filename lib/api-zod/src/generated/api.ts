@@ -6335,6 +6335,26 @@ export const RunOnboardingScenarioResponse = zod.object({
   "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -6418,6 +6438,26 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -6428,7 +6468,7 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
  * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
  */
 
-
+export const createOnboardingCaseBodyOfferAcceptanceCompleteDefault = false;
 
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
@@ -6447,7 +6487,8 @@ export const CreateOnboardingCaseBody = zod.object({
   "joiningDate": zod.string(),
   "primarySkill": zod.string().optional(),
   "skillCriticality": zod.string().optional(),
-  "notes": zod.string().optional().describe('Unstructured recruiter notes; treated as evidence, not instructions')
+  "notes": zod.string().optional().describe('Unstructured recruiter notes; treated as evidence, not instructions'),
+  "offerAcceptanceComplete": zod.boolean().default(createOnboardingCaseBodyOfferAcceptanceCompleteDefault).describe('HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation.')
 }).describe('Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.')
 
 export const createOnboardingCaseResponseReadinessItemOrderMin = 0;
@@ -6525,6 +6566,26 @@ export const CreateOnboardingCaseResponse = zod.object({
   "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -6612,6 +6673,143 @@ export const GetOnboardingCaseResponse = zod.object({
   "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Record the HR confirmation of the candidate's offer-acceptance package and release Gate A
+ */
+
+
+
+export const ConfirmOnboardingOfferAcceptanceParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+
+export const ConfirmOnboardingOfferAcceptanceBody = zod.object({
+  "note": zod.string().min(1)
+})
+
+export const confirmOnboardingOfferAcceptanceResponseReadinessItemOrderMin = 0;
+
+
+
+export const confirmOnboardingOfferAcceptanceResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
+
+
+
+export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | checklist-blocked | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('Stable item identifier; retained as key for legacy clients'),
+  "id": zod.string().optional().describe('Stable template item identifier'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional(),
+  "order": zod.number().min(confirmOnboardingOfferAcceptanceResponseReadinessItemOrderMin).optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+}).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "checklistTemplateVersion": zod.number().min(1),
+  "checklistSnapshot": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(confirmOnboardingOfferAcceptanceResponseChecklistSnapshotItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+})),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
+  "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -6716,6 +6914,26 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -7348,6 +7566,26 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "checklistMatchExplanation": zod.string(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -7715,6 +7953,41 @@ export const GetOnboardingAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary Recorded onboarding outcome KPIs for cases created in the selected period
+ */
+export const getOnboardingOutcomeKpisQueryPeriodDefault = `30`;
+
+export const GetOnboardingOutcomeKpisQueryParams = zod.object({
+  "period": zod.enum(['7', '30', '90', 'All']).default(getOnboardingOutcomeKpisQueryPeriodDefault).describe('Case-created-at window; this is not a joining-date cohort'),
+  "region": zod.coerce.string().optional(),
+  "hireType": zod.coerce.string().optional(),
+  "domain": zod.enum(['Onboarding', 'All domains']).optional()
+})
+
+export const GetOnboardingOutcomeKpisResponse = zod.object({
+  "asOf": zod.coerce.date(),
+  "cohortLabel": zod.string(),
+  "caseCount": zod.number(),
+  "metrics": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "definition": zod.string(),
+  "baseline": zod.string().describe('Baseline remains TBD until a formally approved baseline source exists'),
+  "targetLabel": zod.string(),
+  "targetValue": zod.number(),
+  "direction": zod.enum(['at-most', 'at-least']),
+  "unit": zod.enum(['days', 'percent', 'score']),
+  "value": zod.number().nullable(),
+  "status": zod.enum(['met', 'missed', 'insufficient-data', 'not-collected']),
+  "sampleSize": zod.number(),
+  "eligibleCount": zod.number(),
+  "unknownCount": zod.number(),
+  "note": zod.string()
+}))
+})
+
+
+/**
  * @summary System Watcher agent status — per-connector polling/webhook health and tracked external-system checks
  */
 export const GetOnboardingSystemWatcherResponse = zod.object({
@@ -8072,3 +8345,5 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdBy": zod.string().describe('Display name of the author resolved at write time.'),
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
+
+

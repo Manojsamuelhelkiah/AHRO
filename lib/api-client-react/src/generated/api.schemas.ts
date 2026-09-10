@@ -2173,6 +2173,32 @@ export const OnbCaseChannelPreference = {
   both: 'both',
 } as const;
 
+export type OnbGatewayStatus = typeof OnbGatewayStatus[keyof typeof OnbGatewayStatus];
+
+
+export const OnbGatewayStatus = {
+  complete: 'complete',
+  blocked: 'blocked',
+  pending: 'pending',
+  'human-review': 'human-review',
+  'not-applicable': 'not-applicable',
+} as const;
+
+export interface OnbGateway {
+  status: OnbGatewayStatus;
+  label: string;
+  reason: string;
+}
+
+/**
+ * Server-derived live onboarding gate status; human-review always denotes a real human queue item.
+ */
+export type OnbCaseGateways = {
+  a: OnbGateway;
+  b: OnbGateway;
+  c: OnbGateway;
+};
+
 export interface OnbCase {
   id: number;
   workerName: string;
@@ -2243,8 +2269,21 @@ export interface OnbCase {
   orchestrationCheckpoint: string | null;
   /** Whether this manually-created case currently authorizes live email to its candidate record address */
   candidateEmailAuthorized: boolean;
+  /** HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases. */
+  offerAcceptanceComplete: boolean;
+  /** @nullable */
+  offerAcceptanceCompletedAt: string | null;
+  /** @nullable */
+  offerAcceptanceCompletedBy: string | null;
+  /** Server-derived live onboarding gate status; human-review always denotes a real human queue item. */
+  gateways: OnbCaseGateways;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OnbOfferAcceptanceConfirmation {
+  /** @minLength 1 */
+  note: string;
 }
 
 /**
@@ -2285,6 +2324,8 @@ export interface OnbCaseIntake {
   skillCriticality?: string;
   /** Unstructured recruiter notes; treated as evidence, not instructions */
   notes?: string;
+  /** HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation. */
+  offerAcceptanceComplete?: boolean;
 }
 
 /**
@@ -2782,6 +2823,59 @@ export interface OnbAnalytics {
      * @nullable
      */
   narrative: string | null;
+}
+
+export type OnbOutcomeKpiDirection = typeof OnbOutcomeKpiDirection[keyof typeof OnbOutcomeKpiDirection];
+
+
+export const OnbOutcomeKpiDirection = {
+  'at-most': 'at-most',
+  'at-least': 'at-least',
+} as const;
+
+export type OnbOutcomeKpiUnit = typeof OnbOutcomeKpiUnit[keyof typeof OnbOutcomeKpiUnit];
+
+
+export const OnbOutcomeKpiUnit = {
+  days: 'days',
+  percent: 'percent',
+  score: 'score',
+} as const;
+
+export type OnbOutcomeKpiStatus = typeof OnbOutcomeKpiStatus[keyof typeof OnbOutcomeKpiStatus];
+
+
+export const OnbOutcomeKpiStatus = {
+  met: 'met',
+  missed: 'missed',
+  'insufficient-data': 'insufficient-data',
+  'not-collected': 'not-collected',
+} as const;
+
+export interface OnbOutcomeKpi {
+  id: string;
+  label: string;
+  definition: string;
+  /** Baseline remains TBD until a formally approved baseline source exists */
+  baseline: string;
+  targetLabel: string;
+  targetValue: number;
+  direction: OnbOutcomeKpiDirection;
+  unit: OnbOutcomeKpiUnit;
+  /** @nullable */
+  value: number | null;
+  status: OnbOutcomeKpiStatus;
+  sampleSize: number;
+  eligibleCount: number;
+  unknownCount: number;
+  note: string;
+}
+
+export interface OnbOutcomeKpis {
+  asOf: string;
+  cohortLabel: string;
+  caseCount: number;
+  metrics: OnbOutcomeKpi[];
 }
 
 export interface OnbChannelInfo {
@@ -3327,3 +3421,32 @@ export type ListOnboardingApprovalsParams = {
  */
 status?: string;
 };
+
+export type GetOnboardingOutcomeKpisParams = {
+/**
+ * Case-created-at window; this is not a joining-date cohort
+ */
+period?: GetOnboardingOutcomeKpisPeriod;
+region?: string;
+hireType?: string;
+domain?: GetOnboardingOutcomeKpisDomain;
+};
+
+export type GetOnboardingOutcomeKpisPeriod = typeof GetOnboardingOutcomeKpisPeriod[keyof typeof GetOnboardingOutcomeKpisPeriod];
+
+
+export const GetOnboardingOutcomeKpisPeriod = {
+  NUMBER_7: '7',
+  NUMBER_30: '30',
+  NUMBER_90: '90',
+  All: 'All',
+} as const;
+
+export type GetOnboardingOutcomeKpisDomain = typeof GetOnboardingOutcomeKpisDomain[keyof typeof GetOnboardingOutcomeKpisDomain];
+
+
+export const GetOnboardingOutcomeKpisDomain = {
+  Onboarding: 'Onboarding',
+  All_domains: 'All domains',
+} as const;
+

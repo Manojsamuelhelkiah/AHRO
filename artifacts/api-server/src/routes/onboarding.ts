@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, asc, eq, sql } from "drizzle-orm";
+import { and, desc, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   DEMO_ORGANIZATION_ID,
@@ -13,6 +13,7 @@ import {
   onbSystemChecks,
   onbCandidateUploads,
   onbDocuments,
+  onbWatchEmails,
 } from "@workspace/db/schema";
 import {
   CreateOnboardingCaseBody,
@@ -27,11 +28,15 @@ import {
   UpdateOnboardingChecklistProfileBody,
   RecalculateOnboardingChecklistProfileBody,
   DecideOnboardingEvidenceBody,
+  ConfirmOnboardingOfferAcceptanceBody,
+  GetOnboardingOutcomeKpisQueryParams,
 } from "@workspace/api-zod";
 import {
   defaultReadiness,
   defaultWorkstreams,
   handleInbound,
+  enforceOfferAcceptanceGate,
+  offerAcceptanceRequired,
   resumeAfterDecision,
   startOrchestration,
 } from "../lib/onboarding/engine";
@@ -45,6 +50,7 @@ import {
   sendAdministrativeEmail,
   systemEmailTestAddress,
   retryCandidateEmail,
+  candidateEmailAuthorization,
   whatsappChannelInfo,
 } from "../lib/onboarding/channels";
 import { llmComplete } from "../lib/onboarding/llm";
@@ -70,6 +76,7 @@ import {
   getCandidateLinkRetentionDays,
   isAllowedCandidateLinkRetentionDays,
   CANDIDATE_LINK_RETENTION_DAYS_KEY,
+  mandatoryChecklistReady,
 } from "../lib/onboarding/settings";
 import { logisticsForCase, validateDay1LogisticsDefault } from "../lib/onboarding/logistics-defaults";
 import {
@@ -106,7 +113,7 @@ import {
   simulateVendorEmail,
 } from "../lib/onboarding/email-watch";
 import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
-import { systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
+import { applicableSystems, systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference, shouldAuthorizeCandidateEmail } from "../lib/onboarding/channel-routing";
 import {
   getCandidateAccessCleanupHealth,
@@ -117,6 +124,14 @@ import { normalizeBgvStatus } from "../lib/onboarding/document-validation";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
 import { requeueDocumentMalwareScan } from "../lib/onboarding/document-malware";
 import { malwareScanRetryable, malwareUploadIsClean } from "../lib/onboarding/malware-policy";
+import { latestRequiredUploadMalwareBlockers } from "../lib/onboarding/document-readiness-guard";
+import { documentationGateConfigured } from "../lib/onboarding/engine";
+import {
+  calculateOutcomeKpis,
+  type OutcomeBgvCheck,
+  type OutcomeBgvEmail,
+  type OutcomeEvent,
+} from "../lib/onboarding/outcome-kpis";
 import { clerkClient } from "@clerk/express";
 import {
   getOrganizationId,
@@ -200,7 +215,60 @@ router.post("/onboarding/demo-login", async (req, res, next) => {
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
-function serializeCase(row: typeof onbCases.$inferSelect) {
+async function deriveGateways(row: typeof onbCases.$inferSelect) {
+  const offerRequired = offerAcceptanceRequired(row);
+  const offerAuthorization = candidateEmailAuthorization(row);
+  const [bgv] = await db.select().from(onbSystemChecks).where(and(
+    eq(onbSystemChecks.organizationId, row.organizationId),
+    eq(onbSystemChecks.caseId, row.id),
+    eq(onbSystemChecks.system, "bgv"),
+  ));
+  const [finalApproval] = await db.select({
+    status: onbApprovals.status,
+  }).from(onbApprovals).where(and(
+    eq(onbApprovals.organizationId, row.organizationId),
+    eq(onbApprovals.caseId, row.id),
+    eq(onbApprovals.idempotencyKey, `gateway-c:${row.id}:human-queue`),
+  )).orderBy(desc(onbApprovals.id)).limit(1);
+  const malwareBlockers = documentationGateConfigured(row)
+    ? await db.transaction((tx) => latestRequiredUploadMalwareBlockers(tx, row.organizationId, row.id))
+    : [];
+  const mandatoryReady = mandatoryChecklistReady(row);
+  return {
+    a: row.lifecycleStage === "complete" && !row.offerAcceptanceComplete
+      ? { status: "not-applicable" as const, label: "Gate A — offer acceptance", reason: "Historical terminal case preserved; acceptance evidence was not retroactively inferred." }
+      : !offerRequired
+      ? { status: "not-applicable" as const, label: "Gate A — offer acceptance", reason: "Offer-acceptance packages are not required for this onboarding pathway." }
+      : row.offerAcceptanceComplete
+        ? { status: "complete" as const, label: "Gate A — offer acceptance", reason: "HR confirmed the offer-acceptance package." }
+        : !offerAuthorization.allowed
+          ? { status: "blocked" as const, label: "Gate A — offer acceptance", reason: `${offerAuthorization.reason ?? "Candidate email is not authorized."} The email-only package request is blocked and is in the HR human queue.` }
+          : { status: "human-review" as const, label: "Gate A — offer acceptance", reason: "Offer package completion requires a dedicated HR confirmation; onboarding remains held." },
+    b: row.hireType === "internal-transfer"
+      ? { status: "not-applicable" as const, label: "Gate B — background verification", reason: "This internal-transfer pathway does not run a fresh BGV check." }
+      : !bgv
+        ? { status: "pending" as const, label: "Gate B — background verification", reason: "BGV has not yet been requested; absence is not evidence of completion." }
+        : bgv.status === "done"
+          ? { status: "complete" as const, label: "Gate B — background verification", reason: "The live BGV source reported clearance." }
+          : bgv.status === "overdue"
+            ? { status: "human-review" as const, label: "Gate B — background verification", reason: "BGV is overdue or has an exception; a human review queue item is required." }
+            : { status: "pending" as const, label: "Gate B — background verification", reason: "Awaiting a live BGV source status." },
+    c: row.lifecycleStage === "complete" && !finalApproval
+      ? { status: "not-applicable" as const, label: "Gate C — Day-1 readiness", reason: "Historical terminal case preserved; final-review evidence was not retroactively inferred." }
+      : row.lifecycleStage === "complete" && finalApproval?.status === "approved" && mandatoryReady && malwareBlockers.length === 0 && (!documentationGateConfigured(row) || !applicableSystems(row).some((system) => system.key === "bgv") || bgv?.status === "done")
+      ? { status: "complete" as const, label: "Gate C — Day-1 readiness", reason: "HR approved the final Day-1 review after live readiness checks." }
+      : !mandatoryReady || malwareBlockers.length > 0 || (documentationGateConfigured(row) && applicableSystems(row).some((system) => system.key === "bgv") && (!bgv || bgv.status !== "done"))
+        ? { status: "blocked" as const, label: "Gate C — Day-1 readiness", reason: malwareBlockers.length > 0 ? "Latest required upload malware evidence is not clear." : bgv && bgv.status !== "done" ? "The configured live BGV check is not currently clear." : "Configured mandatory readiness items are not currently complete." }
+        : finalApproval?.status === "pending"
+          ? { status: "human-review" as const, label: "Gate C — Day-1 readiness", reason: "Live readiness is complete and awaits the dedicated HR final-review queue decision." }
+          : finalApproval?.status === "approved"
+            ? { status: "pending" as const, label: "Gate C — Day-1 readiness", reason: "Final approval was recorded but the completion reconciliation is pending." }
+            : { status: "pending" as const, label: "Gate C — Day-1 readiness", reason: "Awaiting configured readiness checks and a dedicated HR final review." },
+  };
+}
+
+async function serializeCase(row: typeof onbCases.$inferSelect) {
+  const gateways = await deriveGateways(row);
   return {
     id: row.id,
     workerName: row.workerName,
@@ -235,6 +303,10 @@ function serializeCase(row: typeof onbCases.$inferSelect) {
     checklistMatchExplanation: row.checklistMatchExplanation,
     orchestrationCheckpoint: row.orchestrationCheckpoint,
     candidateEmailAuthorized: Boolean(row.candidateEmailAuthorizedAt),
+    offerAcceptanceComplete: row.offerAcceptanceComplete,
+    offerAcceptanceCompletedAt: iso(row.offerAcceptanceCompletedAt),
+    offerAcceptanceCompletedBy: row.offerAcceptanceCompletedBy,
+    gateways,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -383,7 +455,7 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
       candidateEmailAuthorizedAt: null,
       candidateEmailAuthorizedBy: null,
     }, getOrganizationId(req));
-    res.status(201).json(serializeCase(row));
+    res.status(201).json(await serializeCase(row));
   } catch (err) {
     next(err);
   }
@@ -398,7 +470,7 @@ router.get("/onboarding/cases", async (req, res, next) => {
       .from(onbCases)
       .where(organizationWhere(onbCases, getOrganizationId(req)))
       .orderBy(desc(onbCases.id));
-    res.json(rows.map(serializeCase));
+    res.json(await Promise.all(rows.map(serializeCase)));
   } catch (err) {
     next(err);
   }
@@ -451,22 +523,23 @@ router.post("/onboarding/cases", async (req, res, next) => {
       scenarioKey: null,
       candidateEmailAuthorizedAt: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? new Date() : null,
       candidateEmailAuthorizedBy: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? req.authUserId! : null,
+      offerAcceptanceComplete: body.offerAcceptanceComplete,
+      offerAcceptanceCompletedAt: body.offerAcceptanceComplete ? new Date() : null,
+      offerAcceptanceCompletedBy: body.offerAcceptanceComplete ? await resolveReviewerName(req.authUserId!) : null,
     }, getOrganizationId(req));
-    if (row.candidateEmailAuthorizedAt) {
-      try {
-        await issueCandidatePortalLink({
-          organizationId: getOrganizationId(req),
-          caseId: row.id,
-          issuedBy: req.authUserId!,
-          publicBase: portalPublicBase(req),
-          sendEmail: true,
-          idempotencyKey: AUTOMATED_PORTAL_EMAIL_KEY(row.id),
-        });
-      } catch (error) {
-        console.error(`[candidate-portal] automatic provisioning failed for case ${row.id}:`, error);
-      }
+    // Gate A owns the first candidate contact only on new/rehire pathways.
+    // Unrelated onboarding pathways retain their established portal behavior.
+    if (row.candidateEmailAuthorizedAt && (row.offerAcceptanceComplete || !offerAcceptanceRequired(row))) {
+      await issueCandidatePortalLink({
+        organizationId: getOrganizationId(req),
+        caseId: row.id,
+        issuedBy: req.authUserId!,
+        publicBase: portalPublicBase(req),
+        sendEmail: true,
+        idempotencyKey: AUTOMATED_PORTAL_EMAIL_KEY(row.id),
+      });
     }
-    res.status(201).json(serializeCase(row));
+    res.status(201).json(await serializeCase(row));
   } catch (err) {
     next(err);
   }
@@ -486,7 +559,93 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
       res.status(404).json({ message: "Case not found" });
       return;
     }
-    res.json(serializeCase(row));
+    res.json(await serializeCase(row));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    const body = ConfirmOnboardingOfferAcceptanceBody.parse(req.body);
+    const organizationId = getOrganizationId(req);
+    const reviewer = await resolveReviewerName(req.authUserId!);
+    // A direct confirmation immediately after create can beat the detached
+    // orchestration starter. Force the durable, idempotent email-only request
+    // to exist first; its effect key prevents repeated sends on retries.
+    const [before] = await db.select({
+      offerAcceptanceComplete: onbCases.offerAcceptanceComplete,
+      hireType: onbCases.hireType,
+    }).from(onbCases).where(and(eq(onbCases.id, id), eq(onbCases.organizationId, organizationId)));
+    if (before && offerAcceptanceRequired(before) && !before.offerAcceptanceComplete) {
+      await enforceOfferAcceptanceGate(id);
+    }
+    const outcome = await db.transaction(async (tx) => {
+      const [current] = await tx.select().from(onbCases).where(and(
+        eq(onbCases.id, id),
+        eq(onbCases.organizationId, organizationId),
+      )).for("update");
+      if (!current) return { kind: "not-found" as const };
+      if (!offerAcceptanceRequired(current)) return { kind: "not-applicable" as const };
+      if (current.offerAcceptanceComplete) return { kind: "already-confirmed" as const, row: current };
+      const [row] = await tx.update(onbCases).set({
+        offerAcceptanceComplete: true,
+        offerAcceptanceCompletedAt: new Date(),
+        offerAcceptanceCompletedBy: reviewer,
+        orchestrationStatus: "idle",
+        orchestrationCheckpoint: "offer-accepted",
+        orchestrationClaimOwner: null,
+        orchestrationClaimUntil: null,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(onbCases.id, id),
+        eq(onbCases.organizationId, organizationId),
+        eq(onbCases.offerAcceptanceComplete, false),
+      )).returning();
+      if (!row) throw new Error("Offer-acceptance confirmation was concurrently updated.");
+      await tx.insert(onbEvents).values({
+        organizationId,
+        caseId: id,
+        agent: "human",
+        engine: "human",
+        hitlPattern: "hard-block",
+        ruleRef: "Gate A — offer-acceptance package",
+        title: "Gate A offer-acceptance package confirmed by HR",
+        detail: `${reviewer} confirmed the offer-acceptance package. Note: ${body.note.trim()}. The dedicated Gate A confirmation releases onboarding; generic approvals do not.`,
+        idempotencyKey: `gateway-a:${id}:confirmed`,
+      }).onConflictDoNothing({
+        target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+      });
+      return { kind: "confirmed" as const, row };
+    });
+    if (outcome.kind === "not-found") {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    if (outcome.kind === "not-applicable") {
+      res.status(409).json({ message: "Gate A is not applicable to this onboarding pathway." });
+      return;
+    }
+    if (outcome.kind === "confirmed" && outcome.row.candidateEmailAuthorizedAt) {
+      await issueCandidatePortalLink({
+        organizationId,
+        caseId: id,
+        issuedBy: req.authUserId!,
+        publicBase: portalPublicBase(req),
+        sendEmail: true,
+        idempotencyKey: AUTOMATED_PORTAL_EMAIL_KEY(id),
+      });
+    }
+    // Atomic case transition is the source of truth. If this process dies
+    // before this wake-up, the shared heartbeat recovers offer-accepted rows.
+    if (outcome.kind === "confirmed") startOrchestration(id);
+    res.json(await serializeCase(outcome.row));
   } catch (err) {
     next(err);
   }
@@ -597,7 +756,7 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
       res.status(409).json({ message: outcome.message });
       return;
     }
-    res.json(serializeCase(outcome.row));
+    res.json(await serializeCase(outcome.row));
   } catch (err) {
     next(err);
   }
@@ -630,7 +789,7 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
         .json({ message: messages[result.code] });
       return;
     }
-    res.json(serializeCase(result.case));
+    res.json(await serializeCase(result.case));
   } catch (err) {
     next(err);
   }
@@ -1306,6 +1465,7 @@ router.get("/onboarding/approvals", async (req, res, next) => {
 
 router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
   try {
+    if (!requireHrChecklistRole(req, res)) return;
     const id = Number(req.params.id);
     const body = DecideOnboardingApprovalBody.parse(req.body);
     if (body.decision !== "approved" && body.decision !== "rejected") {
@@ -1353,6 +1513,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       decidedBy,
       comment: body.comment ?? null,
       recommendation: a.recommendation,
+      ruleRef: a.ruleRef,
       hitlPattern: a.hitlPattern,
       resumeAction: a.resumeAction ?? "none",
     });
@@ -1954,17 +2115,19 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
       return;
     }
     const caseId = Number(req.body?.caseId);
+    const externalRef = String(req.body?.externalRef ?? "");
     const status = String(req.body?.status ?? "");
-    if (!Number.isInteger(caseId) || !status) {
-      res.status(400).json({ message: "caseId (number) and status are required" });
+    if (!Number.isInteger(caseId) || !externalRef || !status) {
+      res.status(400).json({ message: "caseId (number), externalRef, and status are required" });
       return;
     }
     const result = await handleSystemWebhook({
       system: req.params.system,
       caseId,
+      externalRef,
       status,
     });
-    res.status(result.ok ? 200 : 404).json({ message: result.message });
+    res.status(result.ok ? 200 : result.message.startsWith("Unsupported") ? 400 : 404).json({ message: result.message });
   } catch (err) {
     next(err);
   }
@@ -1980,6 +2143,175 @@ type NarrativeCacheEntry = {
   generatingFor: string | null;
 };
 const narrativeCache = new Map<string, NarrativeCacheEntry>();
+
+router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
+  try {
+    const rawDomain =
+      typeof req.query.domain === "string"
+        ? req.query.domain
+        : req.query.domain === undefined
+          ? undefined
+          : String(req.query.domain);
+    const supportedDomain =
+      rawDomain === undefined ||
+      rawDomain === "Onboarding" ||
+      rawDomain === "All domains";
+    // An older frontend may send another domain value. Return an empty
+    // eligible cohort instead of guessing across unsupported domains.
+    const parsed = GetOnboardingOutcomeKpisQueryParams.safeParse({
+      period: req.query.period,
+      region: req.query.region,
+      hireType: req.query.hireType,
+      domain: supportedDomain ? rawDomain : undefined,
+    });
+    if (!parsed.success) {
+      next(parsed.error);
+      return;
+    }
+
+    const organizationId = getOrganizationId(req);
+    const asOf = new Date();
+    const period = parsed.data.period ?? "30";
+    const periodDays = period === "All" ? null : Number(period);
+    const lowerBound =
+      periodDays === null
+        ? null
+        : new Date(asOf.getTime() - periodDays * 24 * 60 * 60 * 1000);
+    const caseFilters = [
+      organizationWhere(onbCases, organizationId),
+      lte(onbCases.createdAt, asOf),
+      ...(lowerBound ? [gte(onbCases.createdAt, lowerBound)] : []),
+      ...(parsed.data.region ? [eq(onbCases.geography, parsed.data.region)] : []),
+      ...(parsed.data.hireType ? [eq(onbCases.hireType, parsed.data.hireType)] : []),
+    ];
+    const cases = supportedDomain
+      ? await db
+          .select()
+          .from(onbCases)
+          .where(and(...caseFilters))
+      : [];
+
+    const caseIds = cases.map((row) => row.id);
+    let events: OutcomeEvent[] = [];
+    let bgvChecks: OutcomeBgvCheck[] = [];
+    let bgvEmails: OutcomeBgvEmail[] = [];
+    const gateCApprovalByCase = new Map<number, { id: number; status: string }>();
+    if (caseIds.length > 0) {
+      const [eventRows, checkRows, emailRows, approvalRows] = await Promise.all([
+        db
+          .select({ event: onbEvents })
+          .from(onbEvents)
+          .innerJoin(
+            onbCases,
+            and(
+              eq(onbEvents.caseId, onbCases.id),
+              eq(onbEvents.organizationId, onbCases.organizationId),
+            ),
+          )
+          .where(
+            and(
+              organizationWhere(onbEvents, organizationId),
+              inArray(onbCases.id, caseIds),
+            ),
+          ),
+        db
+          .select({ check: onbSystemChecks })
+          .from(onbSystemChecks)
+          .innerJoin(
+            onbCases,
+            and(
+              eq(onbSystemChecks.caseId, onbCases.id),
+              eq(onbSystemChecks.organizationId, onbCases.organizationId),
+            ),
+          )
+          .where(
+            and(
+              organizationWhere(onbSystemChecks, organizationId),
+              inArray(onbCases.id, caseIds),
+              eq(onbSystemChecks.system, "bgv"),
+            ),
+          ),
+        db
+          .select({ email: onbWatchEmails })
+          .from(onbWatchEmails)
+          .innerJoin(
+            onbSystemChecks,
+            and(
+              eq(onbWatchEmails.checkId, onbSystemChecks.id),
+              eq(onbWatchEmails.organizationId, onbSystemChecks.organizationId),
+            ),
+          )
+          .innerJoin(
+            onbCases,
+            and(
+              eq(onbWatchEmails.caseId, onbCases.id),
+              eq(onbWatchEmails.organizationId, onbCases.organizationId),
+            ),
+          )
+          .where(
+            and(
+              organizationWhere(onbWatchEmails, organizationId),
+              inArray(onbCases.id, caseIds),
+              eq(onbSystemChecks.system, "bgv"),
+            ),
+          ),
+        db
+          .select({
+            caseId: onbApprovals.caseId,
+            id: onbApprovals.id,
+            status: onbApprovals.status,
+          })
+          .from(onbApprovals)
+          .innerJoin(
+            onbCases,
+            and(
+              eq(onbApprovals.caseId, onbCases.id),
+              eq(onbApprovals.organizationId, onbCases.organizationId),
+            ),
+          )
+          .where(
+            and(
+              organizationWhere(onbApprovals, organizationId),
+              inArray(onbCases.id, caseIds),
+              sql`${onbApprovals.idempotencyKey} like 'gateway-c:%:human-queue'`,
+            ),
+          ),
+      ]);
+      events = eventRows.map(({ event }) => event);
+      bgvChecks = checkRows.map(({ check }) => check);
+      bgvEmails = emailRows.map(({ email }) => email);
+      for (const approval of approvalRows) {
+        const current = gateCApprovalByCase.get(approval.caseId);
+        if (!current || approval.id > current.id) {
+          gateCApprovalByCase.set(approval.caseId, {
+            id: approval.id,
+            status: approval.status,
+          });
+        }
+      }
+    }
+
+    const casesForCalculation = cases.map((row) => ({
+      ...row,
+      gateCApprovalStatus: gateCApprovalByCase.get(row.id)?.status ?? null,
+    }));
+    res.json(
+      calculateOutcomeKpis({
+        cases: casesForCalculation,
+        events,
+        bgvChecks,
+        bgvEmails,
+        asOf,
+        period,
+        region: parsed.data.region,
+        hireType: parsed.data.hireType,
+        domain: supportedDomain ? parsed.data.domain : rawDomain,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/onboarding/analytics", async (req, res, next) => {
   try {

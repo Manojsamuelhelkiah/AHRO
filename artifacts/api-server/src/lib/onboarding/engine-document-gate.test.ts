@@ -183,9 +183,11 @@ describe("live document malware gate in orchestration", { skip: !hasDb }, () => 
     const resumed = await resumeChecklistOrchestration(caseId);
     const [current] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
 
-    assert.equal(resumed, true);
-    assert.equal(current.orchestrationStatus, "idle");
-    assert.equal(current.orchestrationCheckpoint, "review-complete");
+    // Live readiness now hands off to the mandatory Gate C HR queue rather
+    // than completing the pipeline automatically.
+    assert.equal(resumed, false);
+    assert.equal(current.orchestrationStatus, "waiting-approval");
+    assert.equal(current.orchestrationCheckpoint, "waiting:day1-readiness");
   });
 
   test("pending uploads for optional documents do not block mandatory documentation readiness", async () => {
@@ -196,8 +198,8 @@ describe("live document malware gate in orchestration", { skip: !hasDb }, () => 
     const resumed = await resumeChecklistOrchestration(caseId);
     const [current] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
 
-    assert.equal(resumed, true);
-    assert.equal(current.orchestrationStatus, "idle");
-    assert.equal(current.orchestrationCheckpoint, "review-complete");
+    assert.equal(resumed, false);
+    assert.equal(current.orchestrationStatus, "waiting-approval");
+    assert.equal(current.orchestrationCheckpoint, "waiting:day1-readiness");
   });
 });

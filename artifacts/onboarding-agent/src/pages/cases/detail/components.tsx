@@ -10,7 +10,7 @@ export function StatusBadgeText({ status }: { status: string }) {
   let colorClass = 'text-[var(--text-muted)]';
   if (['completed', 'healthy', 'ready', 'verified', 'approved', 'delivered', 'done', 'complete'].includes(s)) colorClass = 'text-[var(--status-green)]';
   else if (['running', 'active', 'in-progress', 'received'].includes(s)) colorClass = 'text-[var(--status-blue)]';
-  else if (['waiting-approval', 'human review', 'pending', 'attention'].includes(s)) colorClass = 'text-[var(--status-amber)]';
+  else if (['waiting-approval', 'human-review', 'human review', 'pending', 'attention'].includes(s)) colorClass = 'text-[var(--status-amber)]';
   else if (['blocked', 'checklist-blocked', 'critical', 'exception', 'failed', 'rejected'].includes(s)) colorClass = 'text-[var(--status-red)]';
 
   return (
@@ -25,7 +25,7 @@ export function StatusDot({ status }: { status: string }) {
   let bg = 'var(--text-muted)';
   if (['completed', 'healthy', 'ready', 'verified', 'approved', 'delivered', 'done', 'complete'].includes(s)) bg = 'var(--status-green)';
   else if (['running', 'active', 'in-progress', 'received'].includes(s)) bg = 'var(--status-blue)';
-  else if (['waiting-approval', 'human review', 'pending', 'attention'].includes(s)) bg = 'var(--status-amber)';
+  else if (['waiting-approval', 'human-review', 'human review', 'pending', 'attention'].includes(s)) bg = 'var(--status-amber)';
   else if (['blocked', 'checklist-blocked', 'critical', 'exception', 'failed', 'rejected'].includes(s)) bg = 'var(--status-red)';
 
   return <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: bg }} />;

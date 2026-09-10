@@ -4,6 +4,7 @@ import {
   onbCases,
   onbCommunications,
   onbEvents,
+  onbSystemChecks,
   type OnbReadinessItemRow,
   type OnbRecordsEvidenceItem,
   type OnbWorkstreamRow,
@@ -31,7 +32,7 @@ import {
   wantsCall,
 } from "./scheduling";
 import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
-import { isNonEmployee } from "./external-systems";
+import { applicableSystems, isNonEmployee } from "./external-systems";
 import { randomUUID } from "node:crypto";
 import {
   LEGACY_CHECKLIST,
@@ -46,6 +47,14 @@ type CaseRow = typeof onbCases.$inferSelect;
 
 export function checkpointSkipsPlanApproval(checkpoint: string | null | undefined): boolean {
   return checkpoint === "plan-approved";
+}
+
+export const OFFER_ACCEPTANCE_GATE_RULE = "Gate A — offer-acceptance package";
+export const DAY1_READINESS_GATE_RULE = "Gate C — Day-1 readiness confirmation";
+
+/** Gate A applies to external employee, contractor, and rehire onboarding. */
+export function offerAcceptanceRequired(c: Pick<CaseRow, "hireType">): boolean {
+  return c.hireType === "external-fte" || c.hireType === "contractor" || c.hireType === "rehire";
 }
 
 /* ------------------------------------------------------------------ */
@@ -89,6 +98,78 @@ async function updateCase(caseId: number, patch: Partial<typeof onbCases.$inferI
     .update(onbCases)
     .set({ ...patch, updatedAt: new Date() })
     .where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, c.organizationId)));
+}
+
+/**
+ * Gate A is before Intake: no plan, connector mutation, welcome message, or
+ * portal provisioning may happen until a named HR reviewer confirms the
+ * package. The email is deliberately attempted even for WhatsApp preference;
+ * sendOutbound preserves the case-scoped email authorization boundary and
+ * durably records a blocked/uncertain attempt rather than falling back.
+ */
+export async function enforceOfferAcceptanceGate(
+  caseId: number,
+  claim?: OrchestrationClaim,
+): Promise<boolean> {
+  const c = await getCase(caseId);
+  if (!offerAcceptanceRequired(c) || c.offerAcceptanceComplete) return true;
+
+  const delivery = await sendOutbound({
+    caseId,
+    channel: "email",
+    toAddress: c.workerEmail,
+    subject: "Action required: complete your offer-acceptance package",
+    body: `Hello ${c.workerName.split(" ")[0]}, before onboarding can begin, please complete your offer-acceptance package by replying to this email or following the instructions provided by HR. A human HR reviewer will confirm completion before any onboarding activity starts.`,
+    idempotencyKey: `gateway-a:${caseId}:offer-package:email`,
+  });
+  const blocked = delivery.status !== "sent";
+  await createApproval({
+    caseId,
+    agent: "offer-acceptance-gate",
+    ruleRef: OFFER_ACCEPTANCE_GATE_RULE,
+    hitlPattern: "hard-block",
+    recommendation: blocked
+      ? "Resolve the blocked/uncertain offer-acceptance package email and confirm package completion"
+      : "Confirm offer-acceptance package completion after HR evidence review",
+    rationale: blocked
+      ? `The mandatory email-only offer package request is ${delivery.status}${delivery.failureReason ? `: ${delivery.failureReason}` : ""}. No WhatsApp fallback is permitted; HR must resolve this before onboarding.`
+      : "The offer-acceptance package request was durably dispatched. HR must review the returned evidence and use the dedicated Gate A confirmation action; generic approvals cannot release this gate.",
+    // This gate has its own atomic confirmation route. A generic approval may
+    // document review, but must never become an orchestration bypass.
+    resumeAction: "none",
+    idempotencyKey: `gateway-a:${caseId}:human-queue`,
+  });
+  const patch = {
+    orchestrationStatus: "waiting-approval",
+    orchestrationCheckpoint: "waiting:offer-acceptance",
+    orchestrationClaimOwner: null,
+    orchestrationClaimUntil: null,
+  } as const;
+  if (claim) await fencedCaseUpdate(caseId, claim, patch);
+  else {
+    // A detached create starter can race the dedicated confirmation route.
+    // Never overwrite a confirmed release with the old waiting boundary.
+    await db.update(onbCases).set({ ...patch, updatedAt: new Date() }).where(and(
+      eq(onbCases.id, caseId),
+      eq(onbCases.organizationId, c.organizationId),
+      eq(onbCases.offerAcceptanceComplete, false),
+    ));
+  }
+  await logEvent(
+    caseId,
+    "offer-acceptance-gate",
+    "rules",
+    "Gate A blocked onboarding pending offer acceptance",
+    blocked
+      ? "Offer-package email is blocked or has an uncertain outcome. A human queue item was created; no downstream onboarding action was started."
+      : "Offer-package email was sent first. A human queue item was created; no downstream onboarding action was started.",
+    {
+      hitlPattern: "hard-block",
+      ruleRef: OFFER_ACCEPTANCE_GATE_RULE,
+      idempotencyKey: `gateway-a:${caseId}:blocked`,
+    },
+  );
+  return false;
 }
 
 async function getCase(caseId: number): Promise<CaseRow> {
@@ -358,6 +439,7 @@ function setWorkstream(
 /* ------------------------------------------------------------------ */
 
 async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"continue" | "paused"> {
+  if (!(await enforceOfferAcceptanceGate(caseId, claim))) return "paused";
   const c = await getCase(caseId);
   const write = (patch: Partial<typeof onbCases.$inferInsert>) =>
     claim ? fencedCaseUpdate(caseId, claim, patch) : updateCase(caseId, patch);
@@ -834,6 +916,7 @@ async function runCommunications(caseId: number) {
 /* ------------------------------------------------------------------ */
 
 async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim) {
+  if (!(await enforceOfferAcceptanceGate(caseId, claim))) return false;
   const c = await getCase(caseId);
 
   const review = await db.transaction(async (tx) => {
@@ -872,7 +955,10 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
       ? {
           workstreams: ws,
           lifecycleStage: "day1-review",
-          orchestrationStatus: "idle",
+          orchestrationStatus: "waiting-approval",
+          orchestrationCheckpoint: "waiting:day1-readiness",
+          orchestrationClaimOwner: null,
+          orchestrationClaimUntil: null,
           updatedAt: new Date(),
         }
       : {
@@ -894,6 +980,21 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
         : []),
     )).returning({ id: onbCases.id });
     if (!updated) throw new Error("Orchestration review commit was fenced");
+    if (promoted) {
+      await tx.insert(onbApprovals).values({
+        organizationId: current.organizationId,
+        caseId,
+        agent: "day1-readiness-gate",
+        ruleRef: DAY1_READINESS_GATE_RULE,
+        hitlPattern: "approve-before-act",
+        recommendation: "Review live Day-1 readiness and confirm onboarding completion",
+        rationale: "All currently configured mandatory readiness items passed this review. HR confirmation is still required and will re-check live document-malware evidence before completion; no automated employment action is taken.",
+        resumeAction: "none",
+        idempotencyKey: `gateway-c:${caseId}:human-queue`,
+      }).onConflictDoNothing({
+        target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
+      });
+    }
     return { allReady, promoted, malwareBlockers: [] as number[] };
   });
   if (
@@ -915,7 +1016,99 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
       ruleRef: "4.7 Readiness Rule 10",
       idempotencyKey: `orchestration:${caseId}:review:${review.promoted ? "complete" : "blocked"}`,
     });
+  if (review.promoted) {
+    // Gate C queue creation and the waiting boundary committed atomically
+    // above, so a crash cannot lose the final-review handoff.
+    return false;
+  }
   return review.promoted;
+}
+
+/**
+ * Gate C's approval is intentionally narrower than generic approval handling.
+ * Re-evaluate the live mandatory/malware boundary while holding the case lock
+ * so an approval cannot race a document replacement or checklist reopen.
+ */
+export async function completeDay1ReadinessGate(caseId: number): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    if (!c) return false;
+    const [approval] = await tx.select({ id: onbApprovals.id }).from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, c.organizationId),
+      eq(onbApprovals.caseId, caseId),
+      eq(onbApprovals.idempotencyKey, `gateway-c:${caseId}:human-queue`),
+      eq(onbApprovals.status, "approved"),
+    ));
+    if (!approval) return false;
+    const malwareBlockers = documentationGateConfigured(c)
+      ? await latestRequiredUploadMalwareBlockers(tx, c.organizationId, caseId)
+      : [];
+    const [bgv] = await tx.select({ status: onbSystemChecks.status }).from(onbSystemChecks).where(and(
+      eq(onbSystemChecks.organizationId, c.organizationId),
+      eq(onbSystemChecks.caseId, caseId),
+      eq(onbSystemChecks.system, "bgv"),
+    ));
+    // BGV is required only where the configured documentation gate and case
+    // pathway make it applicable. In that boundary, absence is not a green
+    // result; a configured live check must exist and be done.
+    const bgvRequired = documentationGateConfigured(c) && applicableSystems(c).some((system) => system.key === "bgv");
+    if (!mandatoryChecklistReady(c) || malwareBlockers.length > 0 || (bgvRequired && (!bgv || bgv.status !== "done"))) {
+      // A previous Gate C approval authorizes only the readiness state that was
+      // reviewed. Reopening evidence/checks revokes that authority; recovery
+      // must never turn an old approval into a later automatic completion.
+      const [reopened] = await tx.update(onbApprovals).set({
+        status: "pending",
+        decidedAt: null,
+        decidedBy: null,
+        comment: "Automatically reopened because live readiness evidence changed; fresh HR confirmation is required.",
+      }).where(and(
+        eq(onbApprovals.organizationId, c.organizationId),
+        eq(onbApprovals.caseId, caseId),
+        eq(onbApprovals.idempotencyKey, `gateway-c:${caseId}:human-queue`),
+        eq(onbApprovals.status, "approved"),
+      )).returning({ id: onbApprovals.id });
+      if (reopened) {
+        await tx.insert(onbEvents).values({
+          organizationId: c.organizationId, caseId, agent: "day1-readiness-gate",
+          engine: "rules", hitlPattern: "approve-before-act", ruleRef: DAY1_READINESS_GATE_RULE,
+          title: "Gate C approval invalidated by changed live readiness evidence",
+          detail: "A fresh HR final-review decision is required; the prior approval was not reused.",
+          idempotencyKey: `gateway-c:${caseId}:reopened`,
+        }).onConflictDoNothing({ target: [onbEvents.organizationId, onbEvents.idempotencyKey] });
+      }
+      await tx.update(onbCases).set({
+        lifecycleStage: "preboarding",
+        orchestrationStatus: "checklist-blocked",
+        orchestrationCheckpoint: "blocked:re-review",
+        orchestrationClaimOwner: null,
+        orchestrationClaimUntil: null,
+        updatedAt: new Date(),
+      }).where(eq(onbCases.id, caseId));
+      return false;
+    }
+    await tx.update(onbCases).set({
+      lifecycleStage: "complete",
+      orchestrationStatus: "done",
+      orchestrationCheckpoint: "review-complete",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+      updatedAt: new Date(),
+    }).where(eq(onbCases.id, caseId));
+    await tx.insert(onbEvents).values({
+      organizationId: c.organizationId,
+      caseId,
+      agent: "day1-readiness-gate",
+      engine: "human",
+      hitlPattern: "approve-before-act",
+      ruleRef: DAY1_READINESS_GATE_RULE,
+      title: "Gate C Day-1 readiness confirmed by HR",
+      detail: "A human reviewer approved the final Day-1 readiness confirmation after current mandatory checklist and malware evidence were re-evaluated. No automated adverse employment action was taken.",
+      idempotencyKey: `gateway-c:${caseId}:complete`,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
+    return true;
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -928,6 +1121,7 @@ async function runFromPlan(
   claim?: OrchestrationClaim,
 ) {
   if (!claim) throw new Error("A durable orchestration claim is required");
+  if (!(await enforceOfferAcceptanceGate(caseId, claim))) return;
   await fencedCaseUpdate(caseId, claim, { orchestrationStatus: "running" });
   const plan = await runPlanGeneration(caseId, resumingAfterPlanApproval, claim);
   if (plan === "paused") return;
@@ -968,6 +1162,7 @@ export function startOrchestration(caseId: number) {
         .returning({ token: onbCases.orchestrationClaimToken });
       if (!claimed) return;
       claim = { owner, token: claimed.token };
+      if (!(await enforceOfferAcceptanceGate(caseId, claim))) return;
       const intake = await runIntake(caseId, claim);
       if (intake === "continue") {
         await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "plan" });
@@ -1033,6 +1228,7 @@ export async function resumeChecklistOrchestration(caseId: number): Promise<bool
   const checkpoint = claimed.orchestrationCheckpoint;
   try {
     await renewOrchestrationClaim(caseId, claim);
+    if (!(await enforceOfferAcceptanceGate(caseId, claim))) return true;
     if (checkpoint === "initial") {
       const intake = await runIntake(caseId, claim);
       if (intake === "continue") {
@@ -1268,6 +1464,7 @@ export function resumeAfterDecision(opts: {
   decidedBy: string;
   comment: string | null;
   recommendation: string;
+  ruleRef: string | null;
   hitlPattern: string;
   resumeAction: string;
 }) {
@@ -1275,17 +1472,49 @@ export function resumeAfterDecision(opts: {
     try {
       const isHardBlock = opts.hitlPattern === "hard-block";
       await logEvent(opts.caseId, "human", "human",
-        isHardBlock
+        opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
+          ? "Gate A review decision recorded — dedicated confirmation still required"
+          : isHardBlock
           ? opts.approved
             ? "Hard-block resolved by human owner"
             : "Hard-block upheld by human owner"
           : opts.approved
             ? "Approved by human reviewer"
             : "Rejected by human reviewer",
-        `${opts.decidedBy} ${opts.approved ? (isHardBlock ? "resolved the hard-block and authorised onboarding to proceed" : "approved") : (isHardBlock ? "upheld the hard-block" : "rejected")}: "${opts.recommendation}"${opts.comment ? ` — ${opts.comment}` : ""}. ${isHardBlock ? "Decision made under human authority; no automated adverse action was taken." : ""}`,
+        opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
+          ? `${opts.decidedBy} recorded a Gate A review decision. The offer package remains blocked until the dedicated HR confirmation action records completion; no onboarding continuation occurred.`
+          : `${opts.decidedBy} ${opts.approved ? (isHardBlock ? "resolved the hard-block and authorised onboarding to proceed" : "approved") : (isHardBlock ? "upheld the hard-block" : "rejected")}: "${opts.recommendation}"${opts.comment ? ` — ${opts.comment}` : ""}. ${isHardBlock ? "Decision made under human authority; no automated adverse action was taken." : ""}`,
         { hitlPattern: opts.hitlPattern });
+      // Gate A can only be released by its tenant-scoped, audited
+      // /offer-acceptance confirmation route. An approval decision may record
+      // HR's review of the blocked send, but cannot alter lifecycle state or
+      // continue orchestration.
+      if (
+        opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE ||
+        opts.ruleRef === "Gate B — background verification"
+      ) return;
       if (isHardBlock && opts.approved) {
         await updateCase(opts.caseId, { lifecycleStage: "profile-validated" });
+      }
+
+      // Only the dedicated Gate C decision can complete Day-1 review. Generic
+      // approvals (including an approved BGV exception) are never a shortcut
+      // around current mandatory checklist or malware gates.
+      if (opts.ruleRef === DAY1_READINESS_GATE_RULE) {
+        if (opts.approved) {
+          const completed = await completeDay1ReadinessGate(opts.caseId);
+          if (!completed) {
+            await logEvent(
+              opts.caseId,
+              "day1-readiness-gate",
+              "rules",
+              "Gate C confirmation did not release onboarding",
+              "The human decision was recorded, but current mandatory readiness or malware evidence no longer passed. The case remains blocked for human resolution.",
+              { hitlPattern: "hard-block", ruleRef: DAY1_READINESS_GATE_RULE, idempotencyKey: `gateway-c:${opts.caseId}:approval-stale` },
+            );
+          }
+        }
+        return;
       }
 
       // Standalone escalations (e.g. sensitive inbound message review) never

@@ -4,6 +4,7 @@ import {
   onbCommunications,
   onbConnectors,
   onbEvents,
+  onbApprovals,
   onbSystemChecks,
   onbDocuments,
   type OnbReadinessItemRow,
@@ -165,13 +166,14 @@ async function logEvent(
   title: string,
   detail: string,
   ruleRef: string,
+  hitlPattern: string = "notify-only",
 ) {
   await db.insert(onbEvents).values({
     caseId,
     organizationId,
     agent: WATCHER_AGENT,
     engine: "system",
-    hitlPattern: "notify-only",
+    hitlPattern,
     ruleRef,
     title,
     detail,
@@ -330,19 +332,84 @@ export async function escalateCheck(
 ): Promise<void> {
   const def = systemDef(check.system);
   if (!def) return;
+  const escalationAt = new Date();
   const [updated] = await db
     .update(onbSystemChecks)
-    .set({ status: "overdue", escalatedAt: new Date(), note: reason })
+    .set({ status: "overdue", escalatedAt: escalationAt, note: reason })
     .where(
       and(
         eq(onbSystemChecks.id, check.id),
         eq(onbSystemChecks.organizationId, check.organizationId),
-        eq(onbSystemChecks.status, "pending"),
+        // A vendor correction after an earlier clearance is safety-critical:
+        // reopen the live gate rather than silently retaining a stale green.
+        sql`${onbSystemChecks.status} in ('pending', 'done')`,
         ...(expectedMode ? [eq(onbSystemChecks.mode, expectedMode)] : []),
       ),
     )
     .returning();
   if (!updated) return; // already escalated
+
+  if (check.system === "bgv") {
+    await db.transaction(async (tx) => {
+      const [c] = await tx.select().from(onbCases).where(and(
+        eq(onbCases.id, check.caseId),
+        eq(onbCases.organizationId, check.organizationId),
+      )).for("update");
+      if (!c) return;
+      if (c.lifecycleStage === "complete" || c.lifecycleStage === "day1-review") {
+        await tx.update(onbApprovals).set({
+          status: "pending", decidedAt: null, decidedBy: null,
+          comment: "Automatically reopened because BGV status regressed; fresh final readiness review is required.",
+        }).where(and(
+          eq(onbApprovals.organizationId, c.organizationId),
+          eq(onbApprovals.caseId, c.id),
+          sql`${onbApprovals.idempotencyKey} = ${`gateway-c:${c.id}:human-queue`}`,
+          eq(onbApprovals.status, "approved"),
+        ));
+      }
+      const readiness = c.readiness.map((item) => ({ ...item }));
+      const documentation = readiness.find((item) => item.key === "documentation");
+      if (documentation) {
+        documentation.status = "in-progress";
+        documentation.note = `BGV requires human review (${check.externalRef}); no automated employment decision was made.`;
+      }
+      await tx.update(onbCases).set({
+        readiness,
+        ...(c.lifecycleStage === "complete" || c.lifecycleStage === "day1-review"
+          ? {
+              lifecycleStage: "preboarding",
+              orchestrationStatus: "checklist-blocked",
+              orchestrationCheckpoint: "blocked:re-review",
+              orchestrationClaimOwner: null,
+              orchestrationClaimUntil: null,
+            }
+          : {}),
+        updatedAt: new Date(),
+      }).where(and(eq(onbCases.id, c.id), eq(onbCases.organizationId, c.organizationId)));
+    });
+  }
+
+  // An SLA breach or exception is a human decision boundary, never merely a
+  // coloured status. The unique key makes webhook/mailbox/tick races converge
+  // on one durable review item and explicitly avoids an automated adverse
+  // employment decision.
+  await db.insert(onbApprovals).values({
+    organizationId: check.organizationId,
+    caseId: check.caseId,
+    agent: WATCHER_AGENT,
+    ruleRef: check.system === "bgv" ? "Gate B — background verification" : def.slaRuleRef,
+    hitlPattern: "hard-block",
+    recommendation: check.system === "bgv"
+      ? "Review the BGV exception, unknown status, or SLA breach and decide the safe next step"
+      : `Review the ${def.label} exception or SLA breach`,
+    rationale: `${def.label} (${check.externalRef}) requires human review: ${reason} No automated adverse employment action was taken.`,
+    resumeAction: "none",
+    // Each pending→overdue transition is a distinct recurrence. Do not let a
+    // previously decided exception suppress a newly reopened human review.
+    idempotencyKey: `gateway-${check.system}:${check.id}:${escalationAt.getTime()}:human-queue`,
+  }).onConflictDoNothing({
+    target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
+  });
 
   await logEvent(
     check.caseId,
@@ -350,6 +417,7 @@ export async function escalateCheck(
     `${def.label} is late — SLA breached`,
     `${def.label} (${check.externalRef}) has not reported completion within its ${def.slaSeconds}s SLA. ${reason} Owner notified; the checklist item stays open until the source system confirms.`,
     def.slaRuleRef,
+    "hard-block",
   );
 
   // Opt-in follow-through: place the escalation voice call automatically
@@ -501,6 +569,7 @@ export async function trackCaseSystems(
 export async function handleSystemWebhook(opts: {
   system: string;
   caseId: number;
+  externalRef: string;
   status: string;
 }): Promise<{ ok: boolean; message: string }> {
   const def = systemDef(opts.system);
@@ -512,6 +581,13 @@ export async function handleSystemWebhook(opts: {
     return {
       ok: false,
       message: `System "${def.key}" reports via scheduled polling, not webhooks`,
+    };
+  }
+  const status = opts.status.trim().toLowerCase();
+  if (!["completed", "pending", "exception", "adverse", "unknown"].includes(status)) {
+    return {
+      ok: false,
+      message: `Unsupported ${def.label} webhook status "${opts.status}". Supported statuses are completed, pending, exception, adverse, and unknown.`,
     };
   }
   const t = telemetry[def.key];
@@ -531,18 +607,45 @@ export async function handleSystemWebhook(opts: {
           eq(onbSystemChecks.caseId, opts.caseId),
           eq(onbSystemChecks.organizationId, owner.organizationId),
           eq(onbSystemChecks.system, def.key),
+          eq(onbSystemChecks.externalRef, opts.externalRef),
         ),
       );
-    if (!check) return { ok: false, message: "No tracked check for this case" };
+    if (!check) return { ok: false, message: "No tracked check matching the provider reference" };
     t.lastEventAt = new Date();
     t.eventsReceived += 1;
-    if (opts.status === "completed") {
+    if (status === "completed") {
       await completeCheck(check, "webhook push");
       t.lastSuccessAt = new Date();
       t.lastError = null;
       t.lastErrorAt = null;
+    } else if (status === "exception" || status === "adverse" || status === "unknown") {
+      await escalateCheck(
+        check,
+        `The ${def.label} vendor reported ${status} status for ${check.externalRef}; human review is required and no automated adverse action was taken.`,
+        "push",
+      );
+      t.lastSuccessAt = new Date();
+      t.lastError = null;
+      t.lastErrorAt = null;
+    } else {
+      await db.update(onbSystemChecks).set({
+        lastCheckedAt: new Date(),
+        note: `${def.label} vendor reports pending (${check.externalRef})`,
+      }).where(and(
+        eq(onbSystemChecks.id, check.id),
+        eq(onbSystemChecks.organizationId, check.organizationId),
+        sql`${onbSystemChecks.status} in ('pending', 'done')`,
+        eq(onbSystemChecks.mode, "push"),
+      ));
+      if (check.status === "done") {
+        await escalateCheck(
+          check,
+          `${def.label} vendor regressed from completed to pending for ${check.externalRef}; fresh human review is required.`,
+          "push",
+        );
+      }
     }
-    return { ok: true, message: "Processed" };
+    return { ok: true, message: status === "completed" ? "Completion processed" : `Status "${status}" processed` };
   } catch (err) {
     t.lastError = String(err).slice(0, 300);
     t.lastErrorAt = new Date();
@@ -568,6 +671,7 @@ function schedulePush(check: typeof onbSystemChecks.$inferSelect): void {
       await handleSystemWebhook({
         system: def.key,
         caseId: check.caseId,
+        externalRef: check.externalRef,
         status: "completed",
       });
       console.log(
@@ -622,6 +726,7 @@ export async function recoverUntrackedCaseSystems(
     .from(onbCases)
     .where(
       and(
+        sql`(${onbCases.hireType} not in ('external-fte', 'contractor', 'rehire') or ${onbCases.offerAcceptanceComplete} = true)`,
         sql`${onbCases.lifecycleStage} in ('preboarding', 'day1-review')
             and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id} and sc.organization_id = ${onbCases.organizationId})`,
         onlyCaseId === undefined ? undefined : eq(onbCases.id, onlyCaseId),
@@ -689,6 +794,48 @@ export async function recoverDecidedApprovalContinuations(): Promise<void> {
   }
 }
 
+/** Recover only explicitly HR-confirmed Gate A releases; never bulk-email legacy rows. */
+export async function recoverConfirmedOfferAcceptanceOrchestrations(): Promise<void> {
+  const rows = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+    eq(onbCases.offerAcceptanceComplete, true),
+    eq(onbCases.orchestrationStatus, "idle"),
+    eq(onbCases.orchestrationCheckpoint, "offer-accepted"),
+  ));
+  if (rows.length === 0) return;
+  const { startOrchestration } = await import("./engine");
+  for (const row of rows) startOrchestration(row.id);
+}
+
+/** Durable recovery for an approved Gate C decision whose async handoff died. */
+export async function recoverApprovedDay1ReadinessGates(): Promise<void> {
+  const approvals = await db.select({ caseId: onbApprovals.caseId }).from(onbApprovals).where(and(
+    eq(onbApprovals.status, "approved"),
+    sql`${onbApprovals.idempotencyKey} like 'gateway-c:%:human-queue'`,
+  ));
+  if (approvals.length === 0) return;
+  const { completeDay1ReadinessGate } = await import("./engine");
+  for (const approval of approvals) {
+    await completeDay1ReadinessGate(approval.caseId);
+  }
+}
+
+/** Repairs the old split-write failure window: an overdue check always owns a queue item. */
+export async function recoverOverdueSystemApprovalQueues(): Promise<void> {
+  const overdue = await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.status, "overdue"));
+  for (const check of overdue) {
+    const def = systemDef(check.system);
+    if (!def) continue;
+    await db.insert(onbApprovals).values({
+      organizationId: check.organizationId, caseId: check.caseId, agent: WATCHER_AGENT,
+      ruleRef: check.system === "bgv" ? "Gate B — background verification" : def.slaRuleRef,
+      hitlPattern: "hard-block", resumeAction: "none",
+      recommendation: `Review the ${def.label} exception or SLA breach`,
+      rationale: `${def.label} (${check.externalRef}) remains overdue and requires human review; no automated adverse action was taken.`,
+      idempotencyKey: `gateway-${check.system}:${check.id}:${(check.escalatedAt ?? check.dueAt).getTime()}:human-queue`,
+    }).onConflictDoNothing({ target: [onbApprovals.organizationId, onbApprovals.idempotencyKey] });
+  }
+}
+
 export async function recoverChecklistRows(
   rows: Array<{ id: number }>,
   resume: (id: number) => Promise<unknown>,
@@ -728,6 +875,9 @@ async function tickOnce(): Promise<void> {
   });
   await recoverChecklistOrchestrations();
   await recoverDecidedApprovalContinuations();
+  await recoverConfirmedOfferAcceptanceOrchestrations();
+  await recoverApprovedDay1ReadinessGates();
+  await recoverOverdueSystemApprovalQueues();
 
   // Self-heal: preboarding cases that somehow have no checks yet.
   await recoverUntrackedCaseSystems();

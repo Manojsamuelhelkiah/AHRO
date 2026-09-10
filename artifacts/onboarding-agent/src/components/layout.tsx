@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useClerk, useUser } from '@clerk/react';
 import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@workspace/api-client-react';
+import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
 import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass } from 'lucide-react';
@@ -57,7 +58,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     .map((p) => p[0]?.toUpperCase())
     .join('');
 
-  const role = typeof window !== 'undefined' ? localStorage.getItem('hro_role') || 'Reviewer' : 'Reviewer';
+  const { role } = useOrganizationRole();
 
   return (
     <div className="flex min-h-screen w-full transition-colors duration-300" style={{ backgroundColor: 'var(--surface-alt)', color: 'var(--text-primary)' }}>
@@ -172,8 +173,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="w-[24px] h-[24px] rounded-full flex items-center justify-center font-bold shrink-0" style={{ backgroundColor: 'var(--primary)', color: '#ffffff', fontSize: 'var(--text-xs)' }}>
                 {initials || 'U'}
               </div>
-              <span style={{ fontSize: 'var(--text-xs)', padding: '2px 6px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '999px', lineHeight: 1 }} className="font-semibold hidden md:block">
-                {role}
+              <span style={{ fontSize: 'var(--text-xs)', padding: '2px 6px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '999px', lineHeight: 1 }} className="font-semibold hidden md:block capitalize">
+                {role || 'Reviewer'}
               </span>
             </div>
             <button

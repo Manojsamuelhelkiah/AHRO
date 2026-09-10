@@ -276,6 +276,7 @@ export async function applyApproverReply(opts: {
     decidedBy,
     comment: opts.bodyText ? opts.bodyText.slice(0, 500) : null,
     recommendation: a.recommendation,
+    ruleRef: a.ruleRef,
     hitlPattern: a.hitlPattern,
     resumeAction: a.resumeAction ?? "none",
   });

@@ -7,6 +7,7 @@ import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
 import { ShieldAlert } from 'lucide-react';
 import { Link } from 'wouter';
+import { useOrganizationRole } from '../hooks/use-organization-role';
 
 export function ApprovalsPage() {
   const [showAll, setShowAll] = useState(false);
@@ -70,7 +71,7 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
   const [comment, setComment] = useState('');
   const { user } = useUser();
   
-  const role = typeof window !== 'undefined' ? localStorage.getItem('hro_role') || 'Reviewer' : 'Reviewer';
+  const { role } = useOrganizationRole();
 
   const handleDecide = (decision: string) => {
     decide.mutate({
@@ -166,7 +167,7 @@ function ApprovalCard({ approval, statusParam }: { approval: any, statusParam: s
                   onFocus={e => e.currentTarget.style.borderColor = 'var(--primary)'}
                   onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
                 />
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>Decision will be recorded as <strong>{role}</strong>.</p>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>Decision will be recorded as <strong>{role || 'Reviewer'}</strong>.</p>
               </div>
               <div className="flex items-center gap-3 shrink-0 w-full lg:w-auto">
                 {!isHardBlock && (

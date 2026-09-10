@@ -43,6 +43,7 @@ async function createDatabaseCase(lifecycleStage: string) {
       joiningDate: "2026-10-01",
       lifecycleStage,
       orchestrationStatus: "running",
+      offerAcceptanceComplete: true,
       readiness: [],
       workstreams: [],
     })

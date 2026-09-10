@@ -3,6 +3,8 @@ import {
   useGetOnboardingAnalytics, getGetOnboardingAnalyticsQueryKey,
   useListOnboardingCases, getListOnboardingCasesQueryKey,
   useListOnboardingApprovals, getListOnboardingApprovalsQueryKey,
+  // @ts-ignore
+  getGetOnboardingOutcomeKpisQueryKey
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { PageHeader, LoadingBlock, Button } from '@/components/ui-shared';
@@ -10,6 +12,8 @@ import { ShieldAlert, AlertTriangle, AlertOctagon, Timer, RefreshCw, ChevronDown
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { Link } from 'wouter';
 import { statusOf, caseTypeOf } from './cases/index';
+
+import { OutcomeKpis } from './analytics/outcome-kpis';
 
 export function AnalyticsPage() {
   const queryClient = useQueryClient();
@@ -34,6 +38,15 @@ export function AnalyticsPage() {
     queryClient.invalidateQueries({ queryKey: getGetOnboardingAnalyticsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey() });
+    try {
+      const params = {
+        period: period as '7' | '30' | '90' | 'All',
+        ...(region !== 'All regions' ? { region } : {}),
+        ...(caseType !== 'All cases' ? { hireType: caseType } : {}),
+        ...(domain !== 'All domains' ? { domain: domain as any } : {})
+      };
+      queryClient.invalidateQueries({ queryKey: getGetOnboardingOutcomeKpisQueryKey(params) });
+    } catch(e) {}
   };
 
   const allCases = casesData || [];
@@ -242,6 +255,14 @@ export function AnalyticsPage() {
           </div>
         </div>
       </section>
+
+      <OutcomeKpis 
+        period={period} 
+        region={region} 
+        domain={domain} 
+        caseType={caseType} 
+        agent={agent} 
+      />
 
       <section className="mb-14">
         <div className="mb-6">

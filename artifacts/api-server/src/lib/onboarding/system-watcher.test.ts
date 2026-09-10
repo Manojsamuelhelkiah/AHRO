@@ -166,14 +166,14 @@ describe("simulated external systems", () => {
 describe("handleSystemWebhook push-mode enforcement", () => {
   test("rejects poll-mode systems even with a valid token path", async () => {
     for (const system of ["itsm", "payroll"]) {
-      const res = await handleSystemWebhook({ system, caseId: 1, status: "completed" });
+      const res = await handleSystemWebhook({ system, caseId: 1, externalRef: "test-ref", status: "completed" });
       assert.equal(res.ok, false);
       assert.match(res.message, /scheduled polling/);
     }
   });
 
   test("rejects unknown systems", async () => {
-    const res = await handleSystemWebhook({ system: "hris", caseId: 1, status: "completed" });
+    const res = await handleSystemWebhook({ system: "hris", caseId: 1, externalRef: "test-ref", status: "completed" });
     assert.equal(res.ok, false);
     assert.match(res.message, /Unknown system/);
   });

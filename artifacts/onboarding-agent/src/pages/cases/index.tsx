@@ -9,7 +9,7 @@ import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
 import { format } from 'date-fns';
-import { Plus, Search, SlidersHorizontal, Bot, User, X, FlaskConical } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Bot, User, X, FlaskConical, Check, AlertTriangle, Clock } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 type OnbCase = ApiOnbCase;
@@ -169,6 +169,38 @@ function CaseTypeBadge({ type }: { type: string }) {
   );
 }
 
+function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: any } }) {
+  if (!gateways) return null;
+  const gates = [
+    { key: 'A', g: gateways.a },
+    { key: 'B', g: gateways.b },
+    { key: 'C', g: gateways.c },
+  ];
+  return (
+    <div className="flex items-center gap-1">
+      {gates.map(({ key, g }) => {
+        if (!g) return null;
+        let bg = 'var(--surface-alt)';
+        let fg = 'var(--text-muted)';
+        let Icon = null;
+        if (g.status === 'complete') { bg = 'var(--status-green-bg)'; fg = 'var(--status-green-fg)'; Icon = Check; }
+        else if (g.status === 'blocked') { bg = 'var(--status-red-bg)'; fg = 'var(--status-red-fg)'; Icon = AlertTriangle; }
+        else if (g.status === 'human-review') { bg = 'var(--status-amber-bg)'; fg = 'var(--status-amber-fg)'; Icon = Clock; }
+        else if (g.status === 'pending') { bg = 'var(--primary-light)'; fg = 'var(--primary)'; Icon = Clock; }
+        return (
+          <div key={key} title={`${key}: ${g.label} - ${g.status}`} className="flex items-center justify-center rounded-sm relative" style={{ width: '22px', height: '22px', backgroundColor: bg, color: fg, border: '1px solid var(--border)' }}>
+            <span className="sr-only">Gateway {key}: {g.label} - {g.status}</span>
+            <span className="absolute -top-1.5 -right-1.5 rounded-full bg-[var(--surface)]" style={{ padding: '1px', border: '1px solid var(--border)' }}>
+              {Icon && <Icon className="w-2 h-2" style={{ color: fg }} />}
+            </span>
+            <span className="font-mono" style={{ fontSize: '10px', fontWeight: 700 }}>{key}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* --------------------------------- filters -------------------------------- */
 
 type AdvancedFilters = {
@@ -183,7 +215,15 @@ type AdvancedFilters = {
 const EMPTY_FILTERS: AdvancedFilters = { status: '', agent: '', priority: '', geography: '', dateFrom: '', dateTo: '' };
 
 export function CasesPage() {
-  const { data: cases, isLoading, isError, refetch } = useListOnboardingCases();
+  const { data: cases, isLoading, isError, refetch } = useListOnboardingCases({
+    query: {
+      queryKey: getListOnboardingCasesQueryKey(),
+      refetchInterval: (query: any) => {
+        const active = query?.state?.data?.some((c: any) => c.orchestrationStatus !== 'completed' && c.orchestrationStatus !== 'done');
+        return active ? 5000 : false;
+      }
+    }
+  });
   const [showNew, setShowNew] = useState(false);
   const [, setLocation] = useLocation();
   const [typeFilter, setTypeFilter] = useState<CaseTypeFilter>('All Cases');
@@ -438,11 +478,11 @@ export function CasesPage() {
           <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
-                {['Case', 'Worker', 'Case Type', 'Effective Date', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
+                {['Case', 'Worker', 'Case Type', 'Effective Date', 'Gates', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
                   <th
                     key={h}
-                    className={cn((h === 'Effective Date' || h === 'Owner / Agent') && 'hidden lg:table-cell')}
-                    style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 6 ? 'right' : 'left' }}
+                    className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Gates') && 'hidden lg:table-cell')}
+                    style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 7 ? 'right' : 'left' }}
                   >
                     {h}
                   </th>
@@ -453,8 +493,8 @@ export function CasesPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                    {Array.from({ length: 7 }).map((_, j) => (
-                      <td key={j} className={cn((j === 3 || j === 5) && 'hidden lg:table-cell')} style={{ padding: '14px var(--space-lg)' }}>
+                    {Array.from({ length: 8 }).map((_, j) => (
+                      <td key={j} className={cn((j === 3 || j === 4 || j === 6) && 'hidden lg:table-cell')} style={{ padding: '14px var(--space-lg)' }}>
                         <div className="animate-pulse rounded" style={{ height: '12px', width: j === 0 ? '120px' : '70px', backgroundColor: 'var(--surface-alt)' }} />
                       </td>
                     ))}
@@ -462,7 +502,7 @@ export function CasesPage() {
                 ))
               ) : isError ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '40px 16px', textAlign: 'center' }}>
+                  <td colSpan={8} style={{ padding: '40px 16px', textAlign: 'center' }}>
                     <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Cases couldn't be loaded</div>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>Try again or contact your administrator if the issue continues.</div>
                     <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>Retry</Button>
@@ -470,7 +510,7 @@ export function CasesPage() {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '40px 16px', textAlign: 'center' }}>
+                  <td colSpan={8} style={{ padding: '40px 16px', textAlign: 'center' }}>
                     {(cases?.length ?? 0) === 0 ? (
                       <>
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No HR operations cases yet</div>
@@ -524,6 +564,9 @@ export function CasesPage() {
                       <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
                         {format(new Date(c.joiningDate), 'MMM d, yyyy')}
                       </td>
+                      <td className="hidden lg:table-cell" style={{ padding: '12px var(--space-lg)' }}>
+                        {c.gateways ? <CompactGates gateways={c.gateways} /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
+                      </td>
                       <td style={{ padding: '12px var(--space-lg)' }}>
                         <HroStatusBadge status={status} />
                       </td>
@@ -574,7 +617,10 @@ export function CasesPage() {
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{c.workerName}</span>
                     <CaseTypeBadge type={caseTypeOf(c)} />
                   </div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
+                    {c.gateways && <CompactGates gateways={c.gateways} />}
+                  </div>
                 </button>
               );
             })
@@ -600,7 +646,7 @@ function OwnerCell({ owner }: { owner: { name: string; kind: 'AI Agent' | 'Human
   );
 }
 
-function NewCaseForm({ onClose }: { onClose: () => void }) {
+export function NewCaseForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const createCase = useCreateOnboardingCase();
   const [channelPref, setChannelPref] = useState('both');
@@ -619,6 +665,7 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
       hireType: fd.get('hireType') as string,
       workerCategory: fd.get('workerCategory') as string,
       workerBand: fd.get('workerBand') as string || undefined,
+      offerAcceptanceComplete: fd.get('offerAcceptanceComplete') === 'on',
       role: fd.get('role') as string,
       department: fd.get('department') as string,
       geography: fd.get('geography') as string,
@@ -739,6 +786,17 @@ function NewCaseForm({ onClose }: { onClose: () => void }) {
           <div className="col-span-2 space-y-1">
             <Label>Notes</Label>
             <Input name="notes" placeholder="Free text recruiter notes..." />
+          </div>
+          <div className="col-span-2 md:col-span-3 space-y-2 mt-2 pt-2 border-t border-[var(--border)]">
+            <div className="flex items-start gap-2">
+              <input type="checkbox" id="offerAcceptanceComplete" name="offerAcceptanceComplete" className="mt-1 flex h-4 w-4 shrink-0 rounded-sm border border-[var(--border)] bg-[var(--surface)] text-[var(--primary)] shadow-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" />
+              <div>
+                <Label htmlFor="offerAcceptanceComplete" className="font-semibold">Is the offer-acceptance package complete?</Label>
+                <p className="text-[11px] leading-snug mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Leaving this unchecked creates a preboarding hold. The agent will first request the completed offer acceptance package by email; if the email cannot be sent safely, HR intervenes.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex items-center justify-end gap-4 pt-4 mt-2" style={{ borderTop: '1px solid var(--border)' }}>

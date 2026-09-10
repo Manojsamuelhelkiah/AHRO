@@ -45,6 +45,12 @@ export async function issueCandidatePortalLink(input: {
     eq(onbCases.organizationId, input.organizationId),
   ));
   if (!c) return null;
+  if (
+    (c.hireType === "external-fte" || c.hireType === "contractor" || c.hireType === "rehire") &&
+    !c.offerAcceptanceComplete
+  ) {
+    throw new Error("Offer acceptance must be confirmed before issuing a candidate portal link");
+  }
 
   if (input.idempotencyKey) {
     const [existingDelivery] = await db.select({

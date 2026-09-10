@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { onbCases, onbEvents, type OnbReadinessItemRow } from "@workspace/db/schema";
+import { onbApprovals, onbCases, onbEvents, type OnbReadinessItemRow } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { LEGACY_CHECKLIST, mandatoryChecklistReady } from "./settings";
 import { resumeChecklistOrchestration } from "./engine";
@@ -44,11 +44,22 @@ export async function setCustomChecklistItemStatus(opts: {
     const shouldDemote =
       opts.status === "pending" &&
       definition.mandatory &&
-      c.lifecycleStage === "day1-review";
+      (c.lifecycleStage === "day1-review" || c.lifecycleStage === "complete");
     const shouldBlock =
       opts.status === "pending" &&
       definition.mandatory &&
-      c.lifecycleStage === "day1-review";
+      (c.lifecycleStage === "day1-review" || c.lifecycleStage === "complete");
+    if (shouldDemote) {
+      await tx.update(onbApprovals).set({
+        status: "pending", decidedAt: null, decidedBy: null,
+        comment: "Automatically reopened because a mandatory readiness item changed; fresh final review is required.",
+      }).where(and(
+        eq(onbApprovals.organizationId, opts.organizationId),
+        eq(onbApprovals.caseId, opts.caseId),
+        eq(onbApprovals.status, "approved"),
+        eq(onbApprovals.idempotencyKey, `gateway-c:${opts.caseId}:human-queue`),
+      ));
+    }
     const [updated] = await tx.update(onbCases).set({
       readiness,
       ...(shouldDemote ? { lifecycleStage: "preboarding" } : {}),
