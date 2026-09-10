@@ -343,15 +343,14 @@ async function createCase(
 
 export async function getDemoCapabilities(organizationId: string, role?: string) {
   const inDemo = organizationId === DEMO_ORGANIZATION_ID;
-  const canManage = inDemo && (role === "owner" || role === "admin");
+  const canManage = inDemo && isDemoControllerRole(role);
   const reason = !inDemo
     ? "Demo Controller is available only in Demo Organization."
     : !canManage
-      ? "Demo Controller runs require an organization owner or admin."
+      ? "Sign in and join Demo Organization to use Demo Controller."
       : null;
-  // Controller capabilities are intentionally fail-closed. A member in the
-  // Demo Organization may learn that the feature exists, but must not receive
-  // volunteer contacts, run history, scenarios, or system details.
+  // All authenticated Demo Organization members can present demos. Missing
+  // membership and other tenants still receive no private controller data.
   const readiness = canManage ? await actualProviderReadiness() : null;
   const volunteers = canManage
     ? await controllerVolunteers(organizationId, readiness ?? undefined)
@@ -1118,7 +1117,7 @@ export function demoDocuments(run: DemoRun): string {
 }
 
 export function isDemoControllerRole(role: string | undefined): boolean {
-  return role === "owner" || role === "admin";
+  return role === "owner" || role === "admin" || role === "member";
 }
 
 export { publicRun };

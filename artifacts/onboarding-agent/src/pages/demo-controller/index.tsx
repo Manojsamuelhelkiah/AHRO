@@ -37,7 +37,7 @@ export function DemoControllerIndexPage() {
           <ShieldAlert className="h-12 w-12 mx-auto text-[var(--status-red)]" />
           <h2 className="text-xl font-bold">Access Restricted</h2>
           <p className="text-[var(--text-secondary)]">
-            {caps.reason || 'Only Demo Organization members with owner or admin role may create or mutate runs.'}
+            {caps.reason || 'Sign in and select Demo Organization to use Demo Center and its demo overrides.'}
           </p>
           <div className="pt-4">
             <Link href="/">
@@ -53,7 +53,7 @@ export function DemoControllerIndexPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader 
         title="Demo Center" 
-        subtitle="Orchestrate synthetic onboarding workflows for presentation and training."
+        subtitle="Available to every Demo Organization user. Run synthetic workflows and use demo overrides for presentation and training."
       />
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

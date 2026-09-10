@@ -9,6 +9,12 @@ Hybrid demonstrations are restricted to explicitly created synthetic demo runs i
 
 **How to apply:** Keep simulated business outcomes and demo overrides separate from genuine evidence and historical outcome metrics. Preserve normal authentication, tenant isolation, and malware quarantine. Demo authority must come from protected server-owned run membership, not a synthetic-looking name or a mutable contact field.
 
+Demo Center and its God Mode controls are available to every signed-in Demo Organization member, not only Owners/Admins.
+
+**Why:** On 2026-09-10 the user explicitly replaced the original admin-only policy after it blocked access to the published demo. Requiring role promotion or an owner bootstrap would recreate the rejected experience.
+
+**How to apply:** Accept ordinary member access for demo runs and overrides without promoting anyone's organization role. Keep authentication, Demo Organization scope, run ownership markers, approved-recipient restrictions, and real-case administration safeguards. Do not restore the old admin-only gate when merging access-setup work.
+
 Real communication is opt-in per action, limited to the selected approved volunteer and channel. Simulation is a separate, visibly labelled fallback, not an automatic retry or a replacement for an uncertain provider result.
 
 **Why:** A delayed response may follow a successful real send or call. Automatically retrying or describing that attempt as simulated can duplicate contact and misrepresent what happened.

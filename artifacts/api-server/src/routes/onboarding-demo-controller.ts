@@ -59,7 +59,7 @@ router.get("/onboarding/demo-controller", async (req, res, next) => {
 router.post("/onboarding/demo-runs", async (req, res, next) => {
   try {
     if (!isDemoControllerRole(req.organizationRole)) {
-      res.status(403).json({ error: "Demo Controller runs require an organization owner or admin." });
+      res.status(403).json({ error: "Sign in and join Demo Organization to create demo runs." });
       return;
     }
     const unknown = rejectUnknown(req.body, ["scenario", "volunteerId", "mode"]);
@@ -86,7 +86,7 @@ router.post("/onboarding/demo-runs", async (req, res, next) => {
 router.get("/onboarding/demo-runs/:runId", async (req, res, next) => {
   try {
     if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isDemoControllerRole(req.organizationRole)) {
-      res.status(403).json({ error: "Demo Controller details require a Demo Organization owner or admin." });
+      res.status(403).json({ error: "Demo Controller details require membership in Demo Organization." });
       return;
     }
     const params = GetOnboardingDemoRunParams.safeParse(req.params);
@@ -108,7 +108,7 @@ router.get("/onboarding/demo-runs/:runId", async (req, res, next) => {
 router.post("/onboarding/demo-runs/:runId/actions", async (req, res, next) => {
   try {
     if (!isDemoControllerRole(req.organizationRole)) {
-      res.status(403).json({ error: "Demo Controller actions require an organization owner or admin." });
+      res.status(403).json({ error: "Sign in and join Demo Organization to use demo controls." });
       return;
     }
     const params = ApplyOnboardingDemoRunActionParams.safeParse(req.params);
@@ -148,7 +148,7 @@ router.post("/onboarding/demo-runs/:runId/actions", async (req, res, next) => {
 router.get("/onboarding/demo-runs/:runId/documents", async (req, res, next) => {
   try {
     if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isDemoControllerRole(req.organizationRole)) {
-      res.status(403).json({ error: "Demo Controller documents require a Demo Organization owner or admin." });
+      res.status(403).json({ error: "Demo Controller documents require membership in Demo Organization." });
       return;
     }
     const params = DownloadOnboardingDemoRunDocumentsParams.safeParse(req.params);

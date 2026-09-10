@@ -171,7 +171,7 @@ export const getGetOnboardingDemoControllerUrl = () => {
 }
 
 /**
- * Returns the capability boundary for the selected tenant. Only Demo Organization members with owner or admin role may create or mutate runs.
+ * Returns the capability boundary for the selected tenant. Every authenticated Demo Organization member may create or mutate synthetic demo runs, including demo overrides. Authentication, tenant isolation, and approved-volunteer communication safeguards still apply.
  * @summary Get demo-controller capabilities and available scenarios
  */
 export const getOnboardingDemoController = async ( options?: RequestInit): Promise<DemoControllerCapabilities> => {

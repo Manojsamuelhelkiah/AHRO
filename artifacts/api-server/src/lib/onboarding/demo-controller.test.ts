@@ -20,6 +20,7 @@ import {
   GetOnboardingDemoControllerResponse,
   GetOnboardingDemoRunResponse,
 } from "@workspace/api-zod";
+import { createRequireAuth } from "../../middlewares/require-auth";
 import onboardingDemoControllerRouter from "../../routes/onboarding-demo-controller";
 import { DEMO_RUN_KEY_PREFIX } from "./demo-controller";
 
@@ -93,8 +94,8 @@ let routeServer: ReturnType<typeof express> extends never ? never : any;
 let preservedSettings: Array<typeof onbSettings.$inferSelect> = [];
 let preservedMemberships: Array<typeof organizationMembershipsTable.$inferSelect> = [];
 
-function roleFromHeader(value: string | null | undefined): "owner" | "admin" | "member" {
-  return value === "admin" || value === "owner" ? value : "member";
+function roleFromHeader(value: string | null | undefined): "owner" | "admin" | "member" | undefined {
+  return value === "admin" || value === "owner" || value === "member" ? value : undefined;
 }
 
 function rememberOwnedRun(value: unknown): void {
@@ -108,14 +109,15 @@ async function request(
   path: string,
   options: RequestInit = {},
   organizationId = DEMO_ORGANIZATION_ID,
-  role = "owner",
+  role: string | null = "owner",
 ): Promise<RequestResult> {
   const response = await fetch(`${routeBaseUrl}${path}`, {
     ...options,
     headers: {
       "content-type": "application/json",
       "x-organization-id": organizationId,
-      "x-test-role": role,
+      "x-test-auth": "signed-in",
+      ...(role === null ? {} : { "x-test-role": role }),
       ...(options.headers ?? {}),
     },
   });
@@ -137,21 +139,21 @@ function bodyRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-async function createRun(scenario = "standard-fte"): Promise<PublicRun> {
+async function createRun(scenario = "standard-fte", role = "owner"): Promise<PublicRun> {
   const input = { scenario, mode: "hybrid" };
   assert.doesNotThrow(() => CreateOnboardingDemoRunBody.parse(input));
   const result = await request("/onboarding/demo-runs", {
     method: "POST",
     body: JSON.stringify(input),
-  });
+  }, DEMO_ORGANIZATION_ID, role);
   assert.equal(result.response.status, 201);
   const run = CreateOnboardingDemoRunResponse.parse(result.body) as unknown as PublicRun;
   rememberOwnedRun(run);
   return run;
 }
 
-async function getRun(runId: string): Promise<PublicRun> {
-  const result = await request(`/onboarding/demo-runs/${runId}`);
+async function getRun(runId: string, role = "owner"): Promise<PublicRun> {
+  const result = await request(`/onboarding/demo-runs/${runId}`, {}, DEMO_ORGANIZATION_ID, role);
   assert.equal(result.response.status, 200);
   return GetOnboardingDemoRunResponse.parse(result.body) as unknown as PublicRun;
 }
@@ -171,12 +173,12 @@ async function readDemoLedger(runId: string): Promise<DemoLedger> {
   return value as DemoLedger;
 }
 
-async function applyBody(runId: string, body: ActionBody): Promise<RequestResult> {
+async function applyBody(runId: string, body: ActionBody, role = "owner"): Promise<RequestResult> {
   assert.doesNotThrow(() => ApplyOnboardingDemoRunActionBody.parse(body));
   const result = await request(`/onboarding/demo-runs/${runId}/actions`, {
     method: "POST",
     body: JSON.stringify(body),
-  });
+  }, DEMO_ORGANIZATION_ID, role);
   if (result.response.status === 200) {
     ApplyOnboardingDemoRunActionResponse.parse(result.body);
     rememberOwnedRun(result.body);
@@ -187,13 +189,14 @@ async function applyBody(runId: string, body: ActionBody): Promise<RequestResult
 async function apply(
   run: PublicRun,
   patch: Omit<Partial<ActionBody>, "expectedVersion" | "requestId"> & Pick<ActionBody, "kind">,
+  role = "owner",
 ): Promise<PublicRun> {
   const body: ActionBody = {
     expectedVersion: run.version,
     requestId: randomUUID(),
     ...patch,
   };
-  const result = await applyBody(run.runId, body);
+  const result = await applyBody(run.runId, body, role);
   assert.equal(result.response.status, 200, JSON.stringify(result.body));
   return ApplyOnboardingDemoRunActionResponse.parse(result.body) as unknown as PublicRun;
 }
@@ -263,14 +266,22 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
   before(async () => {
     const app = express();
     app.use(express.json());
-    // This is the same ephemeral auth harness used by synthetic-reset.test.ts.
-    // It deliberately bypasses Clerk while retaining the route's organization
-    // and role boundaries.
-    app.use((req, _res, next) => {
+    const authenticate = createRequireAuth();
+    // This is the same ephemeral tenant harness used by synthetic-reset.test.ts.
+    // The signed-in requests use a branded Clerk-compatible auth handler so
+    // the route is still exercised behind the exact authentication middleware.
+    app.use((req, res, next) => {
       req.organizationId = String(req.header("x-organization-id") ?? "");
       req.organizationRole = roleFromHeader(req.header("x-test-role"));
-      req.authUserId = "demo-controller-regression-test";
-      next();
+      const userId = req.header("x-test-auth") === "unauthenticated"
+        ? null
+        : "demo-controller-regression-test";
+      const authHandler = Object.assign(
+        () => ({ userId, sessionClaims: null, tokenType: "session_token" }),
+        { [Symbol.for("@clerk/express.auth")]: true },
+      );
+      (req as unknown as { auth: unknown }).auth = authHandler;
+      authenticate(req, res, next);
     });
     app.use(onboardingDemoControllerRouter);
     routeServer = app.listen(0, "127.0.0.1");
@@ -632,7 +643,7 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
     }
   });
 
-  test("forbids non-admin roles and non-Demo organizations without reading tenant data", async () => {
+  test("allows every signed-in Demo Organization member to run the synthetic controls", async () => {
     const memberCapabilities = await request(
       "/onboarding/demo-controller",
       {},
@@ -641,22 +652,119 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
     );
     assert.equal(memberCapabilities.response.status, 200);
     const memberBody = GetOnboardingDemoControllerResponse.parse(memberCapabilities.body);
-    assert.equal(memberBody.available, false);
-    assert.equal(memberBody.canCreateRuns, false);
-    assert.deepEqual(memberBody.approvedVolunteers, []);
-    assert.deepEqual(memberBody.existingSessions, []);
+    assert.equal(memberBody.available, true);
+    assert.equal(memberBody.canCreateRuns, true);
+    assert.ok(memberBody.allowedSystems.includes("bgv"));
 
-    const memberCreate = await request(
-      "/onboarding/demo-runs",
-      {
-        method: "POST",
-        body: JSON.stringify({ scenario: "standard-fte", mode: "hybrid" }),
-      },
+    let run = await createRun("standard-fte", "member");
+    const details = await getRun(run.runId, "member");
+    assert.equal(details.runId, run.runId);
+    assert.equal(details.caseId, run.caseId);
+
+    const downloaded = await request(
+      `/onboarding/demo-runs/${run.runId}/documents`,
+      {},
       DEMO_ORGANIZATION_ID,
       "member",
     );
-    assert.equal(memberCreate.response.status, 403);
+    assert.equal(downloaded.response.status, 200);
+    assert.match(downloaded.response.headers.get("content-type") ?? "", /text\/plain/);
+    assert.match(downloaded.body as string, /NOT A GENUINE HR RECORD/);
 
+    run = await apply(run, { kind: "load-documents" }, "member");
+    assert.equal(run.checkpoints.find((step) => step.key === "documents")?.status, "completed");
+
+    const overrideReason = "God mode demo review: the member explicitly approved this synthetic gate.";
+    run = await apply(run, {
+      kind: "override-step",
+      step: "offer",
+      reason: overrideReason,
+    }, "member");
+    assert.equal(run.checkpoints.find((step) => step.key === "offer")?.status, "overridden");
+    assert.equal(run.checkpoints.find((step) => step.key === "offer")?.reason, overrideReason);
+
+    const systemReason = "Member-controlled simulated BGV outcome for the demo walkthrough.";
+    run = await apply(run, {
+      kind: "system-outcome",
+      system: "bgv",
+      outcome: "complete",
+      reason: systemReason,
+    }, "member");
+    assert.equal(run.systems.find((system) => system.system === "bgv")?.outcome, "complete");
+    assert.equal(run.checkpoints.find((step) => step.key === "bgv")?.reason, systemReason);
+
+    run = await apply(run, {
+      kind: "communication",
+      channel: "call",
+      mode: "simulated",
+    }, "member");
+    assert.equal(run.activity.at(-1)?.provenance, "simulated");
+    assert.equal(run.activity.at(-1)?.providerStatus, "simulated");
+    assert.match(run.activity.at(-1)?.transcript ?? "", /SIMULATED TRANSCRIPT|agent:/i);
+
+    const retiredRunId = run.runId;
+    const retiredCaseId = run.caseId;
+    const restarted = await apply(run, { kind: "restart" }, "member");
+    assert.notEqual(restarted.runId, retiredRunId);
+    assert.notEqual(restarted.caseId, retiredCaseId);
+    assert.equal((await getRun(retiredRunId, "member")).status, "restarted");
+    assert.equal((await getRun(restarted.runId, "member")).runId, restarted.runId);
+  });
+
+  test("keeps owner and admin access while denying missing, unknown, and unauthenticated callers", async () => {
+    for (const role of ["owner", "admin"] as const) {
+      const capabilities = await request(
+        "/onboarding/demo-controller",
+        {},
+        DEMO_ORGANIZATION_ID,
+        role,
+      );
+      assert.equal(capabilities.response.status, 200);
+      const body = GetOnboardingDemoControllerResponse.parse(capabilities.body);
+      assert.equal(body.available, true);
+      assert.equal(body.canCreateRuns, true);
+      const run = await createRun("standard-fte", role);
+      assert.equal((await getRun(run.runId, role)).runId, run.runId);
+    }
+
+    for (const role of [null, "unknown"]) {
+      const capabilities = await request(
+        "/onboarding/demo-controller",
+        {},
+        DEMO_ORGANIZATION_ID,
+        role,
+      );
+      assert.equal(capabilities.response.status, 200);
+      const body = GetOnboardingDemoControllerResponse.parse(capabilities.body);
+      assert.equal(body.available, false);
+      assert.equal(body.canCreateRuns, false);
+      assert.equal(body.canDispatchLive, false);
+      assert.deepEqual(body.allowedSystems, []);
+      assert.deepEqual(body.scenarios, []);
+      assert.deepEqual(body.approvedVolunteers, []);
+      assert.deepEqual(body.existingSessions, []);
+
+      const create = await request(
+        "/onboarding/demo-runs",
+        {
+          method: "POST",
+          body: JSON.stringify({ scenario: "standard-fte", mode: "hybrid" }),
+        },
+        DEMO_ORGANIZATION_ID,
+        role,
+      );
+      assert.equal(create.response.status, 403);
+    }
+
+    const unauthenticated = await request("/onboarding/demo-controller", {
+      headers: { "x-test-auth": "unauthenticated" },
+    });
+    assert.equal(unauthenticated.response.status, 401);
+    assert.deepEqual(unauthenticated.body, { message: "Authentication required" });
+  });
+
+  test("keeps the Demo Organization boundary and private capability data fail-closed", async () => {
+    const run = await createRun("standard-fte", "owner");
     const otherOrganizationId = `demo-controller-other-${randomUUID()}`;
     const otherCapabilities = await request(
       "/onboarding/demo-controller",
@@ -668,6 +776,11 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
     const otherBody = GetOnboardingDemoControllerResponse.parse(otherCapabilities.body);
     assert.equal(otherBody.available, false);
     assert.equal(otherBody.canCreateRuns, false);
+    assert.equal(otherBody.canDispatchLive, false);
+    assert.deepEqual(otherBody.allowedSystems, []);
+    assert.deepEqual(otherBody.scenarios, []);
+    assert.deepEqual(otherBody.approvedVolunteers, []);
+    assert.deepEqual(otherBody.existingSessions, []);
     assert.match(otherBody.reason ?? "", /Demo Organization/i);
 
     const otherCreate = await request(
@@ -681,5 +794,36 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
     );
     assert.equal(otherCreate.response.status, 403);
     assert.match(bodyRecord(otherCreate.body).error as string, /Demo Organization/i);
+
+    const otherDetails = await request(
+      `/onboarding/demo-runs/${run.runId}`,
+      {},
+      otherOrganizationId,
+      "owner",
+    );
+    assert.equal(otherDetails.response.status, 403);
+
+    const otherDocuments = await request(
+      `/onboarding/demo-runs/${run.runId}/documents`,
+      {},
+      otherOrganizationId,
+      "owner",
+    );
+    assert.equal(otherDocuments.response.status, 403);
+
+    const otherAction = await request(
+      `/onboarding/demo-runs/${run.runId}/actions`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          expectedVersion: run.version,
+          requestId: randomUUID(),
+          kind: "load-documents",
+        }),
+      },
+      otherOrganizationId,
+      "owner",
+    );
+    assert.equal(otherAction.response.status, 403);
   });
 });
