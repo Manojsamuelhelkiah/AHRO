@@ -17,6 +17,14 @@ import {
 import { getSetting, HR_ALERT_EMAIL_KEY, HR_APPROVER_EMAIL_KEY, isValidEmail } from "./settings";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import {
+  ACTION_IDENTITY_SETTING_KEY,
+  formatEmailIdentityLines,
+  identityForRole,
+  parseActionIdentityConfig,
+  type EmailDeliveryMode,
+  type NamedStakeholders,
+} from "./email-identity";
+import {
   claimEffectDispatch,
   ensureEffectJournalEntry,
 } from "./effect-journal";
@@ -668,15 +676,58 @@ function roleConfig(
   };
 }
 
-function roleDisplayName(role: BgvNotificationRole, c: typeof onbCases.$inferSelect): string {
+async function namedStakeholdersForOrganization(
+  organizationId: string,
+): Promise<NamedStakeholders> {
+  const [row] = await db.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, organizationId),
+    eq(onbSettings.key, ACTION_IDENTITY_SETTING_KEY),
+  ));
+  return parseActionIdentityConfig(row?.value ?? null).stakeholders;
+}
+
+function roleLabel(role: BgvNotificationRole): string {
   return {
     hr: "HR / onboarding",
     bgvTeam: "BGV provider / verification team",
-    recruiter: c.recruiterName || "Recruiter",
-    hiringManager: c.managerName || "Hiring manager",
+    recruiter: "Recruiter",
+    hiringManager: "Hiring manager",
     compliance: "Compliance / restricted review",
-    candidate: c.workerName,
+    candidate: "Candidate / employee",
   }[role];
+}
+
+function stakeholderFor(
+  role: BgvNotificationRole,
+  c: typeof onbCases.$inferSelect,
+  namedStakeholders: NamedStakeholders = {},
+) {
+  const existingName = role === "recruiter"
+    ? c.recruiterName
+    : role === "hiringManager"
+      ? c.managerName
+      : role === "candidate"
+        ? c.workerName
+        : null;
+  const identity = identityForRole(role, namedStakeholders, existingName, roleLabel(role));
+  return {
+    ...identity,
+    // Action Center identities use the role key as their storage shape. Use
+    // the human-readable copy role unless a caller supplied a richer role.
+    role: namedStakeholders[role]?.role &&
+      namedStakeholders[role]?.role !== role
+      ? namedStakeholders[role]!.role
+      : roleLabel(role),
+  };
+}
+
+function roleDisplayName(
+  role: BgvNotificationRole,
+  c: typeof onbCases.$inferSelect,
+  namedStakeholders: NamedStakeholders = {},
+): string {
+  const stakeholder = stakeholderFor(role, c, namedStakeholders);
+  return stakeholder.name || roleLabel(role);
 }
 function rolePurpose(role: BgvNotificationRole, cycle: StoredCycle): string {
   if (cycle.episode === "release") return "Generic onboarding hold release coordination";
@@ -694,15 +745,45 @@ function copyFor(
   role: BgvNotificationRole,
   cycle: StoredCycle,
   c: typeof onbCases.$inferSelect,
+  namedStakeholders: NamedStakeholders,
+  deliveryMode: EmailDeliveryMode,
+  deliveryAddress: string | null,
 ): { subject: string; body: string } {
   const caseReference = `Case #${c.id}`;
+  const reference = `BGV-${c.id}-${cycle.cycleId}`;
   const release = cycle.episode === "release";
+  const actionRequired = release
+    ? role === "candidate"
+      ? "Continue the onboarding checklist or contact HR for next steps."
+      : "Review the existing case and coordinate with HR; no system release is implied."
+    : role === "candidate"
+      ? "Use the secure onboarding portal or contact HR to provide the requested information."
+      : role === "bgvTeam"
+        ? "Review the provider case through the authorized workflow and update its status (simulation only)."
+        : "Review the existing case and coordinate with HR; no automated employment decision was made.";
   if (release) {
     const body =
       role === "candidate"
         ? `${caseReference}: A generic onboarding hold was released. Please continue using the secure onboarding portal or contact HR for next steps. This is not an employment clearance.`
         : `${caseReference}: A generic onboarding hold for ${c.workerName} was released after the source reported completion. Please review the existing onboarding case or contact HR for next steps. This is not an employment clearance or an automated employment decision.`;
-    return { subject: `Onboarding hold update — ${caseReference}`, body };
+    return {
+      subject: `Onboarding hold update — ${caseReference}`,
+      body: [
+        `Employee: ${c.workerName}`,
+        body,
+        "",
+        ...formatEmailIdentityLines({
+          stakeholder: stakeholderFor(role, c, namedStakeholders),
+          deliveryAddress,
+          requestedBy: "bgv-notifications",
+          requestedByKind: "agent",
+          deliveryMode,
+          actionRequired,
+          reference,
+          appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(c.id))}&reference=${encodeURIComponent(reference)}`,
+        }),
+      ].join("\n"),
+    };
   }
   const joiningDate =
     ["hr", "recruiter", "hiringManager"].includes(role) && c.joiningDate
@@ -720,7 +801,21 @@ function copyFor(
     subject: role === "compliance"
       ? `BGV review required — ${caseReference}`
       : `Background verification onboarding update — ${caseReference}`,
-    body,
+    body: [
+      `Employee: ${c.workerName}`,
+      body,
+      "",
+      ...formatEmailIdentityLines({
+        stakeholder: stakeholderFor(role, c, namedStakeholders),
+        deliveryAddress,
+        requestedBy: "bgv-notifications",
+        requestedByKind: "agent",
+        deliveryMode,
+        actionRequired,
+        reference,
+        appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(c.id))}&reference=${encodeURIComponent(reference)}`,
+      }),
+    ].join("\n"),
   };
 }
 
@@ -728,17 +823,47 @@ function internalCopy(
   internal: (typeof INTERNAL_HOLDS)[number],
   episode: "blocked" | "release",
   caseId: number,
+  workerName: string,
 ): { subject: string; body: string } {
   const caseReference = `Case #${caseId}`;
+  const employeeReference = `Employee: ${workerName}`;
   if (episode === "release") {
     return {
       subject: `Simulated generic onboarding hold release — ${caseReference}`,
-      body: `${caseReference}: SIMULATED ONLY: generic ${internal} onboarding hold/release coordination was recorded. No external ${internal} system was changed and this does not represent employment clearance.`,
+      body: [
+        `${caseReference}: SIMULATED ONLY: generic ${internal} onboarding hold/release coordination for ${workerName} was recorded. No external ${internal} system was changed and this does not represent employment clearance.`,
+        employeeReference,
+        "",
+        ...formatEmailIdentityLines({
+          stakeholder: { name: "", role: `${internal} stakeholder` },
+          deliveryAddress: null,
+          requestedBy: "bgv-notifications",
+          requestedByKind: "agent",
+          deliveryMode: "simulated",
+          actionRequired: `Review the simulated ${internal} coordination only; no external system was changed.`,
+          reference: `BGV-${caseId}-${internal}`,
+          appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(caseId))}&reference=${encodeURIComponent(`BGV-${caseId}-${internal}`)}`,
+        }),
+      ].join("\n"),
     };
   }
   return {
     subject: `Simulated generic onboarding hold — ${caseReference}`,
-    body: `${caseReference}: SIMULATED ONLY: generic ${internal} onboarding work is held while a BGV case receives human review. No finding details, employee decision, or external ${internal} action is included.`,
+    body: [
+      `${caseReference}: SIMULATED ONLY: generic ${internal} onboarding work for ${workerName} is held while a BGV case receives human review. No finding details, employee decision, or external ${internal} action is included.`,
+      employeeReference,
+      "",
+      ...formatEmailIdentityLines({
+        stakeholder: { name: "", role: `${internal} stakeholder` },
+        deliveryAddress: null,
+        requestedBy: "bgv-notifications",
+        requestedByKind: "agent",
+        deliveryMode: "simulated",
+        actionRequired: `Record and review the simulated ${internal} hold only; no external system was changed.`,
+        reference: `BGV-${caseId}-${internal}`,
+        appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(caseId))}&reference=${encodeURIComponent(`BGV-${caseId}-${internal}`)}`,
+      }),
+    ].join("\n"),
   };
 }
 
@@ -867,8 +992,10 @@ function plannedRecipient(
   config: BgvNotificationConfig,
   candidateAuthorized: boolean,
   rows: CommunicationRow[],
+  namedStakeholders: NamedStakeholders = {},
 ) {
   const rc = roleConfig(role, config, c);
+  const stakeholder = stakeholderFor(role, c, namedStakeholders);
   const suppressed = cycle.suppressRoles?.includes(role) ?? false;
   const required = roleIncluded(role, cycle);
   const key = `bgv:${c.id}:${cycle.cycleId}:${role}:purpose`;
@@ -886,8 +1013,11 @@ function plannedRecipient(
   if (required && !row && reason !== "missing-recipient" && reason !== "authorized") state = "skipped";
   return {
     role,
-    displayName: roleDisplayName(role, c),
+    displayName: roleDisplayName(role, c, namedStakeholders),
+    stakeholderName: stakeholder.name || null,
+    stakeholderRole: stakeholder.role,
     email: row?.toAddress ?? rc.email,
+    deliveryAddress: rc.email,
     configured: Boolean(rc.email),
     purpose: rolePurpose(role, cycle),
     actualDeliveryState: required ? state : "skipped" as const,
@@ -902,6 +1032,7 @@ function publicCycle(
   c: typeof onbCases.$inferSelect,
   config: BgvNotificationConfig,
   rows: CommunicationRow[],
+  namedStakeholders: NamedStakeholders = {},
 ) {
   const candidate = candidateEmailAuthorization(c).allowed;
   return {
@@ -915,7 +1046,7 @@ function publicCycle(
     ...(cycle.sourceVersion ? { sourceVersion: cycle.sourceVersion } : {}),
     ...(cycle.suppressRoles ? { suppressRoles: cycle.suppressRoles } : {}),
     notifications: ROLES.map((role) =>
-      plannedRecipient(role, cycle, c, config, candidate, rows),
+      plannedRecipient(role, cycle, c, config, candidate, rows, namedStakeholders),
     ).filter((row) => row.reason !== "not-planned"),
   };
 }
@@ -946,12 +1077,14 @@ async function envelope(
     eq(onbSettings.key, settingKey(caseId)),
   ));
   const state = parseState(stored[0]?.value ?? null, await defaultConfig(organizationId));
+  const namedStakeholders = await namedStakeholdersForOrganization(organizationId);
   const cycles = await Promise.all(state.cycles.map(async (cycle) => ({
     ...publicCycle(
       cycle,
       caseRow,
       state.config,
       await communicationsFor(organizationId, caseId, cycle.cycleId),
+      namedStakeholders,
     ),
   })));
   const authorityCanManage =
@@ -1339,6 +1472,7 @@ async function reconcileCycle(
   const retried: number[] = [];
   const skipped: number[] = [];
   const candidateAuthorized = candidateEmailAuthorization(caseRow).allowed;
+  const namedStakeholders = await namedStakeholdersForOrganization(organizationId);
   const simulatedBase = explicitSimulation ||
     cycle.sourceProvenance === "simulated" ||
     cycle.sourceProvenance === "offline" ||
@@ -1384,7 +1518,14 @@ async function reconcileCycle(
       continue;
     }
     if (simulatedBase || role === "bgvTeam") {
-      const copy = copyFor(role, cycle, caseRow);
+      const copy = copyFor(
+        role,
+        cycle,
+        caseRow,
+        namedStakeholders,
+        "simulated",
+        rc.email,
+      );
       const id = await insertSimulated(
         organizationId,
         caseId,
@@ -1411,7 +1552,14 @@ async function reconcileCycle(
       else skipped.push(id);
       continue;
     }
-    const copy = copyFor(role, cycle, caseRow);
+    const copy = copyFor(
+      role,
+      cycle,
+      caseRow,
+      namedStakeholders,
+      "real",
+      rc.email,
+    );
     if (!(await dispatchFenceValid({
       organizationId,
       caseId,
@@ -1453,7 +1601,7 @@ async function reconcileCycle(
   // IT/payroll/facilities system or imply an employment decision.
   for (const internal of INTERNAL_HOLDS) {
     const key = `bgv:${caseId}:${cycle.cycleId}:internal:${internal}`;
-    const copy = internalCopy(internal, cycle.episode, caseId);
+    const copy = internalCopy(internal, cycle.episode, caseId, caseRow.workerName);
     const id = await insertSimulated(
       organizationId,
       caseId,

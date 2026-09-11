@@ -50,6 +50,7 @@ import type {
   FlowOverride,
   FlowOverrideInput,
   GetDemoVolunteers200,
+  GetOnboardingActionCenterParams,
   GetOnboardingGuardrails200,
   GetOnboardingOutcomeKpisParams,
   GlobalAssumption,
@@ -64,6 +65,15 @@ import type {
   ListEaAssessmentsParams,
   ListOnboardingApprovalsParams,
   ModelOption,
+  OnbActionCenter,
+  OnbActionCenterActionResult,
+  OnbActionCenterCallOutcomeInput,
+  OnbActionCenterIdentitySettings,
+  OnbActionCenterIdentitySettingsInput,
+  OnbActionCenterReminderInput,
+  OnbActionCenterWorkInput,
+  OnbActionCenterWorkReassignInput,
+  OnbActionCenterWorkResolveInput,
   OnbAgent,
   OnbAnalytics,
   OnbApproval,
@@ -6420,6 +6430,673 @@ export function useListOnboardingAgents<TData = Awaited<ReturnType<typeof listOn
 
 
 
+
+export const getGetOnboardingActionCenterUrl = (params?: GetOnboardingActionCenterParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/action-center?${stringifiedParams}` : `/api/onboarding/action-center`
+}
+
+/**
+ * Aggregates persisted approvals, BGV and operational notifications, missing-document followups, completed history, durable human work items, and evidence-backed mandatory-checkpoint opportunities. This is a read-only snapshot and never changes readiness.
+ * @summary Read the tenant-scoped onboarding Action Center
+ */
+export const getOnboardingActionCenter = async (params?: GetOnboardingActionCenterParams, options?: RequestInit): Promise<OnbActionCenter> => {
+
+  return customFetch<OnbActionCenter>(getGetOnboardingActionCenterUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingActionCenterQueryKey = (params?: GetOnboardingActionCenterParams,) => {
+    return [
+    `/api/onboarding/action-center`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetOnboardingActionCenterQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingActionCenter>>, TError = ErrorType<ErrorMessage>>(params?: GetOnboardingActionCenterParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingActionCenter>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingActionCenterQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingActionCenter>>> = ({ signal }) => getOnboardingActionCenter(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingActionCenter>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingActionCenterQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingActionCenter>>>
+export type GetOnboardingActionCenterQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Read the tenant-scoped onboarding Action Center
+ */
+
+export function useGetOnboardingActionCenter<TData = Awaited<ReturnType<typeof getOnboardingActionCenter>>, TError = ErrorType<ErrorMessage>>(
+ params?: GetOnboardingActionCenterParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingActionCenter>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingActionCenterQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingActionCenterIdentitiesUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/identities`
+}
+
+/**
+ * Reads names and shared-versus-individual mailbox labels only. This response contains no recipient address and never changes delivery authorization or candidate routing.
+ * @summary Read named Action Center stakeholder identities
+ */
+export const getOnboardingActionCenterIdentities = async ( options?: RequestInit): Promise<OnbActionCenterIdentitySettings> => {
+
+  return customFetch<OnbActionCenterIdentitySettings>(getGetOnboardingActionCenterIdentitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingActionCenterIdentitiesQueryKey = () => {
+    return [
+    `/api/onboarding/action-center/identities`
+    ] as const;
+    }
+
+
+export const getGetOnboardingActionCenterIdentitiesQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingActionCenterIdentities>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingActionCenterIdentities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingActionCenterIdentitiesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingActionCenterIdentities>>> = ({ signal }) => getOnboardingActionCenterIdentities({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingActionCenterIdentities>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingActionCenterIdentitiesQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingActionCenterIdentities>>>
+export type GetOnboardingActionCenterIdentitiesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Read named Action Center stakeholder identities
+ */
+
+export function useGetOnboardingActionCenterIdentities<TData = Awaited<ReturnType<typeof getOnboardingActionCenterIdentities>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingActionCenterIdentities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingActionCenterIdentitiesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateOnboardingActionCenterIdentitiesUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/identities`
+}
+
+/**
+ * Owner/admin only for ordinary tenants; Demo Organization members may save Demo-only presentation metadata. The supplied version is a compare-and-set token. No email or provider permission is changed.
+ * @summary Save named Action Center stakeholder identities
+ */
+export const updateOnboardingActionCenterIdentities = async (onbActionCenterIdentitySettingsInput: OnbActionCenterIdentitySettingsInput, options?: RequestInit): Promise<OnbActionCenterIdentitySettings> => {
+
+  return customFetch<OnbActionCenterIdentitySettings>(getUpdateOnboardingActionCenterIdentitiesUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbActionCenterIdentitySettingsInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateOnboardingActionCenterIdentitiesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingActionCenterIdentities>>, TError,{data: BodyType<OnbActionCenterIdentitySettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingActionCenterIdentities>>, TError,{data: BodyType<OnbActionCenterIdentitySettingsInput>}, TContext> => {
+
+const mutationKey = ['updateOnboardingActionCenterIdentities'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOnboardingActionCenterIdentities>>, {data: BodyType<OnbActionCenterIdentitySettingsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateOnboardingActionCenterIdentities(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOnboardingActionCenterIdentitiesMutationResult = NonNullable<Awaited<ReturnType<typeof updateOnboardingActionCenterIdentities>>>
+    export type UpdateOnboardingActionCenterIdentitiesMutationBody = BodyType<OnbActionCenterIdentitySettingsInput>
+    export type UpdateOnboardingActionCenterIdentitiesMutationError = ErrorType<void>
+
+    /**
+ * @summary Save named Action Center stakeholder identities
+ */
+export const useUpdateOnboardingActionCenterIdentities = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingActionCenterIdentities>>, TError,{data: BodyType<OnbActionCenterIdentitySettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOnboardingActionCenterIdentities>>,
+        TError,
+        {data: BodyType<OnbActionCenterIdentitySettingsInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateOnboardingActionCenterIdentitiesMutationOptions(options));
+    }
+
+export const getRecordOnboardingActionCenterCallOutcomeUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/actions/manual-call-outcome`
+}
+
+/**
+ * Records an append-only outcome with the authenticated server actor. The outcome is explicitly self-reported and unverified; it does not write readiness. A named persona is accepted only for Demo Organization simulation members.
+ * @summary Record a durable self-reported manual call outcome
+ */
+export const recordOnboardingActionCenterCallOutcome = async (onbActionCenterCallOutcomeInput: OnbActionCenterCallOutcomeInput, options?: RequestInit): Promise<OnbActionCenterActionResult> => {
+
+  return customFetch<OnbActionCenterActionResult>(getRecordOnboardingActionCenterCallOutcomeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbActionCenterCallOutcomeInput)
+  }
+);}
+
+
+
+
+
+export const getRecordOnboardingActionCenterCallOutcomeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordOnboardingActionCenterCallOutcome>>, TError,{data: BodyType<OnbActionCenterCallOutcomeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordOnboardingActionCenterCallOutcome>>, TError,{data: BodyType<OnbActionCenterCallOutcomeInput>}, TContext> => {
+
+const mutationKey = ['recordOnboardingActionCenterCallOutcome'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordOnboardingActionCenterCallOutcome>>, {data: BodyType<OnbActionCenterCallOutcomeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordOnboardingActionCenterCallOutcome(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordOnboardingActionCenterCallOutcomeMutationResult = NonNullable<Awaited<ReturnType<typeof recordOnboardingActionCenterCallOutcome>>>
+    export type RecordOnboardingActionCenterCallOutcomeMutationBody = BodyType<OnbActionCenterCallOutcomeInput>
+    export type RecordOnboardingActionCenterCallOutcomeMutationError = ErrorType<void>
+
+    /**
+ * @summary Record a durable self-reported manual call outcome
+ */
+export const useRecordOnboardingActionCenterCallOutcome = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordOnboardingActionCenterCallOutcome>>, TError,{data: BodyType<OnbActionCenterCallOutcomeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordOnboardingActionCenterCallOutcome>>,
+        TError,
+        {data: BodyType<OnbActionCenterCallOutcomeInput>},
+        TContext
+      > => {
+      return useMutation(getRecordOnboardingActionCenterCallOutcomeMutationOptions(options));
+    }
+
+export const getRemindOnboardingActionCenterDocumentUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/actions/remind-document`
+}
+
+/**
+ * Sends or simulates one due document reminder through the existing authorization, dispatch guard, effect journal, provider and fixed 48-hour next-due policy. This endpoint does not create a scheduler.
+ * @summary Reuse the existing document reminder delivery boundary
+ */
+export const remindOnboardingActionCenterDocument = async (onbActionCenterReminderInput: OnbActionCenterReminderInput, options?: RequestInit): Promise<OnbActionCenterActionResult> => {
+
+  return customFetch<OnbActionCenterActionResult>(getRemindOnboardingActionCenterDocumentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbActionCenterReminderInput)
+  }
+);}
+
+
+
+
+
+export const getRemindOnboardingActionCenterDocumentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof remindOnboardingActionCenterDocument>>, TError,{data: BodyType<OnbActionCenterReminderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof remindOnboardingActionCenterDocument>>, TError,{data: BodyType<OnbActionCenterReminderInput>}, TContext> => {
+
+const mutationKey = ['remindOnboardingActionCenterDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof remindOnboardingActionCenterDocument>>, {data: BodyType<OnbActionCenterReminderInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  remindOnboardingActionCenterDocument(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemindOnboardingActionCenterDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof remindOnboardingActionCenterDocument>>>
+    export type RemindOnboardingActionCenterDocumentMutationBody = BodyType<OnbActionCenterReminderInput>
+    export type RemindOnboardingActionCenterDocumentMutationError = ErrorType<void>
+
+    /**
+ * @summary Reuse the existing document reminder delivery boundary
+ */
+export const useRemindOnboardingActionCenterDocument = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof remindOnboardingActionCenterDocument>>, TError,{data: BodyType<OnbActionCenterReminderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof remindOnboardingActionCenterDocument>>,
+        TError,
+        {data: BodyType<OnbActionCenterReminderInput>},
+        TContext
+      > => {
+      return useMutation(getRemindOnboardingActionCenterDocumentMutationOptions(options));
+    }
+
+export const getAssignOnboardingActionCenterWorkUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/actions/assign`
+}
+
+/**
+ * Creates a queue assignment without provider or readiness effects.
+ * @summary Create a durable human work-item assignment
+ */
+export const assignOnboardingActionCenterWork = async (onbActionCenterWorkInput: OnbActionCenterWorkInput, options?: RequestInit): Promise<OnbActionCenterActionResult> => {
+
+  return customFetch<OnbActionCenterActionResult>(getAssignOnboardingActionCenterWorkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbActionCenterWorkInput)
+  }
+);}
+
+
+
+
+
+export const getAssignOnboardingActionCenterWorkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkInput>}, TContext> => {
+
+const mutationKey = ['assignOnboardingActionCenterWork'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignOnboardingActionCenterWork>>, {data: BodyType<OnbActionCenterWorkInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  assignOnboardingActionCenterWork(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignOnboardingActionCenterWorkMutationResult = NonNullable<Awaited<ReturnType<typeof assignOnboardingActionCenterWork>>>
+    export type AssignOnboardingActionCenterWorkMutationBody = BodyType<OnbActionCenterWorkInput>
+    export type AssignOnboardingActionCenterWorkMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a durable human work-item assignment
+ */
+export const useAssignOnboardingActionCenterWork = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignOnboardingActionCenterWork>>,
+        TError,
+        {data: BodyType<OnbActionCenterWorkInput>},
+        TContext
+      > => {
+      return useMutation(getAssignOnboardingActionCenterWorkMutationOptions(options));
+    }
+
+export const getEscalateOnboardingActionCenterWorkUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/actions/escalate`
+}
+
+/**
+ * Creates a queue escalation without provider or readiness effects.
+ * @summary Create a durable human work-item escalation
+ */
+export const escalateOnboardingActionCenterWork = async (onbActionCenterWorkInput: OnbActionCenterWorkInput, options?: RequestInit): Promise<OnbActionCenterActionResult> => {
+
+  return customFetch<OnbActionCenterActionResult>(getEscalateOnboardingActionCenterWorkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbActionCenterWorkInput)
+  }
+);}
+
+
+
+
+
+export const getEscalateOnboardingActionCenterWorkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof escalateOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof escalateOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkInput>}, TContext> => {
+
+const mutationKey = ['escalateOnboardingActionCenterWork'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof escalateOnboardingActionCenterWork>>, {data: BodyType<OnbActionCenterWorkInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  escalateOnboardingActionCenterWork(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EscalateOnboardingActionCenterWorkMutationResult = NonNullable<Awaited<ReturnType<typeof escalateOnboardingActionCenterWork>>>
+    export type EscalateOnboardingActionCenterWorkMutationBody = BodyType<OnbActionCenterWorkInput>
+    export type EscalateOnboardingActionCenterWorkMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a durable human work-item escalation
+ */
+export const useEscalateOnboardingActionCenterWork = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof escalateOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof escalateOnboardingActionCenterWork>>,
+        TError,
+        {data: BodyType<OnbActionCenterWorkInput>},
+        TContext
+      > => {
+      return useMutation(getEscalateOnboardingActionCenterWorkMutationOptions(options));
+    }
+
+export const getReassignOnboardingActionCenterWorkUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/actions/reassign`
+}
+
+/**
+ * Appends a durable reassignment record and closes the prior assignment as the current work-item presentation. No provider or readiness effect occurs.
+ * @summary Reassign an existing Action Center work item
+ */
+export const reassignOnboardingActionCenterWork = async (onbActionCenterWorkReassignInput: OnbActionCenterWorkReassignInput, options?: RequestInit): Promise<OnbActionCenterActionResult> => {
+
+  return customFetch<OnbActionCenterActionResult>(getReassignOnboardingActionCenterWorkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbActionCenterWorkReassignInput)
+  }
+);}
+
+
+
+
+
+export const getReassignOnboardingActionCenterWorkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reassignOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkReassignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reassignOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkReassignInput>}, TContext> => {
+
+const mutationKey = ['reassignOnboardingActionCenterWork'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reassignOnboardingActionCenterWork>>, {data: BodyType<OnbActionCenterWorkReassignInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reassignOnboardingActionCenterWork(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReassignOnboardingActionCenterWorkMutationResult = NonNullable<Awaited<ReturnType<typeof reassignOnboardingActionCenterWork>>>
+    export type ReassignOnboardingActionCenterWorkMutationBody = BodyType<OnbActionCenterWorkReassignInput>
+    export type ReassignOnboardingActionCenterWorkMutationError = ErrorType<void>
+
+    /**
+ * @summary Reassign an existing Action Center work item
+ */
+export const useReassignOnboardingActionCenterWork = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reassignOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkReassignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reassignOnboardingActionCenterWork>>,
+        TError,
+        {data: BodyType<OnbActionCenterWorkReassignInput>},
+        TContext
+      > => {
+      return useMutation(getReassignOnboardingActionCenterWorkMutationOptions(options));
+    }
+
+export const getResolveOnboardingActionCenterWorkUrl = () => {
+
+
+
+
+  return `/api/onboarding/action-center/actions/resolve`
+}
+
+/**
+ * Appends a durable resolution record. The work item leaves the active queue only after this explicit action; no readiness or provider effect occurs.
+ * @summary Resolve an existing Action Center work item
+ */
+export const resolveOnboardingActionCenterWork = async (onbActionCenterWorkResolveInput: OnbActionCenterWorkResolveInput, options?: RequestInit): Promise<OnbActionCenterActionResult> => {
+
+  return customFetch<OnbActionCenterActionResult>(getResolveOnboardingActionCenterWorkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbActionCenterWorkResolveInput)
+  }
+);}
+
+
+
+
+
+export const getResolveOnboardingActionCenterWorkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkResolveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkResolveInput>}, TContext> => {
+
+const mutationKey = ['resolveOnboardingActionCenterWork'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveOnboardingActionCenterWork>>, {data: BodyType<OnbActionCenterWorkResolveInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveOnboardingActionCenterWork(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveOnboardingActionCenterWorkMutationResult = NonNullable<Awaited<ReturnType<typeof resolveOnboardingActionCenterWork>>>
+    export type ResolveOnboardingActionCenterWorkMutationBody = BodyType<OnbActionCenterWorkResolveInput>
+    export type ResolveOnboardingActionCenterWorkMutationError = ErrorType<void>
+
+    /**
+ * @summary Resolve an existing Action Center work item
+ */
+export const useResolveOnboardingActionCenterWork = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveOnboardingActionCenterWork>>, TError,{data: BodyType<OnbActionCenterWorkResolveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveOnboardingActionCenterWork>>,
+        TError,
+        {data: BodyType<OnbActionCenterWorkResolveInput>},
+        TContext
+      > => {
+      return useMutation(getResolveOnboardingActionCenterWorkMutationOptions(options));
+    }
 
 export const getGetOnboardingOperationalRequestsUrl = (caseId: number,) => {
 

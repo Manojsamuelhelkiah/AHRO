@@ -49,7 +49,7 @@ export type BlockedPublishBackupReadiness = {
   note: string;
 };
 
-function maskEmail(email: string): string {
+export function maskEmail(email: string): string {
   const [local, domain] = email.split("@");
   if (!domain) return "***";
   return `${local.slice(0, 2)}***@${domain}`;
@@ -496,6 +496,10 @@ export async function sendOutbound(opts: {
   persistedBody?: string;
   sensitive?: boolean;
   idempotencyKey?: string;
+  /** The caller has already persisted the exact delivery payload. */
+  stableBody?: boolean;
+  /** The caller has already added the case-bound reply reference. */
+  skipCandidateReplyReference?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   const guarded = await withCaseDispatchGuard(opts.caseId, () =>
     sendOutboundUnsafe(opts),
@@ -518,6 +522,8 @@ async function sendOutboundUnsafe(opts: {
   persistedBody?: string;
   sensitive?: boolean;
   idempotencyKey?: string;
+  stableBody?: boolean;
+  skipCandidateReplyReference?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
@@ -611,10 +617,9 @@ async function sendOutboundUnsafe(opts: {
   // Shared-inbox replies are attributed only through this unguessable,
   // case-bound reference, never by sender address alone.
   let body =
-    opts.channel === "email" && candidateEmail
+    opts.channel === "email" && candidateEmail && !opts.skipCandidateReplyReference
       ? addCandidateReplyReference(opts.body)
       : opts.body;
-  const deliveredBodyHash = createHash("sha256").update(body).digest("hex");
   let subject = opts.subject ?? null;
   const masked =
     opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress);
@@ -649,14 +654,16 @@ async function sendOutboundUnsafe(opts: {
     if (!payload || payload.caseId !== opts.caseId || payload.channel !== opts.channel) {
       throw new Error("Communication idempotency key is bound to another payload");
     }
-    if (opts.persistedBody === undefined) body = payload.body;
+    if (opts.stableBody || opts.persistedBody === undefined) body = payload.body;
     subject = payload.subject;
     const argumentsHash = createHash("sha256").update(JSON.stringify({
       channel: payload.channel,
       toAddress: payload.toAddress,
       subject: payload.subject,
       body: payload.body,
-      ...(opts.persistedBody !== undefined ? { deliveredBodyHash } : {}),
+      ...(opts.persistedBody !== undefined
+        ? { deliveredBodyHash: createHash("sha256").update(body).digest("hex") }
+        : {}),
     })).digest("hex");
     const identity = {
       logicalOperationKey,

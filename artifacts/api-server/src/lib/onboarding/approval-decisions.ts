@@ -15,10 +15,19 @@ import {
 } from "./settings";
 import {
   appendApprovalDecisionHistory,
-  approvalRef,
   approvalVersion,
   type ApprovalDecision,
 } from "./approval-version";
+import {
+  ACTION_IDENTITY_SETTING_KEY,
+  approvalStakeholderFromActionIdentity,
+  type NamedStakeholder,
+  type RequesterKind,
+} from "./email-identity";
+import {
+  composeApprovalDecisionEmail,
+  composeApprovalRequestEmail,
+} from "./approval-email-templates";
 import type { OnboardingDbTransaction } from "./settings";
 
 export type { ApprovalDecision };
@@ -68,6 +77,10 @@ type ApprovalRequestLike = Pick<
   typeof onbApprovals.$inferSelect,
   "id" | "caseId" | "organizationId" | "version"
 >;
+type ApprovalRequestCopyInput = Pick<
+  ApprovalLike,
+  "id" | "version" | "caseId" | "agent" | "hitlPattern" | "recommendation" | "rationale"
+>;
 type NotificationValues = {
   organizationId: string;
   approvalId: number;
@@ -89,70 +102,80 @@ function normalizedConfiguredAddress(value: string | null | undefined): string |
 async function configuredRecipients(
   tx: OnboardingDbTransaction,
   organizationId: string,
-): Promise<{ approver: string | null; hrAlert: string | null }> {
+): Promise<{
+  approver: string | null;
+  hrAlert: string | null;
+  stakeholder: NamedStakeholder;
+}> {
   const rows = await tx.select({
     key: onbSettings.key,
     value: onbSettings.value,
   }).from(onbSettings).where(and(
     eq(onbSettings.organizationId, organizationId),
-    sql`${onbSettings.key} in (${HR_APPROVER_EMAIL_KEY}, ${HR_ALERT_EMAIL_KEY})`,
+    sql`${onbSettings.key} in (${HR_APPROVER_EMAIL_KEY}, ${HR_ALERT_EMAIL_KEY}, ${ACTION_IDENTITY_SETTING_KEY})`,
   ));
   const values = new Map(rows.map((row) => [row.key, row.value]));
   return {
     approver: normalizedConfiguredAddress(values.get(HR_APPROVER_EMAIL_KEY)),
     hrAlert: normalizedConfiguredAddress(values.get(HR_ALERT_EMAIL_KEY)),
+    stakeholder: approvalStakeholderFromActionIdentity(values.get(ACTION_IDENTITY_SETTING_KEY)),
   };
 }
 
-function requestContent(
-  approval: ApprovalLike,
-  workerName: string,
+export function composeApprovalRequestNotificationCopy(
+  input: {
+    approval: ApprovalRequestCopyInput;
+    workerName: string;
+    stakeholderName: string;
+    stakeholderRole: string;
+    deliveryAddress: string | null;
+  },
 ): { subject: string; body: string } {
-  const ref = approvalRef(approval.id, approvalVersion(approval.version));
-  const kind = approval.hitlPattern === "hard-block" ? "HARD-BLOCK" : "Approval needed";
-  return {
-    subject: `[${ref}] ${kind}: ${workerName} (case #${approval.caseId})`,
-    body: [
-      "The onboarding agent has escalated a decision to you.",
-      "",
-      `Case: #${approval.caseId} — ${workerName}`,
-      `Raised by: ${approval.agent} agent (${approval.hitlPattern})`,
-      `Approval cycle: ${ref}`,
-      "",
-      `Recommendation: ${approval.recommendation}`,
-      `Rationale: ${approval.rationale}`,
-      "",
-      `Reply with exactly "approve" or "reject" to decide ${ref}.`,
-      `Only the configured approver address is authorized to decide this approval.`,
-    ].join("\n"),
-  };
+  return composeApprovalRequestEmail({
+    approvalId: input.approval.id,
+    version: input.approval.version,
+    workerName: input.workerName,
+    caseId: input.approval.caseId,
+    agent: input.approval.agent,
+    hitlPattern: input.approval.hitlPattern,
+    recommendation: input.approval.recommendation,
+    rationale: input.approval.rationale,
+    stakeholder: {
+      name: input.stakeholderName,
+      role: input.stakeholderRole,
+    },
+    deliveryAddress: input.deliveryAddress,
+    deliveryMode: "real",
+    deliveryState: "queued",
+  });
 }
 
 function decisionContent(opts: {
   approval: ApprovalLike;
+  workerName: string;
   decidedBy: string;
   decision: ApprovalDecision;
   decidedAt: Date;
+  stakeholder: NamedStakeholder;
+  deliveryAddress: string | null;
+  decidedByKind: RequesterKind;
   stale?: boolean;
 }): { subject: string; body: string } {
-  const ref = approvalRef(opts.approval.id, approvalVersion(opts.approval.version));
-  const verb = opts.stale ? "was not applied" : "was recorded";
-  return {
-    subject: `[${ref}] Decision ${opts.stale ? "stale" : "recorded"}: ${opts.decision}`,
-    body: [
-      opts.stale
-        ? `A reply for ${ref} ${verb}; the current approval cycle was already decided or superseded.`
-        : `The decision for ${ref} ${verb}.`,
-      "",
-      `Actor: ${opts.decidedBy}`,
-      `Time: ${opts.decidedAt.toISOString()}`,
-      `Version: ${approvalVersion(opts.approval.version)}`,
-      `Decision: ${opts.decision}`,
-      "",
-      "This message reports the approval record only. An approval does not by itself claim that a gateway was released.",
-      "Any Gate A or Gate C release is reported separately after its dedicated, current-evidence reconciliation commits.",
-    ].join("\n"),
-  };
+  return composeApprovalDecisionEmail({
+    approvalId: opts.approval.id,
+    version: opts.approval.version,
+    workerName: opts.workerName,
+    caseId: opts.approval.caseId,
+    decidedBy: opts.decidedBy,
+    decision: opts.decision,
+    decidedAt: opts.decidedAt,
+    decidedByKind: opts.decidedByKind,
+    stakeholder: opts.stakeholder,
+    deliveryAddress: opts.deliveryAddress,
+    deliveryMode: "real",
+    deliveryState: "queued",
+    stale: opts.stale,
+  });
 }
 
 async function enqueueNotificationTx(
@@ -185,7 +208,13 @@ async function enqueueRequestTx(
   ) return;
   const recipients = await configuredRecipients(tx, approval.organizationId);
   if (!recipients.approver) return;
-  const content = requestContent(approval, workerName);
+  const content = composeApprovalRequestNotificationCopy({
+    approval,
+    workerName,
+    stakeholderName: recipients.stakeholder.name,
+    stakeholderRole: recipients.stakeholder.role,
+    deliveryAddress: recipients.approver,
+  });
   const version = approvalVersion(approval.version);
   await enqueueNotificationTx(tx, {
     organizationId: approval.organizationId,
@@ -240,6 +269,7 @@ export async function decideApproval(opts: {
   comment?: string | null;
   sourceMessageId?: string | null;
   sourceAddress?: string | null;
+  decidedByKind?: RequesterKind;
 }): Promise<DecisionResult> {
   const expectedVersion = approvalVersion(opts.expectedVersion);
   let decided: {
@@ -278,6 +308,10 @@ export async function decideApproval(opts: {
           decidedBy: opts.decidedBy,
           decision: opts.decision,
           decidedAt: new Date(),
+          workerName: currentCase.workerName,
+          stakeholder: (await configuredRecipients(tx, approval.organizationId)).stakeholder,
+          deliveryAddress: recipient,
+           decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
           stale: true,
         });
         await enqueueNotificationTx(tx, {
@@ -309,14 +343,18 @@ export async function decideApproval(opts: {
       eq(onbApprovals.version, currentVersion),
     )).returning();
     if (!updated) {
+      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
       const content = decisionContent({
         approval,
         decidedBy: opts.decidedBy,
         decision: opts.decision,
         decidedAt,
+        workerName: currentCase.workerName,
+        stakeholder: (await configuredRecipients(tx, approval.organizationId)).stakeholder,
+        deliveryAddress: recipient,
+         decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
         stale: true,
       });
-      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
       if (recipient) {
         await enqueueNotificationTx(tx, {
           organizationId: approval.organizationId,
@@ -366,14 +404,18 @@ export async function decideApproval(opts: {
       eq(onbCases.organizationId, approval.organizationId),
       eq(onbCases.id, approval.caseId),
     ));
+    const recipients = await configuredRecipients(tx, approval.organizationId);
+    const receiptRecipient = normalizedConfiguredAddress(opts.sourceAddress) ?? recipients.approver;
     const content = decisionContent({
       approval: updated,
       decidedBy: opts.decidedBy,
       decision: opts.decision,
       decidedAt,
+      workerName: c?.workerName ?? "worker",
+      stakeholder: recipients.stakeholder,
+      deliveryAddress: receiptRecipient,
+      decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
     });
-    const recipients = await configuredRecipients(tx, approval.organizationId);
-    const receiptRecipient = normalizedConfiguredAddress(opts.sourceAddress) ?? recipients.approver;
     if (receiptRecipient) {
       await enqueueNotificationTx(tx, {
         organizationId: approval.organizationId,

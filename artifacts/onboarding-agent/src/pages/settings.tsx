@@ -27,6 +27,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { TargetedChecklistProfiles } from './settings-checklist-profiles';
 import { ReadinessSlaSettingsCard } from './settings-readiness-sla';
 import { SyntheticResetCard } from './settings-synthetic-reset';
+import { ActionCenterIdentitiesSettings } from './action-center-settings';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -802,6 +803,7 @@ export function SettingsPage() {
       <DemoVolunteersCard />
       <SyntheticResetCard />
       <ReadinessSlaSettingsCard />
+      <ActionCenterIdentitiesSettings />
       <ChecklistSettingsCard />
       <TargetedChecklistProfiles />
 

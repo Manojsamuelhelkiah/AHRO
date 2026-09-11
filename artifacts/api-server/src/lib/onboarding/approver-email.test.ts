@@ -8,6 +8,8 @@ import {
   senderIsApprover,
   composeApprovalEmail,
 } from "./approver-email";
+import { composeApprovalRequestNotificationCopy } from "./approval-decisions";
+import { approvalStakeholderFromActionIdentity } from "./email-identity";
 
 /* ----------------------------- refs ----------------------------- */
 
@@ -109,6 +111,11 @@ test("composeApprovalEmail includes the ref, recommendation and reply instructio
   assert.ok(body.includes("Proceed with conditional clearance"));
   assert.ok(body.includes("Minor date mismatch"));
   assert.ok(/reply .*"approve" or "reject"/i.test(body));
+  assert.match(body, /Employee: Priya Sharma/);
+  assert.match(body, /Intended stakeholder: Name not configured — HR approval stakeholder/);
+  assert.match(body, /Requested by: bgv \(agent\)/);
+  assert.match(body, /Delivery status: REAL PATH/);
+  assert.match(body, /App link: https:\/\/hro-agent-nexus\.replit\.app\/approvals\?tab=approvals&caseId=3&approvalId=9&approvalRef=AP-9-V1/);
   // The reply must be matchable: the ref appears in the body too.
   assert.equal(matchApprovalRef(body), 9);
 });
@@ -124,4 +131,76 @@ test("composeApprovalEmail flags hard-blocks", () => {
     rationale: "x",
   });
   assert.ok(subject.includes("HARD-BLOCK"));
+});
+
+test("approval copy keeps named stakeholder separate from the shared mailbox address", () => {
+  const { body } = composeApprovalEmail({
+    approvalId: 12,
+    version: 2,
+    workerName: "Case Employee",
+    caseId: 88,
+    agent: "intake",
+    hitlPattern: "approve-before-act",
+    recommendation: "Proceed",
+    rationale: "Evidence is ready",
+    stakeholderName: "People Operations",
+    stakeholderRole: "HR approval reviewer",
+    deliveryAddress: "demo-approvals@example.test",
+  });
+  assert.match(body, /Intended stakeholder: People Operations — HR approval reviewer/);
+  assert.match(body, /Actual delivery address: demo-approvals@example.test/);
+  assert.match(body, /Reference: AP-12-V2/);
+  assert.match(body, /App link: https:\/\/hro-agent-nexus\.replit\.app\/approvals\?tab=approvals&caseId=88&approvalId=12&approvalRef=AP-12-V2/);
+  assert.match(body, /not as a verified named human/);
+});
+
+test("the approval outbox template caller resolves the configured HR persona", () => {
+  const stakeholder = approvalStakeholderFromActionIdentity(JSON.stringify({
+    version: 2,
+    identities: {
+      hr: { name: "Amina Patel", mailboxType: "shared" },
+    },
+  }));
+  const { body } = composeApprovalRequestNotificationCopy(
+    {
+      approval: {
+        id: 21,
+        version: 3,
+        caseId: 144,
+        agent: "bgv",
+        hitlPattern: "approve-before-act",
+        recommendation: "Review",
+        rationale: "Human review required",
+      },
+      workerName: "Jordan Lee",
+      stakeholderName: stakeholder.name,
+      stakeholderRole: stakeholder.role,
+      deliveryAddress: "demo-approvals@example.test",
+    },
+  );
+  assert.match(body, /Employee: Jordan Lee/);
+  assert.match(body, /Case: #144/);
+  assert.match(body, /Intended stakeholder: Amina Patel — HR approval stakeholder/);
+  assert.match(body, /Actual delivery address: demo-approvals@example.test/);
+  assert.match(body, /Reference: AP-21-V3/);
+
+  // The outbox stores this rendered body; changing Action Center identities
+  // for a later attempt must not mutate the already-rendered snapshot.
+  const renamed = composeApprovalRequestNotificationCopy({
+    approval: {
+      id: 21,
+      version: 3,
+      caseId: 144,
+      agent: "bgv",
+      hitlPattern: "approve-before-act",
+      recommendation: "Review",
+      rationale: "Human review required",
+    },
+    workerName: "Jordan Lee",
+    stakeholderName: "Beatrice Chen",
+    stakeholderRole: "HR approval stakeholder",
+    deliveryAddress: "demo-approvals@example.test",
+  });
+  assert.doesNotMatch(body, /Beatrice Chen/);
+  assert.match(renamed.body, /Beatrice Chen/);
 });

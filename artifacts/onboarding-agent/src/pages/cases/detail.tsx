@@ -40,8 +40,12 @@ export function CaseDetailPage() {
   const caseId = Number(id);
   const { user } = useUser();
   const { isHR, loading: isHRLoading } = useOrganizationRole();
-  
-  const [activeTab, setActiveTab] = useState('Overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("tab")?.toLowerCase();
+    return requested === "communications" ? "Communications" : "Overview";
+  });
 
   const { data: c, isLoading } = useGetOnboardingCase(caseId, {
     query: {

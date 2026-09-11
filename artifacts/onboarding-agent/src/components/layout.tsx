@@ -13,7 +13,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     items: [
       { path: '/', label: 'Control Tower', icon: TowerControl },
       { path: '/cases', label: 'Cases', icon: Users },
-      { path: '/approvals', label: 'Approvals', icon: CheckSquare },
+      { path: '/approvals', label: 'Action Center', icon: CheckSquare },
     ],
   },
   {

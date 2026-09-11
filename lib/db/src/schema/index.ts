@@ -11,3 +11,4 @@ export * from "./enterprise-architecture";
 export * from "./candidate-portal";
 export * from "./onboarding-sla";
 export * from "./demo-controller-setup";
+export * from "./action-center";

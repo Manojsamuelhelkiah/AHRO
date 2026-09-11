@@ -40,6 +40,7 @@ export const tenantSafeguards = [
   { table: "onb_readiness_sla_outbox", phaseB: false },
   { table: "onb_approval_history", phaseB: false },
   { table: "onb_approval_notifications", phaseB: false },
+  { table: "onb_action_center_actions", phaseB: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -87,4 +88,10 @@ export const expectedForeignKeys = [
     referencedTable: "onb_approvals",
     referencedColumns: ["organization_id", "id"],
   })),
+  {
+    table: "onb_action_center_actions",
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  },
 ];

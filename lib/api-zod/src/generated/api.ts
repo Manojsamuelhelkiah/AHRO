@@ -7912,6 +7912,614 @@ export const ListOnboardingAgentsResponse = zod.array(ListOnboardingAgentsRespon
 
 
 /**
+ * Aggregates persisted approvals, BGV and operational notifications, missing-document followups, completed history, durable human work items, and evidence-backed mandatory-checkpoint opportunities. This is a read-only snapshot and never changes readiness.
+ * @summary Read the tenant-scoped onboarding Action Center
+ */
+export const getOnboardingActionCenterQueryScopeDefault = `active`;
+export const getOnboardingActionCenterQueryLimitDefault = 100;
+export const getOnboardingActionCenterQueryLimitMax = 200;
+
+
+
+export const GetOnboardingActionCenterQueryParams = zod.object({
+  "scope": zod.enum(['active', 'completed', 'all']).default(getOnboardingActionCenterQueryScopeDefault),
+  "limit": zod.coerce.number().min(1).max(getOnboardingActionCenterQueryLimitMax).default(getOnboardingActionCenterQueryLimitDefault)
+})
+
+export const getOnboardingActionCenterResponseCountsPendingApprovalsMin = 0;
+
+export const getOnboardingActionCenterResponseCountsNotificationsMin = 0;
+
+export const getOnboardingActionCenterResponseCountsMissingDocumentsMin = 0;
+
+export const getOnboardingActionCenterResponseCountsOpenWorkItemsMin = 0;
+
+export const getOnboardingActionCenterResponseCountsCompletedMin = 0;
+
+export const getOnboardingActionCenterResponseCountsOpportunitiesMin = 0;
+
+
+
+
+
+
+
+export const getOnboardingActionCenterResponseDocumentFollowupsItemReminderCountMin = 0;
+
+
+
+export const getOnboardingActionCenterResponseWorkItemsItemActionVersionMin = 0;
+
+
+
+export const getOnboardingActionCenterResponseOpportunitiesItemActionVersionMin = 0;
+
+
+
+export const GetOnboardingActionCenterResponse = zod.object({
+  "version": zod.number(),
+  "generatedAt": zod.coerce.date(),
+  "pausedOffline": zod.boolean(),
+  "capabilities": zod.object({
+  "canAct": zod.boolean(),
+  "canSendReminder": zod.boolean(),
+  "canRecordCallOutcome": zod.boolean(),
+  "canAssign": zod.boolean(),
+  "canEscalate": zod.boolean(),
+  "canReassign": zod.boolean(),
+  "canResolve": zod.boolean(),
+  "reminderMode": zod.enum(['existing-runner']),
+  "aiCall": zod.object({
+  "available": zod.boolean(),
+  "mode": zod.enum(['existing-control']),
+  "label": zod.string(),
+  "hrefTemplate": zod.string()
+})
+}),
+  "counts": zod.object({
+  "pendingApprovals": zod.number().min(getOnboardingActionCenterResponseCountsPendingApprovalsMin),
+  "notifications": zod.number().min(getOnboardingActionCenterResponseCountsNotificationsMin),
+  "missingDocuments": zod.number().min(getOnboardingActionCenterResponseCountsMissingDocumentsMin),
+  "openWorkItems": zod.number().min(getOnboardingActionCenterResponseCountsOpenWorkItemsMin),
+  "completed": zod.number().min(getOnboardingActionCenterResponseCountsCompletedMin),
+  "opportunities": zod.number().min(getOnboardingActionCenterResponseCountsOpportunitiesMin)
+}),
+  "approvals": zod.array(zod.object({
+  "id": zod.number().min(1),
+  "caseId": zod.number().min(1),
+  "version": zod.number().min(1),
+  "status": zod.string(),
+  "agent": zod.string(),
+  "hitlPattern": zod.string(),
+  "ruleRef": zod.string().nullable(),
+  "recommendation": zod.string(),
+  "rationale": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "case": zod.object({
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "role": zod.string(),
+  "joiningDate": zod.string(),
+  "lifecycleStage": zod.string(),
+  "urgency": zod.string(),
+  "pausedOffline": zod.boolean(),
+  "canAct": zod.boolean(),
+  "aiCallHref": zod.string()
+}),
+  "actions": zod.object({
+  "approveHref": zod.string(),
+  "caseHref": zod.string(),
+  "canAct": zod.boolean()
+})
+})),
+  "notifications": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number().min(1),
+  "kind": zod.enum(['bgv', 'operational']),
+  "title": zod.string(),
+  "detail": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "provenance": zod.string(),
+  "deliveryLabel": zod.string(),
+  "recipient": zod.string(),
+  "initiator": zod.string(),
+  "capabilities": zod.object({
+  "canAct": zod.boolean()
+}),
+  "createdAt": zod.coerce.date(),
+  "caseHref": zod.string()
+})),
+  "documentFollowups": zod.array(zod.object({
+  "documentId": zod.number().min(1),
+  "caseId": zod.number().min(1),
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.string(),
+  "validationState": zod.string().nullable(),
+  "required": zod.boolean(),
+  "reminderCount": zod.number().min(getOnboardingActionCenterResponseDocumentFollowupsItemReminderCountMin),
+  "lastReminderAt": zod.coerce.date().nullable(),
+  "nextReminderAt": zod.coerce.date().nullable(),
+  "action": zod.enum(['remind', 'review', 'correction']),
+  "capabilities": zod.object({
+  "canRemind": zod.boolean()
+}),
+  "eligibleForReminder": zod.boolean(),
+  "case": zod.object({
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "role": zod.string(),
+  "joiningDate": zod.string(),
+  "lifecycleStage": zod.string(),
+  "urgency": zod.string(),
+  "pausedOffline": zod.boolean(),
+  "canAct": zod.boolean(),
+  "aiCallHref": zod.string()
+}),
+  "caseHref": zod.string()
+})),
+  "workItems": zod.array(zod.object({
+  "id": zod.number().min(1),
+  "caseId": zod.number().min(1),
+  "kind": zod.enum(['assign', 'escalate']),
+  "status": zod.enum(['open']),
+  "owner": zod.string().nullable(),
+  "assignee": zod.string().nullable(),
+  "reason": zod.string().nullable(),
+  "actor": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "actionVersion": zod.number().min(getOnboardingActionCenterResponseWorkItemsItemActionVersionMin),
+  "capabilities": zod.object({
+  "canAct": zod.boolean(),
+  "canReassign": zod.boolean(),
+  "canResolve": zod.boolean()
+}),
+  "caseHref": zod.string()
+})),
+  "completed": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "caseId": zod.number().min(1),
+  "status": zod.string(),
+  "summary": zod.string(),
+  "actor": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "caseHref": zod.string()
+})),
+  "opportunities": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number().min(1),
+  "actionVersion": zod.number().min(getOnboardingActionCenterResponseOpportunitiesItemActionVersionMin),
+  "kind": zod.string(),
+  "priority": zod.enum(['critical', 'high', 'medium', 'low']),
+  "title": zod.string(),
+  "description": zod.string(),
+  "benefit": zod.object({
+  "type": zod.enum(['mandatory-checkpoint', 'existing-policy-delta']),
+  "checkpoint": zod.string(),
+  "delta": zod.string().nullable()
+}),
+  "evidence": zod.object({
+  "source": zod.string()
+}),
+  "capabilities": zod.object({
+  "canAct": zod.boolean()
+}),
+  "caseHref": zod.string()
+}))
+})
+
+
+/**
+ * Reads names and shared-versus-individual mailbox labels only. This response contains no recipient address and never changes delivery authorization or candidate routing.
+ * @summary Read named Action Center stakeholder identities
+ */
+
+export const getOnboardingActionCenterIdentitiesResponseIdentitiesHrNameMax = 120;
+
+export const getOnboardingActionCenterIdentitiesResponseIdentitiesBgvTeamNameMax = 120;
+
+export const getOnboardingActionCenterIdentitiesResponseIdentitiesRecruiterNameMax = 120;
+
+export const getOnboardingActionCenterIdentitiesResponseIdentitiesHiringManagerNameMax = 120;
+
+export const getOnboardingActionCenterIdentitiesResponseIdentitiesComplianceNameMax = 120;
+
+
+
+export const GetOnboardingActionCenterIdentitiesResponse = zod.object({
+  "version": zod.number().min(1),
+  "identities": zod.object({
+  "hr": zod.object({
+  "name": zod.string().max(getOnboardingActionCenterIdentitiesResponseIdentitiesHrNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "bgvTeam": zod.object({
+  "name": zod.string().max(getOnboardingActionCenterIdentitiesResponseIdentitiesBgvTeamNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "recruiter": zod.object({
+  "name": zod.string().max(getOnboardingActionCenterIdentitiesResponseIdentitiesRecruiterNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "hiringManager": zod.object({
+  "name": zod.string().max(getOnboardingActionCenterIdentitiesResponseIdentitiesHiringManagerNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "compliance": zod.object({
+  "name": zod.string().max(getOnboardingActionCenterIdentitiesResponseIdentitiesComplianceNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+})
+})
+})
+
+
+/**
+ * Owner/admin only for ordinary tenants; Demo Organization members may save Demo-only presentation metadata. The supplied version is a compare-and-set token. No email or provider permission is changed.
+ * @summary Save named Action Center stakeholder identities
+ */
+
+export const updateOnboardingActionCenterIdentitiesBodyIdentitiesHrNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesBodyIdentitiesBgvTeamNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesBodyIdentitiesRecruiterNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesBodyIdentitiesHiringManagerNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesBodyIdentitiesComplianceNameMax = 120;
+
+
+
+export const UpdateOnboardingActionCenterIdentitiesBody = zod.object({
+  "version": zod.number().min(1),
+  "identities": zod.object({
+  "hr": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesBodyIdentitiesHrNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured'])
+}),
+  "bgvTeam": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesBodyIdentitiesBgvTeamNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured'])
+}),
+  "recruiter": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesBodyIdentitiesRecruiterNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured'])
+}),
+  "hiringManager": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesBodyIdentitiesHiringManagerNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured'])
+}),
+  "compliance": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesBodyIdentitiesComplianceNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured'])
+})
+})
+})
+
+
+export const updateOnboardingActionCenterIdentitiesResponseIdentitiesHrNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesResponseIdentitiesBgvTeamNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesResponseIdentitiesRecruiterNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesResponseIdentitiesHiringManagerNameMax = 120;
+
+export const updateOnboardingActionCenterIdentitiesResponseIdentitiesComplianceNameMax = 120;
+
+
+
+export const UpdateOnboardingActionCenterIdentitiesResponse = zod.object({
+  "version": zod.number().min(1),
+  "identities": zod.object({
+  "hr": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesResponseIdentitiesHrNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "bgvTeam": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesResponseIdentitiesBgvTeamNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "recruiter": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesResponseIdentitiesRecruiterNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "hiringManager": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesResponseIdentitiesHiringManagerNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+}),
+  "compliance": zod.object({
+  "name": zod.string().max(updateOnboardingActionCenterIdentitiesResponseIdentitiesComplianceNameMax).nullable(),
+  "mailboxType": zod.enum(['shared', 'individual', 'not-configured']),
+  "source": zod.enum(['configured', 'existing-profile', 'not-configured'])
+})
+})
+})
+
+
+/**
+ * Records an append-only outcome with the authenticated server actor. The outcome is explicitly self-reported and unverified; it does not write readiness. A named persona is accepted only for Demo Organization simulation members.
+ * @summary Record a durable self-reported manual call outcome
+ */
+export const recordOnboardingActionCenterCallOutcomeBodyRequestIdMax = 128;
+
+
+export const recordOnboardingActionCenterCallOutcomeBodyNotesMax = 2000;
+
+export const recordOnboardingActionCenterCallOutcomeBodyPersonaMax = 120;
+
+
+
+export const RecordOnboardingActionCenterCallOutcomeBody = zod.object({
+  "requestId": zod.string().min(1).max(recordOnboardingActionCenterCallOutcomeBodyRequestIdMax),
+  "caseId": zod.number().min(1),
+  "outcome": zod.enum(['reached', 'no-answer', 'left-voicemail', 'wrong-number', 'scheduled', 'declined', 'other']),
+  "notes": zod.string().max(recordOnboardingActionCenterCallOutcomeBodyNotesMax).nullish(),
+  "persona": zod.string().max(recordOnboardingActionCenterCallOutcomeBodyPersonaMax).nullish(),
+  "selfReported": zod.boolean()
+})
+
+
+
+export const recordOnboardingActionCenterCallOutcomeResponseActionVersionMin = 0;
+
+
+
+export const RecordOnboardingActionCenterCallOutcomeResponse = zod.object({
+  "action": zod.object({
+  "id": zod.number().min(1),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "caseId": zod.number().min(1),
+  "actor": zod.string(),
+  "verified": zod.boolean(),
+  "selfReported": zod.boolean(),
+  "providerEffectId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}),
+  "idempotent": zod.boolean(),
+  "actionVersion": zod.number().min(recordOnboardingActionCenterCallOutcomeResponseActionVersionMin)
+})
+
+
+/**
+ * Sends or simulates one due document reminder through the existing authorization, dispatch guard, effect journal, provider and fixed 48-hour next-due policy. This endpoint does not create a scheduler.
+ * @summary Reuse the existing document reminder delivery boundary
+ */
+export const remindOnboardingActionCenterDocumentBodyRequestIdMax = 128;
+
+
+
+
+
+export const RemindOnboardingActionCenterDocumentBody = zod.object({
+  "requestId": zod.string().min(1).max(remindOnboardingActionCenterDocumentBodyRequestIdMax),
+  "caseId": zod.number().min(1),
+  "documentId": zod.number().min(1),
+  "mode": zod.enum(['live', 'simulation'])
+})
+
+
+
+export const remindOnboardingActionCenterDocumentResponseActionVersionMin = 0;
+
+
+
+export const RemindOnboardingActionCenterDocumentResponse = zod.object({
+  "action": zod.object({
+  "id": zod.number().min(1),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "caseId": zod.number().min(1),
+  "actor": zod.string(),
+  "verified": zod.boolean(),
+  "selfReported": zod.boolean(),
+  "providerEffectId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}),
+  "idempotent": zod.boolean(),
+  "actionVersion": zod.number().min(remindOnboardingActionCenterDocumentResponseActionVersionMin)
+})
+
+
+/**
+ * Creates a queue assignment without provider or readiness effects.
+ * @summary Create a durable human work-item assignment
+ */
+export const assignOnboardingActionCenterWorkBodyRequestIdMax = 128;
+
+
+export const assignOnboardingActionCenterWorkBodyAssigneeMax = 200;
+
+export const assignOnboardingActionCenterWorkBodyReasonMax = 2000;
+
+export const assignOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
+
+
+
+export const AssignOnboardingActionCenterWorkBody = zod.object({
+  "requestId": zod.string().min(1).max(assignOnboardingActionCenterWorkBodyRequestIdMax),
+  "caseId": zod.number().min(1),
+  "owner": zod.enum(['hr', 'recruiter', 'hiring-manager', 'bgv-team', 'documentation', 'operations', 'compliance']),
+  "assignee": zod.string().max(assignOnboardingActionCenterWorkBodyAssigneeMax).nullish(),
+  "reason": zod.string().max(assignOnboardingActionCenterWorkBodyReasonMax).nullish(),
+  "expectedVersion": zod.number().min(assignOnboardingActionCenterWorkBodyExpectedVersionMin)
+})
+
+
+
+export const assignOnboardingActionCenterWorkResponseActionVersionMin = 0;
+
+
+
+export const AssignOnboardingActionCenterWorkResponse = zod.object({
+  "action": zod.object({
+  "id": zod.number().min(1),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "caseId": zod.number().min(1),
+  "actor": zod.string(),
+  "verified": zod.boolean(),
+  "selfReported": zod.boolean(),
+  "providerEffectId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}),
+  "idempotent": zod.boolean(),
+  "actionVersion": zod.number().min(assignOnboardingActionCenterWorkResponseActionVersionMin)
+})
+
+
+/**
+ * Creates a queue escalation without provider or readiness effects.
+ * @summary Create a durable human work-item escalation
+ */
+export const escalateOnboardingActionCenterWorkBodyRequestIdMax = 128;
+
+
+export const escalateOnboardingActionCenterWorkBodyAssigneeMax = 200;
+
+export const escalateOnboardingActionCenterWorkBodyReasonMax = 2000;
+
+export const escalateOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
+
+
+
+export const EscalateOnboardingActionCenterWorkBody = zod.object({
+  "requestId": zod.string().min(1).max(escalateOnboardingActionCenterWorkBodyRequestIdMax),
+  "caseId": zod.number().min(1),
+  "owner": zod.enum(['hr', 'recruiter', 'hiring-manager', 'bgv-team', 'documentation', 'operations', 'compliance']),
+  "assignee": zod.string().max(escalateOnboardingActionCenterWorkBodyAssigneeMax).nullish(),
+  "reason": zod.string().max(escalateOnboardingActionCenterWorkBodyReasonMax).nullish(),
+  "expectedVersion": zod.number().min(escalateOnboardingActionCenterWorkBodyExpectedVersionMin)
+})
+
+
+
+export const escalateOnboardingActionCenterWorkResponseActionVersionMin = 0;
+
+
+
+export const EscalateOnboardingActionCenterWorkResponse = zod.object({
+  "action": zod.object({
+  "id": zod.number().min(1),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "caseId": zod.number().min(1),
+  "actor": zod.string(),
+  "verified": zod.boolean(),
+  "selfReported": zod.boolean(),
+  "providerEffectId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}),
+  "idempotent": zod.boolean(),
+  "actionVersion": zod.number().min(escalateOnboardingActionCenterWorkResponseActionVersionMin)
+})
+
+
+/**
+ * Appends a durable reassignment record and closes the prior assignment as the current work-item presentation. No provider or readiness effect occurs.
+ * @summary Reassign an existing Action Center work item
+ */
+export const reassignOnboardingActionCenterWorkBodyRequestIdMax = 128;
+
+
+
+export const reassignOnboardingActionCenterWorkBodyAssigneeMax = 200;
+
+export const reassignOnboardingActionCenterWorkBodyReasonMax = 2000;
+
+export const reassignOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
+
+
+
+export const ReassignOnboardingActionCenterWorkBody = zod.object({
+  "requestId": zod.string().min(1).max(reassignOnboardingActionCenterWorkBodyRequestIdMax),
+  "caseId": zod.number().min(1),
+  "workItemId": zod.number().min(1),
+  "owner": zod.enum(['hr', 'recruiter', 'hiring-manager', 'bgv-team', 'documentation', 'operations', 'compliance']),
+  "assignee": zod.string().max(reassignOnboardingActionCenterWorkBodyAssigneeMax).nullish(),
+  "reason": zod.string().max(reassignOnboardingActionCenterWorkBodyReasonMax).nullish(),
+  "expectedVersion": zod.number().min(reassignOnboardingActionCenterWorkBodyExpectedVersionMin)
+})
+
+
+
+export const reassignOnboardingActionCenterWorkResponseActionVersionMin = 0;
+
+
+
+export const ReassignOnboardingActionCenterWorkResponse = zod.object({
+  "action": zod.object({
+  "id": zod.number().min(1),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "caseId": zod.number().min(1),
+  "actor": zod.string(),
+  "verified": zod.boolean(),
+  "selfReported": zod.boolean(),
+  "providerEffectId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}),
+  "idempotent": zod.boolean(),
+  "actionVersion": zod.number().min(reassignOnboardingActionCenterWorkResponseActionVersionMin)
+})
+
+
+/**
+ * Appends a durable resolution record. The work item leaves the active queue only after this explicit action; no readiness or provider effect occurs.
+ * @summary Resolve an existing Action Center work item
+ */
+export const resolveOnboardingActionCenterWorkBodyRequestIdMax = 128;
+
+
+
+export const resolveOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
+
+
+
+export const ResolveOnboardingActionCenterWorkBody = zod.object({
+  "requestId": zod.string().min(1).max(resolveOnboardingActionCenterWorkBodyRequestIdMax),
+  "caseId": zod.number().min(1),
+  "workItemId": zod.number().min(1),
+  "expectedVersion": zod.number().min(resolveOnboardingActionCenterWorkBodyExpectedVersionMin)
+})
+
+
+
+export const resolveOnboardingActionCenterWorkResponseActionVersionMin = 0;
+
+
+
+export const ResolveOnboardingActionCenterWorkResponse = zod.object({
+  "action": zod.object({
+  "id": zod.number().min(1),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "caseId": zod.number().min(1),
+  "actor": zod.string(),
+  "verified": zod.boolean(),
+  "selfReported": zod.boolean(),
+  "providerEffectId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}),
+  "idempotent": zod.boolean(),
+  "actionVersion": zod.number().min(resolveOnboardingActionCenterWorkResponseActionVersionMin)
+})
+
+
+/**
  * Read-only case-scoped view of simulated requests for documentation, access, assets, payroll, and learning workstreams. This endpoint never initializes missing requests and never contacts a provider.
  * @summary Read simulated operational setup requests for a case
  */
@@ -9250,6 +9858,7 @@ export const GetOnboardingApprovalHistoryResponseItem = zod.object({
   "version": zod.number().min(1),
   "eventType": zod.enum(['decision', 'reopened']),
   "status": zod.string(),
+  "validationState": zod.string().nullish(),
   "decidedBy": zod.string().nullable(),
   "comment": zod.string().nullable(),
   "decidedAt": zod.coerce.date().nullable(),

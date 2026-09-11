@@ -351,6 +351,13 @@
       "when": 1789026000006,
       "tag": "0043_demo_controller_setup",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1789026000007,
+      "tag": "0044_action_center",
+      "breakpoints": true
     }
   ]
 }

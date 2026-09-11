@@ -2003,6 +2003,251 @@ paths:
           description: Authentication required
         "403":
           description: Tenant membership required
+  /onboarding/action-center:
+    get:
+      operationId: getOnboardingActionCenter
+      tags: [onboarding]
+      summary: Read the tenant-scoped onboarding Action Center
+      description: >
+        Aggregates persisted approvals, BGV and operational notifications,
+        missing-document followups, completed history, durable human work items,
+        and evidence-backed mandatory-checkpoint opportunities. This is a
+        read-only snapshot and never changes readiness.
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, completed, all]
+            default: active
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        "200":
+          description: Action Center snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenter"
+        "400":
+          description: Invalid scope or limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/action-center/identities:
+    get:
+      operationId: getOnboardingActionCenterIdentities
+      tags: [onboarding]
+      summary: Read named Action Center stakeholder identities
+      description: >
+        Reads names and shared-versus-individual mailbox labels only. This
+        response contains no recipient address and never changes delivery
+        authorization or candidate routing.
+      responses:
+        "200":
+          description: Named stakeholder identity settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterIdentitySettings"
+    put:
+      operationId: updateOnboardingActionCenterIdentities
+      tags: [onboarding]
+      summary: Save named Action Center stakeholder identities
+      description: >
+        Owner/admin only for ordinary tenants; Demo Organization members may
+        save Demo-only presentation metadata. The supplied version is a
+        compare-and-set token. No email or provider permission is changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbActionCenterIdentitySettingsInput"
+      responses:
+        "200":
+          description: Updated named stakeholder identity settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterIdentitySettings"
+        "400":
+          description: Invalid identity metadata
+        "403":
+          description: Owner/admin required outside Demo Organization
+        "409":
+          description: Identity settings version conflict
+  /onboarding/action-center/actions/manual-call-outcome:
+    post:
+      operationId: recordOnboardingActionCenterCallOutcome
+      tags: [onboarding]
+      summary: Record a durable self-reported manual call outcome
+      description: >
+        Records an append-only outcome with the authenticated server actor.
+        The outcome is explicitly self-reported and unverified; it does not
+        write readiness. A named persona is accepted only for Demo Organization
+        simulation members.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbActionCenterCallOutcomeInput"
+      responses:
+        "200":
+          description: Idempotent action receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterActionResult"
+        "400":
+          description: Invalid call outcome
+        "403":
+          description: Named persona is only available in Demo Organization
+        "404":
+          description: Case not found
+        "409":
+          description: Offline sample or conflicting request id
+  /onboarding/action-center/actions/remind-document:
+    post:
+      operationId: remindOnboardingActionCenterDocument
+      tags: [onboarding]
+      summary: Reuse the existing document reminder delivery boundary
+      description: >
+        Sends or simulates one due document reminder through the existing
+        authorization, dispatch guard, effect journal, provider and fixed
+        48-hour next-due policy. This endpoint does not create a scheduler.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbActionCenterReminderInput"
+      responses:
+        "200":
+          description: Reminder receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterActionResult"
+        "400":
+          description: Invalid reminder request
+        "403":
+          description: Live recipient or simulation permission denied
+        "404":
+          description: Case or document not found
+        "409":
+          description: Offline sample, stale reminder, or conflicting request id
+  /onboarding/action-center/actions/assign:
+    post:
+      operationId: assignOnboardingActionCenterWork
+      tags: [onboarding]
+      summary: Create a durable human work-item assignment
+      description: Creates a queue assignment without provider or readiness effects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbActionCenterWorkInput"
+      responses:
+        "200":
+          description: Assignment receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterActionResult"
+        "400":
+          description: Invalid assignment
+        "404":
+          description: Case not found
+        "409":
+          description: Offline sample, stale version, or conflicting request id
+  /onboarding/action-center/actions/escalate:
+    post:
+      operationId: escalateOnboardingActionCenterWork
+      tags: [onboarding]
+      summary: Create a durable human work-item escalation
+      description: Creates a queue escalation without provider or readiness effects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbActionCenterWorkInput"
+      responses:
+        "200":
+          description: Escalation receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterActionResult"
+        "400":
+          description: Invalid escalation
+        "404":
+          description: Case not found
+        "409":
+          description: Offline sample, stale version, or conflicting request id
+  /onboarding/action-center/actions/reassign:
+    post:
+      operationId: reassignOnboardingActionCenterWork
+      tags: [onboarding]
+      summary: Reassign an existing Action Center work item
+      description: >
+        Appends a durable reassignment record and closes the prior assignment
+        as the current work-item presentation. No provider or readiness effect
+        occurs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbActionCenterWorkReassignInput"
+      responses:
+        "200":
+          description: Reassignment receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterActionResult"
+        "400":
+          description: Invalid reassignment
+        "404":
+          description: Work item not found
+        "409":
+          description: Offline sample, stale version, or conflicting request id
+  /onboarding/action-center/actions/resolve:
+    post:
+      operationId: resolveOnboardingActionCenterWork
+      tags: [onboarding]
+      summary: Resolve an existing Action Center work item
+      description: >
+        Appends a durable resolution record. The work item leaves the active
+        queue only after this explicit action; no readiness or provider effect
+        occurs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbActionCenterWorkResolveInput"
+      responses:
+        "200":
+          description: Resolution receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbActionCenterActionResult"
+        "400":
+          description: Invalid resolution
+        "404":
+          description: Work item not found
+        "409":
+          description: Offline sample, stale version, or conflicting request id
   /onboarding/cases/{caseId}/operational-requests:
     get:
       operationId: getOnboardingOperationalRequests
@@ -6276,6 +6521,7 @@ components:
           type: string
           enum: [decision, reopened]
         status: { type: string }
+        validationState: { type: ["string", "null"] }
         decidedBy: { type: ["string", "null"] }
         comment: { type: ["string", "null"] }
         decidedAt: { type: ["string", "null"], format: date-time }
@@ -7908,3 +8154,371 @@ components:
           type: ["string", "null"]
           enum: [I_UNDERSTAND_LIVE_DEMO, null]
       required: [expectedVersion, requestId, kind]
+    OnbActionCenter:
+      type: object
+      additionalProperties: false
+      properties:
+        version: { type: integer, const: 1 }
+        generatedAt: { type: string, format: date-time }
+        pausedOffline: { type: boolean }
+        capabilities:
+          $ref: "#/components/schemas/OnbActionCenterCapabilities"
+        counts:
+          $ref: "#/components/schemas/OnbActionCenterCounts"
+        approvals:
+          type: array
+          items: { $ref: "#/components/schemas/OnbActionCenterApproval" }
+        notifications:
+          type: array
+          items: { $ref: "#/components/schemas/OnbActionCenterNotification" }
+        documentFollowups:
+          type: array
+          items: { $ref: "#/components/schemas/OnbActionCenterDocumentFollowup" }
+        workItems:
+          type: array
+          items: { $ref: "#/components/schemas/OnbActionCenterWorkItem" }
+        completed:
+          type: array
+          items: { $ref: "#/components/schemas/OnbActionCenterCompleted" }
+        opportunities:
+          type: array
+          items: { $ref: "#/components/schemas/OnbActionCenterOpportunity" }
+      required: [version, generatedAt, pausedOffline, capabilities, counts, approvals, notifications, documentFollowups, workItems, completed, opportunities]
+    OnbActionCenterIdentityValue:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: ["string", "null"], maxLength: 120 }
+        mailboxType:
+          type: string
+          enum: [shared, individual, not-configured]
+        source:
+          type: string
+          enum: [configured, existing-profile, not-configured]
+      required: [name, mailboxType, source]
+    OnbActionCenterIdentityMap:
+      type: object
+      additionalProperties: false
+      properties:
+        hr: { $ref: "#/components/schemas/OnbActionCenterIdentityValue" }
+        bgvTeam: { $ref: "#/components/schemas/OnbActionCenterIdentityValue" }
+        recruiter: { $ref: "#/components/schemas/OnbActionCenterIdentityValue" }
+        hiringManager: { $ref: "#/components/schemas/OnbActionCenterIdentityValue" }
+        compliance: { $ref: "#/components/schemas/OnbActionCenterIdentityValue" }
+      required: [hr, bgvTeam, recruiter, hiringManager, compliance]
+    OnbActionCenterIdentitySettings:
+      type: object
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+        identities: { $ref: "#/components/schemas/OnbActionCenterIdentityMap" }
+      required: [version, identities]
+    OnbActionCenterIdentityInputValue:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: ["string", "null"], maxLength: 120 }
+        mailboxType:
+          type: string
+          enum: [shared, individual, not-configured]
+      required: [name, mailboxType]
+    OnbActionCenterIdentityInputMap:
+      type: object
+      additionalProperties: false
+      properties:
+        hr: { $ref: "#/components/schemas/OnbActionCenterIdentityInputValue" }
+        bgvTeam: { $ref: "#/components/schemas/OnbActionCenterIdentityInputValue" }
+        recruiter: { $ref: "#/components/schemas/OnbActionCenterIdentityInputValue" }
+        hiringManager: { $ref: "#/components/schemas/OnbActionCenterIdentityInputValue" }
+        compliance: { $ref: "#/components/schemas/OnbActionCenterIdentityInputValue" }
+      required: [hr, bgvTeam, recruiter, hiringManager, compliance]
+    OnbActionCenterIdentitySettingsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+        identities: { $ref: "#/components/schemas/OnbActionCenterIdentityInputMap" }
+      required: [version, identities]
+    OnbActionCenterCapabilities:
+      type: object
+      additionalProperties: false
+      properties:
+        canAct: { type: boolean }
+        canSendReminder: { type: boolean }
+        canRecordCallOutcome: { type: boolean }
+        canAssign: { type: boolean }
+        canEscalate: { type: boolean }
+        canReassign: { type: boolean }
+        canResolve: { type: boolean }
+        reminderMode:
+          type: string
+          enum: [existing-runner]
+        aiCall:
+          type: object
+          additionalProperties: false
+          properties:
+            available: { type: boolean }
+            mode:
+              type: string
+              enum: [existing-control]
+            label: { type: string }
+            hrefTemplate: { type: string }
+          required: [available, mode, label, hrefTemplate]
+      required: [canAct, canSendReminder, canRecordCallOutcome, canAssign, canEscalate, canReassign, canResolve, reminderMode, aiCall]
+    OnbActionCenterCounts:
+      type: object
+      additionalProperties: false
+      properties:
+        pendingApprovals: { type: integer, minimum: 0 }
+        notifications: { type: integer, minimum: 0 }
+        missingDocuments: { type: integer, minimum: 0 }
+        openWorkItems: { type: integer, minimum: 0 }
+        completed: { type: integer, minimum: 0 }
+        opportunities: { type: integer, minimum: 0 }
+      required: [pendingApprovals, notifications, missingDocuments, openWorkItems, completed, opportunities]
+    OnbActionCenterCase:
+      type: object
+      additionalProperties: false
+      properties:
+        workerName: { type: string }
+        workerEmail: { type: string }
+        role: { type: string }
+        joiningDate: { type: string }
+        lifecycleStage: { type: string }
+        urgency: { type: string }
+        pausedOffline: { type: boolean }
+        canAct: { type: boolean }
+        aiCallHref: { type: string }
+      required: [workerName, workerEmail, role, joiningDate, lifecycleStage, urgency, pausedOffline, canAct, aiCallHref]
+    OnbActionCenterApproval:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        caseId: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 1 }
+        status: { type: string }
+        agent: { type: string }
+        hitlPattern: { type: string }
+        ruleRef: { type: ["string", "null"] }
+        recommendation: { type: string }
+        rationale: { type: string }
+        createdAt: { type: string, format: date-time }
+        case: { $ref: "#/components/schemas/OnbActionCenterCase" }
+        actions:
+          type: object
+          additionalProperties: false
+          properties:
+            approveHref: { type: string }
+            caseHref: { type: string }
+            canAct: { type: boolean }
+          required: [approveHref, caseHref, canAct]
+      required: [id, caseId, version, status, agent, hitlPattern, ruleRef, recommendation, rationale, createdAt, case, actions]
+    OnbActionCenterNotification:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        caseId: { type: integer, minimum: 1 }
+        kind: { type: string, enum: [bgv, operational] }
+        title: { type: string }
+        detail: { type: string }
+        status: { type: string }
+        source: { type: string }
+        provenance: { type: string }
+        deliveryLabel: { type: string }
+        recipient: { type: string }
+        initiator: { type: string }
+        capabilities:
+          type: object
+          additionalProperties: false
+          properties:
+            canAct: { type: boolean }
+          required: [canAct]
+        createdAt: { type: string, format: date-time }
+        caseHref: { type: string }
+      required: [id, caseId, kind, title, detail, status, source, provenance, deliveryLabel, recipient, initiator, capabilities, createdAt, caseHref]
+    OnbActionCenterDocumentFollowup:
+      type: object
+      additionalProperties: false
+      properties:
+        documentId: { type: integer, minimum: 1 }
+        caseId: { type: integer, minimum: 1 }
+        key: { type: string }
+        label: { type: string }
+        status: { type: string }
+        validationState: { type: ["string", "null"] }
+        required: { type: boolean }
+        reminderCount: { type: integer, minimum: 0 }
+        lastReminderAt: { type: ["string", "null"], format: date-time }
+        nextReminderAt: { type: ["string", "null"], format: date-time }
+        action:
+          type: string
+          enum: [remind, review, correction]
+        capabilities:
+          type: object
+          additionalProperties: false
+          properties:
+            canRemind: { type: boolean }
+          required: [canRemind]
+        eligibleForReminder: { type: boolean }
+        case: { $ref: "#/components/schemas/OnbActionCenterCase" }
+        caseHref: { type: string }
+      required: [documentId, caseId, key, label, status, required, reminderCount, lastReminderAt, nextReminderAt, action, validationState, capabilities, eligibleForReminder, case, caseHref]
+    OnbActionCenterWorkItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        caseId: { type: integer, minimum: 1 }
+        kind: { type: string, enum: [assign, escalate] }
+        status: { type: string, enum: [open] }
+        owner: { type: ["string", "null"] }
+        assignee: { type: ["string", "null"] }
+        reason: { type: ["string", "null"] }
+        actor: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        actionVersion: { type: integer, minimum: 0 }
+        capabilities:
+          type: object
+          additionalProperties: false
+          properties:
+            canAct: { type: boolean }
+            canReassign: { type: boolean }
+            canResolve: { type: boolean }
+          required: [canAct, canReassign, canResolve]
+        caseHref: { type: string }
+      required: [id, caseId, kind, status, owner, assignee, reason, actor, createdAt, updatedAt, actionVersion, capabilities, caseHref]
+    OnbActionCenterCompleted:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        caseId: { type: integer, minimum: 1 }
+        status: { type: string }
+        summary: { type: string }
+        actor: { type: string }
+        createdAt: { type: string, format: date-time }
+        caseHref: { type: string }
+      required: [id, kind, caseId, status, summary, actor, createdAt, caseHref]
+    OnbActionCenterOpportunity:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        caseId: { type: integer, minimum: 1 }
+        actionVersion: { type: integer, minimum: 0 }
+        kind: { type: string }
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+        title: { type: string }
+        description: { type: string }
+        benefit:
+          type: object
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              enum: [mandatory-checkpoint, existing-policy-delta]
+            checkpoint: { type: string }
+            delta: { type: ["string", "null"] }
+          required: [type, checkpoint, delta]
+        evidence:
+          type: object
+          additionalProperties: true
+          properties:
+            source: { type: string }
+          required: [source]
+        capabilities:
+          type: object
+          additionalProperties: false
+          properties:
+            canAct: { type: boolean }
+          required: [canAct]
+        caseHref: { type: string }
+      required: [id, caseId, actionVersion, kind, priority, title, description, benefit, evidence, capabilities, caseHref]
+    OnbActionCenterCallOutcomeInput:
+      type: object
+      additionalProperties: false
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        caseId: { type: integer, minimum: 1 }
+        outcome:
+          type: string
+          enum: [reached, no-answer, left-voicemail, wrong-number, scheduled, declined, other]
+        notes: { type: ["string", "null"], maxLength: 2000 }
+        persona: { type: ["string", "null"], maxLength: 120 }
+        selfReported: { type: boolean, const: true }
+      required: [requestId, caseId, outcome, selfReported]
+    OnbActionCenterReminderInput:
+      type: object
+      additionalProperties: false
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        caseId: { type: integer, minimum: 1 }
+        documentId: { type: integer, minimum: 1 }
+        mode:
+          type: string
+          enum: [live, simulation]
+      required: [requestId, caseId, documentId, mode]
+    OnbActionCenterWorkInput:
+      type: object
+      additionalProperties: false
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        caseId: { type: integer, minimum: 1 }
+        owner:
+          type: string
+          enum: [hr, recruiter, hiring-manager, bgv-team, documentation, operations, compliance]
+        assignee: { type: ["string", "null"], maxLength: 200 }
+        reason: { type: ["string", "null"], maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 0 }
+      required: [requestId, caseId, owner, expectedVersion]
+    OnbActionCenterWorkReassignInput:
+      type: object
+      additionalProperties: false
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        caseId: { type: integer, minimum: 1 }
+        workItemId: { type: integer, minimum: 1 }
+        owner:
+          type: string
+          enum: [hr, recruiter, hiring-manager, bgv-team, documentation, operations, compliance]
+        assignee: { type: ["string", "null"], maxLength: 200 }
+        reason: { type: ["string", "null"], maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 0 }
+      required: [requestId, caseId, workItemId, owner, expectedVersion]
+    OnbActionCenterWorkResolveInput:
+      type: object
+      additionalProperties: false
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        caseId: { type: integer, minimum: 1 }
+        workItemId: { type: integer, minimum: 1 }
+        expectedVersion: { type: integer, minimum: 0 }
+      required: [requestId, caseId, workItemId, expectedVersion]
+    OnbActionCenterAction:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        kind: { type: string }
+        status: { type: string }
+        caseId: { type: integer, minimum: 1 }
+        actor: { type: string }
+        verified: { type: boolean }
+        selfReported: { type: boolean }
+        providerEffectId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+      required: [id, kind, status, caseId, actor, verified, selfReported, providerEffectId, createdAt]
+    OnbActionCenterActionResult:
+      type: object
+      additionalProperties: false
+      properties:
+        action: { $ref: "#/components/schemas/OnbActionCenterAction" }
+        idempotent: { type: boolean }
+        actionVersion: { type: integer, minimum: 0 }
+      required: [action, idempotent, actionVersion]

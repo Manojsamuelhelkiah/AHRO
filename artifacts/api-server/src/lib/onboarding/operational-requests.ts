@@ -14,6 +14,7 @@ import {
   resolveOnboardingAgent,
   type OperationalAgent,
 } from "./operational-agents";
+import { formatEmailIdentityLines } from "./email-identity";
 
 export const OPERATIONAL_REQUEST_SETTING_PREFIX = "operational_requests:";
 export const SIMULATED_OPERATIONAL_LABEL = "[SIMULATED — NO EXTERNAL ACTION]";
@@ -467,9 +468,34 @@ async function insertSimulationCommunication(
     : agentIdentity
       ? `AI agent identity: ${agentIdentity.name} (id: ${agentIdentity.id}; origin: ${agentIdentity.origin}; simulated: true).`
       : `AI agent identity: unavailable for unregistered id "${input.request.agent}"; no AI agent invocation occurred.`;
+  const [caseRow] = await tx
+    .select({ workerName: onbCases.workerName })
+    .from(onbCases)
+    .where(and(
+      eq(onbCases.id, input.caseId),
+      eq(onbCases.organizationId, input.organizationId),
+    ));
+  const reference = input.request.reference;
+  const identityLines = formatEmailIdentityLines({
+    stakeholder: {
+      name: "",
+      role: input.request.teamRecipientLabel,
+    },
+    deliveryAddress: null,
+    requestedBy: input.actor,
+    requestedByKind: "human",
+    deliveryMode: "simulated",
+    actionRequired: input.status === "completed"
+      ? "Review the recorded simulated completion; no external completion is claimed."
+      : `Review and update the simulated ${input.request.label} request (${input.status}).`,
+    reference,
+    appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(input.caseId))}&reference=${encodeURIComponent(reference)}`,
+  });
   const body = [
     SIMULATED_OPERATIONAL_LABEL,
     "This is an internal simulation record only. No email was sent, no AI agent was invoked, and no provider or external system was called.",
+    `Employee: ${caseRow?.workerName ?? "unknown (case record unavailable)"}`,
+    `Case: #${input.caseId}`,
     `Workstream owner: ${input.request.owner}`,
     `Method: ${input.request.method}`,
     `Recipient/assignment label: ${recipient}`,
@@ -477,6 +503,7 @@ async function insertSimulationCommunication(
     `Simulation reference: ${input.request.reference}`,
     `Recorded status: ${input.status}`,
     `Recorded by: ${input.actor}`,
+    ...identityLines,
     reasonText.trim(),
     input.status === "completed"
       ? "This records simulated completion only; it is not evidence of external completion."

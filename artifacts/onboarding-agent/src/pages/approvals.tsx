@@ -5,16 +5,78 @@ import { useUser } from '@clerk/react';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
 import { format } from 'date-fns';
 import { ShieldAlert } from 'lucide-react';
-import { Link } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
+import { useEffect } from 'react';
 import { useApprovalAction } from '../hooks/use-approval-action';
 import {
   getApprovalRefetchInterval,
   getApprovalVersionLabel,
   isApprovalAcknowledgement,
 } from '../lib/approval-actions';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+// Import the newly created tab components
+import { NeedsAttentionTab, CompletedTab, CommunicationsTab } from './action-center-tabs';
 
 export function ApprovalsPage() {
-  const [showAll, setShowAll] = useState(false);
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const tabParam = searchParams.get('tab');
+
+  const activeTab = tabParam && ['needs-attention', 'approvals', 'communications', 'completed'].includes(tabParam)
+    ? tabParam : 'needs-attention';
+
+  const setActiveTab = (val: string) => {
+    const next = new URLSearchParams(search);
+    next.set('tab', val);
+    setLocation(`${location}?${next.toString()}`);
+  };
+
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto">
+      <PageHeader title="Action Center" subtitle="One accountable view of employee followups and human decisions." />
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:overflow-visible">
+          <TabsList className="w-max md:w-full min-w-full grid grid-cols-4 mb-4">
+            <TabsTrigger value="needs-attention">Needs Attention</TabsTrigger>
+            <TabsTrigger value="approvals">Approvals</TabsTrigger>
+            <TabsTrigger value="communications">Communications</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
+          </TabsList>
+        </div>
+
+
+        <TabsContent value="needs-attention">
+          <NeedsAttentionTab />
+        </TabsContent>
+
+        <TabsContent value="approvals">
+          <LegacyApprovalsQueue />
+        </TabsContent>
+
+        <TabsContent value="communications">
+          <CommunicationsTab />
+        </TabsContent>
+
+        <TabsContent value="completed">
+          <CompletedTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function LegacyApprovalsQueue() {
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const filterCaseId = searchParams.get('caseId');
+  const filterApprovalId = searchParams.get('approvalId');
+  const filterApprovalRef = searchParams.get('approvalRef');
+  const hasFilter = filterCaseId || filterApprovalId || filterApprovalRef;
+  const [showAll, setShowAll] = useState(!!hasFilter);
   const statusParam = showAll ? 'all' : 'pending';
   const { data: approvals, isLoading } = useListOnboardingApprovals({ status: statusParam }, {
     query: {
@@ -24,35 +86,56 @@ export function ApprovalsPage() {
   });
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto">
-      <PageHeader title="Review Queue" subtitle="Human-in-the-loop decisions for agentic actions.">
+    <div className="space-y-4">
+      {hasFilter && (
+        <div className="bg-[var(--primary-light)] border border-[var(--primary)] text-[var(--primary)] px-4 py-3 rounded-md flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">Filtered View Active:</span>
+            <div className="flex gap-2 text-xs">
+              {filterCaseId && <Badge variant="outline" className="bg-white/50">Case #{filterCaseId}</Badge>}
+              {filterApprovalId && <Badge variant="outline" className="bg-white/50">Approval #{filterApprovalId}</Badge>}
+              {filterApprovalRef && <Badge variant="outline" className="bg-white/50">Ref: {filterApprovalRef}</Badge>}
+            </div>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => {
+            const next = new URLSearchParams(search);
+            ['caseId', 'approvalId', 'approvalRef'].forEach(key => next.delete(key));
+            next.set('tab', 'approvals');
+            setLocation(`${location}?${next.toString()}`);
+          }}>Clear Filters</Button>
+        </div>
+      )}
+      <div className="flex justify-end mb-4">
         <div className="flex items-center gap-2 bg-[var(--surface)] px-3 py-1.5 rounded-md border" style={{ borderColor: 'var(--border)' }}>
-          <Label htmlFor="show-all" className="cursor-pointer" style={{ margin: 0, color: 'var(--text-primary)' }}>Show Resolved History</Label>
-          <input 
-            type="checkbox" 
-            id="show-all" 
-            checked={showAll} 
-            onChange={(e) => setShowAll(e.target.checked)} 
-            style={{ accentColor: 'var(--primary)', cursor: 'pointer', width: '14px', height: '14px' }} 
+          <Label htmlFor="show-all" className="cursor-pointer text-[var(--text-sm)] m-0">Show Resolved History</Label>
+          <input
+            type="checkbox"
+            id="show-all"
+            checked={showAll}
+            onChange={(e) => setShowAll(e.target.checked)}
+            style={{ accentColor: 'var(--primary)', cursor: 'pointer', width: '14px', height: '14px' }}
           />
         </div>
-      </PageHeader>
-
-      <div className="space-y-4">
-        {isLoading ? (
-          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Loading queue...</div>
-        ) : approvals?.length === 0 ? (
-          <Card className="text-center border-dashed" style={{ padding: '64px', borderColor: 'var(--border)', backgroundColor: 'transparent', boxShadow: 'none' }}>
-            <ShieldAlert style={{ width: '48px', height: '48px', margin: '0 auto 16px', color: 'var(--text-muted)', opacity: 0.5 }} />
-            <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Queue is Clear</h3>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>No agent actions require human review at this time.</p>
-          </Card>
-        ) : (
-          approvals?.map(app => (
-            <ApprovalCard key={app.id} approval={app} statusParam={statusParam} />
-          ))
-        )}
       </div>
+
+      {isLoading ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Loading queue...</div>
+      ) : approvals?.length === 0 ? (
+        <Card className="text-center border-dashed" style={{ padding: '64px', borderColor: 'var(--border)', backgroundColor: 'transparent', boxShadow: 'none' }}>
+          <ShieldAlert style={{ width: '48px', height: '48px', margin: '0 auto 16px', color: 'var(--text-muted)', opacity: 0.5 }} />
+          <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Queue is Clear</h3>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>No agent actions require human review at this time.</p>
+        </Card>
+      ) : (
+        approvals?.filter(app => {
+          if (filterCaseId && app.caseId.toString() !== filterCaseId) return false;
+          if (filterApprovalId && app.id.toString() !== filterApprovalId) return false;
+          if (filterApprovalRef && app.ruleRef !== filterApprovalRef) return false;
+          return true;
+        }).map(app => (
+          <ApprovalCard key={app.id} approval={app} statusParam={statusParam} />
+        ))
+      )}
     </div>
   );
 }
@@ -72,7 +155,7 @@ export function scopeLabel(scope: { kind?: string; from?: number; to?: number } 
   }
 }
 
-function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbApproval, statusParam: string }) {
+export function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbApproval, statusParam: string }) {
   const [comment, setComment] = useState('');
   const { user } = useUser();
   const action = useApprovalAction(approval);
@@ -84,7 +167,7 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
 
   const isPending = approval.status === 'pending';
   const isAcknowledgement = isApprovalAcknowledgement(approval);
-  
+
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: history, isLoading: historyLoading } = useGetOnboardingApprovalHistory(approval.id, {
     query: {
@@ -94,7 +177,7 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
   });
 
   return (
-    <Card 
+    <Card
       className={cn("overflow-hidden transition-all group", !isPending && "opacity-75 bg-[var(--surface-alt)]")}
       style={{ padding: '0', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-lg)' }}
     >
@@ -109,9 +192,9 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
               {approval.ruleRef && <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{approval.ruleRef}</span>}
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }} className="md:ml-auto">{format(new Date(approval.createdAt), 'MMM d, HH:mm')}</span>
             </div>
-            
+
             <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '12px', marginBottom: '8px' }}>{approval.recommendation}</h3>
-            
+
             <div style={{ backgroundColor: 'var(--surface-alt)', border: '1px solid var(--border)', borderLeft: '3px solid var(--primary)', borderRadius: 'var(--radius-md)', padding: '12px 16px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
               {approval.rationale}
               {approval.ruleRef?.includes('sla') && (
@@ -121,7 +204,7 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
                 </div>
               )}
             </div>
-            
+
             {Array.isArray(approval.recordsEvidence) && approval.recordsEvidence.length > 0 && (
               <div className="mt-4 border rounded-md divide-y" style={{ borderColor: 'var(--border)' }}>
                 <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: 'var(--surface-alt)' }}>Archive evidence</div>
@@ -152,7 +235,7 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
               </div>
             )}
           </div>
-          
+
           {!isPending && (
             <div className="shrink-0 md:text-right w-full md:w-auto mt-4 md:mt-0 flex md:flex-col justify-between items-center md:items-end">
               <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', backgroundColor: approval.status === 'approved' ? 'var(--status-green)' : 'var(--status-red)', color: '#ffffff' }}>
@@ -200,10 +283,10 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
             <div className="flex flex-col lg:flex-row items-start lg:items-end gap-6">
               <div className="flex-1 w-full space-y-2">
                 <Label>Decision Comment (Optional)</Label>
-                <textarea 
-                  value={comment} 
-                  onChange={(e) => setComment(e.target.value)} 
-                  placeholder="Rationale for override..." 
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Rationale for override..."
                   style={{ width: '100%', minHeight: '36px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 'var(--text-sm)', outline: 'none', resize: 'vertical', backgroundColor: 'var(--surface)', color: 'var(--text-primary)' }}
                   onFocus={e => e.currentTarget.style.borderColor = 'var(--primary)'}
                   onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
@@ -212,9 +295,9 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
               </div>
               <div className="flex items-center gap-3 shrink-0 w-full lg:w-auto">
                 {!isAcknowledgement && (
-                  <button 
+                  <button
                     style={{ height: '32px', borderRadius: 'var(--radius-md)', padding: '0 16px', fontSize: 'var(--text-sm)', fontWeight: 500, border: '1px solid var(--status-red)', color: 'var(--status-red)', backgroundColor: 'var(--surface)', cursor: action.canAct ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}
-                    onClick={() => handleDecide('rejected')} 
+                    onClick={() => handleDecide('rejected')}
                     disabled={!action.canAct}
                     onMouseEnter={e => { if(action.canAct) { e.currentTarget.style.backgroundColor = 'var(--status-red)'; e.currentTarget.style.color = '#fff'; } }}
                     onMouseLeave={e => { if(action.canAct) { e.currentTarget.style.backgroundColor = 'var(--surface)'; e.currentTarget.style.color = 'var(--status-red)'; } }}
@@ -222,9 +305,9 @@ function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbAp
                     Reject Action
                   </button>
                 )}
-                <button 
+                <button
                   style={{ height: '32px', borderRadius: 'var(--radius-md)', padding: '0 16px', fontSize: 'var(--text-sm)', fontWeight: 500, backgroundColor: 'var(--status-green)', color: '#ffffff', border: 'none', cursor: action.canAct ? 'pointer' : 'not-allowed' }}
-                  onClick={() => handleDecide('approved')} 
+                  onClick={() => handleDecide('approved')}
                   disabled={!action.canAct}
                   onMouseEnter={e => { if(action.canAct) e.currentTarget.style.opacity = '0.9' }}
                   onMouseLeave={e => { if(action.canAct) e.currentTarget.style.opacity = '1' }}

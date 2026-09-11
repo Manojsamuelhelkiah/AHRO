@@ -1,16 +1,32 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import { db, onbCandidateUploads, onbCases, onbDocuments, onbEvents, onbSystemChecks } from "@workspace/db";
+import {
+  db,
+  onbCandidateUploads,
+  onbCases,
+  onbCommunications,
+  onbDocuments,
+  onbEvents,
+  onbSystemChecks,
+} from "@workspace/db";
 import { getPrivateFile } from "../objectStorage";
 import { detectCandidateFile } from "./candidate-portal";
-import { candidateEmailAuthorization, sendOutbound } from "./channels";
+import {
+  addCandidateReplyReference,
+  candidateEmailAuthorization,
+  maskEmail,
+  sendOutbound,
+} from "./channels";
 import { candidateEmailMaySend } from "./channel-routing";
 export { normalizeBgvStatus, reminderEligible } from "./document-validation-policy";
-import { actionableCorrectionReason, decideValidationOutcome } from "./document-validation-policy";
+import { actionableCorrectionReason, decideValidationOutcome, reminderEligible } from "./document-validation-policy";
 import { documentationGateReady } from "./document-validation-policy";
 import { checklistStageBlockers, mandatoryChecklistReady } from "./settings";
 import { documentMalwareGateSql } from "./document-malware-gate";
 import { malwareUploadIsClean } from "./malware-policy";
+import { runWithProviderDeny } from "./provider-policy";
+import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
+import { formatEmailIdentityLines } from "./email-identity";
 
 export type ValidationReason = { code: string; message: string; evidence?: string };
 
@@ -188,16 +204,232 @@ export async function runDocumentValidationTick(provider?: AuthoritativeDocument
 }
 
 /** Safe, idempotent candidate reminders; bodies contain no paths or portal secrets. */
+export type DocumentReminderMode = "live" | "simulation";
+export function documentNeedsCorrection(document: {
+  status: string;
+  validationState?: string | null;
+  /** Retained for callers that carry the legacy document projection; never parsed. */
+  note?: string | null;
+}): boolean {
+  return document.status === "received" &&
+    document.validationState === "correction_requested";
+}
+
+export type DocumentReminderResult = {
+  id: number;
+  status: string;
+  failureReason: string | null;
+  idempotencyKey: string;
+};
+
+/**
+ * Freeze the exact candidate reminder payload before entering the provider
+ * boundary. The communication row is the durable replay source, while the
+ * transaction advisory lock closes the first-write race where two workers
+ * would otherwise generate different case-reply references for one
+ * idempotency key.
+ */
+async function prepareStableReminderBody(input: {
+  organizationId: string;
+  caseId: number;
+  toAddress: string;
+  subject: string;
+  body: string;
+  idempotencyKey: string;
+}): Promise<string> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`document-reminder:${input.organizationId}:${input.idempotencyKey}`}))`);
+    const [existing] = await tx.select({ body: onbCommunications.body })
+      .from(onbCommunications)
+      .where(and(
+        eq(onbCommunications.organizationId, input.organizationId),
+        eq(onbCommunications.idempotencyKey, input.idempotencyKey),
+      ));
+    if (existing?.body) return existing.body;
+    const stableBody = addCandidateReplyReference(input.body);
+    await tx.insert(onbCommunications).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      channel: "email",
+      direction: "outbound",
+      audience: "candidate",
+      toAddress: maskEmail(input.toAddress),
+      subject: input.subject,
+      body: stableBody,
+      status: "sending",
+      failureReason: null,
+      sensitive: false,
+      idempotencyKey: input.idempotencyKey,
+    }).onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
+    });
+    const [persisted] = await tx.select({ body: onbCommunications.body })
+      .from(onbCommunications)
+      .where(and(
+        eq(onbCommunications.organizationId, input.organizationId),
+        eq(onbCommunications.idempotencyKey, input.idempotencyKey),
+      ));
+    if (!persisted?.body) throw new Error("Reminder payload could not be persisted.");
+    return persisted.body;
+  });
+}
+
+/**
+ * Sends one reminder through the same boundary as the existing scheduled
+ * queue. The explicit Action Center action is deliberately not a second
+ * scheduler: it uses the same 24-hour eligibility check, case authorization,
+ * provider guard, communication idempotency, and 48-hour next-due update.
+ */
+export async function sendDocumentReminder(input: {
+  organizationId: string;
+  caseId: number;
+  documentId: number;
+  mode: DocumentReminderMode;
+  idempotencyKey: string;
+}): Promise<DocumentReminderResult> {
+  const [row] = await db
+    .select({ doc: onbDocuments, c: onbCases })
+    .from(onbDocuments)
+    .innerJoin(
+      onbCases,
+      and(eq(onbCases.id, onbDocuments.caseId), eq(onbCases.organizationId, onbDocuments.organizationId)),
+    )
+    .where(and(
+      eq(onbDocuments.id, input.documentId),
+      eq(onbDocuments.caseId, input.caseId),
+      eq(onbDocuments.organizationId, input.organizationId),
+    ));
+  if (!row) throw new Error("Case or document not found");
+  const [latestUpload] = row?.doc
+    ? await db.select({ validationState: onbCandidateUploads.validationState })
+      .from(onbCandidateUploads)
+      .where(and(
+        eq(onbCandidateUploads.organizationId, input.organizationId),
+        eq(onbCandidateUploads.caseId, input.caseId),
+        eq(onbCandidateUploads.documentId, input.documentId),
+      ))
+      .orderBy(desc(onbCandidateUploads.id))
+      .limit(1)
+    : [];
+  if (!row?.doc.required || !["pending", "received"].includes(row.doc.status) ||
+    (row.doc.status === "received" && !documentNeedsCorrection({
+      status: row.doc.status,
+      validationState: latestUpload?.validationState,
+    }))) {
+    throw new Error("This document no longer needs a reminder.");
+  }
+  if (!reminderEligible({
+    required: row.doc.required,
+    status: row.doc.status,
+    updatedAt: row.doc.updatedAt,
+    reminderNextAt: row.doc.reminderNextAt,
+  })) {
+    throw new Error("This document is not due for a reminder yet.");
+  }
+  if (input.mode === "simulation" && input.organizationId !== DEMO_ORGANIZATION_ID) {
+    throw new Error("Reminder simulation is only available in Demo Organization.");
+  }
+  if (input.mode === "live" && input.organizationId === DEMO_ORGANIZATION_ID) {
+    throw new Error("Demo live reminders require an authorized existing run and are not available through this path.");
+  }
+
+  const authorization = candidateEmailAuthorization(row.c);
+  if (!candidateEmailMaySend({
+    channelPreference: row.c.channelPreference,
+    caseAuthorized: authorization.allowed,
+    explicitlyAllowlisted: false,
+    validEmail: true,
+  })) {
+    throw new Error(authorization.reason ?? "Candidate email is not currently authorized.");
+  }
+  const subject = `${input.mode === "simulation" ? "[SIMULATED] " : ""}Document action required — ${row.c.workerName} (case #${row.c.id})`;
+  const messageBody = [
+    `Hello ${row.c.workerName}, please review your onboarding checklist and submit or correct “${row.doc.label}”. Our team will review it; no employment decision is made automatically.`,
+    "",
+    ...formatEmailIdentityLines({
+      stakeholder: { name: row.c.workerName, role: "Candidate / employee" },
+      deliveryAddress: row.c.workerEmail,
+      requestedBy: "document-reminder",
+      requestedByKind: "agent",
+      deliveryMode: input.mode === "simulation" ? "simulated" : "real",
+      actionRequired: `Submit or correct the required document: ${row.doc.label}.`,
+      reference: `DOC-${row.c.id}-${row.doc.id}`,
+      appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(row.c.id))}&documentId=${encodeURIComponent(String(row.doc.id))}`,
+    }),
+  ].join("\n");
+  const stableBody = await prepareStableReminderBody({
+    organizationId: input.organizationId,
+    caseId: row.c.id,
+    toAddress: row.c.workerEmail,
+    subject,
+    body: messageBody,
+    idempotencyKey: input.idempotencyKey,
+  });
+  const send = () => sendOutbound({
+    caseId: row.c.id,
+    channel: "email",
+    toAddress: row.c.workerEmail,
+    subject,
+    body: stableBody,
+    persistedBody: stableBody,
+    stableBody: true,
+    skipCandidateReplyReference: true,
+    idempotencyKey: input.idempotencyKey,
+  });
+  const delivery = input.mode === "simulation"
+    ? await runWithProviderDeny(send)
+    : await send();
+  if (["sent", "delivered"].includes(delivery.status)) {
+    await db.update(onbDocuments).set({
+      reminderCount: sql`${onbDocuments.reminderCount} + 1`,
+      lastReminderAt: new Date(),
+      reminderNextAt: new Date(Date.now() + 48 * 3600_000),
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbDocuments.id, row.doc.id),
+      eq(onbDocuments.organizationId, input.organizationId),
+      eq(onbDocuments.caseId, input.caseId),
+      eq(onbDocuments.reminderCount, row.doc.reminderCount),
+    ));
+  }
+  return { ...delivery, idempotencyKey: input.idempotencyKey };
+}
+
 export async function runDocumentReminderTick(): Promise<void> {
   const due = await db.select({ doc: onbDocuments, c: onbCases }).from(onbDocuments)
     .innerJoin(onbCases, eq(onbCases.id, onbDocuments.caseId))
     .where(and(eq(onbDocuments.required, true), inArray(onbDocuments.status, ["pending", "received"]), lt(onbDocuments.updatedAt, new Date(Date.now() - 24 * 3600_000)), or(isNull(onbDocuments.reminderNextAt), lt(onbDocuments.reminderNextAt, new Date())))).limit(25);
   for (const { doc, c } of due) {
+    if (c.organizationId === DEMO_ORGANIZATION_ID) continue;
+    if (doc.status === "received") {
+      const [latestUpload] = await db.select({ validationState: onbCandidateUploads.validationState })
+        .from(onbCandidateUploads)
+        .where(and(
+          eq(onbCandidateUploads.organizationId, c.organizationId),
+          eq(onbCandidateUploads.caseId, c.id),
+          eq(onbCandidateUploads.documentId, doc.id),
+        ))
+        .orderBy(desc(onbCandidateUploads.id))
+        .limit(1);
+      if (!documentNeedsCorrection({
+        status: doc.status,
+        validationState: latestUpload?.validationState,
+      })) continue;
+    }
     const authorization = candidateEmailAuthorization(c);
-    if (!candidateEmailMaySend({ channelPreference: c.channelPreference, caseAuthorized: authorization.allowed, explicitlyAllowlisted: false, validEmail: true })) continue;
+    if (!candidateEmailMaySend({
+      channelPreference: c.channelPreference,
+      caseAuthorized: authorization.allowed,
+      explicitlyAllowlisted: false,
+      validEmail: true,
+    })) continue;
     const key = `document-reminder:${doc.id}:${doc.reminderCount + 1}`;
-    const delivery = await sendOutbound({ caseId: c.id, channel: "email", toAddress: c.workerEmail, subject: "A gentle onboarding document reminder", body: `Hello ${c.workerName}, please review your onboarding checklist and submit or correct “${doc.label}”. Our team will review it; no employment decision is made automatically.`, persistedBody: `Gentle reminder sent for required document: ${doc.label}.`, idempotencyKey: key });
-    if (!["sent", "delivered"].includes(delivery.status)) continue;
-    await db.update(onbDocuments).set({ reminderCount: sql`${onbDocuments.reminderCount} + 1`, lastReminderAt: new Date(), reminderNextAt: new Date(Date.now() + 48 * 3600_000), updatedAt: new Date() }).where(and(eq(onbDocuments.id, doc.id), eq(onbDocuments.organizationId, c.organizationId), eq(onbDocuments.caseId, c.id), eq(onbDocuments.reminderCount, doc.reminderCount)));
+    await sendDocumentReminder({
+      organizationId: c.organizationId,
+      caseId: c.id,
+      documentId: doc.id,
+      mode: "live",
+      idempotencyKey: key,
+    });
   }
 }

@@ -2792,6 +2792,8 @@ export interface OnbApprovalHistory {
   eventType: OnbApprovalHistoryEventType;
   status: string;
   /** @nullable */
+  validationState?: string | null;
+  /** @nullable */
   decidedBy: string | null;
   /** @nullable */
   comment: string | null;
@@ -4704,6 +4706,517 @@ export interface DemoRunAction {
   liveConfirmation?: DemoRunActionLiveConfirmation;
 }
 
+export type OnbActionCenterCapabilitiesReminderMode = typeof OnbActionCenterCapabilitiesReminderMode[keyof typeof OnbActionCenterCapabilitiesReminderMode];
+
+
+export const OnbActionCenterCapabilitiesReminderMode = {
+  'existing-runner': 'existing-runner',
+} as const;
+
+export type OnbActionCenterCapabilitiesAiCallMode = typeof OnbActionCenterCapabilitiesAiCallMode[keyof typeof OnbActionCenterCapabilitiesAiCallMode];
+
+
+export const OnbActionCenterCapabilitiesAiCallMode = {
+  'existing-control': 'existing-control',
+} as const;
+
+export type OnbActionCenterCapabilitiesAiCall = {
+  available: boolean;
+  mode: OnbActionCenterCapabilitiesAiCallMode;
+  label: string;
+  hrefTemplate: string;
+};
+
+export interface OnbActionCenterCapabilities {
+  canAct: boolean;
+  canSendReminder: boolean;
+  canRecordCallOutcome: boolean;
+  canAssign: boolean;
+  canEscalate: boolean;
+  canReassign: boolean;
+  canResolve: boolean;
+  reminderMode: OnbActionCenterCapabilitiesReminderMode;
+  aiCall: OnbActionCenterCapabilitiesAiCall;
+}
+
+export interface OnbActionCenterCounts {
+  /** @minimum 0 */
+  pendingApprovals: number;
+  /** @minimum 0 */
+  notifications: number;
+  /** @minimum 0 */
+  missingDocuments: number;
+  /** @minimum 0 */
+  openWorkItems: number;
+  /** @minimum 0 */
+  completed: number;
+  /** @minimum 0 */
+  opportunities: number;
+}
+
+export interface OnbActionCenterCase {
+  workerName: string;
+  workerEmail: string;
+  role: string;
+  joiningDate: string;
+  lifecycleStage: string;
+  urgency: string;
+  pausedOffline: boolean;
+  canAct: boolean;
+  aiCallHref: string;
+}
+
+export type OnbActionCenterApprovalActions = {
+  approveHref: string;
+  caseHref: string;
+  canAct: boolean;
+};
+
+export interface OnbActionCenterApproval {
+  /** @minimum 1 */
+  id: number;
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 1 */
+  version: number;
+  status: string;
+  agent: string;
+  hitlPattern: string;
+  /** @nullable */
+  ruleRef: string | null;
+  recommendation: string;
+  rationale: string;
+  createdAt: string;
+  case: OnbActionCenterCase;
+  actions: OnbActionCenterApprovalActions;
+}
+
+export type OnbActionCenterNotificationKind = typeof OnbActionCenterNotificationKind[keyof typeof OnbActionCenterNotificationKind];
+
+
+export const OnbActionCenterNotificationKind = {
+  bgv: 'bgv',
+  operational: 'operational',
+} as const;
+
+export type OnbActionCenterNotificationCapabilities = {
+  canAct: boolean;
+};
+
+export interface OnbActionCenterNotification {
+  id: string;
+  /** @minimum 1 */
+  caseId: number;
+  kind: OnbActionCenterNotificationKind;
+  title: string;
+  detail: string;
+  status: string;
+  source: string;
+  provenance: string;
+  deliveryLabel: string;
+  recipient: string;
+  initiator: string;
+  capabilities: OnbActionCenterNotificationCapabilities;
+  createdAt: string;
+  caseHref: string;
+}
+
+export type OnbActionCenterDocumentFollowupAction = typeof OnbActionCenterDocumentFollowupAction[keyof typeof OnbActionCenterDocumentFollowupAction];
+
+
+export const OnbActionCenterDocumentFollowupAction = {
+  remind: 'remind',
+  review: 'review',
+  correction: 'correction',
+} as const;
+
+export type OnbActionCenterDocumentFollowupCapabilities = {
+  canRemind: boolean;
+};
+
+export interface OnbActionCenterDocumentFollowup {
+  /** @minimum 1 */
+  documentId: number;
+  /** @minimum 1 */
+  caseId: number;
+  key: string;
+  label: string;
+  status: string;
+  /** @nullable */
+  validationState: string | null;
+  required: boolean;
+  /** @minimum 0 */
+  reminderCount: number;
+  /** @nullable */
+  lastReminderAt: string | null;
+  /** @nullable */
+  nextReminderAt: string | null;
+  action: OnbActionCenterDocumentFollowupAction;
+  capabilities: OnbActionCenterDocumentFollowupCapabilities;
+  eligibleForReminder: boolean;
+  case: OnbActionCenterCase;
+  caseHref: string;
+}
+
+export type OnbActionCenterWorkItemKind = typeof OnbActionCenterWorkItemKind[keyof typeof OnbActionCenterWorkItemKind];
+
+
+export const OnbActionCenterWorkItemKind = {
+  assign: 'assign',
+  escalate: 'escalate',
+} as const;
+
+export type OnbActionCenterWorkItemStatus = typeof OnbActionCenterWorkItemStatus[keyof typeof OnbActionCenterWorkItemStatus];
+
+
+export const OnbActionCenterWorkItemStatus = {
+  open: 'open',
+} as const;
+
+export type OnbActionCenterWorkItemCapabilities = {
+  canAct: boolean;
+  canReassign: boolean;
+  canResolve: boolean;
+};
+
+export interface OnbActionCenterWorkItem {
+  /** @minimum 1 */
+  id: number;
+  /** @minimum 1 */
+  caseId: number;
+  kind: OnbActionCenterWorkItemKind;
+  status: OnbActionCenterWorkItemStatus;
+  /** @nullable */
+  owner: string | null;
+  /** @nullable */
+  assignee: string | null;
+  /** @nullable */
+  reason: string | null;
+  actor: string;
+  createdAt: string;
+  updatedAt: string;
+  /** @minimum 0 */
+  actionVersion: number;
+  capabilities: OnbActionCenterWorkItemCapabilities;
+  caseHref: string;
+}
+
+export interface OnbActionCenterCompleted {
+  id: string;
+  kind: string;
+  /** @minimum 1 */
+  caseId: number;
+  status: string;
+  summary: string;
+  actor: string;
+  createdAt: string;
+  caseHref: string;
+}
+
+export type OnbActionCenterOpportunityPriority = typeof OnbActionCenterOpportunityPriority[keyof typeof OnbActionCenterOpportunityPriority];
+
+
+export const OnbActionCenterOpportunityPriority = {
+  critical: 'critical',
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+} as const;
+
+export type OnbActionCenterOpportunityBenefitType = typeof OnbActionCenterOpportunityBenefitType[keyof typeof OnbActionCenterOpportunityBenefitType];
+
+
+export const OnbActionCenterOpportunityBenefitType = {
+  'mandatory-checkpoint': 'mandatory-checkpoint',
+  'existing-policy-delta': 'existing-policy-delta',
+} as const;
+
+export type OnbActionCenterOpportunityBenefit = {
+  type: OnbActionCenterOpportunityBenefitType;
+  checkpoint: string;
+  /** @nullable */
+  delta: string | null;
+};
+
+export type OnbActionCenterOpportunityEvidence = {
+  source: string;
+  [key: string]: unknown;
+ };
+
+export type OnbActionCenterOpportunityCapabilities = {
+  canAct: boolean;
+};
+
+export interface OnbActionCenterOpportunity {
+  id: string;
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 0 */
+  actionVersion: number;
+  kind: string;
+  priority: OnbActionCenterOpportunityPriority;
+  title: string;
+  description: string;
+  benefit: OnbActionCenterOpportunityBenefit;
+  evidence: OnbActionCenterOpportunityEvidence;
+  capabilities: OnbActionCenterOpportunityCapabilities;
+  caseHref: string;
+}
+
+export interface OnbActionCenter {
+  version: 1;
+  generatedAt: string;
+  pausedOffline: boolean;
+  capabilities: OnbActionCenterCapabilities;
+  counts: OnbActionCenterCounts;
+  approvals: OnbActionCenterApproval[];
+  notifications: OnbActionCenterNotification[];
+  documentFollowups: OnbActionCenterDocumentFollowup[];
+  workItems: OnbActionCenterWorkItem[];
+  completed: OnbActionCenterCompleted[];
+  opportunities: OnbActionCenterOpportunity[];
+}
+
+export type OnbActionCenterIdentityValueMailboxType = typeof OnbActionCenterIdentityValueMailboxType[keyof typeof OnbActionCenterIdentityValueMailboxType];
+
+
+export const OnbActionCenterIdentityValueMailboxType = {
+  shared: 'shared',
+  individual: 'individual',
+  'not-configured': 'not-configured',
+} as const;
+
+export type OnbActionCenterIdentityValueSource = typeof OnbActionCenterIdentityValueSource[keyof typeof OnbActionCenterIdentityValueSource];
+
+
+export const OnbActionCenterIdentityValueSource = {
+  configured: 'configured',
+  'existing-profile': 'existing-profile',
+  'not-configured': 'not-configured',
+} as const;
+
+export interface OnbActionCenterIdentityValue {
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  name: string | null;
+  mailboxType: OnbActionCenterIdentityValueMailboxType;
+  source: OnbActionCenterIdentityValueSource;
+}
+
+export interface OnbActionCenterIdentityMap {
+  hr: OnbActionCenterIdentityValue;
+  bgvTeam: OnbActionCenterIdentityValue;
+  recruiter: OnbActionCenterIdentityValue;
+  hiringManager: OnbActionCenterIdentityValue;
+  compliance: OnbActionCenterIdentityValue;
+}
+
+export interface OnbActionCenterIdentitySettings {
+  /** @minimum 1 */
+  version: number;
+  identities: OnbActionCenterIdentityMap;
+}
+
+export type OnbActionCenterIdentityInputValueMailboxType = typeof OnbActionCenterIdentityInputValueMailboxType[keyof typeof OnbActionCenterIdentityInputValueMailboxType];
+
+
+export const OnbActionCenterIdentityInputValueMailboxType = {
+  shared: 'shared',
+  individual: 'individual',
+  'not-configured': 'not-configured',
+} as const;
+
+export interface OnbActionCenterIdentityInputValue {
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  name: string | null;
+  mailboxType: OnbActionCenterIdentityInputValueMailboxType;
+}
+
+export interface OnbActionCenterIdentityInputMap {
+  hr: OnbActionCenterIdentityInputValue;
+  bgvTeam: OnbActionCenterIdentityInputValue;
+  recruiter: OnbActionCenterIdentityInputValue;
+  hiringManager: OnbActionCenterIdentityInputValue;
+  compliance: OnbActionCenterIdentityInputValue;
+}
+
+export interface OnbActionCenterIdentitySettingsInput {
+  /** @minimum 1 */
+  version: number;
+  identities: OnbActionCenterIdentityInputMap;
+}
+
+export type OnbActionCenterCallOutcomeInputOutcome = typeof OnbActionCenterCallOutcomeInputOutcome[keyof typeof OnbActionCenterCallOutcomeInputOutcome];
+
+
+export const OnbActionCenterCallOutcomeInputOutcome = {
+  reached: 'reached',
+  'no-answer': 'no-answer',
+  'left-voicemail': 'left-voicemail',
+  'wrong-number': 'wrong-number',
+  scheduled: 'scheduled',
+  declined: 'declined',
+  other: 'other',
+} as const;
+
+export interface OnbActionCenterCallOutcomeInput {
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  requestId: string;
+  /** @minimum 1 */
+  caseId: number;
+  outcome: OnbActionCenterCallOutcomeInputOutcome;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  notes?: string | null;
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  persona?: string | null;
+  selfReported: true;
+}
+
+export type OnbActionCenterReminderInputMode = typeof OnbActionCenterReminderInputMode[keyof typeof OnbActionCenterReminderInputMode];
+
+
+export const OnbActionCenterReminderInputMode = {
+  live: 'live',
+  simulation: 'simulation',
+} as const;
+
+export interface OnbActionCenterReminderInput {
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  requestId: string;
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 1 */
+  documentId: number;
+  mode: OnbActionCenterReminderInputMode;
+}
+
+export type OnbActionCenterWorkInputOwner = typeof OnbActionCenterWorkInputOwner[keyof typeof OnbActionCenterWorkInputOwner];
+
+
+export const OnbActionCenterWorkInputOwner = {
+  hr: 'hr',
+  recruiter: 'recruiter',
+  'hiring-manager': 'hiring-manager',
+  'bgv-team': 'bgv-team',
+  documentation: 'documentation',
+  operations: 'operations',
+  compliance: 'compliance',
+} as const;
+
+export interface OnbActionCenterWorkInput {
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  requestId: string;
+  /** @minimum 1 */
+  caseId: number;
+  owner: OnbActionCenterWorkInputOwner;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  assignee?: string | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  reason?: string | null;
+  /** @minimum 0 */
+  expectedVersion: number;
+}
+
+export type OnbActionCenterWorkReassignInputOwner = typeof OnbActionCenterWorkReassignInputOwner[keyof typeof OnbActionCenterWorkReassignInputOwner];
+
+
+export const OnbActionCenterWorkReassignInputOwner = {
+  hr: 'hr',
+  recruiter: 'recruiter',
+  'hiring-manager': 'hiring-manager',
+  'bgv-team': 'bgv-team',
+  documentation: 'documentation',
+  operations: 'operations',
+  compliance: 'compliance',
+} as const;
+
+export interface OnbActionCenterWorkReassignInput {
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  requestId: string;
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 1 */
+  workItemId: number;
+  owner: OnbActionCenterWorkReassignInputOwner;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  assignee?: string | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  reason?: string | null;
+  /** @minimum 0 */
+  expectedVersion: number;
+}
+
+export interface OnbActionCenterWorkResolveInput {
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  requestId: string;
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 1 */
+  workItemId: number;
+  /** @minimum 0 */
+  expectedVersion: number;
+}
+
+export interface OnbActionCenterAction {
+  /** @minimum 1 */
+  id: number;
+  kind: string;
+  status: string;
+  /** @minimum 1 */
+  caseId: number;
+  actor: string;
+  verified: boolean;
+  selfReported: boolean;
+  /** @nullable */
+  providerEffectId: string | null;
+  createdAt: string;
+}
+
+export interface OnbActionCenterActionResult {
+  action: OnbActionCenterAction;
+  idempotent: boolean;
+  /** @minimum 0 */
+  actionVersion: number;
+}
+
 export type ListEaAssessmentsParams = {
 status?: EaAssessmentStatus;
 };
@@ -4731,6 +5244,24 @@ export type ParseActualsLogBody = {
   /** Raw call-log CSV file (max 20 MB). */
   logFile: Blob;
 };
+
+export type GetOnboardingActionCenterParams = {
+scope?: GetOnboardingActionCenterScope;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+};
+
+export type GetOnboardingActionCenterScope = typeof GetOnboardingActionCenterScope[keyof typeof GetOnboardingActionCenterScope];
+
+
+export const GetOnboardingActionCenterScope = {
+  active: 'active',
+  completed: 'completed',
+  all: 'all',
+} as const;
 
 export type RetryOnboardingEvidenceMalwareScan200MalwareScanState = typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState[keyof typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState];
 

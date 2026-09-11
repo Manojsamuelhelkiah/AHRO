@@ -22,6 +22,10 @@ import {
   decideApproval,
   enqueueApprovalRequestNotification,
 } from "./approval-decisions";
+import {
+  composeApprovalRequestEmail,
+} from "./approval-email-templates";
+import { sharedMailboxResponderIdentity } from "./email-identity";
 
 /**
  * Remote HR approver over email — lets a demo volunteer play the
@@ -125,34 +129,28 @@ export function composeApprovalEmail(opts: {
   hitlPattern: string;
   recommendation: string;
   rationale: string;
+  stakeholderName?: string | null;
+  stakeholderRole?: string;
+  deliveryAddress?: string | null;
+  deliveryMode?: "real" | "simulated";
 }): { subject: string; body: string } {
-  const version = opts.version ?? 1;
-  const ref = approvalRef(opts.approvalId, version);
-  // Keep a harmless legacy alias beside V1 for older inbox rules. It is
-  // never emitted for reopened cycles, where an old bare reference would be
-  // ambiguous.
-  const subjectRef = version === 1
-    ? `AP-${opts.approvalId}] [${ref}`
-    : ref;
-  const kind = opts.hitlPattern === "hard-block" ? "HARD-BLOCK" : "Approval needed";
-  return {
-    subject: `[${subjectRef}] ${kind}: ${opts.workerName} (case #${opts.caseId})`,
-    body: [
-      `The onboarding agent has escalated a decision to you.`,
-      ``,
-      `Case: #${opts.caseId} — ${opts.workerName}`,
-      `Raised by: ${opts.agent} agent (${opts.hitlPattern})`,
-      `Approval cycle: ${ref}`,
-      ``,
-      `Recommendation: ${opts.recommendation}`,
-      `Rationale: ${opts.rationale}`,
-      ``,
-      `To decide, simply reply to this email with "approve" or "reject".`,
-      `(Keep the reference ${ref} in the subject or body so your reply can be matched.)`,
-      ``,
-      `Only replies from this exact email address are honored.`,
-    ].join("\n"),
-  };
+  return composeApprovalRequestEmail({
+    approvalId: opts.approvalId,
+    version: opts.version,
+    workerName: opts.workerName,
+    caseId: opts.caseId,
+    agent: opts.agent,
+    hitlPattern: opts.hitlPattern,
+    recommendation: opts.recommendation,
+    rationale: opts.rationale,
+    stakeholder: {
+      name: opts.stakeholderName?.trim() ?? "",
+      role: opts.stakeholderRole?.trim() || "HR approval stakeholder",
+    },
+    deliveryAddress: opts.deliveryAddress,
+    deliveryMode: opts.deliveryMode ?? "real",
+    deliveryState: "queued",
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -264,7 +262,7 @@ export async function applyApproverReply(opts: {
     return { outcome: "no-decision", approvalId };
   }
 
-  const decidedBy = `${opts.approver} (HR approver via email)`;
+  const decidedBy = sharedMailboxResponderIdentity(opts.fromAddress);
   const result = await decideApproval({
     organizationId: opts.organizationId,
     approvalId,
@@ -274,6 +272,7 @@ export async function applyApproverReply(opts: {
     comment: opts.bodyText ? opts.bodyText.slice(0, 500) : null,
     sourceMessageId: opts.sourceMessageId,
     sourceAddress: opts.fromAddress,
+    decidedByKind: "shared-mailbox",
   });
   if (result.outcome === "not-found") return { outcome: "not-found", approvalId };
   if (result.outcome === "stale") {

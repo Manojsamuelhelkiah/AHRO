@@ -46,3 +46,6 @@
 - [Demo bootstrap approval](demo-bootstrap-approval.md) — initial Demo authority needs private operator approval; managed Clerk metadata editing is not an available setup path.
 - [Operational simulation truthfulness](operational-simulation-truthfulness.md) — show operational emails and agent actions in Communications without implying real external work or readiness.
 - [BGV notification boundaries](bgv-notification-boundaries.md) — human notices versus simulated operations; source provenance, private findings, and stale-email fencing.
+- [Shared mailbox personas](shared-mailbox-personas.md) — intended stakeholder, delivery mailbox, and actual responder are separate; demo names never grant authority.
+- [Provider test isolation](provider-test-isolation.md) — in-process delivery stubs cannot protect DB fixtures from the running API's background workers.
+- [Outbound payload stability](outbound-payload-stability.md) — persist message content and reply references before effect binding; retries must not regenerate them.

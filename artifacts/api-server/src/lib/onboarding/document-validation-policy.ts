@@ -5,9 +5,17 @@ export function normalizeBgvStatus(status: string): "pending" | "incomplete" | "
     : "manual_review";
 }
 
-export function reminderEligible(input: { required: boolean; status: string; updatedAt: Date; now?: number }): boolean {
+export function reminderEligible(input: {
+  required: boolean;
+  status: string;
+  updatedAt: Date;
+  reminderNextAt?: Date | null;
+  now?: number;
+}): boolean {
+  const now = input.now ?? Date.now();
   return input.required && ["pending", "received"].includes(input.status) &&
-    input.updatedAt.getTime() <= (input.now ?? Date.now()) - 24 * 3600_000;
+    input.updatedAt.getTime() <= now - 24 * 3600_000 &&
+    (!input.reminderNextAt || input.reminderNextAt.getTime() <= now);
 }
 
 export type ProviderDecision = "verified" | "rejected" | "manual_review";
