@@ -112,6 +112,7 @@ import type {
   OnbSystemWatcher,
   OnbWatchEmailSimulate,
   OnbWatchEmailSimulateResult,
+  OnboardingBgvNotificationsEnvelope,
   ParseActualsLogBody,
   PricingRateRegister,
   PricingRateSetInput,
@@ -119,6 +120,8 @@ import type {
   PricingSheet,
   PricingSheetInput,
   PricingSheetUpdate,
+  ReconcileOnboardingBgvNotificationsRequest,
+  ReconcileOnboardingBgvNotificationsResult,
   ResolveIntentRouteInput,
   ResolvedIntentRoute,
   RetryOnboardingEvidenceMalwareScan200,
@@ -139,7 +142,8 @@ import type {
   StartOnboardingVoiceCall200,
   StartOnboardingVoiceCallBody,
   SystemInfo,
-  UpdateOnbSettings
+  UpdateOnbSettings,
+  UpdateOnboardingBgvNotificationsRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -7093,6 +7097,230 @@ export function useGetOnboardingCaseBgv<TData = Awaited<ReturnType<typeof getOnb
 
 
 
+
+export const getGetOnboardingBgvNotificationsUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/bgv-notifications`
+}
+
+/**
+ * Returns tenant-scoped recipient configuration, source-derived BGV notification cycles, and one planned recipient row per stakeholder. Missing recipients, simulated provenance, and live authorization requirements are explicit; configuration never implies delivery.
+ * @summary Read durable BGV stakeholder notification cycles and delivery state
+ */
+export const getOnboardingBgvNotifications = async (caseId: number, options?: RequestInit): Promise<OnboardingBgvNotificationsEnvelope> => {
+
+  return customFetch<OnboardingBgvNotificationsEnvelope>(getGetOnboardingBgvNotificationsUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingBgvNotificationsQueryKey = (caseId: number,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/bgv-notifications`
+    ] as const;
+    }
+
+
+export const getGetOnboardingBgvNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingBgvNotifications>>, TError = ErrorType<ErrorMessage>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingBgvNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingBgvNotificationsQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingBgvNotifications>>> = ({ signal }) => getOnboardingBgvNotifications(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingBgvNotifications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingBgvNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingBgvNotifications>>>
+export type GetOnboardingBgvNotificationsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Read durable BGV stakeholder notification cycles and delivery state
+ */
+
+export function useGetOnboardingBgvNotifications<TData = Awaited<ReturnType<typeof getOnboardingBgvNotifications>>, TError = ErrorType<ErrorMessage>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingBgvNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingBgvNotificationsQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateOnboardingBgvNotificationsUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/bgv-notifications`
+}
+
+/**
+ * Saves explicit recipient purpose authorization and safe coordination metadata. It never mutates BGV evidence or employment state. Owner/admin HR roles may save real recipient configuration; Demo Organization members may save simulation-only configuration. Requires the current optimistic version.
+ * @summary Save case-scoped BGV notification recipients and coordination metadata
+ */
+export const updateOnboardingBgvNotifications = async (caseId: number,
+    updateOnboardingBgvNotificationsRequest: UpdateOnboardingBgvNotificationsRequest, options?: RequestInit): Promise<OnboardingBgvNotificationsEnvelope> => {
+
+  return customFetch<OnboardingBgvNotificationsEnvelope>(getUpdateOnboardingBgvNotificationsUrl(caseId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateOnboardingBgvNotificationsRequest)
+  }
+);}
+
+
+
+
+
+export const getUpdateOnboardingBgvNotificationsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingBgvNotifications>>, TError,{caseId: number;data: BodyType<UpdateOnboardingBgvNotificationsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingBgvNotifications>>, TError,{caseId: number;data: BodyType<UpdateOnboardingBgvNotificationsRequest>}, TContext> => {
+
+const mutationKey = ['updateOnboardingBgvNotifications'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOnboardingBgvNotifications>>, {caseId: number;data: BodyType<UpdateOnboardingBgvNotificationsRequest>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  updateOnboardingBgvNotifications(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOnboardingBgvNotificationsMutationResult = NonNullable<Awaited<ReturnType<typeof updateOnboardingBgvNotifications>>>
+    export type UpdateOnboardingBgvNotificationsMutationBody = BodyType<UpdateOnboardingBgvNotificationsRequest>
+    export type UpdateOnboardingBgvNotificationsMutationError = ErrorType<void>
+
+    /**
+ * @summary Save case-scoped BGV notification recipients and coordination metadata
+ */
+export const useUpdateOnboardingBgvNotifications = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOnboardingBgvNotifications>>, TError,{caseId: number;data: BodyType<UpdateOnboardingBgvNotificationsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOnboardingBgvNotifications>>,
+        TError,
+        {caseId: number;data: BodyType<UpdateOnboardingBgvNotificationsRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateOnboardingBgvNotificationsMutationOptions(options));
+    }
+
+export const getReconcileOnboardingBgvNotificationsUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/bgv-notifications/reconcile`
+}
+
+/**
+ * Creates missing current-cycle communications and retries only definite failures. Unknown provider outcomes are never replayed. Synthetic, offline, and demo transitions stay simulated or skipped and cannot live-send.
+ * @summary Reconcile current BGV stakeholder notifications
+ */
+export const reconcileOnboardingBgvNotifications = async (caseId: number,
+    reconcileOnboardingBgvNotificationsRequest?: ReconcileOnboardingBgvNotificationsRequest, options?: RequestInit): Promise<ReconcileOnboardingBgvNotificationsResult> => {
+
+  return customFetch<ReconcileOnboardingBgvNotificationsResult>(getReconcileOnboardingBgvNotificationsUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(reconcileOnboardingBgvNotificationsRequest)
+  }
+);}
+
+
+
+
+
+export const getReconcileOnboardingBgvNotificationsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconcileOnboardingBgvNotifications>>, TError,{caseId: number;data?: BodyType<ReconcileOnboardingBgvNotificationsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reconcileOnboardingBgvNotifications>>, TError,{caseId: number;data?: BodyType<ReconcileOnboardingBgvNotificationsRequest>}, TContext> => {
+
+const mutationKey = ['reconcileOnboardingBgvNotifications'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reconcileOnboardingBgvNotifications>>, {caseId: number;data?: BodyType<ReconcileOnboardingBgvNotificationsRequest>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  reconcileOnboardingBgvNotifications(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReconcileOnboardingBgvNotificationsMutationResult = NonNullable<Awaited<ReturnType<typeof reconcileOnboardingBgvNotifications>>>
+    export type ReconcileOnboardingBgvNotificationsMutationBody = BodyType<ReconcileOnboardingBgvNotificationsRequest> | undefined
+    export type ReconcileOnboardingBgvNotificationsMutationError = ErrorType<void>
+
+    /**
+ * @summary Reconcile current BGV stakeholder notifications
+ */
+export const useReconcileOnboardingBgvNotifications = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconcileOnboardingBgvNotifications>>, TError,{caseId: number;data?: BodyType<ReconcileOnboardingBgvNotificationsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reconcileOnboardingBgvNotifications>>,
+        TError,
+        {caseId: number;data?: BodyType<ReconcileOnboardingBgvNotificationsRequest>},
+        TContext
+      > => {
+      return useMutation(getReconcileOnboardingBgvNotificationsMutationOptions(options));
+    }
 
 export const getUpdateOnboardingChecklistItemUrl = (id: number,
     itemId: string,) => {

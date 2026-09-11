@@ -42,6 +42,15 @@ import { documentationGateReady } from "./document-validation-policy";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readiness-sla-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import {
+  recordBgvBlockedEpisode,
+  recordBgvReleaseEpisode,
+  reconcileCurrentBgvNotifications,
+  withBgvNotificationCaseFence,
+  type BgvNotificationProvenance,
+  type BgvNotificationSource,
+  type BgvNotificationClassification,
+} from "./bgv-notifications";
 
 /**
  * System Watcher agent.
@@ -60,6 +69,14 @@ import { isSyntheticOfflineCase } from "./synthetic-offline";
 
 const POLL_INTERVAL_MS = 20_000;
 export const WATCHER_AGENT = "system-watcher";
+
+function classificationsForProviderStatus(
+  status: string,
+): BgvNotificationClassification[] {
+  return ["exception", "adverse", "unknown", "failed", "rejected"].includes(status)
+    ? ["discrepancy", "review-required"]
+    : ["delay"];
+}
 
 let timer: NodeJS.Timeout | null = null;
 
@@ -185,9 +202,10 @@ async function logEvent(
 }
 
 /** Close a check as done and update the case checklist. Idempotent. Exported for tests. */
-export async function completeCheck(
+async function completeCheckUnlocked(
   check: typeof onbSystemChecks.$inferSelect,
   source: "webhook push" | "scheduled poll" | "status email",
+  notificationProvenance: BgvNotificationProvenance = "simulated",
 ): Promise<void> {
   const def = systemDef(check.system);
   if (!def) return;
@@ -217,6 +235,7 @@ export async function completeCheck(
   // the whole readiness JSON array — without serialization one write wins
   // and the other completion is silently lost.
   let checklistResumeReady = false;
+  let offlinePaused = false;
   await db.transaction(async (tx) => {
     const [caseForGuard] = await tx
       .select()
@@ -226,7 +245,10 @@ export async function completeCheck(
         eq(onbCases.organizationId, check.organizationId),
       ))
       .for("update");
-    if (caseForGuard && isSyntheticOfflineCase(caseForGuard)) return;
+    if (caseForGuard && isSyntheticOfflineCase(caseForGuard)) {
+      offlinePaused = true;
+      return;
+    }
     const [updated] = await tx
       .update(onbSystemChecks)
       .set({
@@ -335,13 +357,41 @@ export async function completeCheck(
     const { resumeChecklistOrchestration } = await import("./engine");
     await resumeChecklistOrchestration(check.caseId);
   }
+  if (!offlinePaused && def.key === "bgv" && check.status === "overdue") {
+    const notificationSource: BgvNotificationSource =
+      source === "webhook push"
+        ? "webhook"
+        : source === "status email"
+          ? "status-email"
+          : "scheduled-poll";
+    await recordBgvReleaseEpisode({
+      organizationId: check.organizationId,
+      caseId: check.caseId,
+      source: notificationSource,
+      provenance: notificationProvenance,
+      skipFence: true,
+    });
+  }
+}
+
+export async function completeCheck(
+  check: typeof onbSystemChecks.$inferSelect,
+  source: "webhook push" | "scheduled poll" | "status email",
+  notificationProvenance: BgvNotificationProvenance = "simulated",
+): Promise<void> {
+  await withBgvNotificationCaseFence(check.organizationId, check.caseId, () =>
+    completeCheckUnlocked(check, source, notificationProvenance),
+  );
 }
 
 /** Escalate a late/stuck check exactly once. Exported for the watch-mailbox tracker. */
-export async function escalateCheck(
+async function escalateCheckUnlocked(
   check: typeof onbSystemChecks.$inferSelect,
   reason: string,
   expectedMode?: string,
+  notificationSource?: BgvNotificationSource,
+  notificationProvenance: BgvNotificationProvenance = "simulated",
+  notificationClassifications?: BgvNotificationClassification[],
 ): Promise<void> {
   const def = systemDef(check.system);
   if (!def) return;
@@ -360,7 +410,34 @@ export async function escalateCheck(
       ),
     )
     .returning();
-  if (!updated) return; // already escalated
+  if (!updated) {
+    // A provider may report a more severe exception after the check is
+    // already overdue. Do not duplicate the approval, but still merge the
+    // explicit classification and add newly eligible compliance notice(s).
+    const [current] = await db.select({
+      status: onbSystemChecks.status,
+    }).from(onbSystemChecks).where(and(
+      eq(onbSystemChecks.id, check.id),
+      eq(onbSystemChecks.organizationId, check.organizationId),
+    ));
+    if (check.system === "bgv" && current?.status === "overdue") {
+      await recordBgvBlockedEpisode({
+        organizationId: check.organizationId,
+        caseId: check.caseId,
+        source: notificationSource ??
+          (expectedMode === "push"
+            ? "webhook"
+            : expectedMode === "email"
+              ? "status-email"
+              : "overdue"),
+        provenance: notificationProvenance,
+        reason,
+        classifications: notificationClassifications,
+        skipFence: true,
+      });
+    }
+    return;
+  }
 
   if (check.system === "bgv") {
     await db.transaction(async (tx) => {
@@ -431,6 +508,23 @@ export async function escalateCheck(
     "hard-block",
   );
 
+  if (check.system === "bgv") {
+    await recordBgvBlockedEpisode({
+      organizationId: check.organizationId,
+      caseId: check.caseId,
+      source: notificationSource ??
+        (expectedMode === "push"
+          ? "webhook"
+          : expectedMode === "email"
+            ? "status-email"
+            : "overdue"),
+      provenance: notificationProvenance,
+      reason,
+      classifications: notificationClassifications,
+      skipFence: true,
+    });
+  }
+
   // Opt-in follow-through: place the escalation voice call automatically
   // when the hire has also gone quiet. Never allowed to break escalation
   // itself — the SLA event above must land even if calling fails.
@@ -442,6 +536,26 @@ export async function escalateCheck(
       String(err).slice(0, 300),
     );
   }
+}
+
+export async function escalateCheck(
+  check: typeof onbSystemChecks.$inferSelect,
+  reason: string,
+  expectedMode?: string,
+  notificationSource?: BgvNotificationSource,
+  notificationProvenance: BgvNotificationProvenance = "simulated",
+  notificationClassifications?: BgvNotificationClassification[],
+): Promise<void> {
+  await withBgvNotificationCaseFence(check.organizationId, check.caseId, () =>
+    escalateCheckUnlocked(
+      check,
+      reason,
+      expectedMode,
+      notificationSource,
+      notificationProvenance,
+      notificationClassifications,
+    ),
+  );
 }
 
 /**
@@ -589,6 +703,7 @@ export async function handleSystemWebhook(opts: {
   caseId: number;
   externalRef: string;
   status: string;
+  provenance?: BgvNotificationProvenance;
 }): Promise<{ ok: boolean; message: string }> {
   const def = systemDef(opts.system);
   if (!def) return { ok: false, message: `Unknown system "${opts.system}"` };
@@ -602,10 +717,10 @@ export async function handleSystemWebhook(opts: {
     };
   }
   const status = opts.status.trim().toLowerCase();
-  if (!["completed", "pending", "exception", "adverse", "unknown"].includes(status)) {
+  if (!["completed", "pending", "exception", "adverse", "unknown", "failed", "rejected"].includes(status)) {
     return {
       ok: false,
-      message: `Unsupported ${def.label} webhook status "${opts.status}". Supported statuses are completed, pending, exception, adverse, and unknown.`,
+        message: `Unsupported ${def.label} webhook status "${opts.status}". Supported statuses are completed, pending, exception, adverse, unknown, failed, and rejected.`,
     };
   }
   const t = telemetry[def.key];
@@ -632,15 +747,18 @@ export async function handleSystemWebhook(opts: {
     t.lastEventAt = new Date();
     t.eventsReceived += 1;
     if (status === "completed") {
-      await completeCheck(check, "webhook push");
+      await completeCheck(check, "webhook push", opts.provenance ?? "simulated");
       t.lastSuccessAt = new Date();
       t.lastError = null;
       t.lastErrorAt = null;
-    } else if (status === "exception" || status === "adverse" || status === "unknown") {
+    } else if (["exception", "adverse", "unknown", "failed", "rejected"].includes(status)) {
       await escalateCheck(
         check,
         `The ${def.label} vendor reported ${status} status for ${check.externalRef}; human review is required and no automated adverse action was taken.`,
         "push",
+        "webhook",
+        opts.provenance,
+        classificationsForProviderStatus(status),
       );
       t.lastSuccessAt = new Date();
       t.lastError = null;
@@ -660,6 +778,9 @@ export async function handleSystemWebhook(opts: {
           check,
           `${def.label} vendor regressed from completed to pending for ${check.externalRef}; fresh human review is required.`,
           "push",
+          "webhook",
+          opts.provenance,
+          classificationsForProviderStatus(status),
         );
       }
     }
@@ -691,6 +812,7 @@ function schedulePush(check: typeof onbSystemChecks.$inferSelect): void {
         caseId: check.caseId,
         externalRef: check.externalRef,
         status: "completed",
+        provenance: "simulated",
       });
       console.log(
         `[system-watcher] simulated ${def.label} webhook delivered for case ${check.caseId} (${check.externalRef})`,
@@ -946,7 +1068,7 @@ async function tickOnce(): Promise<void> {
           now,
         );
         if (status === "completed") {
-          await completeCheck(check, "scheduled poll");
+          await completeCheck(check, "scheduled poll", "simulated");
         }
       }
       t.lastSuccessAt = new Date();
@@ -972,6 +1094,9 @@ async function tickOnce(): Promise<void> {
       await escalateCheck(
         check,
         `No status email quoting ${check.externalRef} has arrived in the watch mailbox.`,
+        undefined,
+        "overdue",
+        "simulated",
       );
       continue;
     }
@@ -981,6 +1106,9 @@ async function tickOnce(): Promise<void> {
       connected
         ? `The ${def.mode === "push" ? "vendor has not pushed a completion webhook" : "vendor status API still reports in-progress"}.`
         : `The ${def.label} connector is disconnected, so no status updates are arriving.`,
+      undefined,
+      "overdue",
+      "simulated",
     );
   }
 }
@@ -994,6 +1122,7 @@ async function tickOnce(): Promise<void> {
 export const runSystemWatcherTick = makeSharedTick(async () => {
   try {
     await tickOnce();
+    await reconcileCurrentBgvNotifications("heartbeat");
   } catch (err) {
     console.error("[system-watcher] tick failed:", String(err).slice(0, 300));
   }

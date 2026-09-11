@@ -2272,6 +2272,92 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/OnbBgvStatus" }
+  /onboarding/cases/{caseId}/bgv-notifications:
+    get:
+      operationId: getOnboardingBgvNotifications
+      tags: [onboarding]
+      summary: Read durable BGV stakeholder notification cycles and delivery state
+      description: >
+        Returns tenant-scoped recipient configuration, source-derived BGV
+        notification cycles, and one planned recipient row per stakeholder.
+        Missing recipients, simulated provenance, and live authorization
+        requirements are explicit; configuration never implies delivery.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: BGV notification policy and durable delivery state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingBgvNotificationsEnvelope"
+        "404":
+          description: Case not found in the requesting organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+    put:
+      operationId: updateOnboardingBgvNotifications
+      tags: [onboarding]
+      summary: Save case-scoped BGV notification recipients and coordination metadata
+      description: >
+        Saves explicit recipient purpose authorization and safe coordination
+        metadata. It never mutates BGV evidence or employment state. Owner/admin
+        HR roles may save real recipient configuration; Demo Organization
+        members may save simulation-only configuration. Requires the current
+        optimistic version.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateOnboardingBgvNotificationsRequest" }
+      responses:
+        "200":
+          description: Saved notification policy and current cycles
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingBgvNotificationsEnvelope" }
+        "400": { description: Invalid recipient or coordination metadata }
+        "403": { description: HR owner/admin role required for live tenant configuration }
+        "404": { description: Case not found in the requesting organization }
+        "409": { description: Stale notification configuration version }
+  /onboarding/cases/{caseId}/bgv-notifications/reconcile:
+    post:
+      operationId: reconcileOnboardingBgvNotifications
+      tags: [onboarding]
+      summary: Reconcile current BGV stakeholder notifications
+      description: >
+        Creates missing current-cycle communications and retries only definite
+        failures. Unknown provider outcomes are never replayed. Synthetic,
+        offline, and demo transitions stay simulated or skipped and cannot
+        live-send.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconcileOnboardingBgvNotificationsRequest" }
+      responses:
+        "200":
+          description: Current notification policy after reconciliation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileOnboardingBgvNotificationsResult" }
+        "403": { description: HR owner/admin role required }
+        "404": { description: Case not found in the requesting organization }
+        "409": { description: Current cycle is stale or has ambiguous delivery }
   /onboarding/cases/{id}/checklist/{itemId}:
     put:
       operationId: updateOnboardingChecklistItem
@@ -6248,6 +6334,151 @@ components:
         createdAt:
           type: string
       required: [id, caseId, channel, direction, audience, toAddress, subject, body, status, failureReason, sensitive, retriedBy, retriedAt, createdAt]
+    BgvNotificationClassification:
+      type: string
+      enum: [delay, missing-info, discrepancy, review-required]
+    BgvNotificationRole:
+      type: string
+      enum: [hr, bgvTeam, recruiter, hiringManager, compliance, candidate]
+    BgvNotificationDeliveryState:
+      type: string
+      enum: [missing-recipient, queued, sent, failed, uncertain, simulated, skipped]
+    BgvNotificationFlags:
+      type: object
+      properties:
+        delay: { type: boolean }
+        missingInfo: { type: boolean }
+        discrepancy: { type: boolean }
+        reviewRequired: { type: boolean }
+        candidateActionRequired: { type: boolean }
+        providerActionRequired: { type: boolean }
+        startDateAtRisk: { type: boolean }
+        coordinationRequired: { type: boolean }
+        dependentWorkOnHold: { type: boolean }
+      required: [delay, missingInfo, discrepancy, reviewRequired, candidateActionRequired, providerActionRequired, startDateAtRisk, coordinationRequired, dependentWorkOnHold]
+    BgvNotificationRecipientConfig:
+      type: object
+      properties:
+        email: { type: ["string", "null"] }
+        enabled: { type: boolean }
+        purposeAuthorized: { type: boolean }
+      required: [email, enabled, purposeAuthorized]
+    BgvNotificationConfig:
+      type: object
+      properties:
+        version: { type: integer, minimum: 1 }
+        flags:
+          type: object
+          properties:
+            candidateActionRequired: { type: boolean }
+            providerActionRequired: { type: boolean }
+            startDateAtRisk: { type: boolean }
+            coordinationRequired: { type: boolean }
+            dependentWorkOnHold: { type: boolean }
+        hr: { $ref: "#/components/schemas/BgvNotificationRecipientConfig" }
+        bgvTeam: { $ref: "#/components/schemas/BgvNotificationRecipientConfig" }
+        recruiter: { $ref: "#/components/schemas/BgvNotificationRecipientConfig" }
+        hiringManager: { $ref: "#/components/schemas/BgvNotificationRecipientConfig" }
+        compliance: { $ref: "#/components/schemas/BgvNotificationRecipientConfig" }
+        candidate:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            purposeAuthorized: { type: boolean }
+          required: [enabled, purposeAuthorized]
+      required: [version]
+    BgvNotificationAuthority:
+      type: object
+      properties:
+        canManage: { type: boolean }
+        offline: { type: boolean }
+        reason: { type: ["string", "null"] }
+      required: [canManage, offline, reason]
+    BgvNotificationRecipient:
+      type: object
+      properties:
+        role: { $ref: "#/components/schemas/BgvNotificationRole" }
+        displayName: { type: string }
+        email: { type: ["string", "null"] }
+        configured: { type: boolean }
+        purpose: { type: string }
+        actualDeliveryState: { $ref: "#/components/schemas/BgvNotificationDeliveryState" }
+        communicationIds:
+          type: array
+          items: { type: integer }
+        liveSendAuthorized: { type: boolean }
+        reason: { type: string }
+      required: [role, displayName, email, configured, purpose, actualDeliveryState, communicationIds, liveSendAuthorized, reason]
+    BgvNotificationCycle:
+      type: object
+      properties:
+        cycleId: { type: string }
+        episode: { type: string, enum: [blocked, release] }
+        source:
+          type: string
+          enum: [webhook, scheduled-poll, status-email, overdue, reopened, hr-reconcile, unknown]
+        sourceProvenance:
+          type: string
+          enum: [trusted-provider, human-authorized, simulated, offline, unknown]
+        classifications:
+          type: array
+          items: { $ref: "#/components/schemas/BgvNotificationClassification" }
+        flags: { $ref: "#/components/schemas/BgvNotificationFlags" }
+        createdAt: { type: string, format: date-time }
+        notifications:
+          type: array
+          items: { $ref: "#/components/schemas/BgvNotificationRecipient" }
+      required: [cycleId, episode, source, sourceProvenance, classifications, flags, createdAt, notifications]
+    OnboardingBgvNotificationsEnvelope:
+      type: object
+      properties:
+        caseId: { type: integer }
+        version: { type: integer, minimum: 1 }
+        config: { $ref: "#/components/schemas/BgvNotificationConfig" }
+        authority: { $ref: "#/components/schemas/BgvNotificationAuthority" }
+        effectiveFlags: { $ref: "#/components/schemas/BgvNotificationFlags" }
+        currentCycle:
+          anyOf:
+            - $ref: "#/components/schemas/BgvNotificationCycle"
+            - type: "null"
+        cycles:
+          type: array
+          items: { $ref: "#/components/schemas/BgvNotificationCycle" }
+        policy:
+          type: object
+          properties:
+            explanation: { type: string }
+            rawFindingsExposed: { type: boolean, const: false }
+            automaticEmploymentDecision: { type: boolean, const: false }
+            bGVClearAuthorityChanged: { type: boolean, const: false }
+          required: [explanation, rawFindingsExposed, automaticEmploymentDecision, bGVClearAuthorityChanged]
+      required: [caseId, version, config, authority, effectiveFlags, currentCycle, cycles, policy]
+    UpdateOnboardingBgvNotificationsRequest:
+      type: object
+      properties:
+        version: { type: integer, minimum: 1 }
+        config: { $ref: "#/components/schemas/BgvNotificationConfig" }
+      required: [version, config]
+    ReconcileOnboardingBgvNotificationsRequest:
+      type: object
+      properties:
+        reason: { type: string, enum: [manual, heartbeat, startup] }
+        simulation: { type: boolean }
+    ReconcileOnboardingBgvNotificationsResult:
+      allOf:
+        - $ref: "#/components/schemas/OnboardingBgvNotificationsEnvelope"
+        - type: object
+          properties:
+            createdCommunicationIds:
+              type: array
+              items: { type: integer }
+            retriedCommunicationIds:
+              type: array
+              items: { type: integer }
+            skippedCommunicationIds:
+              type: array
+              items: { type: integer }
+          required: [createdCommunicationIds, retriedCommunicationIds, skippedCommunicationIds]
     OnbOperationalRequestMethod:
       type: string
       enum: [email, agent]

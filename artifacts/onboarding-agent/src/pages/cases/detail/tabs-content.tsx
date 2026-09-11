@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { WhatsAppSandboxWarning } from '@/components/whatsapp-sandbox-warning';
 import { StatusBadgeText } from './components';
 import { OperationalRequestsSection } from './OperationalRequestsSection';
+import { BgvNotificationsSection } from './BgvNotificationsSection';
 
 export function TasksTab({ c }: { c: any }) {
   return (
@@ -123,6 +124,7 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
   return (
     <div className="pb-12 max-w-4xl space-y-6">
       <OperationalRequestsSection caseId={caseId} requestsEnv={requestsEnv} loadError={requestsLoadError} />
+      <BgvNotificationsSection caseId={caseId} caseData={c} />
       <WhatsAppSandboxWarning
         caseId={caseId}
         channelPreference={c.channelPreference}

@@ -45,3 +45,4 @@
 - [Hybrid demo boundaries](demo-controller-boundaries.md) — Demo Organization run scope, explicit volunteer outreach, and truthful simulation without changing real employment evidence.
 - [Demo bootstrap approval](demo-bootstrap-approval.md) — initial Demo authority needs private operator approval; managed Clerk metadata editing is not an available setup path.
 - [Operational simulation truthfulness](operational-simulation-truthfulness.md) — show operational emails and agent actions in Communications without implying real external work or readiness.
+- [BGV notification boundaries](bgv-notification-boundaries.md) — human notices versus simulated operations; source provenance, private findings, and stale-email fencing.

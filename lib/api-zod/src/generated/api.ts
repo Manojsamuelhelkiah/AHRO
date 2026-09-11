@@ -8321,6 +8321,488 @@ export const GetOnboardingCaseBgvResponse = zod.array(GetOnboardingCaseBgvRespon
 
 
 /**
+ * Returns tenant-scoped recipient configuration, source-derived BGV notification cycles, and one planned recipient row per stakeholder. Missing recipients, simulated provenance, and live authorization requirements are explicit; configuration never implies delivery.
+ * @summary Read durable BGV stakeholder notification cycles and delivery state
+ */
+
+
+
+export const GetOnboardingBgvNotificationsParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+
+
+
+
+export const GetOnboardingBgvNotificationsResponse = zod.object({
+  "caseId": zod.number(),
+  "version": zod.number().min(1),
+  "config": zod.object({
+  "version": zod.number().min(1),
+  "flags": zod.object({
+  "candidateActionRequired": zod.boolean().optional(),
+  "providerActionRequired": zod.boolean().optional(),
+  "startDateAtRisk": zod.boolean().optional(),
+  "coordinationRequired": zod.boolean().optional(),
+  "dependentWorkOnHold": zod.boolean().optional()
+}).optional(),
+  "hr": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "bgvTeam": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "recruiter": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "hiringManager": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "compliance": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "candidate": zod.object({
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional()
+}),
+  "authority": zod.object({
+  "canManage": zod.boolean(),
+  "offline": zod.boolean(),
+  "reason": zod.string().nullable()
+}),
+  "effectiveFlags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "currentCycle": zod.union([zod.object({
+  "cycleId": zod.string(),
+  "episode": zod.enum(['blocked', 'release']),
+  "source": zod.enum(['webhook', 'scheduled-poll', 'status-email', 'overdue', 'reopened', 'hr-reconcile', 'unknown']),
+  "sourceProvenance": zod.enum(['trusted-provider', 'human-authorized', 'simulated', 'offline', 'unknown']),
+  "classifications": zod.array(zod.enum(['delay', 'missing-info', 'discrepancy', 'review-required'])),
+  "flags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "createdAt": zod.coerce.date(),
+  "notifications": zod.array(zod.object({
+  "role": zod.enum(['hr', 'bgvTeam', 'recruiter', 'hiringManager', 'compliance', 'candidate']),
+  "displayName": zod.string(),
+  "email": zod.string().nullable(),
+  "configured": zod.boolean(),
+  "purpose": zod.string(),
+  "actualDeliveryState": zod.enum(['missing-recipient', 'queued', 'sent', 'failed', 'uncertain', 'simulated', 'skipped']),
+  "communicationIds": zod.array(zod.number()),
+  "liveSendAuthorized": zod.boolean(),
+  "reason": zod.string()
+}))
+}),zod.null()]),
+  "cycles": zod.array(zod.object({
+  "cycleId": zod.string(),
+  "episode": zod.enum(['blocked', 'release']),
+  "source": zod.enum(['webhook', 'scheduled-poll', 'status-email', 'overdue', 'reopened', 'hr-reconcile', 'unknown']),
+  "sourceProvenance": zod.enum(['trusted-provider', 'human-authorized', 'simulated', 'offline', 'unknown']),
+  "classifications": zod.array(zod.enum(['delay', 'missing-info', 'discrepancy', 'review-required'])),
+  "flags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "createdAt": zod.coerce.date(),
+  "notifications": zod.array(zod.object({
+  "role": zod.enum(['hr', 'bgvTeam', 'recruiter', 'hiringManager', 'compliance', 'candidate']),
+  "displayName": zod.string(),
+  "email": zod.string().nullable(),
+  "configured": zod.boolean(),
+  "purpose": zod.string(),
+  "actualDeliveryState": zod.enum(['missing-recipient', 'queued', 'sent', 'failed', 'uncertain', 'simulated', 'skipped']),
+  "communicationIds": zod.array(zod.number()),
+  "liveSendAuthorized": zod.boolean(),
+  "reason": zod.string()
+}))
+})),
+  "policy": zod.object({
+  "explanation": zod.string(),
+  "rawFindingsExposed": zod.boolean(),
+  "automaticEmploymentDecision": zod.boolean(),
+  "bGVClearAuthorityChanged": zod.boolean()
+})
+})
+
+
+/**
+ * Saves explicit recipient purpose authorization and safe coordination metadata. It never mutates BGV evidence or employment state. Owner/admin HR roles may save real recipient configuration; Demo Organization members may save simulation-only configuration. Requires the current optimistic version.
+ * @summary Save case-scoped BGV notification recipients and coordination metadata
+ */
+
+
+
+export const UpdateOnboardingBgvNotificationsParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+
+
+
+
+export const UpdateOnboardingBgvNotificationsBody = zod.object({
+  "version": zod.number().min(1),
+  "config": zod.object({
+  "version": zod.number().min(1),
+  "flags": zod.object({
+  "candidateActionRequired": zod.boolean().optional(),
+  "providerActionRequired": zod.boolean().optional(),
+  "startDateAtRisk": zod.boolean().optional(),
+  "coordinationRequired": zod.boolean().optional(),
+  "dependentWorkOnHold": zod.boolean().optional()
+}).optional(),
+  "hr": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "bgvTeam": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "recruiter": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "hiringManager": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "compliance": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "candidate": zod.object({
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional()
+})
+})
+
+
+
+
+
+export const UpdateOnboardingBgvNotificationsResponse = zod.object({
+  "caseId": zod.number(),
+  "version": zod.number().min(1),
+  "config": zod.object({
+  "version": zod.number().min(1),
+  "flags": zod.object({
+  "candidateActionRequired": zod.boolean().optional(),
+  "providerActionRequired": zod.boolean().optional(),
+  "startDateAtRisk": zod.boolean().optional(),
+  "coordinationRequired": zod.boolean().optional(),
+  "dependentWorkOnHold": zod.boolean().optional()
+}).optional(),
+  "hr": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "bgvTeam": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "recruiter": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "hiringManager": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "compliance": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "candidate": zod.object({
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional()
+}),
+  "authority": zod.object({
+  "canManage": zod.boolean(),
+  "offline": zod.boolean(),
+  "reason": zod.string().nullable()
+}),
+  "effectiveFlags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "currentCycle": zod.union([zod.object({
+  "cycleId": zod.string(),
+  "episode": zod.enum(['blocked', 'release']),
+  "source": zod.enum(['webhook', 'scheduled-poll', 'status-email', 'overdue', 'reopened', 'hr-reconcile', 'unknown']),
+  "sourceProvenance": zod.enum(['trusted-provider', 'human-authorized', 'simulated', 'offline', 'unknown']),
+  "classifications": zod.array(zod.enum(['delay', 'missing-info', 'discrepancy', 'review-required'])),
+  "flags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "createdAt": zod.coerce.date(),
+  "notifications": zod.array(zod.object({
+  "role": zod.enum(['hr', 'bgvTeam', 'recruiter', 'hiringManager', 'compliance', 'candidate']),
+  "displayName": zod.string(),
+  "email": zod.string().nullable(),
+  "configured": zod.boolean(),
+  "purpose": zod.string(),
+  "actualDeliveryState": zod.enum(['missing-recipient', 'queued', 'sent', 'failed', 'uncertain', 'simulated', 'skipped']),
+  "communicationIds": zod.array(zod.number()),
+  "liveSendAuthorized": zod.boolean(),
+  "reason": zod.string()
+}))
+}),zod.null()]),
+  "cycles": zod.array(zod.object({
+  "cycleId": zod.string(),
+  "episode": zod.enum(['blocked', 'release']),
+  "source": zod.enum(['webhook', 'scheduled-poll', 'status-email', 'overdue', 'reopened', 'hr-reconcile', 'unknown']),
+  "sourceProvenance": zod.enum(['trusted-provider', 'human-authorized', 'simulated', 'offline', 'unknown']),
+  "classifications": zod.array(zod.enum(['delay', 'missing-info', 'discrepancy', 'review-required'])),
+  "flags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "createdAt": zod.coerce.date(),
+  "notifications": zod.array(zod.object({
+  "role": zod.enum(['hr', 'bgvTeam', 'recruiter', 'hiringManager', 'compliance', 'candidate']),
+  "displayName": zod.string(),
+  "email": zod.string().nullable(),
+  "configured": zod.boolean(),
+  "purpose": zod.string(),
+  "actualDeliveryState": zod.enum(['missing-recipient', 'queued', 'sent', 'failed', 'uncertain', 'simulated', 'skipped']),
+  "communicationIds": zod.array(zod.number()),
+  "liveSendAuthorized": zod.boolean(),
+  "reason": zod.string()
+}))
+})),
+  "policy": zod.object({
+  "explanation": zod.string(),
+  "rawFindingsExposed": zod.boolean(),
+  "automaticEmploymentDecision": zod.boolean(),
+  "bGVClearAuthorityChanged": zod.boolean()
+})
+})
+
+
+/**
+ * Creates missing current-cycle communications and retries only definite failures. Unknown provider outcomes are never replayed. Synthetic, offline, and demo transitions stay simulated or skipped and cannot live-send.
+ * @summary Reconcile current BGV stakeholder notifications
+ */
+
+
+
+export const ReconcileOnboardingBgvNotificationsParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+export const ReconcileOnboardingBgvNotificationsBody = zod.object({
+  "reason": zod.enum(['manual', 'heartbeat', 'startup']).optional(),
+  "simulation": zod.boolean().optional()
+})
+
+
+
+
+
+export const ReconcileOnboardingBgvNotificationsResponse = zod.object({
+  "caseId": zod.number(),
+  "version": zod.number().min(1),
+  "config": zod.object({
+  "version": zod.number().min(1),
+  "flags": zod.object({
+  "candidateActionRequired": zod.boolean().optional(),
+  "providerActionRequired": zod.boolean().optional(),
+  "startDateAtRisk": zod.boolean().optional(),
+  "coordinationRequired": zod.boolean().optional(),
+  "dependentWorkOnHold": zod.boolean().optional()
+}).optional(),
+  "hr": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "bgvTeam": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "recruiter": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "hiringManager": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "compliance": zod.object({
+  "email": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional(),
+  "candidate": zod.object({
+  "enabled": zod.boolean(),
+  "purposeAuthorized": zod.boolean()
+}).optional()
+}),
+  "authority": zod.object({
+  "canManage": zod.boolean(),
+  "offline": zod.boolean(),
+  "reason": zod.string().nullable()
+}),
+  "effectiveFlags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "currentCycle": zod.union([zod.object({
+  "cycleId": zod.string(),
+  "episode": zod.enum(['blocked', 'release']),
+  "source": zod.enum(['webhook', 'scheduled-poll', 'status-email', 'overdue', 'reopened', 'hr-reconcile', 'unknown']),
+  "sourceProvenance": zod.enum(['trusted-provider', 'human-authorized', 'simulated', 'offline', 'unknown']),
+  "classifications": zod.array(zod.enum(['delay', 'missing-info', 'discrepancy', 'review-required'])),
+  "flags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "createdAt": zod.coerce.date(),
+  "notifications": zod.array(zod.object({
+  "role": zod.enum(['hr', 'bgvTeam', 'recruiter', 'hiringManager', 'compliance', 'candidate']),
+  "displayName": zod.string(),
+  "email": zod.string().nullable(),
+  "configured": zod.boolean(),
+  "purpose": zod.string(),
+  "actualDeliveryState": zod.enum(['missing-recipient', 'queued', 'sent', 'failed', 'uncertain', 'simulated', 'skipped']),
+  "communicationIds": zod.array(zod.number()),
+  "liveSendAuthorized": zod.boolean(),
+  "reason": zod.string()
+}))
+}),zod.null()]),
+  "cycles": zod.array(zod.object({
+  "cycleId": zod.string(),
+  "episode": zod.enum(['blocked', 'release']),
+  "source": zod.enum(['webhook', 'scheduled-poll', 'status-email', 'overdue', 'reopened', 'hr-reconcile', 'unknown']),
+  "sourceProvenance": zod.enum(['trusted-provider', 'human-authorized', 'simulated', 'offline', 'unknown']),
+  "classifications": zod.array(zod.enum(['delay', 'missing-info', 'discrepancy', 'review-required'])),
+  "flags": zod.object({
+  "delay": zod.boolean(),
+  "missingInfo": zod.boolean(),
+  "discrepancy": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "candidateActionRequired": zod.boolean(),
+  "providerActionRequired": zod.boolean(),
+  "startDateAtRisk": zod.boolean(),
+  "coordinationRequired": zod.boolean(),
+  "dependentWorkOnHold": zod.boolean()
+}),
+  "createdAt": zod.coerce.date(),
+  "notifications": zod.array(zod.object({
+  "role": zod.enum(['hr', 'bgvTeam', 'recruiter', 'hiringManager', 'compliance', 'candidate']),
+  "displayName": zod.string(),
+  "email": zod.string().nullable(),
+  "configured": zod.boolean(),
+  "purpose": zod.string(),
+  "actualDeliveryState": zod.enum(['missing-recipient', 'queued', 'sent', 'failed', 'uncertain', 'simulated', 'skipped']),
+  "communicationIds": zod.array(zod.number()),
+  "liveSendAuthorized": zod.boolean(),
+  "reason": zod.string()
+}))
+})),
+  "policy": zod.object({
+  "explanation": zod.string(),
+  "rawFindingsExposed": zod.boolean(),
+  "automaticEmploymentDecision": zod.boolean(),
+  "bGVClearAuthorityChanged": zod.boolean()
+})
+}).and(zod.object({
+  "createdCommunicationIds": zod.array(zod.number()),
+  "retriedCommunicationIds": zod.array(zod.number()),
+  "skippedCommunicationIds": zod.array(zod.number())
+}))
+
+
+/**
  * @summary Complete or reopen a custom item in a case's immutable checklist snapshot
  */
 

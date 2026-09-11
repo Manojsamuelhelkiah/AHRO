@@ -127,6 +127,7 @@ export function matchCheckByRef<T extends { externalRef: string; organizationId?
 /* ------------------------------------------------------------------ */
 
 type OpenCheck = typeof onbSystemChecks.$inferSelect;
+type WatchEmailProvenance = "trusted-provider" | "simulated" | "unknown";
 
 /** Is this sender allowed to change check state via email? */
 export function senderTrusted(
@@ -149,8 +150,8 @@ export function senderTrusted(
  * id is recorded so later polls skip the message. Returns the action
  * taken, or null when the message was already recorded.
  *
- * `trusted: true` is only set by the internal demo simulator; real
- * emails are checked against WATCH_EMAIL_TRUSTED_SENDERS.
+ * Provenance is explicit: the internal simulator passes `simulated`; real
+ * emails pass `trusted-provider` only after the sender allowlist check.
  */
 export async function applyWatchEmail(opts: {
   organizationId?: string;
@@ -159,7 +160,7 @@ export async function applyWatchEmail(opts: {
   fromAddress: string;
   subject: string | null;
   bodyText: string;
-  trusted?: boolean;
+  provenance?: WatchEmailProvenance;
 }): Promise<string | null> {
   // Public/request-driven callers must provide the authenticated tenant.
   // Legacy internal probes without one fail closed.
@@ -174,7 +175,13 @@ export async function applyWatchEmail(opts: {
       and ${onbWatchEmails.organizationId} = ${organizationId}`);
   if (seen) return null; // already processed
 
-  const trusted = opts.trusted ?? senderTrusted(opts.fromAddress);
+  // Provenance is an explicit boundary: only the authenticated simulator may
+  // use simulated provenance, and real inbound mail must independently pass
+  // the sender allowlist. Missing provenance is fail-closed.
+  const provenance = opts.provenance ?? "unknown";
+  const trusted =
+    provenance === "simulated" ||
+    (provenance === "trusted-provider" && senderTrusted(opts.fromAddress));
   const parsed = parseStatusEmail(`${opts.subject ?? ""}\n${opts.bodyText}`);
   const def = systemDef(opts.check.system);
   const label = def?.label ?? opts.check.system;
@@ -214,12 +221,19 @@ export async function applyWatchEmail(opts: {
   }
   if (trusted && applicable) {
     if (parsed === "completed") {
-      await completeCheck(opts.check, "status email");
+      await completeCheck(
+        opts.check,
+        "status email",
+        provenance === "trusted-provider" ? "trusted-provider" : "simulated",
+      );
     } else if (parsed === "exception") {
       await escalateCheck(
         opts.check,
         `A status email from ${opts.fromAddress} reported an exception for ${opts.check.externalRef}: "${(opts.subject ?? opts.bodyText).slice(0, 120)}".`,
         "email",
+        "status-email",
+        provenance === "trusted-provider" ? "trusted-provider" : "simulated",
+        ["discrepancy", "review-required"],
       );
     } else {
       await db
@@ -277,6 +291,7 @@ export type WatchPollDeps = {
     fromAddress: string;
     subject: string | null;
     bodyText: string;
+    provenance?: WatchEmailProvenance;
   }) => Promise<string | null>;
 };
 
@@ -300,13 +315,18 @@ export async function processWatchMessageRefs(
     // references anywhere in the shared mailbox are quarantined.
     const check = matchCheckByRef(checks, `${subject ?? ""}\n${body}`);
     if (!check || await deps.alreadyRecorded(ref.id)) continue;
+    const fromAddress = extractAddress(header(msg, "From"));
+    const provenance: WatchEmailProvenance = senderTrusted(fromAddress)
+      ? "trusted-provider"
+      : "unknown";
     const action = await deps.apply({
       organizationId: check.organizationId,
       gmailMessageId: msg.id,
       check,
-      fromAddress: extractAddress(header(msg, "From")),
+      fromAddress,
       subject,
       bodyText: body,
+      provenance,
     });
     if (action) {
       console.log(
@@ -420,7 +440,7 @@ export async function simulateVendorEmail(opts: {
     fromAddress: "no-reply@vendor-notifications.example",
     subject,
     bodyText,
-    trusted: true, // internal demo path — not a real inbound email
+    provenance: "simulated",
   });
   return { ok: true, message: action ?? "Duplicate — already processed" };
 }

@@ -2856,6 +2856,193 @@ export interface OnbCommunication {
   createdAt: string;
 }
 
+export type BgvNotificationClassification = typeof BgvNotificationClassification[keyof typeof BgvNotificationClassification];
+
+
+export const BgvNotificationClassification = {
+  delay: 'delay',
+  'missing-info': 'missing-info',
+  discrepancy: 'discrepancy',
+  'review-required': 'review-required',
+} as const;
+
+export type BgvNotificationRole = typeof BgvNotificationRole[keyof typeof BgvNotificationRole];
+
+
+export const BgvNotificationRole = {
+  hr: 'hr',
+  bgvTeam: 'bgvTeam',
+  recruiter: 'recruiter',
+  hiringManager: 'hiringManager',
+  compliance: 'compliance',
+  candidate: 'candidate',
+} as const;
+
+export type BgvNotificationDeliveryState = typeof BgvNotificationDeliveryState[keyof typeof BgvNotificationDeliveryState];
+
+
+export const BgvNotificationDeliveryState = {
+  'missing-recipient': 'missing-recipient',
+  queued: 'queued',
+  sent: 'sent',
+  failed: 'failed',
+  uncertain: 'uncertain',
+  simulated: 'simulated',
+  skipped: 'skipped',
+} as const;
+
+export interface BgvNotificationFlags {
+  delay: boolean;
+  missingInfo: boolean;
+  discrepancy: boolean;
+  reviewRequired: boolean;
+  candidateActionRequired: boolean;
+  providerActionRequired: boolean;
+  startDateAtRisk: boolean;
+  coordinationRequired: boolean;
+  dependentWorkOnHold: boolean;
+}
+
+export interface BgvNotificationRecipientConfig {
+  /** @nullable */
+  email: string | null;
+  enabled: boolean;
+  purposeAuthorized: boolean;
+}
+
+export type BgvNotificationConfigFlags = {
+  candidateActionRequired?: boolean;
+  providerActionRequired?: boolean;
+  startDateAtRisk?: boolean;
+  coordinationRequired?: boolean;
+  dependentWorkOnHold?: boolean;
+};
+
+export type BgvNotificationConfigCandidate = {
+  enabled: boolean;
+  purposeAuthorized: boolean;
+};
+
+export interface BgvNotificationConfig {
+  /** @minimum 1 */
+  version: number;
+  flags?: BgvNotificationConfigFlags;
+  hr?: BgvNotificationRecipientConfig;
+  bgvTeam?: BgvNotificationRecipientConfig;
+  recruiter?: BgvNotificationRecipientConfig;
+  hiringManager?: BgvNotificationRecipientConfig;
+  compliance?: BgvNotificationRecipientConfig;
+  candidate?: BgvNotificationConfigCandidate;
+}
+
+export interface BgvNotificationAuthority {
+  canManage: boolean;
+  offline: boolean;
+  /** @nullable */
+  reason: string | null;
+}
+
+export interface BgvNotificationRecipient {
+  role: BgvNotificationRole;
+  displayName: string;
+  /** @nullable */
+  email: string | null;
+  configured: boolean;
+  purpose: string;
+  actualDeliveryState: BgvNotificationDeliveryState;
+  communicationIds: number[];
+  liveSendAuthorized: boolean;
+  reason: string;
+}
+
+export type BgvNotificationCycleEpisode = typeof BgvNotificationCycleEpisode[keyof typeof BgvNotificationCycleEpisode];
+
+
+export const BgvNotificationCycleEpisode = {
+  blocked: 'blocked',
+  release: 'release',
+} as const;
+
+export type BgvNotificationCycleSource = typeof BgvNotificationCycleSource[keyof typeof BgvNotificationCycleSource];
+
+
+export const BgvNotificationCycleSource = {
+  webhook: 'webhook',
+  'scheduled-poll': 'scheduled-poll',
+  'status-email': 'status-email',
+  overdue: 'overdue',
+  reopened: 'reopened',
+  'hr-reconcile': 'hr-reconcile',
+  unknown: 'unknown',
+} as const;
+
+export type BgvNotificationCycleSourceProvenance = typeof BgvNotificationCycleSourceProvenance[keyof typeof BgvNotificationCycleSourceProvenance];
+
+
+export const BgvNotificationCycleSourceProvenance = {
+  'trusted-provider': 'trusted-provider',
+  'human-authorized': 'human-authorized',
+  simulated: 'simulated',
+  offline: 'offline',
+  unknown: 'unknown',
+} as const;
+
+export interface BgvNotificationCycle {
+  cycleId: string;
+  episode: BgvNotificationCycleEpisode;
+  source: BgvNotificationCycleSource;
+  sourceProvenance: BgvNotificationCycleSourceProvenance;
+  classifications: BgvNotificationClassification[];
+  flags: BgvNotificationFlags;
+  createdAt: string;
+  notifications: BgvNotificationRecipient[];
+}
+
+export type OnboardingBgvNotificationsEnvelopePolicy = {
+  explanation: string;
+  rawFindingsExposed: false;
+  automaticEmploymentDecision: false;
+  bGVClearAuthorityChanged: false;
+};
+
+export interface OnboardingBgvNotificationsEnvelope {
+  caseId: number;
+  /** @minimum 1 */
+  version: number;
+  config: BgvNotificationConfig;
+  authority: BgvNotificationAuthority;
+  effectiveFlags: BgvNotificationFlags;
+  currentCycle: BgvNotificationCycle | null;
+  cycles: BgvNotificationCycle[];
+  policy: OnboardingBgvNotificationsEnvelopePolicy;
+}
+
+export interface UpdateOnboardingBgvNotificationsRequest {
+  /** @minimum 1 */
+  version: number;
+  config: BgvNotificationConfig;
+}
+
+export type ReconcileOnboardingBgvNotificationsRequestReason = typeof ReconcileOnboardingBgvNotificationsRequestReason[keyof typeof ReconcileOnboardingBgvNotificationsRequestReason];
+
+
+export const ReconcileOnboardingBgvNotificationsRequestReason = {
+  manual: 'manual',
+  heartbeat: 'heartbeat',
+  startup: 'startup',
+} as const;
+
+export interface ReconcileOnboardingBgvNotificationsRequest {
+  reason?: ReconcileOnboardingBgvNotificationsRequestReason;
+  simulation?: boolean;
+}
+
+export type ReconcileOnboardingBgvNotificationsResult = OnboardingBgvNotificationsEnvelope & {
+  createdCommunicationIds: number[];
+  retriedCommunicationIds: number[];
+  skippedCommunicationIds: number[];
+};
+
 export type OnbOperationalRequestMethod = typeof OnbOperationalRequestMethod[keyof typeof OnbOperationalRequestMethod];
 
 

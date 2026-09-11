@@ -11,6 +11,15 @@ if (!process.env.DATABASE_URL) {
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Bounded, separate sessions for work that must hold a PostgreSQL advisory
+// lock while the regular application pool performs nested queries.
+export const bgvNotificationLockPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 32,
+  connectionTimeoutMillis: 5_000,
+  idleTimeoutMillis: 30_000,
+  allowExitOnIdle: true,
+});
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";

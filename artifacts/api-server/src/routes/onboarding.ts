@@ -36,6 +36,8 @@ import {
   GetOnboardingOutcomeKpisQueryParams,
   InitializeOnboardingOperationalRequestsBody,
   ApplyOnboardingOperationalRequestActionBody,
+  GetOnboardingBgvNotificationsParams,
+  ReconcileOnboardingBgvNotificationsBody,
 } from "@workspace/api-zod";
 import {
   defaultReadiness,
@@ -175,6 +177,16 @@ import {
   isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
+import {
+  canManageBgvNotifications,
+  getBgvNotifications,
+  updateBgvNotifications,
+  parseBgvNotificationUpdateBody,
+  reconcileBgvNotifications,
+  BgvNotificationConflictError,
+  BgvNotificationNotFoundError,
+  BgvNotificationValidationError,
+} from "../lib/onboarding/bgv-notifications";
 import {
   DEMO_LOGIN_EMAIL,
   SHARED_DEMO_REVIEWER_METADATA_KEY,
@@ -961,6 +973,101 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
     res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
   } catch (err) {
     next(err);
+  }
+});
+
+/* ----------------------- BGV stakeholder notices ----------------------- */
+
+router.get("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next) => {
+  try {
+    const { caseId } = GetOnboardingBgvNotificationsParams.parse(req.params);
+    const result = await getBgvNotifications({
+      organizationId: getOrganizationId(req),
+      caseId,
+      role: req.organizationRole,
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof BgvNotificationNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.put("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next) => {
+  try {
+    const { caseId } = GetOnboardingBgvNotificationsParams.parse(req.params);
+    const body = parseBgvNotificationUpdateBody(req.body);
+    if (!canManageBgvNotifications(getOrganizationId(req), req.organizationRole)) {
+      res.status(403).json({
+        message: "Owner or admin HR role required for BGV recipient configuration; Demo Organization members may save simulation-only configuration.",
+      });
+      return;
+    }
+    const result = await updateBgvNotifications({
+      organizationId: getOrganizationId(req),
+      caseId,
+      role: req.organizationRole,
+      version: body.version,
+      config: body.config,
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof BgvNotificationNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+    if (error instanceof BgvNotificationValidationError) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    if (error instanceof BgvNotificationConflictError) {
+      res.status(409).json({
+        message: error.message,
+        ...(error.currentVersion === undefined ? {} : { version: error.currentVersion }),
+      });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.post("/onboarding/cases/:caseId/bgv-notifications/reconcile", async (req, res, next) => {
+  try {
+    const { caseId } = GetOnboardingBgvNotificationsParams.parse(req.params);
+    const body = ReconcileOnboardingBgvNotificationsBody.parse(req.body ?? {});
+    if (!canManageBgvNotifications(getOrganizationId(req), req.organizationRole)) {
+      res.status(403).json({
+        message: "Owner or admin HR role required to reconcile BGV notifications; Demo Organization members may reconcile simulation-only notices.",
+      });
+      return;
+    }
+    const result = await reconcileBgvNotifications({
+      organizationId: getOrganizationId(req),
+      caseId,
+      role: req.organizationRole,
+      // HTTP is always an actor-initiated manual action. Heartbeat/startup
+      // values are reserved for the in-process watcher and cannot bypass
+      // authorization when supplied by a client.
+      reason: "manual",
+      simulation: body.simulation || getOrganizationId(req) === DEMO_ORGANIZATION_ID,
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof BgvNotificationNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+    if (error instanceof BgvNotificationConflictError) {
+      res.status(409).json({
+        message: error.message,
+        ...(error.currentVersion === undefined ? {} : { version: error.currentVersion }),
+      });
+      return;
+    }
+    next(error);
   }
 });
 
@@ -2423,6 +2530,10 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
       caseId,
       externalRef,
       status,
+      // This route is the sole trusted real-provider boundary. The
+      // in-process watcher calls the handler directly with simulated
+      // provenance and never reaches this route.
+      provenance: "trusted-provider",
     });
     res.status(result.ok ? 200 : result.message.startsWith("Unsupported") ? 400 : 404).json({ message: result.message });
   } catch (err) {
