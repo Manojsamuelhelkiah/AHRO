@@ -9,9 +9,18 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/require-auth";
 import { ORGANIZATION_HEADER } from "../middlewares/tenant-context";
+import demoControllerSetupRouter, {
+  requireSameOriginDemoSetup,
+} from "./organizations-demo-controller-setup";
 
 const router: IRouter = Router();
+
+// The setup value is returned only to the authenticated target, so establish
+// no-store and browser resource isolation before authentication can reject an
+// endpoint or any other organization route middleware can process it.
+router.use("/organizations/demo-controller-setup", requireSameOriginDemoSetup);
 router.use("/organizations", requireAuth);
+router.use(demoControllerSetupRouter);
 
 function hashJoinCode(value: string): string {
   return createHash("sha256").update(value.trim().toUpperCase()).digest("hex");
@@ -39,14 +48,16 @@ export async function ensureDemoOrganization(): Promise<void> {
 }
 
 function slugify(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "organization";
+  return (
+    value
+      .normalize("NFKD")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "organization"
+  );
 }
 
 router.get("/organizations/current", async (req, res, next): Promise<void> => {
@@ -68,8 +79,8 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
       .where(eq(organizationMembershipsTable.clerkUserId, userId))
       .orderBy(organizationMembershipsTable.createdAt);
     const activeOrganizationId = requested
-      ? memberships.find(({ organizationId }) => organizationId === requested)
-          ?.organizationId ?? null
+      ? (memberships.find(({ organizationId }) => organizationId === requested)
+          ?.organizationId ?? null)
       : memberships.length === 1
         ? memberships[0]!.organizationId
         : null;
@@ -86,7 +97,9 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
 router.post("/organizations", async (req, res, next): Promise<void> => {
   const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
   if (name.length < 2 || name.length > 100) {
-    res.status(400).json({ message: "Organization name must be 2–100 characters" });
+    res
+      .status(400)
+      .json({ message: "Organization name must be 2–100 characters" });
     return;
   }
   try {

@@ -4026,6 +4026,31 @@ export interface DemoControllerCapabilities {
   existingSessions: DemoRunSummary[];
 }
 
+export interface DemoControllerSetupRequest {
+  /** @minLength 1 */
+  requestId: string;
+  /**
+     * Opaque 256-bit value shown only to the authenticated requester.
+     * @minLength 64
+     */
+  approvalValue: string;
+  expiresAt: string;
+  approved: boolean;
+}
+
+export interface DemoControllerSetupResponse {
+  eligible: boolean;
+  /** @nullable */
+  reason: string | null;
+  request: DemoControllerSetupRequest | null;
+  completed: boolean;
+}
+
+export interface CompleteDemoControllerSetupBody {
+  /** @minLength 1 */
+  requestId: string;
+}
+
 export type DemoRunInputMode = typeof DemoRunInputMode[keyof typeof DemoRunInputMode];
 
 

@@ -6,6 +6,7 @@ import { Presentation, ShieldAlert, Play, Clock, AlertTriangle, ArrowRight } fro
 import type { DemoControllerCapabilities, DemoControllerVolunteer } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { DemoControllerAccessSetup } from './access-setup';
 
 export function DemoControllerIndexPage() {
   const { data: caps, isLoading, isError, refetch } = useGetOnboardingDemoController({
@@ -35,7 +36,7 @@ export function DemoControllerIndexPage() {
       <div className="max-w-2xl mx-auto space-y-6 pt-8">
         <Card className="p-8 text-center space-y-4">
           <ShieldAlert className="h-12 w-12 mx-auto text-[var(--status-red)]" />
-          <h2 className="text-xl font-bold">Access Restricted</h2>
+          <h2 className="text-xl font-bold">Demo Controller access required</h2>
           <p className="text-[var(--text-secondary)]">
             {caps.reason || 'Sign in and select Demo Organization to use Demo Center and its demo overrides.'}
           </p>
@@ -45,6 +46,7 @@ export function DemoControllerIndexPage() {
             </Link>
           </div>
         </Card>
+        <DemoControllerAccessSetup />
       </div>
     );
   }
@@ -55,6 +57,7 @@ export function DemoControllerIndexPage() {
         title="Demo Center" 
         subtitle="Available to every Demo Organization user. Run synthetic workflows and use demo overrides for presentation and training."
       />
+      <DemoControllerAccessSetup />
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">

@@ -24,11 +24,13 @@ import type {
   ActualsOverlayInput,
   ActualsOverlayRecord,
   ActualsValidationResult,
+  CompleteDemoControllerSetupBody,
   CorpusSummary,
   CustomIntent,
   CustomIntentInput,
   CustomIntentUpdate,
   DemoControllerCapabilities,
+  DemoControllerSetupResponse,
   DemoRun,
   DemoRunAction,
   DemoRunInput,
@@ -161,6 +163,228 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetDemoControllerSetupStatusUrl = () => {
+
+
+
+
+  return `/api/organizations/demo-controller-setup`
+}
+
+/**
+ * Returns only the authenticated Demo Organization member's own active setup request. The operator approval authority is a deployment secret and is never returned or logged.
+ * @summary Get the authenticated member's Demo Controller setup status
+ */
+export const getDemoControllerSetupStatus = async ( options?: RequestInit): Promise<DemoControllerSetupResponse> => {
+
+  return customFetch<DemoControllerSetupResponse>(getGetDemoControllerSetupStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDemoControllerSetupStatusQueryKey = () => {
+    return [
+    `/api/organizations/demo-controller-setup`
+    ] as const;
+    }
+
+
+export const getGetDemoControllerSetupStatusQueryOptions = <TData = Awaited<ReturnType<typeof getDemoControllerSetupStatus>>, TError = ErrorType<ErrorMessage>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDemoControllerSetupStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDemoControllerSetupStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDemoControllerSetupStatus>>> = ({ signal }) => getDemoControllerSetupStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDemoControllerSetupStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDemoControllerSetupStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getDemoControllerSetupStatus>>>
+export type GetDemoControllerSetupStatusQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get the authenticated member's Demo Controller setup status
+ */
+
+export function useGetDemoControllerSetupStatus<TData = Awaited<ReturnType<typeof getDemoControllerSetupStatus>>, TError = ErrorType<ErrorMessage>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDemoControllerSetupStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDemoControllerSetupStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRequestDemoControllerSetupUrl = () => {
+
+
+
+
+  return `/api/organizations/demo-controller-setup/request`
+}
+
+/**
+ * Issues or reuses the authenticated member's active 24-hour request. The returned opaque value must be provided privately to the deployment operator, who sets DEMO_CONTROLLER_SETUP_APPROVAL to that exact value.
+ * @summary Request a one-time Demo Controller setup approval
+ */
+export const requestDemoControllerSetup = async ( options?: RequestInit): Promise<DemoControllerSetupResponse> => {
+
+  return customFetch<DemoControllerSetupResponse>(getRequestDemoControllerSetupUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRequestDemoControllerSetupMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestDemoControllerSetup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestDemoControllerSetup>>, TError,void, TContext> => {
+
+const mutationKey = ['requestDemoControllerSetup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestDemoControllerSetup>>, void> = () => {
+
+
+          return  requestDemoControllerSetup(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestDemoControllerSetupMutationResult = NonNullable<Awaited<ReturnType<typeof requestDemoControllerSetup>>>
+
+    export type RequestDemoControllerSetupMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Request a one-time Demo Controller setup approval
+ */
+export const useRequestDemoControllerSetup = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestDemoControllerSetup>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestDemoControllerSetup>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRequestDemoControllerSetupMutationOptions(options));
+    }
+
+export const getCompleteDemoControllerSetupUrl = () => {
+
+
+
+
+  return `/api/organizations/demo-controller-setup/complete`
+}
+
+/**
+ * Atomically consumes the exact request and grants Demo Organization admin only while no owner/admin exists. The durable grant is one-time per Demo Organization.
+ * @summary Complete the authenticated member's operator-approved setup
+ */
+export const completeDemoControllerSetup = async (completeDemoControllerSetupBody: CompleteDemoControllerSetupBody, options?: RequestInit): Promise<DemoControllerSetupResponse> => {
+
+  return customFetch<DemoControllerSetupResponse>(getCompleteDemoControllerSetupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(completeDemoControllerSetupBody)
+  }
+);}
+
+
+
+
+
+export const getCompleteDemoControllerSetupMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeDemoControllerSetup>>, TError,{data: BodyType<CompleteDemoControllerSetupBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeDemoControllerSetup>>, TError,{data: BodyType<CompleteDemoControllerSetupBody>}, TContext> => {
+
+const mutationKey = ['completeDemoControllerSetup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeDemoControllerSetup>>, {data: BodyType<CompleteDemoControllerSetupBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  completeDemoControllerSetup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteDemoControllerSetupMutationResult = NonNullable<Awaited<ReturnType<typeof completeDemoControllerSetup>>>
+    export type CompleteDemoControllerSetupMutationBody = BodyType<CompleteDemoControllerSetupBody>
+    export type CompleteDemoControllerSetupMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Complete the authenticated member's operator-approved setup
+ */
+export const useCompleteDemoControllerSetup = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeDemoControllerSetup>>, TError,{data: BodyType<CompleteDemoControllerSetupBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeDemoControllerSetup>>,
+        TError,
+        {data: BodyType<CompleteDemoControllerSetupBody>},
+        TContext
+      > => {
+      return useMutation(getCompleteDemoControllerSetupMutationOptions(options));
+    }
 
 export const getGetOnboardingDemoControllerUrl = () => {
 

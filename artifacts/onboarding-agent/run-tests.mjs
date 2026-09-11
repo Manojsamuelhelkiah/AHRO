@@ -1,7 +1,7 @@
 // Bundles the TS test files with esbuild and runs them with node's test runner.
 import { build } from "esbuild";
 import { spawnSync } from "node:child_process";
-import { globSync } from "node:fs";
+import { existsSync, globSync, rmSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -11,32 +11,105 @@ const entryPoints = [
   ...globSync("src/**/*.test.ts", { cwd: dir }),
   ...globSync("src/**/*.test.tsx", { cwd: dir }),
 ].map((f) => path.join(dir, f));
+const integratedEntryPoint = path.join(
+  dir,
+  "src/pages/demo-controller/access-setup.integration.test.tsx",
+);
+const standardEntryPoints = entryPoints.filter(
+  (entryPoint) => entryPoint !== integratedEntryPoint,
+);
 
 if (entryPoints.length === 0) {
   console.error("No test files found");
   process.exit(1);
 }
 
-await build({
-  entryPoints,
-  outdir: path.join(dir, "dist-test"),
+rmSync(path.join(dir, "dist-test"), { recursive: true, force: true });
+
+const commonBuildOptions = {
   bundle: true,
   platform: "node",
   format: "esm",
   target: "node20",
   outExtension: { ".js": ".mjs" },
   jsx: "automatic",
-  external: ["node:*", ...builtinModules],
   // react-dom/server (cjs) does require("util") etc.; when bundled to esm the
   // externalized require needs a real implementation.
   banner: {
     js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
   },
-});
+};
+
+if (standardEntryPoints.length > 0) {
+  await build({
+    ...commonBuildOptions,
+    entryPoints: standardEntryPoints,
+    outdir: path.join(dir, "dist-test"),
+    external: ["node:*", ...builtinModules],
+  });
+}
+
+if (entryPoints.includes(integratedEntryPoint)) {
+  await build({
+    ...commonBuildOptions,
+    entryPoints: [integratedEntryPoint],
+    outdir: path.join(dir, "dist-test/integration"),
+    external: [
+      "node:*",
+      ...builtinModules,
+      "happy-dom",
+      "react",
+      "react-dom",
+      "react-dom/*",
+      "@tanstack/react-query",
+    ],
+    plugins: [
+      {
+        name: "demo-controller-integration-stubs",
+        setup(build) {
+          build.onResolve({ filter: /^@clerk\/react$/ }, () => ({
+            path: "demo-controller-clerk-test-stub",
+            namespace: "demo-controller-test",
+          }));
+          build.onLoad(
+            {
+              filter: /^demo-controller-clerk-test-stub$/,
+              namespace: "demo-controller-test",
+            },
+            () => ({
+              loader: "js",
+              contents:
+                [
+                  'import React, { createContext, useContext } from "react";',
+                  "const UserContext = createContext({ user: null });",
+                  "export function ClerkProvider({ children, user }) {",
+                  "  return React.createElement(UserContext.Provider, { value: { user } }, children);",
+                  "}",
+                  "export function useUser() { return useContext(UserContext); }",
+                ].join("\n"),
+            }),
+          );
+          build.onResolve({ filter: /^@\// }, (args) => {
+            const basePath = path.join(dir, "src", args.path.slice(2));
+            const resolvedPath = [basePath, `${basePath}.ts`, `${basePath}.tsx`].find(
+              (candidate) => existsSync(candidate),
+            );
+            return { path: resolvedPath ?? basePath };
+          });
+        },
+      },
+    ],
+  });
+}
 
 const result = spawnSync(
   process.execPath,
-  ["--test", ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).map((f) => path.join(dir, f))],
+  [
+    "--test",
+    ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).map((f) =>
+      path.join(dir, f),
+    ),
+  ],
   { stdio: "inherit" },
 );
 process.exit(result.status ?? 1);

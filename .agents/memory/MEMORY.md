@@ -43,3 +43,4 @@
 - [Case explanation boundaries](case-explanation-boundaries.md) — explain recorded evidence, not hidden reasoning; current policy cannot prove historical rationale; chat stays read-only and scope-isolated.
 - [Synthetic case refresh](synthetic-case-refresh.md) — explicit inventory, authoritative offline mode, dispatch/deletion locking, and retained private file references protect real data and recipients.
 - [Hybrid demo boundaries](demo-controller-boundaries.md) — Demo Organization run scope, explicit volunteer outreach, and truthful simulation without changing real employment evidence.
+- [Demo bootstrap approval](demo-bootstrap-approval.md) — initial Demo authority needs private operator approval; managed Clerk metadata editing is not an available setup path.

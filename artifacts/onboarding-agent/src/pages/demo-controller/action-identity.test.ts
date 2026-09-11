@@ -1,5 +1,7 @@
 import { getRequestIdForAction } from './action-identity';
 import type { DemoRunAction } from '@workspace/api-client-react';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 
 const mockGenerateId = (() => {
   let count = 0;
@@ -14,9 +16,9 @@ describe('getRequestIdForAction', () => {
     };
     
     const { requestId, nextAttempt } = getRequestIdForAction(payload, null, mockGenerateId);
-    expect(requestId).toBe('mock-uuid-1');
-    expect(nextAttempt.payload).toEqual(payload);
-    expect(nextAttempt.requestId).toBe('mock-uuid-1');
+    assert.equal(requestId, 'mock-uuid-1');
+    assert.deepEqual(nextAttempt.payload, payload);
+    assert.equal(nextAttempt.requestId, 'mock-uuid-1');
   });
 
   it('reuses the same ID for identical payloads', () => {
@@ -28,8 +30,8 @@ describe('getRequestIdForAction', () => {
     const first = getRequestIdForAction(payload, null, () => 'fixed-id');
     const second = getRequestIdForAction(payload, first.nextAttempt, () => 'should-not-use');
     
-    expect(second.requestId).toBe('fixed-id');
-    expect(second.nextAttempt).toEqual(first.nextAttempt);
+    assert.equal(second.requestId, 'fixed-id');
+    assert.deepEqual(second.nextAttempt, first.nextAttempt);
   });
 
   it('generates a new ID when version changes', () => {
@@ -39,7 +41,7 @@ describe('getRequestIdForAction', () => {
     const first = getRequestIdForAction(payload1, null, () => 'id-1');
     const second = getRequestIdForAction(payload2, first.nextAttempt, () => 'id-2');
     
-    expect(second.requestId).toBe('id-2');
+    assert.equal(second.requestId, 'id-2');
   });
 
   it('generates a new ID when action properties change', () => {
@@ -59,6 +61,6 @@ describe('getRequestIdForAction', () => {
     const first = getRequestIdForAction(payload1, null, () => 'id-1');
     const second = getRequestIdForAction(payload2, first.nextAttempt, () => 'id-2');
     
-    expect(second.requestId).toBe('id-2');
+    assert.equal(second.requestId, 'id-2');
   });
 });

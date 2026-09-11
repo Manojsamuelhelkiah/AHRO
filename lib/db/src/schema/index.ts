@@ -10,3 +10,4 @@ export * from "./pricing-sheets";
 export * from "./enterprise-architecture";
 export * from "./candidate-portal";
 export * from "./onboarding-sla";
+export * from "./demo-controller-setup";

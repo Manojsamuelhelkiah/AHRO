@@ -163,6 +163,10 @@ import {
   isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
+import {
+  DEMO_LOGIN_EMAIL,
+  SHARED_DEMO_REVIEWER_METADATA_KEY,
+} from "../lib/demo-reviewer";
 
 const router: IRouter = Router();
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
@@ -184,7 +188,6 @@ function requireHrChecklistRole(
  * Clerk sign-in ticket for THAT ACCOUNT ONLY (equivalent access to the
  * already-public demo credentials — no other account can be minted).
  */
-const DEMO_LOGIN_EMAIL = "demo.reviewer@example.com";
 // Publicly documented demo credential (also prefilled on the login page).
 const DEMO_LOGIN_PASSWORD = "OnboardOS-Demo-2026!";
 
@@ -194,9 +197,18 @@ const DEMO_LOGIN_PASSWORD = "OnboardOS-Demo-2026!";
  * account must be self-healing — otherwise a fresh publish has no demo user.
  * Handles the create/create race by re-fetching on a creation conflict.
  */
+async function markDemoReviewer(user: Awaited<ReturnType<typeof clerkClient.users.getUser>>) {
+  return clerkClient.users.updateUser(user.id, {
+    privateMetadata: {
+      ...user.privateMetadata,
+      [SHARED_DEMO_REVIEWER_METADATA_KEY]: true,
+    },
+  });
+}
+
 async function ensureDemoUser() {
   const found = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
-  if (found.data[0]) return found.data[0];
+  if (found.data[0]) return markDemoReviewer(found.data[0]);
   try {
     return await clerkClient.users.createUser({
       emailAddress: [DEMO_LOGIN_EMAIL],
@@ -204,11 +216,14 @@ async function ensureDemoUser() {
       firstName: "Demo",
       lastName: "Reviewer",
       skipPasswordChecks: true,
+      privateMetadata: {
+        [SHARED_DEMO_REVIEWER_METADATA_KEY]: true,
+      },
     });
   } catch (err) {
     // Another request may have created it concurrently — re-fetch before failing.
     const refetched = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
-    if (refetched.data[0]) return refetched.data[0];
+    if (refetched.data[0]) return markDemoReviewer(refetched.data[0]);
     throw err;
   }
 }

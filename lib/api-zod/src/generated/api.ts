@@ -9,6 +9,79 @@ import * as zod from 'zod';
 
 
 /**
+ * Returns only the authenticated Demo Organization member's own active setup request. The operator approval authority is a deployment secret and is never returned or logged.
+ * @summary Get the authenticated member's Demo Controller setup status
+ */
+
+export const getDemoControllerSetupStatusResponseRequestOneApprovalValueMin = 64;
+
+
+
+export const GetDemoControllerSetupStatusResponse = zod.object({
+  "eligible": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "request": zod.union([zod.object({
+  "requestId": zod.string().min(1),
+  "approvalValue": zod.string().min(getDemoControllerSetupStatusResponseRequestOneApprovalValueMin).describe('Opaque 256-bit value shown only to the authenticated requester.'),
+  "expiresAt": zod.coerce.date(),
+  "approved": zod.boolean()
+}),zod.null()]),
+  "completed": zod.boolean()
+})
+
+
+/**
+ * Issues or reuses the authenticated member's active 24-hour request. The returned opaque value must be provided privately to the deployment operator, who sets DEMO_CONTROLLER_SETUP_APPROVAL to that exact value.
+ * @summary Request a one-time Demo Controller setup approval
+ */
+
+export const requestDemoControllerSetupResponseRequestOneApprovalValueMin = 64;
+
+
+
+export const RequestDemoControllerSetupResponse = zod.object({
+  "eligible": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "request": zod.union([zod.object({
+  "requestId": zod.string().min(1),
+  "approvalValue": zod.string().min(requestDemoControllerSetupResponseRequestOneApprovalValueMin).describe('Opaque 256-bit value shown only to the authenticated requester.'),
+  "expiresAt": zod.coerce.date(),
+  "approved": zod.boolean()
+}),zod.null()]),
+  "completed": zod.boolean()
+})
+
+
+/**
+ * Atomically consumes the exact request and grants Demo Organization admin only while no owner/admin exists. The durable grant is one-time per Demo Organization.
+ * @summary Complete the authenticated member's operator-approved setup
+ */
+
+
+
+export const CompleteDemoControllerSetupBody = zod.object({
+  "requestId": zod.string().min(1)
+})
+
+
+export const completeDemoControllerSetupResponseRequestOneApprovalValueMin = 64;
+
+
+
+export const CompleteDemoControllerSetupResponse = zod.object({
+  "eligible": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "request": zod.union([zod.object({
+  "requestId": zod.string().min(1),
+  "approvalValue": zod.string().min(completeDemoControllerSetupResponseRequestOneApprovalValueMin).describe('Opaque 256-bit value shown only to the authenticated requester.'),
+  "expiresAt": zod.coerce.date(),
+  "approved": zod.boolean()
+}),zod.null()]),
+  "completed": zod.boolean()
+})
+
+
+/**
  * Returns the capability boundary for the selected tenant. Every authenticated Demo Organization member may create or mutate synthetic demo runs, including demo overrides. Authentication, tenant isolation, and approved-volunteer communication safeguards still apply.
  * @summary Get demo-controller capabilities and available scenarios
  */

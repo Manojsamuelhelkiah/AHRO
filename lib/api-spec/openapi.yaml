@@ -26,7 +26,129 @@ tags:
     description: Owner-scoped enterprise architecture assessments and reusable solution baseline
   - name: demoController
     description: Isolated, synthetic onboarding demonstrations with explicit simulated or approved live communications
+  - name: demoControllerSetup
+    description: One-time, operator-approved Demo Controller bootstrap for a member-only Demo Organization
 paths:
+  /organizations/demo-controller-setup:
+    get:
+      operationId: getDemoControllerSetupStatus
+      tags: [demoControllerSetup]
+      summary: Get the authenticated member's Demo Controller setup status
+      description: Returns only the authenticated Demo Organization member's own active setup request. The operator approval authority is a deployment secret and is never returned or logged.
+      responses:
+        "200":
+          description: Setup status
+          headers:
+            Cache-Control:
+              schema: { type: string, const: "no-store" }
+            Pragma:
+              schema: { type: string, const: "no-cache" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoControllerSetupResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Demo Organization scope or membership required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /organizations/demo-controller-setup/request:
+    post:
+      operationId: requestDemoControllerSetup
+      tags: [demoControllerSetup]
+      summary: Request a one-time Demo Controller setup approval
+      description: Issues or reuses the authenticated member's active 24-hour request. The returned opaque value must be provided privately to the deployment operator, who sets DEMO_CONTROLLER_SETUP_APPROVAL to that exact value.
+      responses:
+        "200":
+          description: Active setup request
+          headers:
+            Cache-Control:
+              schema: { type: string, const: "no-store" }
+            Pragma:
+              schema: { type: string, const: "no-cache" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoControllerSetupResponse"
+        "400":
+          description: Strict request-body validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Demo member required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: An existing Demo Controller or one-time grant prevents bootstrap
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /organizations/demo-controller-setup/complete:
+    post:
+      operationId: completeDemoControllerSetup
+      tags: [demoControllerSetup]
+      summary: Complete the authenticated member's operator-approved setup
+      description: Atomically consumes the exact request and grants Demo Organization admin only while no owner/admin exists. The durable grant is one-time per Demo Organization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteDemoControllerSetupBody"
+      responses:
+        "200":
+          description: Setup completed
+          headers:
+            Cache-Control:
+              schema: { type: string, const: "no-store" }
+            Pragma:
+              schema: { type: string, const: "no-cache" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoControllerSetupResponse"
+        "400":
+          description: Strict request-body validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Demo member or current operator approval required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Expired, consumed, stale, or no-longer-eligible request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/demo-controller:
     get:
       operationId: getOnboardingDemoController
@@ -7032,6 +7154,36 @@ components:
           items:
             $ref: "#/components/schemas/DemoRunSummary"
       required: [available, reason, organizationId, canCreateRuns, canDispatchLive, defaultMode, allowedSystems, scenarios, approvedVolunteers, existingSessions]
+    DemoControllerSetupRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        requestId: { type: string, minLength: 1 }
+        approvalValue:
+          type: string
+          minLength: 64
+          description: Opaque 256-bit value shown only to the authenticated requester.
+        expiresAt: { type: string, format: date-time }
+        approved: { type: boolean }
+      required: [requestId, approvalValue, expiresAt, approved]
+    DemoControllerSetupResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        eligible: { type: boolean }
+        reason: { type: ["string", "null"] }
+        request:
+          oneOf:
+            - $ref: "#/components/schemas/DemoControllerSetupRequest"
+            - type: "null"
+        completed: { type: boolean }
+      required: [eligible, reason, request, completed]
+    CompleteDemoControllerSetupBody:
+      type: object
+      additionalProperties: false
+      properties:
+        requestId: { type: string, minLength: 1 }
+      required: [requestId]
     DemoRunInput:
       type: object
       additionalProperties: false

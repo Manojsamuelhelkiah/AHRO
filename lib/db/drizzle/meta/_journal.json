@@ -344,6 +344,13 @@
       "when": 1789026000005,
       "tag": "0042_voice_provider_correlation",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789026000006,
+      "tag": "0043_demo_controller_setup",
+      "breakpoints": true
     }
   ]
 }
