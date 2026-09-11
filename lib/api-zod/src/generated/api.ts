@@ -7876,7 +7876,7 @@ export const ListOnboardingCaseCommunicationsParams = zod.object({
 export const ListOnboardingCaseCommunicationsResponseItem = zod.object({
   "id": zod.number(),
   "caseId": zod.number(),
-  "channel": zod.string().describe('email | whatsapp'),
+  "channel": zod.string().describe('email | whatsapp | agent | voice | in-app (agent is a simulated assignment channel)'),
   "direction": zod.string().describe('outbound | inbound'),
   "audience": zod.enum(['candidate', 'admin']).describe('Candidate case communication or separate HR\/HITL notification'),
   "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),
@@ -7893,6 +7893,290 @@ export const ListOnboardingCaseCommunicationsResponse = zod.array(ListOnboarding
 
 
 /**
+ * Returns the authenticated tenant's canonical operational-agent catalog. These are internal simulation personas only: no catalog entry invokes an AI provider, sends a message, or calls an external system.
+ * @summary List operational onboarding agents
+ */
+export const listOnboardingAgentsResponseIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+
+
+export const ListOnboardingAgentsResponseItem = zod.object({
+  "id": zod.string().regex(listOnboardingAgentsResponseIdRegExp),
+  "name": zod.string(),
+  "origin": zod.enum(['internal', 'external']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "simulated": zod.literal(true)
+}).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n')
+export const ListOnboardingAgentsResponse = zod.array(ListOnboardingAgentsResponseItem)
+
+
+/**
+ * Read-only case-scoped view of simulated requests for documentation, access, assets, payroll, and learning workstreams. This endpoint never initializes missing requests and never contacts a provider.
+ * @summary Read simulated operational setup requests for a case
+ */
+
+
+
+export const GetOnboardingOperationalRequestsParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+export const getOnboardingOperationalRequestsResponseVersionMin = 0;
+
+export const getOnboardingOperationalRequestsResponseRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const getOnboardingOperationalRequestsResponseRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const getOnboardingOperationalRequestsResponseRequestsItemReferenceRegExp = new RegExp('^SIMULATED-OPS-');
+export const getOnboardingOperationalRequestsResponseRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+
+
+
+export const GetOnboardingOperationalRequestsResponse = zod.object({
+  "caseId": zod.number(),
+  "version": zod.number().min(getOnboardingOperationalRequestsResponseVersionMin),
+  "simulated": zod.literal(true),
+  "offlinePaused": zod.boolean().describe('Synthetic offline samples remain read-only and never record actions'),
+  "requests": zod.array(zod.object({
+  "id": zod.string().regex(getOnboardingOperationalRequestsResponseRequestsItemIdRegExp),
+  "label": zod.string(),
+  "owner": zod.string().describe('Workstream owner accountable for the simulated request'),
+  "agent": zod.string(),
+  "agentIdentity": zod.union([zod.object({
+  "id": zod.string().regex(getOnboardingOperationalRequestsResponseRequestsItemAgentIdentityOneIdRegExp),
+  "name": zod.string(),
+  "origin": zod.enum(['internal', 'external']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "simulated": zod.literal(true)
+}).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved current AI-agent identity; null for email assignments or unknown legacy ids'),
+  "teamRecipientLabel": zod.string().describe('Human-readable team label; never an invented email address'),
+  "method": zod.enum(['email', 'agent']),
+  "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
+  "reference": zod.string().regex(getOnboardingOperationalRequestsResponseRequestsItemReferenceRegExp).describe('Simulation-local reference prefixed SIMULATED-OPS'),
+  "simulated": zod.literal(true),
+  "requestedAt": zod.coerce.date(),
+  "startedAt": zod.coerce.date().nullable(),
+  "completedAt": zod.coerce.date().nullable(),
+  "blockedAt": zod.coerce.date().nullable(),
+  "lastRetryAt": zod.coerce.date().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "failureReason": zod.string().nullable(),
+  "history": zod.array(zod.object({
+  "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
+  "at": zod.coerce.date(),
+  "actor": zod.string(),
+  "reason": zod.string().nullable(),
+  "requestId": zod.string().nullable(),
+  "communicationId": zod.number().nullable(),
+  "agentIdentity": zod.union([zod.object({
+  "id": zod.string().regex(getOnboardingOperationalRequestsResponseRequestsItemHistoryItemAgentIdentityOneIdRegExp),
+  "name": zod.string(),
+  "origin": zod.enum(['internal', 'external']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "simulated": zod.literal(true)
+}).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable')
+})).min(1)
+}).describe('A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.\n'))
+})
+
+
+/**
+ * Creates only missing request records and their unmistakable simulated Communication timeline entries. The default method is agent. No email, AI agent, provider, external system, readiness, document, BGV, or approval effect occurs. Owner/admin users may mutate ordinary tenants; members may use this simulation-only mutation in Demo Organization.
+ * @summary Initialize missing simulated operational setup requests
+ */
+
+
+
+export const InitializeOnboardingOperationalRequestsParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+export const initializeOnboardingOperationalRequestsBodyRequestIdMax = 128;
+
+export const initializeOnboardingOperationalRequestsBodyMethodDefault = `agent`;
+export const initializeOnboardingOperationalRequestsBodyRequestIdsItemRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const initializeOnboardingOperationalRequestsBodyRequestIdsMax = 5;
+
+export const initializeOnboardingOperationalRequestsBodyExpectedVersionMin = 0;
+
+
+
+export const InitializeOnboardingOperationalRequestsBody = zod.object({
+  "requestId": zod.string().min(1).max(initializeOnboardingOperationalRequestsBodyRequestIdMax).optional(),
+  "method": zod.enum(['email', 'agent']).default(initializeOnboardingOperationalRequestsBodyMethodDefault),
+  "requestIds": zod.array(zod.string().regex(initializeOnboardingOperationalRequestsBodyRequestIdsItemRegExp)).min(1).max(initializeOnboardingOperationalRequestsBodyRequestIdsMax).optional(),
+  "expectedVersion": zod.number().min(initializeOnboardingOperationalRequestsBodyExpectedVersionMin).optional()
+})
+
+export const initializeOnboardingOperationalRequestsResponseOneVersionMin = 0;
+
+export const initializeOnboardingOperationalRequestsResponseOneRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const initializeOnboardingOperationalRequestsResponseOneRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const initializeOnboardingOperationalRequestsResponseOneRequestsItemReferenceRegExp = new RegExp('^SIMULATED-OPS-');
+export const initializeOnboardingOperationalRequestsResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+
+
+
+export const InitializeOnboardingOperationalRequestsResponse = zod.object({
+  "caseId": zod.number(),
+  "version": zod.number().min(initializeOnboardingOperationalRequestsResponseOneVersionMin),
+  "simulated": zod.literal(true),
+  "offlinePaused": zod.boolean().describe('Synthetic offline samples remain read-only and never record actions'),
+  "requests": zod.array(zod.object({
+  "id": zod.string().regex(initializeOnboardingOperationalRequestsResponseOneRequestsItemIdRegExp),
+  "label": zod.string(),
+  "owner": zod.string().describe('Workstream owner accountable for the simulated request'),
+  "agent": zod.string(),
+  "agentIdentity": zod.union([zod.object({
+  "id": zod.string().regex(initializeOnboardingOperationalRequestsResponseOneRequestsItemAgentIdentityOneIdRegExp),
+  "name": zod.string(),
+  "origin": zod.enum(['internal', 'external']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "simulated": zod.literal(true)
+}).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved current AI-agent identity; null for email assignments or unknown legacy ids'),
+  "teamRecipientLabel": zod.string().describe('Human-readable team label; never an invented email address'),
+  "method": zod.enum(['email', 'agent']),
+  "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
+  "reference": zod.string().regex(initializeOnboardingOperationalRequestsResponseOneRequestsItemReferenceRegExp).describe('Simulation-local reference prefixed SIMULATED-OPS'),
+  "simulated": zod.literal(true),
+  "requestedAt": zod.coerce.date(),
+  "startedAt": zod.coerce.date().nullable(),
+  "completedAt": zod.coerce.date().nullable(),
+  "blockedAt": zod.coerce.date().nullable(),
+  "lastRetryAt": zod.coerce.date().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "failureReason": zod.string().nullable(),
+  "history": zod.array(zod.object({
+  "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
+  "at": zod.coerce.date(),
+  "actor": zod.string(),
+  "reason": zod.string().nullable(),
+  "requestId": zod.string().nullable(),
+  "communicationId": zod.number().nullable(),
+  "agentIdentity": zod.union([zod.object({
+  "id": zod.string().regex(initializeOnboardingOperationalRequestsResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp),
+  "name": zod.string(),
+  "origin": zod.enum(['internal', 'external']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "simulated": zod.literal(true)
+}).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable')
+})).min(1)
+}).describe('A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.\n'))
+}).and(zod.object({
+  "requestId": zod.string().nullable().describe('Stable operational request id for actions; initialization echoes its client idempotency id'),
+  "action": zod.string().nullable(),
+  "idempotent": zod.boolean(),
+  "initializedRequestIds": zod.array(zod.string())
+}))
+
+
+/**
+ * Selects email or agent, starts/progresses/completes/blocks, or retries one request. The path requestId is the stable operational request id; body requestId is the client idempotency id and must be reused for a retry of the same HTTP request. Every effect is logged-only and marked simulated in Communications. No provider call or live readiness change is made.
+ * @summary Apply a simulated operational request lifecycle action
+ */
+
+export const applyOnboardingOperationalRequestActionPathRequestIdMax = 64;
+
+
+export const applyOnboardingOperationalRequestActionPathRequestIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+
+
+export const ApplyOnboardingOperationalRequestActionParams = zod.object({
+  "caseId": zod.coerce.number().min(1),
+  "requestId": zod.coerce.string().min(1).max(applyOnboardingOperationalRequestActionPathRequestIdMax).regex(applyOnboardingOperationalRequestActionPathRequestIdRegExp)
+})
+
+export const applyOnboardingOperationalRequestActionBodyRequestIdMax = 128;
+
+export const applyOnboardingOperationalRequestActionBodyReasonMin = 3;
+export const applyOnboardingOperationalRequestActionBodyReasonMax = 500;
+
+export const applyOnboardingOperationalRequestActionBodyExpectedVersionMin = 0;
+
+
+
+export const ApplyOnboardingOperationalRequestActionBody = zod.object({
+  "requestId": zod.string().min(1).max(applyOnboardingOperationalRequestActionBodyRequestIdMax).describe('Client idempotency id; reuse only for the identical action payload'),
+  "action": zod.enum(['select-method', 'start', 'progress', 'complete', 'block', 'retry']),
+  "method": zod.enum(['email', 'agent']).optional(),
+  "reason": zod.string().min(applyOnboardingOperationalRequestActionBodyReasonMin).max(applyOnboardingOperationalRequestActionBodyReasonMax).optional(),
+  "expectedVersion": zod.number().min(applyOnboardingOperationalRequestActionBodyExpectedVersionMin)
+})
+
+export const applyOnboardingOperationalRequestActionResponseOneVersionMin = 0;
+
+export const applyOnboardingOperationalRequestActionResponseOneRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const applyOnboardingOperationalRequestActionResponseOneRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const applyOnboardingOperationalRequestActionResponseOneRequestsItemReferenceRegExp = new RegExp('^SIMULATED-OPS-');
+export const applyOnboardingOperationalRequestActionResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+
+
+
+export const ApplyOnboardingOperationalRequestActionResponse = zod.object({
+  "caseId": zod.number(),
+  "version": zod.number().min(applyOnboardingOperationalRequestActionResponseOneVersionMin),
+  "simulated": zod.literal(true),
+  "offlinePaused": zod.boolean().describe('Synthetic offline samples remain read-only and never record actions'),
+  "requests": zod.array(zod.object({
+  "id": zod.string().regex(applyOnboardingOperationalRequestActionResponseOneRequestsItemIdRegExp),
+  "label": zod.string(),
+  "owner": zod.string().describe('Workstream owner accountable for the simulated request'),
+  "agent": zod.string(),
+  "agentIdentity": zod.union([zod.object({
+  "id": zod.string().regex(applyOnboardingOperationalRequestActionResponseOneRequestsItemAgentIdentityOneIdRegExp),
+  "name": zod.string(),
+  "origin": zod.enum(['internal', 'external']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "simulated": zod.literal(true)
+}).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved current AI-agent identity; null for email assignments or unknown legacy ids'),
+  "teamRecipientLabel": zod.string().describe('Human-readable team label; never an invented email address'),
+  "method": zod.enum(['email', 'agent']),
+  "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
+  "reference": zod.string().regex(applyOnboardingOperationalRequestActionResponseOneRequestsItemReferenceRegExp).describe('Simulation-local reference prefixed SIMULATED-OPS'),
+  "simulated": zod.literal(true),
+  "requestedAt": zod.coerce.date(),
+  "startedAt": zod.coerce.date().nullable(),
+  "completedAt": zod.coerce.date().nullable(),
+  "blockedAt": zod.coerce.date().nullable(),
+  "lastRetryAt": zod.coerce.date().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "failureReason": zod.string().nullable(),
+  "history": zod.array(zod.object({
+  "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
+  "at": zod.coerce.date(),
+  "actor": zod.string(),
+  "reason": zod.string().nullable(),
+  "requestId": zod.string().nullable(),
+  "communicationId": zod.number().nullable(),
+  "agentIdentity": zod.union([zod.object({
+  "id": zod.string().regex(applyOnboardingOperationalRequestActionResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp),
+  "name": zod.string(),
+  "origin": zod.enum(['internal', 'external']),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "simulated": zod.literal(true)
+}).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable')
+})).min(1)
+}).describe('A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.\n'))
+}).and(zod.object({
+  "requestId": zod.string().nullable().describe('Stable operational request id for actions; initialization echoes its client idempotency id'),
+  "action": zod.string().nullable(),
+  "idempotent": zod.boolean(),
+  "initializedRequestIds": zod.array(zod.string())
+}))
+
+
+/**
  * @summary Safely retry a definitively failed or logged-only candidate email
  */
 export const RetryOnboardingCaseEmailParams = zod.object({
@@ -7903,7 +8187,7 @@ export const RetryOnboardingCaseEmailParams = zod.object({
 export const RetryOnboardingCaseEmailResponse = zod.object({
   "id": zod.number(),
   "caseId": zod.number(),
-  "channel": zod.string().describe('email | whatsapp'),
+  "channel": zod.string().describe('email | whatsapp | agent | voice | in-app (agent is a simulated assignment channel)'),
   "direction": zod.string().describe('outbound | inbound'),
   "audience": zod.enum(['candidate', 'admin']).describe('Candidate case communication or separate HR\/HITL notification'),
   "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),
@@ -8364,7 +8648,7 @@ export const ReceiveOnboardingInboundBody = zod.object({
 export const ReceiveOnboardingInboundResponse = zod.object({
   "id": zod.number(),
   "caseId": zod.number(),
-  "channel": zod.string().describe('email | whatsapp'),
+  "channel": zod.string().describe('email | whatsapp | agent | voice | in-app (agent is a simulated assignment channel)'),
   "direction": zod.string().describe('outbound | inbound'),
   "audience": zod.enum(['candidate', 'admin']).describe('Candidate case communication or separate HR\/HITL notification'),
   "toAddress": zod.string().describe('Email address or phone number (masked for sensitive comms)'),

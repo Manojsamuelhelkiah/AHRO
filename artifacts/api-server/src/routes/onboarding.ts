@@ -34,6 +34,8 @@ import {
   DecideOnboardingEvidenceBody,
   ConfirmOnboardingOfferAcceptanceBody,
   GetOnboardingOutcomeKpisQueryParams,
+  InitializeOnboardingOperationalRequestsBody,
+  ApplyOnboardingOperationalRequestActionBody,
 } from "@workspace/api-zod";
 import {
   defaultReadiness,
@@ -160,6 +162,16 @@ import {
   SYNTHETIC_RESET_CONFIRMATION,
 } from "../lib/onboarding/synthetic-reset";
 import {
+  applyOperationalRequestAction,
+  canMutateOperationalRequests,
+  getOnboardingAgentCatalog,
+  getOperationalRequests,
+  initializeOperationalRequests,
+  OperationalRequestConflictError,
+  OperationalRequestNotFoundError,
+  OperationalRequestOfflineError,
+} from "../lib/onboarding/operational-requests";
+import {
   isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
@@ -178,6 +190,20 @@ function requireHrChecklistRole(
 ): boolean {
   if (isChecklistAdministrator(req.organizationRole)) return true;
   res.status(403).json({ message });
+  return false;
+}
+
+function requireOperationalMutationRole(
+  req: Request,
+  res: Response,
+): boolean {
+  if (canMutateOperationalRequests(getOrganizationId(req), req.organizationRole)) {
+    return true;
+  }
+  res.status(403).json({
+    message:
+      "Organization owner or admin role required for operational request mutations (Demo Organization members may use simulation-only actions).",
+  });
   return false;
 }
 
@@ -935,6 +961,118 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
     res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
   } catch (err) {
     next(err);
+  }
+});
+
+router.get("/onboarding/agents", (req, res, next) => {
+  try {
+    // The catalog is intentionally the same for every tenant, but this route
+    // remains behind the authenticated tenant router boundary. Touching the
+    // tenant context here makes that contract explicit without persisting
+    // tenant-specific catalog copies.
+    getOrganizationId(req);
+    res.json(getOnboardingAgentCatalog());
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/onboarding/cases/:caseId/operational-requests", async (req, res, next) => {
+  try {
+    const caseId = Number(req.params.caseId);
+    if (!Number.isInteger(caseId) || caseId < 1) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    const result = await getOperationalRequests(getOrganizationId(req), caseId);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof OperationalRequestNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+    if (error instanceof OperationalRequestConflictError) {
+      res.status(409).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.post("/onboarding/cases/:caseId/operational-requests", async (req, res, next) => {
+  try {
+    if (!requireOperationalMutationRole(req, res)) return;
+    const caseId = Number(req.params.caseId);
+    if (!Number.isInteger(caseId) || caseId < 1) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    const body = InitializeOnboardingOperationalRequestsBody.parse(req.body);
+    const result = await initializeOperationalRequests({
+      organizationId: getOrganizationId(req),
+      caseId,
+      method: body.method,
+      requestIds: body.requestIds,
+      requestId: body.requestId,
+      expectedVersion: body.expectedVersion,
+      actor: await resolveReviewerName(req.authUserId!),
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof OperationalRequestNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+    if (
+      error instanceof OperationalRequestConflictError ||
+      error instanceof OperationalRequestOfflineError
+    ) {
+      res.status(409).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.post("/onboarding/cases/:caseId/operational-requests/:requestId/actions", async (req, res, next) => {
+  try {
+    if (!requireOperationalMutationRole(req, res)) return;
+    const caseId = Number(req.params.caseId);
+    if (!Number.isInteger(caseId) || caseId < 1) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    const operationalRequestId = String(req.params.requestId);
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(operationalRequestId)) {
+      res.status(400).json({ message: "Valid operational request id is required." });
+      return;
+    }
+    const body = ApplyOnboardingOperationalRequestActionBody.parse(req.body);
+    const result = await applyOperationalRequestAction({
+      organizationId: getOrganizationId(req),
+      caseId,
+      operationalRequestId,
+      requestId: body.requestId,
+      action: body.action,
+      method: body.method,
+      reason: body.reason,
+      expectedVersion: body.expectedVersion,
+      actor: await resolveReviewerName(req.authUserId!),
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof OperationalRequestNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+    if (
+      error instanceof OperationalRequestConflictError ||
+      error instanceof OperationalRequestOfflineError
+    ) {
+      res.status(409).json({ message: error.message });
+      return;
+    }
+    next(error);
   }
 });
 

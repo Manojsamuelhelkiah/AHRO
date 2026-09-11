@@ -64,6 +64,7 @@ import type {
   ListEaAssessmentsParams,
   ListOnboardingApprovalsParams,
   ModelOption,
+  OnbAgent,
   OnbAnalytics,
   OnbApproval,
   OnbApprovalDecision,
@@ -93,6 +94,10 @@ import type {
   OnbEvidenceDecision,
   OnbInboundMessage,
   OnbOfferAcceptanceConfirmation,
+  OnbOperationalRequestAction,
+  OnbOperationalRequestsEnvelope,
+  OnbOperationalRequestsInitialize,
+  OnbOperationalRequestsMutationResult,
   OnbOutcomeKpis,
   OnbReadinessSlaAttestationInput,
   OnbReadinessSlaPayrollCutoffInput,
@@ -6333,6 +6338,310 @@ export function useListOnboardingCaseCommunications<TData = Awaited<ReturnType<t
 
 
 
+
+export const getListOnboardingAgentsUrl = () => {
+
+
+
+
+  return `/api/onboarding/agents`
+}
+
+/**
+ * Returns the authenticated tenant's canonical operational-agent catalog. These are internal simulation personas only: no catalog entry invokes an AI provider, sends a message, or calls an external system.
+ * @summary List operational onboarding agents
+ */
+export const listOnboardingAgents = async ( options?: RequestInit): Promise<OnbAgent[]> => {
+
+  return customFetch<OnbAgent[]>(getListOnboardingAgentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingAgentsQueryKey = () => {
+    return [
+    `/api/onboarding/agents`
+    ] as const;
+    }
+
+
+export const getListOnboardingAgentsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingAgents>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingAgentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingAgents>>> = ({ signal }) => listOnboardingAgents({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingAgents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingAgentsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingAgents>>>
+export type ListOnboardingAgentsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List operational onboarding agents
+ */
+
+export function useListOnboardingAgents<TData = Awaited<ReturnType<typeof listOnboardingAgents>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingAgentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingOperationalRequestsUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-requests`
+}
+
+/**
+ * Read-only case-scoped view of simulated requests for documentation, access, assets, payroll, and learning workstreams. This endpoint never initializes missing requests and never contacts a provider.
+ * @summary Read simulated operational setup requests for a case
+ */
+export const getOnboardingOperationalRequests = async (caseId: number, options?: RequestInit): Promise<OnbOperationalRequestsEnvelope> => {
+
+  return customFetch<OnbOperationalRequestsEnvelope>(getGetOnboardingOperationalRequestsUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingOperationalRequestsQueryKey = (caseId: number,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/operational-requests`
+    ] as const;
+    }
+
+
+export const getGetOnboardingOperationalRequestsQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingOperationalRequests>>, TError = ErrorType<ErrorMessage>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOperationalRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingOperationalRequestsQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingOperationalRequests>>> = ({ signal }) => getOnboardingOperationalRequests(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOperationalRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingOperationalRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingOperationalRequests>>>
+export type GetOnboardingOperationalRequestsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Read simulated operational setup requests for a case
+ */
+
+export function useGetOnboardingOperationalRequests<TData = Awaited<ReturnType<typeof getOnboardingOperationalRequests>>, TError = ErrorType<ErrorMessage>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOperationalRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingOperationalRequestsQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getInitializeOnboardingOperationalRequestsUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-requests`
+}
+
+/**
+ * Creates only missing request records and their unmistakable simulated Communication timeline entries. The default method is agent. No email, AI agent, provider, external system, readiness, document, BGV, or approval effect occurs. Owner/admin users may mutate ordinary tenants; members may use this simulation-only mutation in Demo Organization.
+ * @summary Initialize missing simulated operational setup requests
+ */
+export const initializeOnboardingOperationalRequests = async (caseId: number,
+    onbOperationalRequestsInitialize: OnbOperationalRequestsInitialize, options?: RequestInit): Promise<OnbOperationalRequestsMutationResult> => {
+
+  return customFetch<OnbOperationalRequestsMutationResult>(getInitializeOnboardingOperationalRequestsUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbOperationalRequestsInitialize)
+  }
+);}
+
+
+
+
+
+export const getInitializeOnboardingOperationalRequestsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initializeOnboardingOperationalRequests>>, TError,{caseId: number;data: BodyType<OnbOperationalRequestsInitialize>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof initializeOnboardingOperationalRequests>>, TError,{caseId: number;data: BodyType<OnbOperationalRequestsInitialize>}, TContext> => {
+
+const mutationKey = ['initializeOnboardingOperationalRequests'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof initializeOnboardingOperationalRequests>>, {caseId: number;data: BodyType<OnbOperationalRequestsInitialize>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  initializeOnboardingOperationalRequests(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InitializeOnboardingOperationalRequestsMutationResult = NonNullable<Awaited<ReturnType<typeof initializeOnboardingOperationalRequests>>>
+    export type InitializeOnboardingOperationalRequestsMutationBody = BodyType<OnbOperationalRequestsInitialize>
+    export type InitializeOnboardingOperationalRequestsMutationError = ErrorType<void>
+
+    /**
+ * @summary Initialize missing simulated operational setup requests
+ */
+export const useInitializeOnboardingOperationalRequests = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initializeOnboardingOperationalRequests>>, TError,{caseId: number;data: BodyType<OnbOperationalRequestsInitialize>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof initializeOnboardingOperationalRequests>>,
+        TError,
+        {caseId: number;data: BodyType<OnbOperationalRequestsInitialize>},
+        TContext
+      > => {
+      return useMutation(getInitializeOnboardingOperationalRequestsMutationOptions(options));
+    }
+
+export const getApplyOnboardingOperationalRequestActionUrl = (caseId: number,
+    requestId: string,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-requests/${requestId}/actions`
+}
+
+/**
+ * Selects email or agent, starts/progresses/completes/blocks, or retries one request. The path requestId is the stable operational request id; body requestId is the client idempotency id and must be reused for a retry of the same HTTP request. Every effect is logged-only and marked simulated in Communications. No provider call or live readiness change is made.
+ * @summary Apply a simulated operational request lifecycle action
+ */
+export const applyOnboardingOperationalRequestAction = async (caseId: number,
+    requestId: string,
+    onbOperationalRequestAction: OnbOperationalRequestAction, options?: RequestInit): Promise<OnbOperationalRequestsMutationResult> => {
+
+  return customFetch<OnbOperationalRequestsMutationResult>(getApplyOnboardingOperationalRequestActionUrl(caseId,requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbOperationalRequestAction)
+  }
+);}
+
+
+
+
+
+export const getApplyOnboardingOperationalRequestActionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingOperationalRequestAction>>, TError,{caseId: number;requestId: string;data: BodyType<OnbOperationalRequestAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingOperationalRequestAction>>, TError,{caseId: number;requestId: string;data: BodyType<OnbOperationalRequestAction>}, TContext> => {
+
+const mutationKey = ['applyOnboardingOperationalRequestAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyOnboardingOperationalRequestAction>>, {caseId: number;requestId: string;data: BodyType<OnbOperationalRequestAction>}> = (props) => {
+          const {caseId,requestId,data} = props ?? {};
+
+          return  applyOnboardingOperationalRequestAction(caseId,requestId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyOnboardingOperationalRequestActionMutationResult = NonNullable<Awaited<ReturnType<typeof applyOnboardingOperationalRequestAction>>>
+    export type ApplyOnboardingOperationalRequestActionMutationBody = BodyType<OnbOperationalRequestAction>
+    export type ApplyOnboardingOperationalRequestActionMutationError = ErrorType<void>
+
+    /**
+ * @summary Apply a simulated operational request lifecycle action
+ */
+export const useApplyOnboardingOperationalRequestAction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingOperationalRequestAction>>, TError,{caseId: number;requestId: string;data: BodyType<OnbOperationalRequestAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyOnboardingOperationalRequestAction>>,
+        TError,
+        {caseId: number;requestId: string;data: BodyType<OnbOperationalRequestAction>},
+        TContext
+      > => {
+      return useMutation(getApplyOnboardingOperationalRequestActionMutationOptions(options));
+    }
 
 export const getRetryOnboardingCaseEmailUrl = (id: number,
     communicationId: number,) => {

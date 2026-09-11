@@ -8,6 +8,7 @@ type OrganizationMembershipResponse = {
 
 export function useOrganizationRole() {
   const [role, setRole] = useState<string | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export function useOrganizationRole() {
         const orgId = pinnedOrgId || data.activeOrganizationId;
         // A different workspace's membership must never grant this page actions.
         const membership = data.memberships.find((m) => m.organizationId === orgId);
+        setOrganizationId(membership?.organizationId ?? null);
         setRole(membership?.role || null);
       })
       .catch(() => {
@@ -44,6 +46,7 @@ export function useOrganizationRole() {
 
   return { 
     role,
+    organizationId,
     isHR: role === 'owner' || role === 'admin',
     loading 
   };

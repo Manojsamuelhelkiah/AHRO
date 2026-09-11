@@ -44,6 +44,7 @@ import { latestRequiredUploadMalwareBlockers } from "./document-readiness-guard"
 import type { OnbChecklistEnforcementStage, OnbChecklistTemplateItem } from "@workspace/db/schema";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { initializeOperationalRequests } from "./operational-requests";
 
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -771,6 +772,16 @@ async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
   const c = await getCase(caseId);
   const ws = (c.workstreams.length ? c.workstreams : defaultWorkstreams()) as OnbWorkstreamRow[];
   const readiness = c.readiness as OnbReadinessItemRow[];
+  // Gate A is enforced by the caller before this stage. Operational setup
+  // requests are intentionally simulated and are persisted separately from
+  // readiness/documents/system checks so this automatic seed cannot claim a
+  // real provider effect.
+  await initializeOperationalRequests({
+    organizationId: c.organizationId,
+    caseId,
+    method: "agent",
+    actor: "onboarding orchestrator (simulated)",
+  });
 
   // Documentation & Compliance — statutory pack is issued immediately, but
   // for external hires the item stays open until the BGV vendor's status
@@ -789,7 +800,9 @@ async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
   // match applicableSystems() so every in-progress item has a tracker.
   const nonEmployee = isNonEmployee(c.workerCategory);
   setReadiness(readiness, "payroll", nonEmployee ? "ready" : "in-progress",
-    nonEmployee ? "Not applicable — non-employee pathway" : "Awaiting bank & tax inputs from new hire");
+    nonEmployee
+      ? "Not applicable — non-employee pathway"
+      : "Awaiting bank & tax inputs from new hire; the operational setup request is simulated and no payroll enrollment was sent");
   await dispatchWorkstreamConnectorMutations(c);
   await logEvent(caseId, "documentation", "rules", "Documentation pack issued",
     `Mandatory identity/statutory documents for ${c.geography} requested; completion tracked with owner notification on gaps.`,
@@ -798,20 +811,20 @@ async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
   // Access & System Readiness
   const accessDetail =
     c.hireType === "internal-transfer"
-      ? "Existing identity re-scoped to the new role; duplicate identity creation prevented."
+      ? "Existing identity re-scope request prepared; duplicate identity creation was not performed."
       : c.hireType === "rehire"
-        ? "Prior identity located; reactivation (not duplication) coordinated with IT Security."
+        ? "Prior identity lookup noted; reactivation request was not sent to IT Security."
         : c.workerCategory === "contractor"
-          ? "Limited-duration access provisioned with automatic expiry at contract end."
-          : "Corporate identity, email/collaboration and role-based application access coordinated.";
+          ? "Limited-duration access request prepared with automatic expiry requirements noted; no access was provisioned."
+          : "Corporate identity, email/collaboration and role-based application access request prepared; no access was provisioned.";
   setWorkstream(ws, "access", "ready");
   setReadiness(
     readiness,
     "access",
     "in-progress",
-    `${accessDetail} Provisioning ticket raised in ITSM — awaiting completion confirmation.`,
+    `${accessDetail} Simulated ITSM request logged — no access was provisioned; awaiting a future real integration.`,
   );
-  await logEvent(caseId, "access", "rules", "Access readiness coordinated", accessDetail, {
+  await logEvent(caseId, "access", "rules", "Access readiness request simulated", accessDetail, {
     hitlPattern: "act-then-review",
     ruleRef: "4.4 Access Rules",
     idempotencyKey: `orchestration:${caseId}:workstreams:access`,
@@ -819,17 +832,17 @@ async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
 
   // Asset & Workplace Readiness
   setWorkstream(ws, "assets", "ready");
-  setReadiness(readiness, "assets", "ready", "Laptop, ID card and workspace scheduled for joining date");
-  await logEvent(caseId, "assets", "rules", "Assets & workspace scheduled",
-    "Device, ID card and workspace (or remote kit) booked against the joining date.",
+  setReadiness(readiness, "assets", "ready", "Simulated asset request logged — no device, ID card or workspace booking occurred");
+  await logEvent(caseId, "assets", "rules", "Assets & workspace request simulated",
+    "Device, ID card and workspace (or remote kit) request was logged for simulation only; no booking or external fulfillment occurred.",
      { hitlPattern: "notify-only", ruleRef: "4.5 Asset Rules", idempotencyKey: `orchestration:${caseId}:workstreams:assets` });
 
   // Learning / Engagement
   setWorkstream(ws, "learning", "ready");
-  setReadiness(readiness, "learning", "ready", "Induction, compliance learning and buddy assigned");
-  setReadiness(readiness, "checkpoints", "ready", "Day-1/30/60/90 checkpoints scheduled");
-  await logEvent(caseId, "learning", "rules", "Learning & engagement plan assigned",
-    "Induction, compliance learning, buddy/mentor and manager-connect scheduled; Day-30/60/90 checkpoints created.",
+  setReadiness(readiness, "learning", "ready", "Simulated induction, compliance learning and buddy plan recorded — no LMS or calendar booking occurred");
+  setReadiness(readiness, "checkpoints", "ready", "Simulated Day-1/30/60/90 checkpoint plan recorded — no external schedule was created");
+  await logEvent(caseId, "learning", "rules", "Learning & engagement plan recorded (simulated)",
+    "Induction, compliance learning, buddy/mentor and manager-connect plan recorded for simulation only; no LMS/calendar booking or external checkpoint was created.",
      { hitlPattern: "notify-only", ruleRef: "4.6 Learning Rules", idempotencyKey: `orchestration:${caseId}:workstreams:learning` });
 
   await mergeManagedReadiness(

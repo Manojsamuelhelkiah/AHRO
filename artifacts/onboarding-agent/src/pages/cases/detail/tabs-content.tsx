@@ -3,10 +3,24 @@ import { format } from 'date-fns';
 import { CheckCircle2, Clock, AlertTriangle, XCircle, FileText, FileCheck2, MessageSquare, Phone, Smartphone, Mail, Send, PhoneCall, Archive, Star, RotateCcw } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, cn, Input } from '@/components/ui-shared';
 import { EngineBadge, HitlBadge } from '@/components/engine-badge';
-import { useReceiveOnboardingInbound, getListOnboardingCaseCommunicationsQueryKey, getListOnboardingCaseEventsQueryKey, useStartOnboardingVoiceCall, useRetryOnboardingCaseEmail } from '@workspace/api-client-react';
+import {
+  useReceiveOnboardingInbound,
+  getListOnboardingCaseCommunicationsQueryKey,
+  getListOnboardingCaseEventsQueryKey,
+  useStartOnboardingVoiceCall,
+  useRetryOnboardingCaseEmail,
+  useInitializeOnboardingOperationalRequests,
+  useApplyOnboardingOperationalRequestAction,
+  getGetOnboardingOperationalRequestsQueryKey,
+  OnbOperationalRequest,
+  OnbOperationalRequestsEnvelope,
+  OnbOperationalRequestActionAction,
+  OnbOperationalRequestMethod
+} from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { WhatsAppSandboxWarning } from '@/components/whatsapp-sandbox-warning';
 import { StatusBadgeText } from './components';
+import { OperationalRequestsSection } from './OperationalRequestsSection';
 
 export function TasksTab({ c }: { c: any }) {
   return (
@@ -89,7 +103,7 @@ export function ActivityTab({ events }: { events: any[] }) {
   );
 }
 
-export function CommunicationsTab({ caseId, c, comms, channels }: any) {
+export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, requestsLoadError }: any) {
   const retryEmail = useRetryOnboardingCaseEmail();
   const queryClient = useQueryClient();
   const [retryError, setRetryError] = useState<string | null>(null);
@@ -108,6 +122,7 @@ export function CommunicationsTab({ caseId, c, comms, channels }: any) {
   };
   return (
     <div className="pb-12 max-w-4xl space-y-6">
+      <OperationalRequestsSection caseId={caseId} requestsEnv={requestsEnv} loadError={requestsLoadError} />
       <WhatsAppSandboxWarning
         caseId={caseId}
         channelPreference={c.channelPreference}

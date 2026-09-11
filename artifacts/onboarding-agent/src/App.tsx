@@ -17,6 +17,7 @@ import { CasesPage } from './pages/cases/index';
 import { CaseDetailPage } from './pages/cases/detail';
 import { ApprovalsPage } from './pages/approvals';
 import { SystemsPage } from './pages/systems';
+import { AgentsPage } from './pages/agents';
 import { AnalyticsPage } from './pages/analytics';
 import { SettingsPage } from './pages/settings';
 import { GuardrailsPage } from './pages/guardrails';
@@ -271,6 +272,9 @@ function Router() {
       </Route>
       <Route path="/approvals">
         <Protected><ApprovalsPage /></Protected>
+      </Route>
+      <Route path="/agents">
+        <Protected><AgentsPage /></Protected>
       </Route>
       <Route path="/systems">
         <Protected><SystemsPage /></Protected>

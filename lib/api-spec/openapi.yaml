@@ -1981,6 +1981,137 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/agents:
+    get:
+      operationId: listOnboardingAgents
+      tags: [onboarding]
+      summary: List operational onboarding agents
+      description: >
+        Returns the authenticated tenant's canonical operational-agent catalog.
+        These are internal simulation personas only: no catalog entry invokes an
+        AI provider, sends a message, or calls an external system.
+      responses:
+        "200":
+          description: Canonical operational-agent catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbAgent"
+        "401":
+          description: Authentication required
+        "403":
+          description: Tenant membership required
+  /onboarding/cases/{caseId}/operational-requests:
+    get:
+      operationId: getOnboardingOperationalRequests
+      tags: [onboarding]
+      summary: Read simulated operational setup requests for a case
+      description: >
+        Read-only case-scoped view of simulated requests for documentation,
+        access, assets, payroll, and learning workstreams. This endpoint never
+        initializes missing requests and never contacts a provider.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Operational request state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbOperationalRequestsEnvelope"
+        "404":
+          description: Case not found in the requesting organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      operationId: initializeOnboardingOperationalRequests
+      tags: [onboarding]
+      summary: Initialize missing simulated operational setup requests
+      description: >
+        Creates only missing request records and their unmistakable simulated
+        Communication timeline entries. The default method is agent. No email,
+        AI agent, provider, external system, readiness, document, BGV, or
+        approval effect occurs. Owner/admin users may mutate ordinary tenants;
+        members may use this simulation-only mutation in Demo Organization.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbOperationalRequestsInitialize"
+      responses:
+        "200":
+          description: Current request state after idempotent initialization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbOperationalRequestsMutationResult"
+        "400":
+          description: Invalid initialization request
+        "403":
+          description: Owner/admin required, except Demo Organization simulation members
+        "404":
+          description: Case not found
+        "409":
+          description: Stale version, offline sample, or conflicting idempotency request
+  /onboarding/cases/{caseId}/operational-requests/{requestId}/actions:
+    post:
+      operationId: applyOnboardingOperationalRequestAction
+      tags: [onboarding]
+      summary: Apply a simulated operational request lifecycle action
+      description: >
+        Selects email or agent, starts/progresses/completes/blocks, or retries
+        one request. The path requestId is the stable operational request id;
+        body requestId is the client idempotency id and must be reused for a
+        retry of the same HTTP request. Every effect is logged-only and marked
+        simulated in Communications. No provider call or live readiness change
+        is made.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbOperationalRequestAction"
+      responses:
+        "200":
+          description: Current request state after the action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbOperationalRequestsMutationResult"
+        "400":
+          description: Invalid action
+        "403":
+          description: Owner/admin required, except Demo Organization simulation members
+        "404":
+          description: Case or operational request not found
+        "409":
+          description: Stale version, invalid state transition, offline sample, or duplicate idempotency id
   /onboarding/cases/{id}/communications/{communicationId}/retry:
     post:
       operationId: retryOnboardingCaseEmail
@@ -6087,7 +6218,7 @@ components:
           type: integer
         channel:
           type: string
-          description: email | whatsapp
+          description: email | whatsapp | agent | voice | in-app (agent is a simulated assignment channel)
         direction:
           type: string
           description: outbound | inbound
@@ -6117,6 +6248,202 @@ components:
         createdAt:
           type: string
       required: [id, caseId, channel, direction, audience, toAddress, subject, body, status, failureReason, sensitive, retriedBy, retriedAt, createdAt]
+    OnbOperationalRequestMethod:
+      type: string
+      enum: [email, agent]
+    OnbOperationalRequestStatus:
+      type: string
+      enum: [requested, in-progress, completed, blocked]
+    OnbAgent:
+      type: object
+      description: >
+        Canonical identity for an operational onboarding agent. The current
+        catalog contains internal simulation personas; simulated true means no
+        AI provider or external system was invoked.
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+        name:
+          type: string
+        origin:
+          type: string
+          enum: [internal, external]
+        description:
+          type: string
+        owner:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        simulated:
+          type: boolean
+          enum: [true]
+      required: [id, name, origin, description, owner, capabilities, simulated]
+    OnbOperationalRequestHistoryEntry:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/OnbOperationalRequestStatus"
+        at:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        reason:
+          type: ["string", "null"]
+        requestId:
+          type: ["string", "null"]
+        communicationId:
+          type: ["integer", "null"]
+        agentIdentity:
+          oneOf:
+            - $ref: "#/components/schemas/OnbAgent"
+            - type: "null"
+          description: Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable
+      required: [status, at, actor, reason, requestId, communicationId]
+    OnbOperationalRequest:
+      type: object
+      description: >
+        A simulated setup request. The reference is local simulation identity,
+        not a vendor ticket or evidence of external completion.
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+        label:
+          type: string
+        owner:
+          type: string
+          description: Workstream owner accountable for the simulated request
+        agent:
+          type: string
+        agentIdentity:
+          oneOf:
+            - $ref: "#/components/schemas/OnbAgent"
+            - type: "null"
+          description: Resolved current AI-agent identity; null for email assignments or unknown legacy ids
+        teamRecipientLabel:
+          type: string
+          description: Human-readable team label; never an invented email address
+        method:
+          $ref: "#/components/schemas/OnbOperationalRequestMethod"
+        status:
+          $ref: "#/components/schemas/OnbOperationalRequestStatus"
+        reference:
+          type: string
+          pattern: "^SIMULATED-OPS-"
+          description: Simulation-local reference prefixed SIMULATED-OPS
+        simulated:
+          type: boolean
+          enum: [true]
+        requestedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: ["string", "null"]
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        blockedAt:
+          type: ["string", "null"]
+          format: date-time
+        lastRetryAt:
+          type: ["string", "null"]
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        failureReason:
+          type: ["string", "null"]
+        history:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/OnbOperationalRequestHistoryEntry"
+      required: [id, label, owner, agent, teamRecipientLabel, method, status, reference, simulated, requestedAt, startedAt, completedAt, blockedAt, lastRetryAt, updatedAt, failureReason, history]
+    OnbOperationalRequestsEnvelope:
+      type: object
+      properties:
+        caseId:
+          type: integer
+        version:
+          type: integer
+          minimum: 0
+        simulated:
+          type: boolean
+          enum: [true]
+        offlinePaused:
+          type: boolean
+          description: Synthetic offline samples remain read-only and never record actions
+        requests:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbOperationalRequest"
+      required: [caseId, version, simulated, offlinePaused, requests]
+    OnbOperationalRequestsInitialize:
+      type: object
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        method:
+          $ref: "#/components/schemas/OnbOperationalRequestMethod"
+          default: agent
+        requestIds:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
+        expectedVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    OnbOperationalRequestAction:
+      type: object
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Client idempotency id; reuse only for the identical action payload
+        action:
+          type: string
+          enum: [select-method, start, progress, complete, block, retry]
+        method:
+          $ref: "#/components/schemas/OnbOperationalRequestMethod"
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
+        expectedVersion:
+          type: integer
+          minimum: 0
+      required: [requestId, action, expectedVersion]
+      additionalProperties: false
+    OnbOperationalRequestsMutationResult:
+      allOf:
+        - $ref: "#/components/schemas/OnbOperationalRequestsEnvelope"
+        - type: object
+          properties:
+            requestId:
+              type: ["string", "null"]
+              description: Stable operational request id for actions; initialization echoes its client idempotency id
+            action:
+              type: ["string", "null"]
+            idempotent:
+              type: boolean
+            initializedRequestIds:
+              type: array
+              items:
+                type: string
+          required: [requestId, action, idempotent, initializedRequestIds]
     OnbInboundMessage:
       type: object
       properties:

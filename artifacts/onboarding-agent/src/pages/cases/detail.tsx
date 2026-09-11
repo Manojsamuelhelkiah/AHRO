@@ -7,12 +7,14 @@ import {
   useListOnboardingCaseDocuments,
   useListOnboardingApprovals,
   useListOnboardingCaseRecords,
+  useGetOnboardingOperationalRequests,
   getGetOnboardingCaseQueryKey,
   getListOnboardingCaseEventsQueryKey,
   getListOnboardingCaseCommunicationsQueryKey,
   getListOnboardingCaseDocumentsQueryKey,
   getListOnboardingApprovalsQueryKey,
   getListOnboardingCaseRecordsQueryKey,
+  getGetOnboardingOperationalRequestsQueryKey,
   useGetOnboardingChannels,
   getGetOnboardingChannelsQueryKey,
   getPinnedOrganizationIdForPage,
@@ -99,6 +101,16 @@ export function CaseDetailPage() {
     query: { enabled: !!caseId && c?.hireType === 'rehire', queryKey: getListOnboardingCaseRecordsQueryKey(caseId) }
   });
 
+  const { data: requestsEnv, isError: requestsLoadError } = useGetOnboardingOperationalRequests(caseId, {
+    query: {
+      enabled: !!caseId,
+      queryKey: getGetOnboardingOperationalRequestsQueryKey(caseId),
+      refetchInterval: () => {
+        return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval' || c?.orchestrationStatus === 'blocked' || c?.orchestrationStatus === 'checklist-blocked' || c?.orchestrationStatus === 'idle') ? 2500 : false;
+      }
+    }
+  });
+
   const { data: caps } = useGetOnboardingDemoController({
     query: {
       enabled: !!caseId,
@@ -151,7 +163,7 @@ export function CaseDetailPage() {
         {activeTab === 'Tasks' && <TasksTab c={c} />}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
         {activeTab === 'Activity' && <ActivityTab events={events || []} />}
-        {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} />}
+        {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} />}
         {activeTab === 'Audit' && <AuditTab events={events || []} approvals={approvals} records={records || []} />}
         {activeTab === 'Ask AI' && <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />}
       </div>

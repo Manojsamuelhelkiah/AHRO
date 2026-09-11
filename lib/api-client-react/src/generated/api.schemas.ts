@@ -2832,7 +2832,7 @@ export const OnbCommunicationAudience = {
 export interface OnbCommunication {
   id: number;
   caseId: number;
-  /** email | whatsapp */
+  /** email | whatsapp | agent | voice | in-app (agent is a simulated assignment channel) */
   channel: string;
   /** outbound | inbound */
   direction: string;
@@ -2855,6 +2855,167 @@ export interface OnbCommunication {
   retriedAt: string | null;
   createdAt: string;
 }
+
+export type OnbOperationalRequestMethod = typeof OnbOperationalRequestMethod[keyof typeof OnbOperationalRequestMethod];
+
+
+export const OnbOperationalRequestMethod = {
+  email: 'email',
+  agent: 'agent',
+} as const;
+
+export type OnbOperationalRequestStatus = typeof OnbOperationalRequestStatus[keyof typeof OnbOperationalRequestStatus];
+
+
+export const OnbOperationalRequestStatus = {
+  requested: 'requested',
+  'in-progress': 'in-progress',
+  completed: 'completed',
+  blocked: 'blocked',
+} as const;
+
+export type OnbAgentOrigin = typeof OnbAgentOrigin[keyof typeof OnbAgentOrigin];
+
+
+export const OnbAgentOrigin = {
+  internal: 'internal',
+  external: 'external',
+} as const;
+
+/**
+ * Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.
+ */
+export interface OnbAgent {
+  /** @pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
+  id: string;
+  name: string;
+  origin: OnbAgentOrigin;
+  description: string;
+  owner: string;
+  capabilities: string[];
+  simulated: true;
+}
+
+export interface OnbOperationalRequestHistoryEntry {
+  status: OnbOperationalRequestStatus;
+  at: string;
+  actor: string;
+  /** @nullable */
+  reason: string | null;
+  /** @nullable */
+  requestId: string | null;
+  /** @nullable */
+  communicationId: number | null;
+  /** Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable */
+  agentIdentity?: OnbAgent | null;
+}
+
+/**
+ * A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.
+ */
+export interface OnbOperationalRequest {
+  /** @pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
+  id: string;
+  label: string;
+  /** Workstream owner accountable for the simulated request */
+  owner: string;
+  agent: string;
+  /** Resolved current AI-agent identity; null for email assignments or unknown legacy ids */
+  agentIdentity?: OnbAgent | null;
+  /** Human-readable team label; never an invented email address */
+  teamRecipientLabel: string;
+  method: OnbOperationalRequestMethod;
+  status: OnbOperationalRequestStatus;
+  /**
+     * Simulation-local reference prefixed SIMULATED-OPS
+     * @pattern ^SIMULATED-OPS-
+     */
+  reference: string;
+  simulated: true;
+  requestedAt: string;
+  /** @nullable */
+  startedAt: string | null;
+  /** @nullable */
+  completedAt: string | null;
+  /** @nullable */
+  blockedAt: string | null;
+  /** @nullable */
+  lastRetryAt: string | null;
+  updatedAt: string;
+  /** @nullable */
+  failureReason: string | null;
+  /** @minItems 1 */
+  history: OnbOperationalRequestHistoryEntry[];
+}
+
+export interface OnbOperationalRequestsEnvelope {
+  caseId: number;
+  /** @minimum 0 */
+  version: number;
+  simulated: true;
+  /** Synthetic offline samples remain read-only and never record actions */
+  offlinePaused: boolean;
+  requests: OnbOperationalRequest[];
+}
+
+export interface OnbOperationalRequestsInitialize {
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  requestId?: string;
+  method?: OnbOperationalRequestMethod;
+  /**
+     * @minItems 1
+     * @maxItems 5
+     * @items.pattern ^[a-z0-9][a-z0-9_-]{0,63}$
+     */
+  requestIds?: string[];
+  /** @minimum 0 */
+  expectedVersion?: number;
+}
+
+export type OnbOperationalRequestActionAction = typeof OnbOperationalRequestActionAction[keyof typeof OnbOperationalRequestActionAction];
+
+
+export const OnbOperationalRequestActionAction = {
+  'select-method': 'select-method',
+  start: 'start',
+  progress: 'progress',
+  complete: 'complete',
+  block: 'block',
+  retry: 'retry',
+} as const;
+
+export interface OnbOperationalRequestAction {
+  /**
+     * Client idempotency id; reuse only for the identical action payload
+     * @minLength 1
+     * @maxLength 128
+     */
+  requestId: string;
+  action: OnbOperationalRequestActionAction;
+  method?: OnbOperationalRequestMethod;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  reason?: string;
+  /** @minimum 0 */
+  expectedVersion: number;
+}
+
+export type OnbOperationalRequestsMutationResult = OnbOperationalRequestsEnvelope & ({
+  /**
+     * Stable operational request id for actions; initialization echoes its client idempotency id
+     * @nullable
+     */
+  requestId: string | null;
+  /** @nullable */
+  action: string | null;
+  idempotent: boolean;
+  initializedRequestIds: string[];
+});
 
 export interface OnbInboundMessage {
   /** email | whatsapp */
