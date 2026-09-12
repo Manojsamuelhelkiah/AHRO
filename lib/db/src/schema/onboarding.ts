@@ -2,6 +2,7 @@ import {
   boolean,
   check,
   foreignKey,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -53,6 +54,14 @@ export type OnbChecklistTemplateItem = {
   /** All non-existing integrations are explicit human tasks, never simulated effects. */
   executor?: "existing-workflow" | "human-task";
   prerequisites?: string[];
+  /**
+   * Typed policy bit copied into the immutable case snapshot. Labels are
+   * presentation/configuration text and can never create or remove a
+   * nonwaivable occupational-health/safety gate.
+   */
+  nonWaivableSafety?: boolean;
+  /** Conservative hold attached by the legacy-policy migration pending review. */
+  migrationReviewHold?: boolean;
 };
 
 export type OnbChecklistProfileCriteria = {
@@ -142,6 +151,23 @@ export type OnbWorkstreamRow = {
   blockers: string[];
 };
 
+/**
+ * A specialist authority is deliberately separate from organization
+ * membership.  Membership answers "may this person enter this tenant?"; this
+ * record answers the narrower question "may this verified person make this
+ * particular consequential decision?".
+ */
+export type OnbAuthorityScope =
+  | "hr-compliance-approve"
+  | "legal-approve"
+  | "occupational-health-approve"
+  | "payroll-approve"
+  | "fraud-control-approve"
+  | "manager-approve"
+  | "application-owner-approve"
+  | "security-approve"
+  | "it-security-approve"
+  | "authority-administration";
 export const onbCases = pgTable("onb_cases", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
@@ -206,6 +232,8 @@ export const onbCases = pgTable("onb_cases", {
   offerAcceptanceComplete: boolean("offer_acceptance_complete").notNull().default(false),
   offerAcceptanceCompletedAt: timestamp("offer_acceptance_completed_at", { withTimezone: true }),
   offerAcceptanceCompletedBy: text("offer_acceptance_completed_by"),
+  /** Immutable authenticated principal that created/requested the case. */
+  createdByUserId: text("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [unique("onb_cases_organization_id_id_unique").on(t.organizationId, t.id)]);
@@ -254,6 +282,18 @@ export const onbApprovals = pgTable("onb_approvals", {
   idempotencyKey: text("idempotency_key"),
   /** Monotonic human-decision cycle. Legacy approvals are version 1. */
   version: integer("version").notNull().default(1),
+  /**
+   * Required specialist scope for new approvals. Null is intentional for
+   * historical rows: those rows remain visible but are unresolved evidence,
+   * not a basis for a new consequential effect.
+   */
+  authorityScope: text("authority_scope").$type<OnbAuthorityScope>(),
+  requestedByUserId: text("requested_by_user_id"),
+  decidedAuthorityId: text("decided_authority_id"),
+  decidedAuthorityRevision: integer("decided_authority_revision"),
+  authorityReviewStatus: text("authority_review_status").notNull().default("not-required"),
+  authorityReviewedByUserId: text("authority_reviewed_by_user_id"),
+  authorityReviewedAt: timestamp("authority_reviewed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
 }, (t) => [
@@ -262,6 +302,27 @@ export const onbApprovals = pgTable("onb_approvals", {
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_approvals_organization_case_fk" }).onDelete("cascade"),
 ]);
 
+/** Tenant governance state. An operator attestation is not directory proof. */
+export const onbAuthorityGovernance = pgTable("onb_authority_governance", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organizationsTable.id, { onDelete: "cascade" }),
+  /** unconfigured | operator-attested | governance-approved | withdrawn */
+  status: text("status").notNull().default("unconfigured"),
+  operatorUserId: text("operator_user_id"),
+  attestedAt: timestamp("attested_at", { withTimezone: true }),
+  attestationNote: text("attestation_note"),
+  approvedByUserId: text("approved_by_user_id"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  governanceSource: text("governance_source"),
+  revision: integer("revision").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check(
+    "onb_authority_governance_status_check",
+    sql`${t.status} in ('unconfigured', 'operator-attested', 'governance-approved', 'withdrawn')`,
+  ),
+]);
 export const onbCommunications = pgTable("onb_communications", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
@@ -758,4 +819,76 @@ export const onbGuardrailEvents = pgTable("onb_guardrail_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_guardrail_events_organization_case_fk" }).onDelete("cascade"),
+]);
+
+/**
+ * Governance-approved, person-bound delegated authority. `personEmail` is
+ * optional and is used only for an explicitly enabled, exact sender-bound
+ * remote response; it is never inferred from a display persona.
+ */
+export const onbAuthorityAssignments = pgTable("onb_authority_assignments", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id, { onDelete: "cascade" }),
+  personUserId: text("person_user_id").notNull(),
+  personEmail: text("person_email"),
+  emailResponderAuthorized: boolean("email_responder_authorized").notNull().default(false),
+  authorityRole: text("authority_role").$type<OnbAuthorityRole>().notNull(),
+  scopes: jsonb("scopes").$type<OnbAuthorityScope[]>().notNull(),
+  caseId: integer("case_id"),
+  siteScope: text("site_scope"),
+  jurisdictionScope: text("jurisdiction_scope"),
+  validFrom: timestamp("valid_from", { withTimezone: true }).notNull().defaultNow(),
+  validUntil: timestamp("valid_until", { withTimezone: true }),
+  /** active | revoked */
+  status: text("status").notNull().default("active"),
+  revision: integer("revision").notNull().default(1),
+  grantorUserId: text("grantor_user_id").notNull(),
+  /** Governance evidence source; email grants are marked governance-decision:clerk-verified-email. */
+  source: text("source").notNull(),
+  governanceDecisionRef: text("governance_decision_ref").notNull(),
+  revokedByUserId: text("revoked_by_user_id"),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokeReason: text("revoke_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("onb_authority_assignments_organization_id_id_unique").on(t.organizationId, t.id),
+  index("onb_authority_assignments_person_lookup_idx").on(t.organizationId, t.personUserId, t.status),
+  index("onb_authority_assignments_remote_lookup_idx").on(t.organizationId, t.personEmail, t.status),
+  check("onb_authority_assignments_status_check", sql`${t.status} in ('active', 'revoked')`),
+  check("onb_authority_assignments_revision_check", sql`${t.revision} > 0`),
+  foreignKey({
+    columns: [t.organizationId, t.caseId],
+    foreignColumns: [onbCases.organizationId, onbCases.id],
+    name: "onb_authority_assignments_organization_case_fk",
+  }).onDelete("cascade"),
+]);
+
+export type OnbAuthorityRole =
+  | "hr-compliance"
+  | "legal"
+  | "occupational-health"
+  | "payroll"
+  | "fraud-control"
+  | "manager"
+  | "application-owner"
+  | "security"
+  | "it-security"
+  | "governance";
+
+/** Append-only authority and governance administration audit. */
+export const onbAuthorityAudit = pgTable("onb_authority_audit", {
+  id: serial("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizationsTable.id, { onDelete: "cascade" }),
+  authorityId: text("authority_id"),
+  action: text("action").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("onb_authority_audit_organization_created_idx").on(t.organizationId, t.createdAt),
 ]);

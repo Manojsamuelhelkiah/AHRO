@@ -529,6 +529,7 @@ export async function finalizeVoiceCall(session: Session, callOutcome: string): 
     try {
       await createApproval({
         caseId: session.caseId,
+        authorityScope: "hr-compliance-approve",
         agent: "channel",
         ruleRef: "4.6 Communications Rules",
         hitlPattern: "approve-before-act",
@@ -750,6 +751,7 @@ async function persistCallOutcome(
         // human double-check). Idempotent approval + event instead.
         await createApproval({
           caseId: session.caseId,
+          authorityScope: "hr-compliance-approve",
           agent: "channel",
           ruleRef: "4.6 Communications Rules",
           hitlPattern: "approve-before-act",
@@ -786,6 +788,7 @@ async function persistCallOutcome(
           // The agent promised new times on the phone — a human must make good on it.
           await createApproval({
             caseId: session.caseId,
+            authorityScope: "hr-compliance-approve",
             agent: "channel",
             ruleRef: "4.6 Communications Rules",
             hitlPattern: "approve-before-act",
@@ -799,6 +802,7 @@ async function persistCallOutcome(
     } else if (decision === "flag-blocker" || decision === "needs-human") {
       await createApproval({
         caseId: session.caseId,
+        authorityScope: "hr-compliance-approve",
         agent: "channel",
         ruleRef: "4.6 Communications Rules",
         hitlPattern: "approve-before-act",

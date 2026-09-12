@@ -115,6 +115,33 @@ describe("targeted checklist profiles", () => {
     assert.equal(checklistProfileMatchingAttributes({ safetyCritical: false }, base).safetyCritical, "false");
   });
 
+  test("profiles cannot disable or make an immutable safety item optional", () => {
+    const base = LEGACY_CHECKLIST.map((item) => item.id === "documentation"
+      ? { ...item, nonWaivableSafety: true }
+      : { ...item });
+    const [protectedItem] = applyChecklistOverrides(base, [{
+      id: "documentation", enabled: false, mandatory: false,
+    }]).filter((item) => item.id === "documentation");
+    assert.equal(protectedItem.nonWaivableSafety, true);
+    assert.equal(protectedItem.enabled, true);
+    assert.equal(protectedItem.mandatory, true);
+  });
+
+  test("profiles preserve migration-review holds for partial and all-item overlays", () => {
+    const base = LEGACY_CHECKLIST.map((item) => ({
+      ...item,
+      ...(item.id === "documentation" ? { migrationReviewHold: true } : {}),
+    }));
+    const partial = applyChecklistOverrides(base, [{
+      id: "documentation", label: "Renamed historical control",
+    }]).find((item) => item.id === "documentation");
+    const all = applyChecklistOverrides(base, base.map((item) => ({
+      id: item.id, enabled: false, mandatory: false, label: `Overlay ${item.id}`,
+    }))).find((item) => item.id === "documentation");
+    assert.equal(partial?.migrationReviewHold, true);
+    assert.equal(all?.migrationReviewHold, true);
+  });
+
   test("combined criteria are ANDed and unmatched employees fall back", () => {
     const combined = profile("combined", { band: "senior", role: "engineer" }, 10);
     const resolved = resolveFromProfiles(
@@ -248,9 +275,13 @@ describe("targeted checklist profiles", () => {
 
   test("stage gates continue to enforce the selected snapshot, not a changed profile", () => {
     const snapshot = applyChecklistOverrides(LEGACY_CHECKLIST, [{
-      id: "profile",
-      enforcementStage: "before-employee-communications",
-    }], false);
+      id: "manual-security-review",
+      label: "Manual security review",
+      order: 7,
+      enabled: true,
+      mandatory: true,
+      enforcementStage: "before-workstreams",
+    }]);
     const readiness = readinessFromChecklist(snapshot);
     const readinessForReplacement = structuredClone(readiness);
     readinessForReplacement[0].status = "ready";

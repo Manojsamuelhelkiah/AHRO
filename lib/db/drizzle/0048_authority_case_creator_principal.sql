@@ -1,0 +1,1 @@
+ALTER TABLE "onb_cases" ADD COLUMN IF NOT EXISTS "created_by_user_id" text;

@@ -50,6 +50,11 @@ async function buildAll() {
       "oracledb",
       "mongodb-client-encryption",
       "nodemailer",
+      // mailauth dynamically requires nodemailer/lib/* internals. Keep the
+      // complete package external so Node resolves those dependencies from
+      // mailauth's own installed package boundary rather than from dist/.
+      "mailauth",
+      "mailauth/*",
       "handlebars",
       "knex",
       "typeorm",

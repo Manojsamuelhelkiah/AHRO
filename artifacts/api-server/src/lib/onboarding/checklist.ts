@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { onbCases, onbEvents, onbPolicyEvidence, onbPolicyAuthorities, type OnbReadinessItemRow } from "@workspace/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { LEGACY_CHECKLIST, mandatoryChecklistReady } from "./settings";
 import { resumeChecklistOrchestration } from "./engine";
 import { reopenApprovalInTransaction } from "./approval-version";
@@ -14,7 +14,10 @@ export function isChecklistAdministrator(role: string | undefined): boolean {
 
 export type ChecklistStatusResult =
   | { ok: true; changed: boolean; case: typeof onbCases.$inferSelect }
-  | { ok: false; code: "not-found" | "not-custom" | "disabled" | "evidence-required" };
+  | {
+    ok: false;
+    code: "not-found" | "not-custom" | "disabled" | "evidence-required" | "unauthorized";
+  };
 
 /** Atomic, tenant-owned manual update. A retry of the same state is a no-op. */
 export async function setCustomChecklistItemStatus(opts: {
@@ -24,13 +27,20 @@ export async function setCustomChecklistItemStatus(opts: {
   status: "ready" | "pending";
   reviewer: string;
   note?: string | null;
+  /** Caller-supplied live authority check runs after row/fence acquisition. */
+  authorize?: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<boolean>;
 }): Promise<ChecklistStatusResult> {
   const result = await db.transaction(async (tx): Promise<ChecklistStatusResult> => {
+    // Keep the global lock order uniform: authority/revocation tenant fence,
+    // then the case row. This prevents a checklist mutation from holding the
+    // case while waiting on a decision/revocation that holds the fence.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${opts.organizationId}))`);
     const [c] = await tx.select().from(onbCases).where(and(
       eq(onbCases.id, opts.caseId),
       eq(onbCases.organizationId, opts.organizationId),
     )).for("update");
     if (!c) return { ok: false, code: "not-found" };
+    if (opts.authorize && !(await opts.authorize(tx))) return { ok: false, code: "unauthorized" };
     if (CONNECTOR_MANAGED_IDS.has(opts.itemId)) return { ok: false, code: "not-custom" };
     const definition = c.checklistSnapshot.find((item) => item.id === opts.itemId);
     if (!definition) return { ok: false, code: "not-found" };

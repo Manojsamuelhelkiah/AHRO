@@ -43,6 +43,8 @@ export const tenantSafeguards = [
   { table: "onb_approval_history", phaseB: false, requiresOrganizationForeignKey: false },
   { table: "onb_approval_notifications", phaseB: false },
   { table: "onb_action_center_actions", phaseB: false },
+  // 0043 table is tenant-owned from creation; include it in startup FK/RLS
+  // verification rather than treating its organization column as unowned.
   { table: "demo_controller_setup_requests", phaseB: false },
   { table: "onb_policy_evidence", phaseB: false },
   { table: "onb_policy_authorities", phaseB: false },
@@ -55,6 +57,10 @@ export const tenantSafeguards = [
   { table: "onb_audit_entries", phaseB: false, requiresOrganizationForeignKey: false },
   { table: "onb_audit_heads", phaseB: false, requiresOrganizationForeignKey: false },
   { table: "onb_audit_lifecycles", phaseB: false, requiresOrganizationForeignKey: false },
+  // Governance authority records are born tenant-scoped and fail closed.
+  { table: "onb_authority_governance", phaseB: false },
+  { table: "onb_authority_assignments", phaseB: false },
+  { table: "onb_authority_audit", phaseB: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -139,6 +145,12 @@ export const expectedForeignKeys = [
   },
   {
     table: "onb_intake_batch_people",
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_authority_assignments",
     columns: ["organization_id", "case_id"],
     referencedTable: "onb_cases",
     referencedColumns: ["organization_id", "id"],

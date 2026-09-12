@@ -7,7 +7,7 @@ import { Router } from 'wouter';
 import { GatewaysStrip } from './detail/gateways-strip';
 import { NewCaseForm } from './index';
 
-test('GatewaysStrip renders all three gates and enforces HR controls', () => {
+test('GatewaysStrip renders all three gates and only exposes Gate A after scoped authority preflight', () => {
   const mockCase = {
     id: 1,
     offerAcceptanceComplete: false,
@@ -18,32 +18,38 @@ test('GatewaysStrip renders all three gates and enforces HR controls', () => {
     }
   };
 
-  const queryClient = new QueryClient();
   const dummyHook = () => ['/cases/1', () => {}] as [string, (path: string) => void];
+  const gateApproval = { id: 44, version: 1, status: 'pending' };
 
-  const render = (isHR: boolean) => renderToStaticMarkup(
+  const render = (canDecide: boolean) => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(
+      ['/api/onboarding/approvals', gateApproval.id, 'capability', gateApproval.version, null],
+      { canDecide, reason: canDecide ? null : 'no_current_verified_scoped_assignment', version: 1 },
+    );
+    return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
       <Router hook={dummyHook}>
-        <GatewaysStrip c={mockCase} isHR={isHR} />
+        <GatewaysStrip c={mockCase} gateApproval={gateApproval} />
       </Router>
     </QueryClientProvider>
-  );
+    );
+  };
 
-  const htmlHR = render(true);
+  const htmlAuthority = render(true);
   
-  assert.match(htmlHR, /A Label/);
-  assert.match(htmlHR, /B Label/);
-  assert.match(htmlHR, /C Label/);
-  assert.match(htmlHR, /View Pending Interventions/);
-  assert.match(htmlHR, /Exceptions and blocked outcomes require human review/);
-  assert.match(htmlHR, /Confirm Offer Package/);
+  assert.match(htmlAuthority, /A Label/);
+  assert.match(htmlAuthority, /B Label/);
+  assert.match(htmlAuthority, /C Label/);
+  assert.match(htmlAuthority, /View Pending Interventions/);
+  assert.match(htmlAuthority, /Exceptions and blocked outcomes require human review/);
+  assert.match(htmlAuthority, /Confirm Offer Package/);
 
-  // Check non-HR hiding
-  const htmlNonHR = render(false);
-  assert.doesNotMatch(htmlNonHR, /Confirm Offer Package/, 'Non-HR should not see confirm button');
+  const htmlDenied = render(false);
+  assert.doesNotMatch(htmlDenied, /Confirm Offer Package/, 'Unscoped browser roles must not reveal the confirmation control');
 });
 
-test('NewCaseForm checkbox payload structure', () => {
+test('NewCaseForm does not permit bypassing dedicated Gate A confirmation', () => {
   const queryClient = new QueryClient();
   const dummyHook = () => ['/cases', () => {}] as [string, (path: string) => void];
 
@@ -55,7 +61,5 @@ test('NewCaseForm checkbox payload structure', () => {
     </QueryClientProvider>
   );
   
-  assert.match(html, /<input type="checkbox"[^>]*name="offerAcceptanceComplete"/);
-  assert.match(html, /Is the offer-acceptance package complete\?/);
-  assert.match(html, /creates a preboarding hold/);
+  assert.doesNotMatch(html, /name="offerAcceptanceComplete"/);
 });

@@ -7,6 +7,8 @@ import {
   parseApproverDecision,
   senderIsApprover,
   composeApprovalEmail,
+  emailDecisionDisabledReceipt,
+  emailDecisionRecordedReceipt,
 } from "./approver-email";
 import { composeApprovalRequestNotificationCopy } from "./approval-decisions";
 import { approvalStakeholderFromActionIdentity } from "./email-identity";
@@ -96,7 +98,7 @@ test("approver address is only deliverable once explicitly allowlisted", () => {
 
 /* ---------------------------- compose ---------------------------- */
 
-test("composeApprovalEmail includes the ref, recommendation and reply instructions", () => {
+test("composeApprovalEmail includes authenticated app-only decision instructions", () => {
   const { subject, body } = composeApprovalEmail({
     approvalId: 9,
     workerName: "Priya Sharma",
@@ -110,13 +112,16 @@ test("composeApprovalEmail includes the ref, recommendation and reply instructio
   assert.ok(subject.includes("Priya Sharma"));
   assert.ok(body.includes("Proceed with conditional clearance"));
   assert.ok(body.includes("Minor date mismatch"));
-  assert.ok(/reply .*"approve" or "reject"/i.test(body));
+  assert.match(body, /sign in to the same organization/i);
+  assert.match(body, /Action Center → Approvals/);
+  assert.match(body, /Email replies .* do not approve, reject, or change/i);
   assert.match(body, /Employee: Priya Sharma/);
   assert.match(body, /Intended stakeholder: Name not configured — HR approval stakeholder/);
   assert.match(body, /Requested by: bgv \(agent\)/);
   assert.match(body, /Delivery status: REAL PATH/);
-  assert.match(body, /App link: https:\/\/hro-agent-nexus\.replit\.app\/approvals\?tab=approvals&caseId=3&approvalId=9&approvalRef=AP-9-V1/);
-  // The reply must be matchable: the ref appears in the body too.
+  assert.match(body, /App navigation: Sign in to the same organization, open Action Center → Approvals, and locate AP-9-V1/);
+  assert.doesNotMatch(body, /App link: https?:\/\//);
+  // The reference still lets a signed-in user locate the exact review.
   assert.equal(matchApprovalRef(body), 9);
 });
 
@@ -131,6 +136,18 @@ test("composeApprovalEmail flags hard-blocks", () => {
     rationale: "x",
   });
   assert.ok(subject.includes("HARD-BLOCK"));
+});
+
+test("email-enabled approval copy describes verified authority rather than a persona", () => {
+  const { body } = composeApprovalEmail({
+    approvalId: 15, version: 2, workerName: "W", caseId: 1, agent: "bgv",
+    hitlPattern: "approve-before-act", recommendation: "r", rationale: "x",
+    // composeApprovalEmail is the compatibility wrapper; the current
+    // notification path supplies this only after a live scoped grant lookup.
+    emailResponderAuthorized: true,
+  });
+  assert.match(body, /exact governance-authorized Clerk-verified member address/);
+  assert.match(body, /no stakeholder persona or mailbox label grants authority/i);
 });
 
 test("approval copy keeps named stakeholder separate from the shared mailbox address", () => {
@@ -150,8 +167,37 @@ test("approval copy keeps named stakeholder separate from the shared mailbox add
   assert.match(body, /Intended stakeholder: People Operations — HR approval reviewer/);
   assert.match(body, /Actual delivery address: demo-approvals@example.test/);
   assert.match(body, /Reference: AP-12-V2/);
-  assert.match(body, /App link: https:\/\/hro-agent-nexus\.replit\.app\/approvals\?tab=approvals&caseId=88&approvalId=12&approvalRef=AP-12-V2/);
-  assert.match(body, /not as a verified named human/);
+  assert.match(body, /App navigation: Sign in to the same organization, open Action Center → Approvals, and locate AP-12-V2/);
+  assert.match(body, /Email replies are notification receipts only/);
+});
+
+test("email reply receipt is explicit, app-only, and deduplicated by provider message", () => {
+  const first = emailDecisionDisabledReceipt({
+    approvalId: 12,
+    version: 2,
+    sourceMessageId: "gmail-message-123",
+  });
+  const retry = emailDecisionDisabledReceipt({
+    approvalId: 12,
+    version: 2,
+    sourceMessageId: "gmail-message-123",
+  });
+  assert.match(first.subject, /Email reply received — no decision applied/);
+  assert.match(first.body, /No decision was applied/);
+  assert.match(first.body, /did not pass the current authority checks/);
+  assert.match(first.body, /Sign in to the same organization and open Action Center → Approvals/);
+  assert.equal(first.idempotencyKey, "approval-email-receipt:gmail-message-123");
+  assert.deepEqual(retry, first);
+});
+
+test("authorized email decision receipt is truthful and provider-message deduplicated", () => {
+  const receipt = emailDecisionRecordedReceipt({
+    approvalId: 12, version: 2, sourceMessageId: "gmail-message-accepted", decision: "approved",
+  });
+  assert.match(receipt.subject, /Email decision recorded — approved/);
+  assert.match(receipt.body, /approved decision .* recorded after current authority verification/i);
+  assert.match(receipt.body, /verified member account, not to a mailbox persona/i);
+  assert.equal(receipt.idempotencyKey, "approval-email-receipt:gmail-message-accepted");
 });
 
 test("the approval outbox template caller resolves the configured HR persona", () => {
@@ -203,4 +249,5 @@ test("the approval outbox template caller resolves the configured HR persona", (
   });
   assert.doesNotMatch(body, /Beatrice Chen/);
   assert.match(renamed.body, /Beatrice Chen/);
+  assert.doesNotMatch(body, /reply with exactly|shared approver mailbox address are honored/i);
 });

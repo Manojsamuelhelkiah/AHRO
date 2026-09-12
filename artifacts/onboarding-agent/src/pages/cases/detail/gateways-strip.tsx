@@ -4,12 +4,30 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Label } from '@/components/ui-shared';
 import { Link } from 'wouter';
 import { StatusBadgeText } from './components';
+import { useApprovalCapability } from '../../../hooks/use-approval-action';
 
-export function GatewaysStrip({ c, isHR }: { c: Pick<OnbCase, 'id' | 'gateways' | 'offerAcceptanceComplete'>, isHR: boolean }) {
+type GateApprovalTarget = {
+  id: number;
+  version: number;
+  status: string;
+} | null | undefined;
+
+export function GatewaysStrip({ c, gateApproval }: {
+  c: Pick<OnbCase, 'id' | 'gateways' | 'offerAcceptanceComplete'>;
+  gateApproval?: GateApprovalTarget;
+}) {
   const queryClient = useQueryClient();
   const confirmOffer = useConfirmOnboardingOfferAcceptance();
+  const gateAuthority = useApprovalCapability(gateApproval);
   const [note, setNote] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
+  // The Gate A write endpoint repeats its current-state check. Never expose
+  // this control based on a browser owner/admin role: only its pending,
+  // scoped authority-bound approval can enable it.
+  const canConfirmGateA =
+    gateApproval?.status === 'pending' &&
+    gateAuthority.data?.canDecide === true &&
+    !gateAuthority.isLoading;
 
   if (!c.gateways) return null;
 
@@ -67,7 +85,7 @@ export function GatewaysStrip({ c, isHR }: { c: Pick<OnbCase, 'id' | 'gateways' 
               <p className="text-[11px] font-medium mt-1 text-[var(--status-red)]">Exceptions and blocked outcomes require human review.</p>
             )}
             
-            {isA && (g.status === 'pending' || g.status === 'human-review' || g.status === 'blocked') && !c.offerAcceptanceComplete && isHR && (
+            {isA && (g.status === 'pending' || g.status === 'human-review' || g.status === 'blocked') && !c.offerAcceptanceComplete && canConfirmGateA && (
               <div className="mt-3 pt-3 border-t border-[var(--border)]">
                 {showConfirm ? (
                   <div className="space-y-2">

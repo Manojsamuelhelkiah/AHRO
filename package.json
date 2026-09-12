@@ -10,7 +10,8 @@
   },
   "private": true,
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
+    "@replit/connectors-sdk": "^0.4.1",
+    "mailauth": "4.13.3"
   },
   "devDependencies": {
     "pdfkit": "^0.19.1",

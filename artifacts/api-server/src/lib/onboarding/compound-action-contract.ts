@@ -94,6 +94,8 @@ export type ApprovalRule = {
 export type ApprovalDecision = {
   proposalHash: string;
   authorityId: string;
+  /** Current assignment generation observed when the decision was recorded. */
+  authorityRevision?: number;
   authorityRole: string;
   decision: "approved" | "rejected";
   expiresAt: Date;

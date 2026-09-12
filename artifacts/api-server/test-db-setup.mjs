@@ -58,6 +58,33 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // references and installs append-only evidence protections. The exact hash
   // binds automatic reconciliation to the approved bytes.
   "e8bb7eafea75bae8995c5104f174e8a9d58a316d50310d231e128749e094144d",
+  // Reviewed authority/governance migration includes an explicit historical
+  // checklist backfill and therefore is not eligible for generic automatic
+  // DDL classification.
+  "714799b0378ef6bf0d8aa071c3524634350871c328c4cb4908c6f5e8ef44106f",
+  // Conservative migration-review holds are data migration, not inferred
+  // safety verification.
+  "af7ca8b29a6e1eaf26045c057ac4b4ca0cc78f575e51719feb6f42fde40683a8",
+  // Forward replacement of the legacy governance status constraint.
+  "37384fcdd9f7f2d2be2c85cc7119fa524b8cd544b37963b5c471d9fb54db0a25",
+  // Reviewed 0049 data correction: separates conservative migration-review
+  // holds from explicitly designated occupational-health controls.
+  "4472d9010d4389999c7f9a34de13b3078823451ae69c5877e9a781363487e6ec",
+]);
+// The authority migration sequence was renumbered after it landed in
+// parallel with the workforce sequence. These are ledger identifiers only:
+// their SQL bodies remain hash-pinned and byte-identical. Reconcile an
+// already-recorded pre-rebase receipt to its canonical tag before checking
+// the current journal, rather than treating that reviewed history as unknown.
+const renamedMigrationTags = new Map([
+  ["0045_verified_decision_authority", "0047_verified_decision_authority"],
+  ["0046_authority_case_creator_principal", "0048_authority_case_creator_principal"],
+  ["0047_nonwaivable_safety_policy", "0049_nonwaivable_safety_policy"],
+  ["0048_authority_governance_withdrawn", "0050_authority_governance_withdrawn"],
+  [
+    "0049_separate_migration_review_from_medical_safety",
+    "0051_separate_migration_review_from_medical_safety",
+  ],
 ]);
 const compatibleHistoricalMigrationHashes = new Map([
   [
@@ -77,6 +104,15 @@ const compatibleHistoricalMigrationHashes = new Map([
       // Exact additive predecessor applied during development before the
       // conditional recovery guard was added.
       "9101162883625d9693b214299c5b4cf5ae0a0e41936f397c9ae3a7584205e246",
+    ]),
+  ],
+  [
+    "0047_verified_decision_authority",
+    new Set([
+      // Exact additive predecessor recorded by the development database before
+      // the reviewed authority migration's conditional DDL was finalized.
+      // The schema receipt is still verified before any tests run.
+      "56663a758762ff5a4fffbeb13939b4752a87f94c2ec4441c054b12cbf2a82a6d",
     ]),
   ],
 ]);
@@ -134,6 +170,65 @@ function migrationHashMatches(migration, appliedHash) {
       .get(migration.tag)
       ?.has(appliedHash) === true
   );
+}
+
+async function adoptRenamedMigrationTags(client, migrations, appliedRows) {
+  const migrationsByTag = new Map(
+    migrations.map((migration) => [migration.tag, migration]),
+  );
+  const rowsByTag = new Map(appliedRows.map((row) => [row.tag, row]));
+
+  for (const [legacyTag, canonicalTag] of renamedMigrationTags) {
+    const existing = rowsByTag.get(legacyTag);
+    if (!existing) continue;
+
+    const migration = migrationsByTag.get(canonicalTag);
+    if (!migration) {
+      throw new Error(
+        `Database test setup cannot adopt ${legacyTag}: canonical migration ${canonicalTag} is absent`,
+      );
+    }
+    if (!migrationHashMatches(migration, existing.hash)) {
+      throw new Error(
+        `Database test setup refused to adopt ${legacyTag}: its hash does not match ${canonicalTag}`,
+      );
+    }
+    if (rowsByTag.has(canonicalTag)) {
+      throw new Error(
+        `Database test setup found both legacy ${legacyTag} and canonical ${canonicalTag} migration receipts`,
+      );
+    }
+
+    const updated = await client.query(
+      `
+        UPDATE ${migrationTable}
+        SET tag = $1, created_at = $2
+        WHERE tag = $3 AND hash = $4 AND created_at = $5
+      `,
+      [
+        canonicalTag,
+        migration.createdAt,
+        legacyTag,
+        existing.hash,
+        existing.created_at,
+      ],
+    );
+    if (updated.rowCount !== 1) {
+      throw new Error(
+        `Database test setup could not atomically adopt ${legacyTag} as ${canonicalTag}`,
+      );
+    }
+
+    const canonicalRow = {
+      ...existing,
+      tag: canonicalTag,
+      created_at: migration.createdAt,
+    };
+    rowsByTag.delete(legacyTag);
+    rowsByTag.set(canonicalTag, canonicalRow);
+  }
+
+  return [...rowsByTag.values()];
 }
 
 function singleQuoteUsesBackslashEscapes(sql, quoteIndex) {
@@ -626,19 +721,24 @@ export async function loadCheckedInMigrations(options = {}) {
   );
   const migrations = [];
   const seenTags = new Set();
+  const seenIndexes = new Set();
 
   for (const entry of journal.entries ?? []) {
     if (
       !entry ||
       typeof entry.tag !== "string" ||
       typeof entry.when !== "number" ||
-      seenTags.has(entry.tag)
+      seenTags.has(entry.tag) ||
+      !Number.isInteger(entry.idx) ||
+      entry.idx < 0 ||
+      seenIndexes.has(entry.idx)
     ) {
       throw new Error(
         "Database test setup found an invalid or duplicate migration journal entry",
       );
     }
     seenTags.add(entry.tag);
+    seenIndexes.add(entry.idx);
 
     const filename = `${entry.tag}.sql`;
     if (!sqlFiles.delete(filename)) {
@@ -1394,7 +1494,12 @@ export async function reconcileDevelopmentDatabase(options = {}) {
     const appliedResult = await client.query(
       `SELECT tag, hash, created_at, schema_snapshot FROM ${migrationTable}`,
     );
-    const applied = new Map(appliedResult.rows.map((row) => [row.tag, row]));
+    const appliedRows = await adoptRenamedMigrationTags(
+      client,
+      migrations,
+      appliedResult.rows,
+    );
+    const applied = new Map(appliedRows.map((row) => [row.tag, row]));
     assertNoUnknownAppliedMigrations(migrations, applied);
     for (const migration of migrations) {
       const existing = applied.get(migration.tag);
@@ -1537,7 +1642,12 @@ export async function applyReviewedMigration(options = {}) {
     const appliedResult = await client.query(
       `SELECT tag, hash, created_at, schema_snapshot FROM ${migrationTable}`,
     );
-    const applied = new Map(appliedResult.rows.map((row) => [row.tag, row]));
+    const appliedRows = await adoptRenamedMigrationTags(
+      client,
+      migrations,
+      appliedResult.rows,
+    );
+    const applied = new Map(appliedRows.map((row) => [row.tag, row]));
     assertNoUnknownAppliedMigrations(migrations, applied);
     const targetIndex = migrations.findIndex(
       (candidate) => candidate.tag === migration.tag,

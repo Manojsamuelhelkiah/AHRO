@@ -6317,7 +6317,9 @@ export const RunOnboardingScenarioResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -6514,7 +6516,9 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -6668,7 +6672,7 @@ export const CreateOnboardingCaseBody = zod.object({
   "primarySkill": zod.string().optional(),
   "skillCriticality": zod.string().optional(),
   "notes": zod.string().optional().describe('Unstructured recruiter notes; treated as evidence, not instructions'),
-  "offerAcceptanceComplete": zod.boolean().default(createOnboardingCaseBodyOfferAcceptanceCompleteDefault).describe('HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation.'),
+  "offerAcceptanceComplete": zod.boolean().default(createOnboardingCaseBodyOfferAcceptanceCompleteDefault).describe('Must be false at creation. Offer acceptance is released only after creation through the dedicated authority-bound Gate A confirmation endpoint.'),
   "workforceContext": zod.object({
   "roleFamily": zod.string().max(createOnboardingCaseBodyWorkforceContextRoleFamilyMax).optional(),
   "band": zod.string().max(createOnboardingCaseBodyWorkforceContextBandMax).optional(),
@@ -6802,7 +6806,9 @@ export const CreateOnboardingCaseResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7003,7 +7009,9 @@ export const GetOnboardingCaseResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7276,7 +7284,9 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7490,7 +7500,9 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7645,7 +7657,9 @@ export const ListOnboardingChecklistProfilesResponseItem = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "createdAt": zod.string()
 }))
@@ -7765,7 +7779,9 @@ export const CreateOnboardingChecklistProfileResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "createdAt": zod.string()
 }))
@@ -7889,7 +7905,9 @@ export const UpdateOnboardingChecklistProfileResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "createdAt": zod.string()
 }))
@@ -7964,7 +7982,9 @@ export const DisableOnboardingChecklistProfileResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "createdAt": zod.string()
 }))
@@ -8039,7 +8059,9 @@ export const DuplicateOnboardingChecklistProfileResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "createdAt": zod.string()
 }))
@@ -9320,7 +9342,12 @@ export const ListOnboardingCaseDocumentsResponseItem = zod.object({
 }).describe('One item of a case\'s documentation pack (identity\/statutory\/contract\/policy)')
 export const ListOnboardingCaseDocumentsResponse = zod.array(ListOnboardingCaseDocumentsResponseItem)
 
-
+/**
+ * @summary Queue a legal review to recover a missing legacy document envelope
+ */
+export const RecoverOnboardingCaseDocumentsParams = zod.object({
+  "id": zod.coerce.number()
+})
 /**
  * @summary List safe document validation evidence for a tenant-owned case
  */
@@ -10006,7 +10033,9 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -10242,7 +10271,9 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -10534,7 +10565,9 @@ export const CorrectOnboardingWorkforceContextResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -10870,6 +10903,9 @@ export const ListOnboardingApprovalsResponseItem = zod.object({
   "to": zod.number().optional()
 }).describe('Which stints the answer covers. kind \"all\" means the whole archived history; \"yearRange\" may carry from\/to year bounds.')
 })).nullable().describe('Structured archive Q&A evidence with per-answer stint scope; null when the approval has no records evidence.'),
+  "authorityScope": zod.string().nullable().describe('Verified specialist authority scope required for a new decision; a null historical value cannot be replayed.'),
+  "authorityReviewStatus": zod.enum(['not-required', 'unresolved', 'reviewed-no-effect']),
+  "decidedAuthorityId": zod.string().nullable(),
   "status": zod.string().describe('pending | approved | rejected'),
   "decidedBy": zod.string().nullable(),
   "comment": zod.string().nullable(),
@@ -10913,11 +10949,29 @@ export const DecideOnboardingApprovalResponse = zod.object({
   "to": zod.number().optional()
 }).describe('Which stints the answer covers. kind \"all\" means the whole archived history; \"yearRange\" may carry from\/to year bounds.')
 })).nullable().describe('Structured archive Q&A evidence with per-answer stint scope; null when the approval has no records evidence.'),
+  "authorityScope": zod.string().nullable().describe('Verified specialist authority scope required for a new decision; a null historical value cannot be replayed.'),
+  "authorityReviewStatus": zod.enum(['not-required', 'unresolved', 'reviewed-no-effect']),
+  "decidedAuthorityId": zod.string().nullable(),
   "status": zod.string().describe('pending | approved | rejected'),
   "decidedBy": zod.string().nullable(),
   "comment": zod.string().nullable(),
   "createdAt": zod.string(),
   "decidedAt": zod.string().nullable()
+})
+
+
+/**
+ * @summary Read-only current-user specialist decision capability preflight
+ */
+export const GetOnboardingApprovalCapabilityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+export const GetOnboardingApprovalCapabilityResponse = zod.object({
+  "canDecide": zod.boolean(),
+  "reason": zod.string().nullable().describe('Machine-readable fail-closed reason when the current authenticated user cannot decide.'),
+  "version": zod.number().min(1)
 })
 
 
@@ -10948,6 +11002,159 @@ export const GetOnboardingApprovalHistoryResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const GetOnboardingApprovalHistoryResponse = zod.array(GetOnboardingApprovalHistoryResponseItem)
+
+
+/**
+ * @summary Current tenant governance state and caller authority administration eligibility
+ */
+
+
+export const GetOnboardingAuthorityGovernanceResponse = zod.object({
+  "governance": zod.object({
+  "status": zod.enum(['unconfigured', 'operator-attested', 'governance-approved', 'withdrawn']),
+  "attestedAt": zod.string().nullish(),
+  "attestationNote": zod.string().nullish(),
+  "approvedAt": zod.string().nullish(),
+  "governanceSource": zod.string().nullish(),
+  "revision": zod.number()
+}),
+  "canAdminister": zod.boolean(),
+  "assignments": zod.array(zod.object({
+  "id": zod.string(),
+  "personUserId": zod.string(),
+  "personEmail": zod.string().nullable(),
+  "emailResponderAuthorized": zod.boolean(),
+  "authorityRole": zod.string(),
+  "scopes": zod.array(zod.string()),
+  "caseId": zod.number().nullable(),
+  "siteScope": zod.string().nullable(),
+  "jurisdictionScope": zod.string().nullable(),
+  "validFrom": zod.string(),
+  "validUntil": zod.string().nullable(),
+  "status": zod.enum(['active', 'revoked']),
+  "revision": zod.number().min(1),
+  "governanceDecisionRef": zod.string(),
+  "revokeReason": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Record operator attestation only; does not approve production authority
+ */
+export const BootstrapOnboardingAuthorityGovernanceBody = zod.object({
+  "note": zod.string()
+})
+
+export const BootstrapOnboardingAuthorityGovernanceResponse = zod.void()
+
+
+/**
+ * @summary Immediately withdraw tenant specialist authority governance
+ */
+
+
+export const WithdrawOnboardingAuthorityGovernanceBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const WithdrawOnboardingAuthorityGovernanceResponse = zod.unknown()
+
+
+/**
+ * @summary List specialist authority assignments (restricted)
+ */
+
+
+export const ListOnboardingAuthorityAssignmentsResponseItem = zod.object({
+  "id": zod.string(),
+  "personUserId": zod.string(),
+  "personEmail": zod.string().nullable(),
+  "emailResponderAuthorized": zod.boolean(),
+  "authorityRole": zod.string(),
+  "scopes": zod.array(zod.string()),
+  "caseId": zod.number().nullable(),
+  "siteScope": zod.string().nullable(),
+  "jurisdictionScope": zod.string().nullable(),
+  "validFrom": zod.string(),
+  "validUntil": zod.string().nullable(),
+  "status": zod.enum(['active', 'revoked']),
+  "revision": zod.number().min(1),
+  "governanceDecisionRef": zod.string(),
+  "revokeReason": zod.string().nullable()
+})
+export const ListOnboardingAuthorityAssignmentsResponse = zod.array(ListOnboardingAuthorityAssignmentsResponseItem)
+
+
+/**
+ * @summary Grant a scoped specialist authority assignment (restricted; self-grant prohibited)
+ */
+
+
+export const CreateOnboardingAuthorityAssignmentBody = zod.object({
+  "personUserId": zod.string(),
+  "personEmail": zod.string().nullish(),
+  "emailResponderAuthorized": zod.boolean().optional(),
+  "authorityRole": zod.string(),
+  "scopes": zod.array(zod.string()).min(1),
+  "caseId": zod.number().nullish(),
+  "siteScope": zod.string().nullish(),
+  "jurisdictionScope": zod.string().nullish(),
+  "validFrom": zod.string().nullish(),
+  "validUntil": zod.string().nullish(),
+  "governanceDecisionRef": zod.string()
+})
+
+
+export const CreateOnboardingAuthorityAssignmentResponse = zod.object({
+  "id": zod.string(),
+  "personUserId": zod.string(),
+  "personEmail": zod.string().nullable(),
+  "emailResponderAuthorized": zod.boolean(),
+  "authorityRole": zod.string(),
+  "scopes": zod.array(zod.string()),
+  "caseId": zod.number().nullable(),
+  "siteScope": zod.string().nullable(),
+  "jurisdictionScope": zod.string().nullable(),
+  "validFrom": zod.string(),
+  "validUntil": zod.string().nullable(),
+  "status": zod.enum(['active', 'revoked']),
+  "revision": zod.number().min(1),
+  "governanceDecisionRef": zod.string(),
+  "revokeReason": zod.string().nullable()
+})
+
+
+/**
+ * @summary Revoke specialist authority; pending decisions and dispatches revalidate it
+ */
+export const RevokeOnboardingAuthorityAssignmentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevokeOnboardingAuthorityAssignmentBody = zod.object({
+  "reason": zod.string()
+})
+
+export const RevokeOnboardingAuthorityAssignmentResponse = zod.unknown()
+
+
+/**
+ * @summary Historical approvals lacking authority evidence, for review only
+ */
+export const ListOnboardingUnresolvedAuthorityApprovalsResponse = zod.unknown()
+
+
+/**
+ * @summary Acknowledge historical evidence without replaying a decision or effect
+ */
+
+
+export const AcknowledgeOnboardingUnresolvedAuthorityApprovalParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const AcknowledgeOnboardingUnresolvedAuthorityApprovalResponse = zod.unknown()
 
 
 /**
@@ -11274,7 +11481,9 @@ export const GetOnboardingSettingsResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })).min(1).max(getOnboardingSettingsResponseDay1ChecklistMax),
   "day1LogisticsDefault": zod.object({
   "orientationDate": zod.string().regex(getOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
@@ -11341,7 +11550,9 @@ export const UpdateOnboardingSettingsBody = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })).min(1).max(updateOnboardingSettingsBodyDay1ChecklistMax).optional(),
   "day1LogisticsDefault": zod.object({
   "orientationDate": zod.string().regex(updateOnboardingSettingsBodyDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
@@ -11396,7 +11607,9 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "responsibleRole": zod.string().optional(),
   "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
   "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
-  "prerequisites": zod.array(zod.string()).optional()
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
 })).min(1).max(updateOnboardingSettingsResponseDay1ChecklistMax),
   "day1LogisticsDefault": zod.object({
   "orientationDate": zod.string().regex(updateOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
@@ -12308,3 +12521,7 @@ export const CreateOnboardingProtectedAuditCorrectionResponse = zod.object({
   "entryHash": zod.string()
 })
 
+
+export const RecoverOnboardingCaseDocumentsResponse = zod.object({
+  "message": zod.string()
+})

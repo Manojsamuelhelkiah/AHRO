@@ -10,6 +10,7 @@ import {
   type ExecutableActionBinding,
   type PlanBranch,
 } from "./compound-action-contract";
+import type { OnboardingDbTransaction } from "./settings";
 
 export type MutatingConnector =
   | "payroll"
@@ -54,14 +55,26 @@ export type ConnectorDispatchContext = {
   binding: ExecutableActionBinding;
   decisions: ApprovalDecision[];
   actorIds: {
-    requestor: string;
-    beneficiary: string;
-    executor: string;
+    requestor?: string;
+    beneficiary?: string;
+    executor?: string;
   };
   deniedBlockers: string[];
   now: Date;
   /** Durable offline fixtures may never reach a connector writer. */
   syntheticOffline?: boolean;
+  /**
+   * Live provider paths supply this database-backed revalidation immediately
+   * before the write. Test/simulation writers deliberately do not represent a
+   * provider boundary.
+   */
+  verifyCurrentAuthority?: (
+    tx?: OnboardingDbTransaction,
+  ) => Promise<{ allowed: true } | { allowed: false; reason: string }>;
+  /** Holds the tenant revocation fence from live revalidation through write. */
+  withAuthorityFence?: <T>(
+    write: (tx?: OnboardingDbTransaction) => Promise<T>,
+  ) => Promise<T>;
 };
 
 export function createConnectorProposal(input: {
@@ -250,6 +263,17 @@ export async function dispatchConnectorMutation<T>(input: {
       approval.reason,
     );
   }
-
-  return input.write(mutation);
+  // Ordinary enrollment/provisioning/open/send operations are consequential
+  // provider effects too. A historical hash binding or NO_APPROVALS policy is
+  // never a bypass around current, DB-backed authority evidence.
+  if (!input.context.verifyCurrentAuthority || !input.context.withAuthorityFence) {
+    throw new ConnectorDispatchRejectedError(input.mutation.connector, "authority_revalidation_required");
+  }
+  return input.context.withAuthorityFence(async (tx) => {
+    const current = await input.context.verifyCurrentAuthority!(tx);
+    if (!current.allowed) {
+      throw new ConnectorDispatchRejectedError(input.mutation.connector, current.reason);
+    }
+    return input.write(mutation);
+  });
 }

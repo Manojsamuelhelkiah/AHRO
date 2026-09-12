@@ -7,7 +7,7 @@ import {
 } from '@workspace/api-client-react';
 
 export const APPROVAL_PERMISSION_MESSAGE =
-  'Only organization owners/admins can approve or acknowledge reviews';
+  'A current governance-approved specialist assignment is required for this decision';
 export const APPROVAL_VERSION_MESSAGE =
   'This review has no valid version. Reload the review before taking action.';
 export const APPROVAL_STALE_MESSAGE =
@@ -23,8 +23,11 @@ export type ApprovalActionTarget = {
   agent?: string | null;
 };
 
-export type ApprovalRoleState = {
-  isHR: boolean;
+export type ApprovalAuthorityState = {
+  /** Result of the server's live, authenticated specialist preflight. */
+  canDecide: boolean;
+  /** Fail-closed reason supplied by the same authority checker as the write. */
+  reason?: string | null;
   loading: boolean;
 };
 
@@ -90,19 +93,12 @@ export function getApprovalVersionLabel(
 
 export function getApprovalActionAvailability(
   approval: ApprovalActionTarget | null | undefined,
-  role: ApprovalRoleState,
+  authority: ApprovalAuthorityState,
 ): ApprovalActionAvailability {
-  if (role.loading) {
+  if (authority.loading) {
     return {
       canAct: false,
-      reason: 'Checking organization permissions…',
-    };
-  }
-
-  if (!role.isHR) {
-    return {
-      canAct: false,
-      reason: APPROVAL_PERMISSION_MESSAGE,
+      reason: 'Checking current specialist authority…',
     };
   }
 
@@ -120,18 +116,28 @@ export function getApprovalActionAvailability(
     };
   }
 
+  // Browser membership roles must never enable an approval action. This is a
+  // read-only preflight of the same server-side current-state checker the
+  // mutation runs under its tenant fence (governance, membership, scope,
+  // assignment validity, case scope, revision, and SoD).
+  if (!authority.canDecide) {
+    return {
+      canAct: false,
+      reason: authority.reason || APPROVAL_PERMISSION_MESSAGE,
+    };
+  }
   return { canAct: true, reason: null };
 }
 
 export function buildApprovalDecisionPayload(
   approval: ApprovalActionTarget | null | undefined,
-  role: ApprovalRoleState,
+  authority: ApprovalAuthorityState,
   decision: string,
   comment?: string,
 ): ApprovalDecisionPayload | null {
   if (
     !approval ||
-    !getApprovalActionAvailability(approval, role).canAct ||
+    !getApprovalActionAvailability(approval, authority).canAct ||
     !isValidApprovalVersion(approval)
   ) {
     return null;

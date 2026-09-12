@@ -22,6 +22,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
 import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
+import { getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
 import { TargetedChecklistProfiles } from './settings-checklist-profiles';
@@ -146,7 +147,7 @@ function RemoteApproverSettings() {
           setResult({
             ok: true,
             message: updated.hrApproverEmail
-              ? `New pending approvals will be emailed to ${updated.hrApproverEmail}. A reply containing "approve" or "reject" from that exact address decides them.`
+              ? `New pending approvals will be delivered to ${updated.hrApproverEmail}. Email decisions require a separate governance-admin assignment plus a valid full-body DKIM signature from this exact Clerk-verified From address; otherwise use the authenticated Approvals queue.`
               : 'Cleared — approvals are decided only from the in-app Approvals queue.',
           });
           queryClient.invalidateQueries({ queryKey: getGetOnboardingSettingsQueryKey() });
@@ -163,9 +164,9 @@ function RemoteApproverSettings() {
         <div>
           <p className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">Remote HR approver (optional)</p>
           <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">
-            When the AI escalates, this address gets an email with the recommendation and decides it by replying{' '}
+              When the AI escalates, this address gets an email with the recommendation. A remote decision is accepted only when Gmail’s raw message has a valid DNS-backed DKIM signature aligned to this exact From address, covering From, Subject, and the full decision body, and the address is bound to a current scoped Clerk member assignment. Mailbox labels, contact roles, personas, and Authentication-Results headers never grant authority.{' '}
             <span className="font-medium text-[var(--text-secondary)]">approve</span> or <span className="font-medium text-[var(--text-secondary)]">reject</span>. Only replies
-            from this exact address are honored; each decision is recorded in the audit trail.
+              that satisfy all of those checks are honored; otherwise use the signed-in Approvals queue.
           </p>
         </div>
         <Badge
@@ -689,6 +690,13 @@ function Day1LogisticsSettingsCard() {
   );
 }
 
+type AuthorityAssignment = {
+  id: string; personUserId: string; personEmail: string | null;
+  emailResponderAuthorized: boolean;
+  authorityRole: string; scopes: string[]; caseId: number | null; siteScope: string | null;
+  jurisdictionScope: string | null; validFrom: string; validUntil: string | null; status: string;
+  revision: number; governanceDecisionRef: string; revokeReason: string | null;
+};
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useGetOnboardingSettings({
@@ -804,6 +812,7 @@ export function SettingsPage() {
       <DemoVolunteersCard />
       <SyntheticResetCard />
       <ReadinessSlaSettingsCard />
+      <AuthorityGovernanceCard />
       <ActionCenterIdentitiesSettings />
       <ChecklistSettingsCard />
 
@@ -1170,6 +1179,200 @@ function CandidateAccessCleanupCard({ settings, isLoading }: {
               Cleanup has not completed recently. Check the production heartbeat if this status persists.
             </p>
           )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const AUTHORITY_SCOPE_OPTIONS = [
+  'hr-compliance-approve', 'legal-approve', 'occupational-health-approve',
+  'payroll-approve', 'fraud-control-approve', 'manager-approve',
+  'application-owner-approve', 'security-approve', 'it-security-approve',
+  'authority-administration',
+];
+
+type AuthorityState = {
+  governance: { status: string; attestedAt?: string | null; attestationNote?: string | null; approvedAt?: string | null; governanceSource?: string | null; revision: number };
+  canAdminister: boolean;
+  assignments: AuthorityAssignment[];
+};
+
+function AuthorityGovernanceCard() {
+  const [state, setState] = useState<AuthorityState | null>(null);
+  const [assignments, setAssignments] = useState<AuthorityAssignment[] | null>(null);
+  const [unresolved, setUnresolved] = useState<Array<{ id: number; caseId: number; recommendation: string; status: string }> | null>(null);
+  const [note, setNote] = useState('');
+  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState({ personUserId: '', authorityRole: 'hr-compliance', scope: 'hr-compliance-approve', personEmail: '', emailResponderAuthorized: false, governanceDecisionRef: '', validUntil: '' });
+  const headers = () => {
+    const organizationId = getPinnedOrganizationIdForPage();
+    return { 'content-type': 'application/json', ...(organizationId ? { 'x-organization-id': organizationId } : {}) };
+  };
+  const request = async (path: string, init?: RequestInit) => {
+    const response = await fetch(`/api${path}`, { credentials: 'include', ...init, headers: { ...headers(), ...(init?.headers ?? {}) } });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || 'Authority request failed.');
+    return body;
+  };
+  const refresh = async () => {
+    try {
+      const next = await request('/onboarding/authority/governance') as AuthorityState;
+      setState(next);
+      setNotice(null);
+      if (next.canAdminister) {
+        setAssignments(await request('/onboarding/authority/assignments') as AuthorityAssignment[]);
+      } else {
+        setAssignments(null);
+      }
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Could not load authority controls.' });
+    }
+  };
+  useEffect(() => { void refresh(); }, []);
+  const bootstrap = async () => {
+    setBusy(true);
+    try {
+      const result = await request('/onboarding/authority/bootstrap', { method: 'POST', body: JSON.stringify({ note }) });
+      setNotice({ ok: true, message: result.message });
+      setNote('');
+      await refresh();
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Attestation was not recorded.' });
+    } finally { setBusy(false); }
+  };
+  const grant = async () => {
+    setBusy(true);
+    try {
+      await request('/onboarding/authority/assignments', {
+        method: 'POST',
+        body: JSON.stringify({
+          personUserId: draft.personUserId, personEmail: draft.personEmail || null,
+          emailResponderAuthorized: draft.emailResponderAuthorized,
+          authorityRole: draft.authorityRole, scopes: [draft.scope],
+          validUntil: draft.validUntil || null, governanceDecisionRef: draft.governanceDecisionRef,
+        }),
+      });
+      setNotice({ ok: true, message: 'Governance-approved authority assignment recorded.' });
+      setDraft({ personUserId: '', authorityRole: 'hr-compliance', scope: 'hr-compliance-approve', personEmail: '', emailResponderAuthorized: false, governanceDecisionRef: '', validUntil: '' });
+      await refresh();
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Authority was not granted.' });
+    } finally { setBusy(false); }
+  };
+  const revoke = async (id: string) => {
+    const reason = window.prompt('Why is this authority being revoked?');
+    if (!reason?.trim()) return;
+    setBusy(true);
+    try {
+      await request(`/onboarding/authority/assignments/${encodeURIComponent(id)}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) });
+      setNotice({ ok: true, message: 'Authority revoked. Pending decisions and dispatches revalidate current authority.' });
+      await refresh();
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Authority was not revoked.' });
+    } finally { setBusy(false); }
+  };
+  const withdrawGovernance = async () => {
+    const reason = window.prompt('Why must all specialist authority be withdrawn?');
+    if (!reason?.trim()) return;
+    setBusy(true);
+    try {
+      const response = await request('/onboarding/authority/governance/withdraw', {
+        method: 'POST', body: JSON.stringify({ reason }),
+      });
+      setNotice({ ok: true, message: response.message });
+      await refresh();
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Governance was not withdrawn.' });
+    } finally { setBusy(false); }
+  };
+  const loadUnresolved = async () => {
+    try {
+      setUnresolved(await request('/onboarding/authority/unresolved-approvals') as Array<{ id: number; caseId: number; recommendation: string; status: string }>);
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Could not load unresolved history.' });
+    }
+  };
+  const acknowledge = async (id: number) => {
+    try {
+      const response = await request(`/onboarding/authority/unresolved-approvals/${id}/acknowledge`, { method: 'POST' });
+      setNotice({ ok: true, message: response.message });
+      await loadUnresolved();
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Historical review was not acknowledged.' });
+    }
+  };
+  const status = state?.governance.status ?? 'loading';
+  return (
+    <Card className="p-0 overflow-hidden">
+      <CardContent className="p-0">
+        <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-alt)] flex flex-col sm:flex-row gap-3 sm:items-start sm:justify-between">
+          <div className="flex gap-3">
+            <IconTile icon={ShieldCheck} className="bg-[var(--primary-light)] text-[var(--primary)] border-transparent" />
+            <div>
+              <h3 className="text-[var(--text-sm)] font-semibold text-[var(--text-primary)]">Specialist decision authority</h3>
+              <p className="mt-1 text-[var(--text-xs)] text-[var(--text-muted)]">Verified, tenant-scoped authority is separate from membership, contact labels, and demo personas.</p>
+            </div>
+          </div>
+          <Badge className={status === 'governance-approved' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]'}>{status}</Badge>
+        </div>
+        <div className="p-4 space-y-4">
+          {status !== 'governance-approved' && (
+            <div className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-[var(--text-xs)] text-[var(--status-amber-fg)]">
+              <strong>Production authority is disabled.</strong> An operator attestation records who initiated governance setup; it is not directory verification and cannot activate specialist authority. A separately approved governance decision is required.
+            </div>
+          )}
+          {status === 'governance-approved' && state?.canAdminister && (
+            <div className="rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+              <p className="flex-1 text-[var(--text-xs)] text-[var(--status-red-fg)]">Emergency governance withdrawal immediately makes specialist decisions fail closed. Re-activation requires a new protected operator governance record.</p>
+              <Button variant="destructive" onClick={() => void withdrawGovernance()} disabled={busy}>Withdraw governance</Button>
+            </div>
+          )}
+          {status === 'unconfigured' && (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input className={inputCls} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Operator attestation note (required)" maxLength={500} />
+              <Button onClick={() => void bootstrap()} disabled={busy || !note.trim()} className="shrink-0">Record operator attestation</Button>
+            </div>
+          )}
+          {state?.canAdminister ? (
+            <>
+              <div className="rounded-md border border-[var(--border)] p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input className={inputCls} value={draft.personUserId} onChange={(event) => setDraft({ ...draft, personUserId: event.target.value })} placeholder="Authenticated person user ID" />
+                <input className={inputCls} value={draft.governanceDecisionRef} onChange={(event) => setDraft({ ...draft, governanceDecisionRef: event.target.value })} placeholder="Approved governance decision reference" />
+                <select className={inputCls} value={draft.authorityRole} onChange={(event) => setDraft({ ...draft, authorityRole: event.target.value })}>
+                  {['hr-compliance', 'legal', 'occupational-health', 'payroll', 'fraud-control', 'manager', 'application-owner', 'security', 'it-security', 'governance'].map((role) => <option key={role}>{role}</option>)}
+                </select>
+                <select className={inputCls} value={draft.scope} onChange={(event) => setDraft({ ...draft, scope: event.target.value })}>
+                  {AUTHORITY_SCOPE_OPTIONS.map((scope) => <option key={scope}>{scope}</option>)}
+                </select>
+                <div className="space-y-1">
+                  <input className={inputCls} type="email" value={draft.personEmail} onChange={(event) => setDraft({ ...draft, personEmail: event.target.value })} placeholder="Member's Clerk-verified email address" />
+                  <label className="flex items-start gap-2 text-[var(--text-xs)] text-[var(--text-muted)]">
+                    <input type="checkbox" checked={draft.emailResponderAuthorized} disabled={!draft.personUserId || !draft.personEmail} onChange={(event) => setDraft({ ...draft, emailResponderAuthorized: event.target.checked })} />
+                    <span>Allow decisions from this exact verified member email. The server rechecks Clerk ownership; shared personas and unverified addresses are rejected.</span>
+                  </label>
+                </div>
+                <input className={inputCls} type="datetime-local" value={draft.validUntil} onChange={(event) => setDraft({ ...draft, validUntil: event.target.value })} aria-label="Authority expiry (optional)" />
+                <Button onClick={() => void grant()} disabled={busy || !draft.personUserId || !draft.governanceDecisionRef} className="md:col-span-2">Grant governance-approved authority</Button>
+              </div>
+              <div className="space-y-2">
+                {(assignments ?? []).map((assignment) => (
+                  <div key={assignment.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border border-[var(--border)] p-3 text-[var(--text-xs)]">
+                    <div><strong>{assignment.authorityRole}</strong> · {assignment.scopes.join(', ')}<br /><span className="text-[var(--text-muted)]">{assignment.personUserId} · rev {assignment.revision} · {assignment.status}{assignment.emailResponderAuthorized ? ` · email decision: Clerk verified (${assignment.personEmail})` : ''}</span></div>
+                    {assignment.status === 'active' && <Button size="sm" variant="outline" className="text-[var(--status-red)]" disabled={busy} onClick={() => void revoke(assignment.id)}>Revoke</Button>}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-[var(--text-xs)] text-[var(--text-muted)]">Assignment administration is restricted to a current governance-approved <code>authority-administration</code> assignment. Ordinary owners, admins, members, contact roles, and personas cannot grant specialist authority.</p>
+          )}
+          <div className="border-t border-[var(--border)] pt-3">
+            <Button size="sm" variant="outline" onClick={() => void loadUnresolved()}>Review unresolved legacy approvals</Button>
+            {unresolved && <div className="mt-3 space-y-2">{unresolved.length ? unresolved.map((item) => <div key={item.id} className="flex flex-col sm:flex-row gap-2 justify-between border border-[var(--border)] rounded-md p-3 text-[var(--text-xs)]"><span>Case #{item.caseId}: {item.recommendation}</span><Button size="sm" variant="outline" onClick={() => void acknowledge(item.id)}>Acknowledge — no effect</Button></div>) : <p className="text-[var(--text-xs)] text-[var(--text-muted)]">No unresolved historical approvals.</p>}</div>}
+          </div>
+          {notice && <p role="status" className={cn('text-[var(--text-xs)] rounded-md p-3', notice.ok ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]')}>{notice.message}</p>}
         </div>
       </CardContent>
     </Card>

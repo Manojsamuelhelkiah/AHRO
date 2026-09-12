@@ -3,12 +3,16 @@ import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
 import { ensureReadinessSlaEnrollment } from "../lib/onboarding/readiness-sla-policy";
-import { and, desc, asc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, asc, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   DEMO_ORGANIZATION_ID,
   onbApprovals,
+  onbAuthorityAssignments,
+  onbAuthorityAudit,
+  onbAuthorityGovernance,
   onbCases,
+  onbChecklistTemplates,
   onbCommunications,
   onbConnectors,
   onbEffectJournal,
@@ -49,9 +53,11 @@ import {
 import {
   defaultReadiness,
   defaultWorkstreams,
+  createApproval,
   handleInbound,
   enforceOfferAcceptanceGate,
   offerAcceptanceRequired,
+  OFFER_ACCEPTANCE_GATE_RULE,
   startOrchestration,
 } from "../lib/onboarding/engine";
 import { isChecklistAdministrator, setCustomChecklistItemStatus, verifyChecklistEvidence } from "../lib/onboarding/checklist";
@@ -90,6 +96,7 @@ import {
   getCandidateLinkRetentionDays,
   isAllowedCandidateLinkRetentionDays,
   CANDIDATE_LINK_RETENTION_DAYS_KEY,
+  NONWAIVABLE_SAFETY_POLICY_KEY,
   mandatoryChecklistReady,
 } from "../lib/onboarding/settings";
 import { logisticsForCase, validateDay1LogisticsDefault } from "../lib/onboarding/logistics-defaults";
@@ -155,6 +162,19 @@ import {
   organizationValues,
   organizationWhere,
 } from "../lib/organization-scope";
+import {
+  AUTHORITY_ROLES,
+  AUTHORITY_SCOPES,
+  auditAuthority,
+  authorityScopeForApproval,
+  canAdministerAuthority,
+  hasCurrentAuthorityScope,
+  newAuthorityId,
+  roleMayExerciseScope,
+  verifyDecisionAuthorityInTransaction,
+  decisionAuthorityStillCurrent,
+} from "../lib/onboarding/decision-authority";
+import { appendApprovalDecisionHistory, reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
 import {
   activeReplacementDecision,
   applyChecklistOverrides,
@@ -636,6 +656,9 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
       scenarioKey: scenario.key,
       candidateEmailAuthorizedAt: null,
       candidateEmailAuthorizedBy: null,
+      // Scenario launch is an authenticated workflow request, not a system
+      // anonymous seed; retain the immutable requester for approval SoD.
+      createdByUserId: req.authUserId!,
     }, getOrganizationId(req));
     res.status(201).json(await serializeCase(row));
   } catch (err) {
@@ -661,10 +684,20 @@ router.get("/onboarding/cases", async (req, res, next) => {
 router.post("/onboarding/cases", async (req, res, next) => {
   try {
     const body = CreateOnboardingCaseBody.parse(req.body);
+    if (body.offerAcceptanceComplete) {
+      res.status(400).json({
+        message: "Offer acceptance cannot be attested during case creation. Create the case, then use the dedicated Gate A confirmation endpoint.",
+      });
+      return;
+    }
     const workerEmail = body.workerEmail.trim().toLowerCase();
     const channelPreference = normalizePreference(body.channelPreference);
     if (!isValidEmail(workerEmail)) {
       res.status(400).json({ message: "Enter a valid candidate email address." });
+      return;
+    }
+    if (body.offerAcceptanceComplete && body.hireType !== "internal-transfer") {
+      res.status(400).json({ message: "Gate A offer acceptance cannot be asserted during case creation. It requires the dedicated authority-checked confirmation and durable evidence." });
       return;
     }
     // Duplicate-trigger prevention (spec §1.3): same person with an active case.
@@ -710,6 +743,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       offerAcceptanceComplete: body.offerAcceptanceComplete,
       offerAcceptanceCompletedAt: body.offerAcceptanceComplete ? new Date() : null,
       offerAcceptanceCompletedBy: body.offerAcceptanceComplete ? await resolveReviewerName(req.authUserId!) : null,
+      createdByUserId: req.authUserId!,
     }, getOrganizationId(req));
     await ensureReadinessSlaEnrollment(getOrganizationId(req), row.id);
     // Gate A owns the first candidate contact only on new/rehire pathways.
@@ -752,7 +786,7 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
 
 router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => {
   try {
-    if (!requireHrChecklistRole(req, res)) return;
+    if (!requireHrChecklistRole(req, res, "Only organization owners and admins may confirm Gate A.")) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) {
       res.status(400).json({ message: "Valid case id is required." });
@@ -760,7 +794,6 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
     }
     const body = ConfirmOnboardingOfferAcceptanceBody.parse(req.body);
     const organizationId = getOrganizationId(req);
-    const reviewer = await resolveReviewerName(req.authUserId!);
     // A direct confirmation immediately after create can beat the detached
     // orchestration starter. Force the durable, idempotent email-only request
     // to exist first; its effect key prevents repeated sends on retries.
@@ -780,17 +813,99 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
       await enforceOfferAcceptanceGate(id);
     }
     const outcome = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
       const [current] = await tx.select().from(onbCases).where(and(
         eq(onbCases.id, id),
         eq(onbCases.organizationId, organizationId),
       )).for("update");
       if (!current) return { kind: "not-found" as const };
       if (!offerAcceptanceRequired(current)) return { kind: "not-applicable" as const };
-      if (current.offerAcceptanceComplete) return { kind: "already-confirmed" as const, row: current };
+      const [gateApproval] = await tx.select().from(onbApprovals).where(and(
+        eq(onbApprovals.organizationId, organizationId),
+        eq(onbApprovals.caseId, id),
+        eq(onbApprovals.idempotencyKey, `gateway-a:${id}:human-queue`),
+      )).for("update");
+      if (!gateApproval) return { kind: "authority-evidence-missing" as const };
+      if (current.offerAcceptanceComplete) {
+        // Do not retrofit a reviewer identity onto a legacy completed Gate A.
+        // A completed row without the decision/revision binding remains
+        // historical evidence and cannot authorize a new provider effect.
+        if (
+          gateApproval.status !== "approved" ||
+          gateApproval.authorityScope !== "hr-compliance-approve" ||
+          !gateApproval.decidedAuthorityId ||
+          !gateApproval.decidedAuthorityRevision
+        ) return { kind: "authority-evidence-missing" as const };
+        return { kind: "already-confirmed" as const, row: current };
+      }
+      // Recovery for an older successful dedicated Gate A write which
+      // persisted the authority-bound decision but crashed before updating
+      // the case. Consume only live, revision-bound evidence; legacy/null
+      // evidence remains fail-closed.
+      if (
+        gateApproval.status === "approved" &&
+        gateApproval.authorityScope === "hr-compliance-approve" &&
+        gateApproval.decidedAuthorityId &&
+        gateApproval.decidedAuthorityRevision &&
+        await decisionAuthorityStillCurrent(tx, gateApproval)
+      ) {
+        const [row] = await tx.update(onbCases).set({
+          offerAcceptanceComplete: true,
+          offerAcceptanceCompletedAt: gateApproval.decidedAt ?? new Date(),
+          offerAcceptanceCompletedBy: gateApproval.decidedBy,
+          orchestrationStatus: "idle",
+          orchestrationCheckpoint: "offer-accepted",
+          orchestrationClaimOwner: null,
+          orchestrationClaimUntil: null,
+          updatedAt: new Date(),
+        }).where(and(eq(onbCases.id, id), eq(onbCases.organizationId, organizationId),
+          eq(onbCases.offerAcceptanceComplete, false))).returning();
+        if (!row) return { kind: "authority-evidence-missing" as const };
+        return { kind: "confirmed" as const, row };
+      }
+      if (gateApproval.status !== "pending") {
+        return { kind: "authority-evidence-missing" as const };
+      }
+      if (gateApproval.authorityScope !== "hr-compliance-approve") {
+        return { kind: "authority-evidence-missing" as const };
+      }
+      const authority = await verifyDecisionAuthorityInTransaction(tx, {
+        organizationId,
+        approval: gateApproval,
+        actorUserId: req.authUserId!,
+      });
+      if (!authority.allowed) return { kind: "unauthorized" as const };
+      const decisionActor = authority.personUserId;
+      const decidedAt = new Date();
+      const [decidedGate] = await tx.update(onbApprovals).set({
+        status: "approved",
+        decidedBy: decisionActor,
+        comment: body.note.trim() || null,
+        decidedAt,
+        decidedAuthorityId: authority.authorityId,
+        decidedAuthorityRevision: authority.revision,
+      }).where(and(
+        eq(onbApprovals.organizationId, organizationId),
+        eq(onbApprovals.id, gateApproval.id),
+        eq(onbApprovals.status, "pending"),
+        eq(onbApprovals.version, gateApproval.version),
+      )).returning();
+      if (!decidedGate) {
+        return { kind: "authority-evidence-missing" as const };
+      }
+      await appendApprovalDecisionHistory(
+        tx,
+        decidedGate,
+        "approved",
+        decisionActor,
+        body.note.trim() || null,
+        decidedAt,
+        "Dedicated Gate A confirmation recorded",
+      );
       const [row] = await tx.update(onbCases).set({
         offerAcceptanceComplete: true,
         offerAcceptanceCompletedAt: new Date(),
-        offerAcceptanceCompletedBy: reviewer,
+        offerAcceptanceCompletedBy: decisionActor,
         orchestrationStatus: "idle",
         orchestrationCheckpoint: "offer-accepted",
         orchestrationClaimOwner: null,
@@ -810,7 +925,7 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
         hitlPattern: "hard-block",
         ruleRef: "Gate A — offer-acceptance package",
         title: "Gate A offer-acceptance package confirmed by HR",
-        detail: `${reviewer} confirmed the offer-acceptance package. Note: ${body.note.trim()}. The dedicated Gate A confirmation releases onboarding; generic approvals do not.`,
+        detail: `${decisionActor} confirmed the offer-acceptance package. Note: ${body.note.trim()}. The dedicated Gate A confirmation releases onboarding; generic approvals do not.`,
         idempotencyKey: `gateway-a:${id}:confirmed`,
       }).onConflictDoNothing({
         target: [onbEvents.organizationId, onbEvents.idempotencyKey],
@@ -819,6 +934,14 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
     });
     if (outcome.kind === "not-found") {
       res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    if (outcome.kind === "unauthorized") {
+      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to confirm Gate A." });
+      return;
+    }
+    if (outcome.kind === "authority-evidence-missing") {
+      res.status(409).json({ message: "Gate A requires a current, pending authority-bound review. Historical or already-decided evidence cannot be retrofitted or replayed." });
       return;
     }
     if (outcome.kind === "not-applicable") {
@@ -842,6 +965,58 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
   } catch (err) {
     next(err);
   }
+});
+
+/** Establish provenance for a pre-authority legacy case and queue only its
+ * missing document-envelope recovery. This is an explicit admin action; no
+ * historical requester is inferred. */
+router.post("/onboarding/cases/:id/document-recovery", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res, "Only organization owners and admins may initiate legacy document recovery.")) return;
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const outcome = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      const [current] = await tx.select().from(onbCases).where(and(
+        eq(onbCases.id, id), eq(onbCases.organizationId, organizationId),
+      )).for("update");
+      if (!current) return { kind: "not-found" as const };
+      // A completed case's historical record is immutable operational history;
+      // recovery may not replay a provider operation against it.
+      if (current.lifecycleStage === "complete") return { kind: "completed" as const };
+      const documents = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(
+        eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, id),
+      )).limit(1);
+      if (documents.length) return { kind: "already-recovered" as const };
+      // Preserve the immutable historical creator exactly as recorded. The
+      // authenticated recovery initiator is attached to the new approval,
+      // never rewritten onto the old case.
+      return { kind: "recoverable" as const };
+    });
+    if (outcome.kind === "completed") {
+      res.status(409).json({ message: "Completed cases preserve their history and cannot replay document recovery." });
+      return;
+    }
+    if (outcome.kind !== "recoverable") {
+      res.status(404).json({ message: "Active case with missing document pack not found." });
+      return;
+    }
+    await createApproval({
+      caseId: id, authorityScope: "legal-approve", agent: "workstreams",
+      ruleRef: "Execution authorization — documents envelope",
+      hitlPattern: "approve-before-act",
+      recommendation: "Authorize recovery of the missing document envelope.",
+      rationale: "A current legal specialist must authorize this missing document provider operation.",
+      resumeAction: "recover-document-envelope",
+      requestedByUserId: req.authUserId!,
+      idempotencyKey: `orchestration:${id}:approval:execution:documents`,
+    });
+    res.status(202).json({ message: "Document recovery queued for legal approval." });
+  } catch (err) { next(err); }
 });
 
 router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) => {
@@ -1168,7 +1343,6 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
 
 router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => {
   try {
-    if (!requireHrChecklistRole(req, res)) return;
     const caseId = Number(req.params.id);
     if (!Number.isInteger(caseId) || caseId < 1) {
       res.status(400).json({ message: "Valid case id is required." });
@@ -1182,6 +1356,12 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
       status: body.status,
       note: body.note,
       reviewer: await resolveReviewerName(req.authUserId!),
+      authorize: async (tx) => {
+        return hasCurrentAuthorityScope(tx, {
+          organizationId: getOrganizationId(req), actorUserId: req.authUserId!,
+          scope: "hr-compliance-approve", caseId,
+        });
+      },
     });
     if (!result.ok) {
       const messages = {
@@ -1189,8 +1369,15 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
         "not-custom": "Connector-managed checklist items cannot be changed manually.",
         disabled: "Disabled checklist items cannot be changed.",
         "evidence-required": "This independent evidence gate can only be completed through its designated evidence workflow; a manual toggle, reminder, or agent result is not accepted.",
+        unauthorized: "A current HR/compliance specialist authority assignment is required to attest a checklist item.",
       };
-      res.status(result.code === "not-custom" || result.code === "disabled" || result.code === "evidence-required" ? 409 : 404)
+      res.status(
+        result.code === "unauthorized"
+          ? 403
+          : result.code === "not-custom" || result.code === "disabled" || result.code === "evidence-required"
+            ? 409
+            : 404,
+      )
         .json({ message: messages[result.code] });
       return;
     }
@@ -1849,7 +2036,6 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
 
 router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, res, next) => {
   try {
-    if (!requireHrChecklistRole(req, res)) return;
     const caseId = Number(req.params.id);
     const evidenceId = Number(req.params.evidenceId);
     const organizationId = getOrganizationId(req);
@@ -1864,6 +2050,10 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
     ));
     if (!target) return res.status(404).json({ message: "Evidence not found" });
     const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      if (!(await hasCurrentAuthorityScope(tx, {
+        organizationId, actorUserId: req.authUserId!, scope: "hr-compliance-approve", caseId,
+      }))) return { kind: "unauthorized" as const };
       // Keep the lock order identical to candidate replacement and worker
       // transitions: document first, then the upload row(s).
       await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(
@@ -1907,6 +2097,7 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
       }).onConflictDoNothing();
       return { kind: "updated" as const, row };
     });
+    if (result.kind === "unauthorized") return res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to decide document evidence." });
     if (result.kind === "not_found") return res.status(404).json({ message: "Evidence not found" });
     if (result.kind === "not_reviewable") return res.status(409).json({ message: "Evidence is not awaiting manual review." });
     if (result.kind === "stale") return res.status(409).json({ message: "Only the latest upload for this document can be used for this decision." });
@@ -2448,6 +2639,446 @@ router.post(
 
 /* ----------------------------- approvals ----------------------------- */
 
+function authorityAssignmentResponse(row: typeof onbAuthorityAssignments.$inferSelect) {
+  return {
+    id: row.id,
+    personUserId: row.personUserId,
+    personEmail: row.personEmail,
+    emailResponderAuthorized: row.emailResponderAuthorized,
+    authorityRole: row.authorityRole,
+    scopes: row.scopes,
+    caseId: row.caseId,
+    siteScope: row.siteScope,
+    jurisdictionScope: row.jurisdictionScope,
+    validFrom: row.validFrom.toISOString(),
+    validUntil: iso(row.validUntil),
+    status: row.status,
+    revision: row.revision,
+    grantorUserId: row.grantorUserId,
+    source: row.source,
+    governanceDecisionRef: row.governanceDecisionRef,
+    revokedByUserId: row.revokedByUserId,
+    revokedAt: iso(row.revokedAt),
+    revokeReason: row.revokeReason,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function authorityBody(value: unknown): {
+  personUserId: string; personEmail: string | null; emailResponderAuthorized: boolean;
+  authorityRole: (typeof AUTHORITY_ROLES)[number]; scopes: (typeof AUTHORITY_SCOPES)[number][];
+  caseId: number | null; siteScope: string | null; jurisdictionScope: string | null;
+  validFrom: Date; validUntil: Date | null; governanceDecisionRef: string;
+} | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  const text = (key: string, required = false): string | null => {
+    const input = body[key];
+    if (input === undefined || input === null) return required ? null : null;
+    return typeof input === "string" && input.trim().length <= 250 ? input.trim() : null;
+  };
+  const personUserId = text("personUserId", true);
+  const authorityRole = text("authorityRole", true);
+  const decisionRef = text("governanceDecisionRef", true);
+  const scopes = body.scopes;
+  if (!personUserId || !authorityRole || !decisionRef || !Array.isArray(scopes) ||
+      !scopes.length || !scopes.every((scope) => typeof scope === "string" && AUTHORITY_SCOPES.includes(scope as never)) ||
+      !AUTHORITY_ROLES.includes(authorityRole as never) ||
+      !scopes.every((scope) => roleMayExerciseScope(
+        authorityRole as (typeof AUTHORITY_ROLES)[number],
+        scope as (typeof AUTHORITY_SCOPES)[number],
+      ))) return null;
+  const validFrom = body.validFrom === undefined ? new Date() : new Date(String(body.validFrom));
+  const validUntil = body.validUntil == null ? null : new Date(String(body.validUntil));
+  const caseId = body.caseId == null ? null : Number(body.caseId);
+  const personEmail = text("personEmail");
+  const emailResponderAuthorized = body.emailResponderAuthorized === true;
+  if (!Number.isFinite(validFrom.getTime()) ||
+      (validUntil && (!Number.isFinite(validUntil.getTime()) || validUntil <= validFrom)) ||
+      (caseId !== null && (!Number.isSafeInteger(caseId) || caseId < 1)) ||
+       (personEmail !== null && (!isValidEmail(personEmail) || personEmail.length > 250)) ||
+       (emailResponderAuthorized && personEmail === null)) return null;
+  return {
+    personUserId,
+    personEmail,
+    emailResponderAuthorized,
+    authorityRole: authorityRole as (typeof AUTHORITY_ROLES)[number],
+    scopes: [...new Set(scopes)] as (typeof AUTHORITY_SCOPES)[number][],
+    caseId,
+    siteScope: text("siteScope"),
+    jurisdictionScope: text("jurisdictionScope"),
+    validFrom,
+    validUntil,
+    governanceDecisionRef: decisionRef,
+  };
+}
+
+async function clerkVerifiedEmailForUser(personUserId: string, email: string): Promise<boolean> {
+  const user = await clerkClient.users.getUser(personUserId);
+  const normalized = email.trim().toLowerCase();
+  return user.emailAddresses.some((address) =>
+    address.emailAddress.trim().toLowerCase() === normalized &&
+    address.verification?.status === "verified",
+  );
+}
+
+router.get("/onboarding/authority/governance", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    const [governance] = await db.select().from(onbAuthorityGovernance).where(
+      eq(onbAuthorityGovernance.organizationId, organizationId),
+    );
+    const mine = await db.select().from(onbAuthorityAssignments).where(and(
+      eq(onbAuthorityAssignments.organizationId, organizationId),
+      eq(onbAuthorityAssignments.personUserId, req.authUserId!),
+    ));
+    const canAdminister = await db.transaction((tx) =>
+      canAdministerAuthority(tx, organizationId, req.authUserId!),
+    );
+    res.json({
+      governance: governance ? {
+        status: governance.status,
+        attestedAt: iso(governance.attestedAt),
+        attestationNote: governance.attestationNote,
+        approvedAt: iso(governance.approvedAt),
+        governanceSource: governance.governanceSource,
+        revision: governance.revision,
+      } : { status: "unconfigured", revision: 0 },
+      canAdminister,
+      assignments: mine.map(authorityAssignmentResponse),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/authority/bootstrap", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res, "Only an organization owner or admin may record an operator governance attestation.")) return;
+    const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 500) : "";
+    if (!note) {
+      res.status(400).json({ message: "An operator attestation note is required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const governance = await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(onbAuthorityGovernance).where(
+        eq(onbAuthorityGovernance.organizationId, organizationId),
+      ).for("update");
+      if (existing?.status === "governance-approved") {
+        return existing;
+      }
+      const [updated] = await tx.insert(onbAuthorityGovernance).values({
+        organizationId,
+        status: "operator-attested",
+        operatorUserId: req.authUserId!,
+        attestedAt: new Date(),
+        attestationNote: note,
+        revision: (existing?.revision ?? 0) + 1,
+      }).onConflictDoUpdate({
+        target: onbAuthorityGovernance.organizationId,
+        set: {
+          status: "operator-attested",
+          operatorUserId: req.authUserId!,
+          attestedAt: new Date(),
+          attestationNote: note,
+          revision: (existing?.revision ?? 0) + 1,
+          updatedAt: new Date(),
+        },
+      }).returning();
+      await auditAuthority(tx, organizationId, req.authUserId!, "operator-attested", {
+        label: "Operator attestation only; this is not directory verification and cannot authorize production specialist decisions.",
+      });
+      return updated;
+    });
+    res.status(201).json({
+      status: governance.status,
+      message: "Operator attestation recorded. Production specialist authority remains disabled until an approved governance decision is recorded outside this self-service workflow.",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Immediate tenant-wide kill switch for specialist authority. */
+router.post("/onboarding/authority/governance/withdraw", async (req, res, next) => {
+  try {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 500) : "";
+    if (!reason) {
+      res.status(400).json({ message: "A governance withdrawal reason is required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const updated = await db.transaction(async (tx) => {
+      // Verify the administrator while governance remains live and while the
+      // shared dispatch/revocation fence is held.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      if (!(await canAdministerAuthority(tx, organizationId, req.authUserId!))) return null;
+      const [row] = await tx.update(onbAuthorityGovernance).set({
+        status: "withdrawn", revision: sql`${onbAuthorityGovernance.revision} + 1`, updatedAt: new Date(),
+      }).where(eq(onbAuthorityGovernance.organizationId, organizationId)).returning();
+      if (row) await auditAuthority(tx, organizationId, req.authUserId!, "governance-withdrawn", { reason });
+      return row;
+    });
+    if (!updated) {
+      res.status(403).json({ message: "A current governance-approved authority administrator is required." });
+      return;
+    }
+    res.json({ status: updated.status, message: "Governance authority was withdrawn; all specialist decisions now fail closed." });
+  } catch (err) { next(err); }
+});
+
+/** Append-only configuration for cases where occupational safety controls are
+ * mandatory. Profile labels and normal settings cannot alter this policy. */
+router.get("/onboarding/authority/nonwaivable-safety-policy", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    const permitted = await db.transaction((tx) => canAdministerAuthority(tx, organizationId, req.authUserId!));
+    if (!permitted) {
+      res.status(403).json({ message: "A current governance-approved authority administrator is required." });
+      return;
+    }
+    const value = await getSetting(organizationId, NONWAIVABLE_SAFETY_POLICY_KEY);
+    let itemIds: string[] = [];
+    try { itemIds = Array.isArray(JSON.parse(value ?? "[]")) ? JSON.parse(value ?? "[]") : []; } catch { itemIds = []; }
+    res.json({ itemIds });
+  } catch (err) { next(err); }
+});
+
+router.post("/onboarding/authority/nonwaivable-safety-policy", async (req, res, next) => {
+  try {
+    const values = Array.isArray(req.body?.itemIds) ? req.body.itemIds : null;
+    if (!values || !values.every((id: unknown) => typeof id === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(id))) {
+      res.status(400).json({ message: "itemIds must be stable lowercase checklist identifiers." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const saved = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      if (!(await canAdministerAuthority(tx, organizationId, req.authUserId!))) return null;
+      const [existing] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+        eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, NONWAIVABLE_SAFETY_POLICY_KEY),
+      )).for("update");
+      let old: string[] = [];
+      try { old = Array.isArray(JSON.parse(existing?.value ?? "[]")) ? JSON.parse(existing?.value ?? "[]") : []; } catch { old = []; }
+      const next = [...new Set(values)].sort();
+      if (old.some((id) => !next.includes(id))) throw new Error("Nonwaivable safety identifiers are immutable and may not be removed.");
+      await tx.insert(onbSettings).values({
+        organizationId, key: NONWAIVABLE_SAFETY_POLICY_KEY, value: JSON.stringify(next),
+      }).onConflictDoUpdate({
+        target: [onbSettings.organizationId, onbSettings.key],
+        set: { value: JSON.stringify(next), updatedAt: new Date() },
+      });
+      // Materialize the policy into a new immutable effective-template
+      // version so all subsequently created cases carry the protected bit.
+      const base = await getEffectiveChecklist(organizationId, tx);
+      {
+        const items = base.items.map((item) => ({
+          ...item,
+          nonWaivableSafety: item.nonWaivableSafety === true || next.includes(item.id),
+          enabled: item.nonWaivableSafety === true || next.includes(item.id) ? true : item.enabled,
+          mandatory: item.nonWaivableSafety === true || next.includes(item.id) ? true : item.mandatory,
+        }));
+        await tx.insert(onbChecklistTemplates).values({
+          organizationId, version: base.version + 1, items, createdBy: req.authUserId!,
+        });
+      }
+      await auditAuthority(tx, organizationId, req.authUserId!, "nonwaivable-safety-policy-updated", { itemIds: next });
+      return next;
+    });
+    if (!saved) {
+      res.status(403).json({ message: "A current governance-approved authority administrator is required." });
+      return;
+    }
+    res.json({ itemIds: saved, message: "Protected safety identifiers are append-only. Existing case snapshots remain immutable." });
+  } catch (err) { next(err); }
+});
+
+router.get("/onboarding/authority/assignments", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    const permitted = await db.transaction((tx) => canAdministerAuthority(tx, organizationId, req.authUserId!));
+    if (!permitted) {
+      res.status(403).json({ message: "A current governance-approved authority-administration assignment is required." });
+      return;
+    }
+    const rows = await db.select().from(onbAuthorityAssignments).where(
+      eq(onbAuthorityAssignments.organizationId, organizationId),
+    );
+    res.json(rows.map(authorityAssignmentResponse));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/authority/assignments", async (req, res, next) => {
+  try {
+    const body = authorityBody(req.body);
+    if (!body) {
+      res.status(400).json({ message: "Invalid authority assignment. A tenant member, approved role/scopes, bounded dates, and governance decision reference are required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    if (body.personUserId === req.authUserId) {
+      res.status(403).json({ message: "Self-grant of specialist authority is prohibited." });
+      return;
+    }
+    // Email authority is an explicit governance-admin grant to an exact
+    // address of the assignment's actual Clerk member. It cannot be enabled
+    // from a contact label, shared persona, or claimed mailbox string.
+    if (body.emailResponderAuthorized) {
+      try {
+        if (!body.personEmail || !(await clerkVerifiedEmailForUser(body.personUserId, body.personEmail))) {
+          res.status(400).json({ message: "Email decisions require an exact Clerk-verified email address belonging to the selected member." });
+          return;
+        }
+      } catch {
+        res.status(503).json({ message: "Clerk verification is unavailable; email decision authority was not granted." });
+        return;
+      }
+    }
+    const assignment = await db.transaction(async (tx) => {
+      // This is the same tenant fence used by revocation and final connector
+      // dispatch. Authority cannot be withdrawn between authorization and grant.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      if (!(await canAdministerAuthority(tx, organizationId, req.authUserId!))) return null;
+      const [member] = await tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        eq(organizationMembershipsTable.clerkUserId, body.personUserId),
+      ));
+      if (!member) throw new Error("Authority subject is not a member of this organization.");
+      if (body.caseId !== null) {
+        const [c] = await tx.select({ id: onbCases.id }).from(onbCases).where(and(
+          eq(onbCases.organizationId, organizationId), eq(onbCases.id, body.caseId),
+        ));
+        if (!c) throw new Error("Case scope does not belong to this organization.");
+      }
+      const [created] = await tx.insert(onbAuthorityAssignments).values({
+        id: newAuthorityId(), organizationId, ...body, status: "active",
+        revision: 1, grantorUserId: req.authUserId!,
+        source: body.emailResponderAuthorized ? "governance-decision:clerk-verified-email" : "governance-decision",
+      }).returning();
+      await auditAuthority(tx, organizationId, req.authUserId!, "granted", {
+        personUserId: body.personUserId, authorityRole: body.authorityRole,
+        scopes: body.scopes, governanceDecisionRef: body.governanceDecisionRef,
+        emailResponderAuthorized: body.emailResponderAuthorized,
+      }, created.id);
+      return created;
+    });
+    if (!assignment) {
+      res.status(403).json({ message: "A current governance-approved authority-administration assignment is required." });
+      return;
+    }
+    res.status(201).json(authorityAssignmentResponse(assignment));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/authority/assignments/:id/revoke", async (req, res, next) => {
+  try {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 500) : "";
+    if (!reason) {
+      res.status(400).json({ message: "A revocation reason is required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const assignment = await db.transaction(async (tx) => {
+      // Paired with the connector final-dispatch fence. Do not let a
+      // revocation commit between its live authority check and provider write.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      if (!(await canAdministerAuthority(tx, organizationId, req.authUserId!))) return null;
+      const [updated] = await tx.update(onbAuthorityAssignments).set({
+        status: "revoked", revision: sql`${onbAuthorityAssignments.revision} + 1`,
+        revokedAt: new Date(), revokedByUserId: req.authUserId!, revokeReason: reason, updatedAt: new Date(),
+      }).where(and(
+        eq(onbAuthorityAssignments.organizationId, organizationId),
+        eq(onbAuthorityAssignments.id, req.params.id),
+        eq(onbAuthorityAssignments.status, "active"),
+      )).returning();
+      if (updated) await auditAuthority(tx, organizationId, req.authUserId!, "revoked", { reason }, updated.id);
+      return updated;
+    });
+    if (!assignment) {
+      res.status(404).json({ message: "Authority assignment not found or not currently revocable." });
+      return;
+    }
+    res.json(authorityAssignmentResponse(assignment));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/authority/unresolved-approvals", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res, "Only organization owners and admins may review unresolved historical authority evidence.")) return;
+    const organizationId = getOrganizationId(req);
+    const rows = await db.select().from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, organizationId),
+      or(
+        eq(onbApprovals.authorityReviewStatus, "unresolved"),
+        and(
+          isNull(onbApprovals.authorityScope),
+          ne(onbApprovals.authorityReviewStatus, "reviewed-no-effect"),
+        ),
+      ),
+    ));
+    res.json(rows.map((row) => ({
+      id: row.id, caseId: row.caseId, status: row.status, version: row.version,
+      recommendation: row.recommendation, authorityScope: row.authorityScope,
+      createdAt: row.createdAt.toISOString(), decidedAt: iso(row.decidedAt),
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/authority/unresolved-approvals/:id/acknowledge", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res, "Only organization owners and admins may acknowledge unresolved historical authority evidence.")) return;
+    const organizationId = getOrganizationId(req);
+    const updated = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      const [current] = await tx.select().from(onbApprovals).where(and(
+        eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.id, Number(req.params.id)),
+      )).for("update");
+      if (!current || !(
+        current.authorityReviewStatus === "unresolved" ||
+        (current.authorityScope === null && current.authorityReviewStatus !== "reviewed-no-effect")
+      )) return null;
+      const [caseRow] = await tx.select({ id: onbCases.id, lifecycleStage: onbCases.lifecycleStage })
+        .from(onbCases).where(and(eq(onbCases.id, current.caseId), eq(onbCases.organizationId, organizationId))).for("update");
+      if (!caseRow) return null;
+      if (current.status === "pending" && caseRow.lifecycleStage !== "complete") {
+        await reopenApprovalInTransaction(tx, {
+          organizationId, caseId: current.caseId, approvalId: current.id,
+          reopenStatuses: ["pending"], authorityScope: authorityScopeForApproval(current),
+          reason: "Historical pending authority evidence acknowledged; renewed as a scoped review cycle.",
+          actor: req.authUserId!,
+        });
+      }
+      const [row] = await tx.update(onbApprovals).set({
+        authorityReviewStatus: "reviewed-no-effect",
+        authorityReviewedByUserId: req.authUserId!,
+        authorityReviewedAt: new Date(),
+      }).where(and(eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.id, current.id))).returning();
+      return row;
+    });
+    if (!updated) {
+      res.status(404).json({ message: "Unresolved historical approval not found." });
+      return;
+    }
+    await db.transaction((tx) => auditAuthority(tx, organizationId, req.authUserId!, "legacy-approval-reviewed-no-effect", {
+      approvalId: updated.id, version: updated.version,
+    }));
+    res.json({ id: updated.id, reviewStatus: updated.authorityReviewStatus, message: updated.status === "pending"
+      ? "Historical evidence was archived and renewed in place as a scoped authority-bound review. No historical decision, continuation, or provider effect was replayed."
+      : "Historical evidence was acknowledged only. No decision, authority, continuation, or provider effect was replayed." });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/onboarding/approvals", async (req, res, next) => {
   try {
     const wantAll = req.query.status === "all";
@@ -2476,6 +3107,9 @@ router.get("/onboarding/approvals", async (req, res, next) => {
         recordsEvidence: a.recordsEvidence,
         status: a.status,
         version: a.version,
+        authorityScope: a.authorityScope,
+        authorityReviewStatus: a.authorityReviewStatus,
+        decidedAuthorityId: a.decidedAuthorityId,
         decidedBy: a.decidedBy,
         comment: a.comment,
         createdAt: a.createdAt.toISOString(),
@@ -2507,13 +3141,52 @@ router.get("/onboarding/approvals/:id/history", async (req, res, next) => {
   }
 });
 
+/**
+ * Read-only UI preflight. The mutation performs this same live check inside
+ * its tenant fence; this endpoint merely prevents presenting an actionable
+ * control based on a browser role, stale assignment, or display persona.
+ */
+router.get("/onboarding/approvals/:id/capability", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      res.status(400).json({ message: "A valid approval id is required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const [approval] = await db.select().from(onbApprovals).where(and(
+      eq(onbApprovals.id, id),
+      eq(onbApprovals.organizationId, organizationId),
+    ));
+    if (!approval) {
+      res.status(404).json({ message: "Approval not found" });
+      return;
+    }
+    if (approval.status !== "pending") {
+      res.json({ canDecide: false, reason: "approval_not_pending", version: approval.version });
+      return;
+    }
+    if (!Number.isSafeInteger(approval.version) || approval.version < 1) {
+      res.json({ canDecide: false, reason: "invalid_approval_version", version: approval.version });
+      return;
+    }
+    const authority = await db.transaction((tx) => verifyDecisionAuthorityInTransaction(tx, {
+      organizationId,
+      approval,
+      actorUserId: req.authUserId!,
+    }));
+    res.json({
+      canDecide: authority.allowed,
+      reason: authority.allowed ? null : authority.reason,
+      version: approval.version,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
   try {
-    if (!requireHrChecklistRole(
-      req,
-      res,
-      "Only organization owners and admins can approve, reject, or acknowledge reviews. Ask an owner or admin to review this request.",
-    )) return;
     const id = Number(req.params.id);
     const body = DecideOnboardingApprovalBody.parse(req.body);
     if (body.decision !== "approved" && body.decision !== "rejected") {
@@ -2533,6 +3206,13 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       res.status(404).json({ message: "Approval not found" });
       return;
     }
+      if (a.ruleRef === OFFER_ACCEPTANCE_GATE_RULE) {
+        res.status(409).json({
+          message: "Gate A requires dedicated offer-acceptance confirmation; generic approval decisions cannot release this gate.",
+          code: "dedicated_offer_acceptance_confirmation_required",
+        });
+        return;
+      }
     const decidedBy = await resolveReviewerName(req.authUserId!);
     const result = await decideApproval({
       organizationId: getOrganizationId(req),
@@ -2541,8 +3221,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       decision: body.decision,
       decidedBy,
       comment: body.comment ?? null,
-      auditActorId: req.authUserId!,
-      auditActorAuthority: `tenant-membership:${req.organizationRole}`,
+      actorUserId: req.authUserId!,
       auditCorrelationId: req.header("x-request-id") ?? req.header("x-correlation-id") ?? null,
     });
     if (result.outcome === "not-found") {
@@ -2554,6 +3233,13 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
         message: "This approval was already decided or replaced. Refresh to review the current request.",
         currentVersion: result.currentVersion,
         reason: result.reason,
+      });
+      return;
+    }
+    if (result.outcome === "unauthorized") {
+      res.status(403).json({
+        message: "A current governance-approved, tenant-scoped specialist authority is required for this decision. Organization membership, a contact role, and a persona do not grant decision authority.",
+        code: result.reason,
       });
       return;
     }
@@ -2576,6 +3262,9 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       recommendation: updated.recommendation,
       rationale: updated.rationale,
       recordsEvidence: updated.recordsEvidence,
+      authorityScope: updated.authorityScope,
+      authorityReviewStatus: updated.authorityReviewStatus,
+      decidedAuthorityId: updated.decidedAuthorityId,
       status: updated.status,
       decidedBy: updated.decidedBy,
       comment: updated.comment,

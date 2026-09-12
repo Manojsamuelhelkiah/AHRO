@@ -715,7 +715,9 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
       hireType: fd.get('hireType') as string,
       workerCategory: fd.get('workerCategory') as string,
       workerBand: fd.get('workerBand') as string || undefined,
-      offerAcceptanceComplete: fd.get('offerAcceptanceComplete') === 'on',
+      // Gate A is released only by the post-creation, authority-bound
+      // confirmation workflow; intake cannot mark it complete.
+      offerAcceptanceComplete: false,
       role: fd.get('role') as string,
       department: fd.get('department') as string,
       geography: fd.get('geography') as string,
@@ -901,17 +903,6 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
              </select>
              <p className="text-[10px] text-[var(--text-muted)]">The selected version is snapshotted; person-specific context below may add known facts.</p>
            </div>
-          <div className="col-span-2 md:col-span-3 space-y-2 mt-2 pt-2 border-t border-[var(--border)]">
-            <div className="flex items-start gap-2">
-              <input type="checkbox" id="offerAcceptanceComplete" name="offerAcceptanceComplete" className="mt-1 flex h-4 w-4 shrink-0 rounded-sm border border-[var(--border)] bg-[var(--surface)] text-[var(--primary)] shadow-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" />
-              <div>
-                <Label htmlFor="offerAcceptanceComplete" className="font-semibold">Is the offer-acceptance package complete?</Label>
-                <p className="text-[11px] leading-snug mt-1" style={{ color: 'var(--text-muted)' }}>
-                  Leaving this unchecked creates a preboarding hold. The agent will first request the completed offer acceptance package by email; if the email cannot be sent safely, HR intervenes.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
         <div className="flex items-center justify-end gap-4 pt-4 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
           {submitError && (

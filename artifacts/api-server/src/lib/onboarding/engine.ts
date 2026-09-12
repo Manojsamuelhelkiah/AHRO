@@ -33,6 +33,10 @@ import {
 } from "./scheduling";
 import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
 import { applicableSystems, isNonEmployee } from "./external-systems";
+import {
+  EXECUTION_AUTHORIZATION_RULES,
+  executionAuthorityScopes,
+} from "./decision-authority";
 import { randomUUID } from "node:crypto";
 import {
   LEGACY_CHECKLIST,
@@ -41,14 +45,21 @@ import {
   readinessFromChecklist,
 } from "./settings";
 import { latestRequiredUploadMalwareBlockers } from "./document-readiness-guard";
-import type { OnbChecklistEnforcementStage, OnbChecklistTemplateItem } from "@workspace/db/schema";
+import type {
+  OnbAuthorityScope,
+  OnbChecklistEnforcementStage,
+  OnbChecklistTemplateItem,
+} from "@workspace/db/schema";
 import { approvalVersion, reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import {
   initializeOperationalRequests,
   initializeWorkforceStepTasks,
 } from "./operational-requests";
-
+import {
+  authorityScopeForApproval,
+  decisionAuthorityStillCurrent,
+} from "./decision-authority";
 type CaseRow = typeof onbCases.$inferSelect;
 
 export function checkpointSkipsPlanApproval(checkpoint: string | null | undefined): boolean {
@@ -58,6 +69,7 @@ export function checkpointSkipsPlanApproval(checkpoint: string | null | undefine
 export const OFFER_ACCEPTANCE_GATE_RULE = "Gate A — offer-acceptance package";
 export const DAY1_READINESS_GATE_RULE = "Gate C — Day-1 readiness confirmation";
 
+export const MIGRATION_REVIEW_HOLD_RULE = "Migration review — historical checklist classification";
 /** Gate A applies to external employee, contractor, and rehire onboarding. */
 export function offerAcceptanceRequired(c: Pick<CaseRow, "hireType">): boolean {
   return c.hireType === "external-fte" || c.hireType === "contractor" || c.hireType === "rehire";
@@ -131,6 +143,7 @@ export async function enforceOfferAcceptanceGate(
   const blocked = delivery.status !== "sent";
   await createApproval({
     caseId,
+    authorityScope: "hr-compliance-approve",
     agent: "offer-acceptance-gate",
     ruleRef: OFFER_ACCEPTANCE_GATE_RULE,
     hitlPattern: "hard-block",
@@ -196,6 +209,9 @@ export async function createApproval(opts: {
   recordsEvidence?: OnbRecordsEvidenceItem[];
   /** Dedupe key: a crash-resumed caller re-creating the same approval is a no-op. */
   idempotencyKey?: string;
+  /** Every newly-created decision must declare its designated authority. */
+  authorityScope: OnbAuthorityScope;
+  requestedByUserId?: string | null;
 }) {
   const c = await getCase(opts.caseId);
   const inserted = await db
@@ -211,6 +227,11 @@ export async function createApproval(opts: {
       recordsEvidence: opts.recordsEvidence ?? null,
       resumeAction: opts.resumeAction,
       idempotencyKey: opts.idempotencyKey ?? null,
+      authorityScope: opts.authorityScope,
+      // Producer identity is durable case-intake identity unless a later
+      // signed-in analyst explicitly supplied their immutable principal ID.
+      // Never manufacture a persona/contact string for SoD.
+      requestedByUserId: opts.requestedByUserId ?? c.createdByUserId ?? null,
     })
     .onConflictDoNothing({
       target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
@@ -285,6 +306,13 @@ export function documentationGateConfigured(
   );
 }
 
+function mandatoryMedicalSafetyGate(c: Pick<CaseRow, "checklistSnapshot">): boolean {
+  return checklistSnapshot(c).some((item) =>
+    item.enabled &&
+    item.mandatory &&
+    item.nonWaivableSafety === true,
+  );
+}
 async function enforceChecklistGate(
   caseId: number,
   stage: OnbChecklistEnforcementStage,
@@ -301,11 +329,14 @@ async function enforceChecklistGate(
       throw new Error("Orchestration claim was fenced by a newer worker");
     }
     const blockers = checklistBlockers(c, stage);
+    const migrationReviewHolds = checklistSnapshot(c).filter((item) =>
+      item.enabled && item.migrationReviewHold === true,
+    );
     const malwareBlockers = documentationGateConfigured(c, stage)
       ? await latestRequiredUploadMalwareBlockers(tx, c.organizationId, caseId)
       : [];
-    if (blockers.length === 0 && malwareBlockers.length === 0) {
-      return { blockers, malwareBlockers };
+    if (blockers.length === 0 && malwareBlockers.length === 0 && migrationReviewHolds.length === 0) {
+      return { blockers, malwareBlockers, migrationReviewHolds };
     }
     await tx.update(onbCases).set({
       orchestrationStatus: "checklist-blocked",
@@ -314,11 +345,25 @@ async function enforceChecklistGate(
       orchestrationClaimUntil: null,
       updatedAt: new Date(),
     }).where(eq(onbCases.id, caseId));
-    return { blockers, malwareBlockers };
+    return { blockers, malwareBlockers, migrationReviewHolds };
   });
-  if (gate.blockers.length === 0 && gate.malwareBlockers.length === 0) return true;
+  if (gate.blockers.length === 0 && gate.malwareBlockers.length === 0 && gate.migrationReviewHolds.length === 0) return true;
+  if (gate.migrationReviewHolds.length > 0) {
+    await createApproval({
+      caseId,
+      authorityScope: "hr-compliance-approve",
+      agent: "authority-migration",
+      ruleRef: MIGRATION_REVIEW_HOLD_RULE,
+      hitlPattern: "approve-before-act",
+      recommendation: "Review and classify historical mandatory checklist controls before continuation.",
+      rationale: `Historical controls require governance review: ${gate.migrationReviewHolds.map((item) => item.label).join("; ")}.`,
+      resumeAction: "none",
+      idempotencyKey: `migration-review:${caseId}:checklist-classification`,
+    });
+  }
   const reasons = [
     ...gate.blockers.map((item) => item.label),
+    ...gate.migrationReviewHolds.map((item) => `migration review: ${item.label}`),
     ...(gate.malwareBlockers.length > 0
       ? [`${gate.malwareBlockers.length} required candidate upload(s) are pending or failed the malware gate`]
       : []),
@@ -474,6 +519,7 @@ async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"c
   if (!c.managerName || !c.role || !c.geography) {
     await createApproval({
       caseId,
+      authorityScope: "hr-compliance-approve",
       agent: "intake",
       ruleRef: "4.1 Intake Rule 10",
       hitlPattern: "hard-block",
@@ -489,6 +535,7 @@ async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"c
   if ((c.notes ?? "").toLowerCase().includes("bgv")) {
     await createApproval({
       caseId,
+      authorityScope: "hr-compliance-approve",
       agent: "documentation",
       ruleRef: "4.1 Intake Rule 8 / 4.3 Documentation Rules",
       hitlPattern: "hard-block",
@@ -510,6 +557,7 @@ async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"c
     await write({ urgency: "elevated" });
     await createApproval({
       caseId,
+      authorityScope: "hr-compliance-approve",
       agent: "intake",
       ruleRef: "4.1 Intake Rule 2",
       hitlPattern: "approve-before-act",
@@ -525,6 +573,7 @@ async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"c
   if (c.hireType === "internal-transfer" && !paused) {
     await createApproval({
       caseId,
+      authorityScope: "legal-approve",
       agent: "intake",
       ruleRef: "4.1 Intake Rule 4",
       hitlPattern: "approve-before-act",
@@ -573,6 +622,7 @@ async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"c
       : "No archived employment records were found for this worker; HR must validate the prior record manually.";
     await createApproval({
       caseId,
+      authorityScope: "hr-compliance-approve",
       agent: "intake",
       ruleRef: "4.1 Intake Rule 5",
       hitlPattern: "approve-before-act",
@@ -705,6 +755,7 @@ async function runPlanGeneration(
     for (const a of gated) {
       await createApproval({
         caseId,
+        authorityScope: "hr-compliance-approve",
         agent: "plan",
         ruleRef: a.rule,
         hitlPattern: "approve-before-act",
@@ -772,8 +823,51 @@ async function runPlanGeneration(
 /* ------------------------------------------------------------------ */
 
 /** Exported for persisted runtime integration coverage; production callers use orchestration claims. */
-export async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
+export async function runWorkstreams(
+  caseId: number,
+  claim?: OrchestrationClaim,
+): Promise<"paused" | "complete"> {
   const c = await getCase(caseId);
+  // Ordinary provider effects each need their own reviewed specialist
+  // decision. Gate A/plan approvals only control progression; they never
+  // authorize payroll, IAM, BGV, or document effects by implication.
+  const executionConnectors = [
+    "documents",
+    ...applicableSystems(c).map((system) =>
+      system.key === "bgv" ? "background-verification"
+        : system.key === "itsm" ? "iam" : "payroll",
+    ),
+  ] as Array<keyof typeof EXECUTION_AUTHORIZATION_RULES>;
+  for (const connector of [...new Set(executionConnectors)]) {
+    const scopes = executionAuthorityScopes(connector);
+    await createApproval({
+      caseId,
+      authorityScope: scopes[0],
+      agent: "workstreams",
+      ruleRef: EXECUTION_AUTHORIZATION_RULES[connector],
+      hitlPattern: "approve-before-act",
+      recommendation: `Authorize the ${connector} provider operation for this case.`,
+      rationale: `A current ${scopes.join(" or ")} specialist decision is required immediately before this provider effect.`,
+      resumeAction: "continue-after-plan",
+      idempotencyKey: `orchestration:${caseId}:approval:execution:${connector}`,
+    });
+  }
+  const executionApprovals = await db.select({ status: onbApprovals.status }).from(onbApprovals).where(and(
+    eq(onbApprovals.organizationId, c.organizationId),
+    eq(onbApprovals.caseId, caseId),
+    sql`${onbApprovals.idempotencyKey} like ${`orchestration:${caseId}:approval:execution:%`}`,
+  ));
+  if (executionApprovals.some((approval) => approval.status === "pending")) {
+    const paused = {
+      orchestrationStatus: "waiting-approval" as const,
+      orchestrationCheckpoint: "waiting:plan",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+    };
+    if (claim) await fencedCaseUpdate(caseId, claim, paused);
+    else await db.update(onbCases).set(paused).where(eq(onbCases.id, caseId));
+    return "paused";
+  }
   const ws = (c.workstreams.length ? c.workstreams : defaultWorkstreams()) as OnbWorkstreamRow[];
   const readiness = c.readiness as OnbReadinessItemRow[];
   // Gate A is enforced by the caller before this stage. The non-learning
@@ -936,6 +1030,7 @@ export async function runWorkstreams(caseId: number, claim?: OrchestrationClaim)
   // The guarded connector dispatch above registered every applicable
   // externally-owned item with the System Watcher. The watcher closes each
   // readiness item only after its simulated source system confirms.
+  return "complete";
 }
 
 /* ------------------------------------------------------------------ */
@@ -1085,10 +1180,29 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
         recommendation: "Review live Day-1 readiness and confirm onboarding completion",
         rationale: "All currently configured mandatory readiness items passed this review. HR confirmation is still required and will re-check live document-malware evidence before completion; no automated employment action is taken.",
         resumeAction: "none",
+        authorityScope: "hr-compliance-approve",
         idempotencyKey: `gateway-c:${caseId}:human-queue`,
       }).onConflictDoNothing({
         target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
       });
+      // A medical/safety checklist item is not waived by HR's final review.
+      // It gets its own designated Occupational Health/EHS decision cycle.
+      if (mandatoryMedicalSafetyGate(current)) {
+        await tx.insert(onbApprovals).values({
+          organizationId: current.organizationId,
+          caseId,
+          agent: "occupational-health-gate",
+          ruleRef: "Medical/Safety — designated clearance",
+          hitlPattern: "approve-before-act",
+          recommendation: "Confirm mandatory medical/safety clearance",
+          rationale: "This case has a mandatory medical, occupational-health, safety, or EHS checkpoint. HR final approval cannot waive this designated-authority gate.",
+          resumeAction: "none",
+          authorityScope: "occupational-health-approve",
+          idempotencyKey: `gateway-medical-safety:${caseId}:human-queue`,
+        }).onConflictDoNothing({
+          target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
+        });
+      }
     }
     return { allReady, promoted, malwareBlockers: [] as number[] };
   });
@@ -1125,22 +1239,39 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
  * so an approval cannot race a document replacement or checklist reopen.
  */
 export async function completeDay1ReadinessGate(caseId: number): Promise<boolean> {
+  // The tenant identity is immutable on a case. Read it before opening the
+  // fenced transaction so the transaction itself can take the authority fence
+  // before it obtains any case/approval row locks.
+  const [tenant] = await db.select({ organizationId: onbCases.organizationId })
+    .from(onbCases).where(eq(onbCases.id, caseId));
+  if (!tenant) return false;
   return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tenant.organizationId}))`);
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!c) return false;
     // Enrollment is additive: a legacy complete case must not be replayed by
     // the approval recovery worker merely because it has an old approved row.
     if (c.lifecycleStage === "complete") return false;
-    const [approval] = await tx.select({
-      id: onbApprovals.id,
-      version: onbApprovals.version,
-    }).from(onbApprovals).where(and(
+    const [approval] = await tx.select().from(onbApprovals).where(and(
       eq(onbApprovals.organizationId, c.organizationId),
       eq(onbApprovals.caseId, caseId),
       eq(onbApprovals.idempotencyKey, `gateway-c:${caseId}:human-queue`),
       eq(onbApprovals.status, "approved"),
     ));
-    if (!approval) return false;
+    if (!approval || !(await decisionAuthorityStillCurrent(tx, approval))) return false;
+    const requiresMedicalSafety = mandatoryMedicalSafetyGate(c);
+    const [medicalSafetyApproval] = requiresMedicalSafety
+      ? await tx.select().from(onbApprovals).where(and(
+          eq(onbApprovals.organizationId, c.organizationId),
+          eq(onbApprovals.caseId, caseId),
+          eq(onbApprovals.idempotencyKey, `gateway-medical-safety:${caseId}:human-queue`),
+          eq(onbApprovals.status, "approved"),
+        ))
+      : [undefined];
+    if (requiresMedicalSafety && (
+      !medicalSafetyApproval ||
+      !(await decisionAuthorityStillCurrent(tx, medicalSafetyApproval))
+    )) return false;
     const malwareBlockers = documentationGateConfigured(c)
       ? await latestRequiredUploadMalwareBlockers(tx, c.organizationId, caseId)
       : [];
@@ -1242,7 +1373,7 @@ async function runFromPlan(
   if (plan === "paused") return;
   await renewOrchestrationClaim(caseId, claim);
   if (!(await enforceChecklistGate(caseId, "before-workstreams", claim))) return;
-  await runWorkstreams(caseId, claim);
+  if ((await runWorkstreams(caseId, claim)) === "paused") return;
   await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
   if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return;
   await renewOrchestrationClaim(caseId, claim);
@@ -1415,7 +1546,7 @@ export async function resumeChecklistOrchestration(caseId: number): Promise<bool
     }
     if (checkpoint === "blocked:before-workstreams") {
       if (!(await enforceChecklistGate(caseId, "before-workstreams", claim))) return false;
-      await runWorkstreams(caseId, claim);
+      if ((await runWorkstreams(caseId, claim)) === "paused") return true;
       await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
       if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return true;
     }
@@ -1477,7 +1608,13 @@ export async function reconcileDecidedApprovals(
   continueRun: ApprovalContinuation = runFromPlan,
 ): Promise<boolean> {
   const owner = randomUUID();
+  // See completeDay1ReadinessGate: fence authority changes before acquiring
+  // the case serialization lock, matching approval decisions and revocations.
+  const [tenant] = await db.select({ organizationId: onbCases.organizationId })
+    .from(onbCases).where(eq(onbCases.id, caseId));
+  if (!tenant) return false;
   const claimed = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tenant.organizationId}))`);
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!c || c.orchestrationStatus !== "waiting-approval") return null;
     const legacyNullCheckpoint = c.orchestrationCheckpoint === null;
@@ -1526,6 +1663,76 @@ export async function reconcileDecidedApprovals(
         updatedAt: new Date(),
       }).where(eq(onbCases.id, caseId));
       return null;
+    }
+    // Final continuation boundary: an approval can be valid when recorded and
+    // become invalid before the asynchronous continuation obtains the case
+    // claim (revocation, expiry, governance withdrawal, scope/case change or
+    // assignment revision). Do not continue on historical role evidence.
+    for (const approval of approvals) {
+      const lacksReviewedAuthorityEvidence =
+        !approval.authorityScope ||
+        !approval.decidedAuthorityId ||
+        !Number.isSafeInteger(approval.decidedAuthorityRevision) ||
+        !approval.decidedAuthorityRevision;
+      // Historical approvals predate assignment/revision evidence. They must
+      // never be treated as approved, but an active workflow needs a usable
+      // reviewed renewal rather than a permanently stuck null-scope row.
+      // Reopening preserves the immutable prior cycle in approval history and
+      // retains its resume action; completed cases remain non-replayable.
+      if (
+        approval.status === "approved" &&
+        lacksReviewedAuthorityEvidence &&
+        c.lifecycleStage !== "complete"
+      ) {
+        await reopenApprovalInTransaction(tx, {
+          organizationId: c.organizationId,
+          caseId,
+          approvalId: approval.id,
+          authorityScope: authorityScopeForApproval(approval),
+          reason: "Legacy approval lacks reviewed authority assignment and revision evidence; a fresh specialist decision is required.",
+          actor: "authority-migration",
+        });
+        await tx.insert(onbEvents).values({
+          organizationId: c.organizationId,
+          caseId,
+          agent: "authority-migration",
+          engine: "rules",
+          hitlPattern: "approve-before-act",
+          ruleRef: approval.ruleRef,
+          title: "Legacy approval renewed for reviewed decision",
+          detail: "Historical approval evidence was archived and a new pending cycle was created with the original continuation semantics. No completed provider effect is replayed.",
+          idempotencyKey: `decision-authority:${approval.id}:v${approval.version}:legacy-renewal`,
+        }).onConflictDoNothing({
+          target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+        });
+        return null;
+      }
+      if (
+        approval.status === "approved" &&
+        !(await decisionAuthorityStillCurrent(tx, approval))
+      ) {
+        await tx.update(onbCases).set({
+          orchestrationStatus: "blocked",
+          lifecycleStage: "exception",
+          orchestrationClaimOwner: null,
+          orchestrationClaimUntil: null,
+          updatedAt: new Date(),
+        }).where(eq(onbCases.id, caseId));
+        await tx.insert(onbEvents).values({
+          organizationId: c.organizationId,
+          caseId,
+          agent: "decision-authority",
+          engine: "rules",
+          hitlPattern: "hard-block",
+          ruleRef: approval.ruleRef,
+          title: "Approved decision invalidated before continuation",
+          detail: "The current verified authority, scope, revision, tenancy, or separation-of-duties evidence no longer permits continuation. No downstream action was dispatched.",
+          idempotencyKey: `decision-authority:${approval.id}:v${approval.version}:continuation-blocked`,
+        }).onConflictDoNothing({
+          target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+        });
+        return null;
+      }
     }
     const checkpoint = resumeAction === "continue-after-plan" ? "plan-approved" : "intake-approved";
     const repairLegacyPlanProfile =
@@ -1592,6 +1799,7 @@ export function resumeAfterDecision(opts: {
   ruleRef: string | null;
   hitlPattern: string;
   resumeAction: string;
+  authorityScope?: OnbAuthorityScope | null;
 }) {
   void (async () => {
     try {
@@ -1600,6 +1808,29 @@ export function resumeAfterDecision(opts: {
         .from(onbCases)
         .where(eq(onbCases.id, opts.caseId));
       if (offlineCase && isSyntheticOfflineCase(offlineCase)) return;
+      if (opts.ruleRef === MIGRATION_REVIEW_HOLD_RULE) {
+        if (!opts.approved) return;
+        // This approval is an explicit governance classification of the
+        // conservative migration hold, not a medical clearance. It removes
+        // only the hold bit; genuinely designated safety controls retain
+        // their independently configured nonWaivableSafety bit.
+        await db.transaction(async (tx) => {
+          if (!offlineCase) return;
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${offlineCase.organizationId}))`);
+          const [current] = await tx.select().from(onbCases)
+            .where(eq(onbCases.id, opts.caseId)).for("update");
+          if (!current || current.lifecycleStage === "complete") return;
+          await tx.update(onbCases).set({
+            checklistSnapshot: checklistSnapshot(current).map((item) => ({
+              ...item,
+              ...(item.migrationReviewHold === true ? { migrationReviewHold: false } : {}),
+            })),
+            updatedAt: new Date(),
+          }).where(eq(onbCases.id, opts.caseId));
+        });
+        await resumeChecklistOrchestration(opts.caseId);
+        return;
+      }
       const isHardBlock = opts.hitlPattern === "hard-block";
       const isDedicatedGatewayDecision = opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE ||
         opts.ruleRef === "Gate B — background verification" ||
@@ -1633,6 +1864,25 @@ export function resumeAfterDecision(opts: {
         opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE ||
         opts.ruleRef === "Gate B — background verification"
       ) return;
+      // A designated medical/safety decision may be the second required Gate
+      // C proof. Re-evaluate the final boundary after it commits rather than
+      // allowing the generic standalone-acknowledgement path to swallow it.
+      if (opts.authorityScope === "occupational-health-approve" && opts.approved) {
+        await completeDay1ReadinessGate(opts.caseId);
+        return;
+      }
+      // Pre-authority migration recovery is a deliberately narrow operation.
+      // It has its own legal decision and never re-enters plan continuation,
+      // which could otherwise dispatch unrelated BGV/IAM/payroll providers.
+      if (opts.resumeAction === "recover-document-envelope") {
+        if (!opts.approved) return;
+        const [current] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
+        // Completed cases preserve their historical state; no recovery replay.
+        if (!current || current.lifecycleStage === "complete") return;
+        const { dispatchDocumentPackRecovery } = await import("./workstream-connectors");
+        await dispatchDocumentPackRecovery(current);
+        return;
+      }
       // SLA/source-completion acknowledgements are records only. In
       // particular, a hard-block acknowledgement must not promote the case
       // before the source stream and mandatory gateway checks complete.
@@ -1704,6 +1954,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
         });
         await createApproval({
           caseId,
+          authorityScope: "hr-compliance-approve",
           agent: "channel",
           ruleRef: "4.6 Communications Rules",
           hitlPattern: "approve-before-act",
@@ -1812,6 +2063,7 @@ NEW MESSAGE FROM THE HIRE
         const result = await send(holding);
         await createApproval({
           caseId,
+          authorityScope: "hr-compliance-approve",
           agent: "channel",
           ruleRef: "4.6 Communications Rules",
           hitlPattern: "approve-before-act",
@@ -1856,6 +2108,7 @@ NEW MESSAGE FROM THE HIRE
       try {
         await createApproval({
           caseId,
+          authorityScope: "hr-compliance-approve",
           agent: "channel",
           ruleRef: "4.6 Communications Rules",
           hitlPattern: "approve-before-act",

@@ -261,8 +261,14 @@ export function applyChecklistOverrides(
       id: override.id,
       label: override.label ?? current!.label,
       order: override.order ?? current!.order,
-      enabled: override.enabled ?? current?.enabled ?? true,
-      mandatory: override.mandatory ?? current?.mandatory ?? false,
+      // A profile is an applicability overlay, not a waiver authority. It
+      // cannot clear an immutable policy bit or make that item skippable.
+      nonWaivableSafety: current?.nonWaivableSafety === true,
+      // Migration-review classification is equally inherited metadata. A
+      // profile overlay must not make a historical hold disappear.
+      migrationReviewHold: current?.migrationReviewHold === true,
+      enabled: current?.nonWaivableSafety === true ? true : (override.enabled ?? current?.enabled ?? true),
+      mandatory: current?.nonWaivableSafety === true ? true : (override.mandatory ?? current?.mandatory ?? false),
       enforcementStage: override.enforcementStage ?? current?.enforcementStage ?? "before-day1-review",
         evidenceRequired: override.evidenceRequired ?? current?.evidenceRequired,
         responsibleRole: override.responsibleRole ?? current?.responsibleRole,

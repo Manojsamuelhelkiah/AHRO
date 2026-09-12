@@ -8,9 +8,12 @@ import {
   onbApprovalHistory,
   onbApprovalNotifications,
   onbApprovals,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
   onbCases,
   onbEvents,
   onbSettings,
+  organizationMembershipsTable,
 } from "@workspace/db";
 import { HR_APPROVER_EMAIL_KEY } from "./settings";
 import {
@@ -26,6 +29,8 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 const organizationId = DEMO_ORGANIZATION_ID;
 const suffix = `approval-versioning-${process.pid}-${randomUUID()}`;
 const caseIds: number[] = [];
+const approverUserId = `${suffix}-hr-specialist`;
+const requesterUserId = `${suffix}-requester`;
 
 describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }, () => {
   let previousApproverSetting: string | null | undefined;
@@ -37,21 +42,45 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
         eq(onbCases.id, caseId),
       ));
     }
-    if (previousApproverSetting === undefined) return;
-    if (previousApproverSetting === null) {
+    if (previousApproverSetting !== undefined && previousApproverSetting === null) {
       await db.delete(onbSettings).where(and(
         eq(onbSettings.organizationId, organizationId),
         eq(onbSettings.key, HR_APPROVER_EMAIL_KEY),
       ));
-    } else {
+    } else if (previousApproverSetting !== undefined) {
       await db.update(onbSettings).set({ value: previousApproverSetting }).where(and(
         eq(onbSettings.organizationId, organizationId),
         eq(onbSettings.key, HR_APPROVER_EMAIL_KEY),
       ));
     }
+    await db.delete(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.id, `${suffix}-authority`));
+    await db.delete(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, organizationId),
+      eq(organizationMembershipsTable.clerkUserId, approverUserId),
+    ));
   });
 
+  async function ensureDecisionAuthority() {
+    await db.insert(onbAuthorityGovernance).values({
+      organizationId, status: "governance-approved", approvedByUserId: "test-governance",
+      approvedAt: new Date(), governanceSource: "test", revision: 1,
+    }).onConflictDoUpdate({
+      target: onbAuthorityGovernance.organizationId,
+      set: { status: "governance-approved", approvedAt: new Date(), governanceSource: "test" },
+    });
+    await db.insert(organizationMembershipsTable).values({
+      organizationId, clerkUserId: approverUserId, role: "member",
+    }).onConflictDoNothing();
+    await db.insert(onbAuthorityAssignments).values({
+      id: `${suffix}-authority`, organizationId, personUserId: approverUserId,
+      authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"],
+      validFrom: new Date(Date.now() - 60_000), status: "active", revision: 1,
+      grantorUserId: "test-governance", source: "test", governanceDecisionRef: "test",
+    }).onConflictDoNothing();
+  }
+
   async function createFixture() {
+    await ensureDecisionAuthority();
     const [created] = await db.insert(onbCases).values({
       organizationId,
       workerName: "Versioned approval test",
@@ -64,6 +93,9 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",
+      // Approval authority and the durable requestor must be distinct. Do not
+      // let a legacy/null creator accidentally make the approval valid.
+      createdByUserId: requesterUserId,
       joiningDate: "2030-01-01",
       lifecycleStage: "preboarding",
       orchestrationStatus: "waiting-approval",
@@ -81,6 +113,8 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       resumeAction: "none",
       idempotencyKey: `${suffix}:${created.id}`,
       status: "pending",
+      authorityScope: "hr-compliance-approve",
+      requestedByUserId: requesterUserId,
     }).returning();
     return { caseId: created.id, approval };
   }
@@ -99,7 +133,8 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
         approvalId: approval.id,
         expectedVersion: 1,
         decision: "approved",
-        decidedBy: "queue-worker-a",
+        decidedBy: approverUserId,
+        actorUserId: approverUserId,
         comment: "first",
       }),
       decideApproval({
@@ -107,7 +142,8 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
         approvalId: approval.id,
         expectedVersion: 1,
         decision: "rejected",
-        decidedBy: "queue-worker-b",
+        decidedBy: approverUserId,
+        actorUserId: approverUserId,
         comment: "losing race",
       }),
     ]);
@@ -133,7 +169,8 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       approvalId: approval.id,
       expectedVersion: 1,
       decision: "approved",
-      decidedBy: "hr",
+      decidedBy: approverUserId,
+      actorUserId: approverUserId,
       comment: null,
     });
     assert.equal(decided.outcome, "decided");
@@ -176,7 +213,8 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       approvalId: approval.id,
       expectedVersion: 1,
       decision: "rejected",
-      decidedBy: "hr",
+      decidedBy: approverUserId,
+      actorUserId: approverUserId,
       comment: "warning acknowledged",
     });
     assert.equal(decided.outcome, "decided");
@@ -210,7 +248,8 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       approvalId: approval.id,
       expectedVersion: 1,
       decision: "approved",
-      decidedBy: "hr",
+      decidedBy: approverUserId,
+      actorUserId: approverUserId,
       comment: "warning acknowledged",
     });
     assert.equal(decided.outcome, "decided");

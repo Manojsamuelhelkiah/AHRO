@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { after, describe, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbApprovals, onbCases, onbCommunications, onbEffectJournal, onbEvents } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
+import { DEMO_ORGANIZATION_ID, onbApprovals, onbAuthorityAssignments, onbAuthorityGovernance, onbCases, onbCommunications, onbEffectJournal, onbEvents, organizationMembershipsTable } from "@workspace/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import { addCandidateReplyReference, sendOutbound } from "./channels";
 import { createApproval, defaultReadiness, reconcileDecidedApprovals } from "./engine";
 import { checklistStageBlockers } from "./settings";
@@ -16,6 +16,13 @@ import {
 const hasDb = Boolean(process.env.DATABASE_URL);
 const keys: string[] = [];
 const caseIds: number[] = [];
+const authorityId = `effect-journal-test-authority-${process.pid}`;
+const authorityUserId = `effect-journal-test-specialist-${process.pid}`;
+const approvedAuthority = {
+  authorityScope: "hr-compliance-approve" as const,
+  decidedAuthorityId: authorityId,
+  decidedAuthorityRevision: 1,
+};
 const identity = (caseId: number, suffix: string, providerIdempotency = false) => {
   const logicalOperationKey = `effect-journal-test:${Date.now()}:${suffix}`;
   keys.push(logicalOperationKey);
@@ -31,10 +38,29 @@ const identity = (caseId: number, suffix: string, providerIdempotency = false) =
 };
 
 describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
+  before(async () => {
+    await db.insert(onbAuthorityGovernance).values({
+      organizationId: DEMO_ORGANIZATION_ID, status: "governance-approved",
+      approvedByUserId: "effect-journal-test", approvedAt: new Date(), governanceSource: "test", revision: 1,
+    }).onConflictDoUpdate({ target: onbAuthorityGovernance.organizationId, set: { status: "governance-approved" } });
+    await db.insert(organizationMembershipsTable).values({
+      organizationId: DEMO_ORGANIZATION_ID, clerkUserId: authorityUserId, role: "member",
+    }).onConflictDoNothing();
+    await db.insert(onbAuthorityAssignments).values({
+      id: authorityId, organizationId: DEMO_ORGANIZATION_ID, personUserId: authorityUserId,
+      authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"], validFrom: new Date(Date.now() - 60_000),
+      status: "active", revision: 1, grantorUserId: "test", source: "test", governanceDecisionRef: "test",
+    }).onConflictDoNothing();
+  });
   after(async () => {
     for (const key of keys) {
       await db.delete(onbEffectJournal).where(eq(onbEffectJournal.logicalOperationKey, key));
     }
+    await db.delete(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.id, authorityId));
+    await db.delete(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, authorityUserId),
+    ));
     for (const caseId of caseIds) {
       await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, caseId));
       await db.delete(onbCases).where(eq(onbCases.id, caseId));
@@ -56,6 +82,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
         legalEntity: "Test Co",
         managerName: "Manager",
         recruiterName: "Recruiter",
+        createdByUserId: `effect-journal-requestor-${process.pid}`,
         joiningDate: "2026-09-08",
       })
       .returning({ id: onbCases.id });
@@ -155,6 +182,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       recommendation: "Approve expedited onboarding",
       rationale: "Short lead time",
       resumeAction: "continue-after-intake",
+      authorityScope: "hr-compliance-approve" as const,
       idempotencyKey: key,
     };
     await createApproval(request);
@@ -190,6 +218,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       rationale: "Approved early",
       resumeAction: "continue-after-intake",
       status: "approved",
+      ...approvedAuthority,
     });
     let continuations = 0;
     const continuation = async (_id: number, planApproved: boolean) => {
@@ -212,6 +241,82 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
     await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
   });
 
+  test("continuation waits behind fenced revocation and withdrawal before claiming", async () => {
+    const caseId = await createCase();
+    await db.update(onbCases).set({
+      readiness: defaultReadiness(), orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: "waiting:intake",
+    }).where(eq(onbCases.id, caseId));
+    await db.insert(onbApprovals).values({
+      organizationId: DEMO_ORGANIZATION_ID, caseId, agent: "intake",
+      ruleRef: "test-race", hitlPattern: "approve-before-act",
+      recommendation: "Proceed", rationale: "Fixture", resumeAction: "continue-after-intake",
+      status: "approved", ...approvedAuthority,
+    });
+    for (const kind of ["revoked", "withdrawn"] as const) {
+      // Restore the same approved waiting state for each competing authority
+      // change, then make the change while holding the shared tenant fence.
+      await db.update(onbCases).set({
+        orchestrationStatus: "waiting-approval", orchestrationCheckpoint: "waiting:intake",
+      }).where(eq(onbCases.id, caseId));
+      let entered!: () => void;
+      let release!: () => void;
+      const fenced = new Promise<void>((resolve) => { entered = resolve; });
+      const unblock = new Promise<void>((resolve) => { release = resolve; });
+      const change = db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
+        if (kind === "revoked") {
+          await tx.update(onbAuthorityAssignments).set({ status: "revoked" })
+            .where(eq(onbAuthorityAssignments.id, authorityId));
+        } else {
+          await tx.update(onbAuthorityGovernance).set({ status: "withdrawn" })
+            .where(eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID));
+        }
+        entered();
+        await unblock;
+      });
+      await fenced;
+      const reconciled = reconcileDecidedApprovals(caseId, async () => {
+        throw new Error("stale authority must not continue");
+      });
+      release();
+      await change;
+      assert.equal(await reconciled, false);
+      if (kind === "revoked") {
+        await db.update(onbAuthorityAssignments).set({ status: "active" })
+          .where(eq(onbAuthorityAssignments.id, authorityId));
+      } else {
+        await db.update(onbAuthorityGovernance).set({ status: "governance-approved" })
+          .where(eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID));
+      }
+    }
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
+  });
+
+  test("active legacy approval is renewed as a scoped pending cycle without replaying continuation", async () => {
+    const caseId = await createCase();
+    await db.update(onbCases).set({
+      readiness: defaultReadiness(), orchestrationStatus: "waiting-approval",
+      orchestrationCheckpoint: "waiting:intake",
+    }).where(eq(onbCases.id, caseId));
+    const [legacy] = await db.insert(onbApprovals).values({
+      organizationId: DEMO_ORGANIZATION_ID, caseId, agent: "intake",
+      ruleRef: "legacy intake", hitlPattern: "approve-before-act",
+      recommendation: "Proceed", rationale: "pre-authority migration",
+      resumeAction: "continue-after-intake", status: "approved",
+      authorityScope: null, decidedAuthorityId: null, decidedAuthorityRevision: null,
+    }).returning();
+    let continued = 0;
+    assert.equal(await reconcileDecidedApprovals(caseId, async () => { continued += 1; }), false);
+    const [renewed] = await db.select().from(onbApprovals)
+      .where(eq(onbApprovals.id, legacy.id));
+    assert.equal(continued, 0);
+    assert.equal(renewed.status, "pending");
+    assert.equal(renewed.resumeAction, "continue-after-intake");
+    assert.equal(renewed.authorityScope, "hr-compliance-approve");
+    await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));
+  });
+
   test("a decided plan approval is recovered after interruption without bypass confusion", async () => {
     const caseId = await createCase();
     await db.update(onbCases).set({
@@ -229,6 +334,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       rationale: "Approved before process interruption",
       resumeAction: "continue-after-plan",
       status: "approved",
+      ...approvedAuthority,
     });
     let continuations = 0;
     await reconcileDecidedApprovals(caseId, async (_id, planApproved) => {
@@ -263,6 +369,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       rationale: "Legacy decision persisted before restart",
       resumeAction: "continue-after-intake",
       status: "approved",
+      ...approvedAuthority,
     });
     let continuations = 0;
     const continuation = async (_id: number, planApproved: boolean) => {
@@ -305,6 +412,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
         rationale: "Historical approval",
         resumeAction: "continue-after-intake",
         status: "approved",
+        ...approvedAuthority,
       },
       {
         organizationId: DEMO_ORGANIZATION_ID,
@@ -316,6 +424,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
         rationale: "Decision persisted before restart",
         resumeAction: "continue-after-plan",
         status: "pending",
+        ...approvedAuthority,
       },
     ]);
     let continuations = 0;
@@ -379,6 +488,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
         rationale: "Historical",
         resumeAction: "continue-after-intake",
         status: "approved",
+        ...approvedAuthority,
       },
       {
         organizationId: DEMO_ORGANIZATION_ID,
@@ -390,6 +500,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
         rationale: "Historical",
         resumeAction: "continue-after-plan",
         status: "approved",
+        ...approvedAuthority,
       },
     ]);
     let continuationAttempts = 0;

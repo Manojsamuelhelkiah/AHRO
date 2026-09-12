@@ -80,6 +80,11 @@ type ApprovalSnapshot = {
   recordsEvidence: OnbRecordsEvidenceItem[] | null;
   resumeAction: string | null;
   idempotencyKey: string | null;
+  authorityScope: string | null;
+  requestedByUserId: string | null;
+  decidedAuthorityId: string | null;
+  decidedAuthorityRevision: number | null;
+  authorityReviewStatus: string;
 };
 
 function snapshotOf(approval: typeof onbApprovals.$inferSelect): ApprovalSnapshot {
@@ -92,6 +97,11 @@ function snapshotOf(approval: typeof onbApprovals.$inferSelect): ApprovalSnapsho
     recordsEvidence: approval.recordsEvidence,
     resumeAction: approval.resumeAction,
     idempotencyKey: approval.idempotencyKey,
+    authorityScope: approval.authorityScope,
+    requestedByUserId: approval.requestedByUserId,
+    decidedAuthorityId: approval.decidedAuthorityId,
+    decidedAuthorityRevision: approval.decidedAuthorityRevision,
+    authorityReviewStatus: approval.authorityReviewStatus,
   };
 }
 
@@ -135,6 +145,9 @@ export type ReopenApprovalOptions = {
   actor?: string;
   /** Breaches may reopen either a prior approval or rejection. */
   reopenStatuses?: readonly string[];
+  /** A legacy row may have no scope at all; the renewed cycle must be
+   * decidable by a real specialist rather than remaining null-scoped. */
+  authorityScope?: typeof onbApprovals.$inferInsert.authorityScope;
 };
 
 export type ReopenApprovalResult = {
@@ -181,6 +194,9 @@ export async function reopenOnboardingApproval(
     status: "pending",
     decidedAt: null,
     decidedBy: null,
+    decidedAuthorityId: null,
+    decidedAuthorityRevision: null,
+    ...(opts.authorityScope === undefined ? {} : { authorityScope: opts.authorityScope }),
     comment: `${opts.reason}${opts.actor ? ` (${opts.actor})` : ""}`,
   }).where(and(
     eq(onbApprovals.organizationId, opts.organizationId),

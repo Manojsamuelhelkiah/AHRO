@@ -2504,6 +2504,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/document-recovery:
+    post:
+      operationId: recoverOnboardingCaseDocuments
+      tags: [onboarding]
+      summary: Queue a legal review to recover a missing legacy document envelope
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "202":
+          description: Legal document-envelope recovery review queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbDocumentRecoveryResult"
+        "400":
+          description: Invalid case id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Active case with no document pack not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Completed case history cannot be replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /onboarding/cases/{id}/evidence:
     get:
       operationId: listOnboardingCaseEvidence
@@ -3068,8 +3110,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: No current governance-approved specialist authority for this tenant, scope, case, or decision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/approvals/{id}/capability:
+    get:
+      operationId: getOnboardingApprovalCapability
+      tags: [onboarding]
+      summary: Read-only current-user specialist decision capability preflight
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Current authenticated specialist decision capability. The decision mutation rechecks this state atomically.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbApprovalCapability"
+        "400":
+          description: Invalid approval id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found in current tenant
           content:
             application/json:
               schema:
@@ -3101,6 +3179,126 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/authority/governance:
+    get:
+      operationId: getOnboardingAuthorityGovernance
+      tags: [onboarding]
+      summary: Current tenant governance state and caller authority administration eligibility
+      responses:
+        "200":
+          description: Governance state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbAuthorityGovernanceState"
+  /onboarding/authority/bootstrap:
+    post:
+      operationId: bootstrapOnboardingAuthorityGovernance
+      tags: [onboarding]
+      summary: Record operator attestation only; does not approve production authority
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+              required: [note]
+      responses:
+        "201": { description: Operator attestation recorded }
+        "403": { description: Owner or admin required }
+  /onboarding/authority/governance/withdraw:
+    post:
+      operationId: withdrawOnboardingAuthorityGovernance
+      tags: [onboarding]
+      summary: Immediately withdraw tenant specialist authority governance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, minLength: 1 }
+              required: [reason]
+      responses:
+        "200": { description: Governance withdrawn and authority decisions fail closed }
+        "403": { description: Current governance authority administrator required }
+  /onboarding/authority/assignments:
+    get:
+      operationId: listOnboardingAuthorityAssignments
+      tags: [onboarding]
+      summary: List specialist authority assignments (restricted)
+      responses:
+        "200":
+          description: Authority assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnbAuthorityAssignment"
+        "403": { description: Governance-approved authority administration required }
+    post:
+      operationId: createOnboardingAuthorityAssignment
+      tags: [onboarding]
+      summary: Grant a scoped specialist authority assignment (restricted; self-grant prohibited)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbAuthorityAssignmentRequest"
+      responses:
+        "201":
+          description: Authority granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbAuthorityAssignment"
+        "403": { description: Governance-approved authority administration required or self-grant denied }
+  /onboarding/authority/assignments/{id}/revoke:
+    post:
+      operationId: revokeOnboardingAuthorityAssignment
+      tags: [onboarding]
+      summary: Revoke specialist authority; pending decisions and dispatches revalidate it
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+              required: [reason]
+      responses:
+        "200": { description: Authority revoked }
+        "403": { description: Governance-approved authority administration required }
+  /onboarding/authority/unresolved-approvals:
+    get:
+      operationId: listOnboardingUnresolvedAuthorityApprovals
+      tags: [onboarding]
+      summary: Historical approvals lacking authority evidence, for review only
+      responses:
+        "200": { description: Legacy review queue }
+  /onboarding/authority/unresolved-approvals/{id}/acknowledge:
+    post:
+      operationId: acknowledgeOnboardingUnresolvedAuthorityApproval
+      tags: [onboarding]
+      summary: Acknowledge historical evidence without replaying a decision or effect
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200": { description: Historical review acknowledged without effect }
   /onboarding/connectors:
     get:
       operationId: listOnboardingConnectors
@@ -6103,6 +6301,14 @@ components:
         prerequisites:
           type: array
           items: { type: string }
+        nonWaivableSafety:
+          type: boolean
+          readOnly: true
+          description: Immutable occupational-health/safety policy bit. Profile edits cannot set, clear, or infer it from labels.
+        migrationReviewHold:
+          type: boolean
+          readOnly: true
+          description: Historical classification hold. This requires an explicit governance review and is not occupational-health/safety evidence.
       required: [id, label, order, enabled, mandatory, enforcementStage]
     OnbChecklistProfileCriteria:
       type: object
@@ -6843,7 +7049,7 @@ components:
         offerAcceptanceComplete:
           type: boolean
           default: false
-          description: HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation.
+          description: Must be false at creation. Offer acceptance is released only after creation through the dedicated authority-bound Gate A confirmation endpoint.
         workforceContext:
           $ref: "#/components/schemas/OnbWorkforceContext"
         jobProfileId:
@@ -7187,6 +7393,14 @@ components:
           type: ["array", "null"]
           items:
             $ref: "#/components/schemas/OnbRecordsEvidenceItem"
+        authorityScope:
+          type: ["string", "null"]
+          description: Verified specialist authority scope required for a new decision; a null historical value cannot be replayed.
+        authorityReviewStatus:
+          type: string
+          enum: [not-required, unresolved, reviewed-no-effect]
+        decidedAuthorityId:
+          type: ["string", "null"]
         status:
           type: string
           description: pending | approved | rejected
@@ -7198,7 +7412,19 @@ components:
           type: string
         decidedAt:
           type: ["string", "null"]
-      required: [id, version, caseId, caseWorkerName, agent, ruleRef, hitlPattern, recommendation, rationale, recordsEvidence, status, decidedBy, comment, createdAt, decidedAt]
+      required: [id, version, caseId, caseWorkerName, agent, ruleRef, hitlPattern, recommendation, rationale, recordsEvidence, authorityScope, authorityReviewStatus, decidedAuthorityId, status, decidedBy, comment, createdAt, decidedAt]
+    OnbApprovalCapability:
+      type: object
+      required: [canDecide, reason, version]
+      properties:
+        canDecide:
+          type: boolean
+        reason:
+          type: ["string", "null"]
+          description: Machine-readable fail-closed reason when the current authenticated user cannot decide.
+        version:
+          type: integer
+          minimum: 1
     OnbRecordsEvidenceItem:
       type: object
       properties:
@@ -7231,6 +7457,58 @@ components:
           type: integer
           minimum: 1
       required: [decision, expectedVersion]
+    OnbAuthorityGovernanceState:
+      type: object
+      properties:
+        governance:
+          type: object
+          properties:
+            status: { type: string, enum: [unconfigured, operator-attested, governance-approved, withdrawn] }
+            attestedAt: { type: ["string", "null"] }
+            attestationNote: { type: ["string", "null"] }
+            approvedAt: { type: ["string", "null"] }
+            governanceSource: { type: ["string", "null"] }
+            revision: { type: integer }
+          required: [status, revision]
+        canAdminister: { type: boolean }
+        assignments:
+          type: array
+          items: { $ref: "#/components/schemas/OnbAuthorityAssignment" }
+      required: [governance, canAdminister, assignments]
+    OnbAuthorityAssignment:
+      type: object
+      properties:
+        id: { type: string }
+        personUserId: { type: string }
+        personEmail: { type: ["string", "null"] }
+        emailResponderAuthorized: { type: boolean }
+        authorityRole: { type: string }
+        scopes: { type: array, items: { type: string } }
+        caseId: { type: ["integer", "null"] }
+        siteScope: { type: ["string", "null"] }
+        jurisdictionScope: { type: ["string", "null"] }
+        validFrom: { type: string }
+        validUntil: { type: ["string", "null"] }
+        status: { type: string, enum: [active, revoked] }
+        revision: { type: integer, minimum: 1 }
+        governanceDecisionRef: { type: string }
+        revokeReason: { type: ["string", "null"] }
+      required: [id, personUserId, personEmail, emailResponderAuthorized, authorityRole, scopes, caseId, siteScope, jurisdictionScope, validFrom, validUntil, status, revision, governanceDecisionRef, revokeReason]
+    OnbAuthorityAssignmentRequest:
+      type: object
+      properties:
+        personUserId: { type: string }
+        personEmail: { type: ["string", "null"] }
+        emailResponderAuthorized: { type: boolean }
+        authorityRole: { type: string }
+        scopes: { type: array, minItems: 1, items: { type: string } }
+        caseId: { type: ["integer", "null"] }
+        siteScope: { type: ["string", "null"] }
+        jurisdictionScope: { type: ["string", "null"] }
+        validFrom: { type: ["string", "null"] }
+        validUntil: { type: ["string", "null"] }
+        governanceDecisionRef: { type: string }
+      required: [personUserId, authorityRole, scopes, governanceDecisionRef]
     OnbApprovalHistory:
       type: object
       properties:
@@ -7703,6 +7981,12 @@ components:
         assignedTo:
           type: ["string", "null"]
       required: [at, responsibleRole, assignedTo]
+    OnbDocumentRecoveryResult:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
     OnbInboundMessage:
       type: object
       properties:

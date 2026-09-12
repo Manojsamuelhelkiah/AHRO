@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
-import { after, describe, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   db,
   DEMO_ORGANIZATION_ID,
   onbApprovals,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
   onbCases,
   onbCommunications,
   onbEvents,
   onbPolicyAuthorities,
   onbReadinessSlaAttestations,
   onbSystemChecks,
+  organizationMembershipsTable,
 } from "@workspace/db";
 import { decideApproval } from "./approval-decisions";
 import { verifyChecklistEvidence } from "./checklist";
@@ -29,7 +32,42 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `gateway-guards-${process.pid}-${randomUUID()}`;
 const caseIds: number[] = [];
 
+const authorityId = `${suffix}-occupational-health`;
+const authorityUserId = `${suffix}-specialist`;
+const requesterUserId = `${suffix}-requester`;
+
 describe("three onboarding gateway guards", { skip: !hasDb }, () => {
+  before(async () => {
+    await db.insert(onbAuthorityGovernance).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      status: "governance-approved",
+      approvedByUserId: "test",
+      approvedAt: new Date(),
+      governanceSource: "test",
+      revision: 1,
+    }).onConflictDoUpdate({
+      target: onbAuthorityGovernance.organizationId,
+      set: { status: "governance-approved" },
+    });
+    await db.insert(organizationMembershipsTable).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      clerkUserId: authorityUserId,
+      role: "member",
+    }).onConflictDoNothing();
+    await db.insert(onbAuthorityAssignments).values({
+      id: authorityId,
+      organizationId: DEMO_ORGANIZATION_ID,
+      personUserId: authorityUserId,
+      authorityRole: "occupational-health",
+      scopes: ["occupational-health-approve"],
+      validFrom: new Date(Date.now() - 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "test",
+      source: "test",
+      governanceDecisionRef: "test",
+    }).onConflictDoNothing();
+  });
   after(async () => {
     for (const id of caseIds) {
       await db.delete(onbCases).where(and(
@@ -37,6 +75,11 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
         eq(onbCases.id, id),
       ));
     }
+    await db.delete(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.id, authorityId));
+    await db.delete(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, authorityUserId),
+    ));
   });
 
   test("Gate A applies only to new external onboarding and rehires", () => {
@@ -62,6 +105,7 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",
+      createdByUserId: requesterUserId,
       joiningDate: "2030-01-01",
       orchestrationStatus: "checklist-blocked",
       orchestrationCheckpoint: "initial",
@@ -100,6 +144,7 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",
+      createdByUserId: requesterUserId,
       joiningDate: "2030-01-01",
       lifecycleStage: "day1-review",
       orchestrationStatus: "waiting-approval",
@@ -144,6 +189,10 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       rationale: "Fixture",
       resumeAction: "none",
       status: "approved",
+      authorityScope: "occupational-health-approve",
+       requestedByUserId: requesterUserId,
+      decidedAuthorityId: authorityId,
+      decidedAuthorityRevision: 1,
       idempotencyKey: `gateway-c:${c.id}:human-queue`,
     });
     return c.id;
@@ -160,12 +209,53 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
     // both calls must still converge to one successful audited completion.
     assert.equal([first, second].filter(Boolean).length, 1);
     const [current] = await db.select().from(onbCases).where(eq(onbCases.id, id));
-    const events = await db.select().from(onbEvents).where(and(
-      eq(onbEvents.organizationId, DEMO_ORGANIZATION_ID),
-      eq(onbEvents.idempotencyKey, `gateway-c:${id}:complete:v1`),
-    ));
+    const events = await db.select().from(onbEvents).where(eq(onbEvents.caseId, id));
     assert.equal(current.lifecycleStage, "complete");
     assert.equal(events.length, 1);
+  });
+
+  test("Gate C waits behind a fenced assignment revocation and rejects stale evidence", async () => {
+    const id = await approvedReadyCase();
+    let fenced!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => { fenced = resolve; });
+    const unblock = new Promise<void>((resolve) => { release = resolve; });
+    const revoke = db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
+      await tx.update(onbAuthorityAssignments).set({ status: "revoked" })
+        .where(eq(onbAuthorityAssignments.id, authorityId));
+      fenced();
+      await unblock;
+    });
+    await entered;
+    const completion = completeDay1ReadinessGate(id);
+    release();
+    await revoke;
+    assert.equal(await completion, false);
+    await db.update(onbAuthorityAssignments).set({ status: "active" })
+      .where(eq(onbAuthorityAssignments.id, authorityId));
+  });
+
+  test("Gate C waits behind a fenced governance withdrawal and rejects stale evidence", async () => {
+    const id = await approvedReadyCase();
+    let fenced!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => { fenced = resolve; });
+    const unblock = new Promise<void>((resolve) => { release = resolve; });
+    const withdraw = db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
+      await tx.update(onbAuthorityGovernance).set({ status: "withdrawn" })
+        .where(eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID));
+      fenced();
+      await unblock;
+    });
+    await entered;
+    const completion = completeDay1ReadinessGate(id);
+    release();
+    await withdraw;
+    assert.equal(await completion, false);
+    await db.update(onbAuthorityGovernance).set({ status: "governance-approved" })
+      .where(eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID));
   });
 
   test("an approved generic final-review row cannot pass a reopened mandatory item", async () => {

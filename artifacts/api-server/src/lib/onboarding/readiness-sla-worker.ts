@@ -168,6 +168,7 @@ async function createOrUpdateApproval(
         rationale: detail,
         status: "pending",
         resumeAction: "none",
+        authorityScope: "hr-compliance-approve",
         idempotencyKey: key,
       }).onConflictDoNothing({
         target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
@@ -397,7 +398,12 @@ async function enqueueNotification(
   now: Date,
 ): Promise<void> {
   const base = `readiness-sla:${caseId}:${ledgerId}:${state}`;
-  const notificationBody = rationale(action, state, now);
+  const notificationBody = [
+    rationale(action, state, now),
+    "",
+    "To acknowledge this review, sign in to the same organization and open Action Center → Approvals.",
+    "Email replies are notification receipts only and do not approve, reject, or release any readiness gate.",
+  ].join("\n");
   if (action.notifyInApp) {
     await db.insert(onbReadinessSlaOutbox).values({
       organizationId,
@@ -453,8 +459,8 @@ async function enqueueNotification(
     rationale(action, state, now),
     "",
     `Approval acknowledgment reference: ${ref}.`,
-    "Please acknowledge this readiness SLA warning/breach through the authorized approval workflow.",
-    "This email is operational notice only; do not reply to this message to approve or reject, and it does not claim source completion or gateway release.",
+    "Sign in to the same organization and open Action Center → Approvals to acknowledge this readiness SLA warning/breach.",
+    "Email replies are notification receipts only; they do not approve, reject, claim source completion, or release a gateway.",
   ].join("\n");
   for (const recipient of recipients) {
     await db.insert(onbReadinessSlaOutbox).values({

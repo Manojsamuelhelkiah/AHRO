@@ -194,6 +194,8 @@ export type EmailIdentityLinesInput = {
   actionRequired: string;
   reference: string;
   appPath?: string;
+  /** Use a safe in-app navigation instruction instead of inventing an origin. */
+  appNavigation?: string;
   /** `queued` is useful before a provider reports its outcome. */
   deliveryState?: "queued" | "sent" | "not-sent";
 };
@@ -227,7 +229,9 @@ export function formatEmailIdentityLines(input: EmailIdentityLinesInput): string
     `Delivery status: ${modeLabel}`,
     `Action required: ${input.actionRequired}`,
     `Reference: ${input.reference}`,
-    `App link: ${formatAppLink(input.appPath)}`,
+    input.appNavigation
+      ? `App navigation: ${input.appNavigation}`
+      : `App link: ${formatAppLink(input.appPath)}`,
   ];
 }
 

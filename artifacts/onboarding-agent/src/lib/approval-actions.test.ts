@@ -22,31 +22,39 @@ const pendingApproval = {
   agent: 'hr-reviewer',
 };
 
-test('member/read-only roles cannot submit approval actions', () => {
+test('a failed current-authority preflight disables approval actions', () => {
   const member = getApprovalActionAvailability(pendingApproval, {
-    isHR: false,
+    canDecide: false,
     loading: false,
   });
   assert.equal(member.canAct, false);
   assert.equal(member.reason, APPROVAL_PERMISSION_MESSAGE);
 
+  const scopedOut = getApprovalActionAvailability(pendingApproval, {
+    canDecide: false,
+    reason: 'separation_of_duties_requester_conflict',
+    loading: false,
+  });
+  assert.equal(scopedOut.canAct, false);
+  assert.equal(scopedOut.reason, 'separation_of_duties_requester_conflict');
+
   const unknownRole = getApprovalActionAvailability(pendingApproval, {
-    isHR: false,
+    canDecide: false,
     loading: true,
   });
   assert.equal(unknownRole.canAct, false);
-  assert.match(unknownRole.reason ?? '', /Checking organization permissions/);
+  assert.match(unknownRole.reason ?? '', /Checking current specialist authority/);
 });
 
-test('owner/admin role enables a valid pending review', () => {
+test('only a current scoped capability enables a valid pending review', () => {
   const owner = getApprovalActionAvailability(pendingApproval, {
-    isHR: true,
+    canDecide: true,
     loading: false,
   });
   assert.equal(owner.canAct, true);
   assert.equal(owner.reason, null);
   assert.deepEqual(
-    buildApprovalDecisionPayload(pendingApproval, { isHR: true, loading: false }, 'approved'),
+    buildApprovalDecisionPayload(pendingApproval, { canDecide: true, loading: false }, 'approved'),
     {
       id: pendingApproval.id,
       data: { decision: 'approved', expectedVersion: pendingApproval.version },
@@ -55,7 +63,7 @@ test('owner/admin role enables a valid pending review', () => {
   assert.equal(
     buildApprovalDecisionPayload(
       pendingApproval,
-      { isHR: false, loading: false },
+      { canDecide: false, loading: false },
       'approved',
     ),
     null,
@@ -66,7 +74,7 @@ test('missing or invalid approval versions fail closed', () => {
   for (const version of [undefined, null, 0, -1, 1.5, '3']) {
     const availability = getApprovalActionAvailability(
       { ...pendingApproval, version },
-      { isHR: true, loading: false },
+      { canDecide: true, loading: false },
     );
     assert.equal(availability.canAct, false);
     assert.equal(availability.reason, APPROVAL_VERSION_MESSAGE);
@@ -76,7 +84,7 @@ test('missing or invalid approval versions fail closed', () => {
 test('403, conflict, and network failures produce explicit review notices', () => {
   assert.match(
     getApprovalMutationErrorMessage({ status: 403 }),
-    /API 403.*Only organization owners\/admins can approve or acknowledge reviews/,
+    /API 403.*current governance-approved specialist assignment/,
   );
   assert.equal(
     getApprovalMutationErrorMessage({ status: 409 }),

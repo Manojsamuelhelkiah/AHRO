@@ -493,6 +493,7 @@ async function escalateCheckUnlocked(
       : `Review the ${def.label} exception or SLA breach`,
     rationale: `${def.label} (${check.externalRef}) requires human review: ${reason} No automated adverse employment action was taken.`,
     resumeAction: "none",
+    authorityScope: "hr-compliance-approve",
     // Each pending→overdue transition is a distinct recurrence. Do not let a
     // previously decided exception suppress a newly reopened human review.
     idempotencyKey: `gateway-${check.system}:${check.id}:${escalationAt.getTime()}:human-queue`,
@@ -880,7 +881,19 @@ export async function recoverUntrackedCaseSystems(
     const { dispatchWorkstreamConnectorMutations } = await import(
       "./workstream-connectors"
     );
-    for (const c of untracked) await dispatchWorkstreamConnectorMutations(c);
+    for (const c of untracked) {
+      try {
+        await dispatchWorkstreamConnectorMutations(c);
+      } catch (error) {
+        // Historical rows without reviewed authority evidence stay held for
+        // human migration review. One such case must not abort recovery for
+        // another case or tenant in this heartbeat.
+        console.error(
+          `[system-watcher] untracked workstream recovery held case ${c.id}:`,
+          error,
+        );
+      }
+    }
   }
 }
 
@@ -973,6 +986,7 @@ export async function recoverOverdueSystemApprovalQueues(): Promise<void> {
       hitlPattern: "hard-block", resumeAction: "none",
       recommendation: `Review the ${def.label} exception or SLA breach`,
       rationale: `${def.label} (${check.externalRef}) remains overdue and requires human review; no automated adverse action was taken.`,
+       authorityScope: "hr-compliance-approve",
       idempotencyKey: `gateway-${check.system}:${check.id}:${(check.escalatedAt ?? check.dueAt).getTime()}:human-queue`,
     }).onConflictDoNothing({ target: [onbApprovals.organizationId, onbApprovals.idempotencyKey] });
   }

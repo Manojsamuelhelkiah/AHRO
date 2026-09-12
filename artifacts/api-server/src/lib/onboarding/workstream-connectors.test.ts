@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbCases, onbDocuments, onbEffectJournal, onbSystemChecks, organizationsTable } from "@workspace/db/schema";
+import {
+  onbApprovals,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
+  onbCases,
+  onbDocuments,
+  onbEffectJournal,
+  onbSystemChecks,
+  organizationMembershipsTable,
+  organizationsTable,
+} from "@workspace/db/schema";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
@@ -18,6 +28,7 @@ import {
   type WorkstreamConnectorCase,
 } from "./workstream-connectors";
 import { recoverUntrackedCaseSystems } from "./system-watcher";
+import { EXECUTION_AUTHORIZATION_RULES } from "./decision-authority";
 
 const createdCaseIds: number[] = [];
 const unitOrganizationId = `workstream-guard-${process.pid}-${randomUUID()}`;
@@ -72,7 +83,7 @@ async function createDatabaseCase(lifecycleStage: string) {
   const [created] = await db
     .insert(onbCases)
     .values({
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId: unitOrganizationId,
       workerName: `Connector Gate ${Date.now()}`,
       workerEmail: `connector-gate-${Date.now()}@example.test`,
       hireType: "external-fte",
@@ -87,11 +98,156 @@ async function createDatabaseCase(lifecycleStage: string) {
       lifecycleStage,
       orchestrationStatus: "running",
       offerAcceptanceComplete: true,
+      createdByUserId: "database-case-requestor",
       readiness: [],
       workstreams: [],
     })
     .returning();
   createdCaseIds.push(created.id);
+  const authorityId = `workstream-hr-${created.id}`;
+  await db.insert(onbAuthorityGovernance).values({
+    organizationId: unitOrganizationId,
+    status: "governance-approved",
+    approvedByUserId: "governance-test",
+    approvedAt: new Date(),
+    governanceSource: "test",
+    revision: 1,
+  }).onConflictDoUpdate({
+    target: onbAuthorityGovernance.organizationId,
+    set: { status: "governance-approved", revision: 1, updatedAt: new Date() },
+  });
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: unitOrganizationId,
+    clerkUserId: "workstream-hr-reviewer",
+    role: "member",
+  }).onConflictDoNothing();
+  await db.insert(onbAuthorityAssignments).values({
+    id: authorityId,
+    organizationId: unitOrganizationId,
+    personUserId: "workstream-hr-reviewer",
+    authorityRole: "hr-compliance",
+    scopes: ["hr-compliance-approve"],
+    validFrom: new Date(Date.now() - 60_000),
+    validUntil: new Date(Date.now() + 60_000),
+    status: "active",
+    revision: 1,
+    grantorUserId: "governance-test",
+    source: "test",
+    governanceDecisionRef: "GOV-TEST",
+  });
+  await db.insert(onbApprovals).values({
+    organizationId: unitOrganizationId,
+    caseId: created.id,
+    agent: "offer-acceptance-gate",
+    ruleRef: "Gate A — offer-acceptance package",
+    hitlPattern: "hard-block",
+    recommendation: "Reviewed",
+    rationale: "Fixture",
+    resumeAction: "none",
+    status: "approved",
+    authorityScope: "hr-compliance-approve",
+    decidedAuthorityId: authorityId,
+    decidedAuthorityRevision: 1,
+    idempotencyKey: `gate-a-fixture-${created.id}`,
+  });
+  const operationAuthorities = [
+    ["documents", "legal", "legal-approve"],
+    ["background-verification", "hr-compliance", "hr-compliance-approve"],
+    ["iam", "it-security", "it-security-approve"],
+    ["payroll", "payroll", "payroll-approve"],
+  ] as const;
+  for (const [connector, authorityRole, authorityScope] of operationAuthorities) {
+    const reviewer = `workstream-${connector}-reviewer`;
+    const operationAuthorityId = `workstream-${connector}-${created.id}`;
+    await db.insert(organizationMembershipsTable).values({
+      organizationId: unitOrganizationId, clerkUserId: reviewer, role: "member",
+    }).onConflictDoNothing();
+    await db.insert(onbAuthorityAssignments).values({
+      id: operationAuthorityId, organizationId: unitOrganizationId,
+      personUserId: reviewer, authorityRole, scopes: [authorityScope],
+      validFrom: new Date(Date.now() - 60_000), validUntil: new Date(Date.now() + 60_000),
+      status: "active", revision: 1, grantorUserId: "governance-test",
+      source: "test", governanceDecisionRef: "GOV-TEST",
+    });
+    await db.insert(onbApprovals).values({
+      organizationId: unitOrganizationId, caseId: created.id, agent: "workstreams",
+      ruleRef: EXECUTION_AUTHORIZATION_RULES[connector], hitlPattern: "approve-before-act",
+      recommendation: "Fixture", rationale: "Fixture", resumeAction: "continue-after-plan",
+      status: "approved", authorityScope, decidedAuthorityId: operationAuthorityId,
+      decidedAuthorityRevision: 1, idempotencyKey: `execution-${connector}-${created.id}`,
+    });
+  }
+  return created;
+}
+
+async function createApprovedInternalTransferCase() {
+  const [created] = await db.insert(onbCases).values({
+    organizationId: unitOrganizationId,
+    workerName: "Internal transfer execution fixture",
+    workerEmail: `internal-transfer-${randomUUID()}@example.test`,
+    workerCategory: "employee",
+    hireType: "internal-transfer",
+    role: "Engineer",
+    department: "Technology",
+    geography: "United Kingdom",
+    legalEntity: "Example Ltd",
+    managerName: "Manager",
+    recruiterName: "Recruiter",
+    joiningDate: "2030-01-01",
+    lifecycleStage: "plan-generated",
+    orchestrationStatus: "running",
+    offerAcceptanceComplete: false,
+    createdByUserId: "internal-transfer-requestor",
+    readiness: [],
+    workstreams: [],
+  }).returning();
+  createdCaseIds.push(created.id);
+  const authorityId = `workstream-legal-${created.id}`;
+  await db.insert(onbAuthorityGovernance).values({
+    organizationId: unitOrganizationId,
+    status: "governance-approved",
+    approvedByUserId: "governance-test",
+    approvedAt: new Date(),
+    governanceSource: "test",
+    revision: 1,
+  }).onConflictDoUpdate({
+    target: onbAuthorityGovernance.organizationId,
+    set: { status: "governance-approved", revision: 1, updatedAt: new Date() },
+  });
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: unitOrganizationId,
+    clerkUserId: "workstream-legal-reviewer",
+    role: "member",
+  }).onConflictDoNothing();
+  await db.insert(onbAuthorityAssignments).values({
+    id: authorityId,
+    organizationId: unitOrganizationId,
+    personUserId: "workstream-legal-reviewer",
+    authorityRole: "legal",
+    scopes: ["legal-approve"],
+    validFrom: new Date(Date.now() - 60_000),
+    validUntil: new Date(Date.now() + 60_000),
+    status: "active",
+    revision: 1,
+    grantorUserId: "governance-test",
+    source: "test",
+    governanceDecisionRef: "GOV-TEST",
+  });
+  await db.insert(onbApprovals).values({
+    organizationId: unitOrganizationId,
+    caseId: created.id,
+    agent: "intake",
+    ruleRef: "4.1 Intake Rule 4",
+    hitlPattern: "approve-before-act",
+    recommendation: "Preserve existing employee identity",
+    rationale: "Fixture",
+    resumeAction: "continue-after-intake",
+    status: "approved",
+    authorityScope: "legal-approve",
+    decidedAuthorityId: authorityId,
+    decidedAuthorityRevision: 1,
+    idempotencyKey: `internal-transfer-fixture-${created.id}`,
+  });
   return created;
 }
 
@@ -108,6 +264,7 @@ function caseRow(
     legalEntity: "Example Ltd",
     lifecycleStage: "plan-generated",
     recruiterName: "Recruiter",
+    createdByUserId: null,
     updatedAt: new Date("2026-09-08T00:00:00Z"),
     workstreams: [],
     ...patch,
@@ -166,13 +323,27 @@ describe("workstream connector runtime enforcement", () => {
     );
   });
 
+  test("a legal continuation alone cannot authorize internal-transfer provider effects", async () => {
+    const c = await createApprovedInternalTransferCase();
+    await assert.rejects(
+      dispatchWorkstreamConnectorMutations(c),
+      /execution_authority_evidence_required/,
+    );
+  });
+
   test("the real simulated workflow routes documents, BGV, IAM, and payroll through the gate", async () => {
     const writes: ConnectorMutation[] = [];
     await dispatchWorkstreamConnectorMutations(caseRow(), {
+      authorize: (proposal) => ({
+        binding: { proposalHash: hashApprovalProposal(proposal) },
+        decisions: [],
+      }),
       write: async (mutation) => {
         writes.push(mutation as ConnectorMutation);
       },
       now: () => new Date("2026-09-08T01:00:00Z"),
+      verifyCurrentAuthority: async () => ({ allowed: true }),
+      withAuthorityFence: async (write) => write(),
     });
     assert.deepEqual(
       writes.map(({ connector, operation }) => `${connector}:${operation}`),
@@ -315,6 +486,8 @@ describe("workstream connector runtime enforcement", () => {
         write: async (boundMutation) => {
           writes.push(boundMutation as ConnectorMutation);
         },
+        verifyCurrentAuthority: async () => ({ allowed: true }),
+        withAuthorityFence: async (write) => write(),
         now: () => new Date("2026-09-08T00:00:00Z"),
       },
     });
@@ -322,20 +495,22 @@ describe("workstream connector runtime enforcement", () => {
   });
 
   test("non-employee applicability omits payroll but still dispatches documents", async () => {
-    const [contractor] = await db.insert(onbCases).values({
-      organizationId: unitOrganizationId, workerName: "Contractor fixture", workerEmail: `contractor-${Date.now()}@example.invalid`,
-      workerCategory: "contractor", hireType: "contractor", role: "Operator", department: "Ops", geography: "United Kingdom",
-      legalEntity: "Example Ltd", managerName: "Manager", recruiterName: "Recruiter", joiningDate: "2030-01-01",
-      lifecycleStage: "plan-generated", orchestrationStatus: "running", offerAcceptanceComplete: true, readiness: [], workstreams: [],
-    }).returning();
-    createdCaseIds.push(contractor.id);
     const writes: ConnectorMutation[] = [];
     await dispatchWorkstreamConnectorMutations(
-      contractor,
+      caseRow({
+        workerCategory: "contractor",
+        hireType: "contractor",
+      }),
       {
+        authorize: (proposal) => ({
+          binding: { proposalHash: hashApprovalProposal(proposal) },
+          decisions: [],
+        }),
         write: async (mutation) => {
           writes.push(mutation as ConnectorMutation);
         },
+        verifyCurrentAuthority: async () => ({ allowed: true }),
+        withAuthorityFence: async (write) => write(),
       },
     );
     assert.ok(writes.some((mutation) => mutation.connector === "documents"));

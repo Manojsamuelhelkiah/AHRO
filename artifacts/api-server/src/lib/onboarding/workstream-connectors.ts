@@ -1,4 +1,6 @@
-import { type onbCases, type OnbChecklistTemplateItem, type OnbReadinessItemRow } from "@workspace/db/schema";
+import { db, onbCases } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { type OnbChecklistTemplateItem, type OnbReadinessItemRow } from "@workspace/db/schema";
 import {
   documentPackFor,
   seedDocumentsForCase,
@@ -30,13 +32,17 @@ import { evaluateWorkforceRuntimePrerequisites } from "./operational-requests";
 import { workforceRuntimeEnabled } from "./workforce-step-runtime";
 import { checklistStageBlockers } from "./settings";
 import {
+  resolveCurrentCaseExecutionAuthorityEvidence,
+  verifyCurrentCompoundAuthorities,
+} from "./decision-authority";
+import {
   claimEffectDispatch,
   confirmEffect,
   ensureEffectJournalEntry,
   isConfirmedEffect,
   markAmbiguousEffectForManualRepair,
 } from "./effect-journal";
-
+import type { OnboardingDbTransaction } from "./settings";
 type CaseRow = typeof onbCases.$inferSelect;
 
 export type WorkstreamConnectorCase = Pick<
@@ -50,6 +56,7 @@ export type WorkstreamConnectorCase = Pick<
   | "legalEntity"
   | "lifecycleStage"
   | "recruiterName"
+  | "createdByUserId"
   | "updatedAt"
   | "workstreams"
 > & {
@@ -82,8 +89,30 @@ export type WorkstreamConnectorDependencies = {
     c: WorkstreamConnectorCase,
   ) => Promise<void>;
   now?: () => Date;
+  /** Deterministic test/simulator authority source; production reads current DB state. */
+  verifyCurrentAuthority?: (input: {
+    proposal: ApprovalProposal;
+    decisions: ApprovalDecision[];
+  }) => Promise<{ allowed: true } | { allowed: false; reason: string }>;
+  withAuthorityFence?: <T>(
+    write: (tx?: OnboardingDbTransaction) => Promise<T>,
+  ) => Promise<T>;
+  /** Immutable authenticated principal IDs, used for live SoD checks. */
+  actorUserIds?: {
+    requestor?: string;
+    beneficiary?: string;
+    executor?: string;
+  };
 };
 
+function isOrdinaryExecutionMutation(mutation: ConnectorMutation): boolean {
+  return (
+    (mutation.connector === "payroll" && mutation.operation === "enrol-worker") ||
+    (mutation.connector === "iam" && mutation.operation === "provision-account") ||
+    (mutation.connector === "background-verification" && mutation.operation === "open-check") ||
+    (mutation.connector === "documents" && mutation.operation === "send-envelope")
+  );
+}
 function requiredBranches(c: WorkstreamConnectorCase): PlanBranch[] {
   const nonEmployee = isNonEmployee(c.workerCategory);
   const workerType =
@@ -265,6 +294,60 @@ async function productionWrite(
   await trackCaseSystems(payload.caseId, [system]);
 }
 
+/**
+ * A legacy writer has no remote receipt to query, so it still gets a durable
+ * logical-effect record. Confirmed keys are intentionally reused rather than
+ * replayed; an ambiguous outcome is surfaced for manual repair.
+ */
+async function journaledProductionWrite(input: {
+  mutation: Readonly<ConnectorMutation>;
+  c: WorkstreamConnectorCase;
+  proposal: ApprovalProposal;
+}): Promise<void> {
+  const identity = {
+    logicalOperationKey: input.proposal.logicalOperationKey,
+    organizationId: input.c.organizationId,
+    tenantId: input.c.organizationId,
+    caseId: input.c.id,
+    toolName: input.proposal.toolName,
+    argumentsHash: hashApprovalProposal(input.proposal),
+    // The legacy DB writers are deterministic/idempotent for this logical key.
+    providerIdempotency: true,
+  };
+  const entry = await ensureEffectJournalEntry(identity);
+  const claim = await claimEffectDispatch({
+    ...identity,
+    owner: `workstream-writer:${input.proposal.logicalOperationKey}`,
+    expectedFencingToken: entry.fencingToken,
+  });
+  if (claim.kind === "reuse_confirmed") return;
+  if (claim.kind === "manual_repair_required") {
+    throw new Error("Effect requires manual repair before another provider dispatch");
+  }
+  if (claim.kind !== "claimed") {
+    throw new Error("Effect is already being dispatched by another worker");
+  }
+  try {
+    await productionWrite(input.mutation, input.c);
+    if (!(await confirmEffect({
+      logicalOperationKey: identity.logicalOperationKey,
+      organizationId: identity.organizationId,
+      owner: `workstream-writer:${input.proposal.logicalOperationKey}`,
+      fencingToken: claim.fencingToken,
+    }))) {
+      throw new Error("Effect confirmation was fenced by another worker");
+    }
+  } catch (error) {
+    await markAmbiguousEffectForManualRepair({
+      logicalOperationKey: identity.logicalOperationKey,
+      organizationId: identity.organizationId,
+      owner: `workstream-writer:${input.proposal.logicalOperationKey}`,
+      fencingToken: claim.fencingToken,
+      error: String(error).slice(0, 500),
+    });
+    throw error;
+  }
+}
 export async function dispatchCaseConnectorMutation(input: {
   c: WorkstreamConnectorCase;
   mutation: ConnectorMutation;
@@ -287,62 +370,50 @@ export async function dispatchCaseConnectorMutation(input: {
   if (!workstreamPolicyGateOpen(input.c)) {
     throw new Error("Workstream connector dispatch blocked by an unmet before-workstreams policy gate.");
   }
-  if (input.mutation.connector === "payroll" && workforceRuntimeEnabled((input.c.processPolicySnapshot ?? {}) as Record<string, unknown>)) {
-    const runtime = await evaluateWorkforceRuntimePrerequisites({ organizationId: input.c.organizationId, caseId: input.c.id, workstream: "payroll" });
-    if (!runtime.active || !runtime.allowed) {
+  if (!(await mutationMayDispatch(input.c, input.mutation))) {
     throw new Error("Payroll connector dispatch blocked by incomplete runtime prerequisites.");
-    }
   }
   const authorization = input.dependencies?.authorize
     ? await input.dependencies.authorize(proposal, input.mutation)
-    : {
-        binding: { proposalHash: hashApprovalProposal(proposal) },
-        decisions: [],
-      };
+    : await db.transaction(async (tx) => {
+        if (!isOrdinaryExecutionMutation(input.mutation)) {
+          return { binding: { proposalHash: hashApprovalProposal(proposal) }, decisions: [] };
+        }
+        const evidence = await resolveCurrentCaseExecutionAuthorityEvidence(tx, {
+          organizationId: input.c.organizationId,
+          caseId: input.c.id,
+          connector: input.mutation.connector,
+          actualActorUserIds: [input.c.createdByUserId ?? undefined],
+        });
+        if (!evidence.allowed) {
+          throw new ConnectorDispatchRejectedError(input.mutation.connector, evidence.reason);
+        }
+        return {
+          binding: { proposalHash: hashApprovalProposal(proposal) },
+          decisions: evidence.decisions.map((decision) => ({
+            ...decision,
+            proposalHash: hashApprovalProposal(proposal),
+          })),
+        };
+      });
   const now = input.dependencies?.now?.() ?? new Date();
-  const write = input.dependencies?.write ?? productionWrite;
-  // Validate every non-provider boundary before claiming a durable effect.
-  // A denial is not an attempted write and must not strand a journal claim.
-  await dispatchConnectorMutation({
-    mutation: input.mutation,
-    context: {
-      proposal, binding: authorization.binding, decisions: authorization.decisions,
-      actorIds: { requestor: `case:${input.c.id}:recruiter:${input.c.recruiterName}`, beneficiary: `case:${input.c.id}:worker:${input.c.workerEmail}`, executor: "onboarding-engine" },
-      deniedBlockers: blockersFor(input.c, input.mutation), now,
-      syntheticOffline: isSyntheticOfflineCase({ workerName: input.c.workerName ?? "", workerEmail: input.c.workerEmail, workerPhone: input.c.workerPhone ?? null, notes: input.c.notes ?? null }),
-    },
-    write: async () => undefined,
-  });
+  const write = input.dependencies?.write
+    ? input.dependencies.write
+    : (mutation: Readonly<ConnectorMutation>, c: WorkstreamConnectorCase) =>
+        journaledProductionWrite({ mutation, c, proposal });
 
-  const logicalOperationKey = proposal.logicalOperationKey;
-  const owner = `workstream-dispatch:${input.c.id}:${logicalOperationKey}`;
-  const journal = await ensureEffectJournalEntry(effectIdentity);
-  const claim = await claimEffectDispatch({
-    logicalOperationKey,
-    organizationId: input.c.organizationId,
-    tenantId: input.c.organizationId,
-    caseId: input.c.id,
-    toolName: proposal.toolName,
-    argumentsHash: hashApprovalProposal(proposal),
-    providerIdempotency: true,
-    owner,
-    expectedFencingToken: journal.fencingToken,
-  });
-  if (claim.kind === "reuse_confirmed") return;
-  if (claim.kind !== "claimed") {
-    throw new Error(`Connector effect ${logicalOperationKey} is unavailable for dispatch (${claim.kind}).`);
-  }
-  try {
-    await dispatchConnectorMutation({
+  await dispatchConnectorMutation({
     mutation: input.mutation,
     context: {
       proposal,
       binding: authorization.binding,
       decisions: authorization.decisions,
       actorIds: {
-        requestor: `case:${input.c.id}:recruiter:${input.c.recruiterName}`,
-        beneficiary: `case:${input.c.id}:worker:${input.c.workerEmail}`,
-        executor: "onboarding-engine",
+        // Contact/display strings are not principals. Only immutable IDs that
+        // were authenticated elsewhere can participate in SoD validation.
+        requestor: input.dependencies?.actorUserIds?.requestor ?? input.c.createdByUserId ?? undefined,
+        beneficiary: input.dependencies?.actorUserIds?.beneficiary,
+        executor: input.dependencies?.actorUserIds?.executor,
       },
       deniedBlockers: blockersFor(input.c, input.mutation),
       now,
@@ -352,24 +423,81 @@ export async function dispatchCaseConnectorMutation(input: {
         workerPhone: input.c.workerPhone ?? null,
         notes: input.c.notes ?? null,
       }),
+      verifyCurrentAuthority: (tx) =>
+        input.dependencies?.verifyCurrentAuthority?.({
+          proposal,
+          decisions: authorization.decisions,
+        }) ?? (
+          isOrdinaryExecutionMutation(input.mutation)
+            ? (tx
+              ? resolveCurrentCaseExecutionAuthorityEvidence(tx, {
+                  organizationId: input.c.organizationId,
+                  caseId: input.c.id,
+                  connector: input.mutation.connector,
+                  actualActorUserIds: [
+                    input.dependencies?.actorUserIds?.requestor ?? input.c.createdByUserId ?? undefined,
+                    input.dependencies?.actorUserIds?.beneficiary,
+                    input.dependencies?.actorUserIds?.executor,
+                  ],
+                }).then((evidence) => evidence.allowed
+                  ? { allowed: true as const }
+                  : { allowed: false as const, reason: evidence.reason })
+              : Promise.resolve({ allowed: false as const, reason: "authority_fence_transaction_required" }))
+            : verifyCurrentCompoundAuthorities({
+                proposal,
+                decisions: authorization.decisions,
+                actorIds: [
+                  input.dependencies?.actorUserIds?.requestor,
+                  input.dependencies?.actorUserIds?.beneficiary,
+                  input.dependencies?.actorUserIds?.executor,
+                ],
+                now,
+              })
+        ),
+      withAuthorityFence: (performWrite) =>
+        input.dependencies?.withAuthorityFence?.(performWrite) ??
+        db.transaction(async (tx) => {
+        // Every revoke operation takes this same transaction-scoped tenant
+        // fence. The lock remains held while the provider call is made, so a
+        // revocation cannot commit between final live verification and write.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${proposal.tenantId}))`);
+        // Do not trust the case snapshot captured before the effect was
+        // claimed. Gate C completion/revocation uses this same tenant fence;
+        // taking the row lock after it serializes a completion-first race
+        // before the external writer is invoked.
+        const [liveCase] = await tx.select().from(onbCases)
+          // The document writer inserts child rows while this fenced
+          // transaction is open. NO KEY UPDATE still serializes concurrent
+          // case-state writers, while allowing the child FK KEY SHARE lock;
+          // UPDATE would self-block through the separate writer connection.
+          .where(eq(onbCases.id, input.c.id)).for("no key update");
+        if (!liveCase || liveCase.organizationId !== proposal.tenantId) {
+          throw new ConnectorDispatchRejectedError(input.mutation.connector, "case_not_found");
+        }
+        if (liveCase.lifecycleStage === "complete") {
+          throw new ConnectorDispatchRejectedError(input.mutation.connector, "case_completed");
+        }
+        if (
+          (liveCase.hireType === "external-fte" || liveCase.hireType === "contractor" || liveCase.hireType === "rehire") &&
+          liveCase.offerAcceptanceComplete !== true
+        ) {
+          throw new ConnectorDispatchRejectedError(input.mutation.connector, "offer_acceptance_not_current");
+        }
+        return performWrite(tx);
+      }),
     },
-      write: (mutation) => write(mutation, input.c),
-    });
-    if (!await confirmEffect({
-      logicalOperationKey, organizationId: input.c.organizationId, owner, fencingToken: claim.fencingToken,
-    })) throw new Error("Connector write completed but effect confirmation lost its fencing claim.");
-  } catch (error) {
-    if (error instanceof ConnectorDispatchRejectedError) throw error;
-    // A write may have happened. Do not spin/replay a failed boundary without
-    // first reconciling the durable operation record.
-    await markAmbiguousEffectForManualRepair({
-      logicalOperationKey, organizationId: input.c.organizationId, owner, fencingToken: claim.fencingToken,
-      error: error instanceof Error ? error.message : "Unknown connector dispatch error",
-    });
-    throw error;
-  }
+    write: (mutation) => write(mutation, input.c),
+  });
 }
 
+/** Startup recovery is intentionally limited to the missing document-pack
+ * operation; it must not opportunistically dispatch the other workstreams. */
+export async function dispatchDocumentPackRecovery(
+  c: WorkstreamConnectorCase,
+): Promise<void> {
+  const [documentMutation] = workstreamMutations(c);
+  await dispatchCaseConnectorMutation({ c, mutation: documentMutation! });
+}
 function workstreamMutations(c: WorkstreamConnectorCase): ConnectorMutation[] {
   const mutations: ConnectorMutation[] = [
     {

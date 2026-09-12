@@ -379,6 +379,8 @@ describe("mutating connector approval and applicability gate", () => {
         actorIds: ACTORS,
         deniedBlockers: [],
         now: NOW,
+        verifyCurrentAuthority: async () => ({ allowed: true }),
+        withAuthorityFence: async (write) => write(),
       },
       write: async (boundMutation) => {
         seen.push(boundMutation as ConnectorMutation);
@@ -387,6 +389,100 @@ describe("mutating connector approval and applicability gate", () => {
     });
     assert.equal(result, "written");
     assert.deepEqual(seen, [mutation]);
+  });
+
+  test("a high-risk provider mutation fails closed without final live authority revalidation", async () => {
+    const mutation: ConnectorMutation = {
+      connector: "payroll",
+      operation: "bank-change",
+      payload: { accountToken: "vault-ref" },
+    };
+    const p = proposal({
+      mutation,
+      branch: "payroll-benefits",
+      rule: BANK_CHANGE_APPROVAL_RULE,
+    });
+    await expectRejectedWithoutWrite({
+      mutation,
+      proposal: p,
+      decisions: decisions(p, [
+        ["fraud-control approver", "fraud-1"],
+        ["payroll approver", "payroll-1"],
+      ]),
+      reason: "authority_revalidation_required",
+    });
+  });
+
+  test("ordinary provider mutations cannot use NO_APPROVALS to bypass final authority validation", async () => {
+    for (const item of ORDINARY_MUTATIONS) {
+      const p = proposal({ ...item, rule: { allOf: [] } });
+      let writes = 0;
+      await assert.rejects(
+        dispatchConnectorMutation({
+          mutation: item.mutation,
+          context: {
+            proposal: p,
+            binding: { proposalHash: hashApprovalProposal(p) },
+            decisions: [],
+            actorIds: ACTORS,
+            deniedBlockers: [],
+            now: NOW,
+            verifyCurrentAuthority: async () => ({
+              allowed: false,
+              reason: "legacy_authority_evidence_required",
+            }),
+            withAuthorityFence: async (write) => write(),
+          },
+          write: async () => {
+            writes += 1;
+          },
+        }),
+        (error) =>
+          error instanceof ConnectorDispatchRejectedError &&
+          error.reason === "legacy_authority_evidence_required",
+      );
+      assert.equal(
+        writes,
+        0,
+        `${item.mutation.connector}:${item.mutation.operation} must not invoke its provider`,
+      );
+    }
+  });
+
+  test("a revocation racing the writer fence prevents the provider invocation", async () => {
+    const item = ORDINARY_MUTATIONS[0];
+    const p = proposal({ ...item, rule: { allOf: [] } });
+    let authorityLive = true;
+    let writes = 0;
+    await assert.rejects(
+      dispatchConnectorMutation({
+        mutation: item.mutation,
+        context: {
+          proposal: p,
+          binding: { proposalHash: hashApprovalProposal(p) },
+          decisions: [],
+          actorIds: ACTORS,
+          deniedBlockers: [],
+          now: NOW,
+          verifyCurrentAuthority: async () => authorityLive
+            ? { allowed: true }
+            : { allowed: false, reason: "no_current_verified_scoped_assignment" },
+          // Model the shared tenant advisory fence: revocation completes before
+          // the final query, so the writer must observe it before provider I/O.
+          withAuthorityFence: async (write) => {
+            authorityLive = false;
+            return write();
+          },
+        },
+        write: async () => {
+          writes += 1;
+        },
+      }),
+      (error) =>
+        error instanceof ConnectorDispatchRejectedError &&
+        error.reason === "no_current_verified_scoped_assignment",
+    );
+    assert.equal(writes, 0);
   });
 
   test("the approved provider payload is deeply immutable", async () => {
@@ -412,6 +508,8 @@ describe("mutating connector approval and applicability gate", () => {
         actorIds: ACTORS,
         deniedBlockers: [],
         now: NOW,
+        verifyCurrentAuthority: async () => ({ allowed: true }),
+        withAuthorityFence: async (write) => write(),
       },
       write: async (boundMutation) => {
         const payload = boundMutation.payload as {

@@ -12,10 +12,14 @@ import {
   getGetOnboardingCaseBgvQueryKey,
   getListOnboardingCaseDocumentsQueryKey,
   getListOnboardingCaseEventsQueryKey,
-  getGetOnboardingCaseQueryKey
+   getGetOnboardingCaseQueryKey,
+   useRecoverOnboardingCaseDocuments,
 } from '@workspace/api-client-react';
 
 export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) {
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const recoverDocuments = useRecoverOnboardingCaseDocuments();
   const { data: evidenceList, isLoading: evidenceLoading } = useListOnboardingCaseEvidence(caseId, {
     query: {
       enabled: !!caseId,
@@ -74,7 +78,23 @@ export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) 
               <Loader2 className="w-4 h-4 animate-spin" /> Loading evidence...
             </div>
           ) : (docs ?? []).length === 0 ? (
-            <p className="text-[var(--text-sm)] text-[var(--text-muted)] italic">Documentation pack not issued yet.</p>
+            <div className="space-y-3">
+              <p className="text-[var(--text-sm)] text-[var(--text-muted)] italic">Documentation pack not issued yet.</p>
+              <Button size="sm" disabled={recoverDocuments.isPending} onClick={() => {
+                setRecoveryNotice(null);
+                recoverDocuments.mutate({ id: caseId }, {
+                  onSuccess: (result) => {
+                    setRecoveryNotice(result.message);
+                    queryClient.invalidateQueries({ queryKey: getListOnboardingCaseDocumentsQueryKey(caseId) });
+                    queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEventsQueryKey(caseId) });
+                  },
+                  onError: (error: any) => {
+                    setRecoveryNotice(error?.data?.message || error?.message || 'Document recovery could not be queued.');
+                  },
+                });
+              }}>{recoverDocuments.isPending ? 'Queuing recovery…' : 'Queue legal document recovery'}</Button>
+              {recoveryNotice && <p className="text-[var(--text-xs)] text-[var(--text-muted)]" role="status">{recoveryNotice}</p>}
+            </div>
           ) : (
             (docs ?? []).map((doc: any) => {
               const evidence = (evidenceList || []).find((e: any) => e.documentId === doc.id);

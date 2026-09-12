@@ -23,11 +23,13 @@ import {
 
 export const HR_ALERT_EMAIL_KEY = "hr_alert_email";
 
+/** Append-only, governance-administered control policy; never derived from labels. */
+export const NONWAIVABLE_SAFETY_POLICY_KEY = "nonwaivable_safety_checklist_ids";
 /**
- * Optional remote HR approver for demos: when set, every new pending
- * approval is emailed to this address and a reply containing
- * approve/reject from this exact sender decides it. Email is an
- * unauthenticated channel, so ONLY this address is ever trusted.
+ * Optional approval-delivery address. Email decisions remain unavailable
+ * unless a governance administrator separately grants the exact address to
+ * the matching Clerk-verified tenant member on a current scoped assignment.
+ * The delivery setting alone never authorizes a mailbox or persona.
  */
 export const HR_APPROVER_EMAIL_KEY = "hr_approver_email";
 
@@ -62,13 +64,13 @@ export async function getCandidateLinkRetentionDays(
 
 export const LEGACY_CHECKLIST_VERSION = 1;
 export const LEGACY_CHECKLIST: readonly OnbChecklistTemplateItem[] = [
-  { id: "profile", label: "Identity, role, manager & joining date confirmed", order: 0, enabled: true, mandatory: true, enforcementStage: "before-workstreams" },
-  { id: "documentation", label: "Documents, statutory forms & work authorization", order: 1, enabled: true, mandatory: true, enforcementStage: "before-day1-review" },
-  { id: "payroll", label: "Payroll, bank, tax, benefits & HRIS activation", order: 2, enabled: true, mandatory: true, enforcementStage: "before-day1-review" },
-  { id: "access", label: "Identity, access, applications & email/collaboration", order: 3, enabled: true, mandatory: true, enforcementStage: "before-day1-review" },
-  { id: "assets", label: "Device, workspace, ID card & remote kit", order: 4, enabled: true, mandatory: true, enforcementStage: "before-day1-review" },
-  { id: "learning", label: "Induction, compliance learning, buddy & manager connect", order: 5, enabled: true, mandatory: true, enforcementStage: "before-day1-review" },
-  { id: "checkpoints", label: "Day-1/30/60/90 readiness checkpoints in place", order: 6, enabled: true, mandatory: true, enforcementStage: "before-day1-review" },
+  { id: "profile", label: "Identity, role, manager & joining date confirmed", order: 0, enabled: true, mandatory: true, enforcementStage: "before-workstreams", nonWaivableSafety: false },
+  { id: "documentation", label: "Documents, statutory forms & work authorization", order: 1, enabled: true, mandatory: true, enforcementStage: "before-day1-review", nonWaivableSafety: false },
+  { id: "payroll", label: "Payroll, bank, tax, benefits & HRIS activation", order: 2, enabled: true, mandatory: true, enforcementStage: "before-day1-review", nonWaivableSafety: false },
+  { id: "access", label: "Identity, access, applications & email/collaboration", order: 3, enabled: true, mandatory: true, enforcementStage: "before-day1-review", nonWaivableSafety: false },
+  { id: "assets", label: "Device, workspace, ID card & remote kit", order: 4, enabled: true, mandatory: true, enforcementStage: "before-day1-review", nonWaivableSafety: false },
+  { id: "learning", label: "Induction, compliance learning, buddy & manager connect", order: 5, enabled: true, mandatory: true, enforcementStage: "before-day1-review", nonWaivableSafety: false },
+  { id: "checkpoints", label: "Day-1/30/60/90 readiness checkpoints in place", order: 6, enabled: true, mandatory: true, enforcementStage: "before-day1-review", nonWaivableSafety: false },
 ] as const;
 
 const STAGES = new Set(["before-workstreams", "before-employee-communications", "before-day1-review"]);
@@ -121,6 +123,15 @@ export function validateChecklist(items: OnbChecklistTemplateItem[]): string | n
   return null;
 }
 
+function parseRestrictedSafetyIds(value: string | null): Set<string> {
+  if (!value) return new Set();
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((id) => typeof id === "string" && ID_PATTERN.test(id))
+      ? new Set(parsed)
+      : new Set();
+  } catch { return new Set(); }
+}
 export async function getEffectiveChecklist(
   organizationId: string,
   client: ChecklistReadClient = db,
@@ -132,7 +143,7 @@ export async function getEffectiveChecklist(
     .where(eq(onbChecklistTemplates.organizationId, organizationId))
     .orderBy(desc(onbChecklistTemplates.version)).limit(1);
   return row
-    ? { version: row.version, items: row.items.map((item) => ({ ...item })) }
+    ? { version: row.version, items: row.items.map((item) => ({ ...item, nonWaivableSafety: item.nonWaivableSafety === true })) }
     : { version: LEGACY_CHECKLIST_VERSION, items: LEGACY_CHECKLIST.map((item) => ({ ...item })) };
 }
 
@@ -210,7 +221,25 @@ export async function saveChecklistVersion(
       throw new Error(`Checklist item "${removed.id}" cannot be deleted; disable it so existing identity and history remain stable.`);
     }
     const version = currentVersion + 1;
-    const normalized = items.map((item) => ({ ...item, label: item.label.trim() }));
+    const [policy] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+      eq(onbSettings.organizationId, organizationId),
+      eq(onbSettings.key, NONWAIVABLE_SAFETY_POLICY_KEY),
+    )).for("update");
+    const protectedIds = parseRestrictedSafetyIds(policy?.value ?? null);
+    const priorPolicy = new Map(previousItems.map((item) => [item.id, item.nonWaivableSafety === true]));
+    // This policy is deliberately not accepted from editable profile input.
+    // Existing protected IDs retain their bit; newly configured IDs default
+    // false and require a separately governed data-policy change to become
+    // protected.
+    const normalized = items.map((item) => {
+      const nonWaivableSafety = priorPolicy.get(item.id) === true || protectedIds.has(item.id);
+      return {
+        ...item, label: item.label.trim(), nonWaivableSafety,
+        // Template editors cannot turn a protected control off or optional.
+        enabled: nonWaivableSafety ? true : item.enabled,
+        mandatory: nonWaivableSafety ? true : item.mandatory,
+      };
+    });
     await tx.insert(onbChecklistTemplates).values({ organizationId, version, items: normalized, createdBy });
     return { version, items: normalized };
   });

@@ -4,9 +4,9 @@ import {
   onbApprovalHistory,
   onbApprovalNotifications,
   onbApprovals,
+  onbAuthorityAssignments,
   onbCases,
   onbSettings,
-  organizationMembershipsTable,
 } from "@workspace/db/schema";
 import { sendAdministrativeEmail } from "./channels";
 import {
@@ -31,6 +31,11 @@ import {
 } from "./approval-email-templates";
 import type { OnboardingDbTransaction } from "./settings";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
+import { roleMayExerciseScope, verifyDecisionAuthorityInTransaction } from "./decision-authority";
+import {
+  isVerifiedGmailDkimTransport,
+  type VerifiedGmailDkimTransport,
+} from "./verified-email-transport";
 
 export type { ApprovalDecision };
 export type DecisionStaleReason = "version-mismatch" | "already-decided" | "not-pending";
@@ -43,6 +48,7 @@ export type DecisionResult =
       released: false;
     }
   | { outcome: "stale"; reason: DecisionStaleReason; currentVersion: number; status: string }
+  | { outcome: "unauthorized"; reason: string }
   | { outcome: "not-found" };
 
 export type ApprovalNotificationKind =
@@ -72,6 +78,7 @@ type ApprovalLike = Pick<
   | "resumeAction"
   | "status"
   | "decidedBy"
+  | "authorityScope"
   | "comment"
   | "decidedAt"
 >;
@@ -131,6 +138,7 @@ export function composeApprovalRequestNotificationCopy(
     stakeholderName: string;
     stakeholderRole: string;
     deliveryAddress: string | null;
+    emailResponderAuthorized?: boolean;
   },
 ): { subject: string; body: string } {
   return composeApprovalRequestEmail({
@@ -149,9 +157,41 @@ export function composeApprovalRequestNotificationCopy(
     deliveryAddress: input.deliveryAddress,
     deliveryMode: "real",
     deliveryState: "queued",
+    emailResponderAuthorized: input.emailResponderAuthorized,
   });
 }
 
+async function hasEnabledEmailResponder(
+  tx: OnboardingDbTransaction,
+  approval: ApprovalLike,
+  address: string,
+): Promise<boolean> {
+  if (!approval.authorityScope) return false;
+  const [c] = await tx.select({
+    geography: onbCases.geography,
+    legalEntity: onbCases.legalEntity,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, approval.organizationId),
+    eq(onbCases.id, approval.caseId),
+  ));
+  if (!c) return false;
+  const now = new Date();
+  const rows = await tx.select().from(onbAuthorityAssignments).where(and(
+    eq(onbAuthorityAssignments.organizationId, approval.organizationId),
+    sql`lower(${onbAuthorityAssignments.personEmail}) = lower(${address})`,
+    eq(onbAuthorityAssignments.emailResponderAuthorized, true),
+    eq(onbAuthorityAssignments.status, "active"),
+    lte(onbAuthorityAssignments.validFrom, now),
+    or(sql`${onbAuthorityAssignments.validUntil} is null`, sql`${onbAuthorityAssignments.validUntil} > ${now}`),
+  ));
+  return rows.filter((row) =>
+    row.scopes.includes(approval.authorityScope!) &&
+    roleMayExerciseScope(row.authorityRole, approval.authorityScope!) &&
+    (row.caseId === null || row.caseId === approval.caseId) &&
+    (!row.siteScope || row.siteScope === c.geography) &&
+    (!row.jurisdictionScope || row.jurisdictionScope === c.legalEntity),
+  ).length === 1;
+}
 function decisionContent(opts: {
   approval: ApprovalLike;
   workerName: string;
@@ -195,6 +235,8 @@ async function enqueueNotificationTx(
   });
 }
 
+const emailReplyReceiptKey = (sourceMessageId: string) =>
+  `approval-email-receipt:${sourceMessageId}`;
 async function enqueueRequestTx(
   tx: OnboardingDbTransaction,
   approval: ApprovalLike,
@@ -216,6 +258,7 @@ async function enqueueRequestTx(
     stakeholderName: recipients.stakeholder.name,
     stakeholderRole: recipients.stakeholder.role,
     deliveryAddress: recipients.approver,
+    emailResponderAuthorized: await hasEnabledEmailResponder(tx, approval, recipients.approver),
   });
   const version = approvalVersion(approval.version);
   await enqueueNotificationTx(tx, {
@@ -272,9 +315,15 @@ export async function decideApproval(opts: {
   sourceMessageId?: string | null;
   sourceAddress?: string | null;
   decidedByKind?: RequesterKind;
-  /** Authenticated actor/authority when the decision came from the UI. */
-  auditActorId?: string | null;
-  auditActorAuthority?: string;
+  /** Authenticated Clerk principal for in-app decisions; never client supplied. */
+  actorUserId?: string | null;
+  /** Exact allowlisted remote address, resolved only by the inbound adapter. */
+  responderEmail?: string | null;
+  /**
+   * Opaque runtime-branded proof from raw Gmail RFC822 DKIM verification.
+   * This is required for a remote email decision and cannot be a caller flag.
+   */
+  transport?: VerifiedGmailDkimTransport | null;
   auditCorrelationId?: string | null;
 }): Promise<DecisionResult> {
   const expectedVersion = approvalVersion(opts.expectedVersion);
@@ -282,8 +331,683 @@ export async function decideApproval(opts: {
     approval: ApprovalLike;
     caseWorkerName: string;
     decidedAt: Date;
+    decisionActor: string;
   } | null = null;
   const result = await db.transaction(async (tx) => {
+    // Must precede approval/case locks: revocation, withdrawal, authority
+    // grants, and connector dispatch all take this tenant fence first.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${opts.organizationId}))`);
+    const [ownership] = await tx.select({ caseId: onbApprovals.caseId }).from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, opts.organizationId),
+      eq(onbApprovals.id, opts.approvalId),
+    ));
+    // Case ownership is derived from the approval, never from request input.
+    if (!ownership) {
+      return { outcome: "not-found" } as const;
+    }
+    const [currentCase] = await tx.select().from(onbCases).where(and(
+      eq(onbCases.organizationId, opts.organizationId),
+      eq(onbCases.id, ownership.caseId),
+    )).for("update");
+    if (!currentCase) {
+      return { outcome: "not-found" } as const;
+    }
+    const [approval] = await tx.select().from(onbApprovals).where(and(
+        eq(onbApprovals.organizationId, opts.organizationId),
+        eq(onbApprovals.id, opts.approvalId),
+    )).for("update");
+    if (!approval) return { outcome: "not-found" } as const;
+    // A direct invocation cannot turn an arbitrary From string into a remote
+    // authority. Only the raw-Gmail verifier can manufacture this proof.
+    if (opts.responderEmail && !isRemoteEmailReply(opts)) {
+      return {
+        outcome: "unauthorized",
+        reason: "A remote email decision requires verified raw Gmail DKIM transport evidence. Sign in to Action Center → Approvals.",
+      } as const;
+    }
+    const remoteReply = isRemoteEmailReply(opts)
+      ? {
+          sourceMessageId: opts.sourceMessageId,
+          sourceAddress: opts.sourceAddress,
+        }
+      : null;
+    if (remoteReply) {
+      const originalOutcome = await emailReplyReceiptOutcomeTx(
+        tx,
+        approval,
+        remoteReply.sourceMessageId,
+      );
+      if (originalOutcome) {
+        // Keep the established public result shape. `decided` is intentionally
+        // returned without setting `decided` continuation state, so a replay
+        // never invokes gateway reconciliation a second time.
+        if (originalOutcome === "decided") {
+          return { outcome: "decided", approval, released: false } as const;
+        }
+        return {
+          outcome: "stale",
+          reason: "already-decided",
+          currentVersion: approvalVersion(approval.version),
+          status: approval.status,
+        } as const;
+      }
+    }
+    const currentVersion = approvalVersion(approval.version);
+    if (currentVersion !== expectedVersion || approval.status !== "pending") {
+      const reason = staleReason(approval.status, currentVersion, expectedVersion);
+      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
+      if (remoteReply && recipient) {
+        await enqueueEmailReplyReceiptTx(tx, {
+          approval,
+          sourceMessageId: remoteReply.sourceMessageId,
+          recipient,
+        });
+      } else if (recipient) {
+        const content = decisionContent({
+          approval,
+          decidedBy: opts.decidedBy,
+          decision: opts.decision,
+          decidedAt: new Date(),
+          workerName: currentCase.workerName,
+          stakeholder: (await configuredRecipients(tx, approval.organizationId)).stakeholder,
+          deliveryAddress: recipient,
+           decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
+          stale: true,
+        });
+        await enqueueNotificationTx(tx, {
+          organizationId: approval.organizationId,
+          approvalId: approval.id,
+          caseId: approval.caseId,
+          version: currentVersion,
+          kind: "stale",
+          recipient,
+          subject: content.subject,
+          body: content.body,
+          sourceMessageId: opts.sourceMessageId,
+          idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:stale:${opts.sourceMessageId ?? `request-${expectedVersion}`}`,
+        });
+      }
+      return { outcome: "stale", reason, currentVersion, status: approval.status } as const;
+    }
+    // Check current, scoped authority inside the case/approval lock, so a
+    // concurrent grant revocation cannot authorize this decision.
+    const authority = await verifyDecisionAuthorityInTransaction(tx, {
+      organizationId: opts.organizationId,
+      approval,
+      actorUserId: opts.actorUserId,
+      responderEmail: opts.responderEmail,
+    });
+    if (!authority.allowed) {
+      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
+      if (remoteReply && recipient) {
+        await enqueueEmailReplyReceiptTx(tx, {
+          approval,
+          sourceMessageId: remoteReply.sourceMessageId,
+          recipient,
+        });
+      }
+      return { outcome: "unauthorized", reason: authority.reason } as const;
+    }
+    const decidedAt = new Date();
+    // Never persist a caller-controlled display label as a decision actor.
+    // Both app and email paths have been bound to this actual current
+    // authority principal by the live verifier.
+    const decisionActor = authority.personUserId;
+    const decisionActorKind: RequesterKind = "human";
+    const [updated] = await tx.update(onbApprovals).set({
+      status: opts.decision,
+      decidedBy: decisionActor,
+      comment: opts.comment ?? null,
+      decidedAt,
+      version: currentVersion,
+      decidedAuthorityId: authority.authorityId,
+      decidedAuthorityRevision: authority.revision,
+    }).where(and(
+      eq(onbApprovals.organizationId, opts.organizationId),
+      eq(onbApprovals.id, opts.approvalId),
+      eq(onbApprovals.status, "pending"),
+      eq(onbApprovals.version, currentVersion),
+    )).returning();
+    if (!updated) {
+      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
+      if (remoteReply && recipient) {
+        await enqueueEmailReplyReceiptTx(tx, {
+          approval,
+          sourceMessageId: remoteReply.sourceMessageId,
+          recipient,
+        });
+      } else if (recipient) {
+        const content = decisionContent({
+          approval,
+          decidedBy: opts.decidedBy,
+          decision: opts.decision,
+          decidedAt,
+          workerName: currentCase.workerName,
+          stakeholder: (await configuredRecipients(tx, approval.organizationId)).stakeholder,
+          deliveryAddress: recipient,
+           decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
+          stale: true,
+        });
+        await enqueueNotificationTx(tx, {
+          organizationId: approval.organizationId,
+          approvalId: approval.id,
+          caseId: approval.caseId,
+          version: currentVersion,
+          kind: "stale",
+          recipient,
+          subject: content.subject,
+          body: content.body,
+          sourceMessageId: opts.sourceMessageId,
+          idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:stale:${opts.sourceMessageId ?? "race"}`,
+        });
+      }
+      return {
+        outcome: "stale",
+        reason: "not-pending",
+        currentVersion,
+        status: approval.status,
+      } as const;
+    }
+    await tx.update(onbApprovalNotifications).set({
+      status: "blocked",
+      failureReason: "Approval request cycle was decided; request snapshot closed without dispatch.",
+    }).where(and(
+      eq(onbApprovalNotifications.organizationId, approval.organizationId),
+      eq(onbApprovalNotifications.approvalId, approval.id),
+      eq(onbApprovalNotifications.version, currentVersion),
+      or(
+        eq(onbApprovalNotifications.kind, "request"),
+        eq(onbApprovalNotifications.kind, "outstanding"),
+      ),
+      or(
+        eq(onbApprovalNotifications.status, "queued"),
+        eq(onbApprovalNotifications.status, "failed"),
+      ),
+    ));
+    await appendApprovalDecisionHistory(
+      tx,
+      updated,
+      opts.decision,
+      decisionActor,
+      opts.comment ?? null,
+      decidedAt,
+    );
+    // This commits together with the verified authority-bound decision and
+    // immutable approval-history snapshot.
+    await appendProtectedAuditInTransaction(tx, {
+      organizationId: approval.organizationId,
+      actorId: authority.personUserId,
+      actorKind: "authenticated",
+      actorAuthority: `verified-authority:${authority.authorityId}:v${authority.revision}`,
+      action: "onboarding.approval.decision-recorded",
+      outcome: "success",
+      objectType: "approval",
+      objectId: String(approval.id),
+      caseReference: `case:${approval.caseId}`,
+      reviewedRevision: currentVersion,
+      source: opts.sourceAddress ? "approval-email" : "approval-decision",
+      correlationId: opts.auditCorrelationId ?? opts.sourceMessageId ?? null,
+      payload: { decision: opts.decision, approvalVersion: currentVersion },
+    });
+    const [c] = await tx.select({ workerName: onbCases.workerName }).from(onbCases).where(and(
+      eq(onbCases.organizationId, approval.organizationId),
+      eq(onbCases.id, approval.caseId),
+    ));
+    const recipients = await configuredRecipients(tx, approval.organizationId);
+    const receiptRecipient = normalizedConfiguredAddress(opts.sourceAddress) ?? recipients.approver;
+    const content = decisionContent({
+      approval: updated,
+      decidedBy: decisionActor,
+      decision: opts.decision,
+      decidedAt,
+      workerName: c?.workerName ?? "worker",
+      stakeholder: recipients.stakeholder,
+      deliveryAddress: receiptRecipient,
+      decidedByKind: decisionActorKind,
+    });
+    if (remoteReply && receiptRecipient) {
+      await enqueueEmailReplyReceiptTx(tx, {
+        approval: updated,
+        sourceMessageId: remoteReply.sourceMessageId,
+        recipient: receiptRecipient,
+        decision: opts.decision,
+      });
+    } else if (receiptRecipient) {
+      await enqueueNotificationTx(tx, {
+        organizationId: approval.organizationId,
+        approvalId: approval.id,
+        caseId: approval.caseId,
+        version: currentVersion,
+        kind: "decision",
+        recipient: receiptRecipient,
+        subject: content.subject,
+        body: content.body,
+        sourceMessageId: opts.sourceMessageId,
+        idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:decision:${opts.sourceMessageId ?? "recorded"}`,
+      });
+    }
+    if (recipients.hrAlert && recipients.hrAlert.toLowerCase() !== receiptRecipient?.toLowerCase()) {
+      await enqueueNotificationTx(tx, {
+        organizationId: approval.organizationId,
+        approvalId: approval.id,
+        caseId: approval.caseId,
+        version: currentVersion,
+        kind: "hr-alert",
+        recipient: recipients.hrAlert,
+        subject: content.subject,
+        body: content.body,
+        idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:hr-alert`,
+      });
+    }
+    const pending = await tx.select().from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, approval.organizationId),
+      eq(onbApprovals.caseId, approval.caseId),
+      eq(onbApprovals.status, "pending"),
+    ));
+    for (const outstanding of pending) {
+      await enqueueRequestTx(tx, outstanding, c?.workerName ?? "worker", "outstanding");
+    }
+    decided = {
+      approval: updated,
+      caseWorkerName: c?.workerName ?? "worker",
+      decidedAt,
+      decisionActor,
+    };
+    return {
+      outcome: "decided",
+      approval: updated,
+      released: false,
+    } as const;
+  });
+
+  const continuation = decided as {
+    approval: ApprovalLike;
+    caseWorkerName: string;
+    decidedAt: Date;
+    decisionActor: string;
+  } | null;
+  if (result.outcome === "decided" && continuation) {
+    // The database transaction above is committed before any continuation can
+    // change case state or invoke gateway-specific reconciliation.
+    const { resumeAfterDecision } = await import("./engine");
+    resumeAfterDecision({
+      caseId: continuation.approval.caseId,
+      approved: opts.decision === "approved",
+      decidedBy: continuation.decisionActor,
+      comment: opts.comment ?? null,
+      recommendation: continuation.approval.recommendation,
+      ruleRef: continuation.approval.ruleRef,
+      hitlPattern: continuation.approval.hitlPattern,
+      resumeAction: continuation.approval.resumeAction ?? "none",
+      authorityScope: continuation.approval.authorityScope,
+    });
+  }
+  return result;
+}
+if (false) {
+/**
+ * The only decision write boundary used by both in-app and email channels.
+ * Case and approval locks serialize against evidence-triggered reopens.
+ */
+async function decideApprovalConflictArtifact(opts: {
+  organizationId: string;
+  approvalId: number;
+  decision: ApprovalDecision;
+  /** Required compare-and-set token for every in-app or email decision. */
+  expectedVersion: number;
+  decidedBy: string;
+  comment?: string | null;
+  sourceMessageId?: string | null;
+  sourceAddress?: string | null;
+  decidedByKind?: RequesterKind;
+  /** Authenticated Clerk principal for in-app decisions; never supplied by the client. */
+  actorUserId?: string | null;
+  /** Exact allowlisted remote address, resolved only by the inbound email adapter. */
+  responderEmail?: string | null;
+  /**
+   * Opaque runtime-branded proof from raw Gmail RFC822 DKIM verification.
+   * This is required for a remote email decision and cannot be a caller flag.
+   */
+  transport?: VerifiedGmailDkimTransport | null;
+}): Promise<DecisionResult> {
+  const expectedVersion = approvalVersion(opts.expectedVersion);
+  let decided: {
+    approval: ApprovalLike;
+    caseWorkerName: string;
+    decidedAt: Date;
+    decisionActor: string;
+  } | null = null;
+  const result = await db.transaction(async (tx) => {
+    // Must precede approval/case locks: revocation, withdrawal, authority
+    // grants, and connector dispatch all take this tenant fence first.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${opts.organizationId}))`);
+    const [ownership] = await tx.select({ caseId: onbApprovals.caseId }).from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, opts.organizationId),
+      eq(onbApprovals.id, opts.approvalId),
+    ));
+    // Case ownership is derived from the approval, never from request input.
+    if (!ownership) {
+      return { outcome: "not-found" } as const;
+    }
+    const [currentCase] = await tx.select().from(onbCases).where(and(
+      eq(onbCases.organizationId, opts.organizationId),
+      eq(onbCases.id, ownership.caseId),
+    )).for("update");
+    if (!currentCase) {
+      return { outcome: "not-found" } as const;
+    }
+    const [approval] = await tx.select().from(onbApprovals).where(and(
+        eq(onbApprovals.organizationId, opts.organizationId),
+        eq(onbApprovals.id, opts.approvalId),
+    )).for("update");
+    if (!approval) return { outcome: "not-found" } as const;
+    // A direct invocation cannot turn an arbitrary From string into a remote
+    // authority. Only the raw-Gmail verifier can manufacture this proof.
+    if (
+      opts.responderEmail &&
+      !isRemoteEmailReply(opts)
+    ) {
+      return {
+        outcome: "unauthorized",
+        reason: "A remote email decision requires verified raw Gmail DKIM transport evidence. Sign in to Action Center → Approvals.",
+      } as const;
+    }
+    const remoteReply = isRemoteEmailReply(opts)
+      ? {
+          sourceMessageId: opts.sourceMessageId,
+          sourceAddress: opts.sourceAddress,
+        }
+      : null;
+    if (remoteReply) {
+      const originalOutcome = await emailReplyReceiptOutcomeTx(
+        tx,
+        approval,
+        remoteReply.sourceMessageId,
+      );
+      if (originalOutcome) {
+        // Keep the established public result shape. `decided` is intentionally
+        // returned without setting `decided` continuation state, so a replay
+        // never invokes gateway reconciliation a second time.
+        if (originalOutcome === "decided") {
+          return { outcome: "decided", approval, released: false } as const;
+        }
+        return {
+          outcome: "stale",
+          reason: "already-decided",
+          currentVersion: approvalVersion(approval.version),
+          status: approval.status,
+        } as const;
+      }
+    }
+    const currentVersion = approvalVersion(approval.version);
+    if (currentVersion !== expectedVersion || approval.status !== "pending") {
+      const reason = staleReason(approval.status, currentVersion, expectedVersion);
+      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
+      if (remoteReply && recipient) {
+        await enqueueEmailReplyReceiptTx(tx, {
+          approval,
+          sourceMessageId: remoteReply.sourceMessageId,
+          recipient,
+        });
+      } else if (recipient) {
+        const content = decisionContent({
+          approval,
+          decidedBy: opts.decidedBy,
+          decision: opts.decision,
+          decidedAt: new Date(),
+          workerName: currentCase.workerName,
+          stakeholder: (await configuredRecipients(tx, approval.organizationId)).stakeholder,
+          deliveryAddress: recipient,
+           decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
+          stale: true,
+        });
+        await enqueueNotificationTx(tx, {
+          organizationId: approval.organizationId,
+          approvalId: approval.id,
+          caseId: approval.caseId,
+          version: currentVersion,
+          kind: "stale",
+          recipient,
+          subject: content.subject,
+          body: content.body,
+          sourceMessageId: opts.sourceMessageId,
+          idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:stale:${opts.sourceMessageId ?? `request-${expectedVersion}`}`,
+        });
+      }
+      return { outcome: "stale", reason, currentVersion, status: approval.status } as const;
+    }
+    // This is the decision-intake boundary. It is intentionally inside the
+    // case/approval lock so revocation, scope changes, reopened revisions and
+    // a pending decision cannot observe different authority states.
+    const authority = await verifyDecisionAuthorityInTransaction(tx, {
+      organizationId: opts.organizationId,
+      approval,
+      actorUserId: opts.actorUserId,
+      responderEmail: opts.responderEmail,
+    });
+    if (!authority.allowed) {
+      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
+      if (remoteReply && recipient) {
+        await enqueueEmailReplyReceiptTx(tx, {
+          approval,
+          sourceMessageId: remoteReply.sourceMessageId,
+          recipient,
+        });
+      }
+      return { outcome: "unauthorized", reason: authority.reason } as const;
+    }
+    const decidedAt = new Date();
+    // Never persist a caller-controlled display label as a decision actor.
+    // Both app and email paths have been bound to this actual current
+    // authority principal by the live verifier.
+    const decisionActor = authority.personUserId;
+    const decisionActorKind: RequesterKind = "human";
+    const [updated] = await tx.update(onbApprovals).set({
+      status: opts.decision,
+      decidedBy: decisionActor,
+      comment: opts.comment ?? null,
+      decidedAt,
+      version: currentVersion,
+      decidedAuthorityId: authority.authorityId,
+      decidedAuthorityRevision: authority.revision,
+    }).where(and(
+      eq(onbApprovals.organizationId, opts.organizationId),
+      eq(onbApprovals.id, opts.approvalId),
+      eq(onbApprovals.status, "pending"),
+      eq(onbApprovals.version, currentVersion),
+    )).returning();
+    if (!updated) {
+      const recipient = normalizedConfiguredAddress(opts.sourceAddress);
+      if (remoteReply && recipient) {
+        await enqueueEmailReplyReceiptTx(tx, {
+          approval,
+          sourceMessageId: remoteReply.sourceMessageId,
+          recipient,
+        });
+      } else if (recipient) {
+        const content = decisionContent({
+          approval,
+          decidedBy: opts.decidedBy,
+          decision: opts.decision,
+          decidedAt,
+          workerName: currentCase.workerName,
+          stakeholder: (await configuredRecipients(tx, approval.organizationId)).stakeholder,
+          deliveryAddress: recipient,
+           decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
+          stale: true,
+        });
+        await enqueueNotificationTx(tx, {
+          organizationId: approval.organizationId,
+          approvalId: approval.id,
+          caseId: approval.caseId,
+          version: currentVersion,
+          kind: "stale",
+          recipient,
+          subject: content.subject,
+          body: content.body,
+          sourceMessageId: opts.sourceMessageId,
+          idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:stale:${opts.sourceMessageId ?? "race"}`,
+        });
+      }
+      return {
+        outcome: "stale",
+        reason: "not-pending",
+        currentVersion,
+        status: approval.status,
+      } as const;
+    }
+    await tx.update(onbApprovalNotifications).set({
+      status: "blocked",
+      failureReason: "Approval request cycle was decided; request snapshot closed without dispatch.",
+    }).where(and(
+      eq(onbApprovalNotifications.organizationId, approval.organizationId),
+      eq(onbApprovalNotifications.approvalId, approval.id),
+      eq(onbApprovalNotifications.version, currentVersion),
+      or(
+        eq(onbApprovalNotifications.kind, "request"),
+        eq(onbApprovalNotifications.kind, "outstanding"),
+      ),
+      or(
+        eq(onbApprovalNotifications.status, "queued"),
+        eq(onbApprovalNotifications.status, "failed"),
+      ),
+    ));
+    await appendApprovalDecisionHistory(
+      tx,
+      updated,
+      opts.decision,
+      decisionActor,
+      opts.comment ?? null,
+      decidedAt,
+    );
+    const [c] = await tx.select({ workerName: onbCases.workerName }).from(onbCases).where(and(
+      eq(onbCases.organizationId, approval.organizationId),
+      eq(onbCases.id, approval.caseId),
+    ));
+    const recipients = await configuredRecipients(tx, approval.organizationId);
+    const receiptRecipient = normalizedConfiguredAddress(opts.sourceAddress) ?? recipients.approver;
+    const content = decisionContent({
+      approval: updated,
+      decidedBy: decisionActor,
+      decision: opts.decision,
+      decidedAt,
+      workerName: c?.workerName ?? "worker",
+      stakeholder: recipients.stakeholder,
+      deliveryAddress: receiptRecipient,
+      decidedByKind: decisionActorKind,
+    });
+    if (remoteReply && receiptRecipient) {
+      await enqueueEmailReplyReceiptTx(tx, {
+        approval: updated,
+        sourceMessageId: remoteReply.sourceMessageId,
+        recipient: receiptRecipient,
+        decision: opts.decision,
+      });
+    } else if (receiptRecipient) {
+      await enqueueNotificationTx(tx, {
+        organizationId: approval.organizationId,
+        approvalId: approval.id,
+        caseId: approval.caseId,
+        version: currentVersion,
+        kind: "decision",
+        recipient: receiptRecipient,
+        subject: content.subject,
+        body: content.body,
+        sourceMessageId: opts.sourceMessageId,
+        idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:decision:${opts.sourceMessageId ?? "recorded"}`,
+      });
+    }
+    if (recipients.hrAlert && recipients.hrAlert.toLowerCase() !== receiptRecipient?.toLowerCase()) {
+      await enqueueNotificationTx(tx, {
+        organizationId: approval.organizationId,
+        approvalId: approval.id,
+        caseId: approval.caseId,
+        version: currentVersion,
+        kind: "hr-alert",
+        recipient: recipients.hrAlert,
+        subject: content.subject,
+        body: content.body,
+        idempotencyKey: `approval-notification:${approval.id}:v${currentVersion}:hr-alert`,
+      });
+    }
+    const pending = await tx.select().from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, approval.organizationId),
+      eq(onbApprovals.caseId, approval.caseId),
+      eq(onbApprovals.status, "pending"),
+    ));
+    for (const outstanding of pending) {
+      await enqueueRequestTx(tx, outstanding, c?.workerName ?? "worker", "outstanding");
+    }
+    decided = {
+      approval: updated,
+      caseWorkerName: c?.workerName ?? "worker",
+      decidedAt,
+      decisionActor,
+    };
+    return {
+      outcome: "decided",
+      approval: updated,
+      released: false,
+    } as const;
+  });
+
+  const continuation = decided as {
+    approval: ApprovalLike;
+    caseWorkerName: string;
+    decidedAt: Date;
+    decisionActor: string;
+  } | null;
+  if (result.outcome === "decided" && continuation) {
+    // The database transaction above is committed before any continuation can
+    // change case state or invoke gateway-specific reconciliation.
+    const { resumeAfterDecision } = await import("./engine");
+    resumeAfterDecision({
+      caseId: continuation.approval.caseId,
+      approved: opts.decision === "approved",
+      decidedBy: continuation.decisionActor,
+      comment: opts.comment ?? null,
+      recommendation: continuation.approval.recommendation,
+      ruleRef: continuation.approval.ruleRef,
+      hitlPattern: continuation.approval.hitlPattern,
+      resumeAction: continuation.approval.resumeAction ?? "none",
+      authorityScope: continuation.approval.authorityScope,
+    });
+  }
+  return result;
+}
+}
+if (false) {
+/**
+ * The only decision write boundary used by both in-app and email channels.
+ * Case and approval locks serialize against evidence-triggered reopens.
+ */
+async function decideApprovalConflictArtifact(opts: {
+  organizationId: string;
+  approvalId: number;
+  decision: ApprovalDecision;
+  /** Required compare-and-set token for every in-app or email decision. */
+  expectedVersion: number;
+  decidedBy: string;
+  comment?: string | null;
+  sourceMessageId?: string | null;
+  sourceAddress?: string | null;
+  decidedByKind?: RequesterKind;
+  /** Authenticated Clerk principal for in-app decisions; never supplied by the client. */
+  actorUserId?: string | null;
+  /** Exact allowlisted remote address, resolved only by the inbound email adapter. */
+  responderEmail?: string | null;
+}): Promise<DecisionResult> {
+  const expectedVersion = approvalVersion(opts.expectedVersion);
+  let decided: {
+    approval: ApprovalLike;
+    caseWorkerName: string;
+    decidedAt: Date;
+    decisionActor: string;
+  } | null = null;
+  const result = await db.transaction(async (tx) => {
+    // Must precede approval/case locks: revocation, withdrawal, authority
+    // grants, and connector dispatch all take this tenant fence first.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${opts.organizationId}))`);
     const [ownership] = await tx.select({ caseId: onbApprovals.caseId }).from(onbApprovals).where(and(
       eq(onbApprovals.organizationId, opts.organizationId),
       eq(onbApprovals.id, opts.approvalId),
@@ -335,13 +1059,32 @@ export async function decideApproval(opts: {
       }
       return { outcome: "stale", reason, currentVersion, status: approval.status } as const;
     }
+    // This is the decision-intake boundary. It is intentionally inside the
+    // case/approval lock so revocation, scope changes, reopened revisions and
+    // a pending decision cannot observe different authority states.
+    const authority = await verifyDecisionAuthorityInTransaction(tx, {
+      organizationId: opts.organizationId,
+      approval,
+      actorUserId: opts.actorUserId,
+      responderEmail: opts.responderEmail,
+    });
+    if (!authority.allowed) {
+      return { outcome: "unauthorized", reason: authority.reason } as const;
+    }
     const decidedAt = new Date();
+    // Never persist a caller-controlled display label as a decision actor.
+    // Both app and email paths have been bound to this actual current
+    // authority principal by the live verifier.
+    const decisionActor = authority.personUserId;
+    const decisionActorKind: RequesterKind = "human";
     const [updated] = await tx.update(onbApprovals).set({
       status: opts.decision,
-      decidedBy: opts.decidedBy,
+      decidedBy: decisionActor,
       comment: opts.comment ?? null,
       decidedAt,
       version: currentVersion,
+      decidedAuthorityId: authority.authorityId,
+      decidedAuthorityRevision: authority.revision,
     }).where(and(
       eq(onbApprovals.organizationId, opts.organizationId),
       eq(onbApprovals.id, opts.approvalId),
@@ -400,40 +1143,12 @@ export async function decideApproval(opts: {
     ));
     await appendApprovalDecisionHistory(
       tx,
-      approval,
+      updated,
       opts.decision,
-      opts.decidedBy,
+      decisionActor,
       opts.comment ?? null,
       decidedAt,
     );
-    // This commits together with the decision and immutable approval snapshot.
-    const [auditMembership] = opts.auditActorId
-      ? await tx.select({ role: organizationMembershipsTable.role })
-          .from(organizationMembershipsTable)
-          .where(and(
-            eq(organizationMembershipsTable.organizationId, approval.organizationId),
-            eq(organizationMembershipsTable.clerkUserId, opts.auditActorId),
-          ))
-      : [];
-    await appendProtectedAuditInTransaction(tx, {
-      organizationId: approval.organizationId,
-      actorId: opts.auditActorId ?? null,
-      actorKind: opts.auditActorId ? "authenticated" : "system",
-      actorAuthority: auditMembership
-        ? `tenant-membership:${auditMembership.role}`
-        : opts.auditActorId
-          ? "tenant-membership:unverified"
-          : opts.auditActorAuthority ?? (opts.sourceAddress ? "verified-shared-mailbox" : "system-decision"),
-      action: "onboarding.approval.decision-recorded",
-      outcome: "success",
-      objectType: "approval",
-      objectId: String(approval.id),
-      caseReference: `case:${approval.caseId}`,
-      reviewedRevision: currentVersion,
-      source: opts.sourceAddress ? "approval-email" : "approval-decision",
-      correlationId: opts.auditCorrelationId ?? opts.sourceMessageId ?? null,
-      payload: { decision: opts.decision, approvalVersion: currentVersion },
-    });
     const [c] = await tx.select({ workerName: onbCases.workerName }).from(onbCases).where(and(
       eq(onbCases.organizationId, approval.organizationId),
       eq(onbCases.id, approval.caseId),
@@ -442,13 +1157,13 @@ export async function decideApproval(opts: {
     const receiptRecipient = normalizedConfiguredAddress(opts.sourceAddress) ?? recipients.approver;
     const content = decisionContent({
       approval: updated,
-      decidedBy: opts.decidedBy,
+      decidedBy: decisionActor,
       decision: opts.decision,
       decidedAt,
       workerName: c?.workerName ?? "worker",
       stakeholder: recipients.stakeholder,
       deliveryAddress: receiptRecipient,
-      decidedByKind: opts.decidedByKind ?? (opts.sourceAddress ? "shared-mailbox" : "human"),
+      decidedByKind: decisionActorKind,
     });
     if (receiptRecipient) {
       await enqueueNotificationTx(tx, {
@@ -485,7 +1200,12 @@ export async function decideApproval(opts: {
     for (const outstanding of pending) {
       await enqueueRequestTx(tx, outstanding, c?.workerName ?? "worker", "outstanding");
     }
-    decided = { approval: updated, caseWorkerName: c?.workerName ?? "worker", decidedAt };
+    decided = {
+      approval: updated,
+      caseWorkerName: c?.workerName ?? "worker",
+      decidedAt,
+      decisionActor,
+    };
     return {
       outcome: "decided",
       approval: updated,
@@ -497,6 +1217,7 @@ export async function decideApproval(opts: {
     approval: ApprovalLike;
     caseWorkerName: string;
     decidedAt: Date;
+    decisionActor: string;
   } | null;
   if (result.outcome === "decided" && continuation) {
     // The database transaction above is committed before any continuation can
@@ -505,17 +1226,18 @@ export async function decideApproval(opts: {
     resumeAfterDecision({
       caseId: continuation.approval.caseId,
       approved: opts.decision === "approved",
-      decidedBy: opts.decidedBy,
+      decidedBy: continuation.decisionActor,
       comment: opts.comment ?? null,
       recommendation: continuation.approval.recommendation,
       ruleRef: continuation.approval.ruleRef,
       hitlPattern: continuation.approval.hitlPattern,
       resumeAction: continuation.approval.resumeAction ?? "none",
+      authorityScope: continuation.approval.authorityScope,
     });
   }
   return result;
 }
-
+}
 /** Tenant-scoped immutable audit history for the approval detail view. */
 export async function getApprovalHistory(opts: {
   organizationId: string;
@@ -705,4 +1427,126 @@ export async function claimApprovalNotification(
     )).returning();
     return claimed ?? null;
   });
+}
+
+async function emailReplyReceiptOutcomeTx(
+  tx: OnboardingDbTransaction,
+  approval: RemoteEmailReceiptApproval,
+  sourceMessageId: string,
+): Promise<"decided" | "no-decision" | null> {
+  // This is deliberately tenant + approval + provider-message scoped. A
+  // Gmail retry must replay the original durable result, rather than being
+  // evaluated against a later decision/reopen cycle.
+  const [row] = await tx.select({
+    kind: onbApprovalNotifications.kind,
+  }).from(onbApprovalNotifications).where(and(
+    eq(onbApprovalNotifications.organizationId, approval.organizationId),
+    eq(onbApprovalNotifications.approvalId, approval.id),
+    eq(onbApprovalNotifications.sourceMessageId, sourceMessageId),
+    eq(onbApprovalNotifications.idempotencyKey, emailReplyReceiptKey(sourceMessageId)),
+  ));
+  if (!row) return null;
+  return row.kind === "decision" ? "decided" : "no-decision";
+}
+
+async function enqueueEmailReplyReceiptTx(
+  tx: OnboardingDbTransaction,
+  input: {
+    approval: RemoteEmailReceiptApproval;
+    sourceMessageId: string;
+    recipient: string;
+    decision?: ApprovalDecision;
+  },
+): Promise<void> {
+  const content = remoteEmailReceiptContent(input);
+  await enqueueNotificationTx(tx, {
+    organizationId: input.approval.organizationId,
+    approvalId: input.approval.id,
+    caseId: input.approval.caseId,
+    version: approvalVersion(input.approval.version),
+    // A recorded remote decision and a no-decision response are both sent by
+    // the existing approval outbox. `kind` also records the original outcome.
+    kind: input.decision ? "decision" : "stale",
+    recipient: input.recipient,
+    subject: content.subject,
+    body: content.body,
+    sourceMessageId: input.sourceMessageId,
+    idempotencyKey: content.idempotencyKey,
+  });
+}
+
+function remoteEmailReceiptContent(input: {
+  approval: RemoteEmailReceiptApproval;
+  sourceMessageId: string;
+  decision?: ApprovalDecision;
+}): { subject: string; body: string; idempotencyKey: string } {
+  const reference = `AP-${input.approval.id}-V${approvalVersion(input.approval.version)}`;
+  if (input.decision) {
+    const label = input.decision === "approved" ? "approved" : "rejected";
+    return {
+      subject: `[${reference}] Email decision recorded — ${label}`,
+      body: [
+        `Your ${label} decision for ${reference} was recorded after current authority verification.`,
+        "The decision was attributed to your verified member account, not to a mailbox persona.",
+        "Sign in to the same organization and open Action Center → Approvals to review the recorded decision.",
+      ].join("\n"),
+      idempotencyKey: emailReplyReceiptKey(input.sourceMessageId),
+    };
+  }
+  return {
+    subject: `[${reference}] Email reply received — no decision applied`,
+    body: [
+      `We received your email reply about ${reference}. No decision was applied.`,
+      "",
+      "This email did not pass the current authority checks, so it cannot approve or reject this onboarding review.",
+      "Sign in to the same organization and open Action Center → Approvals, then locate this reference to submit a decision.",
+      "This receipt does not claim source completion, a gateway release, or any provider action.",
+    ].join("\n"),
+    idempotencyKey: emailReplyReceiptKey(input.sourceMessageId),
+  };
+}
+
+type RemoteEmailReceiptApproval = Pick<
+  typeof onbApprovals.$inferSelect,
+  "id" | "caseId" | "organizationId" | "version"
+>;
+
+/** Persist an invalid/unrecognized remote-reply receipt in the same outbox. */
+export async function enqueueEmailReplyNoDecisionReceipt(input: {
+  approval: RemoteEmailReceiptApproval;
+  sourceMessageId: string;
+  recipient: string;
+}): Promise<void> {
+  await db.transaction((tx) => enqueueEmailReplyReceiptTx(tx, input));
+}
+
+function isRemoteEmailReply(opts: {
+  approvalId: number;
+  expectedVersion: number;
+  decision: ApprovalDecision;
+  sourceMessageId?: string | null;
+  sourceAddress?: string | null;
+  responderEmail?: string | null;
+  transport?: VerifiedGmailDkimTransport | null;
+}): opts is {
+  approvalId: number;
+  expectedVersion: number;
+  decision: ApprovalDecision;
+  sourceMessageId: string;
+  sourceAddress: string;
+  responderEmail: string;
+  transport: VerifiedGmailDkimTransport;
+} {
+  return Boolean(
+    opts.sourceMessageId &&
+    opts.sourceAddress &&
+    opts.responderEmail &&
+    opts.sourceAddress.trim().toLowerCase() === opts.responderEmail.trim().toLowerCase() &&
+    isVerifiedGmailDkimTransport(opts.transport, {
+      fromAddress: opts.responderEmail,
+      sourceMessageId: opts.sourceMessageId,
+      approvalReference: `AP-${opts.approvalId}-V${approvalVersion(opts.expectedVersion)}`,
+      decision: opts.decision,
+    }),
+  );
 }

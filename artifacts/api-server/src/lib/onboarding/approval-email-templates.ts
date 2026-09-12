@@ -20,6 +20,8 @@ export type ApprovalEmailTemplateInput = {
   deliveryAddress?: string | null;
   deliveryMode?: EmailDeliveryMode;
   deliveryState?: "queued" | "sent" | "not-sent";
+  /** Set only for a current governance grant to the exact verified mailbox. */
+  emailResponderAuthorized?: boolean;
   appPath?: string;
 };
 
@@ -57,10 +59,6 @@ export function composeApprovalRequestEmail(
     ? `AP-${input.approvalId}] [${reference}`
     : reference;
   const stakeholder = input.stakeholder ?? DEFAULT_APPROVER;
-  const appPath = input.appPath ??
-    `/approvals?tab=approvals&caseId=${encodeURIComponent(String(input.caseId))}` +
-    `&approvalId=${encodeURIComponent(String(input.approvalId))}` +
-    `&approvalRef=${encodeURIComponent(reference)}`;
   const identity = formatEmailIdentityLines({
     stakeholder,
     deliveryAddress: input.deliveryAddress,
@@ -68,9 +66,11 @@ export function composeApprovalRequestEmail(
     requestedByKind: "agent",
     deliveryMode: input.deliveryMode ?? "real",
     deliveryState: input.deliveryState ?? "queued",
-    actionRequired: `Reply with exactly "approve" or "reject" for ${reference}.`,
+    actionRequired: input.emailResponderAuthorized
+      ? `To decide by email, reply with exactly "approve" or "reject" and include ${reference} in the message body. We verify a full-body DKIM signature, exact From address, and current authority when processing.`
+      : "Sign in to the same organization and open Action Center → Approvals to review this request.",
     reference,
-    appPath,
+    appNavigation: `Sign in to the same organization, open Action Center → Approvals, and locate ${reference}.`,
   });
   return {
     subject: `[${subjectReference}] ${kind}: ${input.workerName} (case #${input.caseId})`,
@@ -86,9 +86,15 @@ export function composeApprovalRequestEmail(
       `Recommendation: ${input.recommendation}`,
       `Rationale: ${input.rationale}`,
       "",
-      `Action required: Reply with exactly "approve" or "reject" for ${reference}.`,
-      "Only replies from the exact configured and allowlisted shared approver mailbox address are honored.",
-      "A reply is recorded as a shared-mailbox response, not as a verified named human.",
+       input.emailResponderAuthorized
+          ? `Email decisions require a valid DNS-backed DKIM signature from the exact governance-authorized Clerk-verified member address. The signature must cover From, Subject, and the entire body (no partial-body signature); include ${reference} and "approve" or "reject" in the body. A stale, revoked, expired, unscoped, non-member, or SoD-conflicted sender is not applied.`
+         : "Action required: sign in to the same organization and open Action Center → Approvals.",
+       input.emailResponderAuthorized
+          ? "A passing mailbox header or Authentication-Results field is not trusted. Raw Gmail message cryptography and current member authority are both required; no stakeholder persona or mailbox label grants authority."
+         : `Locate ${reference} and record the decision in the signed-in app.`,
+       input.emailResponderAuthorized
+         ? "If verification fails, no decision is applied and you will receive a receipt with the sign-in instructions."
+         : "Email replies are notification receipts only: they do not approve, reject, or change this review.",
     ].join("\n"),
   };
 }
@@ -100,10 +106,6 @@ export function composeApprovalDecisionEmail(
   const reference = approvalRef(input.approvalId, version);
   const stale = input.stale === true;
   const stakeholder = input.stakeholder ?? DEFAULT_APPROVER;
-  const appPath = input.appPath ??
-    `/approvals?tab=approvals&caseId=${encodeURIComponent(String(input.caseId))}` +
-    `&approvalId=${encodeURIComponent(String(input.approvalId))}` +
-    `&approvalRef=${encodeURIComponent(reference)}`;
   const identity = formatEmailIdentityLines({
     stakeholder,
     deliveryAddress: input.deliveryAddress,
@@ -112,16 +114,16 @@ export function composeApprovalDecisionEmail(
     deliveryMode: input.deliveryMode ?? "real",
     deliveryState: input.deliveryState ?? "queued",
     actionRequired: stale
-      ? "No action was applied; review the current approval cycle in the app."
+      ? "No decision was applied. Sign in to the same organization and review the current approval cycle in Action Center → Approvals."
       : "No further email action is required; review the recorded decision in the app.",
     reference,
-    appPath,
+    appNavigation: `Sign in to the same organization, open Action Center → Approvals, and locate ${reference}.`,
   });
   return {
     subject: `[${reference}] Decision ${stale ? "stale" : "recorded"}: ${input.decision} — ${input.workerName} (case #${input.caseId})`,
     body: [
       stale
-        ? `A reply for ${reference} was not applied because the current approval cycle was already decided or superseded.`
+        ? `An email response for ${reference} did not apply a decision. Sign in to the same organization and review the current approval cycle in Action Center → Approvals.`
         : `The decision for ${reference} was recorded.`,
       "",
       `Employee: ${input.workerName}`,

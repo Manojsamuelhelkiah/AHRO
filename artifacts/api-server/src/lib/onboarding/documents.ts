@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { onbCases, onbDocuments } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
 
 /**
  * Document checklist ("documentation pack") — real per-case records for
@@ -13,7 +14,7 @@ type CaseRow = typeof onbCases.$inferSelect;
 export type DocumentSeedCase = Pick<
   CaseRow,
   "id" | "organizationId" | "workerCategory" | "geography" | "hireType" | "lifecycleStage"
->;
+> & { synthetic?: boolean };
 export type DocumentRow = typeof onbDocuments.$inferSelect;
 
 type PackItem = {
@@ -54,13 +55,15 @@ export function documentPackFor(c: Pick<DocumentSeedCase, "workerCategory" | "ge
   return items;
 }
 
-/** Seed the pack for one case. Idempotent per (caseId, key). */
-export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<void> {
+/** Seed the pack for one case. Idempotent per (caseId, key). Returns only rows
+ * actually inserted, so recovery reporting never counts a gated no-op. */
+export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<number> {
   const pack = documentPackFor(c);
   // Demo realism for already-progressed cases: earlier-stage docs arrive
   // first. Deterministic per case+key (no randomness) so restarts agree.
-  const progressed = c.lifecycleStage !== "intake" && c.lifecycleStage !== "profile-validated";
-  await db
+  const progressed = c.synthetic === true &&
+    c.lifecycleStage !== "intake" && c.lifecycleStage !== "profile-validated";
+  const inserted = await db
     .insert(onbDocuments)
     .values(
       pack.map((p, i) => {
@@ -84,21 +87,68 @@ export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<void> {
         };
       }),
     )
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: onbDocuments.id });
+  return inserted.length;
 }
 
-/** Backfill packs for any existing case that has none (startup, idempotent). */
-export async function backfillDocumentPacks(): Promise<void> {
+/** Backfill packs for active existing cases that have none (startup, idempotent).
+ * Returns the number of document rows actually inserted, never the number of
+ * attempted, held, completed, or Gate-A-blocked cases. */
+export async function backfillDocumentPacks(scope?: {
+  organizationId?: string;
+  caseId?: number;
+}): Promise<number> {
   const missing = await db
     .select()
     .from(onbCases)
-    .where(
-      sql`not exists (select 1 from ${onbDocuments} d where d.case_id = ${onbCases.id})`,
-    );
-  for (const c of missing) await seedDocumentsForCase(c);
-  if (missing.length > 0) {
-    console.log(`[onboarding documents] seeded document packs for ${missing.length} existing case(s)`);
+    .where(and(
+      sql`${onbCases.lifecycleStage} <> 'complete'
+        and not exists (
+          select 1 from ${onbDocuments} d
+          where d.organization_id = ${onbCases.organizationId}
+            and d.case_id = ${onbCases.id}
+        )`,
+      ...(scope?.organizationId ? [eq(onbCases.organizationId, scope.organizationId)] : []),
+      ...(scope?.caseId ? [eq(onbCases.id, scope.caseId)] : []),
+    ));
+  const { dispatchDocumentPackRecovery } = await import("./workstream-connectors");
+  const { createApproval } = await import("./engine");
+  let insertedDocuments = 0;
+  for (const c of missing) {
+    if (isSyntheticOfflineCase(c)) continue;
+    try {
+      await dispatchDocumentPackRecovery(c);
+      const documents = await db.select({ id: onbDocuments.id }).from(onbDocuments).where(
+        sql`${onbDocuments.organizationId} = ${c.organizationId}
+          and ${onbDocuments.caseId} = ${c.id}`,
+      );
+      insertedDocuments += documents.length;
+    } catch {
+      // Startup is never an authority bypass. Held cases are recovered after
+      // Gate A and the current legal document-envelope decision are present.
+      // A durable creator lets the ordinary approval queue provide that
+      // recovery path. Legacy no-principal rows remain held for an explicit
+      // administrator-initiated provenance review rather than inventing one.
+      if (c.createdByUserId) {
+        await createApproval({
+          caseId: c.id,
+          authorityScope: "legal-approve",
+          agent: "workstreams",
+          ruleRef: "Execution authorization — documents envelope",
+          hitlPattern: "approve-before-act",
+          recommendation: "Authorize recovery of the missing document envelope.",
+          rationale: "Startup found no persisted document pack. A current legal specialist must authorize only this missing provider operation.",
+          resumeAction: "recover-document-envelope",
+          idempotencyKey: `orchestration:${c.id}:approval:execution:documents`,
+        });
+      }
+    }
   }
+  if (insertedDocuments > 0) {
+    console.log(`[onboarding documents] recovered ${insertedDocuments} document row(s) through guarded dispatch`);
+  }
+  return insertedDocuments;
 }
 
 export async function listDocuments(caseId: number): Promise<DocumentRow[]> {

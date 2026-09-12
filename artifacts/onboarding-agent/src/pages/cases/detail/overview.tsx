@@ -114,14 +114,14 @@ function AttentionPanel({ approval, caseId }: any) {
             Acknowledgement records the review only; it does not complete assets or advance the case.
           </p>
         )}
-        {action.isRoleLoading && (
+        {action.isAuthorityLoading && (
           <p className="text-[var(--text-xs)] text-[var(--text-muted)]" role="status">
-            Checking organization permissions…
+            Checking current specialist authority…
           </p>
         )}
-        {!action.isRoleLoading && !action.isAuthorized && (
+        {!action.isAuthorityLoading && !action.isAuthorized && (
           <p className="text-[var(--text-xs)] text-[var(--status-red)]" role="alert">
-            Only organization owners/admins can approve or acknowledge reviews
+            A current governance-approved specialist assignment is required. Organization membership and display personas do not grant decision authority.
           </p>
         )}
         {!action.hasValidVersion && (

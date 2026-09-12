@@ -2252,6 +2252,10 @@ export interface OnbChecklistTemplateItem {
   completionAuthority?: OnbChecklistTemplateItemCompletionAuthority;
   executor?: OnbChecklistTemplateItemExecutor;
   prerequisites?: string[];
+  /** Immutable occupational-health/safety policy bit. Profile edits cannot set, clear, or infer it from labels. */
+  readonly nonWaivableSafety?: boolean;
+  /** Historical classification hold. This requires an explicit governance review and is not occupational-health/safety evidence. */
+  readonly migrationReviewHold?: boolean;
 }
 
 export type OnbChecklistProfileCriteriaSafetyCritical = typeof OnbChecklistProfileCriteriaSafetyCritical[keyof typeof OnbChecklistProfileCriteriaSafetyCritical];
@@ -3141,7 +3145,7 @@ export interface OnbCaseIntake {
   skillCriticality?: string;
   /** Unstructured recruiter notes; treated as evidence, not instructions */
   notes?: string;
-  /** HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation. */
+  /** Must be false at creation. Offer acceptance is released only after creation through the dedicated authority-bound Gate A confirmation endpoint. */
   offerAcceptanceComplete?: boolean;
   workforceContext?: OnbWorkforceContext;
   /** @minLength 1 */
@@ -3425,6 +3429,15 @@ export interface OnbEvent {
   createdAt: string;
 }
 
+export type OnbApprovalAuthorityReviewStatus = typeof OnbApprovalAuthorityReviewStatus[keyof typeof OnbApprovalAuthorityReviewStatus];
+
+
+export const OnbApprovalAuthorityReviewStatus = {
+  'not-required': 'not-required',
+  unresolved: 'unresolved',
+  'reviewed-no-effect': 'reviewed-no-effect',
+} as const;
+
 export type OnbRecordsEvidenceItemScopeKind = typeof OnbRecordsEvidenceItemScopeKind[keyof typeof OnbRecordsEvidenceItemScopeKind];
 
 
@@ -3469,6 +3482,14 @@ export interface OnbApproval {
      * @nullable
      */
   recordsEvidence: OnbRecordsEvidenceItem[] | null;
+  /**
+     * Verified specialist authority scope required for a new decision; a null historical value cannot be replayed.
+     * @nullable
+     */
+  authorityScope: string | null;
+  authorityReviewStatus: OnbApprovalAuthorityReviewStatus;
+  /** @nullable */
+  decidedAuthorityId: string | null;
   /** pending | approved | rejected */
   status: string;
   /** @nullable */
@@ -3480,12 +3501,106 @@ export interface OnbApproval {
   decidedAt: string | null;
 }
 
+export interface OnbApprovalCapability {
+  canDecide: boolean;
+  /**
+     * Machine-readable fail-closed reason when the current authenticated user cannot decide.
+     * @nullable
+     */
+  reason: string | null;
+  /** @minimum 1 */
+  version: number;
+}
+
 export interface OnbApprovalDecision {
   /** approved | rejected */
   decision: string;
   comment?: string;
   /** @minimum 1 */
   expectedVersion: number;
+}
+
+export type OnbAuthorityGovernanceStateGovernanceStatus = typeof OnbAuthorityGovernanceStateGovernanceStatus[keyof typeof OnbAuthorityGovernanceStateGovernanceStatus];
+
+
+export const OnbAuthorityGovernanceStateGovernanceStatus = {
+  unconfigured: 'unconfigured',
+  'operator-attested': 'operator-attested',
+  'governance-approved': 'governance-approved',
+  withdrawn: 'withdrawn',
+} as const;
+
+export type OnbAuthorityGovernanceStateGovernance = {
+  status: OnbAuthorityGovernanceStateGovernanceStatus;
+  /** @nullable */
+  attestedAt?: string | null;
+  /** @nullable */
+  attestationNote?: string | null;
+  /** @nullable */
+  approvedAt?: string | null;
+  /** @nullable */
+  governanceSource?: string | null;
+  revision: number;
+};
+
+export type OnbAuthorityAssignmentStatus = typeof OnbAuthorityAssignmentStatus[keyof typeof OnbAuthorityAssignmentStatus];
+
+
+export const OnbAuthorityAssignmentStatus = {
+  active: 'active',
+  revoked: 'revoked',
+} as const;
+
+export interface OnbAuthorityAssignment {
+  id: string;
+  personUserId: string;
+  /** @nullable */
+  personEmail: string | null;
+  emailResponderAuthorized: boolean;
+  authorityRole: string;
+  scopes: string[];
+  /** @nullable */
+  caseId: number | null;
+  /** @nullable */
+  siteScope: string | null;
+  /** @nullable */
+  jurisdictionScope: string | null;
+  validFrom: string;
+  /** @nullable */
+  validUntil: string | null;
+  status: OnbAuthorityAssignmentStatus;
+  /** @minimum 1 */
+  revision: number;
+  governanceDecisionRef: string;
+  /** @nullable */
+  revokeReason: string | null;
+}
+
+export interface OnbAuthorityGovernanceState {
+  governance: OnbAuthorityGovernanceStateGovernance;
+  canAdminister: boolean;
+  assignments: OnbAuthorityAssignment[];
+}
+
+export interface OnbAuthorityAssignmentRequest {
+  personUserId: string;
+  /** @nullable */
+  personEmail?: string | null;
+  emailResponderAuthorized?: boolean;
+  authorityRole: string;
+  /** @minItems 1 */
+  scopes: string[];
+  /** @nullable */
+  caseId?: number | null;
+  /** @nullable */
+  siteScope?: string | null;
+  /** @nullable */
+  jurisdictionScope?: string | null;
+  /** @nullable */
+  validFrom?: string | null;
+  /** @nullable */
+  validUntil?: string | null;
+  governanceDecisionRef: string;
 }
 
 export type OnbApprovalHistoryEventType = typeof OnbApprovalHistoryEventType[keyof typeof OnbApprovalHistoryEventType];
@@ -3978,6 +4093,9 @@ export type OnbOperationalRequestsMutationResult = OnbOperationalRequestsEnvelop
   initializedRequestIds: string[];
 });
 
+export interface OnbDocumentRecoveryResult {
+  message: string;
+}
 export interface OnbInboundMessage {
   /** email | whatsapp */
   channel: string;
@@ -6163,6 +6281,19 @@ export type ListOnboardingApprovalsParams = {
  * pending (default) | all
  */
 status?: string;
+};
+
+export type BootstrapOnboardingAuthorityGovernanceBody = {
+  note: string;
+};
+
+export type WithdrawOnboardingAuthorityGovernanceBody = {
+  /** @minLength 1 */
+  reason: string;
+};
+
+export type RevokeOnboardingAuthorityAssignmentBody = {
+  reason: string;
 };
 
 export type GetOnboardingOutcomeKpisParams = {

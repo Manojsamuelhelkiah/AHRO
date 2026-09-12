@@ -80,304 +80,339 @@
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "idx": 11,
       "version": "7",
       "when": 1786585763579,
       "tag": "0010_voice_idempotency",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 12,
       "version": "7",
       "when": 1786599900000,
       "tag": "0011_employee_records",
       "breakpoints": true
     },
     {
-      "idx": 12,
+      "idx": 13,
       "version": "7",
       "when": 1786599910000,
       "tag": "0012_employee_records_unique",
       "breakpoints": true
     },
     {
-      "idx": 13,
+      "idx": 14,
       "version": "7",
       "when": 1786599920000,
       "tag": "0013_approval_records_evidence",
       "breakpoints": true
     },
     {
-      "idx": 14,
+      "idx": 15,
       "version": "7",
       "when": 1787200000000,
       "tag": "0014_pricing_rate_sets",
       "breakpoints": true
     },
     {
-      "idx": 15,
+      "idx": 16,
       "version": "7",
       "when": 1787200000001,
       "tag": "0015_pricing_sheets",
       "breakpoints": true
     },
     {
-      "idx": 16,
+      "idx": 17,
       "version": "7",
       "when": 1787200000002,
       "tag": "0016_enterprise_architecture",
       "breakpoints": true
     },
     {
-      "idx": 17,
+      "idx": 18,
       "version": "7",
       "when": 1787200000003,
       "tag": "0017_case_email_authorization_and_retry",
       "breakpoints": true
     },
     {
-      "idx": 18,
+      "idx": 19,
       "version": "7",
       "when": 1788887340000,
       "tag": "0018_custom_intent_routing_contract",
       "breakpoints": true
     },
     {
-      "idx": 19,
+      "idx": 20,
       "version": "7",
       "when": 1788887340001,
       "tag": "0019_effect_journal",
       "breakpoints": true
     },
     {
-      "idx": 20,
+      "idx": 21,
       "version": "7",
       "when": 1788887340002,
       "tag": "0020_align_email_watch_schema",
       "breakpoints": true
     },
     {
-      "idx": 21,
+      "idx": 22,
       "version": "7",
       "when": 1788887340003,
       "tag": "0021_scenario_files",
       "breakpoints": true
     },
     {
-      "idx": 22,
+      "idx": 23,
       "version": "7",
       "when": 1788887340004,
       "tag": "0022_scenario_file_hardening",
       "breakpoints": true
     },
     {
-      "idx": 23,
+      "idx": 24,
       "version": "7",
       "when": 1788887340005,
       "tag": "0023_authenticated_scenario_uploads",
       "breakpoints": true
     },
     {
-      "idx": 24,
+      "idx": 25,
       "version": "7",
       "when": 1788887340006,
       "tag": "0024_scenario_upload_cleanup_fence",
       "breakpoints": true
     },
     {
-      "idx": 25,
+      "idx": 26,
       "version": "7",
       "when": 1788887340003,
       "tag": "0021_application_organizations",
       "breakpoints": true
     },
     {
-      "idx": 26,
+      "idx": 27,
       "version": "7",
       "when": 1788887340007,
       "tag": "0022_application_organizations_phase_a",
       "breakpoints": true
     },
     {
-      "idx": 27,
+      "idx": 28,
       "version": "7",
       "when": 1788887340008,
       "tag": "0023_application_organizations_phase_b",
       "breakpoints": true
     },
     {
-      "idx": 28,
+      "idx": 29,
       "version": "7",
       "when": 1788887340007,
       "tag": "0025_private_scenario_tenancy",
       "breakpoints": true
     },
     {
-      "idx": 29,
+      "idx": 30,
       "version": "7",
       "when": 1788887340008,
       "tag": "0026_preserve_scenario_context",
       "breakpoints": true
     },
     {
-      "idx": 30,
+      "idx": 31,
       "version": "7",
       "when": 1788887340009,
       "tag": "0027_quarantine_scenario_file_ownership",
       "breakpoints": true
     },
     {
-      "idx": 31,
+      "idx": 32,
       "version": "7",
       "when": 1788887340010,
       "tag": "0028_restore_staged_scenario_context",
       "breakpoints": true
     },
     {
-      "idx": 32,
+      "idx": 33,
       "version": "7",
       "when": 1788887340011,
       "tag": "0029_drop_legacy_watch_email_foreign_keys",
       "breakpoints": true
     },
     {
-      "idx": 33,
+      "idx": 34,
       "version": "7",
       "when": 1788887340012,
       "tag": "0030_candidate_portal",
       "breakpoints": true
     },
     {
-      "idx": 34,
+      "idx": 35,
       "version": "7",
       "when": 1788887340012,
       "tag": "0030_day1_checklist_gates",
       "breakpoints": true
     },
     {
-      "idx": 35,
+      "idx": 36,
       "version": "7",
       "when": 1788887340013,
       "tag": "0031_onboarding_communication_idempotency",
       "breakpoints": true
     },
     {
-      "idx": 36,
+      "idx": 37,
       "version": "7",
       "when": 1788887340014,
       "tag": "0032_onboarding_orchestration_claims",
       "breakpoints": true
     },
     {
-      "idx": 37,
+      "idx": 38,
       "version": "7",
       "when": 1788887340015,
       "tag": "0033_day1_logistics_defaults",
       "breakpoints": true
     },
     {
-      "idx": 38,
+      "idx": 39,
       "version": "7",
       "when": 1788973740000,
       "tag": "0034_candidate_access_cleanup_indexes",
       "breakpoints": true
     },
     {
-      "idx": 39,
+      "idx": 40,
       "version": "7",
       "when": 1788973740001,
       "tag": "0035_candidate_exchange_throttle",
       "breakpoints": true
     },
     {
-      "idx": 40,
+      "idx": 41,
       "version": "7",
       "when": 1788887340015,
       "tag": "0033_targeted_checklist_profiles",
       "breakpoints": true
     },
     {
-      "idx": 41,
+      "idx": 42,
       "version": "7",
       "when": 1788973740002,
       "tag": "0036_document_validation_monitoring",
       "breakpoints": true
     },
     {
-      "idx": 42,
+      "idx": 43,
       "version": "7",
       "when": 1789026000000,
       "tag": "0037_document_malware_quarantine",
       "breakpoints": true
     },
     {
-      "idx": 43,
+      "idx": 44,
       "version": "7",
       "when": 1789026000001,
       "tag": "0038_onboarding_three_gateways",
       "breakpoints": true
     },
     {
-      "idx": 44,
+      "idx": 45,
       "version": "7",
       "when": 1789026000002,
       "tag": "0039_weighted_readiness_sla",
       "breakpoints": true
     },
     {
-      "idx": 45,
+      "idx": 46,
       "version": "7",
       "when": 1789026000003,
       "tag": "0040_versioned_approvals",
       "breakpoints": true
     },
     {
-      "idx": 46,
+      "idx": 47,
       "version": "7",
       "when": 1789026000004,
       "tag": "0041_readiness_snapshot_joining_date",
       "breakpoints": true
     },
     {
-      "idx": 47,
+      "idx": 48,
       "version": "7",
       "when": 1789026000005,
       "tag": "0042_voice_provider_correlation",
       "breakpoints": true
     },
     {
-      "idx": 48,
+      "idx": 49,
       "version": "7",
       "when": 1789026000006,
       "tag": "0043_demo_controller_setup",
       "breakpoints": true
     },
     {
-      "idx": 49,
+      "idx": 50,
       "version": "7",
       "when": 1789026000007,
       "tag": "0044_action_center",
       "breakpoints": true
     },
     {
-      "idx": 50,
+      "idx": 51,
       "version": "7",
       "when": 1789026000008,
       "tag": "0045_context_aware_workforce_policies",
       "breakpoints": true
     },
     {
-      "idx": 51,
+      "idx": 52,
       "version": "7",
       "when": 1789026000009,
       "tag": "0046_batch_intake_reconciliation",
       "breakpoints": true
     },
     {
-      "idx": 52,
+      "idx": 53,
       "version": "7",
       "when": 1789026000010,
       "tag": "0045_protected_onboarding_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1789026000011,
+      "tag": "0047_verified_decision_authority",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1789026000012,
+      "tag": "0048_authority_case_creator_principal",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1789026000013,
+      "tag": "0049_nonwaivable_safety_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1789026000014,
+      "tag": "0050_authority_governance_withdrawn",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1789026000014,
+      "tag": "0051_separate_migration_review_from_medical_safety",
       "breakpoints": true
     }
   ]

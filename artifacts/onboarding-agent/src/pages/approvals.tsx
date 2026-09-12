@@ -167,6 +167,7 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
 
   const isPending = approval.status === 'pending';
   const isAcknowledgement = isApprovalAcknowledgement(approval);
+  const isGateA = approval.ruleRef === 'Gate A — offer-acceptance package';
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: history, isLoading: historyLoading } = useGetOnboardingApprovalHistory(approval.id, {
@@ -280,6 +281,12 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
 
         {isPending && (
           <div style={{ borderTop: '1px solid var(--border)', marginTop: '16px', paddingTop: '16px' }}>
+            {isGateA ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[var(--text-sm)] text-[var(--text-secondary)] m-0">Gate A can only be released through its dedicated case confirmation.</p>
+                <Link href={`/cases/${approval.caseId}`}><Button size="sm">Open Gate A confirmation</Button></Link>
+              </div>
+            ) : (
             <div className="flex flex-col lg:flex-row items-start lg:items-end gap-6">
               <div className="flex-1 w-full space-y-2">
                 <Label>Decision Comment (Optional)</Label>
@@ -291,7 +298,7 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
                   onFocus={e => e.currentTarget.style.borderColor = 'var(--primary)'}
                   onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
                 />
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>Decision will be recorded as <strong>{action.role || 'Organization role unavailable'}</strong>.</p>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>The server will verify your current specialist assignment, scope, governance approval, and separation of duties before recording this decision.</p>
               </div>
               <div className="flex items-center gap-3 shrink-0 w-full lg:w-auto">
                 {!isAcknowledgement && (
@@ -316,19 +323,20 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
                 </button>
               </div>
             </div>
-            {isAcknowledgement && (
+            )}
+            {!isGateA && isAcknowledgement && (
               <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-3">
                 Acknowledgement records the review only; it does not complete assets or advance the case.
               </p>
             )}
-            {action.isRoleLoading && (
+            {action.isAuthorityLoading && (
               <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-3" role="status">
-                Checking organization permissions…
+                Checking current specialist authority…
               </p>
             )}
-            {!action.isRoleLoading && !action.isAuthorized && (
+            {!action.isAuthorityLoading && !action.isAuthorized && (
               <p className="text-[var(--text-xs)] text-[var(--status-red)] mt-3" role="alert">
-                Only organization owners/admins can approve or acknowledge reviews
+                A governance-approved specialist assignment is required. Organization membership and display personas do not grant decision authority.
               </p>
             )}
             {!action.hasValidVersion && (

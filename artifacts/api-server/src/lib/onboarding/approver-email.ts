@@ -20,33 +20,28 @@ import {
 } from "./approval-version";
 import {
   decideApproval,
+  enqueueEmailReplyNoDecisionReceipt,
   enqueueApprovalRequestNotification,
 } from "./approval-decisions";
 import {
   composeApprovalRequestEmail,
 } from "./approval-email-templates";
-import { sharedMailboxResponderIdentity } from "./email-identity";
+import {
+  verifyGmailApprovalTransport,
+  type VerifiedGmailDkimTransport,
+} from "./verified-email-transport";
 
 /**
- * Remote HR approver over email — lets a demo volunteer play the
- * human-in-the-loop from their own inbox.
+ * Approval email notifications and remote-reply receipt handling.
  *
  * Outbound: whenever the agent escalates (an approval is created) and an
  * HR approver address is configured in Settings, that person is emailed
- * the recommendation with a reference like [AP-42] and asked to reply
- * "approve" or "reject".
+ * the recommendation with a reference like [AP-42] and told to sign in to
+ * the organization and decide in the Action Center.
  *
- * Inbound: a dedicated Gmail poll searches for replies from that exact
- * sender. Trust and safety mirror the email status channel:
- *  - sender allowlist check FIRST — only the configured address (exact,
- *    case-insensitive) can ever decide anything; everyone else is ignored;
- *  - status-guarded: the decision is a conditional UPDATE that only
- *    transitions pending -> approved/rejected, so retries, duplicate
- *    deliveries and a concurrent in-app decision cannot double-apply;
- *  - apply-then-record: the state change happens first, then the Gmail
- *    message id is recorded (onb_communications.external_message_id) so
- *    later polls skip it — a crash in between re-applies harmlessly;
- *  - the audit trail records the decision as decided-by that person.
+ * Inbound: a dedicated Gmail poll searches for replies from the configured
+ * sender. A decision is accepted only after the exact sender is re-bound to
+ * its verified Clerk account and a current governance assignment.
  */
 
 const connectors = new ReplitConnectors();
@@ -133,6 +128,7 @@ export function composeApprovalEmail(opts: {
   stakeholderRole?: string;
   deliveryAddress?: string | null;
   deliveryMode?: "real" | "simulated";
+  emailResponderAuthorized?: boolean;
 }): { subject: string; body: string } {
   return composeApprovalRequestEmail({
     approvalId: opts.approvalId,
@@ -150,6 +146,7 @@ export function composeApprovalEmail(opts: {
     deliveryAddress: opts.deliveryAddress,
     deliveryMode: opts.deliveryMode ?? "real",
     deliveryState: "queued",
+    emailResponderAuthorized: opts.emailResponderAuthorized,
   });
 }
 
@@ -195,7 +192,7 @@ export async function notifyApproverOfApproval(approval: {
       "channel",
       "system",
       "HR approver notification queued",
-      `The pending approval ${approvalRef(approval.id, approval.version ?? 1)} is queued for the configured HR approver. A reply containing "approve" or "reject" from that address will decide it.`,
+      `The pending approval ${approvalRef(approval.id, approval.version ?? 1)} is queued as an email notification. A decision requires either the authenticated Action Center → Approvals workflow or an exact governance-authorized, Clerk-verified email responder whose live authority is confirmed at processing.`,
       { idempotencyKey: `approval-notification:${approval.id}:event` },
     );
   } catch (err) {
@@ -204,11 +201,13 @@ export async function notifyApproverOfApproval(approval: {
 }
 
 /* ------------------------------------------------------------------ */
-/* Inbound: apply a reply from the approver                            */
+/* Inbound: record a reply and send an explicit no-decision receipt    */
 /* ------------------------------------------------------------------ */
 
 export type ApplyReplyResult =
   | "not-approver"
+  | "unverified-transport"
+  | "not-authorized"
   | "no-ref"
   | "no-decision"
   | "not-found"
@@ -216,11 +215,49 @@ export type ApplyReplyResult =
   | "stale"
   | "decided";
 
+export function emailDecisionDisabledReceipt(input: {
+  approvalId: number;
+  version: number;
+  sourceMessageId: string;
+}): { subject: string; body: string; idempotencyKey: string } {
+  const reference = approvalRef(input.approvalId, input.version);
+  return {
+    subject: `[${reference}] Email reply received — no decision applied`,
+    body: [
+      `We received your email reply about ${reference}. No decision was applied.`,
+      "",
+      "This email did not pass the current authority checks, so it cannot approve or reject this onboarding review.",
+      "Sign in to the same organization and open Action Center → Approvals, then locate this reference to submit a decision.",
+      "This receipt does not claim source completion, a gateway release, or any provider action.",
+    ].join("\n"),
+    idempotencyKey: `approval-email-receipt:${input.sourceMessageId}`,
+  };
+}
+
+export function emailDecisionRecordedReceipt(input: {
+  approvalId: number;
+  version: number;
+  sourceMessageId: string;
+  decision: ApproverDecision;
+}): { subject: string; body: string; idempotencyKey: string } {
+  const reference = approvalRef(input.approvalId, input.version);
+  const label = input.decision === "approved" ? "approved" : "rejected";
+  return {
+    subject: `[${reference}] Email decision recorded — ${label}`,
+    body: [
+      `Your ${label} decision for ${reference} was recorded after current authority verification.`,
+      "The decision was attributed to your verified member account, not to a mailbox persona.",
+      "Sign in to the same organization and open Action Center → Approvals to review the recorded decision.",
+    ].join("\n"),
+    idempotencyKey: `approval-email-receipt:${input.sourceMessageId}`,
+  };
+}
+
 /**
- * Apply one inbound email as an approval decision. Guards in order:
- * sender allowlist first, then reference match, then decision parse,
- * then the status-guarded conditional update. Idempotent — retries and
- * duplicates cannot decide twice.
+ * A remote decision is accepted only for an exact governance-authorized,
+ * Clerk-verified current authority assignment and an independently verified
+ * raw Gmail DKIM transport. Every other reply receives a durable no-decision
+ * receipt and is handed off to the signed-in app.
  */
 export async function applyApproverReply(opts: {
   organizationId: string;
@@ -229,8 +266,11 @@ export async function applyApproverReply(opts: {
   bodyText: string;
   approver: string | null;
   sourceMessageId: string;
+  /** Private branded proof made only from Gmail's raw RFC822 fetch. */
+  transport?: VerifiedGmailDkimTransport | null;
 }): Promise<{ outcome: ApplyReplyResult; approvalId: number | null }> {
-  // 1. Allowlist check FIRST — nobody but the configured approver may act.
+  // 1. Delivery allowlist first. It is only an inbox-routing control; the
+  // decision verifier separately binds the sender to a verified Clerk member.
   const configuredApprover = await approverEmailAddress(opts.organizationId);
   if (
     !senderIsApprover(opts.fromAddress, opts.approver) ||
@@ -243,45 +283,74 @@ export async function applyApproverReply(opts: {
   if (reference === null) return { outcome: "no-ref", approvalId: null };
   const approvalId = reference.approvalId;
 
-  const decision = parseApproverDecision(opts.bodyText || (opts.subject ?? ""));
-
   const [a] = await db.select().from(onbApprovals).where(and(
     eq(onbApprovals.id, approvalId),
     eq(onbApprovals.organizationId, opts.organizationId),
   ));
   if (!a) return { outcome: "not-found", approvalId };
 
-  if (decision === null) {
+  const decision = parseApproverDecision(opts.bodyText || (opts.subject ?? ""));
+  if (!decision) {
+    await enqueueEmailReplyNoDecisionReceipt({
+      approval: a,
+      sourceMessageId: opts.sourceMessageId,
+      recipient: opts.fromAddress,
+    });
+    await logEvent(
+      a.caseId, "channel", "system", "Approval email reply not understood",
+      `An email reply referenced ${approvalRef(approvalId, reference.version)} but no unambiguous decision was applied.`,
+      { idempotencyKey: `approval-email-received:${opts.sourceMessageId}` },
+    );
+    return { outcome: "no-decision", approvalId };
+  }
+  // Do not let a parsed From header, a Gmail query match, or an injected
+  // Authentication-Results field represent sender identity. The branded proof
+  // is generated only by DNS-backed DKIM verification of the raw RFC822 mail.
+  if (!opts.transport) {
+    await enqueueEmailReplyNoDecisionReceipt({
+      approval: a,
+      sourceMessageId: opts.sourceMessageId,
+      recipient: opts.fromAddress,
+    });
     await logEvent(
       a.caseId,
       "channel",
       "system",
-      "Approver reply not understood",
-      `An email reply from the HR approver referenced ${approvalRef(approvalId, reference.version)} but contained no clear "approve" or "reject" — no decision applied. They can reply again with a single clear word.`,
+      "Approval email reply requires signed-in handoff",
+      `An email reply referenced ${approvalRef(approvalId, reference.version)} but raw Gmail DKIM transport identity was not verified; no decision was applied. The approver must use Action Center → Approvals.`,
+      { idempotencyKey: `approval-email-received:${opts.sourceMessageId}` },
     );
-    return { outcome: "no-decision", approvalId };
+    return { outcome: "unverified-transport", approvalId };
   }
-
-  const decidedBy = sharedMailboxResponderIdentity(opts.fromAddress);
   const result = await decideApproval({
     organizationId: opts.organizationId,
     approvalId,
     decision,
     expectedVersion: reference.version,
-    decidedBy,
+    // This untrusted display string is overwritten by decideApproval for an
+    // authorized email decision with the verified Clerk personUserId.
+    decidedBy: "email responder",
     comment: opts.bodyText ? opts.bodyText.slice(0, 500) : null,
     sourceMessageId: opts.sourceMessageId,
     sourceAddress: opts.fromAddress,
-    decidedByKind: "shared-mailbox",
+    decidedByKind: "human",
+    responderEmail: opts.fromAddress,
+    transport: opts.transport,
   });
-  if (result.outcome === "not-found") return { outcome: "not-found", approvalId };
+  if (result.outcome === "decided") return { outcome: "decided", approvalId };
   if (result.outcome === "stale") {
-    return {
-      outcome: result.reason === "already-decided" ? "already-decided" : "stale",
-      approvalId,
-    };
+    return { outcome: result.reason === "already-decided" ? "already-decided" : "stale", approvalId };
   }
-  return { outcome: "decided", approvalId };
+  if (result.outcome === "not-found") return { outcome: "not-found", approvalId };
+  await logEvent(
+    a.caseId,
+    "channel",
+    "system",
+    "Approval email reply received — no decision applied",
+    `An email reply referenced ${approvalRef(approvalId, reference.version)} but current verified member authority was not established; no decision was applied.`,
+    { idempotencyKey: `approval-email-received:${opts.sourceMessageId}` },
+  );
+  return { outcome: "not-authorized", approvalId };
 }
 
 /* ------------------------------------------------------------------ */
@@ -317,7 +386,37 @@ async function pollOnce(organizationId: string): Promise<void> {
     const subject = header(msg, "Subject") || null;
     const bodyText = stripQuotedReply(findPlainText(msg.payload) ?? "");
     if (await alreadyRecorded(ref.id, organizationId)) continue;
-
+    const reference = matchApprovalVersionRef(`${subject ?? ""}\n${bodyText}`);
+    const decision = parseApproverDecision(bodyText || subject || "");
+    let transport: VerifiedGmailDkimTransport | null = null;
+    // The Gmail "full" projection is convenient for display/body parsing but
+    // carries no cryptographic identity assertion. Fetch the provider's raw
+    // RFC822 bytes separately and verify them against DNS before allowing a
+    // remote decision.
+    const rawResp = await connectors.proxy(
+      "google-mail",
+      `/gmail/v1/users/me/messages/${ref.id}?format=raw`,
+      { method: "GET" },
+    );
+    if (rawResp.ok && reference && decision) {
+      const rawMessage = (await rawResp.json()) as { id?: string; raw?: string };
+      if (rawMessage.id === msg.id && typeof rawMessage.raw === "string") {
+        try {
+          transport = await verifyGmailApprovalTransport({
+            rawMessage: Buffer.from(rawMessage.raw, "base64url").toString("utf8"),
+            sourceMessageId: msg.id,
+            expectedFromAddress: fromAddress,
+            expectedReference: approvalRef(reference.approvalId, reference.version),
+            expectedDecisionText: bodyText,
+            expectedDecision: decision,
+          });
+        } catch {
+          // Treat malformed raw source exactly like failed DNS/signature
+          // evidence: do not decide remotely, hand off to the app.
+          transport = null;
+        }
+      }
+    }
     const { outcome, approvalId } = await applyApproverReply({
       organizationId,
       fromAddress,
@@ -325,6 +424,7 @@ async function pollOnce(organizationId: string): Promise<void> {
       bodyText,
       approver,
       sourceMessageId: msg.id,
+      transport,
     });
     // Messages that can't belong to any approval are left unrecorded (they
     // may be a hire reply handled by the main inbound poller). Everything
@@ -335,7 +435,6 @@ async function pollOnce(organizationId: string): Promise<void> {
       .select({
         caseId: onbApprovals.caseId,
         organizationId: onbApprovals.organizationId,
-        version: onbApprovals.version,
       })
       .from(onbApprovals)
       .where(and(
@@ -343,6 +442,10 @@ async function pollOnce(organizationId: string): Promise<void> {
         eq(onbApprovals.organizationId, organizationId),
       ));
     if (!a) continue;
+    // applyApproverReply durably queues exactly one source-message keyed
+    // receipt before returning. Persisting inbound may safely happen after
+    // that commit: a crash in between replays the stored outcome rather than
+    // reevaluating an already-decided approval or creating another receipt.
     await persistInbound({
       caseId: a.caseId,
       organizationId,
@@ -353,7 +456,7 @@ async function pollOnce(organizationId: string): Promise<void> {
       externalMessageId: msg.id,
     });
     console.log(
-      `[approver-email] reply from approver for ${approvalRef(approvalId!, a.version ?? 1)}: ${outcome} (gmail ${msg.id})`,
+      `[approver-email] reply from approver for AP-${approvalId!}: ${outcome} (gmail ${msg.id})`,
     );
   }
 }

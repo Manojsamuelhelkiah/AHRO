@@ -318,7 +318,9 @@ async function createCase(
     managerName: intake.managerName,
     recruiterName: intake.recruiterName,
     joiningDate,
-    lifecycleStage: "intake",
+    // Explicitly isolated synthetic fixture progression; production writers
+    // always seed pending documents after fenced authorization.
+    lifecycleStage: "preboarding",
     orchestrationStatus: "demo-blocked",
     checklistTemplateVersion: 1,
     checklistSnapshot: [...LEGACY_CHECKLIST],
@@ -466,6 +468,7 @@ export async function createDemoRun(
     geography: row.metadata.geography,
     hireType: scenario.intake.hireType,
     lifecycleStage: "intake",
+    synthetic: true,
   });
   return row;
 }

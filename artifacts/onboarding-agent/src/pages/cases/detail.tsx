@@ -27,7 +27,6 @@ import { Presentation } from 'lucide-react';
 import { useUser } from '@clerk/react';
 import { CaseHeader, CaseHealthStrip, CaseTabs } from './detail/components';
 import { GatewaysStrip } from './detail/gateways-strip';
-import { useOrganizationRole } from '../../hooks/use-organization-role';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
 import { DocumentsTab } from './detail/documents-tab';
@@ -39,7 +38,6 @@ export function CaseDetailPage() {
   const { id } = useParams();
   const caseId = Number(id);
   const { user } = useUser();
-  const { isHR, loading: isHRLoading } = useOrganizationRole();
   const [activeTab, setActiveTab] = useState(() => {
     const requested = typeof window === "undefined"
       ? null
@@ -123,7 +121,7 @@ export function CaseDetailPage() {
     }
   });
 
-  if (isLoading || isHRLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading case workspace...</div>;
+  if (isLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading case workspace...</div>;
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
 
   const demoSession = caps?.available ? caps.existingSessions.find((s: any) => s.caseId === caseId) : undefined;
@@ -143,7 +141,12 @@ export function CaseDetailPage() {
       )}
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
       
-      <GatewaysStrip c={c} isHR={isHR} />
+      <GatewaysStrip
+        c={c}
+        gateApproval={pendingApprovals.find((approval: any) =>
+          approval.ruleRef === 'Gate A — offer-acceptance package',
+        )}
+      />
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} />
       <PortalControls caseId={caseId} joiningDate={c.joiningDate} />
       
