@@ -42,6 +42,7 @@ import { documentationGateReady } from "./document-validation-policy";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readiness-sla-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { recoverWorkforceConnectorContinuations } from "./operational-requests";
 import {
   recordBgvBlockedEpisode,
   recordBgvReleaseEpisode,
@@ -868,6 +869,7 @@ export async function recoverUntrackedCaseSystems(
       and(
         sql`(${onbCases.hireType} not in ('external-fte', 'contractor', 'rehire') or ${onbCases.offerAcceptanceComplete} = true)`,
         sql`${onbCases.lifecycleStage} in ('preboarding', 'day1-review')
+            and coalesce(${onbCases.orchestrationStatus}, '') <> 'checklist-blocked'
             and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id} and sc.organization_id = ${onbCases.organizationId})`,
         onlyCaseId === undefined ? undefined : eq(onbCases.id, onlyCaseId),
       ),
@@ -1023,6 +1025,10 @@ async function tickOnce(): Promise<void> {
     logger.error({ component: "document-reminder", error: String(error).slice(0, 300) }, "document reminder tick failed");
   });
   await recoverChecklistOrchestrations();
+  // A human task response may have committed while its guarded connector
+  // continuation was refused. Retry its durable record independently of the
+  // case's current orchestration status; the dispatcher rechecks real gates.
+  await recoverWorkforceConnectorContinuations();
   await recoverDecidedApprovalContinuations();
   await recoverConfirmedOfferAcceptanceOrchestrations();
   await recoverApprovedDay1ReadinessGates();

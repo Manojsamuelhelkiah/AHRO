@@ -41,6 +41,13 @@ export const tenantSafeguards = [
   { table: "onb_approval_history", phaseB: false },
   { table: "onb_approval_notifications", phaseB: false },
   { table: "onb_action_center_actions", phaseB: false },
+  { table: "demo_controller_setup_requests", phaseB: false },
+  { table: "onb_policy_evidence", phaseB: false },
+  { table: "onb_policy_authorities", phaseB: false },
+  { table: "onb_job_profiles", phaseB: false },
+  { table: "onb_policy_recommendations", phaseB: false },
+  { table: "onb_intake_batches", phaseB: false },
+  { table: "onb_intake_batch_people", phaseB: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -90,6 +97,30 @@ export const expectedForeignKeys = [
   })),
   {
     table: "onb_action_center_actions",
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_policy_evidence",
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_policy_authorities",
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_intake_batch_people",
+    columns: ["organization_id", "batch_id"],
+    referencedTable: "onb_intake_batches",
+    referencedColumns: ["organization_id", "batch_id"],
+  },
+  {
+    table: "onb_intake_batch_people",
     columns: ["organization_id", "case_id"],
     referencedTable: "onb_cases",
     referencedColumns: ["organization_id", "id"],

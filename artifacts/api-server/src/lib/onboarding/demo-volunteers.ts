@@ -17,7 +17,10 @@ import { getDay1LogisticsDefault, readinessFromChecklist } from "./settings";
 import { logisticsForCase } from "./logistics-defaults";
 import { SCENARIOS, getScenario } from "./scenarios";
 import { organizationValues, organizationWhere } from "../organization-scope";
-import { resolveChecklistProfileInTransaction } from "./checklist-profiles";
+import {
+  checklistProfileMatchingAttributes,
+  resolveChecklistProfileInTransaction,
+} from "./checklist-profiles";
 
 export const DEMO_VOLUNTEERS_KEY = "demo_volunteers";
 
@@ -197,12 +200,15 @@ export async function seedVolunteerCases(
     // skill, notes) while keeping the volunteer's real identity and contacts,
     // so the agent's messages match the story the volunteer is playing.
     const scenario = getScenario(v.persona);
-    const employee = {
-      band: scenario?.intake.workerCategory ?? v.workerCategory,
+    const employee = checklistProfileMatchingAttributes({}, {
+      workerBand: scenario?.intake.workerCategory ?? v.workerCategory,
       role: scenario?.intake.role ?? v.role,
-      employmentType: scenario?.intake.hireType ?? v.hireType,
-      location: v.geography,
-    };
+      hireType: scenario?.intake.hireType ?? v.hireType,
+      workerCategory: scenario?.intake.workerCategory ?? v.workerCategory,
+      geography: v.geography,
+      department: scenario?.intake.department ?? v.department,
+      legalEntity: scenario?.intake.legalEntity ?? "Demo Legal Entity",
+    });
     const row = await db.transaction(async (tx) => {
       const checklist = await resolveChecklistProfileInTransaction(tx, organizationId, employee);
       const [inserted] = await tx.insert(onbCases).values({

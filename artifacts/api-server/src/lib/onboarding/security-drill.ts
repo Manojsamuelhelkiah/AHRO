@@ -20,7 +20,10 @@ import { refreshDemoAllowlist } from "./demo-volunteers";
 import { runWithProviderDeny } from "./provider-policy";
 import { getDay1LogisticsDefault, readinessFromChecklist } from "./settings";
 import { logisticsForCase } from "./logistics-defaults";
-import { resolveChecklistProfileInTransaction } from "./checklist-profiles";
+import {
+  checklistProfileMatchingAttributes,
+  resolveChecklistProfileInTransaction,
+} from "./checklist-profiles";
 
 export const DRILL_WORKER_NAME = "Red Team Drill (simulated attacker)";
 export const DRILL_EMAIL = "red.team.drill@attacker.example";
@@ -78,12 +81,15 @@ async function drillCase(organizationId: string): Promise<{ id: number; created:
   const logisticsDefault = await getDay1LogisticsDefault(organizationId);
   const joiningDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
   const row = await db.transaction(async (tx) => {
-    const checklist = await resolveChecklistProfileInTransaction(tx, organizationId, {
-      band: "white-collar",
+    const checklist = await resolveChecklistProfileInTransaction(tx, organizationId, checklistProfileMatchingAttributes({}, {
+      workerBand: "white-collar",
       role: "Security Drill Target",
-      employmentType: "external-fte",
-      location: "United States",
-    });
+      hireType: "external-fte",
+      workerCategory: "white-collar",
+      geography: "United States",
+      department: "Security",
+      legalEntity: "Demo Corp",
+    }));
     const [inserted] = await tx.insert(onbCases).values({
       organizationId,
       workerName: DRILL_WORKER_NAME,

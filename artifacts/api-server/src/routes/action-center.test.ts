@@ -13,6 +13,7 @@ import {
   onbCandidateUploads,
   onbCases,
   onbCommunications,
+  onbConnectors,
   onbDocuments,
   onbEffectJournal,
   onbEvents,
@@ -71,6 +72,7 @@ let server: Server | undefined;
 let baseUrl = "";
 const caseIds: number[] = [];
 const documentIds: number[] = [];
+let safetyCriticalCaseId: number;
 const organizationIds = [orgA, orgB, orgC];
 
 type JsonRecord = Record<string, any>;
@@ -84,6 +86,13 @@ function caseValues(organizationId: string, options: {
   email?: string;
   notes?: string | null;
   candidateAuthorized?: boolean;
+  workforceContext?: { siteExposure?: boolean; safetyCritical?: boolean };
+  workforceClassification?: {
+    label: "white-collar" | "blue-collar-frontline" | "mixed" | "needs-review";
+    source: "deterministic-job-context" | "authorized-correction";
+    rationale: string;
+    confidence: "high" | "medium" | "uncertain";
+  };
 }): typeof onbCases.$inferInsert {
   return {
     organizationId,
@@ -109,6 +118,8 @@ function caseValues(organizationId: string, options: {
     readiness: [],
     workstreams: [],
     checklistSnapshot: [],
+    workforceContext: options.workforceContext ?? {},
+    workforceClassification: options.workforceClassification ?? null,
   };
 }
 
@@ -358,6 +369,23 @@ before(async () => {
     key: `demo-${suffix}`,
     updatedAt: new Date(Date.now() - 2 * 86_400_000),
   });
+  // Add after the legacy [live, offline, demo] fixture order. Several
+  // regression cases intentionally address those original caseIds by index.
+  safetyCriticalCaseId = await createCase(orgA, {
+    name: `Action Center Safety ${suffix}`,
+    email: `action-center-safety-${suffix}@example.test`,
+    workforceContext: { siteExposure: true, safetyCritical: true },
+    workforceClassification: {
+      label: "blue-collar-frontline",
+      source: "deterministic-job-context",
+      rationale: "Explicit safety fixture",
+      confidence: "high",
+    },
+  });
+  await createDocument(orgA, safetyCriticalCaseId, {
+    key: `safety-pending-${suffix}`,
+    updatedAt: new Date(Date.now() - 2 * 86_400_000),
+  });
 
   const app = express();
   app.use(express.json());
@@ -409,6 +437,7 @@ after(async () => {
     inArray(onbSettings.organizationId, organizationIds),
     eq(onbSettings.key, ACTION_CENTER_IDENTITIES_KEY),
   ));
+  await db.delete(onbConnectors).where(inArray(onbConnectors.organizationId, organizationIds));
   await db.delete(organizationMembershipsTable).where(
     inArray(organizationMembershipsTable.organizationId, organizationIds),
   );
@@ -420,6 +449,35 @@ after(async () => {
 });
 
 describe("Action Center focused regression suite", { concurrency: false }, () => {
+  test("filters document followups and missing-document count by explicit safety facts, excluding unknown safety", async () => {
+    const response = await request("/onboarding/action-center?scope=active&safetyCritical=true", {}, {
+      userId: ownerA,
+      organizationId: orgA,
+    });
+    assert.equal(response.response.status, 200);
+    const snapshot = bodyRecord(response.body);
+    const followups = snapshot.documentFollowups as JsonRecord[];
+    assert.equal(Number(bodyRecord(snapshot.counts).missingDocuments), 1);
+    assert.equal(followups.length, 1);
+    assert.equal(Number(followups[0]?.caseId), safetyCriticalCaseId);
+    // The ordinary fixture's safety context is unknown.  It must not be
+    // coerced to false or included in a query for an explicit true fact.
+    assert.ok(followups.every((row) => row.caseId !== caseIds[0]));
+  });
+
+  test("applies site and workforce filters to document followups and counts", async () => {
+    for (const query of ["siteExposure=true", "workforce=blue-collar-frontline"]) {
+      const response = await request(`/onboarding/action-center?scope=active&${query}`, {}, {
+        userId: ownerA,
+        organizationId: orgA,
+      });
+      assert.equal(response.response.status, 200);
+      const snapshot = bodyRecord(response.body);
+      assert.equal(Number(bodyRecord(snapshot.counts).missingDocuments), 1);
+      assert.deepEqual((snapshot.documentFollowups as JsonRecord[]).map((row) => row.caseId), [safetyCriticalCaseId]);
+    }
+  });
+
 describe("Action Center routing, tenant scope, and identity CAS", () => {
   test("requires auth, rejects forged organization context, and projects only tenant-owned rows", async () => {
     const unauthenticated = await request("/onboarding/action-center", {

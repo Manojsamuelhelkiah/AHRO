@@ -11,13 +11,25 @@ import {
   onbCommunications,
   onbConnectors,
   onbDocuments,
+  onbEffectJournal,
+  onbReadinessSlaPolicies,
+  onbPolicyAuthorities,
+  organizationMembershipsTable,
   onbSettings,
   onbSystemChecks,
   organizationsTable,
 } from "@workspace/db";
 import onboardingRouter from "../../routes/onboarding";
-import { OPERATIONAL_REQUEST_SETTING_PREFIX } from "./operational-requests";
+import {
+  initializeLearningWorkforceStepTasks,
+  OPERATIONAL_REQUEST_SETTING_PREFIX,
+  reconcileWorkforceConnectorContinuation,
+  recoverWorkforceConnectorContinuations,
+  WORKFORCE_CONTINUATION_SETTING_PREFIX,
+} from "./operational-requests";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
+import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
+import { runWorkstreams } from "./engine";
 
 const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `operational-a-${suffix}`;
@@ -28,6 +40,10 @@ let server: Server;
 let caseA: number;
 let caseB: number;
 let offlineCase: number;
+let workforceCase: number;
+let allNonblockingCase: number;
+let officeNoSiteCase: number;
+const unrelatedSpecialist = `unrelated-${suffix}`;
 
 function caseValues(organizationId: string, name: string, notes: string | null = null) {
   return {
@@ -75,18 +91,100 @@ before(async () => {
     { id: orgA, name: "Operational A", slug: orgA, joinCodeHash: `hash-${orgA}`, createdByUserId: user },
     { id: orgB, name: "Operational B", slug: orgB, joinCodeHash: `hash-${orgB}`, createdByUserId: user },
   ]);
-  [caseA, caseB, offlineCase] = (await db.insert(onbCases).values([
+  await db.insert(organizationMembershipsTable).values([
+    { organizationId: orgA, clerkUserId: user, role: "owner" },
+    { organizationId: orgB, clerkUserId: user, role: "owner" },
+    { organizationId: orgA, clerkUserId: unrelatedSpecialist, role: "member" },
+  ]);
+  [caseA, caseB, offlineCase, workforceCase, allNonblockingCase, officeNoSiteCase] = (await db.insert(onbCases).values([
     caseValues(orgA, "Operational Alpha"),
     caseValues(orgB, "Operational Beta"),
     caseValues(orgA, "Offline Sample", SYNTHETIC_OFFLINE_MARKER),
+    {
+      ...caseValues(orgA, "Workforce Human"),
+      joiningDate: "2020-01-02",
+      offerAcceptanceComplete: true,
+      readiness: [
+        { key: "profile", label: "Profile", status: "pending" },
+        { key: "documentation", label: "Documentation", status: "pending" },
+        { key: "learning", label: "Learning", status: "pending" },
+        { key: "checkpoints", label: "Checkpoints", status: "pending" },
+        { key: "payroll", label: "Payroll", status: "pending" },
+        { key: "access", label: "Access", status: "pending" },
+        { key: "assets", label: "Assets", status: "pending" },
+      ],
+      workstreams: [],
+      checklistSnapshot: [{
+        id: "connector-dispatch-boundary",
+        label: "Connector dispatch boundary",
+        order: 0,
+        enabled: true,
+        mandatory: false,
+        enforcementStage: "before-workstreams",
+      }],
+      workforceContext: { site: "test-site" },
+      processPolicySnapshot: {
+        processPolicy: {
+          semanticsVersion: 2,
+          learning: {
+            schemaVersion: "workforce-step-runtime/v1",
+            ownership: "L&D",
+            channel: "manager-led",
+            timing: { anchor: "joining-date", offsetDays: 0 },
+            steps: [
+              { id: "safety", label: "Safety induction", assignedTo: user },
+              { id: "role", label: "Role induction", prerequisites: ["safety"] },
+            ],
+          },
+        },
+      },
+    },
+    {
+      ...caseValues(orgA, "All Nonblocking"),
+      workforceContext: { site: "test-site" },
+      processPolicySnapshot: {
+        processPolicy: {
+          semanticsVersion: 2,
+          learning: {
+            ownership: "L&D", channel: "manager-led",
+            timing: { anchor: "joining-date", offsetDays: 0 },
+            steps: [{ id: "optional-welcome", label: "Optional welcome", nonblocking: true }],
+          },
+        },
+      },
+    },
+    {
+      ...caseValues(orgA, "Office no site"),
+      workforceContext: { workEnvironment: "office", siteExposure: false, safetyCritical: false },
+      processPolicySnapshot: {
+        processPolicy: {
+          semanticsVersion: 2,
+          learning: {
+            ownership: "L&D", channel: "manager-led",
+            timing: { anchor: "joining-date", offsetDays: 0 },
+            steps: [
+              { id: "named-office", label: "Named office induction", assignedTo: user },
+              { id: "role-office", label: "Office role induction" },
+            ],
+          },
+        },
+      },
+    },
   ]).returning({ id: onbCases.id })).map((row) => row.id);
+  await db.insert(onbPolicyAuthorities).values([
+    { organizationId: orgA, userId: user, authorityRole: "l-d", caseId: workforceCase, itemId: "learning-role", site: "test-site", assignedBy: user },
+    { organizationId: orgA, userId: user, authorityRole: "payroll-operations", caseId: workforceCase, itemId: "payroll-prerequisite", site: "test-site", assignedBy: user },
+    { organizationId: orgA, userId: user, authorityRole: "payroll-operations", caseId: workforceCase, itemId: "payroll-setup", site: "test-site", assignedBy: user },
+    { organizationId: orgA, userId: unrelatedSpecialist, authorityRole: "l-d", caseId: workforceCase, itemId: "learning-role", site: "wrong-site", assignedBy: user },
+    { organizationId: orgA, userId: user, authorityRole: "l-d", caseId: officeNoSiteCase, itemId: "learning-role-office", site: "__organization__", assignedBy: user },
+  ]);
 
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     req.organizationId = String(req.header("x-organization-id") ?? orgA);
     req.organizationRole = req.header("x-test-role") === "member" ? "member" : "owner";
-    req.authUserId = user;
+    req.authUserId = String(req.header("x-test-user") ?? user);
     next();
   });
   app.use(onboardingRouter);
@@ -230,8 +328,11 @@ after(async () => {
     server.close((error) => (error ? reject(error) : resolve())),
   );
   await db.delete(onbSettings).where(inArray(onbSettings.organizationId, [orgA, orgB]));
+  await db.delete(onbPolicyAuthorities).where(inArray(onbPolicyAuthorities.organizationId, [orgA, orgB]));
+  await db.delete(onbEffectJournal).where(inArray(onbEffectJournal.organizationId, [orgA, orgB]));
+  await db.delete(onbReadinessSlaPolicies).where(inArray(onbReadinessSlaPolicies.organizationId, [orgA, orgB]));
   await db.delete(onbConnectors).where(inArray(onbConnectors.organizationId, [orgA, orgB]));
-  await db.delete(onbCases).where(inArray(onbCases.id, [caseA, caseB, offlineCase]));
+  await db.delete(onbCases).where(inArray(onbCases.id, [caseA, caseB, offlineCase, workforceCase, allNonblockingCase, officeNoSiteCase]));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
 });
 
@@ -303,6 +404,12 @@ test("GET is read-only and initialization persists tenant-scoped simulated commu
     (await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, caseA))).length,
     5,
   );
+  const legacyRuntime = await initializeLearningWorkforceStepTasks({
+    organizationId: orgA, caseId: caseA, actor: "orchestrator",
+  });
+  assert.equal(legacyRuntime.active, false);
+  assert.equal(legacyRuntime.version, 1);
+  assert.equal(legacyRuntime.initializedRequestIds.length, 0);
 });
 
 test("actions are fenced, idempotent, and do not mutate readiness", async () => {
@@ -377,7 +484,7 @@ test("actions are fenced, idempotent, and do not mutate readiness", async () => 
   );
 
   const stale = await call(
-    `/onboarding/cases/${caseA}/operational-requests/assets/actions`,
+    `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
     orgA,
     {
       method: "POST",
@@ -390,7 +497,7 @@ test("actions are fenced, idempotent, and do not mutate readiness", async () => 
   );
   assert.equal(stale.status, 409);
   const malformed = await call(
-    `/onboarding/cases/${caseA}/operational-requests/assets/actions`,
+    `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
     orgA,
     {
       method: "POST",
@@ -402,7 +509,7 @@ test("actions are fenced, idempotent, and do not mutate readiness", async () => 
 
 test("blocked requests retry without duplicating an identical request id", async () => {
   const blocked = await call(
-    `/onboarding/cases/${caseA}/operational-requests/assets/actions`,
+    `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
     orgA,
     {
       method: "POST",
@@ -418,7 +525,7 @@ test("blocked requests retry without duplicating an identical request id", async
   const beforeRetry = (await db.select().from(onbCommunications)
     .where(eq(onbCommunications.caseId, caseA))).length;
   const retry = await call(
-    `/onboarding/cases/${caseA}/operational-requests/assets/actions`,
+    `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
     orgA,
     {
       method: "POST",
@@ -428,7 +535,7 @@ test("blocked requests retry without duplicating an identical request id", async
   assert.equal(retry.status, 200);
   assert.equal((await retry.json() as { idempotent: boolean }).idempotent, false);
   const repeatedRetry = await call(
-    `/onboarding/cases/${caseA}/operational-requests/assets/actions`,
+    `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
     orgA,
     {
       method: "POST",
@@ -446,18 +553,18 @@ test("blocked requests retry without duplicating an identical request id", async
     beforeRetry + 1,
   );
   const request = repeatedRetryBody.requests
-    .find((candidate) => candidate.id === "assets");
+    .find((candidate) => candidate.id === "documentation");
   assert.equal(request?.status, "requested");
   assert.equal(request?.failureReason, null);
 });
 
-test("requires integer action versions and serializes same-version mutations", async () => {
+test("requires integer action versions and serializes same-version simulated mutations", async () => {
   const missingVersion = await call(
-    `/onboarding/cases/${caseA}/operational-requests/learning/actions`,
+    `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
     orgA,
     {
       method: "POST",
-      body: JSON.stringify({ requestId: "learning-missing-version", action: "start" }),
+      body: JSON.stringify({ requestId: "assets-missing-version", action: "start" }),
     },
   );
   assert.equal(missingVersion.status, 400);
@@ -465,12 +572,12 @@ test("requires integer action versions and serializes same-version mutations", a
   const current = await call(`/onboarding/cases/${caseA}/operational-requests`, orgA);
   const currentVersion = (await current.json() as { version: number }).version;
   const fractionalVersion = await call(
-    `/onboarding/cases/${caseA}/operational-requests/learning/actions`,
+    `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
     orgA,
     {
       method: "POST",
       body: JSON.stringify({
-        requestId: "learning-fractional-version",
+        requestId: "assets-fractional-version",
         action: "start",
         expectedVersion: currentVersion + 0.5,
       }),
@@ -482,24 +589,24 @@ test("requires integer action versions and serializes same-version mutations", a
     .where(eq(onbCommunications.caseId, caseA))).length;
   const [first, second] = await Promise.all([
     call(
-      `/onboarding/cases/${caseA}/operational-requests/learning/actions`,
+      `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
       orgA,
       {
         method: "POST",
         body: JSON.stringify({
-          requestId: "learning-concurrent-a",
+          requestId: "assets-concurrent-a",
           action: "start",
           expectedVersion: currentVersion,
         }),
       },
     ),
     call(
-      `/onboarding/cases/${caseA}/operational-requests/learning/actions`,
+      `/onboarding/cases/${caseA}/operational-requests/documentation/actions`,
       orgA,
       {
         method: "POST",
         body: JSON.stringify({
-          requestId: "learning-concurrent-b",
+          requestId: "assets-concurrent-b",
           action: "start",
           expectedVersion: currentVersion,
         }),
@@ -512,43 +619,245 @@ test("requires integer action versions and serializes same-version mutations", a
   assert.equal(after.length, before + 1);
   assert.equal(
     after.filter((row) =>
-      row.idempotencyKey === "operational:" + caseA + ":learning:action:learning-concurrent-a" ||
-      row.idempotencyKey === "operational:" + caseA + ":learning:action:learning-concurrent-b",
+      row.idempotencyKey === "operational:" + caseA + ":documentation:action:assets-concurrent-a" ||
+      row.idempotencyKey === "operational:" + caseA + ":documentation:action:assets-concurrent-b",
     ).length,
     1,
   );
-  const learningCommunication = after.find((row) =>
-    row.idempotencyKey === "operational:" + caseA + ":learning:action:learning-concurrent-a" ||
-    row.idempotencyKey === "operational:" + caseA + ":learning:action:learning-concurrent-b",
+  const assetsCommunication = after.find((row) =>
+    row.idempotencyKey === "operational:" + caseA + ":documentation:action:assets-concurrent-a" ||
+    row.idempotencyKey === "operational:" + caseA + ":documentation:action:assets-concurrent-b",
   )!;
-  assert.match(learningCommunication.body, /AI agent identity: .*id: learning/);
-  assert.match(learningCommunication.body, /origin: internal/);
-  const learningRead = await call(
+  assert.match(assetsCommunication.body, /AI agent identity: .*id: documentation/);
+  assert.match(assetsCommunication.body, /origin: internal/);
+  const assetsRead = await call(
     `/onboarding/cases/${caseA}/operational-requests`,
     orgA,
   );
-  const learningRequest = (await learningRead.json() as {
+  const assetsRequest = (await assetsRead.json() as {
     requests: Array<{
       id: string;
       history: Array<{ actor: string; agentIdentity?: { id: string; origin: string } | null }>;
     }>;
-  }).requests.find((request) => request.id === "learning")!;
-  const latestLearningHistory = learningRequest.history.at(-1)!;
-  assert.equal(latestLearningHistory.actor, user);
-  assert.deepEqual(latestLearningHistory.agentIdentity, {
-    id: "learning",
-    name: "Learning & Manager Connect Agent",
+  }).requests.find((request) => request.id === "documentation")!;
+  const latestAssetsHistory = assetsRequest.history.at(-1)!;
+  assert.equal(latestAssetsHistory.actor, user);
+  assert.deepEqual(latestAssetsHistory.agentIdentity, {
+    id: "documentation",
+    name: "Documentation & Compliance Agent",
     origin: "internal",
     description:
-      "Internal simulation persona for tracking learning and manager-connect work; it does not enroll people or send invitations.",
-    owner: "L&D / Manager",
+      "Internal simulation persona for tracking documentation and compliance setup work; it does not verify or submit documents.",
+    owner: "HR Ops",
     capabilities: [
-      "Track learning setup tasks",
-      "Track manager-connect dependencies",
-      "Record simulated readiness blockers",
+      "Track documentation setup tasks",
+      "Identify missing inputs",
+      "Record simulated compliance blockers",
     ],
     simulated: true,
   });
+});
+
+test("learning policy tasks are human-owned, evidence-gated, ordered, and hold readiness", async () => {
+  // Exercise the actual workstream stage rather than constructing an
+  // artificial workstream array: it persists open asset/learning blockers
+  // before later accountable payroll completion dispatches.
+  await runWorkstreams(workforceCase);
+  const initializedResponse = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests`,
+    orgA,
+  );
+  assert.equal(initializedResponse.status, 200);
+  const initialized = await initializedResponse.json() as {
+    version: number;
+    simulated: boolean;
+    requests: Array<{ id: string }>;
+  };
+  assert.equal(initialized.simulated, false);
+  assert.deepEqual(initialized.requests.map((request) => request.id).filter((id) =>
+    ["learning-safety", "learning-role", "payroll-prerequisite", "payroll-setup", "assets-confirmation"].includes(id),
+  ), [
+    "learning-safety", "learning-role", "payroll-prerequisite", "payroll-setup", "assets-confirmation",
+  ]);
+  const [afterWorkstreamInitialization] = await db.select().from(onbCases)
+    .where(eq(onbCases.id, workforceCase));
+  assert.equal(afterWorkstreamInitialization.workstreams.find((workstream) => workstream.key === "assets")?.status, "in-progress");
+  assert.equal(afterWorkstreamInitialization.workstreams.find((workstream) => workstream.key === "learning")?.status, "in-progress");
+  assert.equal(
+    (await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, workforceCase))).length,
+    2,
+  );
+  // First v2 dispatch has a persisted incomplete payroll task set. The
+  // guarded batch still reaches unrelated document/BGV/IAM writers, while
+  // payroll is held without any provider call.
+  const [beforePayrollEvidence] = await db.select().from(onbCases)
+    .where(eq(onbCases.id, workforceCase));
+  await dispatchWorkstreamConnectorMutations(beforePayrollEvidence);
+  assert.ok((await db.select().from(onbDocuments).where(eq(onbDocuments.caseId, workforceCase))).length > 0);
+  assert.deepEqual(
+    (await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, workforceCase)))
+      .map((check) => check.system).sort(),
+    ["bgv", "itsm"],
+  );
+  const unauthorizedNamed = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-safety/actions`,
+    orgA,
+    { method: "POST", headers: { "x-test-user": unrelatedSpecialist, "x-test-role": "member" }, body: JSON.stringify({
+      requestId: "wrong-specialist", action: "start", expectedVersion: initialized.version,
+    }) },
+    "member",
+  );
+  assert.equal(unauthorizedNamed.status, 403);
+  const wrongSiteRole = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-role/actions`,
+    orgA,
+    { method: "POST", headers: { "x-test-user": unrelatedSpecialist, "x-test-role": "member" }, body: JSON.stringify({
+      requestId: "wrong-site-specialist", action: "start", expectedVersion: initialized.version,
+    }) },
+    "member",
+  );
+  assert.equal(wrongSiteRole.status, 403);
+  const blockedByPrerequisite = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-role/actions`,
+    orgA,
+    { method: "POST", body: JSON.stringify({
+      requestId: "role-before-safety", action: "start", expectedVersion: initialized.version,
+    }) },
+  );
+  assert.equal(blockedByPrerequisite.status, 409);
+  const started = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-safety/actions`,
+    orgA,
+    { method: "POST", body: JSON.stringify({
+      requestId: "safety-start", action: "start", expectedVersion: initialized.version,
+    }) },
+  );
+  assert.equal(started.status, 200);
+  const missingEvidence = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-safety/actions`,
+    orgA,
+    { method: "POST", body: JSON.stringify({
+      requestId: "safety-no-evidence", action: "complete", expectedVersion: initialized.version + 1,
+    }) },
+  );
+  assert.equal(missingEvidence.status, 409);
+  const completed = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-safety/actions`,
+    orgA,
+    { method: "POST", body: JSON.stringify({
+      requestId: "safety-complete", action: "complete", reason: "Signed induction record", expectedVersion: initialized.version + 1,
+    }) },
+  );
+  assert.equal(completed.status, 200);
+  const startedRole = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-role/actions`,
+    orgA,
+    { method: "POST", body: JSON.stringify({
+      requestId: "role-start", action: "start", expectedVersion: initialized.version + 2,
+    }) },
+  );
+  assert.equal(startedRole.status, 200);
+  const completedRole = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/learning-role/actions`,
+    orgA,
+    { method: "POST", body: JSON.stringify({
+      requestId: "role-complete", action: "complete", reason: "Manager-led induction record", expectedVersion: initialized.version + 3,
+    }) },
+  );
+  assert.equal(completedRole.status, 200);
+  const updated = (await db.select().from(onbCases).where(eq(onbCases.id, workforceCase)))[0]!;
+  assert.equal(updated.readiness.find((item) => item.key === "learning")?.status, "ready");
+  assert.equal(updated.readiness.find((item) => item.key === "checkpoints")?.status, "ready");
+  const payrollStart = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/payroll-prerequisite/actions`,
+    orgA, { method: "POST", body: JSON.stringify({ requestId: "payroll-prerequisite-start", action: "start", expectedVersion: initialized.version + 4 }) },
+  );
+  assert.equal(payrollStart.status, 200);
+  const payrollEvidence = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/payroll-prerequisite/actions`,
+    orgA, { method: "POST", body: JSON.stringify({ requestId: "payroll-prerequisite-complete", action: "complete", reason: "Verified timesheet and pay details", expectedVersion: initialized.version + 5 }) },
+  );
+  assert.equal(payrollEvidence.status, 200);
+  const payrollSetupStart = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/payroll-setup/actions`,
+    orgA, { method: "POST", body: JSON.stringify({ requestId: "payroll-setup-start", action: "start", expectedVersion: initialized.version + 6 }) },
+  );
+  assert.equal(payrollSetupStart.status, 200);
+  // Simulate an unrelated later checklist pause. Completing payroll must
+  // still invoke the guarded dispatcher; it must not require replaying the
+  // earlier workstream stage or bypass any before-workstreams gate.
+  await db.update(onbCases).set({
+    orchestrationStatus: "checklist-blocked",
+    orchestrationCheckpoint: "blocked:before-employee-communications",
+  }).where(eq(onbCases.id, workforceCase));
+  const payrollSetupComplete = await call(
+    `/onboarding/cases/${workforceCase}/operational-requests/payroll-setup/actions`,
+    orgA, { method: "POST", body: JSON.stringify({ requestId: "payroll-setup-complete", action: "complete", reason: "Payroll setup reviewed by accountable specialist", expectedVersion: initialized.version + 7 }) },
+  );
+  assert.equal(payrollSetupComplete.status, 200);
+  const payrollUpdated = (await db.select().from(onbCases).where(eq(onbCases.id, workforceCase)))[0]!;
+  assert.equal(payrollUpdated.readiness.find((item) => item.key === "payroll")?.status, "ready");
+  assert.deepEqual(
+    (await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, workforceCase)))
+      .map((check) => check.system).sort(),
+    ["bgv", "itsm", "payroll"],
+  );
+});
+
+test("provider refusal leaves a durable workforce continuation for retry", async () => {
+  const requestId = `provider-refusal-${suffix}`;
+  const key = `${WORKFORCE_CONTINUATION_SETTING_PREFIX}${workforceCase}:${requestId}`;
+  await assert.rejects(
+    reconcileWorkforceConnectorContinuation({
+      organizationId: orgA,
+      caseId: workforceCase,
+      requestId,
+      dependencies: {
+        dispatch: async () => {
+          throw new Error("Payroll provider refused the submission");
+        },
+        resume: async () => undefined,
+      },
+    }),
+    /Payroll provider refused/,
+  );
+  const [pending] = await db.select().from(onbSettings).where(and(
+    eq(onbSettings.organizationId, orgA),
+    eq(onbSettings.key, key),
+  ));
+  assert.match(pending?.value ?? "", /"status":"pending"/);
+  await recoverWorkforceConnectorContinuations();
+  // Recovery uses the real guarded dispatch and clears the durable item after
+  // the provider refusal has ceased; it does not re-run or invalidate the
+  // already committed human task evidence.
+  assert.equal((await db.select().from(onbSettings).where(and(
+    eq(onbSettings.organizationId, orgA),
+    eq(onbSettings.key, key),
+  ))).length, 0);
+});
+
+test("all-nonblocking persisted v2 learning tasks do not create a false readiness blocker", async () => {
+  const initialized = await initializeLearningWorkforceStepTasks({
+    organizationId: orgA, caseId: allNonblockingCase, actor: "orchestrator",
+  });
+  assert.equal(initialized.active, true);
+  assert.deepEqual(initialized.initializedRequestIds, ["learning-optional-welcome", "payroll-prerequisite", "payroll-setup", "assets-confirmation"]);
+  assert.equal(initialized.workstreamBlockingComplete.learning, true);
+});
+
+test("confirmed office context without a site permits named and organization-scoped authorities", async () => {
+  const initialized = await initializeLearningWorkforceStepTasks({
+    organizationId: orgA, caseId: officeNoSiteCase, actor: "orchestrator",
+  });
+  const action = (taskId: string, requestId: string, actionName: "start" | "complete", version: number, reason?: string) =>
+    call(`/onboarding/cases/${officeNoSiteCase}/operational-requests/${taskId}/actions`, orgA, {
+      method: "POST",
+      body: JSON.stringify({ requestId, action: actionName, expectedVersion: version, ...(reason ? { reason } : {}) }),
+    });
+  assert.equal((await action("learning-named-office", "office-named-start", "start", initialized.version)).status, 200);
+  assert.equal((await action("learning-named-office", "office-named-complete", "complete", initialized.version + 1, "Manager-led office induction record")).status, 200);
+  assert.equal((await action("learning-role-office", "office-role-start", "start", initialized.version + 2)).status, 200);
+  assert.equal((await action("learning-role-office", "office-role-complete", "complete", initialized.version + 3, "Accountable office induction record")).status, 200);
 });
 
 test("tenant and offline fences apply to reads and mutations", async () => {

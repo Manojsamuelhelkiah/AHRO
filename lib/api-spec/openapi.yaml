@@ -1929,6 +1929,72 @@ paths:
                 $ref: "#/components/schemas/OnbChecklistProfile"
         "404":
           description: Profile not found
+  /onboarding/policy-recommendations:
+    get:
+      operationId: listOnboardingPolicyRecommendations
+      tags: [onboarding]
+      summary: List immutable, evidence-backed cohort learning recommendations and transparent sparse-evidence status
+      parameters:
+        - name: windowDays
+          in: query
+          required: false
+          schema: { type: integer, enum: [30, 90, 180, 365], default: 90 }
+          description: Case-created-at analysis window. Outcome evidence remains a dated final HR readiness event.
+      responses:
+        "200":
+          description: Recommendation review queue and current evidence analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbPolicyRecommendationList"
+  /onboarding/policy-recommendations/refresh:
+    post:
+      operationId: refreshOnboardingPolicyRecommendations
+      tags: [onboarding]
+      summary: Analyze eligible non-demo cohort evidence and create new proposed recommendations only
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                windowDays: { type: integer, enum: [30, 90, 180, 365], default: 90 }
+      responses:
+        "200":
+          description: No new evidence-backed proposal was needed or the cohort was insufficient
+        "201":
+          description: One or more proposed recommendations were created; no policy was changed
+        "403":
+          description: Organization owner or admin role required
+  /onboarding/policy-recommendations/{id}/decision:
+    post:
+      operationId: decideOnboardingPolicyRecommendation
+      tags: [onboarding]
+      summary: Accept, edit-and-accept, or reject an immutable evidence-backed learning recommendation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbPolicyRecommendationDecision"
+      responses:
+        "200":
+          description: Immutable decision. Acceptance creates an immutable profile version for future matching cases only.
+        "400":
+          description: Invalid recommendation or edited learning policy
+        "403":
+          description: Organization owner or admin role required
+        "404":
+          description: Recommendation not found in this organization
+        "409":
+          description: Recommendation already decided or evidence/profile version is stale
   /onboarding/cases/{id}/events:
     get:
       operationId: listOnboardingCaseEvents
@@ -2025,6 +2091,20 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+        - name: workforce
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [white-collar, blue-collar-frontline, mixed, needs-review, unclassified]
+        - name: safetyCritical
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: siteExposure
+          in: query
+          required: false
+          schema: { type: boolean }
       responses:
         "200":
           description: Action Center snapshot
@@ -2644,6 +2724,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/evidence/{itemId}:
+    put:
+      operationId: verifyOnboardingChecklistEvidence
+      tags: [onboarding]
+      summary: Record a designated-human verification decision for an independent policy evidence gate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnbEvidenceVerificationInput" }
+      responses:
+        "200":
+          description: Evidence decision recorded and case readiness updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbCase" }
+        "400": { description: Invalid evidence decision }
+        "403": { description: HR owner/admin role required }
+        "404": { description: Case or gate not found }
+        "409": { description: Item is not an evidence gate or supplied authority is not configured for it }
+  /onboarding/policy-authorities/{userId}/{authorityRole}:
+    put:
+      operationId: assignOnboardingPolicyAuthority
+      tags: [onboarding]
+      summary: Assign a tenant member as a server-authoritative policy evidence authority
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: authorityRole
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
+      responses:
+        "204": { description: Authority assignment exists }
+        "403": { description: HR owner/admin role required }
+        "404": { description: User is not a member of this organization }
+  /onboarding/cases/{id}/workforce-context:
+    put:
+      operationId: correctOnboardingWorkforceContext
+      tags: [onboarding]
+      summary: Record an authorized correction to captured job context without silently rebasing an active policy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnbWorkforceContextCorrectionInput" }
+      responses:
+        "200":
+          description: Context correction captured; use deliberate profile replacement to rebase
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbCase" }
+        "409": { description: Case changed since it was loaded }
   /onboarding/cases/{id}/records:
     get:
       operationId: listOnboardingCaseRecords
@@ -5677,6 +5826,17 @@ components:
           type: boolean
         enforcementStage:
           $ref: "#/components/schemas/OnbChecklistEnforcementStage"
+        evidenceRequired: { type: boolean }
+        responsibleRole: { type: string }
+        completionAuthority:
+          type: string
+          enum: [hr-admin, designated-human]
+        executor:
+          type: string
+          enum: [existing-workflow, human-task]
+        prerequisites:
+          type: array
+          items: { type: string }
       required: [key, label, status]
     OnbChecklistEnforcementStage:
       type: string
@@ -5699,6 +5859,17 @@ components:
           type: boolean
         enforcementStage:
           $ref: "#/components/schemas/OnbChecklistEnforcementStage"
+        evidenceRequired: { type: boolean }
+        responsibleRole: { type: string }
+        completionAuthority:
+          type: string
+          enum: [hr-admin, designated-human]
+        executor:
+          type: string
+          enum: [existing-workflow, human-task]
+        prerequisites:
+          type: array
+          items: { type: string }
       required: [id, label, order, enabled, mandatory, enforcementStage]
     OnbChecklistProfileCriteria:
       type: object
@@ -5708,6 +5879,21 @@ components:
         role: { type: string, minLength: 1 }
         employmentType: { type: string, minLength: 1 }
         location: { type: string, minLength: 1 }
+        roleFamily: { type: string, minLength: 1 }
+        department: { type: string, minLength: 1 }
+        legalEntity: { type: string, minLength: 1 }
+        businessUnit: { type: string, minLength: 1 }
+        industry: { type: string, minLength: 1 }
+        workCountry: { type: string, minLength: 1 }
+        workState: { type: string, minLength: 1 }
+        site: { type: string, minLength: 1 }
+        employmentArrangement: { type: string, minLength: 1 }
+        workerCategory: { type: string, minLength: 1 }
+        payBasis: { type: string, minLength: 1 }
+        shiftPattern: { type: string, minLength: 1 }
+        workEnvironment: { type: string, minLength: 1 }
+        hiringMode: { type: string, minLength: 1 }
+        safetyCritical: { type: string, enum: ["true", "false"] }
     OnbChecklistItemOverride:
       type: object
       additionalProperties: false
@@ -5720,6 +5906,17 @@ components:
         mandatory: { type: boolean }
         enforcementStage:
           $ref: "#/components/schemas/OnbChecklistEnforcementStage"
+        evidenceRequired: { type: boolean }
+        responsibleRole: { type: string }
+        completionAuthority:
+          type: string
+          enum: [hr-admin, designated-human]
+        executor:
+          type: string
+          enum: [existing-workflow, human-task]
+        prerequisites:
+          type: array
+          items: { type: string }
       required: [id]
     OnbChecklistProfileInput:
       type: object
@@ -5734,6 +5931,9 @@ components:
             $ref: "#/components/schemas/OnbChecklistItemOverride"
         priority: { type: integer, minimum: 0 }
         enabled: { type: boolean }
+        processPolicy:
+          type: object
+          additionalProperties: true
       required: [name, criteria, overrides, priority, enabled]
     OnbChecklistProfileUpdate:
       allOf:
@@ -5781,6 +5981,207 @@ components:
         - expectedChecklistTemplateVersion
         - expectedChecklistProfileId
         - expectedChecklistProfileVersion
+    OnbLearningPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        schemaVersion:
+          type: string
+          enum: [workforce-step-runtime/v1]
+        timing:
+          type: object
+          additionalProperties: false
+          properties:
+            anchor: { type: string, enum: [joining-date] }
+            offsetDays: { type: integer, minimum: -90, maximum: 180 }
+          required: [anchor, offsetDays]
+        sequence:
+          type: array
+          minItems: 1
+          maxItems: 24
+          items: { type: string, minLength: 1, maxLength: 120 }
+          description: Compact ordered form. Do not send with steps.
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 24
+          description: Typed accountable human-task form. Do not send with sequence.
+          items:
+            $ref: "#/components/schemas/OnbLearningStep"
+        channel:
+          type: string
+          enum: [manager-led]
+          description: The learning runtime has no connected portal executor. Candidate self-upload is configured by intake.channel instead.
+        ownership: { type: string, minLength: 1, maxLength: 120 }
+      required: [timing, channel, ownership]
+      oneOf:
+        - required: [sequence]
+        - required: [steps]
+    OnbLearningStep:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+        label: { type: string, minLength: 1, maxLength: 120 }
+        responsibleRole: { type: string, minLength: 1, maxLength: 120 }
+        assignedTo: { type: ["string", "null"], minLength: 1, maxLength: 120 }
+        mandatory: { type: boolean }
+        evidenceRequired: { type: boolean }
+        nonblocking: { type: boolean }
+        prerequisites:
+          type: array
+          uniqueItems: true
+          items: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+        parallelGroup: { type: ["string", "null"], minLength: 1, maxLength: 120 }
+        permittedChannels:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [manager-led] }
+        timing:
+          $ref: "#/components/schemas/OnbLearningStepTiming"
+      required: [id, label]
+    OnbLearningStepTiming:
+      type: object
+      additionalProperties: false
+      properties:
+        anchor: { type: string, enum: [joining-date] }
+        notBeforeOffsetDays: { type: integer, minimum: -90, maximum: 180 }
+        dueOffsetDays: { type: integer, minimum: -90, maximum: 180 }
+        escalation:
+          type: object
+          additionalProperties: false
+          properties:
+            offsetDays: { type: integer, minimum: -90, maximum: 180 }
+            responsibleRole: { type: string, minLength: 1, maxLength: 120 }
+            assignedTo: { type: ["string", "null"], minLength: 1, maxLength: 120 }
+          required: [offsetDays, responsibleRole]
+    OnbPolicyRecommendationDecision:
+      type: object
+      additionalProperties: false
+      properties:
+        decision: { type: string, enum: [accepted, rejected] }
+        decisionNote: { type: string, maxLength: 1000 }
+        expectedEvidenceFingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+        learning:
+          $ref: "#/components/schemas/OnbLearningPolicy"
+      required: [decision, expectedEvidenceFingerprint]
+    OnbBroaderCompatibleCohortEvidence:
+      type: object
+      additionalProperties: false
+      description: A same-tenant, wider-version descriptive cohort displayed only when the exact current profile-version cohort is insufficient. It is never eligible for publication.
+      properties:
+        scope: { type: string, const: same-tenant-compatible-profile }
+        status: { type: string, const: descriptive-only }
+        notEligibleForPublication: { type: boolean, const: true }
+        target:
+          type: object
+          additionalProperties: false
+          properties:
+            profileId: { type: string }
+            profileName: { type: string }
+            currentProfileVersion: { type: integer }
+            exactCohortVerifiedOutcomes: { type: integer, minimum: 0 }
+          required: [profileId, profileName, currentProfileVersion, exactCohortVerifiedOutcomes]
+        cohortDefinition: { type: string }
+        compatibilityDefinition: { type: string }
+        outcomeDefinition: { type: string }
+        window:
+          type: object
+          additionalProperties: false
+          properties:
+            startedAt: { type: string, format: date-time }
+            endedAt: { type: string, format: date-time }
+            days: { type: integer }
+          required: [startedAt, endedAt, days]
+        sample:
+          type: object
+          additionalProperties: false
+          properties:
+            candidateCases: { type: integer, minimum: 0 }
+            verifiedOutcomes: { type: integer, minimum: 0 }
+            excludedDemoOrSimulation: { type: integer, minimum: 0 }
+            missingOutcomeEvidence: { type: integer, minimum: 0 }
+          required: [candidateCases, verifiedOutcomes, excludedDemoOrSimulation, missingOutcomeEvidence]
+        outcome:
+          type: object
+          additionalProperties: false
+          properties:
+            meanDaysToVerifiedReadiness: { type: [number, "null"] }
+            uncertainty95PercentDays:
+              type: [object, "null"]
+              additionalProperties: false
+              properties:
+                low: { type: number }
+                high: { type: number }
+              required: [low, high]
+            observedOutcomeDates:
+              type: array
+              items: { type: string, format: date-time }
+            caseReferences:
+              type: array
+              items: { type: integer }
+          required: [meanDaysToVerifiedReadiness, uncertainty95PercentDays, observedOutcomeDates, caseReferences]
+        missingness:
+          type: array
+          items: { type: string }
+        uncertainty: { type: string }
+      required: [scope, status, notEligibleForPublication, target, cohortDefinition, compatibilityDefinition, outcomeDefinition, window, sample, outcome, missingness, uncertainty]
+    OnbPolicyRecommendationFallback:
+      type: object
+      additionalProperties: false
+      properties:
+        status: { type: string, const: insufficient-evidence }
+        message: { type: string }
+        candidateCases: { type: integer, minimum: 0 }
+        verifiedOutcomes: { type: integer, minimum: 0 }
+        excludedDemoOrSimulation: { type: integer, minimum: 0 }
+        missingOutcomeEvidence: { type: integer, minimum: 0 }
+        broaderEvidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbBroaderCompatibleCohortEvidence"
+      required: [status, message, candidateCases, verifiedOutcomes, excludedDemoOrSimulation, missingOutcomeEvidence, broaderEvidence]
+    OnbPolicyRecommendationList:
+      type: object
+      additionalProperties: true
+      description: Each persisted recommendation preserves its full proposal and evidence snapshot. Evidence is cohort-scoped, excludes demo/simulation, reports missingness and uncertainty, and is descriptive rather than causal.
+      properties:
+        asOf: { type: string, format: date-time }
+        methodologyVersion: { type: string, const: learning-cohort-v1 }
+        window:
+          type: object
+          properties:
+            startedAt: { type: string, format: date-time }
+            endedAt: { type: string, format: date-time }
+            days: { type: integer }
+          required: [startedAt, endedAt, days]
+        recommendations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              id: { type: integer }
+              status: { type: string, enum: [proposed, accepted, rejected] }
+              recommendation:
+                type: object
+                additionalProperties: true
+                properties:
+                  type: { type: string, const: cohort-learning-default }
+                  learning: { $ref: "#/components/schemas/OnbLearningPolicy" }
+              evidenceSnapshot:
+                type: object
+                additionalProperties: true
+                properties:
+                  evidenceFingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+              createdAt: { type: string, format: date-time }
+            required: [id, status, recommendation, evidenceSnapshot, createdAt]
+        fallback:
+          type: ["object", "null"]
+          allOf:
+            - $ref: "#/components/schemas/OnbPolicyRecommendationFallback"
+      required: [asOf, methodologyVersion, window, recommendations, fallback]
     OnbChecklistItemStatusUpdate:
       type: object
       additionalProperties: false
@@ -5792,6 +6193,33 @@ components:
           type: ["string", "null"]
           maxLength: 500
       required: [status]
+    OnbEvidenceVerificationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        evidenceReference: { type: string, minLength: 3, maxLength: 500 }
+        authorityRole: { type: string, minLength: 2, maxLength: 80 }
+        decision: { type: string, enum: [verified, rejected] }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+        expectedPolicy:
+          type: object
+          additionalProperties: false
+          description: Exact case policy provenance the server locks and compares before recording independently verified evidence.
+          properties:
+            contextVersion: { type: integer, minimum: 0 }
+            templateVersion: { type: integer, minimum: 0 }
+            profileId: { type: string, minLength: 1 }
+            profileVersion: { type: integer, minimum: 0 }
+          required: [contextVersion, templateVersion, profileId, profileVersion]
+      required: [evidenceReference, authorityRole, decision, reason, expectedPolicy]
+    OnbWorkforceContextCorrectionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        workforceContext: { $ref: "#/components/schemas/OnbWorkforceContext" }
+        expectedUpdatedAt: { type: string, format: date-time }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+      required: [workforceContext, expectedUpdatedAt, reason]
     OnbWorkstream:
       type: object
       description: A parallel readiness workstream owned by one agent
@@ -5814,6 +6242,44 @@ components:
           items:
             type: string
       required: [key, label, agent, status, owner, blockers]
+    OnbWorkforceContext:
+      type: object
+      additionalProperties: false
+      description: Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.
+      properties:
+        roleFamily: { type: string, maxLength: 120 }
+        band: { type: string, maxLength: 120 }
+        department: { type: string, maxLength: 120 }
+        legalEntity: { type: string, maxLength: 120 }
+        businessUnit: { type: string, maxLength: 120 }
+        industry: { type: string, maxLength: 120 }
+        workCountry: { type: string, maxLength: 120 }
+        workState: { type: string, maxLength: 120 }
+        site: { type: string, maxLength: 120 }
+        employmentArrangement: { type: string, maxLength: 120 }
+        workerCategory: { type: string, maxLength: 120 }
+        payBasis: { type: string, maxLength: 120 }
+        shiftPattern: { type: string, maxLength: 120 }
+        workEnvironment: { type: string, enum: [office, remote, site, field, mixed] }
+        hazards: { type: array, maxItems: 30, items: { type: string, maxLength: 120 } }
+        requiredLicenses: { type: array, maxItems: 30, items: { type: string, maxLength: 120 } }
+        hiringMode: { type: string, enum: [individual, batch, seasonal] }
+        batchId: { type: string, maxLength: 120 }
+        assistedIntake: { type: boolean }
+        accessibilityNeeds: { type: string, maxLength: 500 }
+        languagePreference: { type: string, maxLength: 120 }
+        siteExposure: { type: boolean }
+        safetyCritical: { type: boolean }
+    OnbWorkforceClassification:
+      type: object
+      additionalProperties: false
+      description: Explainable job classification; it describes the job, never the person.
+      properties:
+        label: { type: string, enum: [white-collar, blue-collar-frontline, mixed, needs-review] }
+        source: { type: string, enum: [deterministic-job-context, authorized-correction] }
+        rationale: { type: string }
+        confidence: { type: string, enum: [high, medium, uncertain] }
+      required: [label, source, rationale, confidence]
     OnbCase:
       type: object
       properties:
@@ -5901,6 +6367,18 @@ components:
           $ref: "#/components/schemas/OnbChecklistProfileCriteria"
         checklistMatchExplanation:
           type: string
+        workforceContext:
+          $ref: "#/components/schemas/OnbWorkforceContext"
+        workforceClassification:
+          oneOf:
+            - $ref: "#/components/schemas/OnbWorkforceClassification"
+            - type: "null"
+        workforceContextVersion: { type: integer, minimum: 1 }
+        processPolicySnapshot:
+          type: object
+          additionalProperties: true
+        jobProfileId: { type: ["string", "null"] }
+        jobProfileVersion: { type: ["integer", "null"] }
         orchestrationCheckpoint:
           type: ["string", "null"]
           description: Last completed orchestration boundary, or the exact checklist gate currently blocking the case
@@ -5959,6 +6437,12 @@ components:
         - checklistProfileVersion
         - checklistMatchedCriteria
         - checklistMatchExplanation
+        - workforceContext
+        - workforceClassification
+        - workforceContextVersion
+        - processPolicySnapshot
+        - jobProfileId
+        - jobProfileVersion
         - orchestrationCheckpoint
         - candidateEmailAuthorized
         - offerAcceptanceComplete
@@ -6127,6 +6611,11 @@ components:
           type: boolean
           default: false
           description: HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation.
+        workforceContext:
+          $ref: "#/components/schemas/OnbWorkforceContext"
+        jobProfileId:
+          type: string
+          minLength: 1
       required:
         - workerName
         - workerEmail
@@ -6727,7 +7216,7 @@ components:
           required: [createdCommunicationIds, retriedCommunicationIds, skippedCommunicationIds]
     OnbOperationalRequestMethod:
       type: string
-      enum: [email, agent]
+      enum: [email, agent, human-task]
     OnbOperationalRequestStatus:
       type: string
       enum: [requested, in-progress, completed, blocked]
@@ -6783,8 +7272,9 @@ components:
     OnbOperationalRequest:
       type: object
       description: >
-        A simulated setup request. The reference is local simulation identity,
-        not a vendor ticket or evidence of external completion.
+        A simulated setup request or an accountable workforce human task.
+        Human tasks never represent an AI, LMS, calendar, message, or external
+        system execution.
       properties:
         id:
           type: string
@@ -6796,6 +7286,7 @@ components:
           description: Workstream owner accountable for the simulated request
         agent:
           type: string
+          description: Stable simulation persona id, or human-task for a workforce human task
         agentIdentity:
           oneOf:
             - $ref: "#/components/schemas/OnbAgent"
@@ -6810,11 +7301,54 @@ components:
           $ref: "#/components/schemas/OnbOperationalRequestStatus"
         reference:
           type: string
-          pattern: "^SIMULATED-OPS-"
-          description: Simulation-local reference prefixed SIMULATED-OPS
+          description: Simulation-local reference, or a HUMAN-TASK audit reference
         simulated:
           type: boolean
-          enum: [true]
+          description: False only for accountable human workforce tasks
+        runtimeSchemaVersion:
+          type: string
+          enum: [workforce-step-runtime/v1]
+        runtimeWorkstream:
+          type: string
+          enum: [intake, payroll, assets, learning]
+        responsibleRole:
+          type: string
+        assignedTo:
+          type: ["string", "null"]
+        mandatory:
+          type: boolean
+        evidenceRequired:
+          type: boolean
+        nonblocking:
+          type: boolean
+        prerequisites:
+          type: array
+          items:
+            type: string
+        parallelGroup:
+          type: ["string", "null"]
+        permittedChannels:
+          type: array
+          items:
+            type: string
+            enum: [manager-led]
+          description: Accountable-human evidence channel; no learning portal executor is registered.
+        notBeforeAt:
+          type: ["string", "null"]
+          format: date-time
+        dueAt:
+          type: ["string", "null"]
+          format: date-time
+        escalation:
+          oneOf:
+            - $ref: "#/components/schemas/OnbWorkforceStepEscalation"
+            - type: "null"
+        overdue:
+          type: boolean
+          description: Computed from dueAt at read time; no external escalation is implied
+        escalationRequired:
+          type: boolean
+          description: Computed from escalation.at at read time; an accountable human must act
         requestedAt:
           type: string
           format: date-time
@@ -6851,7 +7385,7 @@ components:
           minimum: 0
         simulated:
           type: boolean
-          enum: [true]
+          description: False when the case includes accountable human workforce tasks
         offlinePaused:
           type: boolean
           description: Synthetic offline samples remain read-only and never record actions
@@ -6916,11 +7450,26 @@ components:
               type: ["string", "null"]
             idempotent:
               type: boolean
+            continuationPending:
+              type: boolean
+              description: The task action committed, but a follow-up connector continuation is pending durable automatic retry.
             initializedRequestIds:
               type: array
               items:
                 type: string
           required: [requestId, action, idempotent, initializedRequestIds]
+    OnbWorkforceStepEscalation:
+      type: object
+      additionalProperties: false
+      properties:
+        at:
+          type: string
+          format: date-time
+        responsibleRole:
+          type: string
+        assignedTo:
+          type: ["string", "null"]
+      required: [at, responsibleRole, assignedTo]
     OnbInboundMessage:
       type: object
       properties:
@@ -8081,6 +8630,12 @@ components:
         email: { type: string }
         phone: { type: ["string", "null"] }
         role: { type: string }
+        workforceClassification:
+          oneOf:
+            - $ref: "#/components/schemas/OnbWorkforceClassification"
+            - type: "null"
+        siteExposure: { type: boolean }
+        safetyCritical: { type: boolean }
         department: { type: string }
         geography: { type: string }
         joiningDate: { type: string, format: date }
@@ -8283,13 +8838,18 @@ components:
         workerName: { type: string }
         workerEmail: { type: string }
         role: { type: string }
+        workforceClassification:
+          type: ["object", "null"]
+          additionalProperties: true
+        siteExposure: { type: boolean }
+        safetyCritical: { type: boolean }
         joiningDate: { type: string }
         lifecycleStage: { type: string }
         urgency: { type: string }
         pausedOffline: { type: boolean }
         canAct: { type: boolean }
         aiCallHref: { type: string }
-      required: [workerName, workerEmail, role, joiningDate, lifecycleStage, urgency, pausedOffline, canAct, aiCallHref]
+      required: [workerName, workerEmail, role, workforceClassification, siteExposure, safetyCritical, joiningDate, lifecycleStage, urgency, pausedOffline, canAct, aiCallHref]
     OnbActionCenterApproval:
       type: object
       additionalProperties: false

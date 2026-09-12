@@ -25,6 +25,11 @@ export type OnbReadinessItemRow = {
   order?: number;
   mandatory?: boolean;
   enforcementStage?: OnbChecklistEnforcementStage;
+  evidenceRequired?: boolean;
+  responsibleRole?: string;
+  completionAuthority?: "hr-admin" | "designated-human";
+  executor?: "existing-workflow" | "human-task";
+  prerequisites?: string[];
 };
 
 export type OnbChecklistEnforcementStage =
@@ -39,6 +44,15 @@ export type OnbChecklistTemplateItem = {
   enabled: boolean;
   mandatory: boolean;
   enforcementStage: OnbChecklistEnforcementStage;
+  /** Evidence is required before a designated human may complete this item. */
+  evidenceRequired?: boolean;
+  /** Accountable queue. Only supported human work is represented here. */
+  responsibleRole?: string;
+  /** Human completion authority; an agent assertion or a reminder is never evidence. */
+  completionAuthority?: "hr-admin" | "designated-human";
+  /** All non-existing integrations are explicit human tasks, never simulated effects. */
+  executor?: "existing-workflow" | "human-task";
+  prerequisites?: string[];
 };
 
 export type OnbChecklistProfileCriteria = {
@@ -46,6 +60,56 @@ export type OnbChecklistProfileCriteria = {
   role?: string;
   employmentType?: string;
   location?: string;
+  roleFamily?: string;
+  department?: string;
+  legalEntity?: string;
+  businessUnit?: string;
+  industry?: string;
+  workCountry?: string;
+  workState?: string;
+  site?: string;
+  employmentArrangement?: string;
+  workerCategory?: string;
+  payBasis?: string;
+  shiftPattern?: string;
+  workEnvironment?: string;
+  hiringMode?: string;
+  safetyCritical?: string;
+};
+
+/** Job context describes work and operating conditions, never personal traits. */
+export type OnbWorkforceContext = {
+  roleFamily?: string;
+  band?: string;
+  department?: string;
+  legalEntity?: string;
+  businessUnit?: string;
+  industry?: string;
+  workCountry?: string;
+  workState?: string;
+  site?: string;
+  employmentArrangement?: string;
+  workerCategory?: string;
+  payBasis?: string;
+  shiftPattern?: string;
+  workEnvironment?: "office" | "remote" | "site" | "field" | "mixed";
+  hazards?: string[];
+  requiredLicenses?: string[];
+  hiringMode?: "individual" | "batch" | "seasonal";
+  batchId?: string;
+  assistedIntake?: boolean;
+  accessibilityNeeds?: string;
+  languagePreference?: string;
+  siteExposure?: boolean;
+  safetyCritical?: boolean;
+};
+
+export type OnbWorkforceClassification = {
+  label: "white-collar" | "blue-collar-frontline" | "mixed" | "needs-review";
+  source: "deterministic-job-context" | "authorized-correction";
+  rationale: string;
+  confidence: "high" | "medium" | "uncertain";
+  correction?: { label: "white-collar" | "blue-collar-frontline" | "mixed" | "needs-review"; by: string; reason: string; at: string };
 };
 
 export type OnbChecklistItemOverride = {
@@ -55,6 +119,11 @@ export type OnbChecklistItemOverride = {
   enabled?: boolean;
   mandatory?: boolean;
   enforcementStage?: OnbChecklistEnforcementStage;
+  evidenceRequired?: boolean;
+  responsibleRole?: string;
+  completionAuthority?: "hr-admin" | "designated-human";
+  executor?: "existing-workflow" | "human-task";
+  prerequisites?: string[];
 };
 
 /** One archive Q&A pair attached to an escalation, with the structured stint scope. */
@@ -103,6 +172,14 @@ export const onbCases = pgTable("onb_cases", {
   checklistProfileVersion: integer("checklist_profile_version"),
   checklistMatchedCriteria: jsonb("checklist_matched_criteria").$type<OnbChecklistProfileCriteria>().notNull().default({}),
   checklistMatchExplanation: text("checklist_match_explanation").notNull().default("No targeted profile matched; organization default selected."),
+  /** Immutable job-context input and classification captured at enrolment. */
+  workforceContext: jsonb("workforce_context").$type<OnbWorkforceContext>().notNull().default({}),
+  workforceClassification: jsonb("workforce_classification").$type<OnbWorkforceClassification>(),
+  workforceContextVersion: integer("workforce_context_version").notNull().default(1),
+  /** Effective policy provenance. Kept independently from legacy checklist fields. */
+  processPolicySnapshot: jsonb("process_policy_snapshot").$type<Record<string, unknown>>().notNull().default({}),
+  jobProfileId: text("job_profile_id"),
+  jobProfileVersion: integer("job_profile_version"),
   /** Last safely completed orchestration boundary; also identifies a checklist pause. */
   orchestrationCheckpoint: text("orchestration_checkpoint"),
   orchestrationClaimOwner: text("orchestration_claim_owner"),
@@ -258,6 +335,8 @@ export const onbChecklistProfiles = pgTable("onb_checklist_profiles", {
   name: text("name").notNull(),
   criteria: jsonb("criteria").$type<OnbChecklistProfileCriteria>().notNull(),
   overrides: jsonb("overrides").$type<OnbChecklistItemOverride[]>().notNull().default([]),
+  /** Typed policy metadata layered onto the legacy checklist profile. */
+  processPolicy: jsonb("process_policy").$type<Record<string, unknown>>().notNull().default({}),
   priority: integer("priority").notNull(),
   enabled: boolean("enabled").notNull().default(false),
   createdBy: text("created_by"),
@@ -267,6 +346,118 @@ export const onbChecklistProfiles = pgTable("onb_checklist_profiles", {
   check("onb_checklist_profiles_version_check", sql`${t.version} > 0`),
   check("onb_checklist_profiles_priority_check", sql`${t.priority} >= 0`),
 ]);
+
+/** Metadata-only decision trail for independently verified policy gates. */
+export const onbPolicyEvidence = pgTable("onb_policy_evidence", {
+  id: serial("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  caseId: integer("case_id").notNull(),
+  itemId: text("item_id").notNull(),
+  evidenceReference: text("evidence_reference").notNull(),
+  authorityRole: text("authority_role").notNull(),
+  decision: text("decision").$type<"verified" | "rejected">().notNull(),
+  reason: text("reason").notNull(),
+  verifiedBy: text("verified_by").notNull(),
+  verifiedByUserId: text("verified_by_user_id").notNull(),
+  checklistTemplateVersion: integer("checklist_template_version").notNull(),
+  checklistProfileId: text("checklist_profile_id").notNull(),
+  checklistProfileVersion: integer("checklist_profile_version").notNull(),
+  workforceContextVersion: integer("workforce_context_version").notNull(),
+  authorityAssignmentId: text("authority_assignment_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  foreignKey({
+    columns: [t.organizationId, t.caseId],
+    foreignColumns: [onbCases.organizationId, onbCases.id],
+    name: "onb_policy_evidence_organization_case_fk",
+  }).onDelete("cascade"),
+]);
+
+/** Tenant owner-maintained server-side authority binding for policy evidence. */
+export const onbPolicyAuthorities = pgTable("onb_policy_authorities", {
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  userId: text("user_id").notNull(),
+  authorityRole: text("authority_role").notNull(),
+  caseId: integer("case_id").notNull(),
+  itemId: text("item_id").notNull(),
+  site: text("site").notNull(),
+  assignedBy: text("assigned_by").notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.organizationId, t.userId, t.authorityRole, t.caseId, t.itemId, t.site] }),
+  foreignKey({
+    columns: [t.organizationId, t.caseId],
+    foreignColumns: [onbCases.organizationId, onbCases.id],
+    name: "onb_policy_authorities_organization_case_fk",
+  }).onDelete("cascade"),
+]);
+
+/** Immutable, organization-scoped job-profile versions reusable at intake. */
+export const onbJobProfiles = pgTable("onb_job_profiles", {
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  profileId: text("profile_id").notNull(),
+  version: integer("version").notNull(),
+  name: text("name").notNull(),
+  context: jsonb("context").$type<OnbWorkforceContext>().notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.organizationId, t.profileId, t.version] })]);
+
+/**
+ * A batch is an intake envelope, not a policy. It holds the client retry key
+ * so a retry can reconcile the original people rather than creating a second
+ * cohort. Each person retains their own resolved context and policy snapshot.
+ */
+export const onbIntakeBatches = pgTable("onb_intake_batches", {
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  batchId: text("batch_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  payloadFingerprint: text("payload_fingerprint").notNull(),
+  name: text("name").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.organizationId, t.batchId] }),
+  unique("onb_intake_batches_organization_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+]);
+
+/** Reconciliation rows deliberately preserve a person-level immutable intake snapshot. */
+export const onbIntakeBatchPeople = pgTable("onb_intake_batch_people", {
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  batchId: text("batch_id").notNull(),
+  personKey: text("person_key").notNull(),
+  caseId: integer("case_id").notNull(),
+  workforceContextSnapshot: jsonb("workforce_context_snapshot").$type<OnbWorkforceContext>().notNull(),
+  processPolicySnapshot: jsonb("process_policy_snapshot").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.organizationId, t.batchId, t.personKey] }),
+  foreignKey({
+    columns: [t.organizationId, t.batchId],
+    foreignColumns: [onbIntakeBatches.organizationId, onbIntakeBatches.batchId],
+    name: "onb_intake_batch_people_batch_fk",
+  }).onDelete("cascade"),
+  foreignKey({
+    columns: [t.organizationId, t.caseId],
+    foreignColumns: [onbCases.organizationId, onbCases.id],
+    name: "onb_intake_batch_people_case_fk",
+  }).onDelete("cascade"),
+]);
+
+/** Human-reviewed, evidence-scoped recommendation lifecycle; no auto-adoption. */
+export const onbPolicyRecommendations = pgTable("onb_policy_recommendations", {
+  id: serial("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  status: text("status").$type<"proposed" | "accepted" | "rejected">().notNull().default("proposed"),
+  recommendation: jsonb("recommendation").$type<Record<string, unknown>>().notNull(),
+  evidenceSnapshot: jsonb("evidence_snapshot").$type<Record<string, unknown>>().notNull(),
+  decisionNote: text("decision_note"),
+  decidedBy: text("decided_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+});
 /**
  * One tracked external-system checklist item per case (BGV clearance,
  * ITSM access provisioning, payroll setup). The System Watcher agent

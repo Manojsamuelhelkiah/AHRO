@@ -358,6 +358,20 @@
       "when": 1789026000007,
       "tag": "0044_action_center",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1789026000008,
+      "tag": "0045_context_aware_workforce_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1789026000009,
+      "tag": "0046_batch_intake_reconciliation",
+      "breakpoints": true
     }
   ]
 }

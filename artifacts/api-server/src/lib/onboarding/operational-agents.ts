@@ -46,45 +46,24 @@ const CATALOG: readonly OperationalAgent[] = [
     simulated: true,
   },
   {
-    id: "assets",
-    name: "Assets & Workplace Agent",
-    origin: "internal",
-    description:
-      "Internal simulation persona for tracking asset and workplace setup work; it does not order, reserve, or dispatch equipment.",
+    id: "assets", name: "Assets & Workplace Agent", origin: "internal",
+    description: "Internal simulation persona for tracking asset and workplace setup work; it does not order, reserve, or dispatch equipment.",
     owner: "IT / Facilities",
-    capabilities: [
-      "Track asset setup tasks",
-      "Record workplace dependencies",
-      "Record simulated fulfillment blockers",
-    ],
+    capabilities: ["Track asset setup tasks", "Record workplace dependencies", "Record simulated fulfillment blockers"],
     simulated: true,
   },
   {
-    id: "payroll",
-    name: "Payroll Setup Agent",
-    origin: "internal",
-    description:
-      "Internal simulation persona for tracking payroll setup work; it does not enroll a worker, change payroll, or contact a payroll provider.",
+    id: "payroll", name: "Payroll Setup Agent", origin: "internal",
+    description: "Internal simulation persona for tracking payroll setup work; it does not enroll a worker, change payroll, or contact a payroll provider.",
     owner: "Payroll Operations",
-    capabilities: [
-      "Track payroll setup tasks",
-      "Identify missing payroll inputs",
-      "Record simulated payroll handoffs",
-    ],
+    capabilities: ["Track payroll setup tasks", "Identify missing payroll inputs", "Record simulated payroll handoffs"],
     simulated: true,
   },
   {
-    id: "learning",
-    name: "Learning & Manager Connect Agent",
-    origin: "internal",
-    description:
-      "Internal simulation persona for tracking learning and manager-connect work; it does not enroll people or send invitations.",
+    id: "learning", name: "Learning & Manager Connect Agent", origin: "internal",
+    description: "Internal simulation persona for tracking learning and manager-connect work; it does not enroll people or send invitations.",
     owner: "L&D / Manager",
-    capabilities: [
-      "Track learning setup tasks",
-      "Track manager-connect dependencies",
-      "Record simulated readiness blockers",
-    ],
+    capabilities: ["Track learning setup tasks", "Track manager-connect dependencies", "Record simulated readiness blockers"],
     simulated: true,
   },
 ] as const;

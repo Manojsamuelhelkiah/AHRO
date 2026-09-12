@@ -20,6 +20,7 @@ import { SystemsPage } from './pages/systems';
 import { AgentsPage } from './pages/agents';
 import { AnalyticsPage } from './pages/analytics';
 import { SettingsPage } from './pages/settings';
+import { RecommendationsPage } from './pages/recommendations';
 import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
 import { ClientSetupPage } from './pages/client-setup';
@@ -287,6 +288,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         <Protected><SettingsPage /></Protected>
+      </Route>
+      <Route path="/recommendations">
+        <Protected><RecommendationsPage /></Protected>
       </Route>
       <Route path="/demo-controller">
         <Protected><DemoControllerIndexPage /></Protected>

@@ -55,6 +55,30 @@ export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
   return entry;
 }
 
+/**
+ * A confirmed operation is an immutable fact, not a new authorization
+ * request. Callers may safely short-circuit a replay before evaluating
+ * unrelated current workstream blockers.
+ */
+export async function isConfirmedEffect(input: EffectJournalIdentity): Promise<boolean> {
+  const [entry] = await db
+    .select()
+    .from(onbEffectJournal)
+    .where(and(
+      eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+      eq(onbEffectJournal.organizationId, input.organizationId),
+    ));
+  return Boolean(
+    entry &&
+    entry.status === "confirmed" &&
+    entry.tenantId === input.tenantId &&
+    entry.caseId === input.caseId &&
+    entry.toolName === input.toolName &&
+    entry.argumentsHash === input.argumentsHash &&
+    entry.providerIdempotency === input.providerIdempotency,
+  );
+}
+
 async function currentDisposition(
   logicalOperationKey: string,
   organizationId: string,

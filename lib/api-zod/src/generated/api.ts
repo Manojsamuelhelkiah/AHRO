@@ -175,6 +175,14 @@ export const CreateOnboardingDemoRunResponse = zod.object({
   "email": zod.string(),
   "phone": zod.string().nullable(),
   "role": zod.string(),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional(),
   "department": zod.string(),
   "geography": zod.string(),
   "joiningDate": zod.coerce.date(),
@@ -259,6 +267,14 @@ export const GetOnboardingDemoRunResponse = zod.object({
   "email": zod.string(),
   "phone": zod.string().nullable(),
   "role": zod.string(),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional(),
   "department": zod.string(),
   "geography": zod.string(),
   "joiningDate": zod.coerce.date(),
@@ -372,6 +388,14 @@ export const ApplyOnboardingDemoRunActionResponse = zod.object({
   "email": zod.string(),
   "phone": zod.string().nullable(),
   "role": zod.string(),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional(),
   "department": zod.string(),
   "geography": zod.string(),
   "joiningDate": zod.coerce.date(),
@@ -6771,6 +6795,61 @@ export const runOnboardingScenarioResponseChecklistSnapshotItemOrderMin = 0;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+export const runOnboardingScenarioResponseWorkforceContextRoleFamilyMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextBandMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextDepartmentMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextLegalEntityMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextBusinessUnitMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextIndustryMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextWorkCountryMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextWorkStateMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextSiteMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextPayBasisMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextShiftPatternMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextHazardsItemMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextHazardsMax = 30;
+
+export const runOnboardingScenarioResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const runOnboardingScenarioResponseWorkforceContextBatchIdMax = 120;
+
+export const runOnboardingScenarioResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const runOnboardingScenarioResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
 export const RunOnboardingScenarioResponse = zod.object({
   "id": zod.number(),
   "workerName": zod.string(),
@@ -6798,7 +6877,12 @@ export const RunOnboardingScenarioResponse = zod.object({
   "note": zod.string().optional(),
   "order": zod.number().min(runOnboardingScenarioResponseReadinessItemOrderMin).optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 }).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
   "workstreams": zod.array(zod.object({
   "key": zod.string().describe('documentation | access | assets | learning | analytics'),
@@ -6819,7 +6903,12 @@ export const RunOnboardingScenarioResponse = zod.object({
   "order": zod.number().min(runOnboardingScenarioResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -6828,9 +6917,59 @@ export const RunOnboardingScenarioResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(runOnboardingScenarioResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(runOnboardingScenarioResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(runOnboardingScenarioResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(runOnboardingScenarioResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(runOnboardingScenarioResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(runOnboardingScenarioResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(runOnboardingScenarioResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(runOnboardingScenarioResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(runOnboardingScenarioResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(runOnboardingScenarioResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(runOnboardingScenarioResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(runOnboardingScenarioResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(runOnboardingScenarioResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(runOnboardingScenarioResponseWorkforceContextHazardsItemMax)).max(runOnboardingScenarioResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(runOnboardingScenarioResponseWorkforceContextRequiredLicensesItemMax)).max(runOnboardingScenarioResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(runOnboardingScenarioResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(runOnboardingScenarioResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(runOnboardingScenarioResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
@@ -6874,6 +7013,61 @@ export const listOnboardingCasesResponseChecklistSnapshotItemOrderMin = 0;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+export const listOnboardingCasesResponseWorkforceContextRoleFamilyMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextBandMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextDepartmentMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextLegalEntityMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextBusinessUnitMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextIndustryMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextWorkCountryMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextWorkStateMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextSiteMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextPayBasisMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextShiftPatternMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextHazardsItemMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextHazardsMax = 30;
+
+export const listOnboardingCasesResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const listOnboardingCasesResponseWorkforceContextBatchIdMax = 120;
+
+export const listOnboardingCasesResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const listOnboardingCasesResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
 export const ListOnboardingCasesResponseItem = zod.object({
   "id": zod.number(),
   "workerName": zod.string(),
@@ -6901,7 +7095,12 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "note": zod.string().optional(),
   "order": zod.number().min(listOnboardingCasesResponseReadinessItemOrderMin).optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 }).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
   "workstreams": zod.array(zod.object({
   "key": zod.string().describe('documentation | access | assets | learning | analytics'),
@@ -6922,7 +7121,12 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "order": zod.number().min(listOnboardingCasesResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -6931,9 +7135,59 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(listOnboardingCasesResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(listOnboardingCasesResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(listOnboardingCasesResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(listOnboardingCasesResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(listOnboardingCasesResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(listOnboardingCasesResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(listOnboardingCasesResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(listOnboardingCasesResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(listOnboardingCasesResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(listOnboardingCasesResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(listOnboardingCasesResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(listOnboardingCasesResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(listOnboardingCasesResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(listOnboardingCasesResponseWorkforceContextHazardsItemMax)).max(listOnboardingCasesResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(listOnboardingCasesResponseWorkforceContextRequiredLicensesItemMax)).max(listOnboardingCasesResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(listOnboardingCasesResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(listOnboardingCasesResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(listOnboardingCasesResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
@@ -6967,6 +7221,48 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
  */
 
 export const createOnboardingCaseBodyOfferAcceptanceCompleteDefault = false;
+export const createOnboardingCaseBodyWorkforceContextRoleFamilyMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextBandMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextDepartmentMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextLegalEntityMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextBusinessUnitMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextIndustryMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextWorkCountryMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextWorkStateMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextSiteMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextEmploymentArrangementMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextWorkerCategoryMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextPayBasisMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextShiftPatternMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextHazardsItemMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextHazardsMax = 30;
+
+export const createOnboardingCaseBodyWorkforceContextRequiredLicensesItemMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextRequiredLicensesMax = 30;
+
+export const createOnboardingCaseBodyWorkforceContextBatchIdMax = 120;
+
+export const createOnboardingCaseBodyWorkforceContextAccessibilityNeedsMax = 500;
+
+export const createOnboardingCaseBodyWorkforceContextLanguagePreferenceMax = 120;
+
+
+
 
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
@@ -6986,7 +7282,33 @@ export const CreateOnboardingCaseBody = zod.object({
   "primarySkill": zod.string().optional(),
   "skillCriticality": zod.string().optional(),
   "notes": zod.string().optional().describe('Unstructured recruiter notes; treated as evidence, not instructions'),
-  "offerAcceptanceComplete": zod.boolean().default(createOnboardingCaseBodyOfferAcceptanceCompleteDefault).describe('HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation.')
+  "offerAcceptanceComplete": zod.boolean().default(createOnboardingCaseBodyOfferAcceptanceCompleteDefault).describe('HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation.'),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(createOnboardingCaseBodyWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(createOnboardingCaseBodyWorkforceContextBandMax).optional(),
+  "department": zod.string().max(createOnboardingCaseBodyWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(createOnboardingCaseBodyWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(createOnboardingCaseBodyWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(createOnboardingCaseBodyWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(createOnboardingCaseBodyWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(createOnboardingCaseBodyWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(createOnboardingCaseBodyWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(createOnboardingCaseBodyWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(createOnboardingCaseBodyWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(createOnboardingCaseBodyWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(createOnboardingCaseBodyWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(createOnboardingCaseBodyWorkforceContextHazardsItemMax)).max(createOnboardingCaseBodyWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(createOnboardingCaseBodyWorkforceContextRequiredLicensesItemMax)).max(createOnboardingCaseBodyWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(createOnboardingCaseBodyWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(createOnboardingCaseBodyWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(createOnboardingCaseBodyWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).optional().describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "jobProfileId": zod.string().min(1).optional()
 }).describe('Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.')
 
 export const createOnboardingCaseResponseReadinessItemOrderMin = 0;
@@ -6998,6 +7320,61 @@ export const createOnboardingCaseResponseChecklistSnapshotItemOrderMin = 0;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const createOnboardingCaseResponseWorkforceContextRoleFamilyMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextBandMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextDepartmentMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextLegalEntityMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextBusinessUnitMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextIndustryMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextWorkCountryMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextWorkStateMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextSiteMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextPayBasisMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextShiftPatternMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextHazardsItemMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextHazardsMax = 30;
+
+export const createOnboardingCaseResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const createOnboardingCaseResponseWorkforceContextBatchIdMax = 120;
+
+export const createOnboardingCaseResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const createOnboardingCaseResponseWorkforceContextLanguagePreferenceMax = 120;
 
 
 
@@ -7029,7 +7406,12 @@ export const CreateOnboardingCaseResponse = zod.object({
   "note": zod.string().optional(),
   "order": zod.number().min(createOnboardingCaseResponseReadinessItemOrderMin).optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 }).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
   "workstreams": zod.array(zod.object({
   "key": zod.string().describe('documentation | access | assets | learning | analytics'),
@@ -7050,7 +7432,12 @@ export const CreateOnboardingCaseResponse = zod.object({
   "order": zod.number().min(createOnboardingCaseResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7059,9 +7446,59 @@ export const CreateOnboardingCaseResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(createOnboardingCaseResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(createOnboardingCaseResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(createOnboardingCaseResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(createOnboardingCaseResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(createOnboardingCaseResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(createOnboardingCaseResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(createOnboardingCaseResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(createOnboardingCaseResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(createOnboardingCaseResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(createOnboardingCaseResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(createOnboardingCaseResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(createOnboardingCaseResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(createOnboardingCaseResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(createOnboardingCaseResponseWorkforceContextHazardsItemMax)).max(createOnboardingCaseResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(createOnboardingCaseResponseWorkforceContextRequiredLicensesItemMax)).max(createOnboardingCaseResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(createOnboardingCaseResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(createOnboardingCaseResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(createOnboardingCaseResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
@@ -7109,6 +7546,61 @@ export const getOnboardingCaseResponseChecklistSnapshotItemOrderMin = 0;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+export const getOnboardingCaseResponseWorkforceContextRoleFamilyMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextBandMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextDepartmentMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextLegalEntityMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextBusinessUnitMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextIndustryMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextWorkCountryMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextWorkStateMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextSiteMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextPayBasisMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextShiftPatternMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextHazardsItemMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextHazardsMax = 30;
+
+export const getOnboardingCaseResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const getOnboardingCaseResponseWorkforceContextBatchIdMax = 120;
+
+export const getOnboardingCaseResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const getOnboardingCaseResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
 export const GetOnboardingCaseResponse = zod.object({
   "id": zod.number(),
   "workerName": zod.string(),
@@ -7136,7 +7628,12 @@ export const GetOnboardingCaseResponse = zod.object({
   "note": zod.string().optional(),
   "order": zod.number().min(getOnboardingCaseResponseReadinessItemOrderMin).optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 }).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
   "workstreams": zod.array(zod.object({
   "key": zod.string().describe('documentation | access | assets | learning | analytics'),
@@ -7157,7 +7654,12 @@ export const GetOnboardingCaseResponse = zod.object({
   "order": zod.number().min(getOnboardingCaseResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7166,9 +7668,59 @@ export const GetOnboardingCaseResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(getOnboardingCaseResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(getOnboardingCaseResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(getOnboardingCaseResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(getOnboardingCaseResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(getOnboardingCaseResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(getOnboardingCaseResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(getOnboardingCaseResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(getOnboardingCaseResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(getOnboardingCaseResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(getOnboardingCaseResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(getOnboardingCaseResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(getOnboardingCaseResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(getOnboardingCaseResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(getOnboardingCaseResponseWorkforceContextHazardsItemMax)).max(getOnboardingCaseResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(getOnboardingCaseResponseWorkforceContextRequiredLicensesItemMax)).max(getOnboardingCaseResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(getOnboardingCaseResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(getOnboardingCaseResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(getOnboardingCaseResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
@@ -7294,6 +7846,61 @@ export const confirmOnboardingOfferAcceptanceResponseChecklistSnapshotItemOrderM
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextRoleFamilyMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextBandMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextDepartmentMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextLegalEntityMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextBusinessUnitMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextIndustryMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextWorkCountryMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextWorkStateMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextSiteMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextPayBasisMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextShiftPatternMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextHazardsItemMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextHazardsMax = 30;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextBatchIdMax = 120;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const confirmOnboardingOfferAcceptanceResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
 export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "id": zod.number(),
   "workerName": zod.string(),
@@ -7321,7 +7928,12 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "note": zod.string().optional(),
   "order": zod.number().min(confirmOnboardingOfferAcceptanceResponseReadinessItemOrderMin).optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 }).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
   "workstreams": zod.array(zod.object({
   "key": zod.string().describe('documentation | access | assets | learning | analytics'),
@@ -7342,7 +7954,12 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "order": zod.number().min(confirmOnboardingOfferAcceptanceResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7351,9 +7968,59 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextHazardsItemMax)).max(confirmOnboardingOfferAcceptanceResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextRequiredLicensesItemMax)).max(confirmOnboardingOfferAcceptanceResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(confirmOnboardingOfferAcceptanceResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
@@ -7418,6 +8085,61 @@ export const recalculateOnboardingChecklistProfileResponseChecklistSnapshotItemO
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextRoleFamilyMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextBandMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextDepartmentMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextLegalEntityMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextBusinessUnitMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextIndustryMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextWorkCountryMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextWorkStateMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextSiteMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextPayBasisMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextShiftPatternMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextHazardsItemMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextHazardsMax = 30;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextBatchIdMax = 120;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const recalculateOnboardingChecklistProfileResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
 export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "id": zod.number(),
   "workerName": zod.string(),
@@ -7445,7 +8167,12 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "note": zod.string().optional(),
   "order": zod.number().min(recalculateOnboardingChecklistProfileResponseReadinessItemOrderMin).optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 }).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
   "workstreams": zod.array(zod.object({
   "key": zod.string().describe('documentation | access | assets | learning | analytics'),
@@ -7466,7 +8193,12 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(recalculateOnboardingChecklistProfileResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -7475,9 +8207,59 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextHazardsItemMax)).max(recalculateOnboardingChecklistProfileResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextRequiredLicensesItemMax)).max(recalculateOnboardingChecklistProfileResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(recalculateOnboardingChecklistProfileResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
@@ -7514,6 +8296,20 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const listOnboardingChecklistProfilesResponseOneOverridesItemOrderMin = 0;
 
 export const listOnboardingChecklistProfilesResponseOnePriorityMin = 0;
@@ -7530,7 +8326,22 @@ export const ListOnboardingChecklistProfilesResponseItem = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "overrides": zod.array(zod.object({
   "id": zod.string(),
@@ -7538,10 +8349,16 @@ export const ListOnboardingChecklistProfilesResponseItem = zod.object({
   "order": zod.number().min(listOnboardingChecklistProfilesResponseOneOverridesItemOrderMin).optional(),
   "enabled": zod.boolean().optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "priority": zod.number().min(listOnboardingChecklistProfilesResponseOnePriorityMin),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "processPolicy": zod.record(zod.string(), zod.unknown()).optional()
 }).and(zod.object({
   "profileId": zod.string(),
   "version": zod.number().min(1),
@@ -7551,7 +8368,12 @@ export const ListOnboardingChecklistProfilesResponseItem = zod.object({
   "order": zod.number().min(listOnboardingChecklistProfilesResponseTwoEffectiveChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "createdAt": zod.string()
 }))
@@ -7561,6 +8383,20 @@ export const ListOnboardingChecklistProfilesResponse = zod.array(ListOnboardingC
 /**
  * @summary Create a named targeted checklist profile
  */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -7579,7 +8415,22 @@ export const CreateOnboardingChecklistProfileBody = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "overrides": zod.array(zod.object({
   "id": zod.string(),
@@ -7587,11 +8438,31 @@ export const CreateOnboardingChecklistProfileBody = zod.object({
   "order": zod.number().min(createOnboardingChecklistProfileBodyOverridesItemOrderMin).optional(),
   "enabled": zod.boolean().optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "priority": zod.number().min(createOnboardingChecklistProfileBodyPriorityMin),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "processPolicy": zod.record(zod.string(), zod.unknown()).optional()
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -7615,7 +8486,22 @@ export const CreateOnboardingChecklistProfileResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "overrides": zod.array(zod.object({
   "id": zod.string(),
@@ -7623,10 +8509,16 @@ export const CreateOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(createOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
   "enabled": zod.boolean().optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "priority": zod.number().min(createOnboardingChecklistProfileResponseOnePriorityMin),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "processPolicy": zod.record(zod.string(), zod.unknown()).optional()
 }).and(zod.object({
   "profileId": zod.string(),
   "version": zod.number().min(1),
@@ -7636,7 +8528,12 @@ export const CreateOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(createOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "createdAt": zod.string()
 }))
@@ -7648,6 +8545,20 @@ export const CreateOnboardingChecklistProfileResponse = zod.object({
 export const UpdateOnboardingChecklistProfileParams = zod.object({
   "profileId": zod.coerce.string()
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -7668,7 +8579,22 @@ export const UpdateOnboardingChecklistProfileBody = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "overrides": zod.array(zod.object({
   "id": zod.string(),
@@ -7676,13 +8602,33 @@ export const UpdateOnboardingChecklistProfileBody = zod.object({
   "order": zod.number().min(updateOnboardingChecklistProfileBodyOneOverridesItemOrderMin).optional(),
   "enabled": zod.boolean().optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "priority": zod.number().min(updateOnboardingChecklistProfileBodyOnePriorityMin),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "processPolicy": zod.record(zod.string(), zod.unknown()).optional()
 }).and(zod.object({
   "expectedVersion": zod.number().min(1)
 }))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -7706,7 +8652,22 @@ export const UpdateOnboardingChecklistProfileResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "overrides": zod.array(zod.object({
   "id": zod.string(),
@@ -7714,10 +8675,16 @@ export const UpdateOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(updateOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
   "enabled": zod.boolean().optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "priority": zod.number().min(updateOnboardingChecklistProfileResponseOnePriorityMin),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "processPolicy": zod.record(zod.string(), zod.unknown()).optional()
 }).and(zod.object({
   "profileId": zod.string(),
   "version": zod.number().min(1),
@@ -7727,7 +8694,12 @@ export const UpdateOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(updateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "createdAt": zod.string()
 }))
@@ -7739,6 +8711,20 @@ export const UpdateOnboardingChecklistProfileResponse = zod.object({
 export const DisableOnboardingChecklistProfileParams = zod.object({
   "profileId": zod.coerce.string()
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -7762,7 +8748,22 @@ export const DisableOnboardingChecklistProfileResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "overrides": zod.array(zod.object({
   "id": zod.string(),
@@ -7770,10 +8771,16 @@ export const DisableOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(disableOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
   "enabled": zod.boolean().optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "priority": zod.number().min(disableOnboardingChecklistProfileResponseOnePriorityMin),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "processPolicy": zod.record(zod.string(), zod.unknown()).optional()
 }).and(zod.object({
   "profileId": zod.string(),
   "version": zod.number().min(1),
@@ -7783,7 +8790,12 @@ export const DisableOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(disableOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "createdAt": zod.string()
 }))
@@ -7795,6 +8807,20 @@ export const DisableOnboardingChecklistProfileResponse = zod.object({
 export const DuplicateOnboardingChecklistProfileParams = zod.object({
   "profileId": zod.coerce.string()
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -7818,7 +8844,22 @@ export const DuplicateOnboardingChecklistProfileResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "overrides": zod.array(zod.object({
   "id": zod.string(),
@@ -7826,10 +8867,16 @@ export const DuplicateOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(duplicateOnboardingChecklistProfileResponseOneOverridesItemOrderMin).optional(),
   "enabled": zod.boolean().optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "priority": zod.number().min(duplicateOnboardingChecklistProfileResponseOnePriorityMin),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "processPolicy": zod.record(zod.string(), zod.unknown()).optional()
 }).and(zod.object({
   "profileId": zod.string(),
   "version": zod.number().min(1),
@@ -7839,10 +8886,281 @@ export const DuplicateOnboardingChecklistProfileResponse = zod.object({
   "order": zod.number().min(duplicateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "createdAt": zod.string()
 }))
+
+
+/**
+ * @summary List immutable, evidence-backed cohort learning recommendations and transparent sparse-evidence status
+ */
+export const listOnboardingPolicyRecommendationsQueryWindowDaysDefault = 90;
+
+export const ListOnboardingPolicyRecommendationsQueryParams = zod.object({
+  "windowDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).default(listOnboardingPolicyRecommendationsQueryWindowDaysDefault).describe('Case-created-at analysis window. Outcome evidence remains a dated final HR readiness event.')
+})
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeTimingOffsetDaysMin = -90;
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeTimingOffsetDaysMax = 180;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeSequenceItemMax = 120;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeSequenceMax = 24;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemLabelMax = 120;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemResponsibleRoleMax = 120;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemAssignedToMax = 120;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemPrerequisitesItemRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemParallelGroupMax = 120;
+
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingNotBeforeOffsetDaysMin = -90;
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingNotBeforeOffsetDaysMax = 180;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingDueOffsetDaysMin = -90;
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingDueOffsetDaysMax = 180;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationOffsetDaysMin = -90;
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationOffsetDaysMax = 180;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationResponsibleRoleMax = 120;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationAssignedToMax = 120;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsMax = 24;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeOwnershipMax = 120;
+
+export const listOnboardingPolicyRecommendationsResponseRecommendationsItemEvidenceSnapshotEvidenceFingerprintRegExp = new RegExp('^[a-f0-9]{64}$');
+export const listOnboardingPolicyRecommendationsResponseFallbackOneCandidateCasesMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneVerifiedOutcomesMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneExcludedDemoOrSimulationMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneMissingOutcomeEvidenceMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemTargetExactCohortVerifiedOutcomesMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleCandidateCasesMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleVerifiedOutcomesMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleExcludedDemoOrSimulationMin = 0;
+
+export const listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleMissingOutcomeEvidenceMin = 0;
+
+
+
+export const ListOnboardingPolicyRecommendationsResponse = zod.object({
+  "asOf": zod.coerce.date(),
+  "methodologyVersion": zod.literal("learning-cohort-v1"),
+  "window": zod.object({
+  "startedAt": zod.coerce.date(),
+  "endedAt": zod.coerce.date(),
+  "days": zod.number()
+}),
+  "recommendations": zod.array(zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['proposed', 'accepted', 'rejected']),
+  "recommendation": zod.object({
+  "type": zod.literal("cohort-learning-default").optional(),
+  "learning": zod.union([zod.unknown(),zod.unknown()]).and(zod.object({
+  "schemaVersion": zod.enum(['workforce-step-runtime/v1']).optional(),
+  "timing": zod.object({
+  "anchor": zod.enum(['joining-date']),
+  "offsetDays": zod.number().min(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeTimingOffsetDaysMin).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeTimingOffsetDaysMax)
+}),
+  "sequence": zod.array(zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeSequenceItemMax)).min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeSequenceMax).optional().describe('Compact ordered form. Do not send with steps.'),
+  "steps": zod.array(zod.object({
+  "id": zod.string().regex(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemIdRegExp),
+  "label": zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemLabelMax),
+  "responsibleRole": zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemResponsibleRoleMax).optional(),
+  "assignedTo": zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemAssignedToMax).nullish(),
+  "mandatory": zod.boolean().optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "nonblocking": zod.boolean().optional(),
+  "prerequisites": zod.array(zod.string().regex(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemPrerequisitesItemRegExp)).optional(),
+  "parallelGroup": zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemParallelGroupMax).nullish(),
+  "permittedChannels": zod.array(zod.enum(['manager-led'])).min(1).optional(),
+  "timing": zod.object({
+  "anchor": zod.enum(['joining-date']).optional(),
+  "notBeforeOffsetDays": zod.number().min(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingNotBeforeOffsetDaysMin).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingNotBeforeOffsetDaysMax).optional(),
+  "dueOffsetDays": zod.number().min(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingDueOffsetDaysMin).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingDueOffsetDaysMax).optional(),
+  "escalation": zod.object({
+  "offsetDays": zod.number().min(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationOffsetDaysMin).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationOffsetDaysMax),
+  "responsibleRole": zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationResponsibleRoleMax),
+  "assignedTo": zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsItemTimingEscalationAssignedToMax).nullish()
+}).optional()
+}).optional()
+})).min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeStepsMax).optional().describe('Typed accountable human-task form. Do not send with sequence.'),
+  "channel": zod.enum(['manager-led']).describe('The learning runtime has no connected portal executor. Candidate self-upload is configured by intake.channel instead.'),
+  "ownership": zod.string().min(1).max(listOnboardingPolicyRecommendationsResponseRecommendationsItemRecommendationLearningThreeOwnershipMax)
+})).optional()
+}),
+  "evidenceSnapshot": zod.object({
+  "evidenceFingerprint": zod.string().regex(listOnboardingPolicyRecommendationsResponseRecommendationsItemEvidenceSnapshotEvidenceFingerprintRegExp).optional()
+}),
+  "createdAt": zod.coerce.date()
+})),
+  "fallback": zod.object({
+  "status": zod.literal("insufficient-evidence"),
+  "message": zod.string(),
+  "candidateCases": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneCandidateCasesMin),
+  "verifiedOutcomes": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneVerifiedOutcomesMin),
+  "excludedDemoOrSimulation": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneExcludedDemoOrSimulationMin),
+  "missingOutcomeEvidence": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneMissingOutcomeEvidenceMin),
+  "broaderEvidence": zod.array(zod.object({
+  "scope": zod.literal("same-tenant-compatible-profile"),
+  "status": zod.literal("descriptive-only"),
+  "notEligibleForPublication": zod.boolean(),
+  "target": zod.object({
+  "profileId": zod.string(),
+  "profileName": zod.string(),
+  "currentProfileVersion": zod.number(),
+  "exactCohortVerifiedOutcomes": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemTargetExactCohortVerifiedOutcomesMin)
+}),
+  "cohortDefinition": zod.string(),
+  "compatibilityDefinition": zod.string(),
+  "outcomeDefinition": zod.string(),
+  "window": zod.object({
+  "startedAt": zod.coerce.date(),
+  "endedAt": zod.coerce.date(),
+  "days": zod.number()
+}),
+  "sample": zod.object({
+  "candidateCases": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleCandidateCasesMin),
+  "verifiedOutcomes": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleVerifiedOutcomesMin),
+  "excludedDemoOrSimulation": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleExcludedDemoOrSimulationMin),
+  "missingOutcomeEvidence": zod.number().min(listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleMissingOutcomeEvidenceMin)
+}),
+  "outcome": zod.object({
+  "meanDaysToVerifiedReadiness": zod.number().nullable(),
+  "uncertainty95PercentDays": zod.object({
+  "low": zod.number(),
+  "high": zod.number()
+}).nullable(),
+  "observedOutcomeDates": zod.array(zod.coerce.date()),
+  "caseReferences": zod.array(zod.number())
+}),
+  "missingness": zod.array(zod.string()),
+  "uncertainty": zod.string()
+}).describe('A same-tenant, wider-version descriptive cohort displayed only when the exact current profile-version cohort is insufficient. It is never eligible for publication.'))
+}).nullable()
+}).describe('Each persisted recommendation preserves its full proposal and evidence snapshot. Evidence is cohort-scoped, excludes demo\/simulation, reports missingness and uncertainty, and is descriptive rather than causal.')
+
+
+/**
+ * @summary Analyze eligible non-demo cohort evidence and create new proposed recommendations only
+ */
+export const refreshOnboardingPolicyRecommendationsBodyWindowDaysDefault = 90;
+
+export const RefreshOnboardingPolicyRecommendationsBody = zod.object({
+  "windowDays": zod.union([zod.literal(30),zod.literal(90),zod.literal(180),zod.literal(365)]).default(refreshOnboardingPolicyRecommendationsBodyWindowDaysDefault)
+})
+
+export const RefreshOnboardingPolicyRecommendationsResponse = zod.unknown()
+
+
+/**
+ * @summary Accept, edit-and-accept, or reject an immutable evidence-backed learning recommendation
+ */
+
+
+
+export const DecideOnboardingPolicyRecommendationParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const decideOnboardingPolicyRecommendationBodyDecisionNoteMax = 1000;
+
+export const decideOnboardingPolicyRecommendationBodyExpectedEvidenceFingerprintRegExp = new RegExp('^[a-f0-9]{64}$');
+export const decideOnboardingPolicyRecommendationBodyLearningThreeTimingOffsetDaysMin = -90;
+export const decideOnboardingPolicyRecommendationBodyLearningThreeTimingOffsetDaysMax = 180;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeSequenceItemMax = 120;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeSequenceMax = 24;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemLabelMax = 120;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemResponsibleRoleMax = 120;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemAssignedToMax = 120;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemPrerequisitesItemRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemParallelGroupMax = 120;
+
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingNotBeforeOffsetDaysMin = -90;
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingNotBeforeOffsetDaysMax = 180;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingDueOffsetDaysMin = -90;
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingDueOffsetDaysMax = 180;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationOffsetDaysMin = -90;
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationOffsetDaysMax = 180;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationResponsibleRoleMax = 120;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationAssignedToMax = 120;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsMax = 24;
+
+export const decideOnboardingPolicyRecommendationBodyLearningThreeOwnershipMax = 120;
+
+
+
+export const DecideOnboardingPolicyRecommendationBody = zod.object({
+  "decision": zod.enum(['accepted', 'rejected']),
+  "decisionNote": zod.string().max(decideOnboardingPolicyRecommendationBodyDecisionNoteMax).optional(),
+  "expectedEvidenceFingerprint": zod.string().regex(decideOnboardingPolicyRecommendationBodyExpectedEvidenceFingerprintRegExp),
+  "learning": zod.union([zod.unknown(),zod.unknown()]).and(zod.object({
+  "schemaVersion": zod.enum(['workforce-step-runtime/v1']).optional(),
+  "timing": zod.object({
+  "anchor": zod.enum(['joining-date']),
+  "offsetDays": zod.number().min(decideOnboardingPolicyRecommendationBodyLearningThreeTimingOffsetDaysMin).max(decideOnboardingPolicyRecommendationBodyLearningThreeTimingOffsetDaysMax)
+}),
+  "sequence": zod.array(zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeSequenceItemMax)).min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeSequenceMax).optional().describe('Compact ordered form. Do not send with steps.'),
+  "steps": zod.array(zod.object({
+  "id": zod.string().regex(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemIdRegExp),
+  "label": zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemLabelMax),
+  "responsibleRole": zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemResponsibleRoleMax).optional(),
+  "assignedTo": zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemAssignedToMax).nullish(),
+  "mandatory": zod.boolean().optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "nonblocking": zod.boolean().optional(),
+  "prerequisites": zod.array(zod.string().regex(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemPrerequisitesItemRegExp)).optional(),
+  "parallelGroup": zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemParallelGroupMax).nullish(),
+  "permittedChannels": zod.array(zod.enum(['manager-led'])).min(1).optional(),
+  "timing": zod.object({
+  "anchor": zod.enum(['joining-date']).optional(),
+  "notBeforeOffsetDays": zod.number().min(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingNotBeforeOffsetDaysMin).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingNotBeforeOffsetDaysMax).optional(),
+  "dueOffsetDays": zod.number().min(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingDueOffsetDaysMin).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingDueOffsetDaysMax).optional(),
+  "escalation": zod.object({
+  "offsetDays": zod.number().min(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationOffsetDaysMin).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationOffsetDaysMax),
+  "responsibleRole": zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationResponsibleRoleMax),
+  "assignedTo": zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimingEscalationAssignedToMax).nullish()
+}).optional()
+}).optional()
+})).min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeStepsMax).optional().describe('Typed accountable human-task form. Do not send with sequence.'),
+  "channel": zod.enum(['manager-led']).describe('The learning runtime has no connected portal executor. Candidate self-upload is configured by intake.channel instead.'),
+  "ownership": zod.string().min(1).max(decideOnboardingPolicyRecommendationBodyLearningThreeOwnershipMax)
+})).optional()
+})
+
+export const DecideOnboardingPolicyRecommendationResponse = zod.unknown()
 
 
 /**
@@ -7923,7 +9241,10 @@ export const getOnboardingActionCenterQueryLimitMax = 200;
 
 export const GetOnboardingActionCenterQueryParams = zod.object({
   "scope": zod.enum(['active', 'completed', 'all']).default(getOnboardingActionCenterQueryScopeDefault),
-  "limit": zod.coerce.number().min(1).max(getOnboardingActionCenterQueryLimitMax).default(getOnboardingActionCenterQueryLimitDefault)
+  "limit": zod.coerce.number().min(1).max(getOnboardingActionCenterQueryLimitMax).default(getOnboardingActionCenterQueryLimitDefault),
+  "workforce": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review', 'unclassified']).optional(),
+  "safetyCritical": zod.coerce.boolean().optional(),
+  "siteExposure": zod.coerce.boolean().optional()
 })
 
 export const getOnboardingActionCenterResponseCountsPendingApprovalsMin = 0;
@@ -7999,6 +9320,9 @@ export const GetOnboardingActionCenterResponse = zod.object({
   "workerName": zod.string(),
   "workerEmail": zod.string(),
   "role": zod.string(),
+  "workforceClassification": zod.record(zod.string(), zod.unknown()).nullable(),
+  "siteExposure": zod.boolean(),
+  "safetyCritical": zod.boolean(),
   "joiningDate": zod.string(),
   "lifecycleStage": zod.string(),
   "urgency": zod.string(),
@@ -8050,6 +9374,9 @@ export const GetOnboardingActionCenterResponse = zod.object({
   "workerName": zod.string(),
   "workerEmail": zod.string(),
   "role": zod.string(),
+  "workforceClassification": zod.record(zod.string(), zod.unknown()).nullable(),
+  "siteExposure": zod.boolean(),
+  "safetyCritical": zod.boolean(),
   "joiningDate": zod.string(),
   "lifecycleStage": zod.string(),
   "urgency": zod.string(),
@@ -8534,7 +9861,6 @@ export const getOnboardingOperationalRequestsResponseVersionMin = 0;
 
 export const getOnboardingOperationalRequestsResponseRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const getOnboardingOperationalRequestsResponseRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const getOnboardingOperationalRequestsResponseRequestsItemReferenceRegExp = new RegExp('^SIMULATED-OPS-');
 export const getOnboardingOperationalRequestsResponseRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 
 
@@ -8542,13 +9868,13 @@ export const getOnboardingOperationalRequestsResponseRequestsItemHistoryItemAgen
 export const GetOnboardingOperationalRequestsResponse = zod.object({
   "caseId": zod.number(),
   "version": zod.number().min(getOnboardingOperationalRequestsResponseVersionMin),
-  "simulated": zod.literal(true),
+  "simulated": zod.boolean().describe('False when the case includes accountable human workforce tasks'),
   "offlinePaused": zod.boolean().describe('Synthetic offline samples remain read-only and never record actions'),
   "requests": zod.array(zod.object({
   "id": zod.string().regex(getOnboardingOperationalRequestsResponseRequestsItemIdRegExp),
   "label": zod.string(),
   "owner": zod.string().describe('Workstream owner accountable for the simulated request'),
-  "agent": zod.string(),
+  "agent": zod.string().describe('Stable simulation persona id, or human-task for a workforce human task'),
   "agentIdentity": zod.union([zod.object({
   "id": zod.string().regex(getOnboardingOperationalRequestsResponseRequestsItemAgentIdentityOneIdRegExp),
   "name": zod.string(),
@@ -8559,10 +9885,29 @@ export const GetOnboardingOperationalRequestsResponse = zod.object({
   "simulated": zod.literal(true)
 }).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved current AI-agent identity; null for email assignments or unknown legacy ids'),
   "teamRecipientLabel": zod.string().describe('Human-readable team label; never an invented email address'),
-  "method": zod.enum(['email', 'agent']),
+  "method": zod.enum(['email', 'agent', 'human-task']),
   "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
-  "reference": zod.string().regex(getOnboardingOperationalRequestsResponseRequestsItemReferenceRegExp).describe('Simulation-local reference prefixed SIMULATED-OPS'),
-  "simulated": zod.literal(true),
+  "reference": zod.string().describe('Simulation-local reference, or a HUMAN-TASK audit reference'),
+  "simulated": zod.boolean().describe('False only for accountable human workforce tasks'),
+  "runtimeSchemaVersion": zod.enum(['workforce-step-runtime/v1']).optional(),
+  "runtimeWorkstream": zod.enum(['intake', 'payroll', 'assets', 'learning']).optional(),
+  "responsibleRole": zod.string().optional(),
+  "assignedTo": zod.string().nullish(),
+  "mandatory": zod.boolean().optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "nonblocking": zod.boolean().optional(),
+  "prerequisites": zod.array(zod.string()).optional(),
+  "parallelGroup": zod.string().nullish(),
+  "permittedChannels": zod.array(zod.enum(['manager-led'])).optional().describe('Accountable-human evidence channel; no learning portal executor is registered.'),
+  "notBeforeAt": zod.coerce.date().nullish(),
+  "dueAt": zod.coerce.date().nullish(),
+  "escalation": zod.union([zod.object({
+  "at": zod.coerce.date(),
+  "responsibleRole": zod.string(),
+  "assignedTo": zod.string().nullable()
+}),zod.null()]).optional(),
+  "overdue": zod.boolean().optional().describe('Computed from dueAt at read time; no external escalation is implied'),
+  "escalationRequired": zod.boolean().optional().describe('Computed from escalation.at at read time; an accountable human must act'),
   "requestedAt": zod.coerce.date(),
   "startedAt": zod.coerce.date().nullable(),
   "completedAt": zod.coerce.date().nullable(),
@@ -8587,7 +9932,7 @@ export const GetOnboardingOperationalRequestsResponse = zod.object({
   "simulated": zod.literal(true)
 }).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable')
 })).min(1)
-}).describe('A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.\n'))
+}).describe('A simulated setup request or an accountable workforce human task. Human tasks never represent an AI, LMS, calendar, message, or external system execution.\n'))
 })
 
 
@@ -8614,7 +9959,7 @@ export const initializeOnboardingOperationalRequestsBodyExpectedVersionMin = 0;
 
 export const InitializeOnboardingOperationalRequestsBody = zod.object({
   "requestId": zod.string().min(1).max(initializeOnboardingOperationalRequestsBodyRequestIdMax).optional(),
-  "method": zod.enum(['email', 'agent']).default(initializeOnboardingOperationalRequestsBodyMethodDefault),
+  "method": zod.enum(['email', 'agent', 'human-task']).default(initializeOnboardingOperationalRequestsBodyMethodDefault),
   "requestIds": zod.array(zod.string().regex(initializeOnboardingOperationalRequestsBodyRequestIdsItemRegExp)).min(1).max(initializeOnboardingOperationalRequestsBodyRequestIdsMax).optional(),
   "expectedVersion": zod.number().min(initializeOnboardingOperationalRequestsBodyExpectedVersionMin).optional()
 })
@@ -8623,7 +9968,6 @@ export const initializeOnboardingOperationalRequestsResponseOneVersionMin = 0;
 
 export const initializeOnboardingOperationalRequestsResponseOneRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const initializeOnboardingOperationalRequestsResponseOneRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const initializeOnboardingOperationalRequestsResponseOneRequestsItemReferenceRegExp = new RegExp('^SIMULATED-OPS-');
 export const initializeOnboardingOperationalRequestsResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 
 
@@ -8631,13 +9975,13 @@ export const initializeOnboardingOperationalRequestsResponseOneRequestsItemHisto
 export const InitializeOnboardingOperationalRequestsResponse = zod.object({
   "caseId": zod.number(),
   "version": zod.number().min(initializeOnboardingOperationalRequestsResponseOneVersionMin),
-  "simulated": zod.literal(true),
+  "simulated": zod.boolean().describe('False when the case includes accountable human workforce tasks'),
   "offlinePaused": zod.boolean().describe('Synthetic offline samples remain read-only and never record actions'),
   "requests": zod.array(zod.object({
   "id": zod.string().regex(initializeOnboardingOperationalRequestsResponseOneRequestsItemIdRegExp),
   "label": zod.string(),
   "owner": zod.string().describe('Workstream owner accountable for the simulated request'),
-  "agent": zod.string(),
+  "agent": zod.string().describe('Stable simulation persona id, or human-task for a workforce human task'),
   "agentIdentity": zod.union([zod.object({
   "id": zod.string().regex(initializeOnboardingOperationalRequestsResponseOneRequestsItemAgentIdentityOneIdRegExp),
   "name": zod.string(),
@@ -8648,10 +9992,29 @@ export const InitializeOnboardingOperationalRequestsResponse = zod.object({
   "simulated": zod.literal(true)
 }).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved current AI-agent identity; null for email assignments or unknown legacy ids'),
   "teamRecipientLabel": zod.string().describe('Human-readable team label; never an invented email address'),
-  "method": zod.enum(['email', 'agent']),
+  "method": zod.enum(['email', 'agent', 'human-task']),
   "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
-  "reference": zod.string().regex(initializeOnboardingOperationalRequestsResponseOneRequestsItemReferenceRegExp).describe('Simulation-local reference prefixed SIMULATED-OPS'),
-  "simulated": zod.literal(true),
+  "reference": zod.string().describe('Simulation-local reference, or a HUMAN-TASK audit reference'),
+  "simulated": zod.boolean().describe('False only for accountable human workforce tasks'),
+  "runtimeSchemaVersion": zod.enum(['workforce-step-runtime/v1']).optional(),
+  "runtimeWorkstream": zod.enum(['intake', 'payroll', 'assets', 'learning']).optional(),
+  "responsibleRole": zod.string().optional(),
+  "assignedTo": zod.string().nullish(),
+  "mandatory": zod.boolean().optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "nonblocking": zod.boolean().optional(),
+  "prerequisites": zod.array(zod.string()).optional(),
+  "parallelGroup": zod.string().nullish(),
+  "permittedChannels": zod.array(zod.enum(['manager-led'])).optional().describe('Accountable-human evidence channel; no learning portal executor is registered.'),
+  "notBeforeAt": zod.coerce.date().nullish(),
+  "dueAt": zod.coerce.date().nullish(),
+  "escalation": zod.union([zod.object({
+  "at": zod.coerce.date(),
+  "responsibleRole": zod.string(),
+  "assignedTo": zod.string().nullable()
+}),zod.null()]).optional(),
+  "overdue": zod.boolean().optional().describe('Computed from dueAt at read time; no external escalation is implied'),
+  "escalationRequired": zod.boolean().optional().describe('Computed from escalation.at at read time; an accountable human must act'),
   "requestedAt": zod.coerce.date(),
   "startedAt": zod.coerce.date().nullable(),
   "completedAt": zod.coerce.date().nullable(),
@@ -8676,11 +10039,12 @@ export const InitializeOnboardingOperationalRequestsResponse = zod.object({
   "simulated": zod.literal(true)
 }).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable')
 })).min(1)
-}).describe('A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.\n'))
+}).describe('A simulated setup request or an accountable workforce human task. Human tasks never represent an AI, LMS, calendar, message, or external system execution.\n'))
 }).and(zod.object({
   "requestId": zod.string().nullable().describe('Stable operational request id for actions; initialization echoes its client idempotency id'),
   "action": zod.string().nullable(),
   "idempotent": zod.boolean(),
+  "continuationPending": zod.boolean().optional().describe('The task action committed, but a follow-up connector continuation is pending durable automatic retry.'),
   "initializedRequestIds": zod.array(zod.string())
 }))
 
@@ -8713,7 +10077,7 @@ export const applyOnboardingOperationalRequestActionBodyExpectedVersionMin = 0;
 export const ApplyOnboardingOperationalRequestActionBody = zod.object({
   "requestId": zod.string().min(1).max(applyOnboardingOperationalRequestActionBodyRequestIdMax).describe('Client idempotency id; reuse only for the identical action payload'),
   "action": zod.enum(['select-method', 'start', 'progress', 'complete', 'block', 'retry']),
-  "method": zod.enum(['email', 'agent']).optional(),
+  "method": zod.enum(['email', 'agent', 'human-task']).optional(),
   "reason": zod.string().min(applyOnboardingOperationalRequestActionBodyReasonMin).max(applyOnboardingOperationalRequestActionBodyReasonMax).optional(),
   "expectedVersion": zod.number().min(applyOnboardingOperationalRequestActionBodyExpectedVersionMin)
 })
@@ -8722,7 +10086,6 @@ export const applyOnboardingOperationalRequestActionResponseOneVersionMin = 0;
 
 export const applyOnboardingOperationalRequestActionResponseOneRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const applyOnboardingOperationalRequestActionResponseOneRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-export const applyOnboardingOperationalRequestActionResponseOneRequestsItemReferenceRegExp = new RegExp('^SIMULATED-OPS-');
 export const applyOnboardingOperationalRequestActionResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 
 
@@ -8730,13 +10093,13 @@ export const applyOnboardingOperationalRequestActionResponseOneRequestsItemHisto
 export const ApplyOnboardingOperationalRequestActionResponse = zod.object({
   "caseId": zod.number(),
   "version": zod.number().min(applyOnboardingOperationalRequestActionResponseOneVersionMin),
-  "simulated": zod.literal(true),
+  "simulated": zod.boolean().describe('False when the case includes accountable human workforce tasks'),
   "offlinePaused": zod.boolean().describe('Synthetic offline samples remain read-only and never record actions'),
   "requests": zod.array(zod.object({
   "id": zod.string().regex(applyOnboardingOperationalRequestActionResponseOneRequestsItemIdRegExp),
   "label": zod.string(),
   "owner": zod.string().describe('Workstream owner accountable for the simulated request'),
-  "agent": zod.string(),
+  "agent": zod.string().describe('Stable simulation persona id, or human-task for a workforce human task'),
   "agentIdentity": zod.union([zod.object({
   "id": zod.string().regex(applyOnboardingOperationalRequestActionResponseOneRequestsItemAgentIdentityOneIdRegExp),
   "name": zod.string(),
@@ -8747,10 +10110,29 @@ export const ApplyOnboardingOperationalRequestActionResponse = zod.object({
   "simulated": zod.literal(true)
 }).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved current AI-agent identity; null for email assignments or unknown legacy ids'),
   "teamRecipientLabel": zod.string().describe('Human-readable team label; never an invented email address'),
-  "method": zod.enum(['email', 'agent']),
+  "method": zod.enum(['email', 'agent', 'human-task']),
   "status": zod.enum(['requested', 'in-progress', 'completed', 'blocked']),
-  "reference": zod.string().regex(applyOnboardingOperationalRequestActionResponseOneRequestsItemReferenceRegExp).describe('Simulation-local reference prefixed SIMULATED-OPS'),
-  "simulated": zod.literal(true),
+  "reference": zod.string().describe('Simulation-local reference, or a HUMAN-TASK audit reference'),
+  "simulated": zod.boolean().describe('False only for accountable human workforce tasks'),
+  "runtimeSchemaVersion": zod.enum(['workforce-step-runtime/v1']).optional(),
+  "runtimeWorkstream": zod.enum(['intake', 'payroll', 'assets', 'learning']).optional(),
+  "responsibleRole": zod.string().optional(),
+  "assignedTo": zod.string().nullish(),
+  "mandatory": zod.boolean().optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "nonblocking": zod.boolean().optional(),
+  "prerequisites": zod.array(zod.string()).optional(),
+  "parallelGroup": zod.string().nullish(),
+  "permittedChannels": zod.array(zod.enum(['manager-led'])).optional().describe('Accountable-human evidence channel; no learning portal executor is registered.'),
+  "notBeforeAt": zod.coerce.date().nullish(),
+  "dueAt": zod.coerce.date().nullish(),
+  "escalation": zod.union([zod.object({
+  "at": zod.coerce.date(),
+  "responsibleRole": zod.string(),
+  "assignedTo": zod.string().nullable()
+}),zod.null()]).optional(),
+  "overdue": zod.boolean().optional().describe('Computed from dueAt at read time; no external escalation is implied'),
+  "escalationRequired": zod.boolean().optional().describe('Computed from escalation.at at read time; an accountable human must act'),
   "requestedAt": zod.coerce.date(),
   "startedAt": zod.coerce.date().nullable(),
   "completedAt": zod.coerce.date().nullable(),
@@ -8775,11 +10157,12 @@ export const ApplyOnboardingOperationalRequestActionResponse = zod.object({
   "simulated": zod.literal(true)
 }).describe('Canonical identity for an operational onboarding agent. The current catalog contains internal simulation personas; simulated true means no AI provider or external system was invoked.\n'),zod.null()]).optional().describe('Resolved identity for a new AI-agent assignment; null means no AI agent attribution or historical identity unavailable')
 })).min(1)
-}).describe('A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.\n'))
+}).describe('A simulated setup request or an accountable workforce human task. Human tasks never represent an AI, LMS, calendar, message, or external system execution.\n'))
 }).and(zod.object({
   "requestId": zod.string().nullable().describe('Stable operational request id for actions; initialization echoes its client idempotency id'),
   "action": zod.string().nullable(),
   "idempotent": zod.boolean(),
+  "continuationPending": zod.boolean().optional().describe('The task action committed, but a follow-up connector continuation is pending durable automatic retry.'),
   "initializedRequestIds": zod.array(zod.string())
 }))
 
@@ -9444,6 +10827,61 @@ export const updateOnboardingChecklistItemResponseChecklistSnapshotItemOrderMin 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+export const updateOnboardingChecklistItemResponseWorkforceContextRoleFamilyMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextBandMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextDepartmentMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextLegalEntityMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextBusinessUnitMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextIndustryMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextWorkCountryMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextWorkStateMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextSiteMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextPayBasisMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextShiftPatternMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextHazardsItemMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextHazardsMax = 30;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextBatchIdMax = 120;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const updateOnboardingChecklistItemResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
 export const UpdateOnboardingChecklistItemResponse = zod.object({
   "id": zod.number(),
   "workerName": zod.string(),
@@ -9471,7 +10909,12 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "note": zod.string().optional(),
   "order": zod.number().min(updateOnboardingChecklistItemResponseReadinessItemOrderMin).optional(),
   "mandatory": zod.boolean().optional(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional()
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 }).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
   "workstreams": zod.array(zod.object({
   "key": zod.string().describe('documentation | access | assets | learning | analytics'),
@@ -9492,7 +10935,12 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "order": zod.number().min(updateOnboardingChecklistItemResponseChecklistSnapshotItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })),
   "checklistProfileId": zod.string(),
   "checklistProfileName": zod.string(),
@@ -9501,9 +10949,632 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "band": zod.string().min(1).optional(),
   "role": zod.string().min(1).optional(),
   "employmentType": zod.string().min(1).optional(),
-  "location": zod.string().min(1).optional()
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
 }),
   "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextHazardsItemMax)).max(updateOnboardingChecklistItemResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextRequiredLicensesItemMax)).max(updateOnboardingChecklistItemResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(updateOnboardingChecklistItemResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
+  "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Record a designated-human verification decision for an independent policy evidence gate
+ */
+
+export const verifyOnboardingChecklistEvidencePathItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
+
+
+export const VerifyOnboardingChecklistEvidenceParams = zod.object({
+  "id": zod.coerce.number().min(1),
+  "itemId": zod.coerce.string().regex(verifyOnboardingChecklistEvidencePathItemIdRegExp)
+})
+
+export const verifyOnboardingChecklistEvidenceBodyEvidenceReferenceMin = 3;
+export const verifyOnboardingChecklistEvidenceBodyEvidenceReferenceMax = 500;
+
+export const verifyOnboardingChecklistEvidenceBodyAuthorityRoleMin = 2;
+export const verifyOnboardingChecklistEvidenceBodyAuthorityRoleMax = 80;
+
+export const verifyOnboardingChecklistEvidenceBodyReasonMin = 3;
+export const verifyOnboardingChecklistEvidenceBodyReasonMax = 500;
+
+export const verifyOnboardingChecklistEvidenceBodyExpectedPolicyContextVersionMin = 0;
+
+export const verifyOnboardingChecklistEvidenceBodyExpectedPolicyTemplateVersionMin = 0;
+
+
+export const verifyOnboardingChecklistEvidenceBodyExpectedPolicyProfileVersionMin = 0;
+
+
+
+export const VerifyOnboardingChecklistEvidenceBody = zod.object({
+  "evidenceReference": zod.string().min(verifyOnboardingChecklistEvidenceBodyEvidenceReferenceMin).max(verifyOnboardingChecklistEvidenceBodyEvidenceReferenceMax),
+  "authorityRole": zod.string().min(verifyOnboardingChecklistEvidenceBodyAuthorityRoleMin).max(verifyOnboardingChecklistEvidenceBodyAuthorityRoleMax),
+  "decision": zod.enum(['verified', 'rejected']),
+  "reason": zod.string().min(verifyOnboardingChecklistEvidenceBodyReasonMin).max(verifyOnboardingChecklistEvidenceBodyReasonMax),
+  "expectedPolicy": zod.object({
+  "contextVersion": zod.number().min(verifyOnboardingChecklistEvidenceBodyExpectedPolicyContextVersionMin),
+  "templateVersion": zod.number().min(verifyOnboardingChecklistEvidenceBodyExpectedPolicyTemplateVersionMin),
+  "profileId": zod.string().min(1),
+  "profileVersion": zod.number().min(verifyOnboardingChecklistEvidenceBodyExpectedPolicyProfileVersionMin)
+}).describe('Exact case policy provenance the server locks and compares before recording independently verified evidence.')
+})
+
+export const verifyOnboardingChecklistEvidenceResponseReadinessItemOrderMin = 0;
+
+
+
+export const verifyOnboardingChecklistEvidenceResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextRoleFamilyMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextBandMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextDepartmentMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextLegalEntityMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextBusinessUnitMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextIndustryMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextWorkCountryMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextWorkStateMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextSiteMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextPayBasisMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextShiftPatternMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextHazardsItemMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextHazardsMax = 30;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextBatchIdMax = 120;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const verifyOnboardingChecklistEvidenceResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
+export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | checklist-blocked | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('Stable item identifier; retained as key for legacy clients'),
+  "id": zod.string().optional().describe('Stable template item identifier'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional(),
+  "order": zod.number().min(verifyOnboardingChecklistEvidenceResponseReadinessItemOrderMin).optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
+}).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "checklistTemplateVersion": zod.number().min(1),
+  "checklistSnapshot": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(verifyOnboardingChecklistEvidenceResponseChecklistSnapshotItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
+})),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextHazardsItemMax)).max(verifyOnboardingChecklistEvidenceResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextRequiredLicensesItemMax)).max(verifyOnboardingChecklistEvidenceResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(verifyOnboardingChecklistEvidenceResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
+  "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
+  "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
+  "offerAcceptanceCompletedBy": zod.string().nullable(),
+  "gateways": zod.object({
+  "a": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "b": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+}),
+  "c": zod.object({
+  "status": zod.enum(['complete', 'blocked', 'pending', 'human-review', 'not-applicable']),
+  "label": zod.string(),
+  "reason": zod.string()
+})
+}).describe('Server-derived live onboarding gate status; human-review always denotes a real human queue item.'),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Assign a tenant member as a server-authoritative policy evidence authority
+ */
+
+export const assignOnboardingPolicyAuthorityPathAuthorityRoleRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{1,63}$');
+
+
+export const AssignOnboardingPolicyAuthorityParams = zod.object({
+  "userId": zod.coerce.string().min(1),
+  "authorityRole": zod.coerce.string().regex(assignOnboardingPolicyAuthorityPathAuthorityRoleRegExp)
+})
+
+export const AssignOnboardingPolicyAuthorityResponse = zod.void()
+
+
+/**
+ * @summary Record an authorized correction to captured job context without silently rebasing an active policy
+ */
+
+
+
+export const CorrectOnboardingWorkforceContextParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextRoleFamilyMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextBandMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextDepartmentMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextLegalEntityMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextBusinessUnitMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextIndustryMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextWorkCountryMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextWorkStateMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextSiteMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextEmploymentArrangementMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextWorkerCategoryMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextPayBasisMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextShiftPatternMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextHazardsItemMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextHazardsMax = 30;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextRequiredLicensesItemMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextRequiredLicensesMax = 30;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextBatchIdMax = 120;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextAccessibilityNeedsMax = 500;
+
+export const correctOnboardingWorkforceContextBodyWorkforceContextLanguagePreferenceMax = 120;
+
+export const correctOnboardingWorkforceContextBodyReasonMin = 3;
+export const correctOnboardingWorkforceContextBodyReasonMax = 500;
+
+
+
+export const CorrectOnboardingWorkforceContextBody = zod.object({
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextBandMax).optional(),
+  "department": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextHazardsItemMax)).max(correctOnboardingWorkforceContextBodyWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextRequiredLicensesItemMax)).max(correctOnboardingWorkforceContextBodyWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "expectedUpdatedAt": zod.coerce.date(),
+  "reason": zod.string().min(correctOnboardingWorkforceContextBodyReasonMin).max(correctOnboardingWorkforceContextBodyReasonMax)
+})
+
+export const correctOnboardingWorkforceContextResponseReadinessItemOrderMin = 0;
+
+
+
+export const correctOnboardingWorkforceContextResponseChecklistSnapshotItemOrderMin = 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextRoleFamilyMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextBandMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextDepartmentMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextLegalEntityMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextBusinessUnitMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextIndustryMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextWorkCountryMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextWorkStateMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextSiteMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextEmploymentArrangementMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextWorkerCategoryMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextPayBasisMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextShiftPatternMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextHazardsItemMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextHazardsMax = 30;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextRequiredLicensesItemMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextRequiredLicensesMax = 30;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextBatchIdMax = 120;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextAccessibilityNeedsMax = 500;
+
+export const correctOnboardingWorkforceContextResponseWorkforceContextLanguagePreferenceMax = 120;
+
+
+
+
+export const CorrectOnboardingWorkforceContextResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "workerPhone": zod.string().nullable().describe('E.164 phone for WhatsApp; null when not provided'),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']).describe('HR-selected contact channel(s) for this new hire'),
+  "hireType": zod.string().describe('external-fte | contractor | rehire | internal-transfer | campus-cohort | expedited'),
+  "workerCategory": zod.string().describe('employee | contractor | vendor | intern'),
+  "workerBand": zod.string().nullable().describe('Employee band used for exact targeted checklist matching'),
+  "role": zod.string(),
+  "department": zod.string(),
+  "geography": zod.string().describe('Country\/region driving statutory items (e.g. India, USA, UK)'),
+  "legalEntity": zod.string(),
+  "managerName": zod.string(),
+  "recruiterName": zod.string(),
+  "joiningDate": zod.string().describe('ISO date'),
+  "urgency": zod.string().describe('standard | elevated'),
+  "lifecycleStage": zod.string().describe('trigger-received | profile-validated | plan-generated | preboarding | day1-review | early-enablement | exception | complete | paused'),
+  "orchestrationStatus": zod.string().describe('running | waiting-approval | checklist-blocked | blocked | idle | done'),
+  "readiness": zod.array(zod.object({
+  "key": zod.string().describe('Stable item identifier; retained as key for legacy clients'),
+  "id": zod.string().optional().describe('Stable template item identifier'),
+  "label": zod.string(),
+  "status": zod.string().describe('pending | in-progress | ready | exception'),
+  "note": zod.string().optional(),
+  "order": zod.number().min(correctOnboardingWorkforceContextResponseReadinessItemOrderMin).optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
+}).describe('One enabled entry in the case\'s versioned Day-1 checklist snapshot')),
+  "workstreams": zod.array(zod.object({
+  "key": zod.string().describe('documentation | access | assets | learning | analytics'),
+  "label": zod.string(),
+  "agent": zod.string(),
+  "status": zod.string().describe('pending | in-progress | blocked | ready | exception'),
+  "owner": zod.string().describe('Accountable human owner'),
+  "blockers": zod.array(zod.string())
+}).describe('A parallel readiness workstream owned by one agent')),
+  "primarySkill": zod.string().nullable(),
+  "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
+  "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
+  "checklistTemplateVersion": zod.number().min(1),
+  "checklistSnapshot": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(correctOnboardingWorkforceContextResponseChecklistSnapshotItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
+})),
+  "checklistProfileId": zod.string(),
+  "checklistProfileName": zod.string(),
+  "checklistProfileVersion": zod.number().min(1),
+  "checklistMatchedCriteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
+}),
+  "checklistMatchExplanation": zod.string(),
+  "workforceContext": zod.object({
+  "roleFamily": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextRoleFamilyMax).optional(),
+  "band": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextBandMax).optional(),
+  "department": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextDepartmentMax).optional(),
+  "legalEntity": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextLegalEntityMax).optional(),
+  "businessUnit": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextBusinessUnitMax).optional(),
+  "industry": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextIndustryMax).optional(),
+  "workCountry": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextWorkCountryMax).optional(),
+  "workState": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextWorkStateMax).optional(),
+  "site": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextSiteMax).optional(),
+  "employmentArrangement": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextEmploymentArrangementMax).optional(),
+  "workerCategory": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextWorkerCategoryMax).optional(),
+  "payBasis": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextPayBasisMax).optional(),
+  "shiftPattern": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextShiftPatternMax).optional(),
+  "workEnvironment": zod.enum(['office', 'remote', 'site', 'field', 'mixed']).optional(),
+  "hazards": zod.array(zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextHazardsItemMax)).max(correctOnboardingWorkforceContextResponseWorkforceContextHazardsMax).optional(),
+  "requiredLicenses": zod.array(zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextRequiredLicensesItemMax)).max(correctOnboardingWorkforceContextResponseWorkforceContextRequiredLicensesMax).optional(),
+  "hiringMode": zod.enum(['individual', 'batch', 'seasonal']).optional(),
+  "batchId": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextBatchIdMax).optional(),
+  "assistedIntake": zod.boolean().optional(),
+  "accessibilityNeeds": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextAccessibilityNeedsMax).optional(),
+  "languagePreference": zod.string().max(correctOnboardingWorkforceContextResponseWorkforceContextLanguagePreferenceMax).optional(),
+  "siteExposure": zod.boolean().optional(),
+  "safetyCritical": zod.boolean().optional()
+}).describe('Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.'),
+  "workforceClassification": zod.union([zod.object({
+  "label": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review']),
+  "source": zod.enum(['deterministic-job-context', 'authorized-correction']),
+  "rationale": zod.string(),
+  "confidence": zod.enum(['high', 'medium', 'uncertain'])
+}).describe('Explainable job classification; it describes the job, never the person.'),zod.null()]),
+  "workforceContextVersion": zod.number().min(1),
+  "processPolicySnapshot": zod.record(zod.string(), zod.unknown()),
+  "jobProfileId": zod.string().nullable(),
+  "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
   "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
@@ -10189,7 +12260,12 @@ export const GetOnboardingSettingsResponse = zod.object({
   "order": zod.number().min(getOnboardingSettingsResponseDay1ChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })).min(1).max(getOnboardingSettingsResponseDay1ChecklistMax),
   "day1LogisticsDefault": zod.object({
   "orientationDate": zod.string().regex(getOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
@@ -10252,7 +12328,12 @@ export const UpdateOnboardingSettingsBody = zod.object({
   "order": zod.number().min(updateOnboardingSettingsBodyDay1ChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })).min(1).max(updateOnboardingSettingsBodyDay1ChecklistMax).optional(),
   "day1LogisticsDefault": zod.object({
   "orientationDate": zod.string().regex(updateOnboardingSettingsBodyDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),
@@ -10304,7 +12385,12 @@ export const UpdateOnboardingSettingsResponse = zod.object({
   "order": zod.number().min(updateOnboardingSettingsResponseDay1ChecklistItemOrderMin),
   "enabled": zod.boolean(),
   "mandatory": zod.boolean(),
-  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review'])
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
 })).min(1).max(updateOnboardingSettingsResponseDay1ChecklistMax),
   "day1LogisticsDefault": zod.object({
   "orientationDate": zod.string().regex(updateOnboardingSettingsResponseDay1LogisticsDefaultOrientationDateRegExp).nullable().describe('Blank uses each new case\'s joining date when the default is copied'),

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, onbCases, onbEffectJournal } from "@workspace/db";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import { demoControllerLiveCaseAllowed } from "./provider-policy";
@@ -25,11 +25,58 @@ type DispatchGuardOptions<T> = {
   isUnknownResult?: (result: T) => boolean;
 };
 
+type DispatchGuardTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 const dispatchContext = new AsyncLocalStorage<DispatchGuardContext>();
 const GUARD_TOOL = "provider-dispatch-guard";
 const GUARD_ARGUMENTS_HASH = createHash("sha256")
   .update("provider-dispatch-guard:v1")
   .digest("hex");
+
+function mutationLockKey(organizationId: string, caseId: number): string {
+  return `provider-dispatch-mutation:${organizationId}:${caseId}`;
+}
+
+/**
+ * Serializes a case-policy mutation with the short transaction that makes a
+ * provider-dispatch marker durable. Callers must acquire this before reading
+ * the case and checking `hasActiveCaseDispatchMarker`; otherwise a recovery
+ * worker could commit its marker immediately after a mutation checked.
+ */
+export async function acquireCaseDispatchMutationLock(
+  tx: Pick<DispatchGuardTransaction, "execute">,
+  organizationId: string,
+  caseId: number,
+): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${mutationLockKey(organizationId, caseId)}))`,
+  );
+}
+
+/**
+ * A dispatch in progress (or one that ended ambiguously) cannot safely be
+ * superseded by a policy/context mutation. It must be reconciled first.
+ */
+export async function hasActiveCaseDispatchMarker(
+  tx: Pick<DispatchGuardTransaction, "select">,
+  organizationId: string,
+  caseId: number,
+): Promise<boolean> {
+  const [marker] = await tx
+    .select({ key: onbEffectJournal.logicalOperationKey })
+    .from(onbEffectJournal)
+    .where(and(
+      eq(onbEffectJournal.organizationId, organizationId),
+      eq(onbEffectJournal.caseId, caseId),
+      eq(onbEffectJournal.toolName, GUARD_TOOL),
+      inArray(onbEffectJournal.status, [
+        "dispatching",
+        "unknown_effect_manual_repair",
+      ]),
+    ))
+    .limit(1);
+  return Boolean(marker);
+}
 
 /**
  * Acquire a short-lived durable in-flight marker before crossing a provider
@@ -66,11 +113,23 @@ export async function withCaseDispatchGuard<T>(
 
   const guardKey = `provider-dispatch-guard:${caseId}:${randomUUID()}`;
   const guardOwner = randomUUID();
+  // Resolve the tenant before opening the transaction so the advisory lock
+  // order is identical to policy/context writers: advisory lock, then case
+  // row. Organization is immutable for an existing onboarding case.
+  const [candidate] = await db
+    .select({ organizationId: onbCases.organizationId })
+    .from(onbCases)
+    .where(eq(onbCases.id, caseId));
+  if (!candidate) return undefined;
   const acquired = await db.transaction(async (tx) => {
+    await acquireCaseDispatchMutationLock(tx, candidate.organizationId, caseId);
     const [caseRow] = await tx
       .select()
       .from(onbCases)
-      .where(eq(onbCases.id, caseId))
+      .where(and(
+        eq(onbCases.id, caseId),
+        eq(onbCases.organizationId, candidate.organizationId),
+      ))
       .for("key share");
     if (!caseRow) return { kind: "missing" as const };
     if (isSyntheticOfflineCase(caseRow) && !demoControllerLiveCaseAllowed(caseRow.organizationId, caseRow.id)) {

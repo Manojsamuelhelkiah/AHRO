@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { 
-  Play, FastForward, CheckCircle2, AlertTriangle, RotateCcw, MonitorPlay, Mail, Bot
+  Play, FastForward, CheckCircle2, AlertTriangle, RotateCcw, MonitorPlay, Mail, Bot, UserRound, Clock3
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Card, CardHeader, CardTitle, CardContent, Button, cn, Input } from '@/components/ui-shared';
@@ -50,6 +50,7 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
   }
 
   const { requests, offlinePaused, version } = requestsEnv;
+  const humanTaskCount = requests.filter((request) => request.method === 'human-task').length;
 
   if (requests.length === 0) {
     return (
@@ -57,9 +58,9 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
         <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-4">
           <MonitorPlay className="w-10 h-10 text-[var(--text-muted)]" />
           <div>
-            <h3 className="text-[var(--text-base)] font-bold">Simulated Operational Requests</h3>
+            <h3 className="text-[var(--text-base)] font-bold">Operational requests & accountable human tasks</h3>
             <p className="text-[var(--text-sm)] text-[var(--text-secondary)] max-w-md mx-auto mt-2 leading-relaxed">
-              This case currently has no operational requests tracking. Initialize the simulation to manage synthetic HR asset and access requests.
+              This case currently has no operational requests tracking. Initialization can create only existing operational simulation requests and declared accountable human tasks.
             </p>
           </div>
           <Button 
@@ -68,7 +69,7 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
             disabled={initRequests.isPending || !isHR || roleLoading || offlinePaused}
             title={!isHR ? 'Only HR can initialize simulation' : undefined}
           >
-            Create simulated requests
+            Initialize requests
           </Button>
           {!isHR && !roleLoading && (
             <p className="text-xs text-[var(--text-muted)] font-medium">An organization administrator is needed to manage these requests outside Demo Organization.</p>
@@ -86,14 +87,14 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <CardTitle className="text-[var(--text-base)] flex items-center gap-2">
             <MonitorPlay className="h-5 w-5 text-[var(--violet)]" /> 
-            Simulated Operational Requests
+             {humanTaskCount ? 'Operational requests & human tasks' : 'Simulated Operational Requests'}
           </CardTitle>
           <span className="text-[10px] sm:text-xs px-2 py-1 rounded border border-[var(--violet)] text-[var(--violet-fg)] bg-[var(--violet-light-bg)] font-bold tracking-wider uppercase self-start sm:self-auto shrink-0">
-            SIMULATED
+             {humanTaskCount ? `${humanTaskCount} HUMAN TASK${humanTaskCount === 1 ? '' : 'S'}` : 'SIMULATED'}
           </span>
         </div>
         <p className="text-xs text-[var(--text-muted)] mt-3 leading-relaxed max-w-3xl">
-          Note: Completion here is an operational simulation and does not verify real payroll, assets, or background checks. It does not bypass required human approvals.
+           Simulated requests never verify real operational completion. Workforce learning tasks are accountable human work only: they do not send communication, invoke an LMS, calendar, AI agent, or provider.
         </p>
       </CardHeader>
       <CardContent className="p-0">
@@ -136,6 +137,7 @@ function RequestItem({
   const queryClient = useQueryClient();
   const applyAction = useApplyOnboardingOperationalRequestAction();
   const [error, setError] = useState<string | null>(null);
+  const [continuationPending, setContinuationPending] = useState(false);
   const [reason, setReason] = useState<string>('');
   const [isPromptingAction, setIsPromptingAction] = useState<string | null>(null);
   const attemptIds = useRef(new Map<string, string>());
@@ -158,9 +160,10 @@ function RequestItem({
         expectedVersion: version
       }
     }, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         setIsPromptingAction(null);
         setReason('');
+        setContinuationPending(result.continuationPending === true);
         onSuccess();
       },
       onError: (err: any) => {
@@ -180,13 +183,20 @@ function RequestItem({
   };
 
   const canStart = req.status === 'requested';
-  const canSelectMethod = req.status === 'requested';
+  const canSelectMethod = req.status === 'requested' && req.method !== 'human-task';
   const canProgress = req.status === 'in-progress';
   const canComplete = req.status === 'in-progress';
   const canBlock = req.status === 'in-progress';
   const canRetry = req.status === 'blocked';
 
-  const disabled = offlinePaused || applyAction.isPending || !isHR || roleLoading;
+  // Human-task authorization is determined by the server from the signed-in
+  // tenant user, the named assignment, and scoped authority.  Members may
+  // attempt those actions; an unrelated admin is still denied server-side.
+  const canAttemptAction = req.method === 'human-task' || isHR;
+  const disabled = offlinePaused || applyAction.isPending || !canAttemptAction || roleLoading;
+  const authorizationHint = req.method === 'human-task'
+    ? 'Available to the named assignee or designated specialist; the server verifies your signed-in tenant identity.'
+    : !isHR ? 'Only organization owners and admins can act on simulated operational requests.' : undefined;
 
   return (
     <div className="p-4 sm:p-6 hover:bg-[var(--surface-alt)] transition-colors">
@@ -211,8 +221,8 @@ function RequestItem({
             <span className="break-all"><strong className="text-[var(--text-muted)] mr-1">Team:</strong>{req.teamRecipientLabel}</span>
             <span className="flex items-center gap-1.5 break-all flex-wrap">
               <strong className="text-[var(--text-muted)]">Method:</strong> 
-              {req.method === 'email' ? <Mail className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-              {req.method === 'email' ? 'Email' : 
+               {req.method === 'email' ? <Mail className="w-3.5 h-3.5" /> : req.method === 'human-task' ? <UserRound className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+               {req.method === 'human-task' ? 'Accountable human task' : req.method === 'email' ? 'Email' :
                 req.agentIdentity ? (
                   <span className="inline-flex flex-wrap items-center gap-1">
                     <Link href={`/agents#${req.agentIdentity.id}`} className="text-[var(--primary)] hover:underline font-semibold">
@@ -228,6 +238,19 @@ function RequestItem({
               }
             </span>
           </div>
+           {req.method === 'human-task' && <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+             {req.responsibleRole && <span className="rounded bg-[var(--surface-soft)] px-2 py-1"><strong>Role:</strong> {req.responsibleRole}</span>}
+             {req.assignedTo && <span className="rounded bg-[var(--surface-soft)] px-2 py-1"><strong>Assignee:</strong> {req.assignedTo}</span>}
+             {req.mandatory && <span className="rounded bg-[var(--status-red-bg)] px-2 py-1 font-semibold text-[var(--status-red-fg)]">Mandatory</span>}
+             {req.evidenceRequired && <span className="rounded bg-[var(--status-amber-bg)] px-2 py-1 font-semibold text-[var(--status-amber-fg)]">Evidence note required</span>}
+             {req.nonblocking && <span className="rounded bg-[var(--surface-alt)] px-2 py-1">Nonblocking</span>}
+             {req.parallelGroup && <span className="rounded bg-[var(--surface-alt)] px-2 py-1">Parallel group: {req.parallelGroup}</span>}
+             {!!req.prerequisites?.length && <span className="rounded bg-[var(--surface-alt)] px-2 py-1">After: {req.prerequisites.join(', ')}</span>}
+             {!!req.permittedChannels?.length && <span className="rounded bg-[var(--surface-alt)] px-2 py-1">Permitted: {req.permittedChannels.join(', ')}</span>}
+             {req.notBeforeAt && <span className="rounded bg-[var(--surface-alt)] px-2 py-1">Not before {format(new Date(req.notBeforeAt), 'MMM d, HH:mm')}</span>}
+             {req.dueAt && <span className={cn('rounded px-2 py-1', req.overdue ? 'bg-[var(--status-red-bg)] font-semibold text-[var(--status-red-fg)]' : 'bg-[var(--surface-alt)]')}><Clock3 className="mr-1 inline h-3 w-3" />Due {format(new Date(req.dueAt), 'MMM d, HH:mm')}{req.overdue ? ' · overdue' : ''}</span>}
+             {req.escalationRequired && <span className="rounded bg-[var(--status-red-bg)] px-2 py-1 font-semibold text-[var(--status-red-fg)]">Escalation required: {req.escalation?.responsibleRole}</span>}
+           </div>}
         </div>
         <div className="flex flex-col gap-2 shrink-0">
           <div className="flex flex-wrap items-center xl:justify-end gap-2">
@@ -237,34 +260,34 @@ function RequestItem({
                 onChange={(e) => doAction('select-method', e.target.value)}
                 disabled={disabled}
                 className="text-sm bg-[var(--surface)] border border-[var(--border)] rounded px-2 py-2 focus:ring-1 focus:outline-none min-h-[36px]"
-                title={!isHR ? 'Only HR can change methods' : undefined}
+                title={authorizationHint}
               >
                 <option value="email">Email Method</option>
                 <option value="agent">AI Agent Method</option>
               </select>
             )}
             {canStart && (
-              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5" disabled={disabled} onClick={() => doAction('start')} title={!isHR ? 'Only HR can start requests' : undefined}>
+              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5" disabled={disabled} onClick={() => doAction('start')} title={authorizationHint}>
                 <Play className="h-4 w-4" /> Start
               </Button>
             )}
             {canProgress && (
-              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5" disabled={disabled} onClick={() => setIsPromptingAction(isPromptingAction === 'progress' ? null : 'progress')} title={!isHR ? 'Only HR can progress requests' : undefined}>
+              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5" disabled={disabled} onClick={() => setIsPromptingAction(isPromptingAction === 'progress' ? null : 'progress')} title={authorizationHint}>
                 <FastForward className="h-4 w-4" /> Progress
               </Button>
             )}
-            {canComplete && (
-              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5 border-[var(--status-green)] text-[var(--status-green-fg)] hover:bg-[var(--status-green-bg)]" disabled={disabled} onClick={() => doAction('complete')} title={!isHR ? 'Only HR can complete requests' : undefined}>
+             {canComplete && (
+               <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5 border-[var(--status-green)] text-[var(--status-green-fg)] hover:bg-[var(--status-green-bg)]" disabled={disabled} onClick={() => req.method === 'human-task' ? setIsPromptingAction(isPromptingAction === 'complete' ? null : 'complete') : doAction('complete')} title={authorizationHint}>
                 <CheckCircle2 className="h-4 w-4" /> Complete
               </Button>
             )}
             {canBlock && (
-              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5 border-[var(--status-red)] text-[var(--status-red-fg)] hover:bg-[var(--status-red-bg)]" disabled={disabled} onClick={() => setIsPromptingAction(isPromptingAction === 'block' ? null : 'block')} title={!isHR ? 'Only HR can block requests' : undefined}>
+              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5 border-[var(--status-red)] text-[var(--status-red-fg)] hover:bg-[var(--status-red-bg)]" disabled={disabled} onClick={() => setIsPromptingAction(isPromptingAction === 'block' ? null : 'block')} title={authorizationHint}>
                 <AlertTriangle className="h-4 w-4" /> Block
               </Button>
             )}
             {canRetry && (
-              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5" disabled={disabled} onClick={() => setIsPromptingAction(isPromptingAction === 'retry' ? null : 'retry')} title={!isHR ? 'Only HR can retry requests' : undefined}>
+              <Button size="sm" variant="outline" className="h-9 text-xs sm:text-sm gap-1.5" disabled={disabled} onClick={() => setIsPromptingAction(isPromptingAction === 'retry' ? null : 'retry')} title={authorizationHint}>
                 <RotateCcw className="h-4 w-4" /> Retry
               </Button>
             )}
@@ -277,7 +300,7 @@ function RequestItem({
           <div className="flex-1 w-full">
             <Input 
               autoFocus
-              placeholder={`Reason for ${isPromptingAction} (optional)...`}
+                placeholder={isPromptingAction === 'complete' && req.method === 'human-task' ? 'Evidence note for completion (3+ characters required)...' : `Reason for ${isPromptingAction} (optional)...`}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="w-full text-sm h-10"
@@ -286,7 +309,7 @@ function RequestItem({
           </div>
           <div className="flex gap-2 w-full sm:w-auto mt-1 sm:mt-0">
             <Button type="button" variant="outline" className="flex-1 h-10 px-4" onClick={() => { setIsPromptingAction(null); setReason(''); }} disabled={disabled}>Cancel</Button>
-            <Button type="submit" className="flex-1 h-10 px-4" disabled={disabled}>Confirm</Button>
+             <Button type="submit" className="flex-1 h-10 px-4" disabled={disabled || (isPromptingAction === 'complete' && req.method === 'human-task' && reason.trim().length < 3)}>Confirm</Button>
           </div>
         </form>
       )}
@@ -294,6 +317,11 @@ function RequestItem({
       {error && (
         <div className="mb-4 p-3 bg-[var(--status-red-bg)] border border-[var(--status-red)] text-[var(--status-red-fg)] text-xs rounded-[var(--radius-sm)]">
           <strong>Error:</strong> {error}
+        </div>
+      )}
+      {continuationPending && (
+        <div role="status" className="mb-4 rounded-[var(--radius-sm)] border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-3 text-xs text-[var(--status-amber-fg)]">
+          Task saved. Follow-up processing is pending and will retry automatically.
         </div>
       )}
 

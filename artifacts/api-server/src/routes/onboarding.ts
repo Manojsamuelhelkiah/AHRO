@@ -1,8 +1,9 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
 import { ensureReadinessSlaEnrollment } from "../lib/onboarding/readiness-sla-policy";
-import { and, desc, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, asc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   DEMO_ORGANIZATION_ID,
@@ -10,6 +11,7 @@ import {
   onbCases,
   onbCommunications,
   onbConnectors,
+  onbEffectJournal,
   onbEvents,
   onbCaseLogistics,
   onbSettings,
@@ -18,6 +20,11 @@ import {
   onbDocuments,
   onbVoiceSessions,
   onbWatchEmails,
+  onbPolicyAuthorities,
+  onbPolicyRecommendations,
+  onbJobProfiles,
+  onbIntakeBatchPeople,
+  organizationMembershipsTable,
 } from "@workspace/db/schema";
 import {
   CreateOnboardingCaseBody,
@@ -47,7 +54,7 @@ import {
   offerAcceptanceRequired,
   startOrchestration,
 } from "../lib/onboarding/engine";
-import { isChecklistAdministrator, setCustomChecklistItemStatus } from "../lib/onboarding/checklist";
+import { isChecklistAdministrator, setCustomChecklistItemStatus, verifyChecklistEvidence } from "../lib/onboarding/checklist";
 import { getScenario, SCENARIOS, DEMO_EMAIL } from "../lib/onboarding/scenarios";
 import { ensureConnectorsSeeded } from "../lib/onboarding/connectors";
 import {
@@ -150,14 +157,30 @@ import {
 import {
   activeReplacementDecision,
   applyChecklistOverrides,
+  checklistProfileMatchingAttributes,
   disableChecklistProfile,
+  invalidateEvidenceReadinessForContextChange,
   listCurrentChecklistProfiles,
   mergeChecklistReadiness,
-  resolveChecklistProfile,
-  resolveChecklistProfileInTransaction,
+  resolveEffectiveWorkforcePolicy,
+  resolveEffectiveWorkforcePolicyInTransaction,
   saveChecklistProfile,
+  saveChecklistProfileInTransaction,
   validateProfilesAgainstBase,
 } from "../lib/onboarding/checklist-profiles";
+import {
+  classifyWorkforceContext,
+  canonicalAuthorityRoleId,
+  normalizedWorkforceContext,
+  workforceAuthorityScope,
+  WORKFORCE_STARTER_TEMPLATES,
+} from "../lib/onboarding/workforce-policies";
+import {
+  analyzeCohortLearning,
+  learningPolicyRuntimeIssue,
+  parseLearningPolicy,
+  type LearningPolicy,
+} from "../lib/onboarding/policy-recommendations";
 import {
   executeSyntheticReset,
   inspectSyntheticReset,
@@ -165,11 +188,13 @@ import {
 } from "../lib/onboarding/synthetic-reset";
 import {
   applyOperationalRequestAction,
+  assertWorkforceRuntimeRebaseAllowed,
   canMutateOperationalRequests,
   getOnboardingAgentCatalog,
   getOperationalRequests,
   initializeOperationalRequests,
   OperationalRequestConflictError,
+  OperationalRequestAuthorizationError,
   OperationalRequestNotFoundError,
   OperationalRequestOfflineError,
 } from "../lib/onboarding/operational-requests";
@@ -177,6 +202,10 @@ import {
   isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
+import {
+  acquireCaseDispatchMutationLock,
+  hasActiveCaseDispatchMarker,
+} from "../lib/onboarding/dispatch-guard";
 import {
   canManageBgvNotifications,
   getBgvNotifications,
@@ -372,6 +401,12 @@ async function serializeCase(row: typeof onbCases.$inferSelect) {
     checklistProfileVersion: row.checklistProfileVersion ?? row.checklistTemplateVersion,
     checklistMatchedCriteria: row.checklistMatchedCriteria,
     checklistMatchExplanation: row.checklistMatchExplanation,
+    workforceContext: row.workforceContext,
+    workforceClassification: row.workforceClassification,
+    workforceContextVersion: row.workforceContextVersion,
+    processPolicySnapshot: row.processPolicySnapshot,
+    jobProfileId: row.jobProfileId,
+    jobProfileVersion: row.jobProfileVersion,
     orchestrationCheckpoint: row.orchestrationCheckpoint,
     candidateEmailAuthorized: Boolean(row.candidateEmailAuthorizedAt),
     offerAcceptanceComplete: row.offerAcceptanceComplete,
@@ -393,25 +428,49 @@ async function insertCaseAndStart(
 ) {
   const logisticsDefault = await getDay1LogisticsDefault(organizationId);
   const row = await db.transaction(async (tx) => {
-    const profile = await resolveChecklistProfileInTransaction(tx, organizationId, {
-      band: values.workerBand ?? values.workerCategory,
-      role: values.role,
-      employmentType: values.hireType,
-      location: values.geography,
+    const [jobProfile] = values.jobProfileId
+      ? await tx.select().from(onbJobProfiles).where(and(
+        eq(onbJobProfiles.organizationId, organizationId),
+        eq(onbJobProfiles.profileId, values.jobProfileId),
+        eq(onbJobProfiles.enabled, true),
+      )).orderBy(desc(onbJobProfiles.version)).limit(1)
+      : [];
+    if (values.jobProfileId && !jobProfile) throw new Error("Selected job profile was not found or is retired.");
+    const workforceContext = normalizedWorkforceContext({
+      ...jobProfile?.context,
+      ...values.workforceContext,
     });
+    const workforcePolicy = await resolveEffectiveWorkforcePolicyInTransaction(
+      tx,
+      organizationId,
+      workforceContext,
+      values,
+    );
+    const { profile, classification } = workforcePolicy;
     const [inserted] = await tx
       .insert(onbCases)
       .values({
         ...values,
         ...organizationValues(organizationId),
         checklistTemplateVersion: profile.templateVersion,
-        checklistSnapshot: profile.items,
+        checklistSnapshot: workforcePolicy.effectiveItems,
         checklistProfileId: profile.profileId,
         checklistProfileName: profile.profileName,
         checklistProfileVersion: profile.profileVersion,
         checklistMatchedCriteria: profile.matchedCriteria,
         checklistMatchExplanation: profile.explanation,
-        readiness: readinessFromChecklist(profile.items),
+        workforceContext,
+        workforceClassification: classification,
+        processPolicySnapshot: {
+          profileId: profile.profileId,
+          profileVersion: profile.profileVersion,
+          templateVersion: profile.templateVersion,
+          processPolicy: profile.processPolicy ?? {},
+          classification,
+        },
+        jobProfileId: jobProfile?.profileId ?? null,
+        jobProfileVersion: jobProfile?.version ?? null,
+        readiness: readinessFromChecklist(workforcePolicy.effectiveItems),
         workstreams: defaultWorkstreams(),
         orchestrationStatus: "idle",
       })
@@ -632,6 +691,8 @@ router.post("/onboarding/cases", async (req, res, next) => {
       hireType: body.hireType,
       workerCategory: body.workerCategory,
       workerBand: body.workerBand ?? null,
+      workforceContext: body.workforceContext ?? {},
+      jobProfileId: body.jobProfileId ?? null,
       role: body.role,
       department: body.department,
       geography: body.geography,
@@ -794,6 +855,7 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
     }
     const reviewer = await resolveReviewerName(req.authUserId!);
     const outcome = await db.transaction(async (tx) => {
+      await acquireCaseDispatchMutationLock(tx, organizationId, id);
       const [current] = await tx.select().from(onbCases).where(and(
         eq(onbCases.id, id),
         organizationWhere(onbCases, organizationId),
@@ -809,23 +871,80 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
           message: "The case checklist changed since it was loaded. Refresh the case before recalculating or replacing it.",
         };
       }
-      const preOrchestration =
+      if (await hasActiveCaseDispatchMarker(tx, organizationId, id)) {
+        return {
+          kind: "active-dispatch" as const,
+          message: "This case has an active provider dispatch marker. Reconcile the dispatch before replacing its policy.",
+        };
+      }
+      const initialPreOrchestration =
         current.orchestrationStatus === "idle" &&
         current.lifecycleStage === "trigger-received" &&
         current.orchestrationCheckpoint === null;
+      const correctedPreworkstreamCandidate =
+        current.lifecycleStage === "trigger-received" &&
+        current.orchestrationCheckpoint === null &&
+        (current.orchestrationStatus === "checklist-blocked" ||
+          current.orchestrationStatus === "batch-intake-pending-review") &&
+        current.orchestrationClaimOwner === null &&
+        current.orchestrationClaimUntil === null &&
+        current.checklistSnapshot.some((item) =>
+          item.id === "policy-rebase-required" && item.enabled && item.mandatory,
+        );
+      // A context correction on a newly created case deliberately sets a
+      // rebase gate while retaining its null checkpoint. It may be rebased
+      // without a synthetic "active replacement" only if no human runtime
+      // tasks, external effects, or orchestration claim were ever created.
+      let correctedUnexecutedPreworkstream = false;
+      let preserveBatchReview = false;
+      if (correctedPreworkstreamCandidate) {
+        // Keep these serial on the transaction connection. Besides avoiding
+        // concurrent pg client calls, the order makes the no-task/no-effect
+        // proof explicit before a historical batch hold is restored.
+        const [runtime] = await tx.select({ key: onbSettings.key }).from(onbSettings).where(and(
+          eq(onbSettings.organizationId, organizationId),
+          eq(onbSettings.key, `operational_requests:${id}`),
+        )).for("update").limit(1);
+        const [priorEffect] = runtime
+          ? []
+          : await tx.select({ key: onbEffectJournal.logicalOperationKey }).from(onbEffectJournal).where(and(
+              eq(onbEffectJournal.organizationId, organizationId),
+              eq(onbEffectJournal.caseId, id),
+            )).limit(1);
+        if (!runtime && !priorEffect) {
+          correctedUnexecutedPreworkstream = true;
+          const [batchMembership] = await tx.select({
+            batchId: onbIntakeBatchPeople.batchId,
+          }).from(onbIntakeBatchPeople).where(and(
+            eq(onbIntakeBatchPeople.organizationId, organizationId),
+            eq(onbIntakeBatchPeople.caseId, id),
+          )).limit(1);
+          preserveBatchReview =
+            current.orchestrationStatus === "batch-intake-pending-review" ||
+            Boolean(batchMembership);
+        }
+      }
+      const preOrchestration =
+        initialPreOrchestration || correctedUnexecutedPreworkstream;
       await acquireChecklistPolicyLock(tx, organizationId);
-      const profile = await resolveChecklistProfileInTransaction(tx, organizationId, {
-        band: current.workerBand ?? current.workerCategory,
-        role: current.role,
-        employmentType: current.hireType,
-        location: current.geography,
-      });
-      const readiness = mergeChecklistReadiness(profile.items, current.readiness);
+      const workforcePolicy = await resolveEffectiveWorkforcePolicyInTransaction(
+        tx,
+        organizationId,
+        current.workforceContext,
+        current,
+      );
+      const { profile } = workforcePolicy;
+      const recalculatedClassification = workforcePolicy.classification;
+      const nextItems = workforcePolicy.effectiveItems;
+      const readiness = mergeChecklistReadiness(nextItems, current.readiness, current.checklistSnapshot);
+      const policyRebaseGateRemoved = !nextItems.some((item) =>
+        item.id === "policy-rebase-required" && item.enabled && item.mandatory,
+      );
       const unchanged =
         current.checklistTemplateVersion === profile.templateVersion &&
         current.checklistProfileId === profile.profileId &&
         current.checklistProfileVersion === profile.profileVersion &&
-        JSON.stringify(current.checklistSnapshot) === JSON.stringify(profile.items);
+        JSON.stringify(current.checklistSnapshot) === JSON.stringify(nextItems);
       if (unchanged) return { kind: "updated" as const, row: current };
       if (!preOrchestration && body.action !== "replace-active") {
         return {
@@ -844,19 +963,69 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
       }
       const replacementDecision = preOrchestration
         ? { ok: true as const, forceReReview: false }
-        : activeReplacementDecision(current, profile.items, readiness);
+        : activeReplacementDecision(current, nextItems, readiness);
       if (!replacementDecision.ok) {
         return { kind: "conflict" as const, message: replacementDecision.reason };
       }
+      const nextProcessPolicySnapshot = {
+        profileId: profile.profileId, profileVersion: profile.profileVersion,
+        templateVersion: profile.templateVersion, processPolicy: profile.processPolicy ?? {},
+        classification: recalculatedClassification,
+      };
+      if (JSON.stringify(current.processPolicySnapshot) !== JSON.stringify(nextProcessPolicySnapshot)) {
+        if (!preOrchestration && !["initial", "plan", "intake-approved", "plan-approved", "blocked:before-workstreams"].includes(current.orchestrationCheckpoint ?? "")) {
+          return { kind: "conflict" as const, message: "This process-policy change requires task initialization before workstreams. The case has passed that boundary; its existing task history and obligations are preserved." };
+        }
+        const [runtime] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+          eq(onbSettings.organizationId, organizationId),
+          eq(onbSettings.key, `operational_requests:${id}`),
+        )).for("update");
+        if (runtime) {
+          try { assertWorkforceRuntimeRebaseAllowed(runtime.value); }
+          catch (error) { return { kind: "conflict" as const, message: error instanceof Error ? error.message : "Operational tasks prevent rebase." }; }
+          // Preserve the retired requested state for audit rather than silently
+          // discarding its task identities when the new policy is initialized.
+          await tx.insert(onbSettings).values({
+            organizationId,
+            key: `retired_operational_requests:${id}:${current.workforceContextVersion}:${current.updatedAt.getTime()}`,
+            value: runtime.value,
+          });
+          await tx.insert(onbEvents).values({
+            organizationId, caseId: id, agent: "workforce-policy", engine: "rules",
+            hitlPattern: "notify-only", ruleRef: "Version-fenced process policy rebase",
+            title: "Requested process tasks retired before policy replacement",
+            detail: "Requested process task state retained in the organization-scoped archive. New task initialization is required before workstreams.",
+          });
+          // Requested-only tasks are never effects. Retire their stale state so
+          // the next safe workstream checkpoint initializes the new snapshot.
+          await tx.delete(onbSettings).where(and(eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, `operational_requests:${id}`)));
+        }
+      }
       const [row] = await tx.update(onbCases).set({
         checklistTemplateVersion: profile.templateVersion,
-        checklistSnapshot: profile.items,
+        checklistSnapshot: nextItems,
         checklistProfileId: profile.profileId,
         checklistProfileName: profile.profileName,
         checklistProfileVersion: profile.profileVersion,
         checklistMatchedCriteria: profile.matchedCriteria,
         checklistMatchExplanation: profile.explanation,
+        workforceClassification: recalculatedClassification,
+        processPolicySnapshot: nextProcessPolicySnapshot,
         readiness,
+        ...(correctedUnexecutedPreworkstream && policyRebaseGateRemoved
+          ? {
+              // Context correction must never turn a held cohort into a live
+              // workflow. Restore an older corrected batch row to its explicit
+              // hold; a manual newly-created case returns to idle but this
+              // route never calls startOrchestration.
+              orchestrationStatus: preserveBatchReview
+                ? "batch-intake-pending-review" as const
+                : "idle" as const,
+              orchestrationCheckpoint: null,
+              orchestrationClaimOwner: null,
+              orchestrationClaimUntil: null,
+            }
+          : {}),
         ...(replacementDecision.forceReReview
           ? {
               lifecycleStage: "preboarding" as const,
@@ -887,6 +1056,109 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
       res.status(409).json({ message: outcome.message });
       return;
     }
+    if (outcome.kind === "active-dispatch") {
+      res.status(409).json({ message: outcome.message });
+      return;
+    }
+    res.json(await serializeCase(outcome.row));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Corrects captured job facts without silently changing the case policy.
+ * The caller must subsequently use the fenced, audited profile replacement
+ * action so no new requirement is introduced behind active orchestration.
+ */
+router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const id = Number(req.params.id);
+    const body = req.body as Record<string, unknown>;
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    const expectedUpdatedAt = typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : "";
+    if (!Number.isInteger(id) || id < 1 || reason.length < 3 || reason.length > 500 ||
+      !body.workforceContext || typeof body.workforceContext !== "object" || Array.isArray(body.workforceContext)) {
+      res.status(400).json({ message: "A workforce context, current updatedAt value, and 3–500 character correction reason are required." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const reviewer = await resolveReviewerName(req.authUserId!);
+    const outcome = await db.transaction(async (tx) => {
+      await acquireCaseDispatchMutationLock(tx, organizationId, id);
+      const [current] = await tx.select().from(onbCases).where(and(
+        eq(onbCases.id, id), organizationWhere(onbCases, organizationId),
+      )).for("update");
+      if (!current) return { kind: "not-found" as const };
+      if (current.updatedAt.toISOString() !== expectedUpdatedAt) return { kind: "conflict" as const };
+      if (current.lifecycleStage === "complete") {
+        return { kind: "terminal" as const };
+      }
+      if (await hasActiveCaseDispatchMarker(tx, organizationId, id)) {
+        return { kind: "active-dispatch" as const };
+      }
+      if (current.orchestrationStatus === "running" || current.orchestrationClaimOwner !== null) {
+        return { kind: "active-claim" as const };
+      }
+      const workforceContext = normalizedWorkforceContext(body.workforceContext as typeof current.workforceContext);
+      const derived = classifyWorkforceContext(workforceContext);
+      const workforceClassification = derived && {
+        ...derived,
+        source: "authorized-correction" as const,
+        correction: { label: derived.label, by: reviewer, reason, at: new Date().toISOString() },
+      };
+      // A corrected context invalidates authority to continue with the old
+      // execution snapshot. Require an explicit, fenced rebase before any
+      // more connector effects; this is intentionally stricter than merely
+      // changing the display classification.
+      const reviewGate = {
+        id: "policy-rebase-required",
+        label: "Human policy rebase required after workforce context correction",
+        order: current.checklistSnapshot.length,
+        enabled: true,
+        mandatory: true,
+        evidenceRequired: true,
+        enforcementStage: "before-workstreams" as const,
+        responsibleRole: "hr",
+        completionAuthority: "designated-human" as const,
+        executor: "human-task" as const,
+      };
+      const nextSnapshot = current.checklistSnapshot.some((item) => item.id === reviewGate.id)
+        ? current.checklistSnapshot : [...current.checklistSnapshot, reviewGate];
+      const readiness = invalidateEvidenceReadinessForContextChange(
+        nextSnapshot,
+        mergeChecklistReadiness(nextSnapshot, current.readiness, current.checklistSnapshot),
+      );
+      const [row] = await tx.update(onbCases).set({
+        workforceContext, workforceClassification, workforceContextVersion: current.workforceContextVersion + 1, checklistSnapshot: nextSnapshot, readiness,
+        // Context correction blocks further work but does not rewrite the
+        // checkpoint reached by the original execution. Replacing it with a
+        // pre-workstream checkpoint would allow a later rebase to erase the
+        // already-crossed boundary.
+        // Batch cases remain explicitly held. The rebase-required item still
+        // blocks their release, but correction itself never converts cohort
+        // review into ordinary checklist/orchestration progression.
+        orchestrationStatus: current.orchestrationStatus === "batch-intake-pending-review"
+          ? "batch-intake-pending-review"
+          : "checklist-blocked",
+        orchestrationCheckpoint: current.orchestrationCheckpoint,
+        updatedAt: new Date(),
+      })
+        .where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId))).returning();
+      await tx.insert(onbEvents).values({
+        organizationId, caseId: id, agent: "human", engine: "human", hitlPattern: "human-update",
+        ruleRef: "Workforce context correction",
+        title: "Authorized workforce context correction recorded",
+        detail: `${reviewer} corrected captured job context. Policy snapshot was not changed; deliberate rebase is required. Reason: ${reason}`,
+      });
+      return { kind: "updated" as const, row };
+    });
+    if (outcome.kind === "not-found") return void res.status(404).json({ message: "Case not found." });
+    if (outcome.kind === "conflict") return void res.status(409).json({ message: "Case changed since it was loaded. Refresh before correcting context." });
+    if (outcome.kind === "terminal") return void res.status(409).json({ message: "Completed cases are immutable; workforce context cannot be corrected after completion." });
+    if (outcome.kind === "active-dispatch") return void res.status(409).json({ message: "This case has an active provider dispatch marker. Reconcile the dispatch before correcting workforce context." });
+    if (outcome.kind === "active-claim") return void res.status(409).json({ message: "This case has an active orchestration claim. Wait for it to pause before correcting workforce context." });
     res.json(await serializeCase(outcome.row));
   } catch (err) {
     next(err);
@@ -915,8 +1187,9 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
         "not-found": "Case or checklist item not found.",
         "not-custom": "Connector-managed checklist items cannot be changed manually.",
         disabled: "Disabled checklist items cannot be changed.",
+        "evidence-required": "This independent evidence gate can only be completed through its designated evidence workflow; a manual toggle, reminder, or agent result is not accepted.",
       };
-      res.status(result.code === "not-custom" || result.code === "disabled" ? 409 : 404)
+      res.status(result.code === "not-custom" || result.code === "disabled" || result.code === "evidence-required" ? 409 : 404)
         .json({ message: messages[result.code] });
       return;
     }
@@ -924,6 +1197,266 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
   } catch (err) {
     next(err);
   }
+});
+
+router.put("/onboarding/cases/:id/evidence/:itemId", async (req, res, next) => {
+  try {
+    // A designated HSE/occupational-health specialist must not need broad
+    // owner/admin power. Tenant membership is enforced by organization
+    // resolution; the evidence service verifies the narrower assignment.
+    if (!req.authUserId) {
+      res.status(401).json({ message: "Authentication required." });
+      return;
+    }
+    const caseId = Number(req.params.id);
+    const body = req.body as Record<string, unknown>;
+    const evidenceReference = typeof body.evidenceReference === "string" ? body.evidenceReference.trim() : "";
+    const authorityRole = typeof body.authorityRole === "string" ? body.authorityRole.trim() : "";
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    const decision = body.decision;
+    const expected = body.expectedPolicy as Record<string, unknown> | undefined;
+    if (!Number.isInteger(caseId) || caseId < 1 || evidenceReference.length < 3 || evidenceReference.length > 500 ||
+      authorityRole.length < 2 || authorityRole.length > 80 || reason.length < 3 || reason.length > 500 ||
+       (decision !== "verified" && decision !== "rejected") || !expected ||
+       !Number.isInteger(expected.contextVersion) || !Number.isInteger(expected.templateVersion) ||
+       typeof expected.profileId !== "string" || !Number.isInteger(expected.profileVersion)) {
+      res.status(400).json({ message: "A valid evidence reference, configured authority role, decision, and 3–500 character reason are required." });
+      return;
+    }
+    const result = await verifyChecklistEvidence({
+      organizationId: getOrganizationId(req),
+      caseId,
+      itemId: String(req.params.itemId),
+      evidenceReference,
+      authorityRole,
+      decision,
+      reason,
+      verifier: await resolveReviewerName(req.authUserId!),
+      verifierUserId: req.authUserId!,
+      expected: { contextVersion: expected.contextVersion as number, templateVersion: expected.templateVersion as number, profileId: expected.profileId as string, profileVersion: expected.profileVersion as number },
+    });
+    if (!result.ok) {
+      const messages = {
+        "not-found": "Case or evidence gate not found.",
+        "not-evidence-gate": "This checklist item is not an independently evidenced policy gate.",
+        "wrong-authority": "The supplied authority does not match this gate's configured responsible role.",
+        "not-designated": "Your account is not assigned as the designated authority for this policy gate.",
+        "prerequisites-unmet": "This evidence gate has unmet prerequisites and cannot be verified yet.",
+        "stale-policy": "The policy changed before this evidence was submitted. Refresh and submit against the current policy.",
+      };
+      res.status(result.code === "not-found" ? 404 : 409).json({ message: messages[result.code] });
+      return;
+    }
+    res.json(await serializeCase(result.case));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Owner/admin setup endpoint: authority is bound to a tenant member server-side. */
+router.put("/onboarding/policy-authorities/:userId/:authorityRole", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const organizationId = getOrganizationId(req);
+    const userId = String(req.params.userId ?? "").trim();
+    const authorityRole = canonicalAuthorityRoleId(String(req.params.authorityRole ?? ""));
+    const scope = req.body as Record<string, unknown>;
+    const caseId = Number(scope.caseId);
+    const itemId = typeof scope.itemId === "string" ? scope.itemId.trim() : "";
+    const site = typeof scope.site === "string" ? scope.site.trim() : "";
+    if (!userId || !authorityRole || !Number.isInteger(caseId) || caseId < 1 || !itemId || !site) {
+      res.status(400).json({ message: "A tenant user, stable role, and explicit case, item, and authority scope are required." });
+      return;
+    }
+    const [caseRow] = await db.select({ workforceContext: onbCases.workforceContext })
+      .from(onbCases).where(and(
+        eq(onbCases.id, caseId),
+        eq(onbCases.organizationId, organizationId),
+      )).limit(1);
+    if (!caseRow) {
+      res.status(404).json({ message: "Case not found in this organization." });
+      return;
+    }
+    const requiredScope = workforceAuthorityScope(caseRow.workforceContext);
+    if (!requiredScope || site !== requiredScope) {
+      res.status(400).json({ message: "Authority scope must exactly match the current case site, or use __organization__ only for a confirmed non-site office/remote context." });
+      return;
+    }
+    const [member] = await db.select({ id: organizationMembershipsTable.id })
+      .from(organizationMembershipsTable).where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        eq(organizationMembershipsTable.clerkUserId, userId),
+      )).limit(1);
+    if (!member) {
+      res.status(404).json({ message: "Authority must be assigned to an existing member of this organization." });
+      return;
+    }
+    await db.insert(onbPolicyAuthorities).values({
+      organizationId, userId, authorityRole, caseId, itemId, site,
+      assignedBy: req.authUserId!,
+    }).onConflictDoUpdate({
+      target: [onbPolicyAuthorities.organizationId, onbPolicyAuthorities.userId, onbPolicyAuthorities.authorityRole, onbPolicyAuthorities.caseId, onbPolicyAuthorities.itemId, onbPolicyAuthorities.site],
+      set: { revokedAt: null, assignedBy: req.authUserId! },
+    });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/onboarding/policy-authorities/:userId/:authorityRole", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const scope = req.body as Record<string, unknown>;
+    const caseId = Number(scope.caseId);
+    const itemId = typeof scope.itemId === "string" ? scope.itemId.trim() : "";
+    const site = typeof scope.site === "string" ? scope.site.trim() : "";
+    if (!Number.isInteger(caseId) || caseId < 1 || !itemId || !site) {
+      return void res.status(400).json({ message: "Explicit case, item, and site scope are required to revoke an authority assignment." });
+    }
+    const [revoked] = await db.update(onbPolicyAuthorities).set({ revokedAt: new Date() }).where(and(
+      eq(onbPolicyAuthorities.organizationId, getOrganizationId(req)),
+      eq(onbPolicyAuthorities.userId, String(req.params.userId)),
+      eq(onbPolicyAuthorities.authorityRole, canonicalAuthorityRoleId(String(req.params.authorityRole)) ?? ""),
+      eq(onbPolicyAuthorities.caseId, caseId),
+      eq(onbPolicyAuthorities.itemId, itemId),
+      eq(onbPolicyAuthorities.site, site),
+      isNull(onbPolicyAuthorities.revokedAt),
+    )).returning({ userId: onbPolicyAuthorities.userId });
+    if (!revoked) return void res.status(404).json({ message: "Active authority assignment not found." });
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+/** Deliberately returns only stable tenant identities and membership roles for
+ * assignment controls; names/emails are not invented or used as authority IDs. */
+router.get("/onboarding/policy-authority-members", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const members = await db.select({
+      userId: organizationMembershipsTable.clerkUserId,
+      role: organizationMembershipsTable.role,
+    }).from(organizationMembershipsTable).where(
+      eq(organizationMembershipsTable.organizationId, getOrganizationId(req)),
+    ).orderBy(organizationMembershipsTable.clerkUserId);
+    res.json(members);
+  } catch (err) { next(err); }
+});
+
+router.get("/onboarding/job-profiles", async (req, res, next) => {
+  try {
+    const rows = await db.select().from(onbJobProfiles)
+      .where(eq(onbJobProfiles.organizationId, getOrganizationId(req)))
+      .orderBy(onbJobProfiles.profileId, desc(onbJobProfiles.version));
+    const seen = new Set<string>();
+    res.json(rows.filter((row) => !seen.has(row.profileId) && Boolean(seen.add(row.profileId))));
+  } catch (err) { next(err); }
+});
+
+/** Server-side selection preview for a concrete proposed job context.  This
+ * uses the same resolver and priority ordering as enrollment; it is not a
+ * checklist-only client approximation. */
+router.post("/onboarding/checklist-profiles/preview", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const body = req.body as Record<string, unknown>;
+    const text = (key: string, fallback = "") => typeof body[key] === "string" ? body[key].trim() : fallback;
+    const nestedContext = body.workforceContext && typeof body.workforceContext === "object" &&
+      !Array.isArray(body.workforceContext)
+      ? body.workforceContext as Record<string, unknown>
+      : {};
+    const contextText = (key: string) => typeof nestedContext[key] === "string"
+      ? nestedContext[key].trim()
+      : text(key);
+    const triStateBoolean = (key: "siteExposure" | "safetyCritical") => {
+      const value = nestedContext[key] ?? body[key];
+      if (value === true || value === "true") return true;
+      if (value === false || value === "false") return false;
+      // Blank, omitted, or malformed input is unknown. Never infer false.
+      return undefined;
+    };
+    const workEnvironment = contextText("workEnvironment");
+    const hiringMode = contextText("hiringMode");
+    const workforceContext = normalizedWorkforceContext({
+      roleFamily: contextText("roleFamily") || undefined,
+      band: contextText("band") || undefined,
+      department: contextText("department") || undefined,
+      legalEntity: contextText("legalEntity") || undefined,
+      businessUnit: contextText("businessUnit") || undefined,
+      industry: contextText("industry") || undefined,
+      workCountry: contextText("workCountry") || undefined,
+      workState: contextText("workState") || undefined,
+      site: contextText("site") || undefined,
+      employmentArrangement: contextText("employmentArrangement") || undefined,
+      workerCategory: contextText("workerCategory") || undefined,
+      payBasis: contextText("payBasis") || undefined,
+      shiftPattern: contextText("shiftPattern") || undefined,
+      workEnvironment: ["office", "remote", "site", "field", "mixed"].includes(workEnvironment)
+        ? workEnvironment as "office" | "remote" | "site" | "field" | "mixed"
+        : undefined,
+      hiringMode: ["individual", "batch", "seasonal"].includes(hiringMode)
+        ? hiringMode as "individual" | "batch" | "seasonal"
+        : undefined,
+      siteExposure: triStateBoolean("siteExposure"),
+      safetyCritical: triStateBoolean("safetyCritical"),
+    });
+    const attributes = checklistProfileMatchingAttributes(workforceContext, {
+      workerBand: text("band") || null,
+      role: text("role"),
+      hireType: text("employmentType"),
+      workerCategory: text("workerCategory") || null,
+      geography: text("location"),
+      department: text("department") || null,
+      legalEntity: text("legalEntity") || null,
+    });
+    if (!attributes.role || !attributes.employmentType || !attributes.location) {
+      return void res.status(400).json({ message: "Sample role, employment type, and location are required for an actual selection preview." });
+    }
+    const result = await resolveEffectiveWorkforcePolicy(
+      getOrganizationId(req),
+      workforceContext,
+      {
+        workerBand: text("band") || null,
+        role: text("role"),
+        hireType: text("employmentType"),
+        workerCategory: text("workerCategory") || null,
+        geography: text("location"),
+        department: text("department") || null,
+        legalEntity: text("legalEntity") || null,
+      },
+    );
+    res.json({
+      sampleContext: result.attributes,
+      classification: result.classification,
+      effectiveItems: result.effectiveItems,
+      selection: { ...result.profile, items: result.effectiveItems },
+    });
+  } catch (err) { next(err); }
+});
+
+router.post("/onboarding/job-profiles", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const body = req.body as Record<string, unknown>;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const profileId = typeof body.profileId === "string" && body.profileId.trim() ? body.profileId.trim() : randomUUID();
+    if (!name || name.length > 120 || !body.context || typeof body.context !== "object" || Array.isArray(body.context)) {
+      res.status(400).json({ message: "A name and explicit job context are required." }); return;
+    }
+    const organizationId = getOrganizationId(req);
+    const existing = await db.select({ version: onbJobProfiles.version }).from(onbJobProfiles).where(and(
+      eq(onbJobProfiles.organizationId, organizationId), eq(onbJobProfiles.profileId, profileId),
+    )).orderBy(desc(onbJobProfiles.version)).limit(1);
+    if (existing[0] && body.expectedVersion !== existing[0].version) {
+      res.status(409).json({ message: `Job profile changed since it was loaded (current version ${existing[0].version}).` }); return;
+    }
+    const [row] = await db.insert(onbJobProfiles).values({
+      organizationId, profileId, version: (existing[0]?.version ?? 0) + 1, name,
+      context: normalizedWorkforceContext(body.context as any), enabled: body.enabled !== false,
+      createdBy: req.authUserId!,
+    }).returning();
+    res.status(201).json(row);
+  } catch (err) { next(err); }
 });
 
 router.get("/onboarding/cases/:id/events", async (req, res, next) => {
@@ -1143,7 +1676,6 @@ router.post("/onboarding/cases/:caseId/operational-requests", async (req, res, n
 
 router.post("/onboarding/cases/:caseId/operational-requests/:requestId/actions", async (req, res, next) => {
   try {
-    if (!requireOperationalMutationRole(req, res)) return;
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) {
       res.status(400).json({ message: "Valid case id is required." });
@@ -1165,11 +1697,17 @@ router.post("/onboarding/cases/:caseId/operational-requests/:requestId/actions",
       reason: body.reason,
       expectedVersion: body.expectedVersion,
       actor: await resolveReviewerName(req.authUserId!),
+      actorUserId: req.authUserId!,
+      organizationRole: req.organizationRole,
     });
     res.json(result);
   } catch (error) {
     if (error instanceof OperationalRequestNotFoundError) {
       res.status(404).json({ message: error.message });
+      return;
+    }
+    if (error instanceof OperationalRequestAuthorizationError) {
+      res.status(403).json({ message: error.message });
       return;
     }
     if (
@@ -2146,9 +2684,10 @@ async function serializeChecklistProfile(
     name: profile.name,
     criteria: profile.criteria,
     overrides: profile.overrides,
+    processPolicy: profile.processPolicy,
     priority: profile.priority,
     enabled: profile.enabled,
-    effectiveChecklist: applyChecklistOverrides(base.items, profile.overrides),
+    effectiveChecklist: applyChecklistOverrides(base.items, profile.overrides, profile.processPolicy?.semanticsVersion === 2),
     createdAt: profile.createdAt.toISOString(),
   };
 }
@@ -2159,6 +2698,270 @@ router.get("/onboarding/checklist-profiles", async (req, res, next) => {
     const profiles = await listCurrentChecklistProfiles(organizationId);
     res.json(await Promise.all(profiles.map((profile) => serializeChecklistProfile(organizationId, profile))));
   } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/workforce-policy-templates", (req, res) => {
+  // Templates are reviewed starter guidance. They are organization-neutral
+  // definitions; saving one remains an authenticated, tenant-scoped profile write.
+  res.json(WORKFORCE_STARTER_TEMPLATES);
+});
+
+/* -------------------- cohort learning recommendations ------------------- */
+
+function recommendationFingerprint(value: Record<string, unknown>): string | null {
+  const fingerprint = value.evidenceFingerprint;
+  return typeof fingerprint === "string" && /^[a-f0-9]{64}$/.test(fingerprint)
+    ? fingerprint
+    : null;
+}
+
+function serializePolicyRecommendation(row: typeof onbPolicyRecommendations.$inferSelect) {
+  return {
+    id: row.id,
+    status: row.status,
+    recommendation: row.recommendation,
+    evidenceSnapshot: row.evidenceSnapshot,
+    decisionNote: row.decisionNote,
+    decidedBy: row.decidedBy,
+    createdAt: row.createdAt.toISOString(),
+    decidedAt: row.decidedAt?.toISOString() ?? null,
+  };
+}
+
+function recommendationWindow(value: unknown): number | null {
+  const parsed = typeof value === "string" ? Number(value) : NaN;
+  return [30, 90, 180, 365].includes(parsed) ? parsed : null;
+}
+
+async function cohortLearningAnalysis(organizationId: string, windowDays: number) {
+  const asOf = new Date();
+  const startedAt = new Date(asOf.getTime() - windowDays * 86_400_000);
+  const [cases, events, profiles, approvals] = await Promise.all([
+    db.select({
+      id: onbCases.id,
+      createdAt: onbCases.createdAt,
+      scenarioKey: onbCases.scenarioKey,
+      lifecycleStage: onbCases.lifecycleStage,
+      checklistProfileId: onbCases.checklistProfileId,
+      checklistProfileVersion: onbCases.checklistProfileVersion,
+      checklistProfileName: onbCases.checklistProfileName,
+      processPolicySnapshot: onbCases.processPolicySnapshot,
+    }).from(onbCases).where(and(
+      organizationWhere(onbCases, organizationId),
+      gte(onbCases.createdAt, startedAt),
+      lte(onbCases.createdAt, asOf),
+    )),
+    db.select({
+      caseId: onbEvents.caseId,
+      agent: onbEvents.agent,
+      engine: onbEvents.engine,
+      title: onbEvents.title,
+      detail: onbEvents.detail,
+      createdAt: onbEvents.createdAt,
+    }).from(onbEvents).where(organizationWhere(onbEvents, organizationId)),
+    listCurrentChecklistProfiles(organizationId),
+    db.select({
+      id: onbApprovals.id,
+      caseId: onbApprovals.caseId,
+      status: onbApprovals.status,
+    }).from(onbApprovals).where(and(
+      organizationWhere(onbApprovals, organizationId),
+      sql`${onbApprovals.idempotencyKey} like 'gateway-c:%:human-queue'`,
+    )),
+  ]);
+  const latestGateCApprovalByCase = new Map<number, { id: number; status: string }>();
+  for (const approval of approvals) {
+    const current = latestGateCApprovalByCase.get(approval.caseId);
+    if (!current || approval.id > current.id) {
+      latestGateCApprovalByCase.set(approval.caseId, approval);
+    }
+  }
+  return analyzeCohortLearning({
+    cases: cases.map((row) => ({
+      ...row,
+      gateCApprovalStatus: latestGateCApprovalByCase.get(row.id)?.status ?? null,
+    })),
+    events,
+    profiles,
+    asOf,
+    windowDays,
+    excludeAllAsDemo: organizationId === DEMO_ORGANIZATION_ID,
+  });
+}
+
+router.get("/onboarding/policy-recommendations", async (req, res, next) => {
+  try {
+    const windowDays = recommendationWindow(req.query.windowDays) ?? 90;
+    const organizationId = getOrganizationId(req);
+    const [analysis, rows] = await Promise.all([
+      cohortLearningAnalysis(organizationId, windowDays),
+      db.select().from(onbPolicyRecommendations)
+        .where(eq(onbPolicyRecommendations.organizationId, organizationId))
+        .orderBy(desc(onbPolicyRecommendations.createdAt)),
+    ]);
+    res.json({ ...analysis, recommendations: rows.map(serializePolicyRecommendation) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/policy-recommendations/refresh", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const windowDays = recommendationWindow(req.body?.windowDays) ?? 90;
+    const organizationId = getOrganizationId(req);
+    const analysis = await cohortLearningAnalysis(organizationId, windowDays);
+    const created = await db.transaction(async (tx) => {
+      const existing = await tx.select().from(onbPolicyRecommendations)
+        .where(eq(onbPolicyRecommendations.organizationId, organizationId))
+        .for("update");
+      const existingFingerprints = new Set(existing.map((row) => recommendationFingerprint(row.evidenceSnapshot)).filter(Boolean));
+      const rows = [];
+      for (const candidate of analysis.recommendations) {
+        const evidenceFingerprint = candidate.evidenceSnapshot.evidenceFingerprint;
+        if (existingFingerprints.has(evidenceFingerprint)) continue;
+        const [row] = await tx.insert(onbPolicyRecommendations).values({
+          organizationId,
+          status: "proposed",
+          recommendation: candidate.recommendation,
+          evidenceSnapshot: candidate.evidenceSnapshot,
+        }).returning();
+        rows.push(row);
+      }
+      return rows;
+    });
+    res.status(created.length ? 201 : 200).json({
+      analysis: { ...analysis, recommendations: undefined },
+      created: created.map(serializePolicyRecommendation),
+      message: created.length
+        ? "Evidence-scoped recommendations created for human review. No policy changed."
+        : "No new recommendation was created. Existing evidence remains immutable, or the cohort is insufficient.",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/onboarding/policy-recommendations/:id/decision", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res)) return;
+    const id = Number(req.params.id);
+    const body = req.body as Record<string, unknown>;
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ message: "Recommendation id must be a positive integer." });
+      return;
+    }
+    if (body?.decision !== "accepted" && body?.decision !== "rejected") {
+      res.status(400).json({ message: "decision must be accepted or rejected." });
+      return;
+    }
+    if (typeof body.expectedEvidenceFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(body.expectedEvidenceFingerprint)) {
+      res.status(400).json({ message: "A valid expectedEvidenceFingerprint is required to prevent a stale decision." });
+      return;
+    }
+    const decisionNote = typeof body.decisionNote === "string" ? body.decisionNote.trim() : "";
+    if (decisionNote.length > 1_000) {
+      res.status(400).json({ message: "decisionNote must contain at most 1000 characters." });
+      return;
+    }
+    const editedLearning = body.learning === undefined ? null : parseLearningPolicy(body.learning);
+    if (body.learning !== undefined && !editedLearning) {
+      res.status(400).json({ message: "Edited learning policy must include safe timing, sequence, channel, and ownership values." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(onbPolicyRecommendations).where(and(
+        eq(onbPolicyRecommendations.id, id),
+        eq(onbPolicyRecommendations.organizationId, organizationId),
+      )).for("update");
+      if (!row) throw Object.assign(new Error("Recommendation not found."), { name: "RecommendationNotFound" });
+      if (row.status !== "proposed") throw Object.assign(new Error("This recommendation has already been decided and is immutable."), { name: "RecommendationDecided" });
+      const fingerprint = recommendationFingerprint(row.evidenceSnapshot);
+      if (!fingerprint || fingerprint !== body.expectedEvidenceFingerprint) {
+        throw Object.assign(new Error("Evidence version changed or is invalid. Reload before deciding."), { name: "RecommendationVersionConflict" });
+      }
+      if (body.decision === "rejected") {
+        const [rejected] = await tx.update(onbPolicyRecommendations).set({
+          status: "rejected",
+          decisionNote: decisionNote || null,
+          decidedBy: req.authUserId!,
+          decidedAt: new Date(),
+        }).where(eq(onbPolicyRecommendations.id, row.id)).returning();
+        return { row: rejected, published: null };
+      }
+      const proposed = row.recommendation as Record<string, unknown>;
+      const target = proposed.target as Record<string, unknown> | undefined;
+      if (
+        proposed.type !== "cohort-learning-default" ||
+        !target ||
+        typeof target.profileId !== "string" ||
+        !Number.isInteger(target.expectedProfileVersion) ||
+        !parseLearningPolicy(proposed.learning)
+      ) throw Object.assign(new Error("Stored recommendation is invalid and cannot be published."), { name: "RecommendationInvalid" });
+      const current = (await listCurrentChecklistProfiles(organizationId, tx))
+        .find((profile) => profile.profileId === target.profileId);
+      if (!current || !current.enabled || current.version !== target.expectedProfileVersion) {
+        throw Object.assign(new Error("The target profile changed after this evidence was captured. Reload and refresh the analysis; no policy was published."), { name: "RecommendationVersionConflict" });
+      }
+      const learning = (editedLearning ?? parseLearningPolicy(proposed.learning)) as LearningPolicy;
+      // Named task/escalation assignees are stable authenticated tenant user
+      // IDs, never free-form labels. Verify every referenced ID at publish
+      // time so a stale editor cannot publish an orphaned assignment.
+      const assignedUserIds = new Set((learning.steps ?? []).flatMap((step) => {
+        const timing = step.timing && typeof step.timing === "object"
+          ? step.timing as Record<string, unknown> : {};
+        const escalation = timing.escalation && typeof timing.escalation === "object"
+          ? timing.escalation as Record<string, unknown> : {};
+        return [step.assignedTo, escalation.assignedTo];
+      }).filter((value): value is string => typeof value === "string" && value.length > 0));
+      if (assignedUserIds.size) {
+        const currentMembers = await tx.select({ userId: organizationMembershipsTable.clerkUserId })
+          .from(organizationMembershipsTable)
+          .where(eq(organizationMembershipsTable.organizationId, organizationId));
+        const memberIds = new Set(currentMembers.map((member) => member.userId));
+        const unknown = [...assignedUserIds].find((userId) => !memberIds.has(userId));
+        if (unknown) throw Object.assign(new Error(`Assigned specialist ${unknown} is not a current tenant member.`), { name: "RecommendationInvalid" });
+      }
+      // Compile the exact value immediately before publication. Runtime has a
+      // human-review fallback for old malformed snapshots, but adoption must
+      // fail closed rather than publishing metadata with no executable task.
+      const runtimeIssue = learningPolicyRuntimeIssue(learning);
+      if (runtimeIssue) {
+        throw Object.assign(new Error(`Learning policy is not executable by the workforce-step runtime: ${runtimeIssue}`), { name: "RecommendationInvalid" });
+      }
+      // Only the learning-default subdocument is changed. Checklist overrides
+      // and other process controls are copied exactly, so acceptance cannot
+      // waive a compliance or independently evidenced gate.
+      const published = await saveChecklistProfileInTransaction(tx, organizationId, current.profileId, current.version, {
+        name: current.name,
+        criteria: current.criteria,
+        overrides: current.overrides,
+        priority: current.priority,
+        enabled: current.enabled,
+        processPolicy: { ...current.processPolicy, learning },
+      }, req.authUserId!);
+      const publicationNote = `Published future-case profile v${published.version}.${decisionNote ? ` ${decisionNote}` : ""}`;
+      const [accepted] = await tx.update(onbPolicyRecommendations).set({
+        status: "accepted",
+        decisionNote: publicationNote,
+        decidedBy: req.authUserId!,
+        decidedAt: new Date(),
+      }).where(eq(onbPolicyRecommendations.id, row.id)).returning();
+      return { row: accepted, published: { profileId: published.profileId, version: published.version } };
+    });
+    res.json({ ...serializePolicyRecommendation(result.row), published: result.published, futureCasesOnly: true });
+  } catch (err) {
+    const name = err instanceof Error ? err.name : "";
+    const status = name === "RecommendationNotFound" ? 404
+      : name === "RecommendationVersionConflict" || name === "RecommendationDecided" ? 409
+        : name === "RecommendationInvalid" ? 400 : undefined;
+    if (status) {
+      res.status(status).json({ message: err instanceof Error ? err.message : "Could not decide recommendation." });
+      return;
+    }
     next(err);
   }
 });
@@ -2239,6 +3042,7 @@ router.post("/onboarding/checklist-profiles/:profileId/duplicate", async (req, r
       name: `${profile.name} copy`,
       criteria: profile.criteria,
       overrides: profile.overrides,
+      processPolicy: profile.processPolicy,
       priority: profile.priority,
       enabled: false,
     }, req.authUserId!);

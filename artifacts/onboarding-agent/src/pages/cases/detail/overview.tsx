@@ -24,11 +24,44 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
       <div className="w-full md:w-[320px] lg:w-[360px] shrink-0">
         <div className="md:sticky md:top-[120px] space-y-6">
           <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} />
+           <WorkforceContextCard c={c} />
           <CaseOwnerCard events={events} approvals={approvals} />
           <LatestCommunicationCard comms={comms} setTab={setTab} />
           <DocumentsSummaryCard docs={docs} setTab={setTab} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorkforceContextCard({ c }: { c: any }) {
+  const classification = c.workforceClassification;
+  const context = c.workforceContext ?? {};
+  const fact = (value: unknown) => value === true ? 'Yes' : value === false ? 'No' : 'Unknown';
+  const label = classification?.label === 'blue-collar-frontline' ? 'Blue-collar / frontline'
+    : classification?.label === 'white-collar' ? 'White-collar'
+      : classification?.label === 'mixed' ? 'Mixed'
+        : classification?.label === 'needs-review' ? 'Needs review' : 'Unclassified';
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-4 shadow-[var(--shadow-sm)]">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Workforce context</h3>
+        <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+          classification?.label === 'blue-collar-frontline' ? 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]' :
+          classification?.label === 'needs-review' || !classification ? 'bg-[var(--surface-soft)] text-[var(--text-secondary)]' : 'bg-[var(--primary-light)] text-[var(--primary)]')}>
+          {label}
+        </span>
+      </div>
+      {classification?.rationale ? <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">{classification.rationale}</p>
+        : <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-muted)]">No work context was captured for this existing case. Add an authorized job-context correction before relying on a targeted policy.</p>}
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+        <span className="text-[var(--text-muted)]">Environment <b className="text-[var(--text-primary)]">{context.workEnvironment ?? 'Unknown'}</b></span>
+        <span className="text-[var(--text-muted)]">Site <b className="text-[var(--text-primary)]">{context.site ?? 'Unknown'}</b></span>
+        <span className="text-[var(--text-muted)]">Site exposure <b className="text-[var(--text-primary)]">{fact(context.siteExposure)}</b></span>
+        <span className="text-[var(--text-muted)]">Safety critical <b className="text-[var(--text-primary)]">{fact(context.safetyCritical)}</b></span>
+        <span className="text-[var(--text-muted)]">Profile <b className="text-[var(--text-primary)]">{c.checklistProfileName ?? 'Organization default'}</b></span>
+      </div>
+      <p className="mt-3 text-[10px] text-[var(--text-muted)]">Classification is deterministic from explicit job facts; it never infers personal traits.</p>
     </div>
   );
 }

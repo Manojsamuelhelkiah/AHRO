@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, test } from "node:test";
+import { after, before, beforeEach, describe, test } from "node:test";
 import { db } from "@workspace/db";
 import { DEMO_ORGANIZATION_ID, onbCases, onbDocuments, onbEffectJournal, onbSystemChecks, organizationsTable } from "@workspace/db/schema";
 import { randomUUID } from "node:crypto";
@@ -14,6 +14,7 @@ import type { ConnectorMutation } from "./connector-adapters";
 import {
   dispatchCaseConnectorMutation,
   dispatchWorkstreamConnectorMutations,
+  workstreamPolicyGateOpen,
   type WorkstreamConnectorCase,
 } from "./workstream-connectors";
 import { recoverUntrackedCaseSystems } from "./system-watcher";
@@ -30,6 +31,11 @@ before(async () => {
     joinCodeHash: `hash-${unitOrganizationId}`,
     createdByUserId: "workstream-connector-test",
   });
+});
+
+beforeEach(async () => {
+  // Each authorization scenario needs a fresh operation identity. Confirmed
+  // effects from an earlier test must not turn this into a replay-only test.
   const [created] = await db.insert(onbCases).values({
     organizationId: unitOrganizationId,
     workerName: "Connector unit fixture",
@@ -109,6 +115,16 @@ function caseRow(
 }
 
 describe("workstream connector runtime enforcement", () => {
+  test("an unmet snapshotted before-workstreams evidence gate blocks every dispatch path", () => {
+    assert.equal(workstreamPolicyGateOpen(caseRow({
+      orchestrationStatus: "checklist-blocked",
+      checklistSnapshot: [{
+        id: "safety-sign-off", label: "Safety", order: 0, enabled: true, mandatory: true,
+        enforcementStage: "before-workstreams", evidenceRequired: true,
+      }],
+      readiness: [{ key: "safety-sign-off", label: "Safety", status: "pending" }],
+    })), false);
+  });
   test("the default writers seed the intended case then register every downstream system", async () => {
     const c = await createDatabaseCase("plan-generated");
     await dispatchWorkstreamConnectorMutations(c);
@@ -306,12 +322,16 @@ describe("workstream connector runtime enforcement", () => {
   });
 
   test("non-employee applicability omits payroll but still dispatches documents", async () => {
+    const [contractor] = await db.insert(onbCases).values({
+      organizationId: unitOrganizationId, workerName: "Contractor fixture", workerEmail: `contractor-${Date.now()}@example.invalid`,
+      workerCategory: "contractor", hireType: "contractor", role: "Operator", department: "Ops", geography: "United Kingdom",
+      legalEntity: "Example Ltd", managerName: "Manager", recruiterName: "Recruiter", joiningDate: "2030-01-01",
+      lifecycleStage: "plan-generated", orchestrationStatus: "running", offerAcceptanceComplete: true, readiness: [], workstreams: [],
+    }).returning();
+    createdCaseIds.push(contractor.id);
     const writes: ConnectorMutation[] = [];
     await dispatchWorkstreamConnectorMutations(
-      caseRow({
-        workerCategory: "contractor",
-        hireType: "contractor",
-      }),
+      contractor,
       {
         write: async (mutation) => {
           writes.push(mutation as ConnectorMutation);

@@ -22,7 +22,10 @@ import {
   readinessFromChecklist,
 } from "./settings";
 import { logisticsForCase } from "./logistics-defaults";
-import { resolveChecklistProfileInTransaction } from "./checklist-profiles";
+import {
+  checklistProfileMatchingAttributes,
+  resolveChecklistProfileInTransaction,
+} from "./checklist-profiles";
 import {
   SYNTHETIC_OFFLINE_MARKER,
   SYNTHETIC_OFFLINE_WARNING,
@@ -886,12 +889,15 @@ async function createFreshCases(
   const ids: number[] = [];
   for (const [, scenarioKey] of manifestScenarioKeys.slice(0, SYNTHETIC_REPLACEMENT_COUNT)) {
     const scenario = scenarioForKey(scenarioKey);
-    const profile = await resolveChecklistProfileInTransaction(tx, organizationId, {
-      band: null,
+    const profile = await resolveChecklistProfileInTransaction(tx, organizationId, checklistProfileMatchingAttributes({}, {
+      workerBand: null,
       role: scenario.intake.role,
-      employmentType: scenario.intake.hireType,
-      location: scenario.intake.geography,
-    });
+      hireType: scenario.intake.hireType,
+      workerCategory: scenario.intake.workerCategory,
+      geography: scenario.intake.geography,
+      department: scenario.intake.department,
+      legalEntity: scenario.intake.legalEntity,
+    }));
     const joiningDate = new Date(
       now.getTime() + scenario.intake.joiningDateOffsetDays * 86_400_000,
     ).toISOString().slice(0, 10);

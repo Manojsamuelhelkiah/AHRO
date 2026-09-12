@@ -4,6 +4,7 @@ import {
   onbApprovalHistory,
   onbApprovalNotifications,
   onbApprovals,
+  onbEvents,
   type OnbRecordsEvidenceItem,
 } from "@workspace/db/schema";
 import type { OnboardingDbTransaction } from "./settings";
@@ -142,13 +143,21 @@ export type ReopenApprovalResult = {
   version: number;
 };
 
+const GATE_C_AGENT = "day1-readiness-gate";
+const GATE_C_RULE = "Gate C — Day-1 readiness confirmation";
+const GATE_C_INVALIDATED_TITLE = "Gate C approval invalidated by changed live readiness evidence";
+
+function isGateCApproval(approval: typeof onbApprovals.$inferSelect): boolean {
+  return approval.idempotencyKey === `gateway-c:${approval.caseId}:human-queue`;
+}
+
 /**
  * Reset one live approval while the caller holds the case lock.  The
  * conditional status update makes retries and concurrent evidence mutations
  * harmless; the old decision is inserted into append-only history first in
  * the same transaction.
  */
-export async function reopenApprovalInTransaction(
+export async function reopenOnboardingApproval(
   tx: OnboardingDbTransaction,
   opts: ReopenApprovalOptions,
 ): Promise<ReopenApprovalResult> {
@@ -215,10 +224,32 @@ export async function reopenApprovalInTransaction(
       onbApprovalHistory.eventType,
     ],
   });
+  // Learning and outcome consumers recognize this exact, PII-free event.
+  // Keeping it at the successful approval-cycle transition means every
+  // proactive Gate C reopen path is represented, while retries that find an
+  // already-pending row cannot emit a false invalidation.
+  if (isGateCApproval(approval)) {
+    await tx.insert(onbEvents).values({
+      organizationId: approval.organizationId,
+      caseId: approval.caseId,
+      agent: GATE_C_AGENT,
+      engine: "rules",
+      hitlPattern: "approve-before-act",
+      ruleRef: approval.ruleRef ?? GATE_C_RULE,
+      title: GATE_C_INVALIDATED_TITLE,
+      detail: "A fresh HR final-review decision is required; the prior approval was not reused.",
+      idempotencyKey: `gateway-c:${approval.caseId}:reopened:v${nextVersion}`,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
+  }
   return { reopened: true, previousVersion, version: nextVersion };
 }
 
+/** @deprecated Use reopenOnboardingApproval for new transactional callers. */
+export const reopenApprovalInTransaction = reopenOnboardingApproval;
+
 /** Convenience wrapper for callers that do not already hold a case tx. */
 export async function reopenApproval(opts: ReopenApprovalOptions): Promise<ReopenApprovalResult> {
-  return db.transaction((tx) => reopenApprovalInTransaction(tx, opts));
+  return db.transaction((tx) => reopenOnboardingApproval(tx, opts));
 }

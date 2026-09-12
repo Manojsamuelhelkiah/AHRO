@@ -16,6 +16,7 @@ import {
   onbApprovals,
   onbSettings,
   onbSystemChecks,
+  onbReadinessSlaPolicies,
   onbWatchEmails,
   organizationsTable,
 } from "@workspace/db";
@@ -355,6 +356,7 @@ after(async () => {
       sql`${onbSettings.key} like ${`${BGV_NOTIFICATION_SETTING_PREFIX}%`}`,
     ));
   }
+  await db.delete(onbReadinessSlaPolicies).where(inArray(onbReadinessSlaPolicies.organizationId, [orgA, orgB]));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
   if (oldAllowedRecipients === undefined) delete process.env.ONBOARDING_ALLOWED_RECIPIENTS;
   else process.env.ONBOARDING_ALLOWED_RECIPIENTS = oldAllowedRecipients;

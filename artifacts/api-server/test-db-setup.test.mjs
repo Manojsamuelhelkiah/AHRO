@@ -1062,7 +1062,11 @@ test(
            tag !== "0037_document_malware_quarantine" &&
            tag !== "0039_weighted_readiness_sla" &&
            tag !== "0040_versioned_approvals" &&
-           tag !== "0041_readiness_snapshot_joining_date",
+           tag !== "0041_readiness_snapshot_joining_date" &&
+           tag !== "0043_demo_controller_setup" &&
+           tag !== "0044_action_center" &&
+           tag !== "0045_context_aware_workforce_policies" &&
+           tag !== "0046_batch_intake_reconciliation",
       );
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(),

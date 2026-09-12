@@ -10,10 +10,15 @@ import {
   db,
   eaAssessmentsTable,
   flowOverridesTable,
+  onbCaseLogistics,
   onbCases,
   onbChecklistProfiles,
+  onbConnectors,
+  onbEffectJournal,
   onbEvents,
   onbGuardrailEvents,
+  onbIntakeBatches,
+  onbIntakeBatchPeople,
   onbSettings,
   organizationMembershipsTable,
   organizationsTable,
@@ -30,6 +35,7 @@ import actualsRouter from "./actuals";
 import flowOverridesRouter from "./flow-overrides";
 import customIntentsRouter from "./custom-intents";
 import onboardingRouter from "./onboarding";
+import onboardingBatchIntakeRouter from "./onboarding-batch-intake";
 import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
 import {
@@ -47,6 +53,8 @@ import {
 } from "../middlewares/tenant-context";
 import { errorHandler } from "../middlewares/error-handler";
 import { scenarioUploadObjectPath } from "../lib/objectStorage";
+import { withCaseDispatchGuard } from "../lib/onboarding/dispatch-guard";
+import { dispatchWorkstreamConnectorMutations } from "../lib/onboarding/workstream-connectors";
 
 const suffix = `${process.pid}-${Date.now()}`;
 const orgA = `isolation-a-${suffix}`;
@@ -210,6 +218,7 @@ before(async () => {
   app.use(flowOverridesRouter);
   app.use(customIntentsRouter);
   app.use(onboardingRouter);
+  app.use(onboardingBatchIntakeRouter);
   app.use(pricingSheetsRouter);
   app.use(enterpriseArchitectureRouter);
   app.use(errorHandler);
@@ -228,6 +237,16 @@ after(async () => {
   await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgB));
   await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgA));
   await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgB));
+  await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgA));
+  await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgB));
+  await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, orgA));
+  await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, orgB));
+  await db.delete(onbIntakeBatchPeople).where(eq(onbIntakeBatchPeople.organizationId, orgA));
+  await db.delete(onbIntakeBatchPeople).where(eq(onbIntakeBatchPeople.organizationId, orgB));
+  await db.delete(onbIntakeBatches).where(eq(onbIntakeBatches.organizationId, orgA));
+  await db.delete(onbIntakeBatches).where(eq(onbIntakeBatches.organizationId, orgB));
+  await db.delete(onbCaseLogistics).where(eq(onbCaseLogistics.organizationId, orgA));
+  await db.delete(onbCaseLogistics).where(eq(onbCaseLogistics.organizationId, orgB));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgA));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
   await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, orgA));
@@ -622,6 +641,24 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
     orchestrationClaimOwner: null,
     orchestrationClaimUntil: null,
   }).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id)));
+  const [beforeCorrection] = await db.select({ updatedAt: onbCases.updatedAt })
+    .from(onbCases).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id)));
+  const correction = await fetch(`${baseUrl}/onboarding/cases/${policyCase.id}/workforce-context`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({
+      expectedUpdatedAt: beforeCorrection.updatedAt.toISOString(),
+      reason: "Correct post-workstream office context.",
+      workforceContext: { workEnvironment: "office", siteExposure: false, safetyCritical: false },
+    }),
+  });
+  assert.equal(correction.status, 200);
+  const [afterCorrection] = await db.select({
+    orchestrationStatus: onbCases.orchestrationStatus,
+    orchestrationCheckpoint: onbCases.orchestrationCheckpoint,
+  }).from(onbCases).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id)));
+  assert.equal(afterCorrection.orchestrationStatus, "checklist-blocked");
+  assert.equal(afterCorrection.orchestrationCheckpoint, "workstreams-complete");
   const passedGate = await replace({
     action: "replace-active",
     reason: "Route-level passed gate regression",
@@ -630,7 +667,36 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
   assert.equal(passedGate.status, 409);
   assert.match(
     (await passedGate.json() as { message: string }).message,
-    /gate has already passed/i,
+    /execution boundary/i,
+  );
+
+  await db.update(onbCases).set({ lifecycleStage: "complete" })
+    .where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id)));
+  const completedLegacyReplacement = await replace({
+    action: "replace-active",
+    reason: "Completed legacy replacement regression",
+    ...expectedSnapshot,
+  });
+  assert.equal(completedLegacyReplacement.status, 409);
+  assert.match((await completedLegacyReplacement.json() as { message: string }).message, /execution boundary/i);
+  const [completedCase] = await db.select({
+    updatedAt: onbCases.updatedAt,
+    orchestrationCheckpoint: onbCases.orchestrationCheckpoint,
+  }).from(onbCases).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id)));
+  const terminalCorrection = await fetch(`${baseUrl}/onboarding/cases/${policyCase.id}/workforce-context`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({
+      expectedUpdatedAt: completedCase.updatedAt.toISOString(),
+      reason: "Attempt to alter completed legacy context.",
+      workforceContext: { workEnvironment: "office", siteExposure: false, safetyCritical: false },
+    }),
+  });
+  assert.equal(terminalCorrection.status, 409);
+  assert.equal(
+    (await db.select({ checkpoint: onbCases.orchestrationCheckpoint }).from(onbCases)
+      .where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, policyCase.id))))[0]?.checkpoint,
+    completedCase.orchestrationCheckpoint,
   );
 
   const [unchanged] = await db.select({
@@ -641,6 +707,327 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
     eq(onbCases.id, policyCase.id),
   ));
   assert.deepEqual(unchanged, { profileId: "default", templateVersion: 1 });
+});
+
+test("policy mutations fence durable dispatch markers and a winning correction blocks stale recovery", async () => {
+  const headers = {
+    "content-type": "application/json",
+    "x-test-user": "test-user-a",
+    "x-organization-id": orgA,
+  };
+  const readyChecklist = readinessFromChecklist(LEGACY_CHECKLIST).map((item) => ({
+    ...item,
+    status: "ready" as const,
+  }));
+  const [policyCase] = await db.insert(onbCases).values({
+    organizationId: orgA,
+    workerName: "Dispatch Mutation Fence",
+    workerEmail: `dispatch-fence-${suffix}@example.com`,
+    hireType: "external",
+    workerCategory: "full-time",
+    role: "Engineer",
+    department: "Engineering",
+    geography: "US",
+    legalEntity: "Example",
+    managerName: "Manager",
+    recruiterName: "Recruiter",
+    joiningDate: "2030-01-01",
+    checklistTemplateVersion: 1,
+    checklistSnapshot: [...LEGACY_CHECKLIST],
+    checklistProfileId: "default",
+    checklistProfileName: "Organization default",
+    checklistProfileVersion: 1,
+    checklistMatchedCriteria: {},
+    checklistMatchExplanation: "Organization default selected.",
+    readiness: readyChecklist,
+    workforceContext: {
+      workEnvironment: "office",
+      siteExposure: false,
+      safetyCritical: false,
+    },
+    workforceContextVersion: 1,
+  }).returning();
+  const replace = () => fetch(
+    `${baseUrl}/onboarding/cases/${policyCase.id}/checklist-profile`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        action: "recalculate",
+        expectedChecklistTemplateVersion: 1,
+        expectedChecklistProfileId: "default",
+        expectedChecklistProfileVersion: 1,
+      }),
+    },
+  );
+  const correct = (expectedUpdatedAt: string) => fetch(
+    `${baseUrl}/onboarding/cases/${policyCase.id}/workforce-context`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        expectedUpdatedAt,
+        reason: "Correct the captured office work context.",
+        workforceContext: {
+          workEnvironment: "remote",
+          siteExposure: false,
+          safetyCritical: false,
+        },
+      }),
+    },
+  );
+
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let entered!: () => void;
+  const enteredDispatch = new Promise<void>((resolve) => { entered = resolve; });
+  const dispatch = withCaseDispatchGuard(policyCase.id, async () => {
+    entered();
+    await held;
+  });
+  await enteredDispatch;
+
+  const [beforeRefusedMutations] = await db.select({
+    updatedAt: onbCases.updatedAt,
+    workforceContext: onbCases.workforceContext,
+    workforceContextVersion: onbCases.workforceContextVersion,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, policyCase.id),
+  ));
+  const [blockedCorrection, blockedRebase] = await Promise.all([
+    correct(beforeRefusedMutations.updatedAt.toISOString()),
+    replace(),
+  ]);
+  assert.equal(blockedCorrection.status, 409);
+  assert.match(
+    (await blockedCorrection.json() as { message: string }).message,
+    /active provider dispatch marker/i,
+  );
+  assert.equal(blockedRebase.status, 409);
+  assert.match(
+    (await blockedRebase.json() as { message: string }).message,
+    /active provider dispatch marker/i,
+  );
+  const [unchangedWhileDispatching] = await db.select({
+    workforceContext: onbCases.workforceContext,
+    workforceContextVersion: onbCases.workforceContextVersion,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, policyCase.id),
+  ));
+  assert.deepEqual(unchangedWhileDispatching, {
+    workforceContext: beforeRefusedMutations.workforceContext,
+    workforceContextVersion: beforeRefusedMutations.workforceContextVersion,
+  });
+
+  release();
+  await dispatch;
+
+  // Capture a still-policy-open row, then let correction win. The subsequent
+  // recovery call receives the stale object but must re-read under the same
+  // dispatch fence and observe the new before-workstreams review blocker.
+  const [staleRecoveryCase] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, policyCase.id),
+  ));
+  const correction = await correct(staleRecoveryCase.updatedAt.toISOString());
+  assert.equal(correction.status, 200);
+  let writes = 0;
+  await dispatchWorkstreamConnectorMutations(staleRecoveryCase, {
+    write: async () => { writes += 1; },
+  });
+  assert.equal(writes, 0, "a correction that wins the mutation fence blocks stale recovery");
+});
+
+test("corrected new and batch-held cases rebase before explicit release", async () => {
+  const headers = {
+    "content-type": "application/json",
+    "x-test-user": "test-user-a",
+    "x-organization-id": orgA,
+  };
+  const correct = (caseId: number, expectedUpdatedAt: string) => fetch(
+    `${baseUrl}/onboarding/cases/${caseId}/workforce-context`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        expectedUpdatedAt,
+        reason: "Correct the captured remote work arrangement.",
+        workforceContext: {
+          workEnvironment: "remote",
+          siteExposure: false,
+          safetyCritical: false,
+        },
+      }),
+    },
+  );
+  const rebase = (caseId: number, c: {
+    checklistTemplateVersion: number;
+    checklistProfileId: string | null;
+    checklistProfileVersion: number | null;
+  }) => fetch(`${baseUrl}/onboarding/cases/${caseId}/checklist-profile`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "recalculate",
+      expectedChecklistTemplateVersion: c.checklistTemplateVersion,
+      expectedChecklistProfileId: c.checklistProfileId,
+      expectedChecklistProfileVersion: c.checklistProfileVersion ?? c.checklistTemplateVersion,
+    }),
+  });
+
+  // A newly created manual case has no checkpoint. Correction adds the
+  // explicit rebase gate, and that unexecuted state is intentionally eligible
+  // for the normal audited rebase rather than active-checklist replacement.
+  const [manual] = await db.insert(onbCases).values({
+    organizationId: orgA,
+    workerName: "Manual Corrected New Case",
+    workerEmail: `manual-corrected-${suffix}@example.com`,
+    hireType: "external",
+    workerCategory: "full-time",
+    role: "Engineer",
+    department: "Engineering",
+    geography: "US",
+    legalEntity: "Example",
+    managerName: "Manager",
+    recruiterName: "Recruiter",
+    joiningDate: "2030-01-01",
+    checklistTemplateVersion: 1,
+    checklistSnapshot: [...LEGACY_CHECKLIST],
+    checklistProfileId: "default",
+    checklistProfileName: "Organization default",
+    checklistProfileVersion: 1,
+    checklistMatchedCriteria: {},
+    checklistMatchExplanation: "Organization default selected.",
+    readiness: readinessFromChecklist(LEGACY_CHECKLIST),
+    orchestrationStatus: "idle",
+    lifecycleStage: "trigger-received",
+  }).returning();
+  assert.equal((await correct(manual.id, manual.updatedAt.toISOString())).status, 200);
+  const [manualCorrected] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, manual.id),
+  ));
+  assert.equal(manualCorrected.orchestrationStatus, "checklist-blocked");
+  assert.equal(manualCorrected.orchestrationCheckpoint, null);
+  assert.ok(manualCorrected.checklistSnapshot.some((item) => item.id === "policy-rebase-required"));
+  assert.equal((await rebase(manual.id, manualCorrected)).status, 200);
+  const [manualRebased] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, manual.id),
+  ));
+  assert.equal(manualRebased.orchestrationStatus, "idle");
+  assert.equal(manualRebased.orchestrationCheckpoint, null);
+  assert.equal(manualRebased.checklistSnapshot.some((item) => item.id === "policy-rebase-required"), false);
+
+  const batchCreate = await fetch(`${baseUrl}/onboarding/batch-intake`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      name: `Corrected batch ${suffix}`,
+      idempotencyKey: `corrected-batch-${suffix}`,
+      people: [{
+        personKey: `corrected-batch-person-${suffix}`,
+        workerName: "Batch Corrected Worker",
+        workerEmail: `batch-corrected-${suffix}@example.com`,
+        hireType: "external",
+        workerCategory: "full-time",
+        role: "Engineer",
+        // Finance causes the ordinary plan approval pause before any LLM or
+        // connector boundary, keeping this release-path regression isolated.
+        department: "Finance",
+        geography: "US",
+        legalEntity: "Example",
+        managerName: "Manager",
+        recruiterName: "Recruiter",
+        joiningDate: "2030-01-01",
+        workforceContext: {
+          workEnvironment: "office",
+          siteExposure: false,
+          safetyCritical: false,
+        },
+      }],
+    }),
+  });
+  assert.equal(batchCreate.status, 201);
+  const created = await batchCreate.json() as {
+    batchId: string;
+    results: Array<{ caseId: number }>;
+  };
+  const batchId = created.batchId;
+  const batchCaseId = created.results[0]!.caseId;
+  const [batchCase] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, batchCaseId),
+  ));
+  assert.equal(batchCase.orchestrationStatus, "batch-intake-pending-review");
+  assert.equal((await correct(batchCaseId, batchCase.updatedAt.toISOString())).status, 200);
+  const [correctedBatch] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, batchCaseId),
+  ));
+  assert.equal(correctedBatch.orchestrationStatus, "batch-intake-pending-review");
+  assert.ok(correctedBatch.checklistSnapshot.some((item) => item.id === "policy-rebase-required"));
+
+  const heldRelease = await fetch(
+    `${baseUrl}/onboarding/batch-intake/${batchId}/cases/${batchCaseId}/release`,
+    { method: "POST", headers },
+  );
+  assert.equal(heldRelease.status, 409);
+  assert.match(
+    (await heldRelease.json() as { message: string }).message,
+    /rebase.*policy before explicit release/i,
+  );
+  const noDispatchBeforeRelease = await db.select({
+    key: onbEffectJournal.logicalOperationKey,
+  }).from(onbEffectJournal).where(and(
+    eq(onbEffectJournal.organizationId, orgA),
+    eq(onbEffectJournal.caseId, batchCaseId),
+  ));
+  assert.equal(noDispatchBeforeRelease.length, 0);
+
+  assert.equal((await rebase(batchCaseId, correctedBatch)).status, 200);
+  const [rebasedBatch] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, batchCaseId),
+  ));
+  assert.equal(rebasedBatch.orchestrationStatus, "batch-intake-pending-review");
+  assert.equal(rebasedBatch.checklistSnapshot.some((item) => item.id === "policy-rebase-required"), false);
+
+  const released = await fetch(
+    `${baseUrl}/onboarding/batch-intake/${batchId}/cases/${batchCaseId}/release`,
+    { method: "POST", headers },
+  );
+  assert.equal(released.status, 200);
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const [current] = await db.select({
+      status: onbCases.orchestrationStatus,
+      checkpoint: onbCases.orchestrationCheckpoint,
+      claimOwner: onbCases.orchestrationClaimOwner,
+    }).from(onbCases).where(and(
+      eq(onbCases.organizationId, orgA),
+      eq(onbCases.id, batchCaseId),
+    ));
+    if (
+      current.checkpoint &&
+      current.status !== "batch-intake-pending-review" &&
+      current.status !== "running" &&
+      current.claimOwner === null
+    ) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  const [orchestrated] = await db.select({
+    status: onbCases.orchestrationStatus,
+    checkpoint: onbCases.orchestrationCheckpoint,
+    claimOwner: onbCases.orchestrationClaimOwner,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, batchCaseId),
+  ));
+  assert.equal(orchestrated.status, "waiting-approval");
+  assert.equal(orchestrated.checkpoint, "waiting:plan", "explicit release starts the ordinary orchestration path");
+  assert.equal(orchestrated.claimOwner, null);
 });
 
 test("another demo member cannot access an owner-bound historical scenario", async () => {

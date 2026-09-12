@@ -13,10 +13,14 @@ import type { ChecklistProfileVersion } from "./checklist-profiles";
 import {
   activeReplacementDecision,
   applyChecklistOverrides,
+  checklistProfileMatchingAttributes,
   criteriaOverlap,
+  establishedChecklistBoundary,
+  invalidateEvidenceReadinessForContextChange,
   mergeChecklistReadiness,
   normalizeCriteria,
   profileMatches,
+  profilesCouldOverlap,
   resolveChecklistProfileInTransaction,
   resolveFromProfiles,
   validateProfilesAgainstBase,
@@ -40,6 +44,7 @@ const profile = (
   name: profileId,
   criteria,
   overrides,
+  processPolicy: {},
   priority,
   enabled: true,
   createdBy: "owner",
@@ -66,6 +71,50 @@ describe("targeted checklist profiles", () => {
     assert.equal(profileMatches({ location: "london" }, employee), false);
   });
 
+  test("one context mapper preserves legacy attributes and makes safety-critical tri-state explicit", () => {
+    const base = {
+      workerBand: "Senior",
+      role: "Engineer",
+      hireType: "External FTE",
+      workerCategory: "employee",
+      geography: "New York",
+      department: "Engineering",
+      legalEntity: "Legacy Co",
+    };
+    const context = {
+      roleFamily: "Operations",
+      department: "Field Operations",
+      legalEntity: "Operating Co",
+      businessUnit: "Delivery",
+      industry: "Logistics",
+      workCountry: "US",
+      workState: "NY",
+      site: "Yard A",
+      employmentArrangement: "union",
+      workerCategory: "frontline",
+      payBasis: "hourly",
+      shiftPattern: "night",
+      workEnvironment: "site" as const,
+      hiringMode: "batch" as const,
+      safetyCritical: true,
+    };
+    const enrollment = checklistProfileMatchingAttributes(context, base);
+    // Preview and enrollment provide the same two fact shapes to the sole
+    // mapper, so they cannot silently diverge on safety policy selection.
+    const preview = checklistProfileMatchingAttributes({ ...context }, { ...base });
+    assert.deepEqual(preview, enrollment);
+    assert.deepEqual(enrollment, {
+      band: "Senior", role: "Engineer", employmentType: "External FTE", location: "New York",
+      roleFamily: "Operations", department: "Field Operations", legalEntity: "Operating Co",
+      businessUnit: "Delivery", industry: "Logistics", workCountry: "US", workState: "NY",
+      site: "Yard A", employmentArrangement: "union", workerCategory: "frontline",
+      payBasis: "hourly", shiftPattern: "night", workEnvironment: "site", hiringMode: "batch",
+      safetyCritical: "true",
+    });
+    assert.equal(checklistProfileMatchingAttributes({}, base).safetyCritical, null);
+    assert.equal(checklistProfileMatchingAttributes({ safetyCritical: false }, base).safetyCritical, "false");
+  });
+
   test("combined criteria are ANDed and unmatched employees fall back", () => {
     const combined = profile("combined", { band: "senior", role: "engineer" }, 10);
     const resolved = resolveFromProfiles(
@@ -89,6 +138,16 @@ describe("targeted checklist profiles", () => {
     assert.equal(resolveFromProfiles({ version: 1, items: [...LEGACY_CHECKLIST] }, [tieZ, tieA], employee).profileId, "a-profile");
   });
 
+  test("policy match groups support AND/OR selection and conservatively flag ambiguous OR conflicts", () => {
+    const anyLocation = { match: { operator: "any", rules: [{ field: "location", values: ["new york", "london"] }] } };
+    const allLocationAndBand = { match: { operator: "all", rules: [{ field: "location", values: ["new york"] }, { field: "band", values: ["senior"] }] } };
+    assert.equal(profileMatches({ role: "engineer" }, employee, anyLocation), true);
+    assert.equal(profileMatches({ role: "engineer" }, { ...employee, location: "Paris" }, anyLocation), false);
+    assert.equal(profileMatches({ role: "engineer" }, employee, allLocationAndBand), true);
+    assert.equal(profilesCouldOverlap({ role: "engineer" }, anyLocation, { role: "engineer" }, allLocationAndBand), true);
+    assert.equal(profilesCouldOverlap({ role: "engineer" }, { match: { operator: "all", rules: [{ field: "location", values: ["Paris"] }] } }, { role: "engineer" }, allLocationAndBand), false);
+  });
+
   test("disabled profiles never match, and pure resolution can enforce tenant separation", () => {
     const disabled = { ...profile("disabled", { role: "engineer" }, 100), enabled: false };
     const otherOrg = { ...profile("other-org", { role: "engineer" }, 100), organizationId: "org-b" };
@@ -100,7 +159,6 @@ describe("targeted checklist profiles", () => {
   test("inheritance can add, change, disable and strengthen items and stages", () => {
     const effective = applyChecklistOverrides(LEGACY_CHECKLIST, [
       { id: "profile", label: "Enhanced profile", enforcementStage: "before-workstreams" },
-      { id: "documentation", enabled: false },
       {
         id: "security-training",
         label: "Security training",
@@ -111,7 +169,10 @@ describe("targeted checklist profiles", () => {
       },
     ]);
     assert.equal(effective.find((item) => item.id === "profile")?.label, "Enhanced profile");
-    assert.equal(effective.find((item) => item.id === "documentation")?.enabled, false);
+    assert.throws(
+      () => applyChecklistOverrides(LEGACY_CHECKLIST, [{ id: "documentation", enabled: false }]),
+      /cannot be disabled or weakened/i,
+    );
     assert.equal(effective.find((item) => item.id === "security-training")?.mandatory, true);
     const baseBefore = structuredClone(LEGACY_CHECKLIST);
     const profileBefore = profile("immutable", { role: "engineer" }, 1, [{ id: "profile", label: "Changed" }]);
@@ -130,15 +191,70 @@ describe("targeted checklist profiles", () => {
     );
   });
 
+  test("legacy published overrides remain resolvable while v2 rejects weakening", () => {
+    const weakening = [{ id: "documentation", enabled: false }];
+    const legacy = { ...profile("legacy", { role: "engineer" }, 1, weakening), processPolicy: {} };
+    assert.equal(resolveFromProfiles({ version: 1, items: [...LEGACY_CHECKLIST] }, [legacy], employee).items
+      .find((item) => item.id === "documentation")?.enabled, false);
+    assert.throws(() => applyChecklistOverrides(LEGACY_CHECKLIST, weakening, true), /cannot be disabled/i);
+  });
+
+  test("context correction invalidates all evidence gates even with unchanged definitions", () => {
+    const items = applyChecklistOverrides(LEGACY_CHECKLIST, [{
+      id: "site-clearance", label: "Site clearance", order: 7, enabled: true, mandatory: true,
+      evidenceRequired: true, enforcementStage: "before-workstreams",
+    }]);
+    const changed = invalidateEvidenceReadinessForContextChange(items, [
+      { key: "site-clearance", label: "Site clearance", status: "ready" },
+      { key: "profile", label: "Profile", status: "ready" },
+    ]);
+    assert.equal(changed.find((item) => item.key === "site-clearance")?.status, "pending");
+    assert.equal(changed.find((item) => item.key === "profile")?.status, "ready");
+  });
+
+  test("profile publication rejects deadlocking prerequisite graphs and accepts ordered independent gates", () => {
+    const gates = [
+      { id: "safety-proof", label: "Safety", order: 7, enabled: true, mandatory: true, evidenceRequired: true, enforcementStage: "before-workstreams" as const },
+      { id: "medical-proof", label: "Medical", order: 8, enabled: true, mandatory: true, evidenceRequired: true, enforcementStage: "before-workstreams" as const, prerequisites: ["safety-proof"] },
+    ];
+    assert.doesNotThrow(() => applyChecklistOverrides(LEGACY_CHECKLIST, gates));
+    assert.throws(() => applyChecklistOverrides(LEGACY_CHECKLIST, [{ ...gates[0], prerequisites: ["missing"] }]), /unknown prerequisite/i);
+    assert.throws(() => applyChecklistOverrides(LEGACY_CHECKLIST, [{ ...gates[0], prerequisites: ["safety-proof"] }]), /depend on itself/i);
+    assert.throws(() => applyChecklistOverrides(LEGACY_CHECKLIST, [{ ...gates[0], prerequisites: ["medical-proof"] }, gates[1]]), /must be earlier/i);
+    assert.throws(() => applyChecklistOverrides(LEGACY_CHECKLIST, [
+      { ...gates[0], enforcementStage: "before-day1-review" },
+      gates[1],
+    ]), /cannot be enforced later/i);
+  });
+
+  test("strict profiles cannot weaken any hard-gate dimension", () => {
+    const hard = [{
+      id: "hard-gate", label: "Hard gate", order: 1, enabled: true, mandatory: true,
+      evidenceRequired: true, enforcementStage: "before-workstreams" as const,
+      completionAuthority: "designated-human" as const, responsibleRole: "hse",
+      executor: "human-task" as const, prerequisites: ["prior"],
+    }, {
+      id: "prior", label: "Prior", order: 0, enabled: true, mandatory: false,
+      enforcementStage: "before-workstreams" as const,
+    }];
+    assert.throws(() => applyChecklistOverrides(hard, [{ id: "hard-gate", enforcementStage: "before-day1-review" }]), /later stage/i);
+    assert.throws(() => applyChecklistOverrides(hard, [{ id: "hard-gate", evidenceRequired: false }]), /required evidence/i);
+    assert.throws(() => applyChecklistOverrides(hard, [{ id: "hard-gate", completionAuthority: "hr-admin" }]), /completion authority/i);
+    assert.throws(() => applyChecklistOverrides(hard, [{ id: "hard-gate", responsibleRole: "payroll-operations" }]), /responsible role/i);
+    assert.throws(() => applyChecklistOverrides(hard, [{ id: "hard-gate", executor: "existing-workflow" }]), /executor/i);
+    assert.throws(() => applyChecklistOverrides(hard, [{ id: "hard-gate", prerequisites: [] }]), /remove a prerequisite/i);
+    assert.doesNotThrow(() => applyChecklistOverrides(hard, [{ id: "hard-gate", evidenceRequired: false }], false));
+  });
+
   test("stage gates continue to enforce the selected snapshot, not a changed profile", () => {
     const snapshot = applyChecklistOverrides(LEGACY_CHECKLIST, [{
       id: "profile",
       enforcementStage: "before-employee-communications",
-    }]);
+    }], false);
     const readiness = readinessFromChecklist(snapshot);
     const readinessForReplacement = structuredClone(readiness);
     readinessForReplacement[0].status = "ready";
-    const laterProfile = applyChecklistOverrides(LEGACY_CHECKLIST, [{ id: "profile", mandatory: false }]);
+    const laterProfile = applyChecklistOverrides(LEGACY_CHECKLIST, []);
     const merged = mergeChecklistReadiness([...laterProfile.filter((item) => item.id !== "documentation"), {
       id: "new-item", label: "New", order: 7, enabled: true, mandatory: true,
       enforcementStage: "before-day1-review" as const,
@@ -176,14 +292,34 @@ describe("targeted checklist profiles", () => {
     );
     assert.equal(lateReplacement.ok, false);
     if (!lateReplacement.ok) assert.match(lateReplacement.reason, /already passed/i);
-    assert.deepEqual(
+    assert.equal(
       activeReplacementDecision(
         { lifecycleStage: "day1-review", orchestrationCheckpoint: "review-complete" },
         snapshot,
         readiness,
-      ),
-      { ok: true, forceReReview: true },
+      ).ok,
+      false,
     );
+  });
+
+  test("execution boundaries are monotonic even when a replacement has no tasks", () => {
+    assert.equal(
+      establishedChecklistBoundary({ lifecycleStage: "preboarding", orchestrationCheckpoint: "workstreams-complete" }),
+      1,
+    );
+    const postWorkstreams = activeReplacementDecision(
+      { lifecycleStage: "preboarding", orchestrationCheckpoint: "workstreams-complete" },
+      [],
+      [],
+    );
+    assert.equal(postWorkstreams.ok, false);
+    if (!postWorkstreams.ok) assert.match(postWorkstreams.reason, /execution boundary/i);
+    const completedLegacy = activeReplacementDecision(
+      { lifecycleStage: "complete", orchestrationCheckpoint: "blocked:before-workstreams" },
+      [],
+      [],
+    );
+    assert.equal(completedLegacy.ok, false);
   });
 });
 

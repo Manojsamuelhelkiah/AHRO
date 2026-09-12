@@ -1,11 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   DEMO_ORGANIZATION_ID,
   onbCases,
   onbCommunications,
+  onbEvents,
   onbSettings,
+  onbPolicyAuthorities,
+  organizationMembershipsTable,
 } from "@workspace/db/schema";
 import { isNonEmployee } from "./external-systems";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
@@ -15,11 +18,18 @@ import {
   type OperationalAgent,
 } from "./operational-agents";
 import { formatEmailIdentityLines } from "./email-identity";
+import {
+  compileWorkforceProcessSteps,
+  workforceRuntimeEnabled,
+  type WorkforceStepRuntimeIssue,
+} from "./workforce-step-runtime";
+import { workforceAuthorityScope } from "./workforce-policies";
 
 export const OPERATIONAL_REQUEST_SETTING_PREFIX = "operational_requests:";
+export const WORKFORCE_CONTINUATION_SETTING_PREFIX = "workforce_connector_continuation:";
 export const SIMULATED_OPERATIONAL_LABEL = "[SIMULATED — NO EXTERNAL ACTION]";
 
-export type OperationalRequestMethod = "email" | "agent";
+export type OperationalRequestMethod = "email" | "agent" | "human-task";
 export type OperationalRequestStatus =
   | "requested"
   | "in-progress"
@@ -112,7 +122,26 @@ type StoredOperationalRequest = {
   method: OperationalRequestMethod;
   status: OperationalRequestStatus;
   reference: string;
-  simulated: true;
+  /** Human workforce tasks are accountable work, not a simulated integration. */
+  simulated: boolean;
+  runtimeSchemaVersion?: "workforce-step-runtime/v1";
+  runtimeWorkstream?: "intake" | "payroll" | "assets" | "learning";
+  responsibleRole?: string;
+  assignedTo?: string | null;
+  mandatory?: boolean;
+  evidenceRequired?: boolean;
+  nonblocking?: boolean;
+  prerequisites?: string[];
+  parallelGroup?: string | null;
+  permittedChannels?: Array<"portal" | "manager-led">;
+  notBeforeAt?: string | null;
+  dueAt?: string | null;
+  escalation?: {
+    at: string;
+    responsibleRole: string;
+    assignedTo: string | null;
+  } | null;
+  workforceContextVersion?: number;
   requestedAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -133,14 +162,20 @@ type StoredOperationalState = {
 export type OperationalRequest = Omit<
   StoredOperationalRequest,
   "processedRequestIds"
->;
+> & {
+  /** Computed at read time; it does not pretend an escalation was sent. */
+  overdue: boolean;
+  /** A visible accountable escalation is required, not an automatic message. */
+  escalationRequired: boolean;
+};
 
 export type OnboardingAgent = OperationalAgent;
 
 export type OperationalRequestsEnvelope = {
   caseId: number;
   version: number;
-  simulated: true;
+  /** False when this case includes accountable human workforce tasks. */
+  simulated: boolean;
   offlinePaused: boolean;
   requests: OperationalRequest[];
 };
@@ -150,6 +185,8 @@ export type OperationalRequestMutationResult = OperationalRequestsEnvelope & {
   action: string | null;
   idempotent: boolean;
   initializedRequestIds: string[];
+  /** The human task commit succeeded; guarded connector continuation will retry. */
+  continuationPending?: boolean;
 };
 
 export class OperationalRequestConflictError extends Error {
@@ -174,11 +211,21 @@ export class OperationalRequestOfflineError extends Error {
     this.name = "OperationalRequestOfflineError";
   }
 }
+export class OperationalRequestAuthorizationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OperationalRequestAuthorizationError";
+  }
+}
 
 const nowIso = () => new Date().toISOString();
 
 function settingKey(caseId: number): string {
   return `${OPERATIONAL_REQUEST_SETTING_PREFIX}${caseId}`;
+}
+
+function continuationKey(caseId: number, requestId: string): string {
+  return `${WORKFORCE_CONTINUATION_SETTING_PREFIX}${caseId}:${requestId}`;
 }
 
 function advisoryLockKey(organizationId: string, caseId: number): string {
@@ -191,6 +238,17 @@ function stableFingerprint(value: unknown): string {
 
 function publicRequest(request: StoredOperationalRequest): OperationalRequest {
   const { processedRequestIds: _processedRequestIds, ...result } = request;
+  const now = Date.now();
+  const overdue = Boolean(
+    request.dueAt &&
+    request.status !== "completed" &&
+    new Date(request.dueAt).getTime() < now,
+  );
+  const escalationRequired = Boolean(
+    request.escalation &&
+    request.status !== "completed" &&
+    new Date(request.escalation.at).getTime() <= now,
+  );
   return {
     ...result,
     // Keep the legacy agent id while deriving display metadata from the
@@ -204,6 +262,8 @@ function publicRequest(request: StoredOperationalRequest): OperationalRequest {
       // rather than receiving a fabricated historical snapshot.
       agentIdentity: entry.agentIdentity ?? null,
     })),
+    overdue,
+    escalationRequired,
   };
 }
 
@@ -219,7 +279,7 @@ function publicEnvelope(
   return {
     caseId,
     version: state.version,
-    simulated: true,
+    simulated: state.requests.every((request) => request.simulated),
     offlinePaused,
     requests: state.requests.map(publicRequest),
   };
@@ -269,7 +329,7 @@ function parseState(raw: string | null): StoredOperationalState {
         typeof request !== "object" ||
         typeof (request as { id?: unknown }).id !== "string" ||
         !statuses.includes((request as { status?: OperationalRequestStatus }).status!) ||
-        !["email", "agent"].includes(
+        !["email", "agent", "human-task"].includes(
           (request as { method?: OperationalRequestMethod }).method!,
         ) ||
         !Array.isArray((request as { history?: unknown }).history) ||
@@ -317,10 +377,19 @@ function parseState(raw: string | null): StoredOperationalState {
 }
 
 function defaultDefinitions(
-  c: Pick<typeof onbCases.$inferSelect, "workerCategory">,
+  c: Pick<typeof onbCases.$inferSelect, "workerCategory" | "processPolicySnapshot">,
 ): readonly OperationalRequestDefinition[] {
+  if (!workforceRuntimeEnabled(c.processPolicySnapshot)) {
+    return OPERATIONAL_REQUEST_DEFINITIONS.filter(
+      (definition) => definition.id !== "payroll" || !isNonEmployee(c.workerCategory),
+    );
+  }
   return OPERATIONAL_REQUEST_DEFINITIONS.filter(
-    (definition) => definition.id !== "payroll" || !isNonEmployee(c.workerCategory),
+    // Learning has no connected executor. It is compiled below as accountable
+    // human work; it must never be initialized as an agent simulation.
+    (definition) =>
+      !["learning", "payroll", "assets"].includes(definition.id) &&
+      (definition.id !== "payroll" || !isNonEmployee(c.workerCategory)),
   );
 }
 
@@ -375,6 +444,60 @@ function defaultRequest(
         agentIdentity: method === "agent" ? registeredAgent : null,
       },
     ],
+    processedRequestIds: {},
+  };
+}
+
+function workforceTaskRequest(
+  caseId: number,
+  task: ReturnType<typeof compileWorkforceProcessSteps>["steps"][number],
+  timestamp: string,
+  workforceContextVersion: number,
+): StoredOperationalRequest {
+  const id = task.id;
+  return {
+    id,
+    label: task.label,
+    owner: task.assignedTo ?? task.responsibleRole,
+    agent: "human-task",
+    agentIdentity: null,
+    teamRecipientLabel: task.assignedTo
+      ? `${task.assignedTo} (${task.responsibleRole})`
+      : task.responsibleRole,
+    method: "human-task",
+    status: "requested",
+    reference: `HUMAN-TASK-${caseId}-${id}-${randomUUID().slice(0, 8)}`,
+    simulated: false,
+    runtimeSchemaVersion: "workforce-step-runtime/v1",
+    runtimeWorkstream: task.workstream,
+    responsibleRole: task.responsibleRole,
+    assignedTo: task.assignedTo,
+    mandatory: task.mandatory,
+    evidenceRequired: task.evidenceRequired,
+    nonblocking: task.nonblocking,
+    prerequisites: task.prerequisites,
+    parallelGroup: task.parallelGroup,
+    permittedChannels: task.permittedChannels,
+    notBeforeAt: task.notBeforeAt,
+    dueAt: task.dueAt,
+    escalation: task.escalation,
+    workforceContextVersion,
+    requestedAt: timestamp,
+    startedAt: null,
+    completedAt: null,
+    blockedAt: null,
+    lastRetryAt: null,
+    updatedAt: timestamp,
+    failureReason: null,
+    history: [{
+      status: "requested",
+      at: timestamp,
+      actor: "system",
+      reason: "Accountable human workforce task created from the immutable learning policy snapshot. No AI agent, LMS, calendar, message, or external system was invoked.",
+      requestId: null,
+      communicationId: null,
+      agentIdentity: null,
+    }],
     processedRequestIds: {},
   };
 }
@@ -646,6 +769,151 @@ function ensureActionAllowed(
   }
 }
 
+function isWorkforceHumanTask(request: StoredOperationalRequest): boolean {
+  return request.method === "human-task" &&
+    request.runtimeSchemaVersion === "workforce-step-runtime/v1";
+}
+
+function assertWorkforceTaskCanStart(
+  state: StoredOperationalState,
+  request: StoredOperationalRequest,
+  timestamp: string,
+): void {
+  if (!isWorkforceHumanTask(request)) return;
+  if (request.notBeforeAt && new Date(request.notBeforeAt).getTime() > new Date(timestamp).getTime()) {
+    throw new OperationalRequestConflictError(
+      `Human task "${request.id}" is not available until ${request.notBeforeAt}.`,
+    );
+  }
+  const incomplete = (request.prerequisites ?? []).filter((id) =>
+    state.requests.find((candidate) => candidate.id === id)?.status !== "completed",
+  );
+  if (incomplete.length) {
+    throw new OperationalRequestConflictError(
+      `Human task "${request.id}" is waiting for prerequisite completion: ${incomplete.join(", ")}.`,
+    );
+  }
+}
+
+function assertWorkforceTaskAction(
+  state: StoredOperationalState,
+  request: StoredOperationalRequest,
+  body: OperationalRequestActionBody,
+  timestamp: string,
+): void {
+  if (!isWorkforceHumanTask(request)) return;
+  if (body.method !== undefined) {
+    throw new OperationalRequestConflictError(
+      `Human task "${request.id}" has fixed permitted channels (${(request.permittedChannels ?? []).join(", ") || "none"}) and cannot select a simulated email or agent method.`,
+    );
+  }
+  if (body.action === "select-method") {
+    throw new OperationalRequestConflictError(
+      `Human task "${request.id}" has a fixed human-task execution method.`,
+    );
+  }
+  if (body.action === "start") assertWorkforceTaskCanStart(state, request, timestamp);
+  if (body.action === "complete" && request.evidenceRequired !== false) {
+    const evidence = body.reason?.trim();
+    if (!evidence || evidence.length < 3) {
+      throw new OperationalRequestConflictError(
+        `Human task "${request.id}" requires an evidence reference or completion note of at least 3 characters before it can be completed.`,
+      );
+    }
+  }
+}
+
+async function reconcileWorkforceStepReadiness(
+  tx: OperationalTransaction,
+  caseRow: typeof onbCases.$inferSelect,
+  state: StoredOperationalState,
+): Promise<boolean> {
+  const blockingFor = (workstream: StoredOperationalRequest["runtimeWorkstream"]) =>
+    state.requests.filter(
+      (request) =>
+        request.runtimeWorkstream === workstream &&
+        request.mandatory !== false &&
+        request.nonblocking !== true,
+    );
+  const completeFor = (workstream: StoredOperationalRequest["runtimeWorkstream"]) => {
+    const tasks = blockingFor(workstream);
+    return tasks.every((request) => request.status === "completed");
+  };
+  const incompleteLabels = (workstream: StoredOperationalRequest["runtimeWorkstream"]) =>
+    blockingFor(workstream)
+      .filter((request) => request.status !== "completed")
+      .map((request) => request.label);
+  const learningComplete = completeFor("learning");
+  const payrollComplete = completeFor("payroll");
+  const assetsComplete = completeFor("assets");
+  const intakeComplete = completeFor("intake");
+  const readiness = caseRow.readiness.map((item) => ({ ...item }));
+  const learning = readiness.find((item) => item.key === "learning");
+  const checkpoints = readiness.find((item) => item.key === "checkpoints");
+  const payroll = readiness.find((item) => item.key === "payroll");
+  const assets = readiness.find((item) => item.key === "assets");
+  const profile = readiness.find((item) => item.key === "profile");
+  const learningNote = learningComplete
+    ? "All mandatory learning workforce tasks were completed by accountable humans with recorded completion evidence. No LMS, calendar, or messaging-provider completion is claimed."
+    : `Awaiting accountable human completion of ${incompleteLabels("learning").length} mandatory learning task(s): ${incompleteLabels("learning").join(", ")}.`;
+  if (learning) {
+    learning.status = learningComplete ? "ready" : "in-progress";
+    learning.note = learningNote;
+  }
+  if (checkpoints) {
+    checkpoints.status = learningComplete ? "ready" : "in-progress";
+    checkpoints.note = learningComplete
+      ? "Learning and manager-connect workforce tasks are complete; checkpoint planning remains a human-owned record."
+      : "Checkpoint readiness is held until mandatory learning workforce tasks are completed.";
+  }
+  if (payroll) {
+    if (isNonEmployee(caseRow.workerCategory)) {
+      payroll.status = "ready";
+      payroll.note = "Not applicable — non-employee pathway.";
+    } else {
+      payroll.status = payrollComplete ? "ready" : "in-progress";
+      payroll.note = payrollComplete
+        ? "Payroll prerequisite and setup were completed by accountable humans with recorded evidence; no payroll provider enrollment is claimed."
+        : `Payroll readiness is held for ${incompleteLabels("payroll").join(", ")}.`;
+    }
+  }
+  if (assets) {
+    assets.status = assetsComplete ? "ready" : "in-progress";
+    assets.note = assetsComplete
+      ? "Asset/workplace readiness was completed by accountable humans with recorded evidence; no fulfillment provider action is claimed."
+      : `Asset readiness is held for ${incompleteLabels("assets").join(", ")}.`;
+  }
+  if (profile) {
+    profile.status = intakeComplete ? "ready" : "in-progress";
+    profile.note = intakeComplete
+      ? "Configured intake mode and channel were confirmed by an accountable human with recorded evidence."
+      : `Intake confirmation is held for ${incompleteLabels("intake").join(", ")}.`;
+  }
+  const workstreams = caseRow.workstreams.map((item) => ({
+    ...item,
+    blockers: [...item.blockers],
+  }));
+  const learningWorkstream = workstreams.find((item) => item.key === "learning");
+  if (learningWorkstream) {
+    learningWorkstream.status = learningComplete ? "ready" : "in-progress";
+    learningWorkstream.blockers = learningComplete ? [] : incompleteLabels("learning");
+  }
+  const assetsWorkstream = workstreams.find((item) => item.key === "assets");
+  if (assetsWorkstream) {
+    assetsWorkstream.status = assetsComplete ? "ready" : "in-progress";
+    assetsWorkstream.blockers = assetsComplete ? [] : incompleteLabels("assets");
+  }
+  await tx.update(onbCases).set({
+    readiness,
+    workstreams,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(onbCases.id, caseRow.id),
+    eq(onbCases.organizationId, caseRow.organizationId),
+  ));
+  return [learningComplete, payrollComplete, assetsComplete, intakeComplete].every(Boolean);
+}
+
 function actionReason(
   action: OperationalRequestAction,
   reason: string | undefined,
@@ -676,7 +944,7 @@ function methodOrCurrent(
       request.method,
     );
   }
-  if (request.method === "email") request.agentIdentity = null;
+  if (request.method !== "agent") request.agentIdentity = null;
   return request.method;
 }
 
@@ -689,6 +957,193 @@ export function canMutateOperationalRequests(
     role === "admin" ||
     (organizationId === DEMO_ORGANIZATION_ID && role === "member")
   );
+}
+
+export type WorkforceRuntimePrerequisiteEvaluation = {
+  /** True only when this case currently has v2 human runtime tasks. */
+  active: boolean;
+  /** Every mandatory, blocking task in the requested workstream is complete. */
+  allowed: boolean;
+  incompleteTaskIds: string[];
+  version: number;
+};
+
+/** Stable authority identifier; display labels are not authorization keys. */
+export function workforceAuthorityRoleId(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+/** Invoke inside the policy-rebase transaction after locking this case's state. */
+export function assertWorkforceRuntimeRebaseAllowed(serializedState: unknown): void {
+  const state = parseState(typeof serializedState === "string" ? serializedState : null);
+  if (state.requests.some((request) =>
+    request.runtimeSchemaVersion === "workforce-step-runtime/v1" &&
+    request.status !== "requested",
+  )) {
+    throw new OperationalRequestConflictError(
+      "A workforce policy rebase cannot retire or rebuild tasks after a task has been claimed or acted on.",
+    );
+  }
+}
+
+/**
+ * Read-only transactional gate for connector dispatch/recovery. Connector
+ * owners call this immediately before a workstream mutation; it deliberately
+ * writes no task state and never treats a missing runtime as a v2 blocker.
+ */
+export async function evaluateWorkforceRuntimePrerequisites(input: {
+  organizationId: string;
+  caseId: number;
+  workstream: "intake" | "payroll" | "assets" | "learning";
+}): Promise<WorkforceRuntimePrerequisiteEvaluation> {
+  return db.transaction(async (tx) => {
+    const [stored] = await tx.select({ value: onbSettings.value })
+      .from(onbSettings)
+      .where(and(
+        eq(onbSettings.organizationId, input.organizationId),
+        eq(onbSettings.key, settingKey(input.caseId)),
+      )).limit(1);
+    if (!stored) {
+      return { active: false, allowed: true, incompleteTaskIds: [], version: 0 };
+    }
+    const state = parseState(stored.value);
+    const tasks = state.requests.filter(
+      (request) =>
+        request.runtimeSchemaVersion === "workforce-step-runtime/v1" &&
+        request.runtimeWorkstream === input.workstream &&
+        request.mandatory !== false &&
+        request.nonblocking !== true,
+    );
+    if (!tasks.length) {
+      return { active: false, allowed: true, incompleteTaskIds: [], version: state.version };
+    }
+    const incompleteTaskIds = tasks
+      .filter((request) => request.status !== "completed")
+      .map((request) => request.id);
+    return {
+      active: true,
+      allowed: incompleteTaskIds.length === 0,
+      incompleteTaskIds,
+      version: state.version,
+    };
+  });
+}
+
+type WorkforceContinuationDependencies = {
+  dispatch?: (caseRow: typeof onbCases.$inferSelect) => Promise<void>;
+  resume?: (caseId: number) => Promise<unknown>;
+};
+
+/**
+ * Replays a committed human-task continuation. Both boundaries re-read and
+ * enforce their own current gates, so this is safe for a later checklist
+ * pause and cannot revive a stale pre-workstream authorization.
+ */
+export async function reconcileWorkforceConnectorContinuation(input: {
+  organizationId: string;
+  caseId: number;
+  requestId: string;
+  dependencies?: WorkforceContinuationDependencies;
+}): Promise<void> {
+  const key = continuationKey(input.caseId, input.requestId);
+  try {
+    const [caseRow] = await db.select().from(onbCases).where(and(
+      eq(onbCases.id, input.caseId),
+      eq(onbCases.organizationId, input.organizationId),
+    ));
+    if (!caseRow) {
+      await db.delete(onbSettings).where(and(
+        eq(onbSettings.organizationId, input.organizationId),
+        eq(onbSettings.key, key),
+      ));
+      return;
+    }
+    if (input.dependencies?.dispatch) {
+      await input.dependencies.dispatch(caseRow);
+    } else {
+      const { dispatchWorkstreamConnectorMutations } = await import("./workstream-connectors");
+      await dispatchWorkstreamConnectorMutations(caseRow);
+    }
+    if (input.dependencies?.resume) {
+      await input.dependencies.resume(input.caseId);
+    } else {
+      const { resumeChecklistOrchestration } = await import("./engine");
+      await resumeChecklistOrchestration(input.caseId);
+    }
+    await db.delete(onbSettings).where(and(
+      eq(onbSettings.organizationId, input.organizationId),
+      eq(onbSettings.key, key),
+    ));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await db.insert(onbSettings).values({
+      organizationId: input.organizationId,
+      key,
+      value: JSON.stringify({
+        version: 1,
+        caseId: input.caseId,
+        requestId: input.requestId,
+        status: "pending",
+        lastError: detail.slice(0, 500),
+        updatedAt: nowIso(),
+      }),
+    }).onConflictDoUpdate({
+      target: [onbSettings.organizationId, onbSettings.key],
+      set: {
+        value: JSON.stringify({
+          version: 1,
+          caseId: input.caseId,
+          requestId: input.requestId,
+          status: "pending",
+          lastError: detail.slice(0, 500),
+          updatedAt: nowIso(),
+        }),
+        updatedAt: sql`now()`,
+      },
+    });
+    await db.insert(onbEvents).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      agent: "workforce-continuation",
+      engine: "system",
+      hitlPattern: "retry",
+      ruleRef: "workforce-step-runtime/v1",
+      title: "Committed workforce continuation pending retry",
+      detail: `Human task completion is durable; guarded connector continuation remains pending: ${detail.slice(0, 300)}`,
+      idempotencyKey: `workforce-continuation:${input.caseId}:${input.requestId}:pending`,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
+    throw error;
+  }
+}
+
+/** Watcher recovery for continuations whose post-commit boundary failed. */
+export async function recoverWorkforceConnectorContinuations(): Promise<void> {
+  const rows = await db.select({
+    organizationId: onbSettings.organizationId,
+    key: onbSettings.key,
+  }).from(onbSettings).where(
+    sql`${onbSettings.key} like ${`${WORKFORCE_CONTINUATION_SETTING_PREFIX}%`}`,
+  );
+  for (const row of rows) {
+    const suffix = row.key.slice(WORKFORCE_CONTINUATION_SETTING_PREFIX.length);
+    const separator = suffix.indexOf(":");
+    const caseId = Number(suffix.slice(0, separator));
+    const requestId = suffix.slice(separator + 1);
+    if (separator < 1 || !Number.isInteger(caseId) || caseId < 1 || !requestId) continue;
+    try {
+      await reconcileWorkforceConnectorContinuation({
+        organizationId: row.organizationId,
+        caseId,
+        requestId,
+      });
+    } catch (error) {
+      // The error was persisted on its continuation row; continue recovering
+      // other tenants/cases rather than turning one refusal into a silent drop.
+      console.error(`[workforce-continuation] recovery failed for ${row.key}:`, error);
+    }
+  }
 }
 
 export async function getOperationalRequests(
@@ -735,6 +1190,11 @@ export async function initializeOperationalRequests(input: {
       input.caseId,
     );
     const method = input.method ?? "agent";
+    if (method === "human-task") {
+      throw new OperationalRequestConflictError(
+        "Human-task is reserved for workforce step policies and cannot initialize a simulated operational request.",
+      );
+    }
     const requestedIds = input.requestIds
       ? [...new Set(input.requestIds)]
       : defaultDefinitions(caseRow).map((definition) => definition.id);
@@ -817,6 +1277,170 @@ export async function initializeOperationalRequests(input: {
   });
 }
 
+export type WorkforceStepInitializationResult = OperationalRequestsEnvelope & {
+  active: boolean;
+  initializedRequestIds: string[];
+  issues: WorkforceStepRuntimeIssue[];
+  blockingTasksComplete: boolean;
+  workstreamBlockingComplete: Record<"intake" | "payroll" | "assets" | "learning", boolean>;
+};
+
+/**
+ * Persist learning work as accountable human tasks. The source is only the
+ * immutable processPolicySnapshot already attached to this case. A policy
+ * never causes an AI/persona or external-system invocation here.
+ */
+export async function initializeWorkforceStepTasks(input: {
+  organizationId: string;
+  caseId: number;
+  actor: string;
+}): Promise<WorkforceStepInitializationResult> {
+  return db.transaction(async (tx) => {
+    const { caseRow, state } = await lockAndLoad(
+      tx,
+      input.organizationId,
+      input.caseId,
+    );
+    const compilation = compileWorkforceProcessSteps({
+      processPolicySnapshot: caseRow.processPolicySnapshot,
+      joiningDate: caseRow.joiningDate,
+      workerCategory: caseRow.workerCategory,
+    });
+    const existingRuntimeTasks = () => state.requests.filter(
+      (request) => request.runtimeSchemaVersion === "workforce-step-runtime/v1",
+    );
+    if (!compilation.active) {
+      const prior = existingRuntimeTasks();
+      if (prior.some((request) => request.status !== "requested")) {
+        throw new OperationalRequestConflictError(
+          "A workforce policy rebase cannot retire tasks after a task has been claimed or acted on.",
+        );
+      }
+      if (prior.length) {
+        state.requests = state.requests.filter(
+          (request) => request.runtimeSchemaVersion !== "workforce-step-runtime/v1",
+        );
+        delete state.initializationRequestIds["learning-workforce-steps"];
+        state.version += 1;
+        await saveState(tx, input.organizationId, input.caseId, state);
+      }
+      return {
+        ...publicEnvelope(input.caseId, state, isSyntheticOfflineCase(caseRow)),
+        active: false,
+        initializedRequestIds: [],
+        issues: [],
+        blockingTasksComplete: true,
+        workstreamBlockingComplete: { intake: true, payroll: true, assets: true, learning: true },
+      };
+    }
+    // Keep learning ids namespaced so legacy snapshots with terse sequence ids
+    // cannot collide with payroll/assets task ids in the same case state.
+    const runtimeTasks = compilation.steps.map((task) => task.workstream === "learning" && !task.id.startsWith("learning-")
+      ? {
+          ...task,
+          id: `learning-${task.id}`,
+          prerequisites: task.prerequisites.map((prerequisite) =>
+            prerequisite.startsWith("learning-") ? prerequisite : `learning-${prerequisite}`),
+        }
+      : task);
+    const runtimeIds = runtimeTasks.map((task) => task.id);
+    if (new Set(runtimeIds).size !== runtimeIds.length) {
+      throw new OperationalRequestConflictError(
+        "Learning policy step ids collide after their required learning namespace is applied.",
+      );
+    }
+    for (const task of runtimeTasks) {
+      if (!task.assignedTo) continue;
+      const [member] = await tx.select({ id: organizationMembershipsTable.id })
+        .from(organizationMembershipsTable)
+        .where(and(
+          eq(organizationMembershipsTable.organizationId, input.organizationId),
+          eq(organizationMembershipsTable.clerkUserId, task.assignedTo),
+        )).limit(1);
+      if (!member) {
+        throw new OperationalRequestConflictError(
+          `Named assignee "${task.assignedTo}" is not an authenticated member of this organization.`,
+        );
+      }
+    }
+    const fingerprint = stableFingerprint({
+      action: "initialize-learning-workforce-steps",
+      schemaVersion: compilation.schemaVersion,
+      steps: compilation.steps,
+      issues: compilation.issues,
+    });
+    const initializationKey = "learning-workforce-steps";
+    const seen = state.initializationRequestIds[initializationKey];
+    if (seen && seen.fingerprint !== fingerprint) {
+      const prior = existingRuntimeTasks();
+      if (prior.some((request) => request.status !== "requested")) {
+        throw new OperationalRequestConflictError(
+          "A workforce policy rebase cannot replace tasks after a task has been claimed or acted on.",
+        );
+      }
+      // A paused/rebased case has no claim or completion evidence yet. Retire
+      // its requested-only tasks atomically, then construct the new immutable
+      // snapshot below. References are never reused after an acted-on task.
+      state.requests = state.requests.filter(
+        (request) => request.runtimeSchemaVersion !== "workforce-step-runtime/v1",
+      );
+      delete state.initializationRequestIds[initializationKey];
+    }
+    const existing = new Set(state.requests.map((request) => request.id));
+    const initializedRequestIds: string[] = [];
+      for (const task of runtimeTasks) {
+      const request = workforceTaskRequest(
+        caseRow.id,
+        task,
+        nowIso(),
+        caseRow.workforceContextVersion,
+      );
+      if (existing.has(request.id)) continue;
+      if (request.prerequisites?.some((prerequisite) => !existing.has(prerequisite) &&
+        !runtimeTasks.some((candidate) => candidate.id === prerequisite))) {
+        throw new OperationalRequestConflictError(
+          `Learning task "${request.id}" has a prerequisite outside its policy snapshot.`,
+        );
+      }
+      state.requests.push(request);
+      existing.add(request.id);
+      initializedRequestIds.push(request.id);
+    }
+    if (initializedRequestIds.length > 0) state.version += 1;
+    state.initializationRequestIds[initializationKey] = {
+      action: "initialize-learning-workforce-steps",
+      fingerprint,
+    };
+    if (initializedRequestIds.length > 0 || !seen) {
+      await saveState(tx, input.organizationId, input.caseId, state);
+    }
+    const blockingTasks = state.requests.filter(
+      (request) =>
+        request.mandatory !== false &&
+        request.nonblocking !== true,
+    );
+    const workstreamBlockingComplete = Object.fromEntries(
+      (["intake", "payroll", "assets", "learning"] as const).map((workstream) => {
+        const scoped = blockingTasks.filter((request) => request.runtimeWorkstream === workstream);
+        return [workstream, scoped.every((request) => request.status === "completed")];
+      }),
+    ) as WorkforceStepInitializationResult["workstreamBlockingComplete"];
+    return {
+      ...publicEnvelope(input.caseId, state, isSyntheticOfflineCase(caseRow)),
+      active: true,
+      initializedRequestIds,
+      issues: compilation.issues,
+      blockingTasksComplete:
+        blockingTasks.length > 0 &&
+        blockingTasks.every((request) => request.status === "completed"),
+      workstreamBlockingComplete,
+    };
+  });
+}
+
+/** @deprecated Kept for the initial learning-only caller during rollout. */
+export const initializeLearningWorkforceStepTasks = initializeWorkforceStepTasks;
+
 export async function applyOperationalRequestAction(input: {
   organizationId: string;
   caseId: number;
@@ -827,9 +1451,12 @@ export async function applyOperationalRequestAction(input: {
   reason?: string;
   expectedVersion: number;
   actor: string;
+  actorUserId?: string;
+  organizationRole?: string;
 }): Promise<OperationalRequestMutationResult> {
   assertRequestId(input.requestId);
-  return db.transaction(async (tx) => {
+  let pendingContinuation: string | null = null;
+  const result = await db.transaction(async (tx) => {
     const { caseRow, state } = await lockAndLoad(
       tx,
       input.organizationId,
@@ -842,6 +1469,56 @@ export async function applyOperationalRequestAction(input: {
       throw new OperationalRequestNotFoundError(
         `Operational request "${input.operationalRequestId}" was not found for this case.`,
       );
+    }
+    if (request.runtimeSchemaVersion === "workforce-step-runtime/v1") {
+      if (!input.actorUserId) {
+        throw new OperationalRequestAuthorizationError("A signed-in tenant user is required to act on an accountable workforce task.");
+      }
+      const [membership] = await tx.select({ id: organizationMembershipsTable.id })
+        .from(organizationMembershipsTable)
+        .where(and(
+          eq(organizationMembershipsTable.organizationId, input.organizationId),
+          eq(organizationMembershipsTable.clerkUserId, input.actorUserId),
+        )).limit(1);
+      if (!membership) {
+        throw new OperationalRequestAuthorizationError("The signed-in user is not a member of this organization.");
+      }
+      const authorityScope = workforceAuthorityScope(caseRow.workforceContext);
+      if (!authorityScope || request.workforceContextVersion !== caseRow.workforceContextVersion) {
+        throw new OperationalRequestAuthorizationError(
+          "This workforce task cannot be acted on because its current site/context scope is unknown or has changed.",
+        );
+      }
+      if (request.assignedTo) {
+        if (request.assignedTo !== input.actorUserId) {
+          throw new OperationalRequestAuthorizationError("This workforce task is assigned to a different authenticated tenant user.");
+        }
+      } else {
+        const authorities = await tx.select({
+          userId: onbPolicyAuthorities.userId,
+          authorityRole: onbPolicyAuthorities.authorityRole,
+          site: onbPolicyAuthorities.site,
+        })
+          .from(onbPolicyAuthorities)
+          .where(and(
+            eq(onbPolicyAuthorities.organizationId, input.organizationId),
+            eq(onbPolicyAuthorities.userId, input.actorUserId),
+            eq(onbPolicyAuthorities.caseId, input.caseId),
+            eq(onbPolicyAuthorities.itemId, request.id),
+            isNull(onbPolicyAuthorities.revokedAt),
+          ));
+        const authority = authorities.find((candidate) =>
+          candidate.site === authorityScope &&
+          workforceAuthorityRoleId(candidate.authorityRole) === workforceAuthorityRoleId(request.responsibleRole ?? ""),
+        );
+        if (!authority) {
+          throw new OperationalRequestAuthorizationError(
+            "This unassigned workforce task requires a server-side authority binding for its accountable role and case.",
+          );
+        }
+      }
+    } else if (!canMutateOperationalRequests(input.organizationId, input.organizationRole)) {
+      throw new OperationalRequestAuthorizationError("Organization owner or admin role required for simulated operational request mutations.");
     }
     const body = {
       action: input.action,
@@ -871,6 +1548,13 @@ export async function applyOperationalRequestAction(input: {
     }
     assertActionExpectedVersion(state, input.expectedVersion);
     ensureActionAllowed(request, input.action);
+    const timestamp = nowIso();
+    assertWorkforceTaskAction(state, request, {
+      action: input.action,
+      method: input.method,
+      reason: input.reason,
+      expectedVersion: input.expectedVersion,
+    }, timestamp);
     if (input.action === "select-method" && input.method === undefined) {
       throw new OperationalRequestConflictError(
         "select-method requires method=email or method=agent.",
@@ -885,7 +1569,6 @@ export async function applyOperationalRequestAction(input: {
       );
     }
     const reason = actionReason(input.action, input.reason);
-    const timestamp = nowIso();
     const method = methodOrCurrent(request, input.method);
     if (
       (input.action === "select-method" || input.action === "start" || input.action === "retry") &&
@@ -906,16 +1589,18 @@ export async function applyOperationalRequestAction(input: {
     } else if (input.action === "retry") {
       nextStatus = "requested";
     }
-    const communicationId = await insertSimulationCommunication(tx, {
-      organizationId: input.organizationId,
-      caseId: input.caseId,
-      request,
-      status: nextStatus,
-      actor: input.actor,
-      requestId: input.requestId,
-      reason,
-      idempotencyKey: `operational:${input.caseId}:${request.id}:action:${input.requestId}`,
-    });
+    const communicationId = request.simulated
+      ? await insertSimulationCommunication(tx, {
+          organizationId: input.organizationId,
+          caseId: input.caseId,
+          request,
+          status: nextStatus,
+          actor: input.actor,
+          requestId: input.requestId,
+          reason,
+          idempotencyKey: `operational:${input.caseId}:${request.id}:action:${input.requestId}`,
+        })
+      : null;
     applyHistory(
       request,
       nextStatus,
@@ -933,7 +1618,31 @@ export async function applyOperationalRequestAction(input: {
       fingerprint,
     };
     state.version += 1;
+    if (isWorkforceHumanTask(request)) {
+      await reconcileWorkforceStepReadiness(tx, caseRow, state);
+    }
     await saveState(tx, input.organizationId, input.caseId, state);
+    if (
+      input.action === "complete" &&
+      isWorkforceHumanTask(request) &&
+      request.status === "completed"
+    ) {
+      pendingContinuation = continuationKey(input.caseId, input.requestId);
+      await tx.insert(onbSettings).values({
+        organizationId: input.organizationId,
+        key: pendingContinuation,
+        value: JSON.stringify({
+          version: 1,
+          caseId: input.caseId,
+          requestId: input.requestId,
+          status: "pending",
+          updatedAt: nowIso(),
+        }),
+      }).onConflictDoUpdate({
+        target: [onbSettings.organizationId, onbSettings.key],
+        set: { updatedAt: sql`now()` },
+      });
+    }
     return {
       ...publicEnvelope(input.caseId, state, isSyntheticOfflineCase(caseRow)),
       requestId: input.operationalRequestId,
@@ -942,4 +1651,22 @@ export async function applyOperationalRequestAction(input: {
       initializedRequestIds: [],
     };
   });
+  // Completion changes the same checklist state that gates the next review.
+  // Resume only after the transaction commits; the engine will independently
+  // re-check all mandatory evidence and never interprets this as an LMS effect.
+  if (pendingContinuation) {
+    try {
+      await reconcileWorkforceConnectorContinuation({
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+        requestId: input.requestId,
+      });
+    } catch {
+      // The task transaction already committed and the failure was persisted
+      // as a continuation row/event. Return the completed task rather than
+      // misreporting it as a 500 or rolling its evidence into ambiguity.
+      return { ...result, continuationPending: true };
+    }
+  }
+  return { ...result, continuationPending: false };
 }

@@ -78,6 +78,11 @@ router.get("/onboarding/action-center", async (req, res, next) => {
       getOrganizationId(req),
       parsed.data.scope,
       parsed.data.limit,
+      {
+        workforce: parsed.data.workforce,
+        safetyCritical: parsed.data.safetyCritical,
+        siteExposure: parsed.data.siteExposure,
+      },
     );
     res.json(GetOnboardingActionCenterResponse.parse(result));
   } catch (error) {

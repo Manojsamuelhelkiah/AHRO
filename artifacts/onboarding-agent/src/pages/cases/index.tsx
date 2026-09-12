@@ -9,8 +9,10 @@ import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
 import { format } from 'date-fns';
-import { Plus, Search, SlidersHorizontal, Bot, User, X, FlaskConical, Check, AlertTriangle, Clock, Presentation } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, FlaskConical, Check, AlertTriangle, Clock, Presentation } from 'lucide-react';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { BatchIntakeForm } from './batch-intake';
+import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
 
 type OnbCase = ApiOnbCase;
 
@@ -210,9 +212,40 @@ type AdvancedFilters = {
   geography: string;
   dateFrom: string;
   dateTo: string;
+  workforce: '' | 'white-collar' | 'blue-collar-frontline' | 'mixed' | 'needs-review' | 'unclassified';
+  siteExposure: '' | 'yes' | 'no';
+  safetyCritical: '' | 'yes' | 'no';
 };
 
-const EMPTY_FILTERS: AdvancedFilters = { status: '', agent: '', priority: '', geography: '', dateFrom: '', dateTo: '' };
+const EMPTY_FILTERS: AdvancedFilters = { status: '', agent: '', priority: '', geography: '', dateFrom: '', dateTo: '', workforce: '', siteExposure: '', safetyCritical: '' };
+
+function workforceLabel(c: OnbCase) {
+  return c.workforceClassification?.label ?? 'unclassified';
+}
+function WorkforceTags({ c }: { c: OnbCase }) {
+  const context = c.workforceContext ?? {};
+  return <div className="mt-1 flex flex-wrap gap-1">
+    <span className="rounded bg-[var(--surface-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--text-secondary)]">{workforceLabel(c).replace(/-/g, ' ')}</span>
+    {context.siteExposure === true && <span className="rounded bg-[var(--status-amber-bg)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--status-amber-fg)]">Site exposure</span>}
+    {context.siteExposure === false && <span className="rounded bg-[var(--surface-alt)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">No site exposure</span>}
+    {context.safetyCritical === true && <span className="rounded bg-[var(--status-red-bg)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--status-red-fg)]">Safety-critical</span>}
+    {context.safetyCritical === false && <span className="rounded bg-[var(--surface-alt)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">Not safety-critical</span>}
+  </div>;
+}
+
+function intakeClassification(context: { workEnvironment?: string; siteExposure?: string; safetyCritical?: string; hazards?: string }) {
+  const safetyKnown = (context.siteExposure === 'yes' || context.siteExposure === 'no') && (context.safetyCritical === 'yes' || context.safetyCritical === 'no');
+  const frontline = context.workEnvironment === 'site' || context.workEnvironment === 'field' || context.siteExposure === 'yes' || context.safetyCritical === 'yes' || Boolean(context.hazards?.trim());
+  const office = (context.workEnvironment === 'office' || context.workEnvironment === 'remote') && safetyKnown;
+  const label = office && frontline ? 'mixed' : frontline ? 'blue-collar-frontline' : office ? 'white-collar' : 'needs-review';
+  return {
+    label,
+    rationale: label === 'needs-review'
+      ? 'Work environment and safety applicability are incomplete, so a human context review gate will be added.'
+      : `Derived only from explicit ${[context.workEnvironment && `environment ${context.workEnvironment}`, context.siteExposure === 'yes' && 'site exposure', context.safetyCritical === 'yes' && 'safety-critical duties', context.hazards?.trim() && 'recorded hazards'].filter(Boolean).join(', ')}.`,
+    uncertainty: label === 'needs-review' ? 'Uncertain — the system does not infer safety facts.' : 'High confidence from supplied job facts.',
+  };
+}
 
 export function CasesPage() {
   const { data: cases, isLoading, isError, refetch } = useListOnboardingCases({
@@ -225,6 +258,7 @@ export function CasesPage() {
     }
   });
   const [showNew, setShowNew] = useState(false);
+  const [showBatch, setShowBatch] = useState(false);
   const [, setLocation] = useLocation();
   const [typeFilter, setTypeFilter] = useState<CaseTypeFilter>('All Cases');
   const [query, setQuery] = useState('');
@@ -264,6 +298,9 @@ export function CasesPage() {
     if (filters.geography) rows = rows.filter((c) => c.geography === filters.geography);
     if (filters.dateFrom) rows = rows.filter((c) => c.joiningDate >= filters.dateFrom);
     if (filters.dateTo) rows = rows.filter((c) => c.joiningDate <= filters.dateTo);
+    if (filters.workforce) rows = rows.filter((c) => workforceLabel(c) === filters.workforce);
+    if (filters.siteExposure) rows = rows.filter((c) => c.workforceContext?.siteExposure === (filters.siteExposure === 'yes'));
+    if (filters.safetyCritical) rows = rows.filter((c) => c.workforceContext?.safetyCritical === (filters.safetyCritical === 'yes'));
     const q = query.trim().toLowerCase();
     if (q) {
       rows = rows.filter((c) =>
@@ -331,6 +368,9 @@ export function CasesPage() {
           <Button onClick={() => setShowNew(!showNew)} className="gap-2">
             <Plus className="h-4 w-4" /> New Case
           </Button>
+          <Button variant="outline" onClick={() => setShowBatch(!showBatch)} className="gap-2">
+            <Users className="h-4 w-4" /> Batch Intake
+          </Button>
         </div>
       </PageHeader>
 
@@ -341,6 +381,7 @@ export function CasesPage() {
       )}
 
       {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
+       {showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
 
       <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'visible' }}>
         {/* search + filters row */}
@@ -369,6 +410,8 @@ export function CasesPage() {
                     {CASE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
+                 <div className="space-y-1"><Label>Workforce classification</Label><select className={selectStyle} value={filters.workforce} onChange={(e) => setFilters({ ...filters, workforce: e.target.value as AdvancedFilters['workforce'] })}><option value="">Any classification</option><option value="white-collar">White-collar</option><option value="blue-collar-frontline">Frontline / site</option><option value="mixed">Mixed</option><option value="needs-review">Needs review</option><option value="unclassified">Unclassified</option></select></div>
+                 <div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label>Site exposure</Label><select className={selectStyle} value={filters.siteExposure} onChange={(e) => setFilters({ ...filters, siteExposure: e.target.value as AdvancedFilters['siteExposure'] })}><option value="">Any</option><option value="yes">Yes</option><option value="no">No</option></select></div><div className="space-y-1"><Label>Safety-critical</Label><select className={selectStyle} value={filters.safetyCritical} onChange={(e) => setFilters({ ...filters, safetyCritical: e.target.value as AdvancedFilters['safetyCritical'] })}><option value="">Any</option><option value="yes">Yes</option><option value="no">No</option></select></div></div>
                 <div className="space-y-1">
                   <Label>Status</Label>
                   <select className={selectStyle} value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value as AdvancedFilters['status'] })}>
@@ -560,6 +603,7 @@ export function CasesPage() {
                       <td style={{ padding: '12px var(--space-lg)' }}>
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.workerName}</div>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{c.workerEmail}</div>
+                       <WorkforceTags c={c} />
                       </td>
                       <td style={{ padding: '12px var(--space-lg)' }}>
                         <CaseTypeBadge type={caseTypeOf(c)} />
@@ -624,6 +668,7 @@ export function CasesPage() {
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
                     {c.gateways && <CompactGates gateways={c.gateways} />}
                   </div>
+                   <WorkforceTags c={c} />
                 </button>
               );
             })
@@ -652,9 +697,11 @@ function OwnerCell({ owner }: { owner: { name: string; kind: 'AI Agent' | 'Human
 export function NewCaseForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const createCase = useCreateOnboardingCase();
+  const jobProfiles = useQuery({ queryKey: ['onboarding', 'job-profiles'], queryFn: listJobProfiles });
   const [channelPref, setChannelPref] = useState('both');
   const [phone, setPhone] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [classificationPreview, setClassificationPreview] = useState(() => intakeClassification({}));
   const needsPhone = channelPref !== 'email' && !phone.trim();
   
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -678,6 +725,24 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
       joiningDate: fd.get('joiningDate') as string,
       urgency: fd.get('urgency') as string,
       notes: fd.get('notes') as string || undefined,
+       jobProfileId: fd.get('jobProfileId') as string || undefined,
+      workforceContext: {
+        roleFamily: fd.get('roleFamily') as string || undefined,
+        workCountry: fd.get('workCountry') as string || undefined,
+        site: fd.get('site') as string || undefined,
+        workEnvironment: (fd.get('workEnvironment') as 'office' | 'remote' | 'site' | 'field' | 'mixed') || undefined,
+        hiringMode: (fd.get('hiringMode') as 'individual' | 'batch' | 'seasonal') || undefined,
+        batchId: fd.get('batchId') as string || undefined,
+        payBasis: fd.get('payBasis') as string || undefined,
+        shiftPattern: fd.get('shiftPattern') as string || undefined,
+        hazards: (fd.get('hazards') as string).split(',').map((item) => item.trim()).filter(Boolean),
+        requiredLicenses: (fd.get('requiredLicenses') as string).split(',').map((item) => item.trim()).filter(Boolean),
+        assistedIntake: parseWorkforceTriState(fd.get('assistedIntake')),
+        siteExposure: parseWorkforceTriState(fd.get('siteExposure')),
+        safetyCritical: parseWorkforceTriState(fd.get('safetyCritical')),
+        accessibilityNeeds: fd.get('accessibilityNeeds') as string || undefined,
+        languagePreference: fd.get('languagePreference') as string || undefined,
+      },
     };
     
     setSubmitError(null);
@@ -699,7 +764,15 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
         <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>New Case</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
       </div>
-      <form onSubmit={handleSubmit} className="p-[var(--space-lg)] space-y-4">
+      <form onSubmit={handleSubmit} onInput={(event) => {
+        const values = new FormData(event.currentTarget);
+        setClassificationPreview(intakeClassification({
+          workEnvironment: values.get('workEnvironment') as string,
+          siteExposure: values.get('siteExposure') as string,
+          safetyCritical: values.get('safetyCritical') as string,
+          hazards: values.get('hazards') as string,
+        }));
+      }} className="p-[var(--space-lg)] space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <Label>Worker Name</Label>
@@ -790,6 +863,44 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
             <Label>Notes</Label>
             <Input name="notes" placeholder="Free text recruiter notes..." />
           </div>
+           <div className="col-span-2 md:col-span-3 space-y-3 mt-2 pt-3 border-t border-[var(--border)]">
+             <div>
+               <Label className="font-semibold">Work context for policy routing</Label>
+               <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>Classifies the job from explicit work conditions only. Leave unknown facts blank; they will be shown as needs review rather than inferred.</p>
+             </div>
+             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+               <div className="space-y-1"><Label>Role Family</Label><Input name="roleFamily" placeholder="e.g. Operations" /></div>
+               <div className="space-y-1"><Label>Work Environment</Label><select name="workEnvironment" defaultValue="" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] text-[var(--text-sm)]"><option value="">Unknown / needs review</option><option value="office">Office</option><option value="remote">Remote</option><option value="site">Site</option><option value="field">Field</option><option value="mixed">Mixed</option></select></div>
+               <div className="space-y-1"><Label>Work Country</Label><Input name="workCountry" placeholder="e.g. India" /></div>
+               <div className="space-y-1"><Label>Site</Label><Input name="site" placeholder="Site or facility" /></div>
+               <div className="space-y-1"><Label>Pay Basis</Label><Input name="payBasis" placeholder="Salary or wage" /></div>
+               <div className="space-y-1"><Label>Hiring Mode</Label><select name="hiringMode" defaultValue="individual" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] text-[var(--text-sm)]"><option value="individual">Individual</option><option value="batch">Batch</option><option value="seasonal">Seasonal</option></select></div>
+               <div className="space-y-1"><Label>Batch ID</Label><Input name="batchId" placeholder="Optional batch" /></div>
+               <div className="space-y-1"><Label>Shift Pattern</Label><Input name="shiftPattern" placeholder="e.g. Rotating" /></div>
+               <div className="space-y-1"><Label>Required Licenses</Label><Input name="requiredLicenses" placeholder="Comma-separated" /></div>
+               <div className="col-span-2 md:col-span-3 space-y-1"><Label>Hazards / site conditions</Label><Input name="hazards" placeholder="Comma-separated; e.g. forklift traffic, heights" /></div>
+             </div>
+             <div className="flex flex-wrap gap-x-5 gap-y-2 text-[var(--text-xs)] text-[var(--text-secondary)]">
+               <label className="flex items-center gap-2">Site exposure <select name="siteExposure" defaultValue="" className="h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+               <label className="flex items-center gap-2">Safety-critical duties <select name="safetyCritical" defaultValue="" className="h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+               <label className="flex items-center gap-2">Assisted intake requested <select name="assistedIntake" defaultValue="" className="h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+               <label className="flex items-center gap-2">Accessibility needs <Input name="accessibilityNeeds" className="h-7 w-40" /></label>
+               <label className="flex items-center gap-2">Language preference <Input name="languagePreference" className="h-7 w-32" /></label>
+             </div>
+              <div className={cn('rounded border p-3 text-xs', classificationPreview.label === 'needs-review' ? 'border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]' : 'border-[var(--status-green)]/30 bg-[var(--status-green-bg)] text-[var(--status-green-fg)]')}>
+                <strong>Explainable workforce classification: {classificationPreview.label.replace(/-/g, ' ')}</strong>
+                <p className="mt-1">{classificationPreview.rationale}</p>
+                <p className="mt-1 opacity-90">{classificationPreview.uncertainty}</p>
+              </div>
+           </div>
+           <div className="space-y-1">
+             <Label>Reusable job profile</Label>
+             <select name="jobProfileId" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)]">
+               <option value="">Use explicit intake context only</option>
+               {jobProfiles.data?.filter((profile) => profile.enabled).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.name} · v{profile.version}</option>)}
+             </select>
+             <p className="text-[10px] text-[var(--text-muted)]">The selected version is snapshotted; person-specific context below may add known facts.</p>
+           </div>
           <div className="col-span-2 md:col-span-3 space-y-2 mt-2 pt-2 border-t border-[var(--border)]">
             <div className="flex items-start gap-2">
               <input type="checkbox" id="offerAcceptanceComplete" name="offerAcceptanceComplete" className="mt-1 flex h-4 w-4 shrink-0 rounded-sm border border-[var(--border)] bg-[var(--surface)] text-[var(--primary)] shadow-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" />

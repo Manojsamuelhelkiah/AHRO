@@ -25,8 +25,25 @@ import { useOrganizationRole } from '../hooks/use-organization-role';
 import { useQueryClient } from '@tanstack/react-query';
 import { ActionCenterCreateWork } from './action-center-create-work';
 
+function WorkforceContextTags({ c }: { c: OnbActionCenter['documentFollowups'][0]['case'] }) {
+  const label = (c.workforceClassification as { label?: string } | null)?.label ?? 'unclassified';
+  return <span className="flex flex-wrap gap-1 text-[10px]">
+    <span className="rounded bg-[var(--surface-soft)] px-1.5 py-0.5 uppercase">{label.replace(/-/g, ' ')}</span>
+    {c.siteExposure && <span className="rounded bg-[var(--status-amber-bg)] px-1.5 py-0.5 text-[var(--status-amber-fg)]">Site exposure</span>}
+    {c.safetyCritical && <span className="rounded bg-[var(--status-red-bg)] px-1.5 py-0.5 text-[var(--status-red-fg)]">Safety-critical</span>}
+  </span>;
+}
+
 export function NeedsAttentionTab() {
-  const { data, isLoading, isFetching } = useGetOnboardingActionCenter({ scope: 'active' });
+  const [workforce, setWorkforce] = useState<'white-collar' | 'blue-collar-frontline' | 'mixed' | 'needs-review' | 'unclassified' | ''>('');
+  const [safetyOnly, setSafetyOnly] = useState(false);
+  const [siteOnly, setSiteOnly] = useState(false);
+  const { data, isLoading, isFetching } = useGetOnboardingActionCenter({
+    scope: 'active',
+    workforce: workforce || undefined,
+    safetyCritical: safetyOnly || undefined,
+    siteExposure: siteOnly || undefined,
+  });
 
   if (isLoading) return <div className="py-12 text-center text-sm text-[var(--text-muted)]">Loading actionable items...</div>;
   if (!data) return <div className="py-12 text-center text-sm text-[var(--status-red)]">Failed to load action center.</div>;
@@ -48,6 +65,19 @@ export function NeedsAttentionTab() {
           <p>Paused offline cases are read-only. Other cases retain their permitted actions.</p>
         </div>
       )}
+      <div className="flex flex-wrap items-center gap-3 rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Job context filters</span>
+        <select aria-label="Workforce classification filter" value={workforce} onChange={(event) => setWorkforce(event.target.value as typeof workforce)} className="h-8 rounded border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px]">
+          <option value="">All classifications</option>
+          <option value="white-collar">White-collar</option>
+          <option value="blue-collar-frontline">Blue-collar / frontline</option>
+          <option value="mixed">Mixed</option>
+          <option value="needs-review">Needs review</option>
+          <option value="unclassified">Unclassified</option>
+        </select>
+        <label className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={safetyOnly} onChange={(event) => setSafetyOnly(event.target.checked)} /> Safety-critical only</label>
+         <label className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={siteOnly} onChange={(event) => setSiteOnly(event.target.checked)} /> Site exposure only</label>
+      </div>
       {totalActionable === 0 ? (
         <Card className="text-center border-dashed py-16" style={{ borderColor: 'var(--border)', backgroundColor: 'transparent', boxShadow: 'none' }}>
           <CheckCircle2 className="mx-auto h-12 w-12 text-[var(--status-green)] opacity-50 mb-4" />
@@ -187,6 +217,7 @@ function DocumentFollowupCard({ doc }: { doc: OnbActionCenter['documentFollowups
           <span className="text-[10px] font-mono text-[var(--text-muted)] ml-auto md:ml-2 truncate max-w-[120px]">
             {doc.case.workerEmail}
           </span>
+           <WorkforceContextTags c={doc.case} />
         </div>
         <h4 className="text-sm font-semibold text-[var(--text-primary)]">{doc.action === 'review' ? 'Review submitted document:' : 'Pending:'} {doc.label} {doc.required && <span className="text-[var(--status-red)]">*</span>}</h4>
         <div className="text-xs text-[var(--text-secondary)] mt-1 flex flex-wrap gap-4 items-center">

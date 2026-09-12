@@ -74,6 +74,11 @@ export const LEGACY_CHECKLIST: readonly OnbChecklistTemplateItem[] = [
 const STAGES = new Set(["before-workstreams", "before-employee-communications", "before-day1-review"]);
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const WORKSTREAM_OWNED_IDS = new Set(["documentation", "payroll", "access", "assets", "learning", "checkpoints"]);
+const STAGE_ORDER: Record<string, number> = {
+  "before-workstreams": 0,
+  "before-employee-communications": 1,
+  "before-day1-review": 2,
+};
 
 export function validateChecklist(items: OnbChecklistTemplateItem[]): string | null {
   if (items.length < 1 || items.length > 100) return "Checklist must contain between 1 and 100 items.";
@@ -99,6 +104,20 @@ export function validateChecklist(items: OnbChecklistTemplateItem[]): string | n
   }
   const sorted = [...orders].sort((a, b) => a - b);
   if (sorted.some((order, index) => order !== index)) return "Checklist order must be contiguous and start at 0.";
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const item of items) {
+    if (!item.enabled) continue;
+    for (const prerequisiteId of item.prerequisites ?? []) {
+      if (prerequisiteId === item.id) return `Checklist item "${item.id}" cannot depend on itself.`;
+      const prerequisite = byId.get(prerequisiteId);
+      if (!prerequisite) return `Checklist item "${item.id}" has unknown prerequisite "${prerequisiteId}".`;
+      if (!prerequisite.enabled) return `Checklist item "${item.id}" depends on disabled prerequisite "${prerequisiteId}".`;
+      if (prerequisite.order >= item.order) return `Checklist prerequisite "${prerequisiteId}" must be earlier than "${item.id}".`;
+      if (STAGE_ORDER[prerequisite.enforcementStage] > STAGE_ORDER[item.enforcementStage]) {
+        return `Checklist prerequisite "${prerequisiteId}" cannot be enforced later than "${item.id}".`;
+      }
+    }
+  }
   return null;
 }
 
@@ -126,6 +145,11 @@ export function readinessFromChecklist(items: readonly OnbChecklistTemplateItem[
     order: item.order,
     mandatory: item.mandatory,
     enforcementStage: item.enforcementStage,
+    evidenceRequired: item.evidenceRequired,
+    responsibleRole: item.responsibleRole,
+    completionAuthority: item.completionAuthority,
+    executor: item.executor,
+    prerequisites: item.prerequisites,
   }));
 }
 

@@ -42,9 +42,12 @@ import {
 } from "./settings";
 import { latestRequiredUploadMalwareBlockers } from "./document-readiness-guard";
 import type { OnbChecklistEnforcementStage, OnbChecklistTemplateItem } from "@workspace/db/schema";
-import { reopenApprovalInTransaction } from "./approval-version";
+import { approvalVersion, reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { initializeOperationalRequests } from "./operational-requests";
+import {
+  initializeOperationalRequests,
+  initializeWorkforceStepTasks,
+} from "./operational-requests";
 
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -768,20 +771,27 @@ async function runPlanGeneration(
 /* Stage 3 — Parallel workstream agents (LDM)                          */
 /* ------------------------------------------------------------------ */
 
-async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
+/** Exported for persisted runtime integration coverage; production callers use orchestration claims. */
+export async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
   const c = await getCase(caseId);
   const ws = (c.workstreams.length ? c.workstreams : defaultWorkstreams()) as OnbWorkstreamRow[];
   const readiness = c.readiness as OnbReadinessItemRow[];
-  // Gate A is enforced by the caller before this stage. Operational setup
-  // requests are intentionally simulated and are persisted separately from
-  // readiness/documents/system checks so this automatic seed cannot claim a
-  // real provider effect.
+  // Gate A is enforced by the caller before this stage. The non-learning
+  // operational setup requests remain simulation records. Learning is
+  // deliberately excluded: there is no connected LMS/calendar executor, so
+  // the immutable policy snapshot is compiled into accountable human tasks.
   await initializeOperationalRequests({
     organizationId: c.organizationId,
     caseId,
     method: "agent",
     actor: "onboarding orchestrator (simulated)",
   });
+  const workforceTasks = await initializeWorkforceStepTasks({
+    organizationId: c.organizationId,
+    caseId,
+    actor: "onboarding orchestrator",
+  });
+  const workforceRuntimeActive = workforceTasks.active;
 
   // Documentation & Compliance — statutory pack is issued immediately, but
   // for external hires the item stays open until the BGV vendor's status
@@ -799,11 +809,24 @@ async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
   // Payroll: non-employees (contractor/vendor) are outside payroll — must
   // match applicableSystems() so every in-progress item has a tracker.
   const nonEmployee = isNonEmployee(c.workerCategory);
-  setReadiness(readiness, "payroll", nonEmployee ? "ready" : "in-progress",
+  const payrollReady = workforceTasks.workstreamBlockingComplete.payroll;
+  setReadiness(readiness, "payroll", nonEmployee || payrollReady ? "ready" : "in-progress",
     nonEmployee
       ? "Not applicable — non-employee pathway"
-      : "Awaiting bank & tax inputs from new hire; the operational setup request is simulated and no payroll enrollment was sent");
+      : !workforceRuntimeActive
+        ? "Awaiting bank & tax inputs from new hire; the operational setup request is simulated and no payroll enrollment was sent"
+      : payrollReady
+        ? "Payroll prerequisite and setup were completed by accountable humans with evidence; no payroll enrollment is claimed."
+        : "Payroll readiness is held until the configured prerequisite and human setup confirmation are completed with evidence.");
+  // Payroll remains individually held by the connector dispatcher until its
+  // accountable human tasks complete. Dispatch the independent document, BGV
+  // and IAM mutations now; each has its own guarded, journaled operation.
   await dispatchWorkstreamConnectorMutations(c);
+  if (workforceRuntimeActive && !nonEmployee && !payrollReady) {
+    await logEvent(caseId, "payroll", "human", "Payroll connector dispatch held",
+      "Only the payroll connector mutation was held because the configured payroll prerequisite and human setup confirmation are incomplete; independent document, BGV, and IAM work remains dispatched through their own guarded operations.",
+      { hitlPattern: "hard-block", ruleRef: "workforce-step-runtime/v1", idempotencyKey: `orchestration:${caseId}:workstreams:payroll-held` });
+  }
   await logEvent(caseId, "documentation", "rules", "Documentation pack issued",
     `Mandatory identity/statutory documents for ${c.geography} requested; completion tracked with owner notification on gaps.`,
      { hitlPattern: "notify-only", ruleRef: "4.3 Documentation Rule 1", idempotencyKey: `orchestration:${caseId}:workstreams:documentation` });
@@ -831,24 +854,81 @@ async function runWorkstreams(caseId: number, claim?: OrchestrationClaim) {
   });
 
   // Asset & Workplace Readiness
-  setWorkstream(ws, "assets", "ready");
-  setReadiness(readiness, "assets", "ready", "Simulated asset request logged — no device, ID card or workspace booking occurred");
-  await logEvent(caseId, "assets", "rules", "Assets & workspace request simulated",
-    "Device, ID card and workspace (or remote kit) request was logged for simulation only; no booking or external fulfillment occurred.",
+  const assetsReady = workforceTasks.workstreamBlockingComplete.assets;
+  setWorkstream(ws, "assets", assetsReady ? "ready" : "in-progress",
+    assetsReady ? [] : ["Accountable human asset/workplace confirmation is required"]);
+  setReadiness(readiness, "assets", assetsReady ? "ready" : "in-progress",
+    !workforceRuntimeActive
+      ? "Simulated asset request logged — no device, ID card or workspace booking occurred"
+    : assetsReady
+      ? "Asset/workplace readiness was completed by accountable humans with evidence; no device, ID card, or workspace booking is claimed."
+      : "Asset/workplace readiness is held until the accountable human task is completed with evidence; no fulfillment request was sent.");
+  await logEvent(caseId, "assets", workforceRuntimeActive ? "human" : "rules", !workforceRuntimeActive ? "Assets & workspace request simulated" : assetsReady ? "Assets workforce task already complete" : "Accountable assets workforce task created",
+    !workforceRuntimeActive
+      ? "Device, ID card and workspace (or remote kit) request was logged for simulation only; no booking or external fulfillment occurred."
+    : assetsReady
+      ? "Asset/workplace readiness has human-recorded evidence; no booking or external fulfillment is claimed."
+      : "No device, ID card, workspace, badge, PPE, or tools request was sent. Action Center requires accountable human completion with evidence.",
      { hitlPattern: "notify-only", ruleRef: "4.5 Asset Rules", idempotencyKey: `orchestration:${caseId}:workstreams:assets` });
 
-  // Learning / Engagement
-  setWorkstream(ws, "learning", "ready");
-  setReadiness(readiness, "learning", "ready", "Simulated induction, compliance learning and buddy plan recorded — no LMS or calendar booking occurred");
-  setReadiness(readiness, "checkpoints", "ready", "Simulated Day-1/30/60/90 checkpoint plan recorded — no external schedule was created");
-  await logEvent(caseId, "learning", "rules", "Learning & engagement plan recorded (simulated)",
-    "Induction, compliance learning, buddy/mentor and manager-connect plan recorded for simulation only; no LMS/calendar booking or external checkpoint was created.",
-     { hitlPattern: "notify-only", ruleRef: "4.6 Learning Rules", idempotencyKey: `orchestration:${caseId}:workstreams:learning` });
+  // Learning / Engagement. Unlike the legacy simulation, readiness remains
+  // held until these named/role-accountable human tasks are completed through
+  // Action Center with required completion evidence.
+  const learningTaskNames = workforceTasks.requests
+    .filter((request) =>
+      request.runtimeSchemaVersion === "workforce-step-runtime/v1" &&
+      request.runtimeWorkstream === "learning" &&
+      request.mandatory !== false &&
+      request.nonblocking !== true &&
+      request.status !== "completed",
+    )
+    .map((request) => request.label);
+  const learningReady = workforceTasks.workstreamBlockingComplete.learning;
+  const intakeReady = workforceTasks.workstreamBlockingComplete.intake;
+  setWorkstream(ws, "learning", learningReady ? "ready" : "in-progress", learningReady ? [] : learningTaskNames);
+  setReadiness(
+    readiness,
+    "learning",
+    learningReady ? "ready" : "in-progress",
+    !workforceRuntimeActive
+      ? "Learning and manager-connect request was logged for simulation only; no learning enrollment or invitation was sent."
+    : learningReady
+      ? "Mandatory learning workforce tasks are complete with human-recorded evidence. No LMS or calendar completion is claimed."
+      : `Awaiting accountable human completion of ${learningTaskNames.length} mandatory learning task(s): ${learningTaskNames.join(", ")}.`,
+  );
+  if (!intakeReady) {
+    setReadiness(
+      readiness,
+      "profile",
+      "in-progress",
+      "Configured intake mode/channel is awaiting accountable human confirmation with evidence.",
+    );
+  }
+  setReadiness(
+    readiness,
+    "checkpoints",
+    learningReady ? "ready" : "in-progress",
+    learningReady
+      ? "Learning and manager-connect workforce tasks are complete; checkpoints remain a human-owned record."
+      : "Checkpoint readiness is held until mandatory learning workforce tasks are completed.",
+  );
+  if (workforceTasks.issues.length) {
+    await logEvent(caseId, "learning", "rules", "Learning policy selection is not executable",
+      workforceTasks.issues.map((issue) => issue.message).join(" "),
+      { hitlPattern: "hard-block", ruleRef: "workforce-step-runtime/v1", idempotencyKey: `orchestration:${caseId}:workstreams:learning:policy-issue` });
+  }
+  await logEvent(caseId, "learning", "human", learningReady
+    ? "Learning workforce tasks already complete"
+    : "Accountable learning workforce tasks created",
+  learningReady
+    ? "The immutable learning policy's mandatory tasks were already completed by accountable humans. No LMS, calendar, message, or simulated agent completion is claimed."
+    : `Action Center holds learning readiness until ${learningTaskNames.length} mandatory human task(s) are completed with required evidence. No LMS, calendar, message, or simulated agent was invoked.`,
+   { hitlPattern: "hard-block", ruleRef: "workforce-step-runtime/v1", idempotencyKey: `orchestration:${caseId}:workstreams:learning` });
 
   await mergeManagedReadiness(
     caseId,
     readiness,
-    ["documentation", "payroll", "access", "assets", "learning", "checkpoints"],
+    ["profile", "documentation", "payroll", "access", "assets", "learning", "checkpoints"],
     { workstreams: ws, lifecycleStage: "preboarding" },
     claim,
   );
@@ -1051,7 +1131,10 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     // Enrollment is additive: a legacy complete case must not be replayed by
     // the approval recovery worker merely because it has an old approved row.
     if (c.lifecycleStage === "complete") return false;
-    const [approval] = await tx.select({ id: onbApprovals.id }).from(onbApprovals).where(and(
+    const [approval] = await tx.select({
+      id: onbApprovals.id,
+      version: onbApprovals.version,
+    }).from(onbApprovals).where(and(
       eq(onbApprovals.organizationId, c.organizationId),
       eq(onbApprovals.caseId, caseId),
       eq(onbApprovals.idempotencyKey, `gateway-c:${caseId}:human-queue`),
@@ -1099,22 +1182,13 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
       // A previous Gate C approval authorizes only the readiness state that was
       // reviewed. Reopening evidence/checks revokes that authority; recovery
       // must never turn an old approval into a later automatic completion.
-      const reopened = await reopenApprovalInTransaction(tx, {
+      await reopenApprovalInTransaction(tx, {
         organizationId: c.organizationId,
         caseId,
         idempotencyKey: `gateway-c:${caseId}:human-queue`,
         reason: "Automatically reopened because live readiness evidence changed; fresh HR confirmation is required.",
         actor: "day1-readiness-gate",
       });
-      if (reopened.reopened) {
-        await tx.insert(onbEvents).values({
-          organizationId: c.organizationId, caseId, agent: "day1-readiness-gate",
-          engine: "rules", hitlPattern: "approve-before-act", ruleRef: DAY1_READINESS_GATE_RULE,
-          title: "Gate C approval invalidated by changed live readiness evidence",
-          detail: "A fresh HR final-review decision is required; the prior approval was not reused.",
-          idempotencyKey: `gateway-c:${caseId}:reopened:v${reopened.version}`,
-        }).onConflictDoNothing({ target: [onbEvents.organizationId, onbEvents.idempotencyKey] });
-      }
       await tx.update(onbCases).set({
         lifecycleStage: "preboarding",
         orchestrationStatus: "checklist-blocked",
@@ -1142,7 +1216,9 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
       ruleRef: DAY1_READINESS_GATE_RULE,
       title: "Gate C Day-1 readiness confirmed by HR",
       detail: "A human reviewer approved the final Day-1 readiness confirmation after current mandatory checklist and malware evidence were re-evaluated. No automated adverse employment action was taken.",
-      idempotencyKey: `gateway-c:${caseId}:complete`,
+      // Completion belongs to the approval cycle, not merely the case. A
+      // reopened Gate C must be able to record its later fresh confirmation.
+      idempotencyKey: `gateway-c:${caseId}:complete:v${approvalVersion(approval.version)}`,
     }).onConflictDoNothing({
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });

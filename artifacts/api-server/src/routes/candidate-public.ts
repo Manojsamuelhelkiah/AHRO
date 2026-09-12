@@ -16,6 +16,7 @@ import { actionableCorrectionReason } from "../lib/onboarding/document-validatio
 import { malwareUploadIsClean } from "../lib/onboarding/malware-policy";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
 import { reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
+import { candidatePortalIntakeAllowed } from "../lib/onboarding/workforce-step-runtime";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
@@ -117,6 +118,21 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
   try {
     const ctx = await candidateContext(req);
     if (!ctx) return invalid(res);
+    const [policyCase] = await db.select({
+      processPolicySnapshot: onbCases.processPolicySnapshot,
+      workforceContext: onbCases.workforceContext,
+    }).from(onbCases).where(and(
+      eq(onbCases.organizationId, ctx.organizationId),
+      eq(onbCases.id, ctx.caseId),
+    ));
+    if (!policyCase) return invalid(res);
+    const portalAllowed = candidatePortalIntakeAllowed({
+      processPolicySnapshot: policyCase.processPolicySnapshot,
+      hiringMode: (policyCase.workforceContext as { hiringMode?: unknown } | null)?.hiringMode as string | undefined,
+    });
+    if (!portalAllowed.allowed) {
+      return res.status(409).json({ message: portalAllowed.message });
+    }
     const documentId = Number(req.params.documentId);
     const originalName = String(req.header("x-file-name") ?? "").trim();
     const declaredType = String(req.header("x-file-type") ?? "").toLowerCase();

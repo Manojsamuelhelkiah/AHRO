@@ -49,3 +49,4 @@
 - [Shared mailbox personas](shared-mailbox-personas.md) — intended stakeholder, delivery mailbox, and actual responder are separate; demo names never grant authority.
 - [Provider test isolation](provider-test-isolation.md) — in-process delivery stubs cannot protect DB fixtures from the running API's background workers.
 - [Outbound payload stability](outbound-payload-stability.md) — persist message content and reply references before effect binding; retries must not regenerate them.
+- [Workforce runtime boundaries](workforce-runtime-boundaries.md) — opt-in snapshot semantics, real persisted fixtures, and checkpoint fencing independent of task-state presence.

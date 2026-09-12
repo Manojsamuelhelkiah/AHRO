@@ -64,6 +64,7 @@ import type {
   ListCustomIntentsParams,
   ListEaAssessmentsParams,
   ListOnboardingApprovalsParams,
+  ListOnboardingPolicyRecommendationsParams,
   ModelOption,
   OnbActionCenter,
   OnbActionCenterActionResult,
@@ -102,6 +103,7 @@ import type {
   OnbEmployeeRecord,
   OnbEvent,
   OnbEvidenceDecision,
+  OnbEvidenceVerificationInput,
   OnbInboundMessage,
   OnbOfferAcceptanceConfirmation,
   OnbOperationalRequestAction,
@@ -109,6 +111,8 @@ import type {
   OnbOperationalRequestsInitialize,
   OnbOperationalRequestsMutationResult,
   OnbOutcomeKpis,
+  OnbPolicyRecommendationDecision,
+  OnbPolicyRecommendationList,
   OnbReadinessSlaAttestationInput,
   OnbReadinessSlaPayrollCutoffInput,
   OnbReadinessSlaPolicyUpdate,
@@ -122,6 +126,7 @@ import type {
   OnbSystemWatcher,
   OnbWatchEmailSimulate,
   OnbWatchEmailSimulateResult,
+  OnbWorkforceContextCorrectionInput,
   OnboardingBgvNotificationsEnvelope,
   ParseActualsLogBody,
   PricingRateRegister,
@@ -132,6 +137,7 @@ import type {
   PricingSheetUpdate,
   ReconcileOnboardingBgvNotificationsRequest,
   ReconcileOnboardingBgvNotificationsResult,
+  RefreshOnboardingPolicyRecommendationsBody,
   ResolveIntentRouteInput,
   ResolvedIntentRoute,
   RetryOnboardingEvidenceMalwareScan200,
@@ -6199,6 +6205,233 @@ export const useDuplicateOnboardingChecklistProfile = <TError = ErrorType<void>,
       return useMutation(getDuplicateOnboardingChecklistProfileMutationOptions(options));
     }
 
+export const getListOnboardingPolicyRecommendationsUrl = (params?: ListOnboardingPolicyRecommendationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/policy-recommendations?${stringifiedParams}` : `/api/onboarding/policy-recommendations`
+}
+
+/**
+ * @summary List immutable, evidence-backed cohort learning recommendations and transparent sparse-evidence status
+ */
+export const listOnboardingPolicyRecommendations = async (params?: ListOnboardingPolicyRecommendationsParams, options?: RequestInit): Promise<OnbPolicyRecommendationList> => {
+
+  return customFetch<OnbPolicyRecommendationList>(getListOnboardingPolicyRecommendationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingPolicyRecommendationsQueryKey = (params?: ListOnboardingPolicyRecommendationsParams,) => {
+    return [
+    `/api/onboarding/policy-recommendations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListOnboardingPolicyRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingPolicyRecommendations>>, TError = ErrorType<unknown>>(params?: ListOnboardingPolicyRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingPolicyRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingPolicyRecommendationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingPolicyRecommendations>>> = ({ signal }) => listOnboardingPolicyRecommendations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingPolicyRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingPolicyRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingPolicyRecommendations>>>
+export type ListOnboardingPolicyRecommendationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List immutable, evidence-backed cohort learning recommendations and transparent sparse-evidence status
+ */
+
+export function useListOnboardingPolicyRecommendations<TData = Awaited<ReturnType<typeof listOnboardingPolicyRecommendations>>, TError = ErrorType<unknown>>(
+ params?: ListOnboardingPolicyRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingPolicyRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingPolicyRecommendationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRefreshOnboardingPolicyRecommendationsUrl = () => {
+
+
+
+
+  return `/api/onboarding/policy-recommendations/refresh`
+}
+
+/**
+ * @summary Analyze eligible non-demo cohort evidence and create new proposed recommendations only
+ */
+export const refreshOnboardingPolicyRecommendations = async (refreshOnboardingPolicyRecommendationsBody?: RefreshOnboardingPolicyRecommendationsBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRefreshOnboardingPolicyRecommendationsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(refreshOnboardingPolicyRecommendationsBody)
+  }
+);}
+
+
+
+
+
+export const getRefreshOnboardingPolicyRecommendationsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshOnboardingPolicyRecommendations>>, TError,{data?: BodyType<RefreshOnboardingPolicyRecommendationsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshOnboardingPolicyRecommendations>>, TError,{data?: BodyType<RefreshOnboardingPolicyRecommendationsBody>}, TContext> => {
+
+const mutationKey = ['refreshOnboardingPolicyRecommendations'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshOnboardingPolicyRecommendations>>, {data?: BodyType<RefreshOnboardingPolicyRecommendationsBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  refreshOnboardingPolicyRecommendations(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshOnboardingPolicyRecommendationsMutationResult = NonNullable<Awaited<ReturnType<typeof refreshOnboardingPolicyRecommendations>>>
+    export type RefreshOnboardingPolicyRecommendationsMutationBody = BodyType<RefreshOnboardingPolicyRecommendationsBody> | undefined
+    export type RefreshOnboardingPolicyRecommendationsMutationError = ErrorType<void>
+
+    /**
+ * @summary Analyze eligible non-demo cohort evidence and create new proposed recommendations only
+ */
+export const useRefreshOnboardingPolicyRecommendations = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshOnboardingPolicyRecommendations>>, TError,{data?: BodyType<RefreshOnboardingPolicyRecommendationsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshOnboardingPolicyRecommendations>>,
+        TError,
+        {data?: BodyType<RefreshOnboardingPolicyRecommendationsBody>},
+        TContext
+      > => {
+      return useMutation(getRefreshOnboardingPolicyRecommendationsMutationOptions(options));
+    }
+
+export const getDecideOnboardingPolicyRecommendationUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/policy-recommendations/${id}/decision`
+}
+
+/**
+ * @summary Accept, edit-and-accept, or reject an immutable evidence-backed learning recommendation
+ */
+export const decideOnboardingPolicyRecommendation = async (id: number,
+    onbPolicyRecommendationDecision: OnbPolicyRecommendationDecision, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDecideOnboardingPolicyRecommendationUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbPolicyRecommendationDecision)
+  }
+);}
+
+
+
+
+
+export const getDecideOnboardingPolicyRecommendationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingPolicyRecommendation>>, TError,{id: number;data: BodyType<OnbPolicyRecommendationDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingPolicyRecommendation>>, TError,{id: number;data: BodyType<OnbPolicyRecommendationDecision>}, TContext> => {
+
+const mutationKey = ['decideOnboardingPolicyRecommendation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideOnboardingPolicyRecommendation>>, {id: number;data: BodyType<OnbPolicyRecommendationDecision>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideOnboardingPolicyRecommendation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideOnboardingPolicyRecommendationMutationResult = NonNullable<Awaited<ReturnType<typeof decideOnboardingPolicyRecommendation>>>
+    export type DecideOnboardingPolicyRecommendationMutationBody = BodyType<OnbPolicyRecommendationDecision>
+    export type DecideOnboardingPolicyRecommendationMutationError = ErrorType<void>
+
+    /**
+ * @summary Accept, edit-and-accept, or reject an immutable evidence-backed learning recommendation
+ */
+export const useDecideOnboardingPolicyRecommendation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideOnboardingPolicyRecommendation>>, TError,{id: number;data: BodyType<OnbPolicyRecommendationDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideOnboardingPolicyRecommendation>>,
+        TError,
+        {id: number;data: BodyType<OnbPolicyRecommendationDecision>},
+        TContext
+      > => {
+      return useMutation(getDecideOnboardingPolicyRecommendationMutationOptions(options));
+    }
+
 export const getListOnboardingCaseEventsUrl = (id: number,) => {
 
 
@@ -8071,6 +8304,225 @@ export const useUpdateOnboardingChecklistItem = <TError = ErrorType<ErrorMessage
         TContext
       > => {
       return useMutation(getUpdateOnboardingChecklistItemMutationOptions(options));
+    }
+
+export const getVerifyOnboardingChecklistEvidenceUrl = (id: number,
+    itemId: string,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/evidence/${itemId}`
+}
+
+/**
+ * @summary Record a designated-human verification decision for an independent policy evidence gate
+ */
+export const verifyOnboardingChecklistEvidence = async (id: number,
+    itemId: string,
+    onbEvidenceVerificationInput: OnbEvidenceVerificationInput, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getVerifyOnboardingChecklistEvidenceUrl(id,itemId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbEvidenceVerificationInput)
+  }
+);}
+
+
+
+
+
+export const getVerifyOnboardingChecklistEvidenceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyOnboardingChecklistEvidence>>, TError,{id: number;itemId: string;data: BodyType<OnbEvidenceVerificationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyOnboardingChecklistEvidence>>, TError,{id: number;itemId: string;data: BodyType<OnbEvidenceVerificationInput>}, TContext> => {
+
+const mutationKey = ['verifyOnboardingChecklistEvidence'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyOnboardingChecklistEvidence>>, {id: number;itemId: string;data: BodyType<OnbEvidenceVerificationInput>}> = (props) => {
+          const {id,itemId,data} = props ?? {};
+
+          return  verifyOnboardingChecklistEvidence(id,itemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyOnboardingChecklistEvidenceMutationResult = NonNullable<Awaited<ReturnType<typeof verifyOnboardingChecklistEvidence>>>
+    export type VerifyOnboardingChecklistEvidenceMutationBody = BodyType<OnbEvidenceVerificationInput>
+    export type VerifyOnboardingChecklistEvidenceMutationError = ErrorType<void>
+
+    /**
+ * @summary Record a designated-human verification decision for an independent policy evidence gate
+ */
+export const useVerifyOnboardingChecklistEvidence = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyOnboardingChecklistEvidence>>, TError,{id: number;itemId: string;data: BodyType<OnbEvidenceVerificationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyOnboardingChecklistEvidence>>,
+        TError,
+        {id: number;itemId: string;data: BodyType<OnbEvidenceVerificationInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyOnboardingChecklistEvidenceMutationOptions(options));
+    }
+
+export const getAssignOnboardingPolicyAuthorityUrl = (userId: string,
+    authorityRole: string,) => {
+
+
+
+
+  return `/api/onboarding/policy-authorities/${userId}/${authorityRole}`
+}
+
+/**
+ * @summary Assign a tenant member as a server-authoritative policy evidence authority
+ */
+export const assignOnboardingPolicyAuthority = async (userId: string,
+    authorityRole: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getAssignOnboardingPolicyAuthorityUrl(userId,authorityRole),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+
+
+export const getAssignOnboardingPolicyAuthorityMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, TError,{userId: string;authorityRole: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, TError,{userId: string;authorityRole: string}, TContext> => {
+
+const mutationKey = ['assignOnboardingPolicyAuthority'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, {userId: string;authorityRole: string}> = (props) => {
+          const {userId,authorityRole} = props ?? {};
+
+          return  assignOnboardingPolicyAuthority(userId,authorityRole,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignOnboardingPolicyAuthorityMutationResult = NonNullable<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>>
+
+    export type AssignOnboardingPolicyAuthorityMutationError = ErrorType<void>
+
+    /**
+ * @summary Assign a tenant member as a server-authoritative policy evidence authority
+ */
+export const useAssignOnboardingPolicyAuthority = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, TError,{userId: string;authorityRole: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>,
+        TError,
+        {userId: string;authorityRole: string},
+        TContext
+      > => {
+      return useMutation(getAssignOnboardingPolicyAuthorityMutationOptions(options));
+    }
+
+export const getCorrectOnboardingWorkforceContextUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/workforce-context`
+}
+
+/**
+ * @summary Record an authorized correction to captured job context without silently rebasing an active policy
+ */
+export const correctOnboardingWorkforceContext = async (id: number,
+    onbWorkforceContextCorrectionInput: OnbWorkforceContextCorrectionInput, options?: RequestInit): Promise<OnbCase> => {
+
+  return customFetch<OnbCase>(getCorrectOnboardingWorkforceContextUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbWorkforceContextCorrectionInput)
+  }
+);}
+
+
+
+
+
+export const getCorrectOnboardingWorkforceContextMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctOnboardingWorkforceContext>>, TError,{id: number;data: BodyType<OnbWorkforceContextCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctOnboardingWorkforceContext>>, TError,{id: number;data: BodyType<OnbWorkforceContextCorrectionInput>}, TContext> => {
+
+const mutationKey = ['correctOnboardingWorkforceContext'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctOnboardingWorkforceContext>>, {id: number;data: BodyType<OnbWorkforceContextCorrectionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  correctOnboardingWorkforceContext(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectOnboardingWorkforceContextMutationResult = NonNullable<Awaited<ReturnType<typeof correctOnboardingWorkforceContext>>>
+    export type CorrectOnboardingWorkforceContextMutationBody = BodyType<OnbWorkforceContextCorrectionInput>
+    export type CorrectOnboardingWorkforceContextMutationError = ErrorType<void>
+
+    /**
+ * @summary Record an authorized correction to captured job context without silently rebasing an active policy
+ */
+export const useCorrectOnboardingWorkforceContext = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctOnboardingWorkforceContext>>, TError,{id: number;data: BodyType<OnbWorkforceContextCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof correctOnboardingWorkforceContext>>,
+        TError,
+        {id: number;data: BodyType<OnbWorkforceContextCorrectionInput>},
+        TContext
+      > => {
+      return useMutation(getCorrectOnboardingWorkforceContextMutationOptions(options));
     }
 
 export const getListOnboardingCaseRecordsUrl = (id: number,) => {

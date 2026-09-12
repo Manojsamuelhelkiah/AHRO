@@ -2020,6 +2020,22 @@ export interface ActualsValidationResult {
   measuredFields: string[];
 }
 
+export type OnbReadinessItemCompletionAuthority = typeof OnbReadinessItemCompletionAuthority[keyof typeof OnbReadinessItemCompletionAuthority];
+
+
+export const OnbReadinessItemCompletionAuthority = {
+  'hr-admin': 'hr-admin',
+  'designated-human': 'designated-human',
+} as const;
+
+export type OnbReadinessItemExecutor = typeof OnbReadinessItemExecutor[keyof typeof OnbReadinessItemExecutor];
+
+
+export const OnbReadinessItemExecutor = {
+  'existing-workflow': 'existing-workflow',
+  'human-task': 'human-task',
+} as const;
+
 export type OnbChecklistEnforcementStage = typeof OnbChecklistEnforcementStage[keyof typeof OnbChecklistEnforcementStage];
 
 
@@ -2045,7 +2061,28 @@ export interface OnbReadinessItem {
   order?: number;
   mandatory?: boolean;
   enforcementStage?: OnbChecklistEnforcementStage;
+  evidenceRequired?: boolean;
+  responsibleRole?: string;
+  completionAuthority?: OnbReadinessItemCompletionAuthority;
+  executor?: OnbReadinessItemExecutor;
+  prerequisites?: string[];
 }
+
+export type OnbChecklistTemplateItemCompletionAuthority = typeof OnbChecklistTemplateItemCompletionAuthority[keyof typeof OnbChecklistTemplateItemCompletionAuthority];
+
+
+export const OnbChecklistTemplateItemCompletionAuthority = {
+  'hr-admin': 'hr-admin',
+  'designated-human': 'designated-human',
+} as const;
+
+export type OnbChecklistTemplateItemExecutor = typeof OnbChecklistTemplateItemExecutor[keyof typeof OnbChecklistTemplateItemExecutor];
+
+
+export const OnbChecklistTemplateItemExecutor = {
+  'existing-workflow': 'existing-workflow',
+  'human-task': 'human-task',
+} as const;
 
 export interface OnbChecklistTemplateItem {
   id: string;
@@ -2056,7 +2093,20 @@ export interface OnbChecklistTemplateItem {
   enabled: boolean;
   mandatory: boolean;
   enforcementStage: OnbChecklistEnforcementStage;
+  evidenceRequired?: boolean;
+  responsibleRole?: string;
+  completionAuthority?: OnbChecklistTemplateItemCompletionAuthority;
+  executor?: OnbChecklistTemplateItemExecutor;
+  prerequisites?: string[];
 }
+
+export type OnbChecklistProfileCriteriaSafetyCritical = typeof OnbChecklistProfileCriteriaSafetyCritical[keyof typeof OnbChecklistProfileCriteriaSafetyCritical];
+
+
+export const OnbChecklistProfileCriteriaSafetyCritical = {
+  true: 'true',
+  false: 'false',
+} as const;
 
 export interface OnbChecklistProfileCriteria {
   /** @minLength 1 */
@@ -2067,7 +2117,52 @@ export interface OnbChecklistProfileCriteria {
   employmentType?: string;
   /** @minLength 1 */
   location?: string;
+  /** @minLength 1 */
+  roleFamily?: string;
+  /** @minLength 1 */
+  department?: string;
+  /** @minLength 1 */
+  legalEntity?: string;
+  /** @minLength 1 */
+  businessUnit?: string;
+  /** @minLength 1 */
+  industry?: string;
+  /** @minLength 1 */
+  workCountry?: string;
+  /** @minLength 1 */
+  workState?: string;
+  /** @minLength 1 */
+  site?: string;
+  /** @minLength 1 */
+  employmentArrangement?: string;
+  /** @minLength 1 */
+  workerCategory?: string;
+  /** @minLength 1 */
+  payBasis?: string;
+  /** @minLength 1 */
+  shiftPattern?: string;
+  /** @minLength 1 */
+  workEnvironment?: string;
+  /** @minLength 1 */
+  hiringMode?: string;
+  safetyCritical?: OnbChecklistProfileCriteriaSafetyCritical;
 }
+
+export type OnbChecklistItemOverrideCompletionAuthority = typeof OnbChecklistItemOverrideCompletionAuthority[keyof typeof OnbChecklistItemOverrideCompletionAuthority];
+
+
+export const OnbChecklistItemOverrideCompletionAuthority = {
+  'hr-admin': 'hr-admin',
+  'designated-human': 'designated-human',
+} as const;
+
+export type OnbChecklistItemOverrideExecutor = typeof OnbChecklistItemOverrideExecutor[keyof typeof OnbChecklistItemOverrideExecutor];
+
+
+export const OnbChecklistItemOverrideExecutor = {
+  'existing-workflow': 'existing-workflow',
+  'human-task': 'human-task',
+} as const;
 
 export interface OnbChecklistItemOverride {
   id: string;
@@ -2078,7 +2173,14 @@ export interface OnbChecklistItemOverride {
   enabled?: boolean;
   mandatory?: boolean;
   enforcementStage?: OnbChecklistEnforcementStage;
+  evidenceRequired?: boolean;
+  responsibleRole?: string;
+  completionAuthority?: OnbChecklistItemOverrideCompletionAuthority;
+  executor?: OnbChecklistItemOverrideExecutor;
+  prerequisites?: string[];
 }
+
+export type OnbChecklistProfileInputProcessPolicy = { [key: string]: unknown };
 
 export interface OnbChecklistProfileInput {
   /** @minLength 1 */
@@ -2088,6 +2190,7 @@ export interface OnbChecklistProfileInput {
   /** @minimum 0 */
   priority: number;
   enabled: boolean;
+  processPolicy?: OnbChecklistProfileInputProcessPolicy;
 }
 
 export type OnbChecklistProfileUpdate = OnbChecklistProfileInput & {
@@ -2129,6 +2232,288 @@ export interface OnbChecklistRecalculationInput {
   expectedChecklistProfileVersion: number;
 }
 
+export type OnbLearningPolicySchemaVersion = typeof OnbLearningPolicySchemaVersion[keyof typeof OnbLearningPolicySchemaVersion];
+
+
+export const OnbLearningPolicySchemaVersion = {
+  'workforce-step-runtime/v1': 'workforce-step-runtime/v1',
+} as const;
+
+export type OnbLearningPolicyTimingAnchor = typeof OnbLearningPolicyTimingAnchor[keyof typeof OnbLearningPolicyTimingAnchor];
+
+
+export const OnbLearningPolicyTimingAnchor = {
+  'joining-date': 'joining-date',
+} as const;
+
+export type OnbLearningPolicyTiming = {
+  anchor: OnbLearningPolicyTimingAnchor;
+  /**
+     * @minimum -90
+     * @maximum 180
+     */
+  offsetDays: number;
+};
+
+/**
+ * The learning runtime has no connected portal executor. Candidate self-upload is configured by intake.channel instead.
+ */
+export type OnbLearningPolicyChannel = typeof OnbLearningPolicyChannel[keyof typeof OnbLearningPolicyChannel];
+
+
+export const OnbLearningPolicyChannel = {
+  'manager-led': 'manager-led',
+} as const;
+
+export type OnbLearningStepPermittedChannelsItem = typeof OnbLearningStepPermittedChannelsItem[keyof typeof OnbLearningStepPermittedChannelsItem];
+
+
+export const OnbLearningStepPermittedChannelsItem = {
+  'manager-led': 'manager-led',
+} as const;
+
+export type OnbLearningStepTimingAnchor = typeof OnbLearningStepTimingAnchor[keyof typeof OnbLearningStepTimingAnchor];
+
+
+export const OnbLearningStepTimingAnchor = {
+  'joining-date': 'joining-date',
+} as const;
+
+export type OnbLearningStepTimingEscalation = {
+  /**
+     * @minimum -90
+     * @maximum 180
+     */
+  offsetDays: number;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  responsibleRole: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     * @nullable
+     */
+  assignedTo?: string | null;
+};
+
+export interface OnbLearningStepTiming {
+  anchor?: OnbLearningStepTimingAnchor;
+  /**
+     * @minimum -90
+     * @maximum 180
+     */
+  notBeforeOffsetDays?: number;
+  /**
+     * @minimum -90
+     * @maximum 180
+     */
+  dueOffsetDays?: number;
+  escalation?: OnbLearningStepTimingEscalation;
+}
+
+export interface OnbLearningStep {
+  /** @pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  label: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  responsibleRole?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     * @nullable
+     */
+  assignedTo?: string | null;
+  mandatory?: boolean;
+  evidenceRequired?: boolean;
+  nonblocking?: boolean;
+  /** @items.pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
+  prerequisites?: string[];
+  /**
+     * @minLength 1
+     * @maxLength 120
+     * @nullable
+     */
+  parallelGroup?: string | null;
+  /** @minItems 1 */
+  permittedChannels?: OnbLearningStepPermittedChannelsItem[];
+  timing?: OnbLearningStepTiming;
+}
+
+export type OnbLearningPolicy = (unknown & {
+  schemaVersion?: OnbLearningPolicySchemaVersion;
+  timing: OnbLearningPolicyTiming;
+  /**
+     * Compact ordered form. Do not send with steps.
+     * @minItems 1
+     * @maxItems 24
+     * @items.minLength 1
+     * @items.maxLength 120
+     */
+  sequence?: string[];
+  /**
+     * Typed accountable human-task form. Do not send with sequence.
+     * @minItems 1
+     * @maxItems 24
+     */
+  steps?: OnbLearningStep[];
+  /** The learning runtime has no connected portal executor. Candidate self-upload is configured by intake.channel instead. */
+  channel: OnbLearningPolicyChannel;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  ownership: string;
+});
+
+export type OnbPolicyRecommendationDecisionDecision = typeof OnbPolicyRecommendationDecisionDecision[keyof typeof OnbPolicyRecommendationDecisionDecision];
+
+
+export const OnbPolicyRecommendationDecisionDecision = {
+  accepted: 'accepted',
+  rejected: 'rejected',
+} as const;
+
+export interface OnbPolicyRecommendationDecision {
+  decision: OnbPolicyRecommendationDecisionDecision;
+  /** @maxLength 1000 */
+  decisionNote?: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expectedEvidenceFingerprint: string;
+  learning?: OnbLearningPolicy;
+}
+
+export type OnbBroaderCompatibleCohortEvidenceTarget = {
+  profileId: string;
+  profileName: string;
+  currentProfileVersion: number;
+  /** @minimum 0 */
+  exactCohortVerifiedOutcomes: number;
+};
+
+export type OnbBroaderCompatibleCohortEvidenceWindow = {
+  startedAt: string;
+  endedAt: string;
+  days: number;
+};
+
+export type OnbBroaderCompatibleCohortEvidenceSample = {
+  /** @minimum 0 */
+  candidateCases: number;
+  /** @minimum 0 */
+  verifiedOutcomes: number;
+  /** @minimum 0 */
+  excludedDemoOrSimulation: number;
+  /** @minimum 0 */
+  missingOutcomeEvidence: number;
+};
+
+/**
+ * @nullable
+ */
+export type OnbBroaderCompatibleCohortEvidenceOutcomeUncertainty95PercentDays = {
+  low: number;
+  high: number;
+} | null;
+
+export type OnbBroaderCompatibleCohortEvidenceOutcome = {
+  /** @nullable */
+  meanDaysToVerifiedReadiness: number | null;
+  /** @nullable */
+  uncertainty95PercentDays: OnbBroaderCompatibleCohortEvidenceOutcomeUncertainty95PercentDays;
+  observedOutcomeDates: string[];
+  caseReferences: number[];
+};
+
+/**
+ * A same-tenant, wider-version descriptive cohort displayed only when the exact current profile-version cohort is insufficient. It is never eligible for publication.
+ */
+export interface OnbBroaderCompatibleCohortEvidence {
+  scope: 'same-tenant-compatible-profile';
+  status: 'descriptive-only';
+  notEligibleForPublication: true;
+  target: OnbBroaderCompatibleCohortEvidenceTarget;
+  cohortDefinition: string;
+  compatibilityDefinition: string;
+  outcomeDefinition: string;
+  window: OnbBroaderCompatibleCohortEvidenceWindow;
+  sample: OnbBroaderCompatibleCohortEvidenceSample;
+  outcome: OnbBroaderCompatibleCohortEvidenceOutcome;
+  missingness: string[];
+  uncertainty: string;
+}
+
+export interface OnbPolicyRecommendationFallback {
+  status: 'insufficient-evidence';
+  message: string;
+  /** @minimum 0 */
+  candidateCases: number;
+  /** @minimum 0 */
+  verifiedOutcomes: number;
+  /** @minimum 0 */
+  excludedDemoOrSimulation: number;
+  /** @minimum 0 */
+  missingOutcomeEvidence: number;
+  broaderEvidence: OnbBroaderCompatibleCohortEvidence[];
+}
+
+export type OnbPolicyRecommendationListWindow = {
+  startedAt: string;
+  endedAt: string;
+  days: number;
+};
+
+export type OnbPolicyRecommendationListRecommendationsItemStatus = typeof OnbPolicyRecommendationListRecommendationsItemStatus[keyof typeof OnbPolicyRecommendationListRecommendationsItemStatus];
+
+
+export const OnbPolicyRecommendationListRecommendationsItemStatus = {
+  proposed: 'proposed',
+  accepted: 'accepted',
+  rejected: 'rejected',
+} as const;
+
+export type OnbPolicyRecommendationListRecommendationsItemRecommendation = {
+  type?: 'cohort-learning-default';
+  learning?: OnbLearningPolicy;
+  [key: string]: unknown;
+ };
+
+export type OnbPolicyRecommendationListRecommendationsItemEvidenceSnapshot = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  evidenceFingerprint?: string;
+  [key: string]: unknown;
+ };
+
+export type OnbPolicyRecommendationListRecommendationsItem = {
+  id: number;
+  status: OnbPolicyRecommendationListRecommendationsItemStatus;
+  recommendation: OnbPolicyRecommendationListRecommendationsItemRecommendation;
+  evidenceSnapshot: OnbPolicyRecommendationListRecommendationsItemEvidenceSnapshot;
+  createdAt: string;
+  [key: string]: unknown;
+ };
+
+/**
+ * Each persisted recommendation preserves its full proposal and evidence snapshot. Evidence is cohort-scoped, excludes demo/simulation, reports missingness and uncertainty, and is descriptive rather than causal.
+ */
+export interface OnbPolicyRecommendationList {
+  asOf: string;
+  methodologyVersion: 'learning-cohort-v1';
+  window: OnbPolicyRecommendationListWindow;
+  recommendations: OnbPolicyRecommendationListRecommendationsItem[];
+  /** @nullable */
+  fallback: OnbPolicyRecommendationFallback | null;
+  [key: string]: unknown;
+ }
+
 export type OnbChecklistItemStatusUpdateStatus = typeof OnbChecklistItemStatusUpdateStatus[keyof typeof OnbChecklistItemStatusUpdateStatus];
 
 
@@ -2146,6 +2531,132 @@ export interface OnbChecklistItemStatusUpdate {
   note?: string | null;
 }
 
+export type OnbEvidenceVerificationInputDecision = typeof OnbEvidenceVerificationInputDecision[keyof typeof OnbEvidenceVerificationInputDecision];
+
+
+export const OnbEvidenceVerificationInputDecision = {
+  verified: 'verified',
+  rejected: 'rejected',
+} as const;
+
+/**
+ * Exact case policy provenance the server locks and compares before recording independently verified evidence.
+ */
+export type OnbEvidenceVerificationInputExpectedPolicy = {
+  /** @minimum 0 */
+  contextVersion: number;
+  /** @minimum 0 */
+  templateVersion: number;
+  /** @minLength 1 */
+  profileId: string;
+  /** @minimum 0 */
+  profileVersion: number;
+};
+
+export interface OnbEvidenceVerificationInput {
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  evidenceReference: string;
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  authorityRole: string;
+  decision: OnbEvidenceVerificationInputDecision;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  reason: string;
+  /** Exact case policy provenance the server locks and compares before recording independently verified evidence. */
+  expectedPolicy: OnbEvidenceVerificationInputExpectedPolicy;
+}
+
+export type OnbWorkforceContextWorkEnvironment = typeof OnbWorkforceContextWorkEnvironment[keyof typeof OnbWorkforceContextWorkEnvironment];
+
+
+export const OnbWorkforceContextWorkEnvironment = {
+  office: 'office',
+  remote: 'remote',
+  site: 'site',
+  field: 'field',
+  mixed: 'mixed',
+} as const;
+
+export type OnbWorkforceContextHiringMode = typeof OnbWorkforceContextHiringMode[keyof typeof OnbWorkforceContextHiringMode];
+
+
+export const OnbWorkforceContextHiringMode = {
+  individual: 'individual',
+  batch: 'batch',
+  seasonal: 'seasonal',
+} as const;
+
+/**
+ * Work and operating context only. Accessibility, language and assisted-intake preferences are collected explicitly and never inferred from a workforce indicator.
+ */
+export interface OnbWorkforceContext {
+  /** @maxLength 120 */
+  roleFamily?: string;
+  /** @maxLength 120 */
+  band?: string;
+  /** @maxLength 120 */
+  department?: string;
+  /** @maxLength 120 */
+  legalEntity?: string;
+  /** @maxLength 120 */
+  businessUnit?: string;
+  /** @maxLength 120 */
+  industry?: string;
+  /** @maxLength 120 */
+  workCountry?: string;
+  /** @maxLength 120 */
+  workState?: string;
+  /** @maxLength 120 */
+  site?: string;
+  /** @maxLength 120 */
+  employmentArrangement?: string;
+  /** @maxLength 120 */
+  workerCategory?: string;
+  /** @maxLength 120 */
+  payBasis?: string;
+  /** @maxLength 120 */
+  shiftPattern?: string;
+  workEnvironment?: OnbWorkforceContextWorkEnvironment;
+  /**
+     * @maxItems 30
+     * @items.maxLength 120
+     */
+  hazards?: string[];
+  /**
+     * @maxItems 30
+     * @items.maxLength 120
+     */
+  requiredLicenses?: string[];
+  hiringMode?: OnbWorkforceContextHiringMode;
+  /** @maxLength 120 */
+  batchId?: string;
+  assistedIntake?: boolean;
+  /** @maxLength 500 */
+  accessibilityNeeds?: string;
+  /** @maxLength 120 */
+  languagePreference?: string;
+  siteExposure?: boolean;
+  safetyCritical?: boolean;
+}
+
+export interface OnbWorkforceContextCorrectionInput {
+  workforceContext: OnbWorkforceContext;
+  expectedUpdatedAt: string;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  reason: string;
+}
+
 /**
  * A parallel readiness workstream owned by one agent
  */
@@ -2161,6 +2672,43 @@ export interface OnbWorkstream {
   blockers: string[];
 }
 
+export type OnbWorkforceClassificationLabel = typeof OnbWorkforceClassificationLabel[keyof typeof OnbWorkforceClassificationLabel];
+
+
+export const OnbWorkforceClassificationLabel = {
+  'white-collar': 'white-collar',
+  'blue-collar-frontline': 'blue-collar-frontline',
+  mixed: 'mixed',
+  'needs-review': 'needs-review',
+} as const;
+
+export type OnbWorkforceClassificationSource = typeof OnbWorkforceClassificationSource[keyof typeof OnbWorkforceClassificationSource];
+
+
+export const OnbWorkforceClassificationSource = {
+  'deterministic-job-context': 'deterministic-job-context',
+  'authorized-correction': 'authorized-correction',
+} as const;
+
+export type OnbWorkforceClassificationConfidence = typeof OnbWorkforceClassificationConfidence[keyof typeof OnbWorkforceClassificationConfidence];
+
+
+export const OnbWorkforceClassificationConfidence = {
+  high: 'high',
+  medium: 'medium',
+  uncertain: 'uncertain',
+} as const;
+
+/**
+ * Explainable job classification; it describes the job, never the person.
+ */
+export interface OnbWorkforceClassification {
+  label: OnbWorkforceClassificationLabel;
+  source: OnbWorkforceClassificationSource;
+  rationale: string;
+  confidence: OnbWorkforceClassificationConfidence;
+}
+
 /**
  * HR-selected contact channel(s) for this new hire
  */
@@ -2172,6 +2720,8 @@ export const OnbCaseChannelPreference = {
   whatsapp: 'whatsapp',
   both: 'both',
 } as const;
+
+export type OnbCaseProcessPolicySnapshot = { [key: string]: unknown };
 
 export type OnbGatewayStatus = typeof OnbGatewayStatus[keyof typeof OnbGatewayStatus];
 
@@ -2262,6 +2812,15 @@ export interface OnbCase {
   checklistProfileVersion: number;
   checklistMatchedCriteria: OnbChecklistProfileCriteria;
   checklistMatchExplanation: string;
+  workforceContext: OnbWorkforceContext;
+  workforceClassification: OnbWorkforceClassification | null;
+  /** @minimum 1 */
+  workforceContextVersion: number;
+  processPolicySnapshot: OnbCaseProcessPolicySnapshot;
+  /** @nullable */
+  jobProfileId: string | null;
+  /** @nullable */
+  jobProfileVersion: number | null;
   /**
      * Last completed orchestration boundary, or the exact checklist gate currently blocking the case
      * @nullable
@@ -2430,6 +2989,9 @@ export interface OnbCaseIntake {
   notes?: string;
   /** HR attests at intake that the offer-acceptance package is complete; otherwise Gate A sends the package request and waits for a separate HR confirmation. */
   offerAcceptanceComplete?: boolean;
+  workforceContext?: OnbWorkforceContext;
+  /** @minLength 1 */
+  jobProfileId?: string;
 }
 
 /**
@@ -3051,6 +3613,7 @@ export type OnbOperationalRequestMethod = typeof OnbOperationalRequestMethod[key
 export const OnbOperationalRequestMethod = {
   email: 'email',
   agent: 'agent',
+  'human-task': 'human-task',
 } as const;
 
 export type OnbOperationalRequestStatus = typeof OnbOperationalRequestStatus[keyof typeof OnbOperationalRequestStatus];
@@ -3099,8 +3662,39 @@ export interface OnbOperationalRequestHistoryEntry {
   agentIdentity?: OnbAgent | null;
 }
 
+export type OnbOperationalRequestRuntimeSchemaVersion = typeof OnbOperationalRequestRuntimeSchemaVersion[keyof typeof OnbOperationalRequestRuntimeSchemaVersion];
+
+
+export const OnbOperationalRequestRuntimeSchemaVersion = {
+  'workforce-step-runtime/v1': 'workforce-step-runtime/v1',
+} as const;
+
+export type OnbOperationalRequestRuntimeWorkstream = typeof OnbOperationalRequestRuntimeWorkstream[keyof typeof OnbOperationalRequestRuntimeWorkstream];
+
+
+export const OnbOperationalRequestRuntimeWorkstream = {
+  intake: 'intake',
+  payroll: 'payroll',
+  assets: 'assets',
+  learning: 'learning',
+} as const;
+
+export type OnbOperationalRequestPermittedChannelsItem = typeof OnbOperationalRequestPermittedChannelsItem[keyof typeof OnbOperationalRequestPermittedChannelsItem];
+
+
+export const OnbOperationalRequestPermittedChannelsItem = {
+  'manager-led': 'manager-led',
+} as const;
+
+export interface OnbWorkforceStepEscalation {
+  at: string;
+  responsibleRole: string;
+  /** @nullable */
+  assignedTo: string | null;
+}
+
 /**
- * A simulated setup request. The reference is local simulation identity, not a vendor ticket or evidence of external completion.
+ * A simulated setup request or an accountable workforce human task. Human tasks never represent an AI, LMS, calendar, message, or external system execution.
  */
 export interface OnbOperationalRequest {
   /** @pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
@@ -3108,6 +3702,7 @@ export interface OnbOperationalRequest {
   label: string;
   /** Workstream owner accountable for the simulated request */
   owner: string;
+  /** Stable simulation persona id, or human-task for a workforce human task */
   agent: string;
   /** Resolved current AI-agent identity; null for email assignments or unknown legacy ids */
   agentIdentity?: OnbAgent | null;
@@ -3115,12 +3710,32 @@ export interface OnbOperationalRequest {
   teamRecipientLabel: string;
   method: OnbOperationalRequestMethod;
   status: OnbOperationalRequestStatus;
-  /**
-     * Simulation-local reference prefixed SIMULATED-OPS
-     * @pattern ^SIMULATED-OPS-
-     */
+  /** Simulation-local reference, or a HUMAN-TASK audit reference */
   reference: string;
-  simulated: true;
+  /** False only for accountable human workforce tasks */
+  simulated: boolean;
+  runtimeSchemaVersion?: OnbOperationalRequestRuntimeSchemaVersion;
+  runtimeWorkstream?: OnbOperationalRequestRuntimeWorkstream;
+  responsibleRole?: string;
+  /** @nullable */
+  assignedTo?: string | null;
+  mandatory?: boolean;
+  evidenceRequired?: boolean;
+  nonblocking?: boolean;
+  prerequisites?: string[];
+  /** @nullable */
+  parallelGroup?: string | null;
+  /** Accountable-human evidence channel; no learning portal executor is registered. */
+  permittedChannels?: OnbOperationalRequestPermittedChannelsItem[];
+  /** @nullable */
+  notBeforeAt?: string | null;
+  /** @nullable */
+  dueAt?: string | null;
+  escalation?: OnbWorkforceStepEscalation | null;
+  /** Computed from dueAt at read time; no external escalation is implied */
+  overdue?: boolean;
+  /** Computed from escalation.at at read time; an accountable human must act */
+  escalationRequired?: boolean;
   requestedAt: string;
   /** @nullable */
   startedAt: string | null;
@@ -3141,7 +3756,8 @@ export interface OnbOperationalRequestsEnvelope {
   caseId: number;
   /** @minimum 0 */
   version: number;
-  simulated: true;
+  /** False when the case includes accountable human workforce tasks */
+  simulated: boolean;
   /** Synthetic offline samples remain read-only and never record actions */
   offlinePaused: boolean;
   requests: OnbOperationalRequest[];
@@ -3203,6 +3819,8 @@ export type OnbOperationalRequestsMutationResult = OnbOperationalRequestsEnvelop
   /** @nullable */
   action: string | null;
   idempotent: boolean;
+  /** The task action committed, but a follow-up connector continuation is pending durable automatic retry. */
+  continuationPending?: boolean;
   initializedRequestIds: string[];
 });
 
@@ -4536,6 +5154,9 @@ export interface DemoCaseMetadata {
   /** @nullable */
   phone: string | null;
   role: string;
+  workforceClassification?: OnbWorkforceClassification | null;
+  siteExposure?: boolean;
+  safetyCritical?: boolean;
   department: string;
   geography: string;
   joiningDate: string;
@@ -4754,10 +5375,19 @@ export interface OnbActionCenterCounts {
   opportunities: number;
 }
 
+/**
+ * @nullable
+ */
+export type OnbActionCenterCaseWorkforceClassification = { [key: string]: unknown } | null;
+
 export interface OnbActionCenterCase {
   workerName: string;
   workerEmail: string;
   role: string;
+  /** @nullable */
+  workforceClassification: OnbActionCenterCaseWorkforceClassification;
+  siteExposure: boolean;
+  safetyCritical: boolean;
   joiningDate: string;
   lifecycleStage: string;
   urgency: string;
@@ -5245,6 +5875,37 @@ export type ParseActualsLogBody = {
   logFile: Blob;
 };
 
+export type ListOnboardingPolicyRecommendationsParams = {
+/**
+ * Case-created-at analysis window. Outcome evidence remains a dated final HR readiness event.
+ */
+windowDays?: ListOnboardingPolicyRecommendationsWindowDays;
+};
+
+export type ListOnboardingPolicyRecommendationsWindowDays = typeof ListOnboardingPolicyRecommendationsWindowDays[keyof typeof ListOnboardingPolicyRecommendationsWindowDays];
+
+
+export const ListOnboardingPolicyRecommendationsWindowDays = {
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+  NUMBER_180: 180,
+  NUMBER_365: 365,
+} as const;
+
+export type RefreshOnboardingPolicyRecommendationsBodyWindowDays = typeof RefreshOnboardingPolicyRecommendationsBodyWindowDays[keyof typeof RefreshOnboardingPolicyRecommendationsBodyWindowDays];
+
+
+export const RefreshOnboardingPolicyRecommendationsBodyWindowDays = {
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+  NUMBER_180: 180,
+  NUMBER_365: 365,
+} as const;
+
+export type RefreshOnboardingPolicyRecommendationsBody = {
+  windowDays?: RefreshOnboardingPolicyRecommendationsBodyWindowDays;
+};
+
 export type GetOnboardingActionCenterParams = {
 scope?: GetOnboardingActionCenterScope;
 /**
@@ -5252,6 +5913,9 @@ scope?: GetOnboardingActionCenterScope;
  * @maximum 200
  */
 limit?: number;
+workforce?: GetOnboardingActionCenterWorkforce;
+safetyCritical?: boolean;
+siteExposure?: boolean;
 };
 
 export type GetOnboardingActionCenterScope = typeof GetOnboardingActionCenterScope[keyof typeof GetOnboardingActionCenterScope];
@@ -5261,6 +5925,17 @@ export const GetOnboardingActionCenterScope = {
   active: 'active',
   completed: 'completed',
   all: 'all',
+} as const;
+
+export type GetOnboardingActionCenterWorkforce = typeof GetOnboardingActionCenterWorkforce[keyof typeof GetOnboardingActionCenterWorkforce];
+
+
+export const GetOnboardingActionCenterWorkforce = {
+  'white-collar': 'white-collar',
+  'blue-collar-frontline': 'blue-collar-frontline',
+  mixed: 'mixed',
+  'needs-review': 'needs-review',
+  unclassified: 'unclassified',
 } as const;
 
 export type RetryOnboardingEvidenceMalwareScan200MalwareScanState = typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState[keyof typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState];

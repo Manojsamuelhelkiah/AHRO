@@ -28,6 +28,7 @@ import { TargetedChecklistProfiles } from './settings-checklist-profiles';
 import { ReadinessSlaSettingsCard } from './settings-readiness-sla';
 import { SyntheticResetCard } from './settings-synthetic-reset';
 import { ActionCenterIdentitiesSettings } from './action-center-settings';
+import { JobProfilesAndAuthorities } from './settings-job-profiles';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -805,7 +806,6 @@ export function SettingsPage() {
       <ReadinessSlaSettingsCard />
       <ActionCenterIdentitiesSettings />
       <ChecklistSettingsCard />
-      <TargetedChecklistProfiles />
 
       <CandidateAccessCleanupCard settings={settings} isLoading={isLoading} />
 
@@ -1038,8 +1038,14 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <ChecklistSettingsCard />
-      <TargetedChecklistProfiles />
+      <section aria-labelledby="workforce-process-policies" className="space-y-4">
+        <div className="rounded-[var(--radius-lg)] border border-[var(--primary)]/30 bg-[var(--primary-light)]/20 p-4">
+          <h2 id="workforce-process-policies" className="text-sm font-bold text-[var(--text-primary)]">Workforce &amp; Process Policies</h2>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Configure explicit job-context matching, process controls, accountable human task compilation, and designated evidence authorities for this tenant. A new tenant starts with an empty, configurable catalog.</p>
+        </div>
+        <TargetedChecklistProfiles />
+        <JobProfilesAndAuthorities />
+      </section>
 
       <Day1LogisticsSettingsCard />
 

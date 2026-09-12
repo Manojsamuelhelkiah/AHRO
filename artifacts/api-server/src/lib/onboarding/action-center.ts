@@ -21,6 +21,7 @@ import { externalProviderDispatchDenied } from "./provider-policy";
 import { isChecklistAdministrator } from "./checklist";
 
 export type ActionCenterScope = "active" | "completed" | "all";
+export type ActionCenterWorkforceFilter = "white-collar" | "blue-collar-frontline" | "mixed" | "needs-review" | "unclassified";
 export type ActionCenterCallOutcome =
   | "reached"
   | "no-answer"
@@ -138,6 +139,9 @@ function caseSummary(row: typeof onbCases.$inferSelect) {
     workerName: row.workerName,
     workerEmail: row.workerEmail,
     role: row.role,
+    workforceClassification: row.workforceClassification,
+    siteExposure: Boolean(row.workforceContext.siteExposure),
+    safetyCritical: Boolean(row.workforceContext.safetyCritical),
     joiningDate: row.joiningDate,
     lifecycleStage: row.lifecycleStage,
     urgency: row.urgency,
@@ -630,6 +634,7 @@ export async function getActionCenter(
   organizationId: string,
   scope: ActionCenterScope = "active",
   limit = 100,
+  filters: { workforce?: ActionCenterWorkforceFilter; safetyCritical?: boolean; siteExposure?: boolean } = {},
 ) {
   const [cases, approvalRows, documents, systemChecks, events, communications, actionRows, approvalHistory, uploads] =
     await Promise.all([
@@ -680,6 +685,17 @@ export async function getActionCenter(
         .where(eq(onbCandidateUploads.organizationId, organizationId))
         .orderBy(desc(onbCandidateUploads.id)),
     ]);
+  const filteredCaseIds = new Set(cases.filter((row) => {
+    if (filters.workforce) {
+      const label = row.workforceClassification?.label ?? "unclassified";
+      if (label !== filters.workforce) return false;
+    }
+    // Unknown is not "no": filters are explicit applicability facts and must
+    // not silently include cases whose safety/site context has not been set.
+    if (filters.safetyCritical !== undefined && row.workforceContext.safetyCritical !== filters.safetyCritical) return false;
+    if (filters.siteExposure !== undefined && row.workforceContext.siteExposure !== filters.siteExposure) return false;
+    return true;
+  }).map((row) => row.id));
   const caseById = new Map(cases.map((row) => [row.id, row]));
   const latestSystemChecks = Array.from(new Map(
     systemChecks.map((row) => [`${row.c.id}:${row.check.system}`, row]),
@@ -694,7 +710,11 @@ export async function getActionCenter(
   const completedApprovals = approvalRows.filter(({ approval }) => approval.status !== "pending");
   const dueAt = Date.now();
   const followups = documents
-    .filter(({ doc }) => doc.required && ["pending", "received"].includes(doc.status))
+    .filter(({ doc, c }) =>
+      filteredCaseIds.has(c.id) &&
+      doc.required &&
+      ["pending", "received"].includes(doc.status),
+    )
     .map(({ doc, c }) => ({
       validationState: latestUploadByDocument.get(doc.id)?.validationState ?? null,
       documentId: doc.id,
@@ -749,7 +769,7 @@ export async function getActionCenter(
     actionVersionByCase.set(row.caseId, (actionVersionByCase.get(row.caseId) ?? 0) + 1);
   }
   const notifications = [
-    ...latestSystemChecks
+    ...latestSystemChecks.filter(({ c }) => filteredCaseIds.has(c.id))
       .filter(({ check }) =>
         check.status === "overdue" ||
         (check.status === "pending" && check.dueAt.getTime() <= dueAt),
@@ -781,7 +801,7 @@ export async function getActionCenter(
          capabilities: { canAct: false },
       })),
     ...events
-      .filter((event) =>
+      .filter((event) => filteredCaseIds.has(event.caseId ?? -1) &&
         event.caseId !== null &&
         /overdue|exception|escalat|failed|attention|blocked|quarantin|review/i.test(
           `${event.title} ${event.detail}`,
@@ -807,7 +827,7 @@ export async function getActionCenter(
            canAct: false,
          },
       })),
-     ...communications.map(({ communication, c }) => ({
+     ...communications.filter(({ c }) => filteredCaseIds.has(c.id)).map(({ communication, c }) => ({
        id: `communication:${communication.id}`,
       caseId: communication.caseId,
       kind: /bgv|background/i.test(`${communication.subject ?? ""} ${communication.body}`)
@@ -830,7 +850,8 @@ export async function getActionCenter(
   ].slice(0, limit);
 
   const opportunities: Array<Record<string, unknown>> = [];
-  for (const { doc, c } of documents) {
+   for (const { doc, c } of documents) {
+     if (!filteredCaseIds.has(c.id)) continue;
     if (!doc.required || !["pending", "received"].includes(doc.status)) continue;
     const received = doc.status === "received";
     const correctionRequired = documentNeedsCorrection({
@@ -867,7 +888,8 @@ export async function getActionCenter(
        capabilities: { canAct: !isSyntheticOfflineCase(c) },
     });
   }
-  for (const { check, c } of latestSystemChecks) {
+   for (const { check, c } of latestSystemChecks) {
+     if (!filteredCaseIds.has(c.id)) continue;
     if (check.system !== "bgv" || check.status === "done") continue;
     opportunities.push({
       id: `bgv:${c.id}:${check.id}`,
@@ -894,7 +916,8 @@ export async function getActionCenter(
        capabilities: { canAct: !isSyntheticOfflineCase(c) },
     });
   }
-  for (const { approval, c } of activeApprovals) {
+   for (const { approval, c } of activeApprovals) {
+     if (!filteredCaseIds.has(c.id)) continue;
     opportunities.push({
       id: `approval:${approval.id}:v${approval.version}`,
       caseId: c.id,
@@ -908,7 +931,8 @@ export async function getActionCenter(
        capabilities: { canAct: !isSyntheticOfflineCase(c) },
     });
   }
-  for (const c of cases) {
+   for (const c of cases) {
+     if (!filteredCaseIds.has(c.id)) continue;
     for (const item of c.checklistSnapshot) {
       if (!item.enabled || !item.mandatory) continue;
       const readiness = c.readiness.find((candidate) => candidate.key === item.id || candidate.key === item.label);
@@ -919,9 +943,11 @@ export async function getActionCenter(
         kind: "mandatory-checklist",
         priority: priorityForCase(c),
         title: `Complete ${item.label}`,
-        description: `Completing this mandatory checklist item moves the case toward the ${item.enforcementStage} checkpoint.`,
+        description: item.evidenceRequired
+          ? `Independent evidence must be verified by the assigned ${item.responsibleRole ?? "designated human"} authority before this ${item.enforcementStage} gate can clear.`
+          : `Completing this mandatory checklist item moves the case toward the ${item.enforcementStage} checkpoint.`,
         benefit: { type: "mandatory-checkpoint", checkpoint: item.enforcementStage, delta: null },
-        evidence: { source: "onb_cases.checklist_snapshot", itemId: item.id, status: readiness?.status ?? "not-started" },
+        evidence: { source: item.evidenceRequired ? "onb_policy_evidence" : "onb_cases.checklist_snapshot", itemId: item.id, status: readiness?.status ?? "not-started" },
         caseHref: caseHref(c.id),
          capabilities: { canAct: !isSyntheticOfflineCase(c) },
       });
@@ -938,8 +964,9 @@ export async function getActionCenter(
   const showCompleted = scope === "completed" || scope === "all";
   const showActive = scope === "active" || scope === "all";
   const completed = showCompleted
-    ? [
+     ? [
         ...completedActions.map((row) => {
+          if (!filteredCaseIds.has(row.caseId)) return null;
           const c = caseById.get(row.caseId);
           return {
             id: `action-${row.id}`,
@@ -961,8 +988,8 @@ export async function getActionCenter(
             createdAt: row.createdAt.toISOString(),
             caseHref: caseHref(c?.id ?? row.caseId),
           };
-        }),
-        ...completedApprovals.map(({ approval, c }) => ({
+        }).filter((row): row is NonNullable<typeof row> => row !== null),
+        ...completedApprovals.filter(({ c }) => filteredCaseIds.has(c.id)).map(({ approval, c }) => ({
           id: `approval-${approval.id}-v${approval.version}`,
           kind: "approval",
           caseId: c.id,
@@ -972,7 +999,7 @@ export async function getActionCenter(
           createdAt: (approval.decidedAt ?? approval.createdAt).toISOString(),
           caseHref: caseHref(c.id),
         })),
-        ...approvalHistory.map((history) => {
+        ...approvalHistory.filter((history) => filteredCaseIds.has(history.caseId)).map((history) => {
           const c = caseById.get(history.caseId);
           return {
             id: `approval-history-${history.id}`,
@@ -1021,7 +1048,7 @@ export async function getActionCenter(
       completed: completed.length,
       opportunities: active ? opportunities.length : 0,
     },
-    approvals: showActive ? activeApprovals.slice(0, limit).map(({ approval, c }) => ({
+    approvals: showActive ? activeApprovals.filter(({ c }) => filteredCaseIds.has(c.id)).slice(0, limit).map(({ approval, c }) => ({
       id: approval.id,
       caseId: c.id,
       version: approval.version,
@@ -1058,7 +1085,7 @@ export async function getActionCenter(
     })),
      notifications: active ? notifications.slice(0, limit) : [],
     documentFollowups: active ? followups.slice(0, limit) : [],
-    workItems: active ? openActions.slice(0, limit).map((row) => {
+    workItems: active ? openActions.filter((row) => filteredCaseIds.has(row.caseId)).slice(0, limit).map((row) => {
       const current = latestReassignByTarget.get(row.id) ?? row;
       return {
       id: row.id,
