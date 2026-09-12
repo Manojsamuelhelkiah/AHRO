@@ -76,6 +76,10 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Reviewed forward correction allowing one immutable receipt per provider
   // for the same operation, so clients can transition from simulation.
   "d4ddb9b88db2b521f4ccf397f925cfdfc44e9f90e6f555fa0c9d34eee7b1a421",
+  // Additive membership lifecycle revision column and its nonnegative check
+  // constraint. The exact hash permits the plain ADD CONSTRAINT statement
+  // without allowing procedural migration guards.
+  "6d7b99b22a51ed14f3853a731fd17e30929e8579a36551265c5da53d90ef5c19",
 ]);
 // The authority migration sequence was renumbered after it landed in
 // parallel with the workforce sequence. These are ledger identifiers only:

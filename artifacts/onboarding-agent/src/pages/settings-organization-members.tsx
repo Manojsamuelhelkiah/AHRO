@@ -1,6 +1,10 @@
 import { useState } from "react";
 import {
   getListOrganizationMembersQueryKey,
+  getListRemovedOrganizationMembersQueryKey,
+  useListRemovedOrganizationMembers,
+  useReinstateOrganizationMember,
+  type RemovedOrganizationMember,
   useChangeOrganizationMemberRole,
   useListOrganizationMembers,
   useRemoveOrganizationMember,
@@ -30,7 +34,32 @@ export function OrganizationMembersSettings() {
   const members = useListOrganizationMembers({
     query: { enabled: canRead, queryKey: getListOrganizationMembersQueryKey() },
   });
+  const removedMembers = useListRemovedOrganizationMembers({
+    query: { enabled: canManage, queryKey: getListRemovedOrganizationMembersQueryKey(), staleTime: 0 },
+  });
+  const [selected, setSelected] = useState<RemovedOrganizationMember | null>(null);
+  const [reason, setReason] = useState("");
+  const refreshMemberships = () => {
+    void queryClient.invalidateQueries({ queryKey: getListOrganizationMembersQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getListRemovedOrganizationMembersQueryKey() });
+  };
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const reinstate = useReinstateOrganizationMember({
+    mutation: {
+      onSuccess: () => {
+        setSelected(null);
+        setReason("");
+        setNotice({ ok: true, message: "Account reinstated as an ordinary member. Specialist grants and historical approval receipts remain revoked." });
+        refreshMemberships();
+      },
+      onError: (error) => {
+        setNotice({ ok: false, message: mutationMessage(error) });
+        setSelected(null);
+        setReason("");
+        refreshMemberships();
+      },
+    },
+  });
   const roleChange = useChangeOrganizationMemberRole({
     mutation: {
       onSuccess: () => {
@@ -44,7 +73,7 @@ export function OrganizationMembersSettings() {
     mutation: {
       onSuccess: () => {
         setNotice({ ok: true, message: "Membership revoked. The member can no longer access this organization." });
-        void queryClient.invalidateQueries({ queryKey: getListOrganizationMembersQueryKey() });
+        refreshMemberships();
       },
       onError: (error) => setNotice({ ok: false, message: mutationMessage(error) }),
     },
@@ -52,7 +81,7 @@ export function OrganizationMembersSettings() {
 
   if (roleLoading || !canRead) return null;
   const rows = members.data ?? [];
-  const busy = roleChange.isPending || remove.isPending;
+  const busy = roleChange.isPending || remove.isPending || reinstate.isPending;
 
   const changeRole = (member: OrganizationMember, nextRole: OrganizationMemberRole) => {
     if (!canManage || nextRole === "owner" || nextRole === member.role) return;
@@ -65,7 +94,7 @@ export function OrganizationMembersSettings() {
 
   const revoke = (member: OrganizationMember) => {
     if (!canManage || !window.confirm(
-      `Remove ${member.clerkUserId} from this organization?\n\nThis revokes organization access and existing specialist approval authority. Shared join codes cannot restore access. Historical records are retained. There is currently no self-service reinstatement.`,
+      `Remove ${member.clerkUserId} from this organization?\n\nThis revokes organization access and existing specialist approval authority. Shared join codes cannot restore access. Historical records are retained. Only an owner can explicitly reinstate ordinary membership.`,
     )) return;
     setNotice(null);
     remove.mutate({
@@ -154,6 +183,58 @@ export function OrganizationMembersSettings() {
                 </div>
               </div>
             ))
+          )}
+          {canManage && (
+            <section className="space-y-3 border-t border-[var(--border)] pt-4" aria-label="Removed members">
+              <h4 className="text-sm font-semibold">Removed members</h4>
+              <p className="text-xs text-[var(--text-muted)]">
+                Only an owner can reinstate an account, as an ordinary member. Legal, Payroll,
+                Occupational Health and all other specialist grants and historical approval receipts
+                remain revoked. Fresh verified grants require the existing governed process.
+              </p>
+              {removedMembers.isLoading ? <LoadingBlock>Loading removed members...</LoadingBlock>
+                : removedMembers.isError ? (
+                  <div role="alert" className="text-xs text-[var(--status-red-fg)]">
+                    {mutationMessage(removedMembers.error)}
+                    <Button variant="outline" size="sm" onClick={() => void removedMembers.refetch()}>Retry</Button>
+                  </div>
+                ) : (removedMembers.data ?? []).length === 0 ? (
+                  <p className="text-xs text-[var(--text-muted)]">No removed members were found.</p>
+                ) : (removedMembers.data ?? []).map((member) => (
+                  <div key={member.clerkUserId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--border)] p-3">
+                    <div className="min-w-0 text-xs">
+                      <p className="break-all font-medium">{member.clerkUserId}</p>
+                      <p className="text-[var(--text-muted)]">Removed {new Date(member.revokedAt).toLocaleString()}</p>
+                    </div>
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => {
+                      setSelected(member);
+                      setReason("");
+                      setNotice(null);
+                    }}>Review reinstatement</Button>
+                  </div>
+                ))}
+              {selected && (
+                <form className="space-y-3 rounded-md border border-[var(--border)] p-3" onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!canManage || busy || !reason.trim()) return;
+                  reinstate.mutate({ userId: selected.clerkUserId, data: { expectedRevokedAt: selected.revokedAt, expectedRevision: selected.revision, reason: reason.trim() } });
+                }}>
+                  <p className="break-all text-sm font-medium">Reinstate {selected.clerkUserId} as member?</p>
+                  <label className="block text-xs">
+                    Reason for reinstatement (required)
+                    <textarea required maxLength={1000} value={reason} disabled={busy}
+                      onChange={(event) => setReason(event.target.value)}
+                      className="mt-2 block w-full rounded-md border border-input bg-background p-2"
+                    />
+                  </label>
+                  <p className="text-xs text-[var(--text-muted)]">This reason is retained in the audit record and visible to authorized audit reviewers. Do not include sensitive personal or medical details. Reinstatement does not restore administrative or specialist authority.</p>
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" disabled={busy || !reason.trim()}>{reinstate.isPending ? "Reinstating..." : "Reinstate as member"}</Button>
+                    <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { setSelected(null); setReason(""); }}>Cancel</Button>
+                  </div>
+                </form>
+              )}
+            </section>
           )}
           {notice && (
             <p

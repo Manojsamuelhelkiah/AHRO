@@ -40,12 +40,62 @@ const commonBuildOptions = {
   },
 };
 
+const organizationMembersTestStubs = {
+  name: "organization-members-test-stubs",
+  setup(build) {
+    const membersComponentSuffix = path.join(
+      "src",
+      "pages",
+      "settings-organization-members.tsx",
+    );
+    const isMembersComponent = (importer) =>
+      importer.endsWith(membersComponentSuffix);
+
+    build.onResolve(
+      { filter: /^@workspace\/api-client-react$/ },
+      (args) => {
+        if (!isMembersComponent(args.importer)) return;
+        return {
+          path: path.join(
+            dir,
+            "src/pages/test-support/organization-members-api-stub.ts",
+          ),
+        };
+      },
+    );
+    build.onResolve({ filter: /^@\// }, (args) => {
+      if (
+        isMembersComponent(args.importer) &&
+        args.path === "@/hooks/use-organization-role"
+      ) {
+        return {
+          path: path.join(
+            dir,
+            "src/pages/test-support/organization-members-role-stub.ts",
+          ),
+        };
+      }
+
+      const basePath = path.join(dir, "src", args.path.slice(2));
+      const resolvedPath = [
+        basePath,
+        `${basePath}.ts`,
+        `${basePath}.tsx`,
+        `${basePath}.js`,
+        `${basePath}.jsx`,
+      ].find((candidate) => existsSync(candidate));
+      return { path: resolvedPath ?? basePath };
+    });
+  },
+};
+
 if (standardEntryPoints.length > 0) {
   await build({
     ...commonBuildOptions,
     entryPoints: standardEntryPoints,
     outdir: path.join(dir, "dist-test"),
     external: ["node:*", ...builtinModules],
+    plugins: [organizationMembersTestStubs],
   });
 }
 

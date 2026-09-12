@@ -1,4 +1,6 @@
 import {
+  check,
+  integer,
   index,
   pgTable,
   serial,
@@ -6,6 +8,7 @@ import {
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -37,6 +40,12 @@ export const organizationMembershipsTable = pgTable(
      * never be resurrected by a join-code retry.
      */
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /**
+     * Monotonic lifecycle generation used as the durable compare-and-set
+     * version for removal and reinstatement. Timestamp values are display
+     * data only and are not unique enough to fence rapid lifecycle cycles.
+     */
+    membershipRevision: integer("membership_revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -45,6 +54,10 @@ export const organizationMembershipsTable = pgTable(
       table.clerkUserId,
     ),
     index("organization_memberships_user_idx").on(table.clerkUserId),
+    check(
+      "organization_memberships_membership_revision_check",
+      sql`${table.membershipRevision} >= 0`,
+    ),
   ],
 );
 

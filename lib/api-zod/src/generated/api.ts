@@ -604,6 +604,56 @@ export const ListOrganizationMembersResponse = zod.array(ListOrganizationMembers
 
 
 /**
+ * Owner-only listing of retained membership revocation tombstones. Removed accounts are never exposed to admins or other tenants.
+ * @summary List removed members in the selected organization
+ */
+export const listRemovedOrganizationMembersResponseRevisionMin = 0;
+
+
+
+export const ListRemovedOrganizationMembersResponseItem = zod.object({
+  "clerkUserId": zod.string(),
+  "role": zod.enum(['owner', 'admin', 'member']),
+  "createdAt": zod.coerce.date(),
+  "revokedAt": zod.coerce.date(),
+  "revision": zod.number().min(listRemovedOrganizationMembersResponseRevisionMin)
+})
+export const ListRemovedOrganizationMembersResponse = zod.array(ListRemovedOrganizationMembersResponseItem)
+
+
+/**
+ * Owner-only reinstatement protected by the exact revokedAt timestamp and monotonic membership revision compare-and-set preconditions. The account is restored only as an ordinary member; specialist grants and historical approval receipts remain revoked.
+ * @summary Reinstate a removed organization member
+ */
+export const reinstateOrganizationMemberPathUserIdMax = 200;
+
+
+
+export const ReinstateOrganizationMemberParams = zod.object({
+  "userId": zod.coerce.string().min(1).max(reinstateOrganizationMemberPathUserIdMax)
+})
+
+export const reinstateOrganizationMemberBodyExpectedRevisionMin = 0;
+
+export const reinstateOrganizationMemberBodyReasonMax = 1000;
+
+
+
+export const ReinstateOrganizationMemberBody = zod.object({
+  "expectedRevokedAt": zod.coerce.date(),
+  "expectedRevision": zod.number().min(reinstateOrganizationMemberBodyExpectedRevisionMin),
+  "reason": zod.string().min(1).max(reinstateOrganizationMemberBodyReasonMax)
+})
+
+export const ReinstateOrganizationMemberResponse = zod.object({
+  "clerkUserId": zod.string(),
+  "role": zod.enum(['owner', 'admin', 'member']),
+  "createdAt": zod.coerce.date(),
+  "revokedAt": zod.coerce.date().nullish()
+})
+
+
+/**
  * Owner-only role mutation protected by an expected-role compare-and-set precondition.
  * @summary Change an active member's role
  */

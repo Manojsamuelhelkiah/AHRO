@@ -21,6 +21,24 @@ export interface OrganizationMember {
   revokedAt?: string | null;
 }
 
+export type RemovedOrganizationMemberRole = typeof RemovedOrganizationMemberRole[keyof typeof RemovedOrganizationMemberRole];
+
+
+export const RemovedOrganizationMemberRole = {
+  owner: 'owner',
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export interface RemovedOrganizationMember {
+  clerkUserId: string;
+  role: RemovedOrganizationMemberRole;
+  createdAt: string;
+  revokedAt: string;
+  /** @minimum 0 */
+  revision: number;
+}
+
 export type OrganizationMemberRoleChangeExpectedRole = typeof OrganizationMemberRoleChangeExpectedRole[keyof typeof OrganizationMemberRoleChangeExpectedRole];
 
 
@@ -54,6 +72,17 @@ export const OrganizationMemberRemovalExpectedRole = {
 
 export interface OrganizationMemberRemoval {
   expectedRole: OrganizationMemberRemovalExpectedRole;
+}
+
+export interface OrganizationMemberReinstatement {
+  expectedRevokedAt: string;
+  /** @minimum 0 */
+  expectedRevision: number;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
 }
 
 export type OnbProtectedAuditEntryActorKind = typeof OnbProtectedAuditEntryActorKind[keyof typeof OnbProtectedAuditEntryActorKind];

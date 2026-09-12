@@ -75,13 +75,27 @@ function boundedText(value: unknown, max = MAX_METADATA_VALUE_LENGTH): string | 
   return undefined;
 }
 
-export function minimizeAuditPayload(payload: Record<string, unknown> | undefined): Record<string, string | number | boolean | null> {
+export function minimizeAuditPayload(
+  payload: Record<string, unknown> | undefined,
+  action?: string,
+): Record<string, string | number | boolean | null> {
   if (!payload) return {};
   return Object.fromEntries(
     Object.entries(payload)
-      .filter(([key]) => ALLOWED_METADATA_KEYS.has(key))
+      .filter(([key]) =>
+        ALLOWED_METADATA_KEYS.has(key) ||
+        (key === "reason" && action === "organization.membership.reinstated"),
+      )
       .flatMap(([key, value]) => {
-        const safe = boundedText(value);
+        // Reinstatement reasons are deliberately retained only for that
+        // explicit action as a bounded, reviewer-supplied audit fact. Generic
+        // callers cannot widen this allowlist into an arbitrary blob.
+        const safe = boundedText(
+          value,
+          key === "reason" && action === "organization.membership.reinstated"
+            ? 1_000
+            : MAX_METADATA_VALUE_LENGTH,
+        );
         return safe === undefined ? [] : [[key.slice(0, 80), safe]];
       }),
   );
@@ -160,17 +174,18 @@ export async function appendProtectedAuditInTransaction(
   input: ProtectedAuditInput,
 ) {
   const occurredAt = input.occurredAt ?? new Date();
+  const normalizedAction = compact(input.action, 160) ?? "unknown";
   const normalized = {
     ...input,
     actorId: compact(input.actorId, 200),
     actorAuthority: compact(input.actorAuthority, 120) ?? "unverified",
-    action: compact(input.action, 160) ?? "unknown",
+    action: normalizedAction,
     objectType: compact(input.objectType, 120) ?? "unknown",
     objectId: opaqueReference(input.objectId),
     caseReference: opaqueReference(input.caseReference),
     source: compact(input.source, 120) ?? "application",
     correlationId: opaqueReference(input.correlationId),
-    payload: minimizeAuditPayload(input.payload),
+    payload: minimizeAuditPayload(input.payload, normalizedAction),
   };
   if (!normalized.organizationId.trim()) throw new Error("Audit organization is required");
 

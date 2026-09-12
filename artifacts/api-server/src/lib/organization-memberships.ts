@@ -22,6 +22,11 @@ export type OrganizationMember = {
   createdAt: string;
 };
 
+export type RemovedOrganizationMember = OrganizationMember & {
+  revokedAt: string;
+  revision: number;
+};
+
 type MutationFailure = {
   kind: "error";
   status: 403 | 404 | 409;
@@ -40,7 +45,7 @@ const OWNER_REQUIRED: MutationFailure = {
   kind: "error",
   status: 403,
   code: "ORGANIZATION_OWNER_REQUIRED",
-  message: "Only an organization owner may manage member roles or remove members.",
+  message: "Only an organization owner may manage member roles, remove members, or reinstate members.",
 };
 
 function memberResponse(
@@ -51,6 +56,21 @@ function memberResponse(
     role: member.role,
     createdAt: member.createdAt.toISOString(),
     ...(member.revokedAt ? { revokedAt: member.revokedAt.toISOString() } : {}),
+  };
+}
+
+function removedMemberResponse(
+  member: typeof organizationMembershipsTable.$inferSelect,
+): RemovedOrganizationMember {
+  if (!member.revokedAt) {
+    throw new Error("Removed membership response requires a revocation timestamp");
+  }
+  return {
+    clerkUserId: member.clerkUserId,
+    role: member.role,
+    createdAt: member.createdAt.toISOString(),
+    revokedAt: member.revokedAt.toISOString(),
+    revision: member.membershipRevision,
   };
 }
 
@@ -134,6 +154,39 @@ export async function listOrganizationMembers(
         role: member.role,
         createdAt: member.createdAt.toISOString(),
       })),
+    };
+  });
+  return result;
+}
+
+export async function listRemovedOrganizationMembers(
+  organizationId: string,
+  actorUserId: string,
+): Promise<
+  | { kind: "ok"; members: RemovedOrganizationMember[] }
+  | MutationFailure
+> {
+  const result = await db.transaction(async (tx) => {
+    const [actor] = await tx
+      .select({ role: organizationMembershipsTable.role })
+      .from(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        eq(organizationMembershipsTable.clerkUserId, actorUserId),
+        isNull(organizationMembershipsTable.revokedAt),
+      ));
+    if (!actor || actor.role !== "owner") return OWNER_REQUIRED;
+    const members = await tx
+      .select()
+      .from(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        sql`${organizationMembershipsTable.revokedAt} IS NOT NULL`,
+      ))
+      .orderBy(organizationMembershipsTable.revokedAt, organizationMembershipsTable.clerkUserId);
+    return {
+      kind: "ok" as const,
+      members: members.map(removedMemberResponse),
     };
   });
   return result;
@@ -257,7 +310,10 @@ export async function removeOrganizationMember(input: {
     const revokedAt = new Date();
     const [updated] = await tx
       .update(organizationMembershipsTable)
-      .set({ revokedAt })
+      .set({
+        revokedAt,
+        membershipRevision: sql`${organizationMembershipsTable.membershipRevision} + 1`,
+      })
       .where(and(
         eq(organizationMembershipsTable.id, target.id),
         eq(organizationMembershipsTable.role, input.expectedRole),
@@ -302,6 +358,75 @@ export async function removeOrganizationMember(input: {
       objectId: input.targetUserId,
       source: "organization-memberships",
       payload: { safeStatus: "revoked", reasonProvided: true },
+    });
+    return { kind: "ok" as const, member: memberResponse(updated) };
+  });
+}
+
+export async function reinstateOrganizationMember(input: {
+  organizationId: string;
+  actorUserId: string;
+  targetUserId: string;
+  expectedRevokedAt: Date;
+  expectedRevision: number;
+  reason: string;
+}): Promise<MembershipMutationResult> {
+  return db.transaction(async (tx) => {
+    await lockOrganization(tx, input.organizationId);
+    const { actor, target } = await findActorAndTarget(
+      tx,
+      input.organizationId,
+      input.actorUserId,
+      input.targetUserId,
+    );
+    if (!actor || actor.revokedAt || actor.role !== "owner") return OWNER_REQUIRED;
+    if (!target || !target.revokedAt) {
+      return {
+        kind: "error" as const,
+        status: 404 as const,
+        code: "ORGANIZATION_REMOVED_MEMBER_NOT_FOUND",
+        message: "The target is not a removed member of this organization.",
+      };
+    }
+    if (
+      target.revokedAt.getTime() !== input.expectedRevokedAt.getTime() ||
+      target.membershipRevision !== input.expectedRevision
+    ) {
+      return conflict("The removal changed; reload the removed-member list and retry.");
+    }
+    // The lifecycle revision is the durable CAS version. revokedAt remains a
+    // display/audit timestamp and is checked alongside it for an exact
+    // tombstone precondition.
+    const [updated] = await tx
+      .update(organizationMembershipsTable)
+      .set({
+        revokedAt: null,
+        role: "member",
+        membershipRevision: sql`${organizationMembershipsTable.membershipRevision} + 1`,
+      })
+      .where(and(
+        eq(organizationMembershipsTable.id, target.id),
+        eq(organizationMembershipsTable.role, target.role),
+        eq(organizationMembershipsTable.revokedAt, input.expectedRevokedAt),
+        eq(organizationMembershipsTable.membershipRevision, input.expectedRevision),
+      ))
+      .returning();
+    if (!updated) return conflict("The removal changed; reload the removed-member list and retry.");
+    await appendProtectedAuditInTransaction(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorUserId,
+      actorKind: "authenticated",
+      actorAuthority: "organization-owner",
+      action: "organization.membership.reinstated",
+      outcome: "success",
+      objectType: "organization-membership",
+      objectId: input.targetUserId,
+      source: "organization-memberships",
+      payload: {
+        safeStatus: "member",
+        reasonProvided: true,
+        reason: input.reason,
+      },
     });
     return { kind: "ok" as const, member: memberResponse(updated) };
   });

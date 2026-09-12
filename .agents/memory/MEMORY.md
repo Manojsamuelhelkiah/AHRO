@@ -28,6 +28,7 @@
 - [Clerk API smoke probes](clerk-api-smoke-probes.md) — API readiness checks must look like CORS/fetch requests; navigation headers can trigger Clerk handshake redirects.
 - [Secure App Storage uploads](secure-app-storage-uploads.md) — the signer cannot bind size/type; strict limits need authenticated bounded writes plus a durable, fenced lifecycle.
 - [Application tenant boundaries](application-tenant-boundaries.md) — Clerk authenticates users; app-owned organizations isolate every client record with explicit, verified scope.
+- [Membership reinstatement safety](membership-reinstatement-safety.md) — use persistent lifecycle versions against timestamp reuse; retain rationale only for the intended audit action.
 - [Shared mailbox tenant attribution](shared-mailbox-tenant-attribution.md) — sender identity is insufficient; require exact case-bound references and quarantine ambiguous matches.
 - [Wouter query navigation](wouter-query-navigation.md) — pathname and search are separate reactive values; preserve both explicitly when replacing URL parameters.
 - [Production safety gates](production-safety-gates.md) — Replit has no post-deploy hook; fail closed in production startup before serving or passing health checks.

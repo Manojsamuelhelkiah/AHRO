@@ -429,6 +429,53 @@ paths:
           description: Authentication required
         "403":
           description: Owner or admin membership required
+  /organizations/current/removed-members:
+    get:
+      operationId: listRemovedOrganizationMembers
+      tags: [organizations]
+      summary: List removed members in the selected organization
+      description: Owner-only listing of retained membership revocation tombstones. Removed accounts are never exposed to admins or other tenants.
+      responses:
+        "200":
+          description: Removed organization members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RemovedOrganizationMember"
+        "401":
+          description: Authentication required
+        "403":
+          description: Organization owner membership required
+  /organizations/current/members/{userId}/reinstate:
+    post:
+      operationId: reinstateOrganizationMember
+      tags: [organizations]
+      summary: Reinstate a removed organization member
+      description: Owner-only reinstatement protected by the exact revokedAt timestamp and monotonic membership revision compare-and-set preconditions. The account is restored only as an ordinary member; specialist grants and historical approval receipts remain revoked.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationMemberReinstatement"
+      responses:
+        "200":
+          description: Reinstated membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMember"
+        "400": { description: Invalid reinstatement body }
+        "403": { description: Organization owner membership required }
+        "404": { description: Removed target membership not found }
+        "409": { description: Expected removal timestamp or membership revision conflict }
   /organizations/members/{userId}:
     patch:
       operationId: changeOrganizationMemberRole
@@ -4236,6 +4283,16 @@ components:
         createdAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time, nullable: true }
       required: [clerkUserId, role, createdAt]
+    RemovedOrganizationMember:
+      type: object
+      additionalProperties: false
+      properties:
+        clerkUserId: { type: string }
+        role: { type: string, enum: [owner, admin, member] }
+        createdAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+        revision: { type: integer, minimum: 0 }
+      required: [clerkUserId, role, createdAt, revokedAt, revision]
     OrganizationMemberRoleChange:
       type: object
       additionalProperties: false
@@ -4249,6 +4306,14 @@ components:
       properties:
         expectedRole: { type: string, enum: [owner, admin, member] }
       required: [expectedRole]
+    OrganizationMemberReinstatement:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRevokedAt: { type: string, format: date-time }
+        expectedRevision: { type: integer, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+      required: [expectedRevokedAt, expectedRevision, reason]
     OnbProtectedAuditEntry:
       type: object
       additionalProperties: false

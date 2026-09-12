@@ -19,7 +19,9 @@ import demoControllerSetupRouter, {
 import {
   changeOrganizationMemberRole,
   listOrganizationMembers,
+  listRemovedOrganizationMembers,
   removeOrganizationMember,
+  reinstateOrganizationMember,
 } from "../lib/organization-memberships";
 
 const router: IRouter = Router();
@@ -106,6 +108,81 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
     next(error);
   }
 });
+
+router.get(
+  "/organizations/current/removed-members",
+  requireTenantContext,
+  async (req, res, next): Promise<void> => {
+    try {
+      const result = await listRemovedOrganizationMembers(
+        req.organizationId!,
+        req.authUserId!,
+      );
+      if (result.kind !== "ok") {
+        res.status(result.status).json({ message: result.message, code: result.code });
+        return;
+      }
+      res.json(result.members);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/organizations/current/members/:userId/reinstate",
+  requireTenantContext,
+  async (req, res, next): Promise<void> => {
+    try {
+      const targetUserId = String(req.params.userId ?? "").trim();
+      const expectedRevokedAt =
+        typeof req.body?.expectedRevokedAt === "string"
+          ? req.body.expectedRevokedAt
+          : "";
+      const expectedRevision =
+        typeof req.body?.expectedRevision === "number"
+          ? req.body.expectedRevision
+          : Number.NaN;
+      const reason =
+        typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+      const parsedExpectedRevokedAt = new Date(expectedRevokedAt);
+      const validExpectedRevokedAt =
+        Number.isFinite(parsedExpectedRevokedAt.getTime()) &&
+        parsedExpectedRevokedAt.toISOString() === expectedRevokedAt;
+      if (
+        !targetUserId ||
+        targetUserId.length > 200 ||
+        !Number.isSafeInteger(expectedRevision) ||
+        expectedRevision < 0 ||
+        !expectedRevokedAt ||
+        !validExpectedRevokedAt ||
+        !reason ||
+        reason.length > 1_000
+      ) {
+        res.status(400).json({
+          message: "A valid expected removal timestamp, revision, and a 1–1000 character reason are required.",
+          code: "INVALID_ORGANIZATION_MEMBERSHIP_REINSTATEMENT",
+        });
+        return;
+      }
+      const result = await reinstateOrganizationMember({
+        organizationId: req.organizationId!,
+        actorUserId: req.authUserId!,
+        targetUserId,
+        expectedRevokedAt: parsedExpectedRevokedAt,
+        expectedRevision,
+        reason,
+      });
+      if (result.kind !== "ok") {
+        res.status(result.status).json({ message: result.message, code: result.code });
+        return;
+      }
+      res.json(result.member);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.post("/organizations", async (req, res, next): Promise<void> => {
   const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";

@@ -158,6 +158,7 @@ import type {
   OnbWorkforceContextCorrectionInput,
   OnboardingBgvNotificationsEnvelope,
   OrganizationMember,
+  OrganizationMemberReinstatement,
   OrganizationMemberRemoval,
   OrganizationMemberRoleChange,
   ParseActualsLogBody,
@@ -171,6 +172,7 @@ import type {
   ReconcileOnboardingBgvNotificationsRequest,
   ReconcileOnboardingBgvNotificationsResult,
   RefreshOnboardingPolicyRecommendationsBody,
+  RemovedOrganizationMember,
   ResolveIntentRouteInput,
   ResolvedIntentRoute,
   RetryOnboardingEvidenceMalwareScan200,
@@ -1670,6 +1672,157 @@ export function useListOrganizationMembers<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getListRemovedOrganizationMembersUrl = () => {
+
+
+
+
+  return `/api/organizations/current/removed-members`
+}
+
+/**
+ * Owner-only listing of retained membership revocation tombstones. Removed accounts are never exposed to admins or other tenants.
+ * @summary List removed members in the selected organization
+ */
+export const listRemovedOrganizationMembers = async ( options?: RequestInit): Promise<RemovedOrganizationMember[]> => {
+
+  return customFetch<RemovedOrganizationMember[]>(getListRemovedOrganizationMembersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRemovedOrganizationMembersQueryKey = () => {
+    return [
+    `/api/organizations/current/removed-members`
+    ] as const;
+    }
+
+
+export const getListRemovedOrganizationMembersQueryOptions = <TData = Awaited<ReturnType<typeof listRemovedOrganizationMembers>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRemovedOrganizationMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRemovedOrganizationMembersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRemovedOrganizationMembers>>> = ({ signal }) => listRemovedOrganizationMembers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRemovedOrganizationMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRemovedOrganizationMembersQueryResult = NonNullable<Awaited<ReturnType<typeof listRemovedOrganizationMembers>>>
+export type ListRemovedOrganizationMembersQueryError = ErrorType<void>
+
+
+/**
+ * @summary List removed members in the selected organization
+ */
+
+export function useListRemovedOrganizationMembers<TData = Awaited<ReturnType<typeof listRemovedOrganizationMembers>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRemovedOrganizationMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRemovedOrganizationMembersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReinstateOrganizationMemberUrl = (userId: string,) => {
+
+
+
+
+  return `/api/organizations/current/members/${userId}/reinstate`
+}
+
+/**
+ * Owner-only reinstatement protected by the exact revokedAt timestamp and monotonic membership revision compare-and-set preconditions. The account is restored only as an ordinary member; specialist grants and historical approval receipts remain revoked.
+ * @summary Reinstate a removed organization member
+ */
+export const reinstateOrganizationMember = async (userId: string,
+    organizationMemberReinstatement: OrganizationMemberReinstatement, options?: RequestInit): Promise<OrganizationMember> => {
+
+  return customFetch<OrganizationMember>(getReinstateOrganizationMemberUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(organizationMemberReinstatement)
+  }
+);}
+
+
+
+
+
+export const getReinstateOrganizationMemberMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reinstateOrganizationMember>>, TError,{userId: string;data: BodyType<OrganizationMemberReinstatement>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reinstateOrganizationMember>>, TError,{userId: string;data: BodyType<OrganizationMemberReinstatement>}, TContext> => {
+
+const mutationKey = ['reinstateOrganizationMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reinstateOrganizationMember>>, {userId: string;data: BodyType<OrganizationMemberReinstatement>}> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  reinstateOrganizationMember(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReinstateOrganizationMemberMutationResult = NonNullable<Awaited<ReturnType<typeof reinstateOrganizationMember>>>
+    export type ReinstateOrganizationMemberMutationBody = BodyType<OrganizationMemberReinstatement>
+    export type ReinstateOrganizationMemberMutationError = ErrorType<void>
+
+    /**
+ * @summary Reinstate a removed organization member
+ */
+export const useReinstateOrganizationMember = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reinstateOrganizationMember>>, TError,{userId: string;data: BodyType<OrganizationMemberReinstatement>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reinstateOrganizationMember>>,
+        TError,
+        {userId: string;data: BodyType<OrganizationMemberReinstatement>},
+        TContext
+      > => {
+      return useMutation(getReinstateOrganizationMemberMutationOptions(options));
+    }
 
 export const getChangeOrganizationMemberRoleUrl = (userId: string,) => {
 
