@@ -21,6 +21,8 @@ import {
   useGetOnboardingDemoController,
   getGetOnboardingDemoControllerQueryKey
 } from '@workspace/api-client-react';
+import { useQuery } from '@tanstack/react-query';
+import { customFetch } from '@workspace/api-client-react';
 import { useListLifecycleHolds } from '../../hooks/use-privacy-api';
 import { Link } from 'wouter';
 import { Presentation, AlertTriangle } from 'lucide-react';
@@ -56,6 +58,22 @@ export function CaseDetailPage() {
         return (status === 'running' || status === 'waiting-approval' || status === 'blocked' || status === 'checklist-blocked' || status === 'idle') ? 2500 : false;
       }
     }
+  });
+  const { data: standardIntakeEvidence } = useQuery({
+    queryKey: ['standard-intake-evidence', caseId],
+    queryFn: () => customFetch<{
+      sourceIdentity: string;
+      sourceEventId: string;
+      eventType: 'accepted-offer' | 'scheduled-preboarding';
+      acceptanceEvidenceReference: string;
+      state: string;
+      activationStatus: 'awaiting-review' | 'scheduled' | 'due-review' | 'released';
+      activationDueAt: string | null;
+    }>(`/api/onboarding/cases/${caseId}/standard-intake-evidence`, { responseType: 'json' }),
+    // Most cases do not originate in standard intake. A 404 is deliberately
+    // ignored and no request is made until a real case has loaded.
+    enabled: Boolean(c?.id),
+    retry: false,
   });
 
   const { data: events } = useListOnboardingCaseEvents(caseId, {
@@ -190,6 +208,7 @@ export function CaseDetailPage() {
 
       <GatewaysStrip
         c={c}
+        standardIntakeEvidence={standardIntakeEvidence}
         gateApproval={pendingApprovals.find((approval: any) =>
           approval.ruleRef === 'Gate A — offer-acceptance package',
         )}

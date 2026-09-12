@@ -20,6 +20,7 @@ import {
   onbGovernanceAuthorityAssignments,
   onbGovernanceRequirements,
   onbReadinessSlaAttestations,
+  onbReadinessSlaCaseState,
   onbReadinessSlaPolicies,
   onbPolicyAuthorities,
   onbSensitiveLifecyclePolicies,
@@ -47,6 +48,11 @@ import { EXECUTION_AUTHORIZATION_RULES } from "./decision-authority";
 import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
 import { runWorkstreams } from "./engine";
 import { ensureReadinessSlaEnrollment } from "./readiness-sla-policy";
+import {
+  changeStandardOperationsStartDate,
+  getStandardOperationsView,
+  reconcileStandardOperationsStartDateImpact,
+} from "./standard-operations";
 
 const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `operational-a-${suffix}`;
@@ -215,6 +221,9 @@ async function seedCurrentExecutionApprovals(caseId: number): Promise<void> {
 }
 
 async function seedTrustedAccessReleaseEvidence(caseId: number): Promise<void> {
+  const [caseRow] = await db.select({ joiningDate: onbCases.joiningDate }).from(onbCases)
+    .where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, caseId)));
+  assert.ok(caseRow);
   await db.insert(onbSystemChecks).values({
     organizationId: orgA,
     caseId,
@@ -228,6 +237,15 @@ async function seedTrustedAccessReleaseEvidence(caseId: number): Promise<void> {
     evidenceProvenance: "trusted-provider",
   });
   await ensureReadinessSlaEnrollment(orgA, caseId, "operational-fixture");
+  // Deliberately retain a known pre-change cutoff. The date-impact regression
+  // below proves this old timing fact cannot replace payroll's reconciliation
+  // decision after a start-date correction.
+  await db.update(onbReadinessSlaCaseState).set({
+    payrollCutoff: new Date("2030-01-01T00:00:00Z"),
+  }).where(and(
+    eq(onbReadinessSlaCaseState.organizationId, orgA),
+    eq(onbReadinessSlaCaseState.caseId, caseId),
+  ));
   await db.insert(onbReadinessSlaAttestations).values({
     organizationId: orgA,
     caseId,
@@ -238,6 +256,8 @@ async function seedTrustedAccessReleaseEvidence(caseId: number): Promise<void> {
     attestedBy: "operational-fixture",
     attestedRole: "hr-operations",
     evidenceProvenance: "trusted-provider",
+    sourceStartDate: caseRow.joiningDate,
+    sourceEvidenceRevision: `operational-fixture-oracle-${caseId}`,
   });
 }
 
@@ -623,6 +643,17 @@ test("GET is read-only and initialization persists tenant-scoped simulated commu
 });
 
 test("actions are fenced, idempotent, and do not mutate readiness", async () => {
+  // Completing access is now a release assertion. Supply the same durable,
+  // trusted provider facts and current scoped execution approval that the
+  // production release guard requires, only after the initialization test has
+  // verified that simulated request creation itself produces none of them.
+  await db.update(onbCases).set({
+    offerAcceptanceComplete: true,
+  }).where(eq(onbCases.id, caseA));
+  await Promise.all([
+    seedCurrentExecutionApprovals(caseA),
+    seedTrustedAccessReleaseEvidence(caseA),
+  ]);
   const beforeCase = (await db.select().from(onbCases).where(eq(onbCases.id, caseA)))[0]!;
   const emailMethod = await call(
     `/onboarding/cases/${caseA}/operational-requests/access/actions`,
@@ -873,6 +904,17 @@ test("learning policy tasks are human-owned, evidence-gated, ordered, and hold r
   // artificial workstream array: it persists open asset/learning blockers
   // before later accountable payroll completion dispatches.
   await runWorkstreams(workforceCase);
+  // Payroll timing was initially evidenced for the original start date.
+  // Changing that date while the human workforce tasks are still pending
+  // must create a stream-specific payroll reconciliation hold, not a
+  // whole-plan connector deny-list.
+  await changeStandardOperationsStartDate({
+    organizationId: orgA,
+    caseId: workforceCase,
+    startDate: "2020-01-16",
+    expectedVersion: 0,
+    actorUserId: user,
+  });
   const initializedResponse = await call(
     `/onboarding/cases/${workforceCase}/operational-requests`,
     orgA,
@@ -1006,12 +1048,36 @@ test("learning policy tasks are human-owned, evidence-gated, ordered, and hold r
   );
   assert.equal(payrollSetupComplete.status, 200);
   const payrollUpdated = (await db.select().from(onbCases).where(eq(onbCases.id, workforceCase)))[0]!;
-  assert.equal(payrollUpdated.readiness.find((item) => item.key === "payroll")?.status, "ready");
+  assert.equal(payrollUpdated.orchestrationCheckpoint, "waiting:standard-operations-release");
+  assert.deepEqual(
+    (await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, workforceCase)))
+      .map((check) => check.system).sort(),
+    ["bgv", "itsm"],
+  );
+  const dateHeldContinuationKey = `${WORKFORCE_CONTINUATION_SETTING_PREFIX}${workforceCase}:payroll-setup-complete`;
+  assert.ok((await db.select().from(onbSettings).where(and(
+    eq(onbSettings.organizationId, orgA),
+    eq(onbSettings.key, dateHeldContinuationKey),
+  )))[0]);
+
+  await reconcileStandardOperationsStartDateImpact({
+    organizationId: orgA,
+    caseId: workforceCase,
+    stream: "payroll",
+    resolution: "manual-resolution",
+    expectedVersion: 1,
+    actorUserId: user,
+  });
+  await recoverWorkforceConnectorContinuations();
   assert.deepEqual(
     (await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, workforceCase)))
       .map((check) => check.system).sort(),
     ["bgv", "itsm", "payroll"],
   );
+  assert.equal((await db.select().from(onbSettings).where(and(
+    eq(onbSettings.organizationId, orgA),
+    eq(onbSettings.key, dateHeldContinuationKey),
+  ))).length, 0);
 });
 
 test("provider refusal leaves a durable workforce continuation for retry", async () => {
@@ -1068,6 +1134,49 @@ test("confirmed office context without a site permits named and organization-sco
   assert.equal((await action("learning-named-office", "office-named-complete", "complete", initialized.version + 1, "Manager-led office induction record")).status, 200);
   assert.equal((await action("learning-role-office", "office-role-start", "start", initialized.version + 2)).status, 200);
   assert.equal((await action("learning-role-office", "office-role-complete", "complete", initialized.version + 3, "Accountable office induction record")).status, 200);
+});
+
+test("date reconciliation cannot reuse stale HRIS activation evidence for access release", async () => {
+  await db.update(onbCases).set({ offerAcceptanceComplete: true }).where(eq(onbCases.id, officeNoSiteCase));
+  await changeStandardOperationsStartDate({
+    organizationId: orgA,
+    caseId: officeNoSiteCase,
+    startDate: "2030-02-01",
+    expectedVersion: 0,
+    actorUserId: user,
+  });
+  for (const [index, stream] of (["hris", "provisioning", "payroll", "benefits", "schedules"] as const).entries()) {
+    await reconcileStandardOperationsStartDateImpact({
+      organizationId: orgA,
+      caseId: officeNoSiteCase,
+      stream,
+      resolution: "manual-resolution",
+      expectedVersion: index + 1,
+      actorUserId: user,
+    });
+  }
+
+  const stale = await getStandardOperationsView(orgA, officeNoSiteCase);
+  assert.equal(stale.startDateImpacts.every((impact) => impact.status === "manual-resolution"), true);
+  assert.equal(stale.release.access.eligible, false);
+  assert.match(stale.release.access.blockers.join(" "), /authoritative HRIS activation/);
+
+  await db.insert(onbReadinessSlaAttestations).values({
+    organizationId: orgA,
+    caseId: officeNoSiteCase,
+    snapshotVersion: 1,
+    streamKey: "hris",
+    complete: true,
+    evidenceProvenance: "trusted-provider",
+    sourceStartDate: "2030-02-01",
+    sourceEvidenceRevision: `fresh-oracle-receipt-${officeNoSiteCase}`,
+    reason: "Fresh Oracle HCM source receipt matched the corrected effective date.",
+    attestedBy: "server-oracle-hcm-classifier",
+    attestedRole: "system",
+  });
+  const refreshed = await getStandardOperationsView(orgA, officeNoSiteCase);
+  assert.equal(refreshed.release.access.eligible, true, refreshed.release.access.blockers.join("; "));
+  assert.equal(refreshed.release.assets.eligible, true, refreshed.release.assets.blockers.join("; "));
 });
 
 test("tenant and offline fences apply to reads and mutations", async () => {

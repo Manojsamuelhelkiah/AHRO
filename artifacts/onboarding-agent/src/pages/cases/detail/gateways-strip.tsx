@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useConfirmOnboardingOfferAcceptance, getGetOnboardingCaseQueryKey, getListOnboardingCaseEventsQueryKey, getListOnboardingCasesQueryKey, getGetOnboardingDashboardQueryKey, getListOnboardingApprovalsQueryKey, getListOnboardingCaseDocumentsQueryKey, getListOnboardingCaseCommunicationsQueryKey, OnbCase } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { customFetch } from '@workspace/api-client-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Label } from '@/components/ui-shared';
 import { Link } from 'wouter';
 import { StatusBadgeText } from './components';
@@ -12,15 +13,31 @@ type GateApprovalTarget = {
   status: string;
 } | null | undefined;
 
-export function GatewaysStrip({ c, gateApproval }: {
-  c: Pick<OnbCase, 'id' | 'gateways' | 'offerAcceptanceComplete'>;
+export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
+  c: Pick<OnbCase, 'id' | 'gateways' | 'offerAcceptanceComplete' | 'orchestrationStatus'>;
   gateApproval?: GateApprovalTarget;
+  standardIntakeEvidence?: {
+    sourceIdentity: string;
+    sourceEventId: string;
+    eventType: 'accepted-offer' | 'scheduled-preboarding';
+    acceptanceEvidenceReference: string;
+    state: string;
+    activationStatus: 'awaiting-review' | 'scheduled' | 'due-review' | 'released';
+    activationDueAt: string | null;
+  };
 }) {
   const queryClient = useQueryClient();
   const confirmOffer = useConfirmOnboardingOfferAcceptance();
   const gateAuthority = useApprovalCapability(gateApproval);
   const [note, setNote] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const releaseStandardIntake = useMutation({
+    mutationFn: () => customFetch<{ orchestrationStatus: string }>(
+      `/api/onboarding/cases/${c.id}/standard-intake/release`,
+      { method: 'POST', responseType: 'json' },
+    ),
+  });
   // The Gate A write endpoint repeats its current-state check. Never expose
   // this control based on a browser owner/admin role: only its pending,
   // scoped authority-bound approval can enable it.
@@ -53,6 +70,18 @@ export function GatewaysStrip({ c, gateApproval }: {
       }
     });
   };
+  const handleStandardRelease = () => {
+    setReleaseError(null);
+    releaseStandardIntake.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetOnboardingCaseQueryKey(c.id) });
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEventsQueryKey(c.id) });
+        queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey() });
+      },
+      onError: (error: any) => setReleaseError(error?.response?.data?.message || error?.message || 'The standard intake case could not be released.'),
+    });
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -80,6 +109,26 @@ export function GatewaysStrip({ c, gateApproval }: {
             </div>
             <p className="text-[var(--text-xs)] text-[var(--text-secondary)] flex-1">{g.label}</p>
             {g.reason && <p className="text-[11px] text-[var(--text-muted)] mt-1">{g.reason}</p>}
+             {isA && standardIntakeEvidence && (
+               <div className="mt-3 rounded border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-2 text-[11px] text-[var(--status-amber-fg)]">
+                 <p className="font-semibold">TA source acceptance evidence — review before Gate A</p>
+                 <p className="mt-1">Source: {standardIntakeEvidence.sourceIdentity} · event {standardIntakeEvidence.sourceEventId}</p>
+                 <p className="mt-1 break-all">Reference: {standardIntakeEvidence.acceptanceEvidenceReference}</p>
+                 <p className="mt-1">This is a source-system reference, not an uploaded offer artifact. Verify it in the approved TA source before confirming Gate A.</p>
+                 {standardIntakeEvidence.eventType === 'scheduled-preboarding' && (
+                   <p className="mt-1 font-medium">Scheduled HR review due: {standardIntakeEvidence.activationDueAt ? new Date(standardIntakeEvidence.activationDueAt).toLocaleString() : 'not available'} · {standardIntakeEvidence.activationStatus}</p>
+                 )}
+               </div>
+             )}
+             {isA && standardIntakeEvidence && c.orchestrationStatus === 'standard-intake-pending-review' &&
+               (standardIntakeEvidence.eventType !== 'scheduled-preboarding' || standardIntakeEvidence.activationStatus === 'due-review') && (
+               <div className="mt-3 border-t border-[var(--border)] pt-3">
+                 <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={handleStandardRelease} disabled={releaseStandardIntake.isPending}>
+                   Release to existing Gate A review
+                 </Button>
+                 {releaseError && <p role="alert" className="mt-1 text-[11px] text-[var(--status-red)]">{releaseError}</p>}
+               </div>
+             )}
             
             {g.status === 'blocked' && (
               <p className="text-[11px] font-medium mt-1 text-[var(--status-red)]">Exceptions and blocked outcomes require human review.</p>

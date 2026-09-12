@@ -45,6 +45,8 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
     : null;
   const blockedStageLabel = blockedStage === 're-review'
     ? 'the final Day-1 review'
+    : blockedStage === 'waiting:standard-operations-release'
+      ? 'trusted BGV/HRIS evidence, current scoped approval, and any HR Operations or date-reconciliation hold to clear'
     : blockedStage?.replace(/-/g, ' ');
 
   const handleUpdate = (item: OnbReadinessItem, status: OnbChecklistItemStatusUpdateStatus) => {
@@ -227,7 +229,9 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
 
       {blockedStage && (
         <div role="alert" data-testid="status-checklist-blocker" className="mb-4 rounded-[var(--radius-md)] border border-[var(--status-red)]/30 bg-[var(--status-red-bg)] p-3 text-[var(--text-sm)] text-[var(--status-red-fg)]">
-          <strong>Onboarding is paused.</strong> Complete the mandatory items marked as blockers before {blockedStageLabel} can begin.
+          <strong>Onboarding is paused.</strong> {blockedStage === 'waiting:standard-operations-release'
+            ? `Access and payroll release remain pending ${blockedStageLabel}; no release has been recorded.`
+            : `Complete the mandatory items marked as blockers before ${blockedStageLabel} can begin.`}
         </div>
       )}
       {error && (
@@ -258,7 +262,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
         </div>
       ) : null}
       <div className="space-y-3">
-        {readinessItems.map(w => {
+        {readinessItems.map((w, index) => {
           const isCustom = !!w.id && !systemManagedIds.has(w.id);
           const isBlocker = Boolean(
             blockedStage &&
@@ -268,7 +272,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
           );
 
           return (
-            <div key={w.key} data-testid={`row-case-checklist-${w.key}`} className={cn(
+            <div key={w.key === 'restricted' ? `restricted-${index}` : w.key} data-testid={`row-case-checklist-${w.key === 'restricted' ? `restricted-${index}` : w.key}`} className={cn(
               "flex items-start gap-3 p-3 rounded-[var(--radius-md)] hover:bg-[var(--surface-alt)] transition-colors border border-transparent hover:border-[var(--border)]",
               (w.status === 'exception' || isBlocker) ? "bg-[var(--status-red-bg)] border-[var(--status-red)]/20" : ""
             )}>

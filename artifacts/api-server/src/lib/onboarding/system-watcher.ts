@@ -1,4 +1,5 @@
 import { db } from "@workspace/db";
+import { randomUUID } from "node:crypto";
 import {
   onbCases,
   onbCommunications,
@@ -7,9 +8,10 @@ import {
   onbApprovals,
   onbSystemChecks,
   onbDocuments,
+  onbStandardIntakeEvents,
   type OnbReadinessItemRow,
 } from "@workspace/db/schema";
-import { and, eq, gt, inArray, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
 import {
   autoEscalationCallsEnabled,
   checklistStageBlockers,
@@ -70,9 +72,9 @@ import {
  *  - push systems (BGV) deliver completion through the webhook code path;
  *  - poll systems (ITSM, payroll) are checked on a schedule.
  *
- * When a system reports done the watcher flips the matching case
- * readiness item to ready, logs a rules-tagged event, and promotes the
- * case to day1-review once every checklist item is ready. When a check
+ * Only a trusted-provider system completion may flip the matching case
+ * readiness item to ready or promote a case. Simulated notifications remain
+ * communications/status telemetry and never become canonical readiness. When a check
  * blows past its SLA (late/stuck, e.g. because the connector is
  * disconnected) it raises a rules-tagged escalation event exactly once.
  */
@@ -132,6 +134,15 @@ const telemetry: Record<WatchedSystem, SystemTelemetry> = {
 
 /** In-process timers simulating the BGV vendor's outbound webhooks. */
 const scheduledPushes = new Map<number, NodeJS.Timeout>();
+
+/**
+ * Synthetic provider outcomes are test/development telemetry only. Production
+ * must wait for an authenticated provider callback or a real adapter result;
+ * a connected display status is never permission to manufacture completion.
+ */
+export function simulatedProviderCompletionsAllowed(): boolean {
+  return process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
+}
 
 /* ------------------------------------------------------------------ */
 /* Health classification                                               */
@@ -249,6 +260,7 @@ async function completeCheckUnlocked(
 ): Promise<void> {
   const def = systemDef(check.system);
   if (!def) return;
+  const trustedCompletion = notificationProvenance === "trusted-provider";
 
   // Guard against tracking-mode retag races: a completion may only land
   // through the channel the check is *currently* tracked on. If HR
@@ -275,6 +287,7 @@ async function completeCheckUnlocked(
   // the whole readiness JSON array — without serialization one write wins
   // and the other completion is silently lost.
   let checklistResumeReady = false;
+  let standardOperationsReleaseResumeReady = false;
   let offlinePaused = false;
   await db.transaction(async (tx) => {
     const [caseForGuard] = await tx
@@ -289,6 +302,15 @@ async function completeCheckUnlocked(
       offlinePaused = true;
       return;
     }
+    const closableStatus = trustedCompletion
+      ? sql`(
+          ${onbSystemChecks.status} in ('pending', 'overdue')
+          or (
+            ${onbSystemChecks.status} = 'done'
+            and ${onbSystemChecks.evidenceProvenance} is distinct from 'trusted-provider'
+          )
+        )`
+      : sql`${onbSystemChecks.status} in ('pending', 'overdue')`;
     const [updated] = await tx
       .update(onbSystemChecks)
       .set({
@@ -302,7 +324,7 @@ async function completeCheckUnlocked(
         and(
           eq(onbSystemChecks.id, check.id),
           eq(onbSystemChecks.organizationId, check.organizationId),
-          sql`${onbSystemChecks.status} in ('pending', 'overdue')`,
+          closableStatus,
           eq(onbSystemChecks.mode, expectedMode[source]),
         ),
       )
@@ -325,7 +347,13 @@ async function completeCheckUnlocked(
       .where(and(eq(onbCases.id, check.caseId), eq(onbCases.organizationId, check.organizationId)))
       .for("update");
     let promoted = false;
-    if (c) {
+    if (c && trustedCompletion) {
+      // A trusted source update can satisfy a held IAM/payroll release even
+      // when no checklist boundary itself was waiting. Resume only the exact
+      // durable Standard Operations checkpoint; it cannot promote Gate C.
+      standardOperationsReleaseResumeReady =
+        c.orchestrationStatus === "checklist-blocked" &&
+        c.orchestrationCheckpoint === "waiting:standard-operations-release";
       const readiness = c.readiness as OnbReadinessItemRow[];
       const item = readiness.find((r) => r.key === def.readinessKey);
       if (item) {
@@ -380,8 +408,12 @@ async function completeCheckUnlocked(
         engine: "system" as const,
         hitlPattern: "notify-only",
         ruleRef: def.completionRuleRef,
-        title: `${def.label} reported complete`,
-        detail: `${def.label} (${check.externalRef}) reported done via ${source}. Checklist item "${def.readinessKey}" marked ready by the System Watcher.`,
+        title: trustedCompletion
+          ? `${def.label} reported complete`
+          : `${def.label} simulated completion notification received`,
+        detail: trustedCompletion
+          ? `${def.label} (${check.externalRef}) reported done via ${source}. Checklist item "${def.readinessKey}" marked ready by the System Watcher.`
+          : `${def.label} (${check.externalRef}) reported done via ${source}, but its simulated notification is communications/status telemetry only; canonical readiness and orchestration were not changed.`,
       },
       ...(promoted
         ? [
@@ -401,7 +433,7 @@ async function completeCheckUnlocked(
     ];
     await tx.insert(onbEvents).values(events);
   });
-  if (checklistResumeReady) {
+  if (checklistResumeReady || standardOperationsReleaseResumeReady) {
     // Dynamic import avoids the engine -> workstream connector -> watcher
     // module cycle while still making source-system completion resume the
     // exact gated boundary through its DB-backed compare-and-set claim.
@@ -808,19 +840,6 @@ export async function handleSystemWebhook(opts: {
         ),
       );
     if (!check) return { ok: false, message: "No tracked check matching the provider reference" };
-    // This route is reached only after server-side webhook authentication.
-    // Persist the fact separately from the familiar `connected` display
-    // status so seeded simulated connectors cannot qualify as live sources.
-    if (opts.provenance === "trusted-provider") {
-      await db.update(onbConnectors).set({
-        status: "connected",
-        configurationProvenance: "trusted-provider",
-        lastSyncAt: new Date(),
-      }).where(and(
-        eq(onbConnectors.organizationId, owner.organizationId),
-        eq(onbConnectors.key, def.connectorKey),
-      ));
-    }
     t.lastEventAt = new Date();
     t.eventsReceived += 1;
     if (status === "completed") {
@@ -872,7 +891,7 @@ export async function handleSystemWebhook(opts: {
 /** Schedule the simulated BGV vendor's push for a pending check. */
 function schedulePush(check: typeof onbSystemChecks.$inferSelect): void {
   const def = systemDef(check.system);
-  if (!def || def.mode !== "push") return;
+  if (!def || def.mode !== "push" || !simulatedProviderCompletionsAllowed()) return;
   if (scheduledPushes.has(check.id)) return;
   const delay = Math.max(
     0,
@@ -957,8 +976,73 @@ export async function recoverUntrackedCaseSystems(
       "./workstream-connectors"
     );
     for (const c of untracked) {
+      // The recovery scanner otherwise has no orchestration owner. Claim the
+      // row before dispatch so a simultaneous resume cannot replace the
+      // lifecycle state between a held connector outcome and its durable
+      // checkpoint. The connector journal remains the provider-effect fence.
+      const owner = randomUUID();
+      const [claim] = await db.update(onbCases).set({
+        orchestrationClaimOwner: owner,
+        orchestrationClaimToken: sql`${onbCases.orchestrationClaimToken} + 1`,
+        orchestrationClaimUntil: sql`now() + interval '60 seconds'`,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(onbCases.id, c.id),
+        eq(onbCases.organizationId, c.organizationId),
+        sql`${onbCases.lifecycleStage} in ('preboarding', 'day1-review')`,
+        sql`coalesce(${onbCases.orchestrationStatus}, '') <> 'checklist-blocked'`,
+        sql`not exists (
+          select 1 from ${onbSystemChecks} sc
+          where sc.case_id = ${onbCases.id}
+            and sc.organization_id = ${onbCases.organizationId}
+        )`,
+        or(
+          sql`${onbCases.orchestrationClaimOwner} is null`,
+          sql`${onbCases.orchestrationClaimUntil} <= now()`,
+        ),
+      )).returning({ token: onbCases.orchestrationClaimToken });
+      if (!claim) continue;
+
+      let parkedForRelease = false;
       try {
-        await dispatchWorkstreamConnectorMutations(c);
+        const outcome = await dispatchWorkstreamConnectorMutations(c);
+        if (outcome.releaseHeld) {
+          // This state transition and its audit event share the recovery
+          // claim fence. Once BGV registration exists, this is the only
+          // durable path that keeps the case eligible for a later source-
+          // driven/heartbeat retry rather than orphaning it from `untracked`.
+          const parked = await db.transaction(async (tx) => {
+            const [updated] = await tx.update(onbCases).set({
+              lifecycleStage: "preboarding",
+              orchestrationStatus: "checklist-blocked",
+              orchestrationCheckpoint: "waiting:standard-operations-release",
+              orchestrationClaimOwner: null,
+              orchestrationClaimUntil: null,
+              updatedAt: new Date(),
+            }).where(and(
+              eq(onbCases.id, c.id),
+              eq(onbCases.organizationId, c.organizationId),
+              eq(onbCases.orchestrationClaimOwner, owner),
+              eq(onbCases.orchestrationClaimToken, claim.token),
+            )).returning({ id: onbCases.id });
+            if (!updated) return false;
+            await tx.insert(onbEvents).values({
+              organizationId: c.organizationId,
+              caseId: c.id,
+              agent: "system-watcher",
+              engine: "rules",
+              hitlPattern: "hard-block",
+              ruleRef: "standard-operations/release-gate",
+              title: "Release workstream waiting on Standard Operations",
+              detail: `${outcome.heldConnectors.join(" and ")} release remains held by current Standard Operations evidence, approval, date-reconciliation, or HR Operations hold requirements. Independent workstream effects remain separately journaled and will not be duplicated on retry.`,
+              idempotencyKey: `orchestration:${c.id}:workstreams:standard-operations-held`,
+            }).onConflictDoNothing({
+              target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+            });
+            return true;
+          });
+          parkedForRelease = parked;
+        }
       } catch (error) {
         if (error instanceof ConnectorDispatchRejectedError) {
           logger.warn({
@@ -980,13 +1064,61 @@ export async function recoverUntrackedCaseSystems(
           { organizationId: c.organizationId, caseId: c.id },
           error,
         );
+      } finally {
+        if (!parkedForRelease) {
+          // A successful recovery that did not hold, or any rejected/error
+          // attempt, must not strand a scanner-only claim on the case.
+          await db.update(onbCases).set({
+            orchestrationClaimOwner: null,
+            orchestrationClaimUntil: null,
+            updatedAt: new Date(),
+          }).where(and(
+            eq(onbCases.id, c.id),
+            eq(onbCases.organizationId, c.organizationId),
+            eq(onbCases.orchestrationClaimOwner, owner),
+            eq(onbCases.orchestrationClaimToken, claim.token),
+          ));
+        }
       }
     }
   }
 }
 
 /** Reclaim durable checklist boundaries abandoned by a crashed worker. */
+async function recoverLegacyStandardOperationsReleaseBlocks(): Promise<void> {
+  // Before the explicit release checkpoint existed, an expected IAM/payroll
+  // Standard Operations denial bubbled into the generic engine catch while
+  // the case was still at the exact post-plan/pre-workstreams checkpoint.
+  // Restrict migration to that known-safe shape and a matching durable error;
+  // never reinterpret arbitrary blocked cases as releasable work.
+  const rows = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+    eq(onbCases.orchestrationStatus, "blocked"),
+    eq(onbCases.orchestrationCheckpoint, "plan"),
+    sql`exists (
+      select 1 from ${onbEvents} event
+      where event.case_id = ${onbCases.id}
+        and event.organization_id = ${onbCases.organizationId}
+        and event.title = 'Orchestration error'
+        and event.detail like '%standard-operations:%'
+    )`,
+  ));
+  for (const row of rows) {
+    await db.update(onbCases).set({
+      orchestrationStatus: "checklist-blocked",
+      orchestrationCheckpoint: "waiting:standard-operations-release",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbCases.id, row.id),
+      eq(onbCases.orchestrationStatus, "blocked"),
+      eq(onbCases.orchestrationCheckpoint, "plan"),
+    ));
+  }
+}
+
 export async function recoverChecklistOrchestrations(): Promise<void> {
+  await recoverLegacyStandardOperationsReleaseBlocks();
   const rows = await db.select({ id: onbCases.id }).from(onbCases).where(
     and(
       sql`${onbCases.orchestrationCheckpoint} in (
@@ -994,6 +1126,7 @@ export async function recoverChecklistOrchestrations(): Promise<void> {
         'blocked:before-employee-communications',
         'blocked:before-day1-review',
         'blocked:re-review',
+        'waiting:standard-operations-release',
         'initial',
         'plan',
         'intake-approved',
@@ -1055,6 +1188,75 @@ export async function recoverConfirmedOfferAcceptanceOrchestrations(): Promise<v
     eq(onbCases.orchestrationCheckpoint, "offer-accepted"),
   ));
   if (rows.length === 0) return;
+  const { startOrchestration } = await import("./engine");
+  for (const row of rows) startOrchestration(row.id);
+}
+
+/**
+ * A scheduled preboarding source event remains inert until its durable review
+ * due point. The keyed approval is the staff work queue; it deliberately has
+ * no resume action, because only the explicit evidence-review release route
+ * may enter the onboarding engine. If a process dies between writes the next
+ * heartbeat repeats the idempotent approval then marks the source event due.
+ */
+export async function recoverDueStandardIntakeReviews(now = new Date()): Promise<void> {
+  const rows = await db.select({
+    organizationId: onbStandardIntakeEvents.organizationId,
+    caseId: onbStandardIntakeEvents.caseId,
+    sourceId: onbStandardIntakeEvents.sourceId,
+    sourceEventId: onbStandardIntakeEvents.sourceEventId,
+  }).from(onbStandardIntakeEvents).where(and(
+    eq(onbStandardIntakeEvents.eventType, "scheduled-preboarding"),
+    eq(onbStandardIntakeEvents.activationStatus, "scheduled"),
+    lte(onbStandardIntakeEvents.activationDueAt, now),
+  ));
+  if (!rows.length) return;
+  const { createApproval } = await import("./engine");
+  for (const row of rows) {
+    if (row.caseId === null) continue;
+    try {
+      await createApproval({
+        caseId: row.caseId,
+        agent: WATCHER_AGENT,
+        ruleRef: "Scheduled preboarding review release",
+        hitlPattern: "approve-before-act",
+        recommendation: "Review the restricted TA source evidence and explicitly release scheduled preboarding",
+        rationale: "The persisted preboarding review due point has arrived. An authorized HR/compliance reviewer must inspect the source evidence reference and use the dedicated standard-intake release control; this queue decision cannot start onboarding by itself.",
+        resumeAction: "none",
+        authorityScope: "hr-compliance-approve",
+        idempotencyKey: `standard-intake-scheduled-review:${row.sourceId}:${row.sourceEventId}`,
+      });
+      await db.update(onbStandardIntakeEvents).set({
+        activationStatus: "due-review",
+        activationReviewRequestedAt: now,
+      }).where(and(
+        eq(onbStandardIntakeEvents.organizationId, row.organizationId),
+        eq(onbStandardIntakeEvents.sourceId, row.sourceId),
+        eq(onbStandardIntakeEvents.sourceEventId, row.sourceEventId),
+        eq(onbStandardIntakeEvents.activationStatus, "scheduled"),
+      ));
+    } catch (error) {
+      if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
+      reportRestrictedLifecycleRecovery(
+        "scheduled-standard-intake-review",
+        { organizationId: row.organizationId, caseId: row.caseId },
+        error,
+      );
+    }
+  }
+}
+
+/** Recover a detached explicit release if the request died before its starter ran. */
+export async function recoverReleasedStandardIntakeOrchestrations(): Promise<void> {
+  const rows = await db.select({ id: onbCases.id }).from(onbStandardIntakeEvents).innerJoin(onbCases, and(
+    eq(onbStandardIntakeEvents.organizationId, onbCases.organizationId),
+    eq(onbStandardIntakeEvents.caseId, onbCases.id),
+  )).where(and(
+    eq(onbStandardIntakeEvents.activationStatus, "released"),
+    eq(onbCases.orchestrationStatus, "idle"),
+    sql`${onbCases.orchestrationCheckpoint} is null`,
+  ));
+  if (!rows.length) return;
   const { startOrchestration } = await import("./engine");
   for (const row of rows) startOrchestration(row.id);
 }
@@ -1185,6 +1387,8 @@ async function tickOnce(): Promise<void> {
   await recoverWorkforceConnectorContinuations();
   await recoverDecidedApprovalContinuations();
   await recoverConfirmedOfferAcceptanceOrchestrations();
+  await recoverDueStandardIntakeReviews();
+  await recoverReleasedStandardIntakeOrchestrations();
   await recoverApprovedDay1ReadinessGates();
   await recoverOverdueSystemApprovalQueues();
 
@@ -1193,13 +1397,19 @@ async function tickOnce(): Promise<void> {
 
   const checks = await openChecks();
 
-  // Push systems: (re-)schedule the simulated vendor webhook.
-  for (const check of checks) {
-    if (check.mode === "push") schedulePush(check);
+  // Push systems only schedule synthetic vendor callbacks in explicitly
+  // non-production execution. Production waits for authenticated webhooks.
+  if (simulatedProviderCompletionsAllowed()) {
+    for (const check of checks) {
+      if (check.mode === "push") schedulePush(check);
+    }
   }
 
-  // Poll systems: call the simulated vendor status API.
-  for (const def of WATCHED_SYSTEMS.filter((d) => d.mode === "poll")) {
+  // Poll systems use the deterministic simulated adapter only outside
+  // production. A production heartbeat must not synthesize provider outcomes.
+  for (const def of simulatedProviderCompletionsAllowed()
+    ? WATCHED_SYSTEMS.filter((d) => d.mode === "poll")
+    : []) {
     const t = telemetry[def.key];
     t.lastPollAt = new Date();
     try {

@@ -170,8 +170,9 @@ describe("governance runtime execution gates", () => {
       completedAt: new Date(), evidenceProvenance: "simulated",
     }]), false);
     assert.equal(hasTrustedHrisActivationEvidence({
-      complete: true, evidenceProvenance: "human-authorized",
-    }), false);
+      complete: true, evidenceProvenance: "human-authorized", snapshotVersion: 1,
+      sourceStartDate: "2030-01-01", sourceEvidenceRevision: "human-assertion",
+    }, { joiningDate: "2030-01-01", snapshotVersion: 1 }), false);
   });
 });
 

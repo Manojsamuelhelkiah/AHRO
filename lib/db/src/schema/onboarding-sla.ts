@@ -161,6 +161,13 @@ export const onbReadinessSlaAttestations = pgTable(
     evidenceProvenance: text("evidence_provenance").$type<
       "trusted-provider" | "human-authorized" | "simulated" | "offline" | "unknown"
     >(),
+    /**
+     * Trusted provider assertions are bound to the effective date and the
+     * immutable provider-read receipt that produced them. Nullable legacy rows
+     * intentionally cannot satisfy a current HRIS release gate.
+     */
+    sourceStartDate: text("source_start_date"),
+    sourceEvidenceRevision: text("source_evidence_revision"),
     reason: text("reason").notNull(),
     attestedBy: text("attested_by").notNull(),
     attestedRole: text("attested_role").notNull(),

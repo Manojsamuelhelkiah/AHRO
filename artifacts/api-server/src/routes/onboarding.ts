@@ -159,6 +159,7 @@ import { requeueDocumentMalwareScan } from "../lib/onboarding/document-malware";
 import { malwareScanRetryable, malwareUploadIsClean } from "../lib/onboarding/malware-policy";
 import { latestRequiredUploadMalwareBlockers } from "../lib/onboarding/document-readiness-guard";
 import { documentationGateConfigured } from "../lib/onboarding/engine";
+import { hasTrustedBgvClearanceEvidence } from "../lib/onboarding/connector-evidence-provenance";
 import {
   evaluateCaseDerivedLifecycleGateInTransaction,
   evaluateSensitiveLifecycleGate,
@@ -384,11 +385,17 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null);
 async function deriveGateways(row: typeof onbCases.$inferSelect) {
   const offerRequired = offerAcceptanceRequired(row);
   const offerAuthorization = candidateEmailAuthorization(row);
-  const [bgv] = await db.select().from(onbSystemChecks).where(and(
+  const bgvChecks = await db.select().from(onbSystemChecks).where(and(
     eq(onbSystemChecks.organizationId, row.organizationId),
     eq(onbSystemChecks.caseId, row.id),
     eq(onbSystemChecks.system, "bgv"),
   ));
+  const bgv = bgvChecks[0];
+  // A simulated watcher completion is display/planning data, never proof at a
+  // live gate. The provenance predicate also requires an actual external
+  // reference, completion timestamp, and supported inbound mechanism.
+  const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks);
+  const bgvRequiredForDay1 = applicableSystems(row).some((system) => system.key === "bgv");
   const [finalApproval] = await db.select({
     status: onbApprovals.status,
   }).from(onbApprovals).where(and(
@@ -414,17 +421,17 @@ async function deriveGateways(row: typeof onbCases.$inferSelect) {
       ? { status: "not-applicable" as const, label: "Gate B — background verification", reason: "This internal-transfer pathway does not run a fresh BGV check." }
       : !bgv
         ? { status: "pending" as const, label: "Gate B — background verification", reason: "BGV has not yet been requested; absence is not evidence of completion." }
-        : bgv.status === "done"
+        : bgvClear
           ? { status: "complete" as const, label: "Gate B — background verification", reason: "The live BGV source reported clearance." }
           : bgv.status === "overdue"
             ? { status: "human-review" as const, label: "Gate B — background verification", reason: "BGV is overdue or has an exception; a human review queue item is required." }
             : { status: "pending" as const, label: "Gate B — background verification", reason: "Awaiting a live BGV source status." },
     c: row.lifecycleStage === "complete" && !finalApproval
       ? { status: "not-applicable" as const, label: "Gate C — Day-1 readiness", reason: "Historical terminal case preserved; final-review evidence was not retroactively inferred." }
-      : row.lifecycleStage === "complete" && finalApproval?.status === "approved" && mandatoryReady && malwareBlockers.length === 0 && (!documentationGateConfigured(row) || !applicableSystems(row).some((system) => system.key === "bgv") || bgv?.status === "done")
+      : row.lifecycleStage === "complete" && finalApproval?.status === "approved" && mandatoryReady && malwareBlockers.length === 0 && (!bgvRequiredForDay1 || bgvClear)
       ? { status: "complete" as const, label: "Gate C — Day-1 readiness", reason: "HR approved the final Day-1 review after live readiness checks." }
-      : !mandatoryReady || malwareBlockers.length > 0 || (documentationGateConfigured(row) && applicableSystems(row).some((system) => system.key === "bgv") && (!bgv || bgv.status !== "done"))
-        ? { status: "blocked" as const, label: "Gate C — Day-1 readiness", reason: malwareBlockers.length > 0 ? "Latest required upload malware evidence is not clear." : bgv && bgv.status !== "done" ? "The configured live BGV check is not currently clear." : "Configured mandatory readiness items are not currently complete." }
+      : !mandatoryReady || malwareBlockers.length > 0 || (bgvRequiredForDay1 && !bgvClear)
+        ? { status: "blocked" as const, label: "Gate C — Day-1 readiness", reason: malwareBlockers.length > 0 ? "Latest required upload malware evidence is not clear." : bgv ? "Trusted BGV clearance is not currently present; simulated or unproven status is excluded." : "Configured mandatory readiness items are not currently complete." }
         : finalApproval?.status === "pending"
           ? { status: "human-review" as const, label: "Gate C — Day-1 readiness", reason: "Live readiness is complete and awaits the dedicated HR final-review queue decision." }
           : finalApproval?.status === "approved"

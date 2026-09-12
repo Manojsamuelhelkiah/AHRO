@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import {
   onbApprovals,
   onbCases,
+  onbStandardIntakeEvents,
   onbCommunications,
   onbEvents,
   onbSystemChecks,
@@ -32,6 +33,7 @@ import {
 } from "./scheduling";
 import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
 import { applicableSystems, isNonEmployee } from "./external-systems";
+import { hasTrustedBgvClearanceEvidence } from "./connector-evidence-provenance";
 import {
   EXECUTION_AUTHORIZATION_RULES,
   executionAuthorityScopes,
@@ -122,9 +124,11 @@ async function updateCase(caseId: number, patch: Partial<typeof onbCases.$inferI
 /**
  * Gate A is before Intake: no plan, connector mutation, welcome message, or
  * portal provisioning may happen until a named HR reviewer confirms the
- * package. The email is deliberately attempted even for WhatsApp preference;
+ * package. Ordinary cases receive an email even for a WhatsApp preference;
  * sendOutbound preserves the case-scoped email authorization boundary and
  * durably records a blocked/uncertain attempt rather than falling back.
+ * Trusted standard-intake cases instead retain an HR-reviewable TA source
+ * evidence reference, so a duplicate acceptance request is not sent.
  */
 export async function enforceOfferAcceptanceGate(
   caseId: number,
@@ -133,7 +137,18 @@ export async function enforceOfferAcceptanceGate(
   const c = await getCase(caseId);
   if (!offerAcceptanceRequired(c) || c.offerAcceptanceComplete) return true;
 
-  const delivery = await sendOutbound({
+  // A trusted source-event record is an acceptance-evidence *reference*, not
+  // a completed Gate A. Keep the existing authority-bound human gate, while
+  // avoiding a contradictory repeat "please accept" message to a worker whose
+  // accepted-offer event is already under HR review.
+  const [standardIntakeEvidence] = await db.select({
+    sourceId: onbStandardIntakeEvents.sourceId,
+  }).from(onbStandardIntakeEvents).where(and(
+    eq(onbStandardIntakeEvents.organizationId, c.organizationId),
+    eq(onbStandardIntakeEvents.caseId, caseId),
+    eq(onbStandardIntakeEvents.state, "created"),
+  )).limit(1);
+  const delivery = standardIntakeEvidence ? null : await sendOutbound({
     caseId,
     channel: "email",
     toAddress: c.workerEmail,
@@ -141,18 +156,24 @@ export async function enforceOfferAcceptanceGate(
     body: `Hello ${c.workerName.split(" ")[0]}, before onboarding can begin, please complete your offer-acceptance package by replying to this email or following the instructions provided by HR. A human HR reviewer will confirm completion before any onboarding activity starts.`,
     idempotencyKey: `gateway-a:${caseId}:offer-package:email`,
   });
-  const blocked = delivery.status !== "sent";
+  const blocked = delivery ? delivery.status !== "sent" : false;
+  const deliveryFailureReason = delivery?.failureReason;
+  const deliveryStatus = delivery?.status ?? "not-dispatched";
   await createApproval({
     caseId,
     authorityScope: "hr-compliance-approve",
     agent: "offer-acceptance-gate",
     ruleRef: OFFER_ACCEPTANCE_GATE_RULE,
     hitlPattern: "hard-block",
-    recommendation: blocked
+    recommendation: standardIntakeEvidence
+      ? "Review the restricted TA source acceptance evidence reference and confirm package completion"
+      : blocked
       ? "Resolve the blocked/uncertain offer-acceptance package email and confirm package completion"
       : "Confirm offer-acceptance package completion after HR evidence review",
-    rationale: blocked
-      ? `The mandatory email-only offer package request is ${delivery.status}${delivery.failureReason ? `: ${delivery.failureReason}` : ""}. No WhatsApp fallback is permitted; HR must resolve this before onboarding.`
+    rationale: standardIntakeEvidence
+      ? "A trusted TA source event supplied an acceptance evidence reference. An authorized HR reviewer must verify that restricted source reference and use the dedicated Gate A confirmation action; generic approvals cannot release this gate."
+      : blocked
+      ? `The mandatory email-only offer package request is ${deliveryStatus}${deliveryFailureReason ? `: ${deliveryFailureReason}` : ""}. No WhatsApp fallback is permitted; HR must resolve this before onboarding.`
       : "The offer-acceptance package request was durably dispatched. HR must review the returned evidence and use the dedicated Gate A confirmation action; generic approvals cannot release this gate.",
     // This gate has its own atomic confirmation route. A generic approval may
     // document review, but must never become an orchestration bypass.
@@ -180,7 +201,9 @@ export async function enforceOfferAcceptanceGate(
     "offer-acceptance-gate",
     "rules",
     "Gate A blocked onboarding pending offer acceptance",
-    blocked
+    standardIntakeEvidence
+      ? "A trusted TA source event is retained in the restricted intake register. HR must review its acceptance evidence reference and use the dedicated Gate A confirmation; no acceptance-request message was sent and no downstream onboarding action was started."
+      : blocked
       ? "Offer-package email is blocked or has an uncertain outcome. A human queue item was created; no downstream onboarding action was started."
       : "Offer-package email was sent first. A human queue item was created; no downstream onboarding action was started.",
     {
@@ -914,10 +937,6 @@ export async function runWorkstreams(
       : payrollReady
         ? "Payroll prerequisite and setup were completed by accountable humans with evidence; no payroll enrollment is claimed."
         : "Payroll readiness is held until the configured prerequisite and human setup confirmation are completed with evidence.");
-  // Payroll remains individually held by the connector dispatcher until its
-  // accountable human tasks complete. Dispatch the independent document, BGV
-  // and IAM mutations now; each has its own guarded, journaled operation.
-  await dispatchWorkstreamConnectorMutations(c);
   if (workforceRuntimeActive && !nonEmployee && !payrollReady) {
     await logEvent(caseId, "payroll", "human", "Payroll connector dispatch held",
       "Only the payroll connector mutation was held because the configured payroll prerequisite and human setup confirmation are incomplete; independent document, BGV, and IAM work remains dispatched through their own guarded operations.",
@@ -1028,6 +1047,35 @@ export async function runWorkstreams(
     { workstreams: ws, lifecycleStage: "preboarding" },
     claim,
   );
+  // A held IAM/payroll release is expected operational work rather than a
+  // failed orchestration. Documents/BGV may already have been safely
+  // journaled; retain that partial success and park at a durable retry
+  // checkpoint without claiming either held release completed.
+  const dispatchOutcome = await dispatchWorkstreamConnectorMutations(c);
+  if (dispatchOutcome.releaseHeld) {
+    await logEvent(
+      caseId,
+      "workstreams",
+      "rules",
+      "Release workstream waiting on Standard Operations",
+      `${dispatchOutcome.heldConnectors.join(" and ")} release remains held by current Standard Operations evidence, approval, date-reconciliation, or HR Operations hold requirements. Independent workstream effects remain separately journaled and will not be duplicated on retry.`,
+      {
+        hitlPattern: "hard-block",
+        ruleRef: "standard-operations/release-gate",
+        idempotencyKey: `orchestration:${caseId}:workstreams:standard-operations-held`,
+      },
+    );
+    const waiting = {
+      lifecycleStage: "preboarding" as const,
+      orchestrationStatus: "checklist-blocked" as const,
+      orchestrationCheckpoint: "waiting:standard-operations-release",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+    };
+    if (claim) await fencedCaseUpdate(caseId, claim, waiting);
+    else await db.update(onbCases).set(waiting).where(eq(onbCases.id, caseId));
+    return "paused";
+  }
 
   // The guarded connector dispatch above registered every applicable
   // externally-owned item with the System Watcher. The watcher closes each
@@ -1295,11 +1343,12 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     const malwareBlockers = documentationGateConfigured(c)
       ? await latestRequiredUploadMalwareBlockers(tx, c.organizationId, caseId)
       : [];
-    const [bgv] = await tx.select({ status: onbSystemChecks.status }).from(onbSystemChecks).where(and(
+    const bgvChecks = await tx.select().from(onbSystemChecks).where(and(
       eq(onbSystemChecks.organizationId, c.organizationId),
       eq(onbSystemChecks.caseId, caseId),
       eq(onbSystemChecks.system, "bgv"),
     ));
+    const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks);
     // The weighted readiness policy is optional during rollout. When the SLA
     // agent exports its hook, evaluate it inside this same final-review
     // transaction so the score and the approval cannot observe different
@@ -1329,7 +1378,7 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     // pathway make it applicable. In that boundary, absence is not a green
     // result; a configured live check must exist and be done.
     const bgvRequired = documentationGateConfigured(c) && applicableSystems(c).some((system) => system.key === "bgv");
-    if (!weightedReadinessPass || !mandatoryChecklistReady(c) || malwareBlockers.length > 0 || (bgvRequired && (!bgv || bgv.status !== "done"))) {
+    if (!weightedReadinessPass || !mandatoryChecklistReady(c) || malwareBlockers.length > 0 || (bgvRequired && !bgvClear)) {
       // A previous Gate C approval authorizes only the readiness state that was
       // reviewed. Reopening evidence/checks revokes that authority; recovery
       // must never turn an old approval into a later automatic completion.
@@ -1489,6 +1538,7 @@ export async function resumeChecklistOrchestration(caseId: number): Promise<bool
         'blocked:before-employee-communications',
         'blocked:before-day1-review',
         'blocked:re-review',
+        'waiting:standard-operations-release',
         'initial',
         'plan',
         'intake-approved',
@@ -1569,12 +1619,26 @@ export async function resumeChecklistOrchestration(caseId: number): Promise<bool
       await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
       if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return true;
     }
+    if (checkpoint === "waiting:standard-operations-release") {
+      // This checkpoint is reached only after the pre-workstreams checklist
+      // gate has passed and independent setup already ran. Re-running the
+      // workstream preparation would also attempt to rebase already-claimed
+      // human workforce tasks after a date correction. Retry only the
+      // journal-fenced provider mutations; each repeats current authority and
+      // Standard Operations checks immediately before its write.
+      const outcome = await dispatchWorkstreamConnectorMutations(await getCase(caseId));
+      if (outcome.releaseHeld) return true;
+      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
+      if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return true;
+    }
     if (
       checkpoint === "blocked:before-workstreams" ||
+      checkpoint === "waiting:standard-operations-release" ||
       checkpoint === "blocked:before-employee-communications" ||
       checkpoint === "workstreams-complete"
     ) {
       if (checkpoint !== "blocked:before-workstreams" &&
+          checkpoint !== "waiting:standard-operations-release" &&
           !(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return false;
       await renewOrchestrationClaim(caseId, claim);
       await runCommunications(caseId);

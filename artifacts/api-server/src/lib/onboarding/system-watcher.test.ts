@@ -9,10 +9,12 @@ import {
   handleSystemWebhook,
   recoverOverdueSystemApprovalQueues,
   recoverChecklistRows,
+  simulatedProviderCompletionsAllowed,
 } from "./system-watcher";
 import { setSetting, AUTO_ESCALATION_CALLS_KEY } from "./settings";
 import {
   onbCommunications,
+  onbConnectors,
   onbEffectJournal,
   onbGovernanceAuthorityAssignments,
   onbSensitiveLifecyclePolicies,
@@ -237,6 +239,16 @@ describe("disconnected connector deadline", () => {
 });
 
 describe("simulated external systems", () => {
+  test("production never enables synthetic provider completions by default", () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      assert.equal(simulatedProviderCompletionsAllowed(), false);
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
+  });
+
   test("every watched system has a definition with SLA beyond its completion window", () => {
     for (const def of WATCHED_SYSTEMS) {
       assert.ok(
@@ -346,8 +358,8 @@ describe("concurrent completions (real DB)", () => {
     // one readiness item stuck in-progress forever (both checks are done, so
     // nothing ever revisits them).
     await Promise.all([
-      completeCheck(checks[0], "webhook push"),
-      completeCheck(checks[1], "scheduled poll"),
+      completeCheck(checks[0], "webhook push", "trusted-provider"),
+      completeCheck(checks[1], "scheduled poll", "trusted-provider"),
     ]);
 
     const [after1] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
@@ -405,8 +417,8 @@ describe("concurrent completions (real DB)", () => {
       })
       .returning();
 
-    await completeCheck(check, "scheduled poll");
-    await completeCheck(check, "scheduled poll");
+    await completeCheck(check, "scheduled poll", "trusted-provider");
+    await completeCheck(check, "scheduled poll", "trusted-provider");
 
     const events = await db
       .select()
@@ -414,6 +426,87 @@ describe("concurrent completions (real DB)", () => {
       .where(eq(onbEvents.caseId, c.id));
     const completions = events.filter((e) => e.title.includes("reported complete"));
     assert.equal(completions.length, 1);
+  });
+
+  test("simulated completion remains status telemetry and cannot promote readiness", async () => {
+    const [c] = await db.insert(onbCases).values({
+      organizationId: systemWatcherOrganizationId,
+      workerName: `Watcher Simulated Proof Test ${Date.now()}`,
+      workerEmail: `watcher-simulated-${Date.now()}@example.com`,
+      hireType: "new-hire",
+      workerCategory: "employee",
+      role: "Engineer",
+      department: "R&D",
+      geography: "US",
+      workforceContext: { workCountry: "US" },
+      legalEntity: "Test Co",
+      managerName: "M",
+      recruiterName: "R",
+      joiningDate: "2026-09-01",
+      lifecycleStage: "preboarding",
+      readiness: [{ key: "access", label: "Access", status: "in-progress" }],
+      workstreams: [],
+    }).returning();
+    created.push(c.id);
+    const [check] = await db.insert(onbSystemChecks).values({
+      organizationId: systemWatcherOrganizationId,
+      caseId: c.id,
+      system: "itsm",
+      mode: "poll",
+      externalRef: `RITM-SIM-${c.id}`,
+      requestedAt: new Date(),
+      dueAt: new Date(Date.now() + 300_000),
+    }).returning();
+
+    await completeCheck(check, "scheduled poll", "simulated");
+    const [after] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
+    assert.equal(after.readiness.find((item) => item.key === "access")?.status, "in-progress");
+    assert.equal(after.lifecycleStage, "preboarding");
+  });
+
+  test("a trusted completion atomically upgrades simulated done telemetry exactly once", async () => {
+    const [c] = await db.insert(onbCases).values({
+      organizationId: systemWatcherOrganizationId,
+      workerName: `Watcher Trusted Upgrade Test ${Date.now()}`,
+      workerEmail: `watcher-trusted-upgrade-${Date.now()}@example.com`,
+      hireType: "new-hire",
+      workerCategory: "employee",
+      role: "Engineer",
+      department: "R&D",
+      geography: "US",
+      workforceContext: { workCountry: "US" },
+      legalEntity: "Test Co",
+      managerName: "M",
+      recruiterName: "R",
+      joiningDate: "2026-09-01",
+      lifecycleStage: "preboarding",
+      readiness: [{ key: "access", label: "Access", status: "in-progress" }],
+      workstreams: [],
+    }).returning();
+    created.push(c.id);
+    const [check] = await db.insert(onbSystemChecks).values({
+      organizationId: systemWatcherOrganizationId,
+      caseId: c.id,
+      system: "itsm",
+      mode: "poll",
+      externalRef: `RITM-UPGRADE-${c.id}`,
+      requestedAt: new Date(),
+      dueAt: new Date(Date.now() + 300_000),
+    }).returning();
+
+    await completeCheck(check, "scheduled poll", "simulated");
+    await Promise.all([
+      completeCheck(check, "scheduled poll", "trusted-provider"),
+      completeCheck(check, "scheduled poll", "trusted-provider"),
+    ]);
+
+    const [upgraded] = await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.id, check.id));
+    const [after] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
+    const events = await db.select().from(onbEvents).where(eq(onbEvents.caseId, c.id));
+    assert.equal(upgraded.status, "done");
+    assert.equal(upgraded.evidenceProvenance, "trusted-provider");
+    assert.equal(after.readiness.find((item) => item.key === "access")?.status, "ready");
+    assert.equal(events.filter((event) => event.title === "ITSM Access Provisioning reported complete").length, 1);
   });
 });
 
@@ -608,6 +701,9 @@ after(async () => {
   );
   await db.delete(onbGovernanceAuthorityAssignments).where(
     eq(onbGovernanceAuthorityAssignments.organizationId, systemWatcherOrganizationId),
+  );
+  await db.delete(onbConnectors).where(
+    eq(onbConnectors.organizationId, systemWatcherOrganizationId),
   );
   await db.delete(organizationsTable).where(eq(organizationsTable.id, systemWatcherOrganizationId));
 });

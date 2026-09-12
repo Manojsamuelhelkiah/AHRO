@@ -253,6 +253,36 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       reason: "Gateway test fixture has current HRIS completion evidence",
       attestedBy: "gateway-guards-test",
       attestedRole: "hr-owner",
+      evidenceProvenance: "trusted-provider",
+      sourceStartDate: c.joiningDate,
+      sourceEvidenceRevision: `gateway-oracle-receipt-${c.id}`,
+    });
+    // Gate C accepts only source-confirmed BGV clearance. Keep this fixture
+    // explicit even for the internal-transfer pathway so a provenance
+    // tightening cannot be masked by a status-only legacy row.
+    await db.insert(onbSystemChecks).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      caseId: c.id,
+      system: "bgv",
+      mode: "push",
+      externalRef: `gateway-bgv-${c.id}`,
+      status: "done",
+      dueAt: new Date("2029-01-01T00:00:00.000Z"),
+      completedAt: new Date("2029-01-01T00:00:00.000Z"),
+      lastCheckedAt: new Date("2029-01-01T00:00:00.000Z"),
+      evidenceProvenance: "trusted-provider",
+    });
+    await db.insert(onbSystemChecks).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      caseId: c.id,
+      system: "itsm",
+      mode: "poll",
+      externalRef: `gateway-itsm-${c.id}`,
+      status: "done",
+      dueAt: new Date("2029-01-01T00:00:00.000Z"),
+      completedAt: new Date("2029-01-01T00:00:00.000Z"),
+      lastCheckedAt: new Date("2029-01-01T00:00:00.000Z"),
+      evidenceProvenance: "trusted-provider",
     });
     await db.insert(onbSystemChecks).values({
       organizationId: DEMO_ORGANIZATION_ID,
@@ -263,6 +293,8 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       status: "done",
       dueAt: new Date("2029-01-01T00:00:00.000Z"),
       completedAt: new Date("2029-01-01T00:00:00.000Z"),
+      lastCheckedAt: new Date("2029-01-01T00:00:00.000Z"),
+      evidenceProvenance: "trusted-provider",
     });
     await db.insert(onbApprovals).values({
       organizationId: DEMO_ORGANIZATION_ID,

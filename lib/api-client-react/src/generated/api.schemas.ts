@@ -7162,6 +7162,847 @@ export interface SensitiveLifecycleShorteningPreview {
   confirmationPhrase: 'AUTHORIZE RETENTION SHORTENING';
 }
 
+export type StandardProviderConfigurationInputConfigurationState = typeof StandardProviderConfigurationInputConfigurationState[keyof typeof StandardProviderConfigurationInputConfigurationState];
+
+
+export const StandardProviderConfigurationInputConfigurationState = {
+  'mapping-configured': 'mapping-configured',
+  'sandbox-validated': 'sandbox-validated',
+  'operator-approved': 'operator-approved',
+} as const;
+
+export type StandardProviderConfigurationInputFieldMappings = {[key: string]: string};
+
+export interface StandardProviderConfigurationInput {
+  configurationState: StandardProviderConfigurationInputConfigurationState;
+  fieldMappings: StandardProviderConfigurationInputFieldMappings;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  sandboxEvidenceReference?: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  operatorApprovalReference?: string;
+  /** @minimum 0 */
+  expectedVersion: number;
+}
+
+export interface StandardProviderSourceConfirmationRefreshInput {
+  /**
+     * Required case scope for lifecycle and sensitive-authority fencing.
+     * @minimum 1
+     */
+  caseId: number;
+  /**
+     * Required for the Oracle HCM path.
+     * @minLength 1
+     * @maxLength 255
+     */
+  workersUniqId?: string;
+  /**
+     * Required for the Oracle HCM path.
+     * @minLength 1
+     * @maxLength 255
+     */
+  periodOfServiceId?: string;
+  /**
+     * Required for the ServiceNow path.
+     * @minLength 1
+     * @maxLength 255
+     */
+  requestSysId?: string;
+}
+
+export type StandardProviderStatusKey = typeof StandardProviderStatusKey[keyof typeof StandardProviderStatusKey];
+
+
+export const StandardProviderStatusKey = {
+  'oracle-hcm': 'oracle-hcm',
+  servicenow: 'servicenow',
+  bgv: 'bgv',
+  payroll: 'payroll',
+  benefits: 'benefits',
+} as const;
+
+export type StandardProviderStatusDefaultMappings = {[key: string]: string};
+
+export type StandardProviderStatusFieldMappings = {[key: string]: string};
+
+export type StandardProviderStatusConfigurationState = typeof StandardProviderStatusConfigurationState[keyof typeof StandardProviderStatusConfigurationState];
+
+
+export const StandardProviderStatusConfigurationState = {
+  'not-configured': 'not-configured',
+  'mapping-configured': 'mapping-configured',
+  'sandbox-validated': 'sandbox-validated',
+  'operator-approved': 'operator-approved',
+} as const;
+
+export type StandardProviderStatusSourceObservationState = typeof StandardProviderStatusSourceObservationState[keyof typeof StandardProviderStatusSourceObservationState];
+
+
+export const StandardProviderStatusSourceObservationState = {
+  'awaiting-source-confirmation': 'awaiting-source-confirmation',
+  'source-read-confirmed-not-live-evidence': 'source-read-confirmed-not-live-evidence',
+  'legacy-operator-observation-unverified': 'legacy-operator-observation-unverified',
+} as const;
+
+export type StandardProviderStatusFulfillmentState = typeof StandardProviderStatusFulfillmentState[keyof typeof StandardProviderStatusFulfillmentState];
+
+
+export const StandardProviderStatusFulfillmentState = {
+  'not-configured-manual-work-required': 'not-configured-manual-work-required',
+  'not-submitted': 'not-submitted',
+  'source-read-confirmed-not-live-evidence': 'source-read-confirmed-not-live-evidence',
+  'legacy-operator-observation-unverified': 'legacy-operator-observation-unverified',
+} as const;
+
+export type StandardProviderStatusSourceRecordsItemEvidenceClass = typeof StandardProviderStatusSourceRecordsItemEvidenceClass[keyof typeof StandardProviderStatusSourceRecordsItemEvidenceClass];
+
+
+export const StandardProviderStatusSourceRecordsItemEvidenceClass = {
+  'server-adapter-source-read': 'server-adapter-source-read',
+  'restricted-confidential-source-observation': 'restricted-confidential-source-observation',
+} as const;
+
+export type StandardProviderStatusSourceRecordsItem = {
+  /** @nullable */
+  caseId: number | null;
+  recordType: string;
+  sourceRecordId: string;
+  normalizedState: string;
+  /** @nullable */
+  sourceObservedAt: string | null;
+  /**
+     * Redacted without all-class sensitive authority.
+     * @nullable
+     */
+  evidenceReference: string | null;
+  evidenceClass: StandardProviderStatusSourceRecordsItemEvidenceClass;
+};
+
+export type StandardProviderStatusManualFulfillment = {
+  status: 'not-configured';
+  evidence: string;
+  consent: string;
+  cutoff: string;
+  reconciliation: string;
+  failure: string;
+};
+
+export interface StandardProviderStatus {
+  key: StandardProviderStatusKey;
+  label: string;
+  sourceOfTruth: string;
+  /** @nullable */
+  documentedApi?: string | null;
+  /** @nullable */
+  documentationUrl?: string | null;
+  defaultMappings?: StandardProviderStatusDefaultMappings;
+  fieldMappings: StandardProviderStatusFieldMappings;
+  configurationState: StandardProviderStatusConfigurationState;
+  sourceObservationState: StandardProviderStatusSourceObservationState;
+  fulfillmentState: StandardProviderStatusFulfillmentState;
+  manualOwner: string;
+  sourceRecords: StandardProviderStatusSourceRecordsItem[];
+  remoteDispatchEnabled: false;
+  liveReadinessEligible: false;
+  launchBlockers: string[];
+  setupBlockers: string[];
+  manualFulfillment: StandardProviderStatusManualFulfillment;
+  /** @minimum 0 */
+  version: number;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export type StandardProviderDecisionStatus = typeof StandardProviderDecisionStatus[keyof typeof StandardProviderDecisionStatus];
+
+
+export const StandardProviderDecisionStatus = {
+  open: 'open',
+  accepted: 'accepted',
+  deferred: 'deferred',
+} as const;
+
+export interface StandardProviderDecision {
+  providerKey: string;
+  decisionKey: string;
+  status: StandardProviderDecisionStatus;
+  accountableRole: string;
+  requirement: string;
+  detail: string;
+  documentationUrls: string[];
+  createdAt: string;
+  /** @nullable */
+  resolvedAt: string | null;
+}
+
+export interface StandardProviderStatusResponse {
+  providers: StandardProviderStatus[];
+  decisions: StandardProviderDecision[];
+}
+
+/**
+ * Error envelope returned by the dedicated standard onboarding routes.
+ */
+export interface StandardOnboardingError {
+  message: string;
+}
+
+export type StandardIntakeWorkforceContextWorkEnvironment = typeof StandardIntakeWorkforceContextWorkEnvironment[keyof typeof StandardIntakeWorkforceContextWorkEnvironment];
+
+
+export const StandardIntakeWorkforceContextWorkEnvironment = {
+  office: 'office',
+  remote: 'remote',
+  site: 'site',
+  field: 'field',
+  mixed: 'mixed',
+} as const;
+
+export type StandardIntakeWorkforceContextHiringMode = typeof StandardIntakeWorkforceContextHiringMode[keyof typeof StandardIntakeWorkforceContextHiringMode];
+
+
+export const StandardIntakeWorkforceContextHiringMode = {
+  individual: 'individual',
+  batch: 'batch',
+  seasonal: 'seasonal',
+} as const;
+
+/**
+ * Bounded operational context used for checklist selection. Special category and free-form fields are deliberately not accepted here.
+ */
+export interface StandardIntakeWorkforceContext {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  roleFamily?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  band?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  department?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  legalEntity?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  businessUnit?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  industry?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  workCountry?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  workState?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  site?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  employmentArrangement?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  workerCategory?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  payBasis?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  shiftPattern?: string;
+  assistedIntake?: boolean;
+  siteExposure?: boolean;
+  safetyCritical?: boolean;
+  /**
+     * @maxItems 20
+     * @items.minLength 1
+     * @items.maxLength 120
+     */
+  hazards?: string[];
+  /**
+     * @maxItems 20
+     * @items.minLength 1
+     * @items.maxLength 120
+     */
+  requiredLicenses?: string[];
+  workEnvironment?: StandardIntakeWorkforceContextWorkEnvironment;
+  hiringMode?: StandardIntakeWorkforceContextHiringMode;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  batchId?: string;
+}
+
+export type StandardIntakePersonChannelPreference = typeof StandardIntakePersonChannelPreference[keyof typeof StandardIntakePersonChannelPreference];
+
+
+export const StandardIntakePersonChannelPreference = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+  both: 'both',
+} as const;
+
+export interface StandardIntakePerson {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  personKey: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  workerName: string;
+  /**
+     * @minLength 1
+     * @maxLength 254
+     */
+  workerEmail: string;
+  /**
+     * @minLength 1
+     * @maxLength 32
+     */
+  workerPhone?: string;
+  channelPreference?: StandardIntakePersonChannelPreference;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  hireType: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  workerCategory: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  workerBand?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  role: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  department: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  geography: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  legalEntity: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  managerName: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  recruiterName: string;
+  joiningDate: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  urgency?: string;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  jobProfileId?: string;
+  workforceContext?: StandardIntakeWorkforceContext;
+}
+
+export type StandardIntakeEventEventType = typeof StandardIntakeEventEventType[keyof typeof StandardIntakeEventEventType];
+
+
+export const StandardIntakeEventEventType = {
+  'accepted-offer': 'accepted-offer',
+  'scheduled-preboarding': 'scheduled-preboarding',
+} as const;
+
+export interface StandardIntakeEvent {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  sourceEventId: string;
+  eventType: StandardIntakeEventEventType;
+  /**
+     * Opaque whitespace-free source-system URI/reference; the offer artifact is not uploaded.
+     * @minLength 1
+     * @maxLength 500
+     * @pattern ^[a-z][a-z0-9+.-]{1,30}:[^\s]+$
+     */
+  acceptanceEvidenceReference: string;
+  occurredAt?: string;
+  person: StandardIntakePerson;
+}
+
+export interface StandardIntakeBatchInput {
+  /**
+     * @minItems 1
+     * @maxItems 500
+     */
+  events: StandardIntakeEvent[];
+}
+
+export type StandardIntakeRowResultStatus = typeof StandardIntakeRowResultStatus[keyof typeof StandardIntakeRowResultStatus];
+
+
+export const StandardIntakeRowResultStatus = {
+  created: 'created',
+  reconciled: 'reconciled',
+  conflict: 'conflict',
+  'duplicate-active': 'duplicate-active',
+  invalid: 'invalid',
+  blocked: 'blocked',
+} as const;
+
+export interface StandardIntakeRowResult {
+  /** @minimum 0 */
+  index: number;
+  sourceEventId?: string;
+  status: StandardIntakeRowResultStatus;
+  /** @minimum 1 */
+  caseId?: number;
+  errors?: string[];
+  message?: string;
+  profileId?: string;
+  /** @minimum 1 */
+  profileVersion?: number;
+}
+
+export interface StandardIntakePreviewResponse {
+  sourceId: string;
+  rows: StandardIntakeRowResult[];
+}
+
+export interface StandardIntakeCommitSummary {
+  /** @minimum 0 */
+  created: number;
+  /** @minimum 0 */
+  reconciled: number;
+  /** @minimum 0 */
+  unresolved: number;
+}
+
+export interface StandardIntakeCommitResponse {
+  sourceId: string;
+  replay: boolean;
+  results: StandardIntakeRowResult[];
+  summary: StandardIntakeCommitSummary;
+}
+
+export type StandardIntakeEvidenceEventType = typeof StandardIntakeEvidenceEventType[keyof typeof StandardIntakeEvidenceEventType];
+
+
+export const StandardIntakeEvidenceEventType = {
+  'accepted-offer': 'accepted-offer',
+  'scheduled-preboarding': 'scheduled-preboarding',
+} as const;
+
+export type StandardIntakeEvidenceActivationStatus = typeof StandardIntakeEvidenceActivationStatus[keyof typeof StandardIntakeEvidenceActivationStatus];
+
+
+export const StandardIntakeEvidenceActivationStatus = {
+  'awaiting-review': 'awaiting-review',
+  scheduled: 'scheduled',
+  'due-review': 'due-review',
+  released: 'released',
+} as const;
+
+export type StandardIntakeEvidenceState = typeof StandardIntakeEvidenceState[keyof typeof StandardIntakeEvidenceState];
+
+
+export const StandardIntakeEvidenceState = {
+  created: 'created',
+  'duplicate-active': 'duplicate-active',
+} as const;
+
+export interface StandardIntakeEvidence {
+  sourceId: string;
+  sourceIdentity: string;
+  sourceEventId: string;
+  eventType: StandardIntakeEvidenceEventType;
+  acceptanceEvidenceReference: string;
+  /** @nullable */
+  activationDueAt: string | null;
+  activationStatus: StandardIntakeEvidenceActivationStatus;
+  /** @nullable */
+  activationReviewRequestedAt: string | null;
+  /** @nullable */
+  activationReleasedAt: string | null;
+  receivedAt: string;
+  state: StandardIntakeEvidenceState;
+}
+
+export interface StandardIntakeReleaseResponse {
+  /** @minimum 1 */
+  caseId: number;
+  orchestrationStatus: string;
+  gateAWillBeRequired: true;
+}
+
+export type StandardOperationsExceptionInputType = typeof StandardOperationsExceptionInputType[keyof typeof StandardOperationsExceptionInputType];
+
+
+export const StandardOperationsExceptionInputType = {
+  'no-response': 'no-response',
+  'payroll-cutoff': 'payroll-cutoff',
+  'delayed-bgv': 'delayed-bgv',
+} as const;
+
+export interface StandardOperationsExceptionInput {
+  type: StandardOperationsExceptionInputType;
+  /** @minimum 0 */
+  expectedVersion: number;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  rationale: string;
+}
+
+export interface StandardOperationsResolutionInput {
+  /** @minimum 0 */
+  expectedVersion: number;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  rationale: string;
+}
+
+export type StandardOperationsManualFulfillmentInputArea = typeof StandardOperationsManualFulfillmentInputArea[keyof typeof StandardOperationsManualFulfillmentInputArea];
+
+
+export const StandardOperationsManualFulfillmentInputArea = {
+  bgv: 'bgv',
+  payroll: 'payroll',
+  benefits: 'benefits',
+} as const;
+
+export type StandardOperationsManualFulfillmentInputStatus = typeof StandardOperationsManualFulfillmentInputStatus[keyof typeof StandardOperationsManualFulfillmentInputStatus];
+
+
+export const StandardOperationsManualFulfillmentInputStatus = {
+  'not-started': 'not-started',
+  'in-progress': 'in-progress',
+  failed: 'failed',
+  resolved: 'resolved',
+} as const;
+
+export type StandardOperationsManualFulfillmentInputEvidenceStatus = typeof StandardOperationsManualFulfillmentInputEvidenceStatus[keyof typeof StandardOperationsManualFulfillmentInputEvidenceStatus];
+
+
+export const StandardOperationsManualFulfillmentInputEvidenceStatus = {
+  'not-recorded': 'not-recorded',
+  recorded: 'recorded',
+} as const;
+
+export type StandardOperationsManualFulfillmentInputConsentStatus = typeof StandardOperationsManualFulfillmentInputConsentStatus[keyof typeof StandardOperationsManualFulfillmentInputConsentStatus];
+
+
+export const StandardOperationsManualFulfillmentInputConsentStatus = {
+  'not-applicable': 'not-applicable',
+  pending: 'pending',
+  recorded: 'recorded',
+} as const;
+
+export type StandardOperationsManualFulfillmentInputCutoffStatus = typeof StandardOperationsManualFulfillmentInputCutoffStatus[keyof typeof StandardOperationsManualFulfillmentInputCutoffStatus];
+
+
+export const StandardOperationsManualFulfillmentInputCutoffStatus = {
+  'not-applicable': 'not-applicable',
+  unknown: 'unknown',
+  reviewed: 'reviewed',
+} as const;
+
+export type StandardOperationsManualFulfillmentInputReconciliationStatus = typeof StandardOperationsManualFulfillmentInputReconciliationStatus[keyof typeof StandardOperationsManualFulfillmentInputReconciliationStatus];
+
+
+export const StandardOperationsManualFulfillmentInputReconciliationStatus = {
+  'not-started': 'not-started',
+  pending: 'pending',
+  resolved: 'resolved',
+} as const;
+
+export type StandardOperationsManualFulfillmentInputFailureStatus = typeof StandardOperationsManualFulfillmentInputFailureStatus[keyof typeof StandardOperationsManualFulfillmentInputFailureStatus];
+
+
+export const StandardOperationsManualFulfillmentInputFailureStatus = {
+  none: 'none',
+  active: 'active',
+} as const;
+
+export interface StandardOperationsManualFulfillmentInput {
+  area: StandardOperationsManualFulfillmentInputArea;
+  /** @minimum 0 */
+  expectedVersion: number;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  rationale: string;
+  status: StandardOperationsManualFulfillmentInputStatus;
+  evidenceStatus: StandardOperationsManualFulfillmentInputEvidenceStatus;
+  consentStatus: StandardOperationsManualFulfillmentInputConsentStatus;
+  cutoffStatus: StandardOperationsManualFulfillmentInputCutoffStatus;
+  reconciliationStatus: StandardOperationsManualFulfillmentInputReconciliationStatus;
+  failureStatus: StandardOperationsManualFulfillmentInputFailureStatus;
+}
+
+export interface StandardOperationsStartDateInput {
+  startDate: string;
+  /** @minimum 0 */
+  expectedVersion: number;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  rationale: string;
+}
+
+export type StandardOperationsImpactReconciliationInputResolution = typeof StandardOperationsImpactReconciliationInputResolution[keyof typeof StandardOperationsImpactReconciliationInputResolution];
+
+
+export const StandardOperationsImpactReconciliationInputResolution = {
+  'source-proof': 'source-proof',
+  'manual-resolution': 'manual-resolution',
+} as const;
+
+export interface StandardOperationsImpactReconciliationInput {
+  resolution: StandardOperationsImpactReconciliationInputResolution;
+  /** @minimum 0 */
+  expectedVersion: number;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  rationale: string;
+}
+
+export type StandardOperationsViewPreparation = {
+  allowed: true;
+  message: string;
+};
+
+export type StandardOperationsViewStartDateImpactsItemStream = typeof StandardOperationsViewStartDateImpactsItemStream[keyof typeof StandardOperationsViewStartDateImpactsItemStream];
+
+
+export const StandardOperationsViewStartDateImpactsItemStream = {
+  hris: 'hris',
+  provisioning: 'provisioning',
+  payroll: 'payroll',
+  benefits: 'benefits',
+  schedules: 'schedules',
+} as const;
+
+export type StandardOperationsViewStartDateImpactsItemStatus = typeof StandardOperationsViewStartDateImpactsItemStatus[keyof typeof StandardOperationsViewStartDateImpactsItemStatus];
+
+
+export const StandardOperationsViewStartDateImpactsItemStatus = {
+  'review-required': 'review-required',
+  'source-confirmed': 'source-confirmed',
+  'manual-resolution': 'manual-resolution',
+} as const;
+
+export type StandardOperationsViewStartDateImpactsItem = {
+  stream: StandardOperationsViewStartDateImpactsItemStream;
+  owner: string;
+  status: StandardOperationsViewStartDateImpactsItemStatus;
+};
+
+export type StandardOperationsViewStartDateReconciliationState = typeof StandardOperationsViewStartDateReconciliationState[keyof typeof StandardOperationsViewStartDateReconciliationState];
+
+
+export const StandardOperationsViewStartDateReconciliationState = {
+  'not-required': 'not-required',
+  'pending-review': 'pending-review',
+  complete: 'complete',
+} as const;
+
+export type StandardOperationsViewStartDateReconciliation = {
+  state: StandardOperationsViewStartDateReconciliationState;
+  message: string;
+};
+
+export type StandardOperationsViewRehireReuse = {
+  eligible: boolean;
+  message: string;
+};
+
+export type StandardOperationsViewConditionalJoin = {
+  enabled: boolean;
+  message: string;
+};
+
+export interface StandardOperationsReleaseEligibility {
+  eligible: boolean;
+  blockers: string[];
+}
+
+export type StandardOperationsViewRelease = {
+  access: StandardOperationsReleaseEligibility;
+  assets: StandardOperationsReleaseEligibility;
+};
+
+export type StandardOperationsViewExceptionsItemType = typeof StandardOperationsViewExceptionsItemType[keyof typeof StandardOperationsViewExceptionsItemType];
+
+
+export const StandardOperationsViewExceptionsItemType = {
+  'no-response': 'no-response',
+  'payroll-cutoff': 'payroll-cutoff',
+  'delayed-bgv': 'delayed-bgv',
+} as const;
+
+export type StandardOperationsViewExceptionsItemState = typeof StandardOperationsViewExceptionsItemState[keyof typeof StandardOperationsViewExceptionsItemState];
+
+
+export const StandardOperationsViewExceptionsItemState = {
+  held: 'held',
+  clear: 'clear',
+} as const;
+
+export type StandardOperationsViewExceptionsItem = {
+  type: StandardOperationsViewExceptionsItemType;
+  owner: 'HR Operations';
+  state: StandardOperationsViewExceptionsItemState;
+  message: string;
+};
+
+export type StandardOperationsViewManualFulfillmentItemArea = typeof StandardOperationsViewManualFulfillmentItemArea[keyof typeof StandardOperationsViewManualFulfillmentItemArea];
+
+
+export const StandardOperationsViewManualFulfillmentItemArea = {
+  bgv: 'bgv',
+  payroll: 'payroll',
+  benefits: 'benefits',
+} as const;
+
+export type StandardOperationsViewManualFulfillmentItemStatus = typeof StandardOperationsViewManualFulfillmentItemStatus[keyof typeof StandardOperationsViewManualFulfillmentItemStatus];
+
+
+export const StandardOperationsViewManualFulfillmentItemStatus = {
+  'not-started': 'not-started',
+  'in-progress': 'in-progress',
+  failed: 'failed',
+  resolved: 'resolved',
+} as const;
+
+export type StandardOperationsViewManualFulfillmentItemEvidenceStatus = typeof StandardOperationsViewManualFulfillmentItemEvidenceStatus[keyof typeof StandardOperationsViewManualFulfillmentItemEvidenceStatus];
+
+
+export const StandardOperationsViewManualFulfillmentItemEvidenceStatus = {
+  'not-recorded': 'not-recorded',
+  recorded: 'recorded',
+} as const;
+
+export type StandardOperationsViewManualFulfillmentItemConsentStatus = typeof StandardOperationsViewManualFulfillmentItemConsentStatus[keyof typeof StandardOperationsViewManualFulfillmentItemConsentStatus];
+
+
+export const StandardOperationsViewManualFulfillmentItemConsentStatus = {
+  'not-applicable': 'not-applicable',
+  pending: 'pending',
+  recorded: 'recorded',
+} as const;
+
+export type StandardOperationsViewManualFulfillmentItemCutoffStatus = typeof StandardOperationsViewManualFulfillmentItemCutoffStatus[keyof typeof StandardOperationsViewManualFulfillmentItemCutoffStatus];
+
+
+export const StandardOperationsViewManualFulfillmentItemCutoffStatus = {
+  'not-applicable': 'not-applicable',
+  unknown: 'unknown',
+  reviewed: 'reviewed',
+} as const;
+
+export type StandardOperationsViewManualFulfillmentItemReconciliationStatus = typeof StandardOperationsViewManualFulfillmentItemReconciliationStatus[keyof typeof StandardOperationsViewManualFulfillmentItemReconciliationStatus];
+
+
+export const StandardOperationsViewManualFulfillmentItemReconciliationStatus = {
+  'not-started': 'not-started',
+  pending: 'pending',
+  resolved: 'resolved',
+} as const;
+
+export type StandardOperationsViewManualFulfillmentItemFailureStatus = typeof StandardOperationsViewManualFulfillmentItemFailureStatus[keyof typeof StandardOperationsViewManualFulfillmentItemFailureStatus];
+
+
+export const StandardOperationsViewManualFulfillmentItemFailureStatus = {
+  none: 'none',
+  active: 'active',
+} as const;
+
+export type StandardOperationsViewManualFulfillmentItem = {
+  area: StandardOperationsViewManualFulfillmentItemArea;
+  status: StandardOperationsViewManualFulfillmentItemStatus;
+  evidenceStatus: StandardOperationsViewManualFulfillmentItemEvidenceStatus;
+  consentStatus: StandardOperationsViewManualFulfillmentItemConsentStatus;
+  cutoffStatus: StandardOperationsViewManualFulfillmentItemCutoffStatus;
+  reconciliationStatus: StandardOperationsViewManualFulfillmentItemReconciliationStatus;
+  failureStatus: StandardOperationsViewManualFulfillmentItemFailureStatus;
+};
+
+export interface StandardOperationsView {
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 0 */
+  version: number;
+  startDate: string;
+  preparation: StandardOperationsViewPreparation;
+  startDateImpacts: StandardOperationsViewStartDateImpactsItem[];
+  startDateReconciliation: StandardOperationsViewStartDateReconciliation;
+  rehireReuse: StandardOperationsViewRehireReuse;
+  conditionalJoin: StandardOperationsViewConditionalJoin;
+  release: StandardOperationsViewRelease;
+  exceptions: StandardOperationsViewExceptionsItem[];
+  manualFulfillment: StandardOperationsViewManualFulfillmentItem[];
+}
+
 export type ReviseGovernanceDecisionBody = {
   /** @minimum 1 */
   expectedRevision: number;
@@ -7604,3 +8445,4 @@ export type ListSensitiveLifecycleDeletionJobs200JobsItem = { [key: string]: unk
 export type ListSensitiveLifecycleDeletionJobs200 = {
   jobs: ListSensitiveLifecycleDeletionJobs200JobsItem[];
 };
+

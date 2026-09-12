@@ -21,6 +21,9 @@ export type SystemEvidenceFact = {
 export type HrisActivationEvidenceFact = {
   complete: boolean;
   evidenceProvenance: string | null;
+  snapshotVersion: number;
+  sourceStartDate: string | null;
+  sourceEvidenceRevision: string | null;
 };
 
 export function hasTrustedProviderConfiguration(
@@ -45,7 +48,12 @@ export function hasTrustedBgvClearanceEvidence(
 
 export function hasTrustedHrisActivationEvidence(
   attestation: HrisActivationEvidenceFact | undefined,
+  expected: { joiningDate: string; snapshotVersion: number },
 ): boolean {
   return attestation?.complete === true &&
-    attestation.evidenceProvenance === "trusted-provider";
+    attestation.evidenceProvenance === "trusted-provider" &&
+    attestation.snapshotVersion === expected.snapshotVersion &&
+    attestation.sourceStartDate === expected.joiningDate &&
+    attestation.sourceEvidenceRevision !== null &&
+    attestation.sourceEvidenceRevision.trim().length > 0;
 }

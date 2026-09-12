@@ -17,12 +17,14 @@ import {
   onbGovernanceRequirements,
   onbReadinessSlaAttestations,
   onbReadinessSlaCaseState,
+  onbReadinessSlaPolicies,
   onbSensitiveLifecyclePolicies,
+  onbSettings,
   onbSystemChecks,
   organizationsTable,
 } from "@workspace/db/schema";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   BANK_CHANGE_APPROVAL_RULE,
   PRIVILEGED_ACCESS_APPROVAL_RULE,
@@ -44,13 +46,22 @@ import {
   withGovernanceDecisionSnapshot,
 } from "./governance-runtime";
 import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
+import {
+  changeStandardOperationsStartDate,
+  setStandardOperationsException,
+} from "./standard-operations";
+import { resumeChecklistOrchestration, runWorkstreams } from "./engine";
+import { ensureReadinessSlaEnrollment } from "./readiness-sla-policy";
 
 const createdCaseIds: number[] = [];
 const unitOrganizationId = `workstream-guard-${process.pid}-${randomUUID()}`;
 let unitCaseId: number;
 let unitPolicySnapshot: Record<string, unknown>;
 
-async function establishLiveGovernanceFixture(caseId: number) {
+async function establishLiveGovernanceFixture(
+  caseId: number,
+  options: { sourceEvidence?: boolean } = {},
+) {
   await governanceSnapshotForNewCase(unitOrganizationId);
   const decisions = await db.select().from(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, unitOrganizationId));
   for (const decision of decisions) {
@@ -88,19 +99,31 @@ async function establishLiveGovernanceFixture(caseId: number) {
   }
   unitPolicySnapshot = withGovernanceDecisionSnapshot({}, await governanceSnapshotForNewCase(unitOrganizationId));
   await db.update(onbCases).set({ processPolicySnapshot: unitPolicySnapshot }).where(eq(onbCases.id, caseId));
-  await db.insert(onbSystemChecks).values({
-    organizationId: unitOrganizationId, caseId, system: "bgv", mode: "push", externalRef: `fixture-bgv-${caseId}`,
-    status: "done", dueAt: new Date(), completedAt: new Date(), lastCheckedAt: new Date(),
-    evidenceProvenance: "trusted-provider",
-  });
-  await db.insert(onbReadinessSlaCaseState).values({
-    organizationId: unitOrganizationId, caseId, snapshotVersion: 1,
-  });
-  await db.insert(onbReadinessSlaAttestations).values({
-    organizationId: unitOrganizationId, caseId, snapshotVersion: 1, streamKey: "hris", complete: true,
-    reason: "Fixture HRIS source attestation", attestedBy: "fixture", attestedRole: "hr-operations",
-    evidenceProvenance: "trusted-provider",
-  });
+  if (options.sourceEvidence !== false) {
+    await db.insert(onbSystemChecks).values({
+      organizationId: unitOrganizationId, caseId, system: "bgv", mode: "push", externalRef: `fixture-bgv-${caseId}`,
+      status: "done", dueAt: new Date(), completedAt: new Date(), lastCheckedAt: new Date(),
+      evidenceProvenance: "trusted-provider",
+    });
+  }
+  if (options.sourceEvidence !== false) {
+    const [caseRow] = await db.select({ joiningDate: onbCases.joiningDate }).from(onbCases).where(and(
+      eq(onbCases.organizationId, unitOrganizationId),
+      eq(onbCases.id, caseId),
+    ));
+    assert.ok(caseRow);
+    await db.insert(onbReadinessSlaCaseState).values({
+      organizationId: unitOrganizationId, caseId, snapshotVersion: 1,
+      payrollCutoff: new Date("2030-01-01T00:00:00Z"),
+    });
+    await db.insert(onbReadinessSlaAttestations).values({
+      organizationId: unitOrganizationId, caseId, snapshotVersion: 1, streamKey: "hris", complete: true,
+      reason: "Fixture HRIS source attestation", attestedBy: "fixture", attestedRole: "hr-operations",
+      evidenceProvenance: "trusted-provider",
+      sourceStartDate: caseRow.joiningDate,
+      sourceEvidenceRevision: `fixture-oracle-${caseId}`,
+    });
+  }
 }
 
 before(async () => {
@@ -116,6 +139,10 @@ before(async () => {
 
 beforeEach(async () => {
   await db.delete(onbGovernanceDispatchMarkers).where(eq(onbGovernanceDispatchMarkers.organizationId, unitOrganizationId));
+  // Standard-operations state is intentionally case-scoped in production.
+  // Clear fixture state between tests so a deterministic race fixture cannot
+  // contaminate a later simulated connector path.
+  await db.delete(onbSettings).where(eq(onbSettings.organizationId, unitOrganizationId));
   // Each authorization scenario needs a fresh operation identity. Confirmed
   // effects from an earlier test must not turn this into a replay-only test.
   const [created] = await db.insert(onbCases).values({
@@ -144,6 +171,7 @@ beforeEach(async () => {
 
 after(async () => {
   await db.delete(onbGovernanceDispatchMarkers).where(eq(onbGovernanceDispatchMarkers.organizationId, unitOrganizationId));
+  await db.delete(onbSettings).where(eq(onbSettings.organizationId, unitOrganizationId));
   await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, unitOrganizationId));
   await db.delete(onbCases).where(eq(onbCases.organizationId, unitOrganizationId));
   await db.delete(onbGovernanceDecisionReviews).where(eq(onbGovernanceDecisionReviews.organizationId, unitOrganizationId));
@@ -152,6 +180,7 @@ after(async () => {
   await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, unitOrganizationId));
   await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, unitOrganizationId));
   await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, unitOrganizationId));
+  await db.delete(onbReadinessSlaPolicies).where(eq(onbReadinessSlaPolicies.organizationId, unitOrganizationId));
   await db.delete(organizationsTable).where(eq(organizationsTable.id, unitOrganizationId));
   for (const id of createdCaseIds) {
     await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, id));
@@ -404,7 +433,8 @@ describe("workstream connector runtime enforcement", () => {
   });
   test("the default writers seed documents and BGV but do not release access before trusted clearance", async () => {
     const c = await createDatabaseCase("plan-generated");
-    await assert.rejects(dispatchWorkstreamConnectorMutations(c), /governance:.*bgv-not-clear/);
+    const outcome = await dispatchWorkstreamConnectorMutations(c);
+    assert.deepEqual(outcome, { releaseHeld: true, heldConnectors: ["iam", "payroll"] });
 
     const documents = await db
       .select()
@@ -423,8 +453,21 @@ describe("workstream connector runtime enforcement", () => {
     );
   });
 
-  test("restart recovery preserves the trusted-evidence gate for an untracked case", async () => {
+  test("untracked recovery parks a held release and resumes it after trusted source evidence", async () => {
     const c = await createDatabaseCase("preboarding");
+    // Pre-create the exact engine execution approval identities so the source
+    // refresh can resume the stored checkpoint without manufacturing a second
+    // approval cycle. The authoritative fixture approvals remain unchanged.
+    await db.update(onbCases).set({ workerCategory: "contractor" }).where(eq(onbCases.id, c.id));
+    for (const connector of ["documents", "background-verification", "iam", "payroll"]) {
+      await db.update(onbApprovals).set({
+        idempotencyKey: `orchestration:${c.id}:approval:execution:${connector}`,
+      }).where(and(
+        eq(onbApprovals.caseId, c.id),
+        eq(onbApprovals.idempotencyKey, `execution-${connector}-${c.id}`),
+      ));
+    }
+    await establishLiveGovernanceFixture(c.id, { sourceEvidence: false });
     await recoverUntrackedCaseSystems(c.id);
 
     const documents = await db
@@ -441,6 +484,43 @@ describe("workstream connector runtime enforcement", () => {
       checks.map((check) => check.system).sort(),
       ["bgv"],
     );
+    let [held] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
+    assert.equal(held.orchestrationStatus, "checklist-blocked");
+    assert.equal(held.orchestrationCheckpoint, "waiting:standard-operations-release");
+    assert.equal(held.orchestrationClaimOwner, null);
+    assert.equal(held.orchestrationClaimUntil, null);
+
+    await db.update(onbSystemChecks).set({
+      status: "done",
+      completedAt: new Date(),
+      lastCheckedAt: new Date(),
+      evidenceProvenance: "trusted-provider",
+    }).where(and(eq(onbSystemChecks.caseId, c.id), eq(onbSystemChecks.system, "bgv")));
+    // Oracle classifier records trusted HRIS evidence only for an enrolled
+    // SLA cohort; model that durable current snapshot before its refresh.
+    const enrollment = await ensureReadinessSlaEnrollment(
+      unitOrganizationId, c.id, "workstream-connectors-test",
+    );
+    assert.ok(enrollment);
+    await db.insert(onbReadinessSlaAttestations).values({
+      organizationId: unitOrganizationId,
+      caseId: c.id,
+      snapshotVersion: enrollment.state.snapshotVersion,
+      streamKey: "hris",
+      complete: true,
+      reason: "Trusted HRIS refresh after recovery",
+      attestedBy: "fixture",
+      attestedRole: "hr-operations",
+      evidenceProvenance: "trusted-provider",
+      sourceStartDate: c.joiningDate,
+      sourceEvidenceRevision: `fixture-oracle-refresh-${c.id}`,
+    });
+    assert.equal(await resumeChecklistOrchestration(c.id), true);
+    [held] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
+    assert.notEqual(held.orchestrationStatus, "blocked");
+    assert.notEqual(held.orchestrationCheckpoint, "waiting:standard-operations-release");
+    const resumedChecks = await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, c.id));
+    assert.ok(resumedChecks.some((check) => check.system === "itsm"));
   });
 
   test("a legal continuation alone cannot authorize internal-transfer provider effects", async () => {
@@ -453,9 +533,190 @@ describe("workstream connector runtime enforcement", () => {
     );
   });
 
+  test("rechecks an HR Operations hold immediately before the IAM writer", async () => {
+    const c = await createDatabaseCase("preboarding");
+    await establishLiveGovernanceFixture(c.id);
+    let writes = 0;
+    await assert.rejects(
+      dispatchCaseConnectorMutation({
+        c,
+        mutation: {
+          connector: "iam",
+          operation: "provision-account",
+          payload: { caseId: c.id },
+        },
+        dependencies: {
+          authorize: (proposal) => ({
+            binding: { proposalHash: hashApprovalProposal(proposal) },
+            decisions: [],
+          }),
+          verifyCurrentAuthority: async () => ({ allowed: true }),
+          // The hold is introduced after the preliminary release check but
+          // before the guarded writer callback. This models the otherwise
+          // timing-dependent policy-mutation race deterministically.
+          withAuthorityFence: async (performWrite) => {
+            await setStandardOperationsException({
+              organizationId: c.organizationId,
+              caseId: c.id,
+              type: "no-response",
+              expectedVersion: 0,
+              actorUserId: "workstream-hr-reviewer",
+            });
+            return performWrite();
+          },
+          write: async () => {
+            writes += 1;
+          },
+        },
+      }),
+      /standard-operations:.*no-response/,
+    );
+    assert.equal(writes, 0);
+  });
+
+  test("blocks payroll at both release checks until its changed-date stream is reconciled", async () => {
+    const payrollMutation = (caseId: number): ConnectorMutation => ({
+      connector: "payroll",
+      operation: "enrol-worker",
+      payload: {
+        caseId,
+        workerCategory: "employee",
+        geography: "United Kingdom",
+        hireType: "external-fte",
+      },
+    });
+    const baseDependencies = {
+      authorize: (proposal: Parameters<typeof hashApprovalProposal>[0]) => ({
+        binding: { proposalHash: hashApprovalProposal(proposal) },
+        decisions: [],
+      }),
+      verifyCurrentAuthority: async () => ({ allowed: true as const }),
+    };
+
+    const prechecked = await createDatabaseCase("plan-generated");
+    await establishLiveGovernanceFixture(prechecked.id);
+    await changeStandardOperationsStartDate({
+      organizationId: prechecked.organizationId,
+      caseId: prechecked.id,
+      startDate: "2026-11-01",
+      expectedVersion: 0,
+      actorUserId: "workstream-hr-reviewer",
+    });
+    let writes = 0;
+    await assert.rejects(
+      dispatchCaseConnectorMutation({
+        c: prechecked,
+        mutation: payrollMutation(prechecked.id),
+        dependencies: {
+          ...baseDependencies,
+          write: async () => { writes += 1; },
+        },
+      }),
+      /standard-operations:.*Payroll start-date impact remains review-required/,
+    );
+    assert.equal(writes, 0);
+
+    const fenced = await createDatabaseCase("plan-generated");
+    await establishLiveGovernanceFixture(fenced.id);
+    writes = 0;
+    await assert.rejects(
+      dispatchCaseConnectorMutation({
+        c: fenced,
+        mutation: payrollMutation(fenced.id),
+        dependencies: {
+          ...baseDependencies,
+          withAuthorityFence: async (performWrite) => {
+            await changeStandardOperationsStartDate({
+              organizationId: fenced.organizationId,
+              caseId: fenced.id,
+              startDate: "2026-11-01",
+              expectedVersion: 0,
+              actorUserId: "workstream-hr-reviewer",
+            });
+            return performWrite();
+          },
+          write: async () => { writes += 1; },
+        },
+      }),
+      /standard-operations:.*Payroll start-date impact remains review-required/,
+    );
+    assert.equal(writes, 0);
+  });
+
+  test("engine persists a Standard Operations release checkpoint and resumes it after trusted sources", async () => {
+    const c = await createDatabaseCase("plan-generated");
+    // Keep the focused engine fixture out of payroll: this test exercises the
+    // access release path and avoids manufacturing an SLA enrollment solely
+    // to supply an unrelated payroll cutoff.
+    await db.update(onbCases).set({ workerCategory: "contractor" }).where(eq(onbCases.id, c.id));
+    await establishLiveGovernanceFixture(c.id, { sourceEvidence: false });
+
+    // First pass creates the durable specialist approval requests. Approve
+    // them using the already-current authoritative assignments in this safe
+    // DB fixture, then re-enter the real engine workstream stage.
+    assert.equal(await runWorkstreams(c.id), "paused", "engine should pause for specialist approvals");
+    const approvals = await db.select().from(onbApprovals).where(eq(onbApprovals.caseId, c.id));
+    const executionByRule = new Map(approvals
+      .filter((approval) => approval.idempotencyKey?.startsWith(`execution-`))
+      .map((approval) => [approval.ruleRef, approval]));
+    for (const approval of approvals.filter((item) =>
+      item.idempotencyKey?.startsWith(`orchestration:${c.id}:approval:execution:`))) {
+      const approved = executionByRule.get(approval.ruleRef);
+      assert.ok(approved?.decidedAuthorityId);
+      await db.update(onbApprovals).set({
+        status: "approved",
+        decidedAuthorityId: approved!.decidedAuthorityId,
+        decidedAuthorityRevision: approved!.decidedAuthorityRevision,
+      }).where(eq(onbApprovals.id, approval.id));
+    }
+    // The fixture's bootstrap approvals supplied the authority identity above.
+    // Keep only the engine-created approval cycle before executing so duplicate
+    // same-authority decisions cannot be mistaken for a SoD conflict.
+    await db.delete(onbApprovals).where(and(
+      eq(onbApprovals.caseId, c.id),
+      sql`${onbApprovals.idempotencyKey} like ${"execution-%"}`,
+    ));
+
+    assert.equal(await runWorkstreams(c.id), "paused", "held IAM release must park at the durable checkpoint");
+    let [held] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
+    assert.equal(held.orchestrationStatus, "checklist-blocked");
+    assert.equal(held.orchestrationCheckpoint, "waiting:standard-operations-release");
+    const initialChecks = await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, c.id));
+    assert.ok(initialChecks.some((check) => check.system === "bgv"), JSON.stringify(initialChecks));
+    assert.ok(!initialChecks.some((check) => check.system === "itsm"), JSON.stringify(initialChecks));
+
+    await db.update(onbSystemChecks).set({
+      status: "done",
+      completedAt: new Date(),
+      lastCheckedAt: new Date(),
+      evidenceProvenance: "trusted-provider",
+    }).where(and(eq(onbSystemChecks.caseId, c.id), eq(onbSystemChecks.system, "bgv")));
+    const enrollment = await ensureReadinessSlaEnrollment(
+      unitOrganizationId, c.id, "workstream-connectors-test",
+    );
+    assert.ok(enrollment);
+    await db.insert(onbReadinessSlaAttestations).values({
+      organizationId: unitOrganizationId, caseId: c.id, snapshotVersion: enrollment.state.snapshotVersion,
+      streamKey: "hris", complete: true, reason: "Trusted HRIS refresh",
+      attestedBy: "fixture", attestedRole: "hr-operations",
+      evidenceProvenance: "trusted-provider",
+      sourceStartDate: c.joiningDate,
+      sourceEvidenceRevision: `fixture-oracle-refresh-${c.id}`,
+    });
+
+    assert.equal(await resumeChecklistOrchestration(c.id), true, "trusted source refresh should claim the stored release checkpoint");
+    [held] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
+    assert.notEqual(held.orchestrationStatus, "blocked");
+    assert.notEqual(held.orchestrationCheckpoint, "waiting:standard-operations-release");
+    const resumedChecks = await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, c.id));
+    assert.ok(resumedChecks.some((check) => check.system === "itsm"));
+  });
+
   test("the real simulated workflow routes documents, BGV, IAM, and payroll through the gate", async () => {
+    const c = await createDatabaseCase("plan-generated");
+    await establishLiveGovernanceFixture(c.id);
     const writes: ConnectorMutation[] = [];
-    await dispatchWorkstreamConnectorMutations(caseRow(), {
+    await dispatchWorkstreamConnectorMutations(c, {
       authorize: (proposal) => ({
         binding: { proposalHash: hashApprovalProposal(proposal) },
         decisions: [],
@@ -617,14 +878,14 @@ describe("workstream connector runtime enforcement", () => {
   });
 
   test("non-employee applicability omits payroll but still dispatches documents", async () => {
-    const [contractor] = await db.insert(onbCases).values({
-      organizationId: unitOrganizationId, workerName: "Contractor fixture", workerEmail: `contractor-${Date.now()}@example.invalid`,
-      workerCategory: "contractor", hireType: "contractor", role: "Operator", department: "Ops", geography: "United Kingdom",
-      legalEntity: "Example Ltd", managerName: "Manager", recruiterName: "Recruiter", joiningDate: "2030-01-01",
-      lifecycleStage: "plan-generated", orchestrationStatus: "running", offerAcceptanceComplete: true, readiness: [], workstreams: [],
-       processPolicySnapshot: unitPolicySnapshot,
-    }).returning();
-    createdCaseIds.push(contractor.id);
+    const seeded = await createDatabaseCase("plan-generated");
+    await db.update(onbCases).set({
+      workerName: "Contractor fixture",
+      workerCategory: "contractor",
+      hireType: "contractor",
+    }).where(eq(onbCases.id, seeded.id));
+    const [contractor] = await db.select().from(onbCases).where(eq(onbCases.id, seeded.id));
+    assert.ok(contractor);
     await establishLiveGovernanceFixture(contractor.id);
     const writes: ConnectorMutation[] = [];
     await dispatchWorkstreamConnectorMutations(

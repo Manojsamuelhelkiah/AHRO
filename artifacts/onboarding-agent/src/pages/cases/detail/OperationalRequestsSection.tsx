@@ -16,6 +16,7 @@ import {
   getGetOnboardingOperationalRequestsQueryKey
 } from '@workspace/api-client-react';
 import { useOrganizationRole } from '../../../hooks/use-organization-role';
+import { StandardOperationsPanel } from './StandardOperationsPanel';
 
 export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: { caseId: number, requestsEnv?: OnbOperationalRequestsEnvelope, loadError?: boolean }) {
   const queryClient = useQueryClient();
@@ -43,10 +44,13 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
   };
 
   if (!requestsEnv) {
-    return <Card><CardContent className="p-5 text-sm" role={loadError ? 'alert' : 'status'}>
+    return <div className="space-y-5">
+      <StandardOperationsPanel caseId={caseId} />
+      <Card><CardContent className="p-5 text-sm" role={loadError ? 'alert' : 'status'}>
       {loadError ? 'Operational requests could not be loaded.' : 'Loading operational requests…'}
       {loadError && <Button variant="outline" className="ml-3" onClick={invalidateAll}>Try again</Button>}
-    </CardContent></Card>;
+      </CardContent></Card>
+    </div>;
   }
 
   const { requests, offlinePaused, version } = requestsEnv;
@@ -54,6 +58,8 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
 
   if (requests.length === 0) {
     return (
+      <div className="space-y-5">
+      <StandardOperationsPanel caseId={caseId} />
       <Card className="border-[var(--border)] shadow-sm">
         <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-4">
           <MonitorPlay className="w-10 h-10 text-[var(--text-muted)]" />
@@ -78,10 +84,13 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
           {error && <p className="text-sm text-[var(--status-red)]">{error}</p>}
         </CardContent>
       </Card>
+      </div>
     );
   }
 
   return (
+    <div className="space-y-5">
+    <StandardOperationsPanel caseId={caseId} />
     <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardHeader className="pb-4 border-b bg-[var(--surface-alt)]">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
@@ -114,6 +123,7 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
 

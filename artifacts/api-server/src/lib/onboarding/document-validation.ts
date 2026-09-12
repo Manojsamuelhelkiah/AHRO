@@ -21,6 +21,7 @@ import { candidateEmailMaySend } from "./channel-routing";
 export { normalizeBgvStatus, reminderEligible } from "./document-validation-policy";
 import { actionableCorrectionReason, decideValidationOutcome, reminderEligible } from "./document-validation-policy";
 import { documentationGateReady } from "./document-validation-policy";
+import { hasTrustedBgvClearanceEvidence } from "./connector-evidence-provenance";
 import { checklistStageBlockers, mandatoryChecklistReady } from "./settings";
 import { documentMalwareGateSql } from "./document-malware-gate";
 import { malwareUploadIsClean } from "./malware-policy";
@@ -57,18 +58,24 @@ export async function reconcileDocumentationReadiness(organizationId: string, ca
   await withCaseDerivedLifecycleWrite({ organizationId, caseId }, async (tx, c) => {
     const required = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true)));
     const verified = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified"), documentMalwareGateSql()));
-    const [bgv] = await tx.select({ status: onbSystemChecks.status }).from(onbSystemChecks).where(and(eq(onbSystemChecks.organizationId, organizationId), eq(onbSystemChecks.caseId, caseId), eq(onbSystemChecks.system, "bgv")));
+    const bgvChecks = await tx.select().from(onbSystemChecks).where(and(
+      eq(onbSystemChecks.organizationId, organizationId),
+      eq(onbSystemChecks.caseId, caseId),
+      eq(onbSystemChecks.system, "bgv"),
+    ));
+    const bgv = bgvChecks[0];
+    const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks);
     const bgvApplicable = c.hireType !== "internal-transfer";
-    const ready = documentationGateReady({ bgvApplicable, bgvClear: bgv?.status === "done", requiredDocuments: required.length, verifiedDocuments: verified.length });
+    const ready = documentationGateReady({ bgvApplicable, bgvClear, requiredDocuments: required.length, verifiedDocuments: verified.length });
     const readiness = c.readiness.map((row) => ({ ...row }));
     const item = readiness.find((r) => r.key === "documentation");
     if (!item) return;
     item.status = ready ? "ready" : "in-progress";
     item.note = ready
       ? bgvApplicable
-        ? "BGV is clear and every required document is verified."
+        ? "Trusted BGV clearance is present and every required document is verified."
         : "Every required document is verified; BGV is not applicable."
-      : `${bgvApplicable && bgv?.status !== "done" ? "BGV clearance is pending. " : ""}Required document verification: ${verified.length}/${required.length}.`;
+      : `${bgvApplicable && !bgvClear ? "Trusted BGV clearance is pending; simulated or unproven status is excluded. " : ""}Required document verification: ${verified.length}/${required.length}.`;
     const promoted =
       ready &&
       mandatoryChecklistReady({ ...c, readiness }) &&

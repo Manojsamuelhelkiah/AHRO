@@ -36,6 +36,10 @@ import { isValidEmail } from "./settings";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import {
+  hasTrustedBgvClearanceEvidence,
+  hasTrustedHrisActivationEvidence,
+} from "./connector-evidence-provenance";
+import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
@@ -413,13 +417,33 @@ async function resolveStreamResults(
     eq(onbSystemChecks.caseId, c.id),
   ));
   const bgvCheck = checks.find((check) => check.system === "bgv");
+  const itsmCheck = checks.find((check) => check.system === "itsm");
   const payrollCheck = checks.find((check) => check.system === "payroll");
+  const trustedBgv = hasTrustedBgvClearanceEvidence(checks);
+  const trustedPayroll = Boolean(
+    payrollCheck?.status === "done" &&
+    payrollCheck.completedAt !== null &&
+    payrollCheck.externalRef.trim().length > 0 &&
+    ["push", "poll", "email"].includes(payrollCheck.mode) &&
+    payrollCheck.evidenceProvenance === "trusted-provider",
+  );
+  const trustedItAssets = Boolean(
+    itsmCheck?.status === "done" &&
+    itsmCheck.completedAt !== null &&
+    itsmCheck.externalRef.trim().length > 0 &&
+    ["push", "poll", "email"].includes(itsmCheck.mode) &&
+    itsmCheck.evidenceProvenance === "trusted-provider",
+  );
   const attestation = await tx.select().from(onbReadinessSlaAttestations).where(and(
     eq(onbReadinessSlaAttestations.organizationId, organizationId),
     eq(onbReadinessSlaAttestations.caseId, c.id),
     eq(onbReadinessSlaAttestations.snapshotVersion, snapshot.snapshotVersion),
     eq(onbReadinessSlaAttestations.streamKey, "hris"),
   )).orderBy(desc(onbReadinessSlaAttestations.id)).limit(1);
+  const trustedHris = hasTrustedHrisActivationEvidence(attestation[0], {
+    joiningDate: c.joiningDate,
+    snapshotVersion: snapshot.snapshotVersion,
+  });
   const readiness = c.readiness ?? [];
   const access = readiness.find((item) => item.key === "access");
   const assets = readiness.find((item) => item.key === "assets");
@@ -447,20 +471,28 @@ async function resolveStreamResults(
   };
   return [
     make("documentation", docsComplete, docsReason),
-    make("bgv", bgvCheck?.status === "done", bgvCheck?.status === "done"
-      ? "Current tracked BGV check reported done"
-      : "Current tracked BGV check is not done", bgvCheck?.completedAt),
-    make("hris", attestation[0]?.complete === true, attestation[0]?.complete
-      ? `HRIS completion attested by ${attestation[0].attestedBy} at ${attestation[0].createdAt.toISOString()}`
-      : "Separate HRIS attestation with timestamp and reason is required", attestation[0]?.complete ? attestation[0].createdAt : null),
-    make("it-assets", access?.status === "ready" && assets?.status === "ready",
-      access?.status === "ready" && assets?.status === "ready"
-        ? "Existing access and assets readiness are both ready"
-        : "Both existing access and assets readiness must be ready"),
-    make("payroll", payroll?.status === "ready" && payrollCheck?.status === "done",
-      payroll?.status === "ready" && payrollCheck?.status === "done"
-        ? "Existing payroll check and payroll readiness are both ready"
-        : "Existing payroll check and payroll readiness must both be ready", payrollCheck?.completedAt),
+    make("bgv", trustedBgv, trustedBgv
+      ? "Trusted BGV provider clearance is current"
+      : "Trusted BGV provider clearance is required; simulated or status-only completion is excluded", bgvCheck?.completedAt),
+    make("hris", trustedHris, trustedHris
+      ? "Trusted HRIS activation evidence is current"
+      : "Trusted HRIS activation evidence for the current joining date and SLA snapshot is required; legacy, human, or simulated attestation is excluded",
+      trustedHris ? attestation[0]?.createdAt : null),
+    // Legacy readiness booleans do not record source provenance. A completed
+    // trusted ITSM receipt is the authoritative confirmation for this
+    // connector-owned access/assets stream.
+    make("it-assets", trustedItAssets,
+      trustedItAssets
+        ? "Trusted ITSM access/assets release receipt is current"
+        : access?.status === "ready" && assets?.status === "ready"
+          ? "Legacy access/assets status is excluded because it has no trusted release provenance"
+          : "Trusted access and asset release evidence is required",
+      trustedItAssets ? itsmCheck?.completedAt : null),
+    make("payroll", payroll?.status === "ready" && trustedPayroll,
+      payroll?.status === "ready" && trustedPayroll
+        ? "Trusted payroll provider enrollment and payroll readiness are both ready"
+        : "Trusted payroll provider evidence is required; simulated or status-only completion is excluded",
+      trustedPayroll ? payrollCheck?.completedAt : null),
   ];
 }
 

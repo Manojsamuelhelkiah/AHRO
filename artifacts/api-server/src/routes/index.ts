@@ -11,9 +11,13 @@ import slideDeckRouter from "./slide-deck";
 import onboardingRouter from "./onboarding";
 import onboardingChecklistProfileDraftRouter from "./onboarding-checklist-profile-draft";
 import onboardingBatchIntakeRouter from "./onboarding-batch-intake";
+import onboardingStandardIntakeRouter from "./onboarding-standard-intake";
+import onboardingTaIntakeRouter from "./onboarding-ta-intake";
 import onboardingSlaRouter from "./onboarding-sla";
 import onboardingContactRouter from "./onboarding-contact";
 import onboardingCaseExplainabilityRouter from "./onboarding-case-explainability";
+import onboardingStandardOperationsRouter from "./onboarding-standard-operations";
+import onboardingStandardProvidersRouter from "./onboarding-standard-providers";
 import pricingRateSetsRouter from "./pricing-rate-sets";
 import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
@@ -36,11 +40,15 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(organizationsRouter);
 router.use(candidatePublicRouter);
+// TA middleware uses a tenant-pinned HMAC source contract rather than a
+// browser Clerk session. Its own middleware authenticates every request.
+router.use(onboardingTaIntakeRouter);
 router.use((req, res, next) => {
   // Provider webhooks authenticate themselves and the demo-login bootstrap
   // must remain reachable before a Clerk session exists.
   if (
     req.path.startsWith("/onboarding/webhooks/") ||
+    req.path.startsWith("/onboarding/ta-intake/") ||
     req.path === "/onboarding/demo-login"
   ) {
     next();
@@ -68,12 +76,15 @@ router.use(onboardingChecklistProfileDraftRouter);
 router.use(onboardingRouter);
 router.use(onboardingAuditRouter);
 router.use(onboardingBatchIntakeRouter);
+router.use(onboardingStandardIntakeRouter);
+router.use(onboardingStandardProvidersRouter);
 router.use(actionCenterRouter);
 router.use(governanceRouter);
 router.use(hrPolicyRouter);
 router.use(privacyLifecycleRouter);
 router.use(onboardingDemoControllerRouter);
 router.use(onboardingSlaRouter);
+router.use(onboardingStandardOperationsRouter);
 router.use(onboardingContactRouter);
 router.use(onboardingCaseExplainabilityRouter);
 router.use(candidateAdminRouter);

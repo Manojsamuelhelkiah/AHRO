@@ -32,6 +32,8 @@ import {
   onbReadinessSlaOutbox,
   onbReadinessSlaSnapshots,
   onbSettings,
+  onbStandardIntakeEvents,
+  onbStandardProviderSourceRecords,
   onbSensitiveLifecycleConfirmations,
   onbSensitiveLifecycleDeletionJobs,
   onbSensitiveLifecycleHolds,
@@ -1453,6 +1455,29 @@ async function newestCaseDerivedSourceAtInTransaction(
     newest(onbPolicyEvidence, onbPolicyEvidence.createdAt, and(eq(onbPolicyEvidence.organizationId, organizationId), eq(onbPolicyEvidence.caseId, caseId))),
     newest(onbPolicyAuthorities, onbPolicyAuthorities.createdAt, and(eq(onbPolicyAuthorities.organizationId, organizationId), eq(onbPolicyAuthorities.caseId, caseId))),
     newest(onbIntakeBatchPeople, onbIntakeBatchPeople.createdAt, and(eq(onbIntakeBatchPeople.organizationId, organizationId), eq(onbIntakeBatchPeople.caseId, caseId))),
+    // Server-confirmed provider source IDs/evidence and standard-intake
+    // snapshots are case-derived references. They are inventory roots even
+    // though the lifecycle worker preserves their rows and linkage.
+    newest(onbStandardProviderSourceRecords, onbStandardProviderSourceRecords.recordedAt, and(
+      eq(onbStandardProviderSourceRecords.organizationId, organizationId),
+      eq(onbStandardProviderSourceRecords.caseId, caseId),
+    )),
+    newest(onbStandardProviderSourceRecords, onbStandardProviderSourceRecords.sourceObservedAt, and(
+      eq(onbStandardProviderSourceRecords.organizationId, organizationId),
+      eq(onbStandardProviderSourceRecords.caseId, caseId),
+    )),
+    newest(onbStandardIntakeEvents, onbStandardIntakeEvents.createdAt, and(
+      eq(onbStandardIntakeEvents.organizationId, organizationId),
+      eq(onbStandardIntakeEvents.caseId, caseId),
+    )),
+    newest(onbStandardIntakeEvents, onbStandardIntakeEvents.replayedAt, and(
+      eq(onbStandardIntakeEvents.organizationId, organizationId),
+      eq(onbStandardIntakeEvents.caseId, caseId),
+    )),
+    newest(onbStandardIntakeEvents, onbStandardIntakeEvents.activationReleasedAt, and(
+      eq(onbStandardIntakeEvents.organizationId, organizationId),
+      eq(onbStandardIntakeEvents.caseId, caseId),
+    )),
     newest(onbEmployeeRecords, onbEmployeeRecords.createdAt, and(
       eq(onbEmployeeRecords.organizationId, organizationId),
       sql`lower(${onbEmployeeRecords.workerEmail}) = lower(${workerEmail})`,
@@ -1604,6 +1629,7 @@ async function processCaseDerivedEnvelopeDeletionJob(
     }).where(and(eq(onbReadinessSlaCaseState.organizationId, job.organizationId), eq(onbReadinessSlaCaseState.caseId, job.caseId)));
     await tx.update(onbReadinessSlaAttestations).set({
       reason: "[minimized]", attestedBy: "[minimized]", attestedRole: "[minimized]",
+      sourceStartDate: null, sourceEvidenceRevision: null,
     }).where(and(eq(onbReadinessSlaAttestations.organizationId, job.organizationId), eq(onbReadinessSlaAttestations.caseId, job.caseId)));
     await tx.update(onbReadinessSlaLedger).set({ lastRationale: null, history: [], updatedAt: now })
       .where(and(eq(onbReadinessSlaLedger.organizationId, job.organizationId), eq(onbReadinessSlaLedger.caseId, job.caseId)));
@@ -1624,6 +1650,33 @@ async function processCaseDerivedEnvelopeDeletionJob(
       personKey: sql`'minimized-' || ${onbIntakeBatchPeople.personKey}`,
       workforceContextSnapshot: {}, processPolicySnapshot: {},
     }).where(and(eq(onbIntakeBatchPeople.organizationId, job.organizationId), eq(onbIntakeBatchPeople.caseId, job.caseId)));
+    // Keep durable provider/intake register rows and their case linkage for
+    // audit/idempotency, while removing all original person/provider evidence
+    // and opaque snapshots. The synthetic provider ID is per-row so its
+    // organization/provider/type uniqueness constraint remains valid.
+    await tx.update(onbStandardProviderSourceRecords).set({
+      sourceRecordId: sql`'minimized-' || ${onbStandardProviderSourceRecords.id}::text`,
+      normalizedState: "[minimized]",
+      evidenceReference: "[minimized]",
+      fieldSnapshot: {},
+      recordedBy: "[minimized]",
+    }).where(and(
+      eq(onbStandardProviderSourceRecords.organizationId, job.organizationId),
+      eq(onbStandardProviderSourceRecords.caseId, job.caseId),
+    ));
+    await tx.update(onbStandardIntakeEvents).set({
+      sourceIdentity: "[minimized]",
+      acceptanceEvidenceReference: "[minimized]",
+      payloadFingerprint: "[minimized]",
+      intakeSnapshot: {},
+      workforceContextSnapshot: {},
+      processPolicySnapshot: {},
+      failureReason: sql`case when ${onbStandardIntakeEvents.failureReason} is null then null else '[minimized]' end`,
+      activationReleasedBy: sql`case when ${onbStandardIntakeEvents.activationReleasedBy} is null then null else '[minimized]' end`,
+    }).where(and(
+      eq(onbStandardIntakeEvents.organizationId, job.organizationId),
+      eq(onbStandardIntakeEvents.caseId, job.caseId),
+    ));
     // These setting namespaces are server-owned case representations. Delete
     // only the exact operational key and demo ledgers whose parsed single
     // caseId matches; other tenant configuration and other demo runs remain.

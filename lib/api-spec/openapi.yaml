@@ -4168,6 +4168,690 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/standard-providers/status:
+    get:
+      operationId: getOnboardingStandardProviderStatus
+      tags: [onboarding]
+      summary: Get administrator source-contract configuration, manual ownership, and truthfulness gates
+      description: Requires organization owner/admin. Source evidence and identifiers are redacted unless the viewer also has current all-class sensitive authority for the linked case. Observations are explicitly unverified and cannot satisfy readiness or release gates.
+      responses:
+        "200":
+          description: Provider contract status and unresolved decision register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandardProviderStatusResponse"
+  /onboarding/standard-providers/{providerKey}/configuration:
+    put:
+      operationId: updateOnboardingStandardProviderConfiguration
+      tags: [onboarding]
+      summary: Save Oracle HCM or ServiceNow mapping metadata only
+      description: Requires organization owner/admin. Credentials are never accepted and remote dispatch remains disabled.
+      parameters:
+        - name: providerKey
+          in: path
+          required: true
+          schema: { type: string, enum: [oracle-hcm, servicenow, bgv, payroll, benefits] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardProviderConfigurationInput" }
+      responses:
+        "200": { description: Mapping saved; remote dispatch remains disabled }
+        "400": { description: Invalid mapping or missing sandbox/operator evidence }
+        "403": { description: Organization owner or admin required }
+        "409": { description: Provider intentionally unselected or stale configuration version }
+  /onboarding/standard-providers/{providerKey}/source-confirmations/refresh:
+    post:
+      operationId: refreshOnboardingStandardProviderSourceConfirmation
+      tags: [onboarding]
+      summary: Refresh an authenticated Oracle or ServiceNow source confirmation
+      description: Requires organization owner/admin plus current all-class sensitive authority. The server reads tenant-pinned provider credentials only after sandbox/operator and governance/lifecycle fences; callers cannot provide source state, evidence, or a field snapshot.
+      parameters:
+        - name: providerKey
+          in: path
+          required: true
+          schema: { type: string, enum: [oracle-hcm, servicenow] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardProviderSourceConfirmationRefreshInput" }
+      responses:
+        "201": { description: Authenticated normalized non-live source confirmation recorded }
+        "400": { description: Missing provider source identity }
+        "403": { description: Organization owner or admin required }
+        "409": { description: Mapping is not configured }
+  /onboarding/ta-intake/events:
+    post:
+      operationId: commitOnboardingTrustedTaIntakeEvents
+      tags: [onboarding]
+      summary: Commit accepted-offer or scheduled-preboarding events from an authenticated TA source
+      description: >
+        Authenticated service-to-service intake using the tenant-pinned TA source
+        HMAC contract. The source identity and organization are established by
+        the verified headers, never by the request body. Rows are committed
+        independently: successful rows remain durable when another row is
+        invalid, blocked, duplicated, or conflicting. This endpoint creates
+        held cases only; it does not grant authority, start downstream
+        orchestration, send messages, or dispatch a provider.
+      security:
+        - taIntakeHmac: []
+      parameters:
+        - name: x-ta-intake-source
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 160 }
+          description: Configured, tenant-pinned TA middleware source identifier.
+        - name: x-ta-intake-timestamp
+          in: header
+          required: true
+          schema: { type: string, pattern: '^[0-9]+$' }
+          description: Unix epoch timestamp in milliseconds covered by the HMAC.
+        - name: x-ta-intake-signature
+          in: header
+          required: true
+          schema: { type: string, pattern: '^[a-f0-9]{64}$' }
+          description: Lowercase SHA-256 HMAC over the canonical request contract.
+        - name: x-organization-id
+          in: header
+          required: false
+          schema: { type: string, minLength: 1 }
+          description: Optional organization selector; when supplied it must match the source's tenant binding.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardIntakeBatchInput" }
+      responses:
+        "200":
+          description: Every row was an exact replay reconciliation; no new case was created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "201":
+          description: At least one row created a held case and every other row reconciled successfully
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "207":
+          description: Multi-Status; successful rows were committed and unresolved rows can be corrected and replayed independently
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "400":
+          description: Missing or malformed intake event batch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: TA source authentication headers are missing or invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: The authenticated TA source is not authorized for the requested organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/standard-intake/preview:
+    post:
+      operationId: previewOnboardingStandardIntake
+      tags: [onboarding]
+      summary: Validate and preview standard intake rows without creating cases
+      description: >
+        Authenticated tenant route for an organization owner or administrator.
+        The server validates the bounded event/person/workforce-context
+        structure, detects active-case duplicates, and resolves the effective
+        checklist policy without mutating a case. It grants no authority and
+        performs no provider, message, or downstream workflow dispatch.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardIntakeBatchInput" }
+      responses:
+        "200":
+          description: Per-row validation and reconciliation preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakePreviewResponse" }
+        "400":
+          description: The body must contain 1–500 intake events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/standard-intake/events:
+    post:
+      operationId: commitOnboardingStandardIntakeEvents
+      tags: [onboarding]
+      summary: Commit standard intake events with row-isolated recovery
+      description: >
+        Authenticated tenant route for an organization owner or administrator.
+        Each row is validated and committed independently. A `207 Multi-Status`
+        response means successful rows remain durable while invalid, blocked,
+        duplicate, or conflicting rows are returned for correction and replay.
+        Exact retries reconcile to the original case; changed facts for an
+        existing source event are reported as a row conflict. Intake creates a
+        held case only: it grants no authority, does not complete Gate A, and
+        does not start orchestration, send messages, or dispatch a provider.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardIntakeBatchInput" }
+      responses:
+        "200":
+          description: Every row reconciled to an existing event; no new case was created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "201":
+          description: At least one held case was created and all remaining rows reconciled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "207":
+          description: Multi-Status; successful rows were committed and unresolved rows are independently recoverable by replay
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "400":
+          description: The body must contain 1–500 intake events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/standard-intake/replay:
+    post:
+      operationId: replayOnboardingStandardIntakeEvents
+      tags: [onboarding]
+      summary: Replay unresolved standard intake rows
+      description: >
+        Authenticated tenant route for an organization owner or administrator.
+        It uses the same bounded batch contract as commit and preserves exact
+        event identity for recovery. A `207 Multi-Status` response preserves
+        successful rows and reports row-level failures for another replay; it
+        never grants authority or dispatches downstream onboarding work.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardIntakeBatchInput" }
+      responses:
+        "200":
+          description: Every row reconciled to an existing event; no new case was created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "201":
+          description: At least one held case was created and all remaining rows reconciled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "207":
+          description: Multi-Status; successful rows were committed and unresolved rows remain independently replayable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeCommitResponse" }
+        "400":
+          description: The body must contain 1–500 intake events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{caseId}/standard-intake-evidence:
+    get:
+      operationId: getOnboardingStandardIntakeEvidence
+      tags: [onboarding]
+      summary: Read restricted standard intake source evidence metadata
+      description: >
+        Authenticated tenant route requiring an organization owner or
+        administrator and a current case-scoped `hr-compliance-approve`
+        authority assignment. It exposes only the opaque source evidence
+        reference and activation metadata; it does not expose the offer
+        artifact, grant authority, or complete Gate A.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Restricted source evidence and activation metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeEvidence" }
+        "400":
+          description: Valid positive case id required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Owner/admin membership and current case-scoped HR/compliance authority required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: No standard intake source event is associated with the case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{caseId}/standard-intake/release:
+    post:
+      operationId: releaseOnboardingStandardIntakeCase
+      tags: [onboarding]
+      summary: Release a reviewed standard intake case to the existing onboarding engine
+      description: >
+        Authenticated tenant route requiring an organization owner or
+        administrator and a current case-scoped `hr-compliance-approve`
+        authority assignment. Release only changes the held case into the
+        existing engine entry state; the normal Gate A approval remains
+        required. This route grants no authority, does not complete Gate A,
+        and does not authorize provider dispatch.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Case released to the existing engine; Gate A remains required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardIntakeReleaseResponse" }
+        "400":
+          description: Valid positive case id required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Owner/admin membership and current case-scoped HR/compliance authority required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: Standard intake case not found in this organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "409":
+          description: Policy rebase, scheduling, lifecycle, or prior-release conflict; no activation was applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{id}/standard-operations:
+    get:
+      operationId: getOnboardingStandardOperations
+      tags: [onboarding]
+      summary: Read standard onboarding operations safeguards and release blockers
+      description: >
+        Authenticated tenant-member route. The view is a status projection for
+        preparation, start-date reconciliation, exception holds, and manual
+        fulfillment; it grants no authority and performs no provider dispatch,
+        enrollment, access release, asset release, payroll action, benefits
+        action, or schedule action.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Standard operations status projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOperationsView" }
+        "400":
+          description: Valid positive case id required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Active organization membership required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: Case not found in this organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{id}/standard-operations/exceptions:
+    post:
+      operationId: setOnboardingStandardOperationException
+      tags: [onboarding]
+      summary: Place a standard operations exception hold
+      description: >
+        Authenticated tenant route requiring an organization owner or
+        administrator. Records a status-only HR Operations hold and grants no
+        authority or release permission. `expectedVersion` is optimistic
+        concurrency control; a stale value returns HTTP `409` and no state is
+        changed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardOperationsExceptionInput" }
+      responses:
+        "200":
+          description: Updated standard operations projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOperationsView" }
+        "400":
+          description: Invalid exception type, expected version, or rationale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: Case not found in this organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "409":
+          description: Standard operations version conflict; refresh and retry with the current version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{id}/standard-operations/exceptions/{type}/resolve:
+    post:
+      operationId: resolveOnboardingStandardOperationException
+      tags: [onboarding]
+      summary: Resolve a standard operations exception hold
+      description: >
+        Authenticated tenant route requiring an organization owner or
+        administrator. Records a status-only resolution and grants no
+        authority or release permission. A stale `expectedVersion` returns
+        HTTP `409` without applying the resolution.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: type
+          in: path
+          required: true
+          schema: { type: string, enum: [no-response, payroll-cutoff, delayed-bgv] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardOperationsResolutionInput" }
+      responses:
+        "200":
+          description: Updated standard operations projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOperationsView" }
+        "400":
+          description: Invalid exception type, expected version, or rationale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: Case not found in this organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "409":
+          description: Standard operations version conflict or state conflict; refresh and retry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{id}/standard-operations/manual-fulfillment:
+    post:
+      operationId: updateOnboardingStandardOperationsManualFulfillment
+      tags: [onboarding]
+      summary: Record status-only manual fulfillment for BGV, payroll, or benefits
+      description: >
+        Authenticated tenant route requiring an organization owner or
+        administrator. Stores bounded manual-work statuses only; it does not
+        claim provider evidence, grant authority, enroll a worker, or release
+        access, assets, payroll, benefits, or schedules. A stale
+        `expectedVersion` returns HTTP `409` and no state is changed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardOperationsManualFulfillmentInput" }
+      responses:
+        "200":
+          description: Updated standard operations projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOperationsView" }
+        "400":
+          description: Invalid manual fulfillment status, expected version, or rationale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: Case not found in this organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "409":
+          description: Standard operations version conflict or completed-case conflict; no state was changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{id}/standard-operations/start-date:
+    put:
+      operationId: updateOnboardingStandardOperationsStartDate
+      tags: [onboarding]
+      summary: Change a case start date and open cross-functional reconciliation
+      description: >
+        Authenticated tenant route requiring an organization owner or
+        administrator. A date change opens fresh HRIS, provisioning, payroll,
+        benefits, and schedules reconciliation; it reuses no prior timing
+        conclusion, grants no authority, and dispatches no provider action.
+        A stale `expectedVersion` returns HTTP `409` and no state is changed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardOperationsStartDateInput" }
+      responses:
+        "200":
+          description: Updated standard operations projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOperationsView" }
+        "400":
+          description: Invalid calendar date, expected version, or rationale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: Case not found in this organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "409":
+          description: Standard operations version or current-date conflict; no date or state was changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+  /onboarding/cases/{id}/standard-operations/start-date/impacts/{stream}/reconcile:
+    post:
+      operationId: reconcileOnboardingStandardOperationsStartDateImpact
+      tags: [onboarding]
+      summary: Reconcile one impact of a changed standard operations start date
+      description: >
+        Authenticated tenant route requiring an organization owner or
+        administrator. `source-proof` is accepted only when current
+        server-verified proof exists for the stream; otherwise an accountable
+        `manual-resolution` is required. Either choice is status-only, grants
+        no authority, and does not replace independent release evidence. A
+        stale `expectedVersion` returns HTTP `409` without applying the
+        reconciliation.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: stream
+          in: path
+          required: true
+          schema: { type: string, enum: [hris, provisioning, payroll, benefits, schedules] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StandardOperationsImpactReconciliationInput" }
+      responses:
+        "200":
+          description: Updated standard operations projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOperationsView" }
+        "400":
+          description: Invalid stream, resolution, expected version, or rationale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "403":
+          description: Organization owner or administrator required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "404":
+          description: Case not found in this organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
+        "409":
+          description: Standard operations version or reconciliation conflict; no state was changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandardOnboardingError" }
   /onboarding/analytics:
     get:
       operationId: getOnboardingAnalytics
@@ -4804,6 +5488,20 @@ paths:
         "403": { description: Verified privacy or legal authority required }
         "409": { description: Job is not failed or is absent }
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authenticated Clerk-compatible user session token.
+    taIntakeHmac:
+      type: apiKey
+      in: header
+      name: x-ta-intake-signature
+      description: >
+        HMAC authentication for a configured, tenant-pinned TA middleware
+        source. The source and timestamp headers are also required and all
+        headers are covered by the canonical request signature.
   parameters:
     OnbChecklistProfileId:
       name: profileId
@@ -11295,3 +11993,428 @@ components:
         heldRecordCount: { type: integer, minimum: 0 }
         requiresExplicitAuthorizedConfirmation: { type: boolean, const: true }
         confirmationPhrase: { type: string, const: "AUTHORIZE RETENTION SHORTENING" }
+    StandardProviderConfigurationInput:
+      type: object
+      additionalProperties: false
+      required: [configurationState, fieldMappings, expectedVersion]
+      properties:
+        configurationState:
+          type: string
+          enum: [mapping-configured, sandbox-validated, operator-approved]
+        fieldMappings:
+          type: object
+          maxProperties: 30
+          additionalProperties: { type: string, minLength: 1, maxLength: 500 }
+        sandboxEvidenceReference: { type: string, minLength: 1, maxLength: 500 }
+        operatorApprovalReference: { type: string, minLength: 1, maxLength: 500 }
+        expectedVersion: { type: integer, minimum: 0 }
+    StandardProviderSourceConfirmationRefreshInput:
+      type: object
+      additionalProperties: false
+      required: [caseId]
+      properties:
+        caseId: { type: integer, minimum: 1, description: Required case scope for lifecycle and sensitive-authority fencing. }
+        workersUniqId: { type: string, minLength: 1, maxLength: 255, description: Required for the Oracle HCM path. }
+        periodOfServiceId: { type: string, minLength: 1, maxLength: 255, description: Required for the Oracle HCM path. }
+        requestSysId: { type: string, minLength: 1, maxLength: 255, description: Required for the ServiceNow path. }
+    StandardProviderStatus:
+      type: object
+      required: [key, label, sourceOfTruth, fieldMappings, configurationState, sourceObservationState, fulfillmentState, manualOwner, sourceRecords, remoteDispatchEnabled, liveReadinessEligible, launchBlockers, setupBlockers, manualFulfillment, version, updatedAt]
+      properties:
+        key: { type: string, enum: [oracle-hcm, servicenow, bgv, payroll, benefits] }
+        label: { type: string }
+        sourceOfTruth: { type: string }
+        documentedApi: { type: ["string", "null"] }
+        documentationUrl: { type: ["string", "null"], format: uri }
+        defaultMappings: { type: object, additionalProperties: { type: string } }
+        fieldMappings: { type: object, additionalProperties: { type: string } }
+        configurationState: { type: string, enum: [not-configured, mapping-configured, sandbox-validated, operator-approved] }
+        sourceObservationState: { type: string, enum: [awaiting-source-confirmation, source-read-confirmed-not-live-evidence, legacy-operator-observation-unverified] }
+        fulfillmentState: { type: string, enum: [not-configured-manual-work-required, not-submitted, source-read-confirmed-not-live-evidence, legacy-operator-observation-unverified] }
+        manualOwner: { type: string }
+        sourceRecords:
+          type: array
+          items:
+            type: object
+            required: [caseId, recordType, sourceRecordId, normalizedState, sourceObservedAt, evidenceReference, evidenceClass]
+            properties:
+              caseId: { type: ["integer", "null"] }
+              recordType: { type: string }
+              sourceRecordId: { type: string }
+              normalizedState: { type: string }
+              sourceObservedAt: { type: ["string", "null"], format: date-time }
+              evidenceReference: { type: ["string", "null"], description: Redacted without all-class sensitive authority. }
+              evidenceClass: { type: string, enum: [server-adapter-source-read, restricted-confidential-source-observation] }
+        remoteDispatchEnabled: { type: boolean, const: false }
+        liveReadinessEligible: { type: boolean, const: false }
+        launchBlockers: { type: array, items: { type: string } }
+        setupBlockers: { type: array, items: { type: string } }
+        manualFulfillment:
+          type: object
+          required: [status, evidence, consent, cutoff, reconciliation, failure]
+          properties:
+            status: { type: string, const: not-configured }
+            evidence: { type: string }
+            consent: { type: string }
+            cutoff: { type: string }
+            reconciliation: { type: string }
+            failure: { type: string }
+        version: { type: integer, minimum: 0 }
+        updatedAt: { type: ["string", "null"], format: date-time }
+    StandardProviderDecision:
+      type: object
+      required: [providerKey, decisionKey, status, accountableRole, requirement, detail, documentationUrls, createdAt, resolvedAt]
+      properties:
+        providerKey: { type: string }
+        decisionKey: { type: string }
+        status: { type: string, enum: [open, accepted, deferred] }
+        accountableRole: { type: string }
+        requirement: { type: string }
+        detail: { type: string }
+        documentationUrls: { type: array, items: { type: string, format: uri } }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+    StandardProviderStatusResponse:
+      type: object
+      required: [providers, decisions]
+      properties:
+        providers: { type: array, items: { $ref: "#/components/schemas/StandardProviderStatus" } }
+        decisions: { type: array, items: { $ref: "#/components/schemas/StandardProviderDecision" } }
+    StandardOnboardingError:
+      type: object
+      additionalProperties: false
+      description: Error envelope returned by the dedicated standard onboarding routes.
+      properties:
+        message: { type: string }
+      required: [message]
+    StandardIntakeWorkforceContext:
+      type: object
+      additionalProperties: false
+      description: >
+        Bounded operational context used for checklist selection. Special
+        category and free-form fields are deliberately not accepted here.
+      properties:
+        roleFamily: { type: string, minLength: 1, maxLength: 120 }
+        band: { type: string, minLength: 1, maxLength: 120 }
+        department: { type: string, minLength: 1, maxLength: 120 }
+        legalEntity: { type: string, minLength: 1, maxLength: 120 }
+        businessUnit: { type: string, minLength: 1, maxLength: 120 }
+        industry: { type: string, minLength: 1, maxLength: 120 }
+        workCountry: { type: string, minLength: 1, maxLength: 120 }
+        workState: { type: string, minLength: 1, maxLength: 120 }
+        site: { type: string, minLength: 1, maxLength: 120 }
+        employmentArrangement: { type: string, minLength: 1, maxLength: 120 }
+        workerCategory: { type: string, minLength: 1, maxLength: 120 }
+        payBasis: { type: string, minLength: 1, maxLength: 120 }
+        shiftPattern: { type: string, minLength: 1, maxLength: 120 }
+        assistedIntake: { type: boolean }
+        siteExposure: { type: boolean }
+        safetyCritical: { type: boolean }
+        hazards:
+          type: array
+          maxItems: 20
+          items: { type: string, minLength: 1, maxLength: 120 }
+        requiredLicenses:
+          type: array
+          maxItems: 20
+          items: { type: string, minLength: 1, maxLength: 120 }
+        workEnvironment: { type: string, enum: [office, remote, site, field, mixed] }
+        hiringMode: { type: string, enum: [individual, batch, seasonal] }
+        batchId: { type: string, minLength: 1, maxLength: 160 }
+    StandardIntakePerson:
+      type: object
+      additionalProperties: false
+      properties:
+        personKey: { type: string, minLength: 1, maxLength: 160 }
+        workerName: { type: string, minLength: 1, maxLength: 120 }
+        workerEmail: { type: string, format: email, minLength: 1, maxLength: 254 }
+        workerPhone: { type: string, minLength: 1, maxLength: 32 }
+        channelPreference: { type: string, enum: [email, whatsapp, both] }
+        hireType: { type: string, minLength: 1, maxLength: 120 }
+        workerCategory: { type: string, minLength: 1, maxLength: 120 }
+        workerBand: { type: string, minLength: 1, maxLength: 120 }
+        role: { type: string, minLength: 1, maxLength: 120 }
+        department: { type: string, minLength: 1, maxLength: 120 }
+        geography: { type: string, minLength: 1, maxLength: 120 }
+        legalEntity: { type: string, minLength: 1, maxLength: 120 }
+        managerName: { type: string, minLength: 1, maxLength: 120 }
+        recruiterName: { type: string, minLength: 1, maxLength: 120 }
+        joiningDate: { type: string, format: date }
+        urgency: { type: string, minLength: 1, maxLength: 120 }
+        jobProfileId: { type: string, minLength: 1, maxLength: 160 }
+        workforceContext: { $ref: "#/components/schemas/StandardIntakeWorkforceContext" }
+      required:
+        - personKey
+        - workerName
+        - workerEmail
+        - hireType
+        - workerCategory
+        - role
+        - department
+        - geography
+        - legalEntity
+        - managerName
+        - recruiterName
+        - joiningDate
+    StandardIntakeEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        sourceEventId: { type: string, minLength: 1, maxLength: 160 }
+        eventType: { type: string, enum: [accepted-offer, scheduled-preboarding] }
+        acceptanceEvidenceReference:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '^[a-z][a-z0-9+.-]{1,30}:[^\s]+$'
+          description: Opaque whitespace-free source-system URI/reference; the offer artifact is not uploaded.
+        occurredAt: { type: string, format: date-time }
+        person: { $ref: "#/components/schemas/StandardIntakePerson" }
+      required: [sourceEventId, eventType, acceptanceEvidenceReference, person]
+    StandardIntakeBatchInput:
+      type: object
+      additionalProperties: false
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: "#/components/schemas/StandardIntakeEvent" }
+      required: [events]
+    StandardIntakeRowResult:
+      type: object
+      additionalProperties: false
+      properties:
+        index: { type: integer, minimum: 0 }
+        sourceEventId: { type: string }
+        status: { type: string, enum: [created, reconciled, conflict, duplicate-active, invalid, blocked] }
+        caseId: { type: integer, minimum: 1 }
+        errors:
+          type: array
+          items: { type: string }
+        message: { type: string }
+        profileId: { type: string }
+        profileVersion: { type: integer, minimum: 1 }
+      required: [index, status]
+    StandardIntakePreviewResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        sourceId: { type: string }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/StandardIntakeRowResult" }
+      required: [sourceId, rows]
+    StandardIntakeCommitSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        created: { type: integer, minimum: 0 }
+        reconciled: { type: integer, minimum: 0 }
+        unresolved: { type: integer, minimum: 0 }
+      required: [created, reconciled, unresolved]
+    StandardIntakeCommitResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        sourceId: { type: string }
+        replay: { type: boolean }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/StandardIntakeRowResult" }
+        summary: { $ref: "#/components/schemas/StandardIntakeCommitSummary" }
+      required: [sourceId, replay, results, summary]
+    StandardIntakeEvidence:
+      type: object
+      additionalProperties: false
+      properties:
+        sourceId: { type: string }
+        sourceIdentity: { type: string }
+        sourceEventId: { type: string }
+        eventType: { type: string, enum: [accepted-offer, scheduled-preboarding] }
+        acceptanceEvidenceReference: { type: string }
+        activationDueAt: { type: ["string", "null"], format: date-time }
+        activationStatus: { type: string, enum: [awaiting-review, scheduled, due-review, released] }
+        activationReviewRequestedAt: { type: ["string", "null"], format: date-time }
+        activationReleasedAt: { type: ["string", "null"], format: date-time }
+        receivedAt: { type: string, format: date-time }
+        state: { type: string, enum: [created, duplicate-active] }
+      required:
+        - sourceId
+        - sourceIdentity
+        - sourceEventId
+        - eventType
+        - acceptanceEvidenceReference
+        - activationDueAt
+        - activationStatus
+        - activationReviewRequestedAt
+        - activationReleasedAt
+        - receivedAt
+        - state
+    StandardIntakeReleaseResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        caseId: { type: integer, minimum: 1 }
+        orchestrationStatus: { type: string }
+        gateAWillBeRequired: { type: boolean, const: true }
+      required: [caseId, orchestrationStatus, gateAWillBeRequired]
+    StandardOperationsExceptionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [no-response, payroll-cutoff, delayed-bgv] }
+        expectedVersion: { type: integer, minimum: 0 }
+        rationale: { type: string, minLength: 3, maxLength: 500 }
+      required: [type, expectedVersion, rationale]
+    StandardOperationsResolutionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        rationale: { type: string, minLength: 3, maxLength: 500 }
+      required: [expectedVersion, rationale]
+    StandardOperationsManualFulfillmentInput:
+      type: object
+      additionalProperties: false
+      properties:
+        area: { type: string, enum: [bgv, payroll, benefits] }
+        expectedVersion: { type: integer, minimum: 0 }
+        rationale: { type: string, minLength: 3, maxLength: 500 }
+        status: { type: string, enum: [not-started, in-progress, failed, resolved] }
+        evidenceStatus: { type: string, enum: [not-recorded, recorded] }
+        consentStatus: { type: string, enum: [not-applicable, pending, recorded] }
+        cutoffStatus: { type: string, enum: [not-applicable, unknown, reviewed] }
+        reconciliationStatus: { type: string, enum: [not-started, pending, resolved] }
+        failureStatus: { type: string, enum: [none, active] }
+      required:
+        - area
+        - expectedVersion
+        - rationale
+        - status
+        - evidenceStatus
+        - consentStatus
+        - cutoffStatus
+        - reconciliationStatus
+        - failureStatus
+    StandardOperationsStartDateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        startDate: { type: string, format: date }
+        expectedVersion: { type: integer, minimum: 0 }
+        rationale: { type: string, minLength: 3, maxLength: 500 }
+      required: [startDate, expectedVersion, rationale]
+    StandardOperationsImpactReconciliationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        resolution: { type: string, enum: [source-proof, manual-resolution] }
+        expectedVersion: { type: integer, minimum: 0 }
+        rationale: { type: string, minLength: 3, maxLength: 500 }
+      required: [resolution, expectedVersion, rationale]
+    StandardOperationsView:
+      type: object
+      additionalProperties: false
+      properties:
+        caseId: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 0 }
+        startDate: { type: string, format: date }
+        preparation:
+          type: object
+          additionalProperties: false
+          properties:
+            allowed: { type: boolean, const: true }
+            message: { type: string }
+          required: [allowed, message]
+        startDateImpacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              stream: { type: string, enum: [hris, provisioning, payroll, benefits, schedules] }
+              owner: { type: string }
+              status: { type: string, enum: [review-required, source-confirmed, manual-resolution] }
+            required: [stream, owner, status]
+        startDateReconciliation:
+          type: object
+          additionalProperties: false
+          properties:
+            state: { type: string, enum: [not-required, pending-review, complete] }
+            message: { type: string }
+          required: [state, message]
+        rehireReuse:
+          type: object
+          additionalProperties: false
+          properties:
+            eligible: { type: boolean }
+            message: { type: string }
+          required: [eligible, message]
+        conditionalJoin:
+          type: object
+          additionalProperties: false
+          properties:
+            enabled: { type: boolean }
+            message: { type: string }
+          required: [enabled, message]
+        release:
+          type: object
+          additionalProperties: false
+          properties:
+            access: { $ref: "#/components/schemas/StandardOperationsReleaseEligibility" }
+            assets: { $ref: "#/components/schemas/StandardOperationsReleaseEligibility" }
+          required: [access, assets]
+        exceptions:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              type: { type: string, enum: [no-response, payroll-cutoff, delayed-bgv] }
+              owner: { type: string, const: HR Operations }
+              state: { type: string, enum: [held, clear] }
+              message: { type: string }
+            required: [type, owner, state, message]
+        manualFulfillment:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              area: { type: string, enum: [bgv, payroll, benefits] }
+              status: { type: string, enum: [not-started, in-progress, failed, resolved] }
+              evidenceStatus: { type: string, enum: [not-recorded, recorded] }
+              consentStatus: { type: string, enum: [not-applicable, pending, recorded] }
+              cutoffStatus: { type: string, enum: [not-applicable, unknown, reviewed] }
+              reconciliationStatus: { type: string, enum: [not-started, pending, resolved] }
+              failureStatus: { type: string, enum: [none, active] }
+            required:
+              - area
+              - status
+              - evidenceStatus
+              - consentStatus
+              - cutoffStatus
+              - reconciliationStatus
+              - failureStatus
+      required:
+        - caseId
+        - version
+        - startDate
+        - preparation
+        - startDateImpacts
+        - startDateReconciliation
+        - rehireReuse
+        - conditionalJoin
+        - release
+        - exceptions
+        - manualFulfillment
+    StandardOperationsReleaseEligibility:
+      type: object
+      additionalProperties: false
+      properties:
+        eligible: { type: boolean }
+        blockers:
+          type: array
+          items: { type: string }
+      required: [eligible, blockers]

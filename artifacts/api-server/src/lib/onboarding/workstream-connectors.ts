@@ -44,6 +44,11 @@ import {
 } from "./effect-journal";
 import type { OnboardingDbTransaction } from "./settings";
 import { evaluateStoredCaseGovernanceGate } from "./governance-runtime";
+import {
+  getStandardOperationsView,
+  getStandardOperationsViewInTransaction,
+  type StandardOperationsView,
+} from "./standard-operations";
 import { withGovernanceDispatch } from "./governance-dispatch";
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -107,6 +112,20 @@ export type WorkstreamConnectorDependencies = {
   };
 };
 
+export type WorkstreamDispatchOutcome = {
+  /** Release mutations were deliberately held; other independent effects ran. */
+  releaseHeld: boolean;
+  heldConnectors: Array<"iam" | "payroll">;
+};
+
+function isExpectedStandardOperationsReleaseHold(
+  error: unknown,
+): error is ConnectorDispatchRejectedError {
+  return error instanceof ConnectorDispatchRejectedError &&
+    (error.connector === "iam" || error.connector === "payroll") &&
+    error.reason.startsWith("standard-operations:");
+}
+
 function isOrdinaryExecutionMutation(mutation: ConnectorMutation): boolean {
   return (
     (mutation.connector === "payroll" && mutation.operation === "enrol-worker") ||
@@ -166,6 +185,60 @@ function blockersFor(
   return (c.workstreams as Array<{ key?: string; blockers?: string[] }>)
     .filter((workstream) => workstream.key === workstreamKey)
     .flatMap((workstream) => workstream.blockers ?? []);
+}
+
+function standardOperationsReleaseBlocker(
+  mutation: Pick<ConnectorMutation, "connector" | "operation">,
+  standardOperations: StandardOperationsView,
+): string | null {
+  if (mutation.connector === "iam" && mutation.operation === "provision-account") {
+    return standardOperations.release.access.eligible
+      ? null
+      : `standard-operations:${standardOperations.release.access.blockers.join(" ")}`;
+  }
+  if (mutation.connector === "payroll" && mutation.operation === "enrol-worker") {
+    const payrollDateImpact = standardOperations.startDateImpacts
+      .find((impact) => impact.stream === "payroll");
+    if (standardOperations.startDateReconciliation.state !== "not-required" &&
+        payrollDateImpact?.status === "review-required") {
+      // A pre-change payroll cutoff only proves that the old timing was
+      // known. It cannot authorize enrollment against a changed start date:
+      // payroll must independently record a manual resolution or a
+      // source-proof binding for its own stream.
+      return "standard-operations:Payroll start-date impact remains review-required; reconcile the payroll stream against the changed effective date before enrollment.";
+    }
+    const holds = standardOperations.exceptions
+      .filter((exception) => exception.state === "held" &&
+        (exception.type === "no-response" || exception.type === "payroll-cutoff" || exception.type === "delayed-bgv"))
+      .map((exception) => exception.type);
+    return holds.length === 0
+      ? null
+      : `standard-operations:HR Operations hold(s) require resolution before payroll enrollment: ${holds.join(", ")}`;
+  }
+  return null;
+}
+
+async function assertStandardOperationsReleaseAllowed(
+  mutation: Pick<ConnectorMutation, "connector" | "operation">,
+  organizationId: string,
+  caseId: number,
+  tx?: OnboardingDbTransaction,
+  lockedCaseRow?: typeof onbCases.$inferSelect,
+): Promise<void> {
+  if (
+    !((mutation.connector === "iam" && mutation.operation === "provision-account") ||
+      (mutation.connector === "payroll" && mutation.operation === "enrol-worker"))
+  ) return;
+  // The final production check receives the same authority-fence transaction
+  // that locks the current case. Never open a nested transaction here: doing
+  // so could wait on that lock and let a stale release decision escape.
+  const standardOperations = tx
+    ? await getStandardOperationsViewInTransaction(tx, organizationId, caseId, lockedCaseRow)
+    : await getStandardOperationsView(organizationId, caseId);
+  const blocker = standardOperationsReleaseBlocker(mutation, standardOperations);
+  if (blocker) {
+    throw new ConnectorDispatchRejectedError(mutation.connector, blocker);
+  }
 }
 
 /** Rechecked at recovery and immediately before each connector operation. */
@@ -371,6 +444,11 @@ export async function dispatchCaseConnectorMutation(input: {
   // Do not turn an already-confirmed journal fact into a rejected replay
   // merely because an independent task subsequently became blocked.
   if (await isConfirmedEffect(effectIdentity)) return;
+  await assertStandardOperationsReleaseAllowed(
+    input.mutation,
+    input.c.organizationId,
+    input.c.id,
+  );
   if (!workstreamPolicyGateOpen(input.c)) {
     throw new Error("Workstream connector dispatch blocked by an unmet before-workstreams policy gate.");
   }
@@ -444,6 +522,31 @@ export async function dispatchCaseConnectorMutation(input: {
       });
       if (!finalGate.allowed) {
         return { blockedReason: `governance:${finalGate.blockers.map((blocker) => blocker.kind).join(",")}` };
+      }
+      // This repeats the release decision after authority verification and
+      // immediately before the provider writer. The passed transaction is the
+      // authority fence transaction, which already holds the current case row;
+      // it sees an HR Operations hold/date correction committed after the
+      // preliminary read and before the durable dispatch marker.
+      if (authorityTx) {
+        const [liveCase] = await authorityTx.select().from(onbCases).where(
+          eq(onbCases.id, c.id),
+        );
+        if (!liveCase || liveCase.organizationId !== c.organizationId) {
+          throw new ConnectorDispatchRejectedError(mutation.connector, "case_not_found");
+        }
+        await assertStandardOperationsReleaseAllowed(
+          mutation,
+          c.organizationId,
+          c.id,
+          authorityTx,
+          liveCase,
+        );
+      } else {
+        // Dependency-provided simulated fences have no DB transaction. Keep
+        // them safe by re-reading rather than allowing the preliminary result
+        // to stand; production always takes the branch above.
+        await assertStandardOperationsReleaseAllowed(mutation, c.organizationId, c.id);
       }
       await baseWrite(mutation, c, authorityTx);
       return { blockedReason: null };
@@ -594,29 +697,43 @@ function workstreamMutations(c: WorkstreamConnectorCase): ConnectorMutation[] {
 export async function dispatchWorkstreamConnectorMutations(
   c: WorkstreamConnectorCase,
   dependencies?: WorkstreamConnectorDependencies,
-): Promise<void> {
+): Promise<WorkstreamDispatchOutcome> {
   const syntheticOffline = isSyntheticOfflineCase({
     workerName: c.workerName ?? "",
     workerEmail: c.workerEmail,
     workerPhone: c.workerPhone ?? null,
     notes: c.notes ?? null,
   });
-  if (syntheticOffline) return;
+  if (syntheticOffline) return { releaseHeld: false, heldConnectors: [] };
   // This is also called by watchdog recovery, so it must independently retain
   // Gate A rather than trusting the engine caller.
   if (
     (c.hireType === "external-fte" || c.hireType === "contractor" || c.hireType === "rehire") &&
     c.offerAcceptanceComplete === false
-  ) return;
-  if (!workstreamPolicyGateOpen(c)) return;
-  await withCaseDispatchGuard(c.id, async (caseRow) => {
-      if (isSyntheticOfflineCase(caseRow)) return;
+  ) return { releaseHeld: false, heldConnectors: [] };
+  if (!workstreamPolicyGateOpen(c)) return { releaseHeld: false, heldConnectors: [] };
+  const outcome = await withCaseDispatchGuard(c.id, async (caseRow) => {
+      if (isSyntheticOfflineCase(caseRow)) return { releaseHeld: false, heldConnectors: [] };
       // Never trust the pre-guard row; a context correction/evidence
       // rejection may have blocked the case while this worker was waiting.
-      if (!workstreamPolicyGateOpen(caseRow)) return;
+      if (!workstreamPolicyGateOpen(caseRow)) return { releaseHeld: false, heldConnectors: [] };
+      const heldConnectors: Array<"iam" | "payroll"> = [];
       for (const mutation of workstreamMutations(caseRow)) {
         if (!await mutationMayDispatch(caseRow, mutation)) continue;
-        await dispatchCaseConnectorMutation({ c: caseRow, mutation, dependencies });
+        try {
+          await dispatchCaseConnectorMutation({ c: caseRow, mutation, dependencies });
+        } catch (error) {
+          // A standard-operations release hold is expected, durable work, not
+          // an orchestration exception. Keep independently safe document/BGV
+          // effects and continue assessing the remaining stream.
+          if (isExpectedStandardOperationsReleaseHold(error)) {
+            heldConnectors.push(error.connector as "iam" | "payroll");
+            continue;
+          }
+          throw error;
+        }
       }
+      return { releaseHeld: heldConnectors.length > 0, heldConnectors };
     }, { onOffline: async () => undefined });
+  return outcome ?? { releaseHeld: false, heldConnectors: [] };
 }

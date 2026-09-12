@@ -9,9 +9,10 @@ import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
 import { format } from 'date-fns';
-import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, FlaskConical, Check, AlertTriangle, Clock, Presentation } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, FlaskConical, Check, AlertTriangle, Clock, Presentation, ShieldCheck } from 'lucide-react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { BatchIntakeForm } from './batch-intake';
+import { StandardIntakeForm } from './standard-intake';
 import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
 
 type OnbCase = ApiOnbCase;
@@ -259,6 +260,7 @@ export function CasesPage() {
   });
   const [showNew, setShowNew] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
+  const [showStandardIntake, setShowStandardIntake] = useState(false);
   const [, setLocation] = useLocation();
   const [typeFilter, setTypeFilter] = useState<CaseTypeFilter>('All Cases');
   const [query, setQuery] = useState('');
@@ -371,6 +373,9 @@ export function CasesPage() {
           <Button variant="outline" onClick={() => setShowBatch(!showBatch)} className="gap-2">
             <Users className="h-4 w-4" /> Batch Intake
           </Button>
+           <Button variant="outline" onClick={() => setShowStandardIntake(!showStandardIntake)} className="gap-2">
+             <ShieldCheck className="h-4 w-4" /> Trusted Intake
+           </Button>
         </div>
       </PageHeader>
 
@@ -382,6 +387,7 @@ export function CasesPage() {
 
       {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
        {showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
+       {showStandardIntake && <StandardIntakeForm onClose={() => setShowStandardIntake(false)} />}
 
       <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'visible' }}>
         {/* search + filters row */}

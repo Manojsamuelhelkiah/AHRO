@@ -148,6 +148,22 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
     await new Promise((resolve) => setTimeout(resolve, 40));
   }
 
+  async function waitForEvent(caseId: number, title: string) {
+    // `resumeAfterDecision` intentionally continues outside the approval
+    // transaction. Poll the durable event rather than assuming a fixed delay
+    // is enough while other database-backed suites are using the pool.
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const [event] = await db.select().from(onbEvents).where(and(
+        eq(onbEvents.organizationId, organizationId),
+        eq(onbEvents.caseId, caseId),
+        eq(onbEvents.title, title),
+      )).limit(1);
+      if (event) return event;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return undefined;
+  }
+
   test("same-version concurrent decisions have one winner and one stale loser", async () => {
     const { caseId, approval } = await createFixture();
     const decisions = [
@@ -372,15 +388,13 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       hitlPattern: "hard-block",
       resumeAction: "none",
     });
-    await settleContinuation();
+    const event = await waitForEvent(
+      caseId,
+      "Review acknowledged — source completion/mandatory gates still required",
+    );
 
     const [current] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
     assert.equal(current.lifecycleStage, "preboarding");
-    const [event] = await db.select().from(onbEvents).where(and(
-      eq(onbEvents.organizationId, organizationId),
-      eq(onbEvents.caseId, caseId),
-      eq(onbEvents.title, "Review acknowledged — source completion/mandatory gates still required"),
-    ));
     assert.ok(event);
     assert.match(event.detail, /source completion\/mandatory gates still required/);
     assert.doesNotMatch(event.detail, /authorised onboarding to proceed/);

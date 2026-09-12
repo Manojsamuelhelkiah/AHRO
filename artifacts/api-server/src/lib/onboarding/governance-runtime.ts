@@ -454,6 +454,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     workerEmail: string;
     workerPhone?: string | null;
     notes?: string | null;
+    joiningDate?: string;
     hireType: string;
     workerCategory: string;
     processPolicySnapshot?: unknown;
@@ -484,7 +485,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
   });
   const { decisions, requirements } = await currentGovernanceRows(organizationId);
   const providerKey = providerKeyForWorkflow(workflow);
-  const [provider, checks, hrisState, activeAuthorities, allDecisionRevisions, decisionReviews] = await Promise.all([
+  const [provider, checks, hrisState, activeAuthorities, allDecisionRevisions, decisionReviews, currentCase] = await Promise.all([
     providerKey
       ? db.select().from(onbConnectors).where(and(
         eq(onbConnectors.organizationId, organizationId),
@@ -514,6 +515,10 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     db.select().from(onbGovernanceDecisionReviews).where(
       eq(onbGovernanceDecisionReviews.organizationId, organizationId),
     ),
+    db.select({ joiningDate: onbCases.joiningDate }).from(onbCases).where(and(
+      eq(onbCases.organizationId, organizationId),
+      eq(onbCases.id, input.caseRow.id),
+    )).limit(1),
   ]);
   const snapshotVersion = hrisState[0]?.snapshotVersion;
   const hrisAttestations = snapshotVersion === undefined
@@ -596,7 +601,10 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     standardHireAccess: {
       standardNewHire: standardNewHireForStoredCase(input.caseRow),
       bgvClear: hasTrustedBgvClearanceEvidence(checks),
-      hrisActive: hasTrustedHrisActivationEvidence(hrisAttestations[0]),
+        hrisActive: snapshotVersion !== undefined && currentCase[0] !== undefined && hasTrustedHrisActivationEvidence(hrisAttestations[0], {
+          joiningDate: currentCase[0].joiningDate,
+          snapshotVersion,
+        }),
     },
   });
 }

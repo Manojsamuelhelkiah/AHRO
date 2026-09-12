@@ -93,6 +93,12 @@ export const tenantSafeguards = [
   // A disposable cursor is recreated by workers; it intentionally has no
   // organization parent FK so tenant cleanup cannot be blocked by a cursor.
   { table: "onb_sensitive_lifecycle_scan_cursors", phaseB: false, requiresOrganizationForeignKey: false },
+  // Standard intake and provider contracts are tenant-owned at creation and
+  // must be covered by startup tenant/FK/RLS verification.
+  { table: "onb_standard_intake_events", phaseB: false },
+  { table: "onb_standard_provider_configs", phaseB: false },
+  { table: "onb_standard_provider_source_records", phaseB: false },
+  { table: "onb_standard_provider_decisions", phaseB: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -149,6 +155,15 @@ export const expectedForeignKeys = [
     table,
     columns: ["organization_id", "approval_id"],
     referencedTable: "onb_approvals",
+    referencedColumns: ["organization_id", "id"],
+  })),
+  ...[
+    "onb_standard_intake_events",
+    "onb_standard_provider_source_records",
+  ].map((table) => ({
+    table,
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
     referencedColumns: ["organization_id", "id"],
   })),
   {

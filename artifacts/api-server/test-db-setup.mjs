@@ -61,6 +61,10 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // references and installs append-only evidence protections. The exact hash
   // binds automatic reconciliation to the approved bytes.
   "e8bb7eafea75bae8995c5104f174e8a9d58a316d50310d231e128749e094144d",
+  // Reviewed intake retention repair: replaces a case-cascading foreign key
+  // with tombstones and installs a narrowly scoped evidence-minimizing delete
+  // trigger. The exact hash prevents modification without renewed review.
+  "886e070edb7bd373604dbcf48cf5730ba27ae9843b692cee22f87695fdb501a8",
   // Reviewed authority/governance migration includes an explicit historical
   // checklist backfill and therefore is not eligible for generic automatic
   // DDL classification.

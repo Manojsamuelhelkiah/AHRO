@@ -11,6 +11,7 @@ test('GatewaysStrip renders all three gates and only exposes Gate A after scoped
   const mockCase = {
     id: 1,
     offerAcceptanceComplete: false,
+    orchestrationStatus: 'not-ready',
     gateways: {
       a: { status: 'pending' as const, label: 'A Label', reason: 'A Reason' },
       b: { status: 'human-review' as const, label: 'B Label', reason: 'B Reason' },

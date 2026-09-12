@@ -1093,6 +1093,14 @@ test(
              tag !== "0060_governed_minimal_approval_history" &&
              tag !== "0061_candidate_upload_reservations" &&
               tag !== "0062_candidate_upload_reservation_context_version" &&
+              // Standard intake/provider tables are born after the legacy
+              // workspace's organizations migration. They cannot be applied
+              // to the deliberately pre-organization fixture below.
+              tag !== "0063_standard_onboarding_intake" &&
+              tag !== "0064_standard_provider_contracts" &&
+              tag !== "0065_standard_intake_scheduled_activation" &&
+              tag !== "0066_standard_intake_case_tombstones" &&
+               tag !== "0067_hris_attestation_source_binding" &&
              tag !== "0053_governed_hr_policy_library" &&
              tag !== "0053_external_audit_anchor_receipt_generation" &&
              tag !== "0054_external_audit_anchor_receipt_constraints" &&

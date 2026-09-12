@@ -9,9 +9,14 @@ import {
   onbCandidateSessions,
   onbCases,
   onbCommunications,
+  onbConnectors,
   onbSensitiveLifecycleDeletionJobs,
   onbSensitiveLifecycleHolds,
   onbSensitiveLifecyclePolicies,
+  onbStandardIntakeEvents,
+  onbStandardProviderConfigs,
+  onbStandardProviderDecisions,
+  onbStandardProviderSourceRecords,
   onbVoiceSessions,
   organizationsTable,
 } from "@workspace/db";
@@ -101,6 +106,11 @@ before(async () => {
 });
 
 after(async () => {
+  await db.delete(onbStandardProviderSourceRecords).where(eq(onbStandardProviderSourceRecords.organizationId, organizationId));
+  await db.delete(onbStandardIntakeEvents).where(eq(onbStandardIntakeEvents.organizationId, organizationId));
+  await db.delete(onbStandardProviderDecisions).where(eq(onbStandardProviderDecisions.organizationId, organizationId));
+  await db.delete(onbStandardProviderConfigs).where(eq(onbStandardProviderConfigs.organizationId, organizationId));
+  await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, organizationId));
   await db.delete(onbCandidateSessions).where(eq(onbCandidateSessions.organizationId, organizationId));
   await db.delete(onbCandidateLinks).where(eq(onbCandidateLinks.organizationId, organizationId));
   await db.delete(onbCommunications).where(eq(onbCommunications.organizationId, organizationId));

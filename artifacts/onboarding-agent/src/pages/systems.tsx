@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle, Eye, Webhook, RefreshCw, Clock, Inbox, FlaskConical } from 'lucide-react';
 import { format } from 'date-fns';
 import { MalwareScannerStatus } from '@/components/malware-scanner-status';
+import { StandardProvidersPanel } from '@/components/standard-providers-panel';
 
 export function SystemsPage() {
   const queryClient = useQueryClient();
@@ -44,12 +45,16 @@ export function SystemsPage() {
         subtitle="Manage system-of-record adapters and outbound communication channels." 
       />
 
-      <div className="space-y-4 pt-4">
+      <div className="pt-4">
+        <StandardProvidersPanel />
+      </div>
+
+      <div className="space-y-4 pt-10">
         <div>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Server className="w-4 h-4 text-[var(--primary)]" /> System Adapters
+            <Server className="w-4 h-4 text-[var(--primary)]" /> System Adapters (Legacy)
           </h2>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Source systems that agents read from and write to via MCP.</p>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Legacy adapters for tracking mode and watcher configurations.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {loadingConn ? <LoadingBlock className="col-span-full">Loading adapters...</LoadingBlock> : connectors?.map(conn => (

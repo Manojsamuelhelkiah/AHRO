@@ -25,6 +25,7 @@ import {
 } from "./workforce-step-runtime";
 import { workforceAuthorityScope } from "./workforce-policies";
 import { evaluateStoredCaseGovernanceGate, type GovernanceWorkflow } from "./governance-runtime";
+import { getStandardOperationsViewInTransaction } from "./standard-operations";
 import {
   SensitiveLifecycleValidationError,
   withCaseDerivedLifecycleWrite,
@@ -1066,7 +1067,9 @@ export async function evaluateWorkforceRuntimePrerequisites(input: {
 }
 
 type WorkforceContinuationDependencies = {
-  dispatch?: (caseRow: typeof onbCases.$inferSelect) => Promise<void>;
+  dispatch?: (caseRow: typeof onbCases.$inferSelect) => Promise<
+    void | { releaseHeld: boolean; heldConnectors: string[] }
+  >;
   resume?: (caseId: number) => Promise<unknown>;
 };
 
@@ -1094,11 +1097,37 @@ export async function reconcileWorkforceConnectorContinuation(input: {
       ));
       return;
     }
-    if (input.dependencies?.dispatch) {
-      await input.dependencies.dispatch(caseRow);
-    } else {
-      const { dispatchWorkstreamConnectorMutations } = await import("./workstream-connectors");
-      await dispatchWorkstreamConnectorMutations(caseRow);
+    const dispatchOutcome = input.dependencies?.dispatch
+      ? await input.dependencies.dispatch(caseRow)
+      : await (async () => {
+        const { dispatchWorkstreamConnectorMutations } = await import("./workstream-connectors");
+        return dispatchWorkstreamConnectorMutations(caseRow);
+      })();
+    if (dispatchOutcome?.releaseHeld) {
+      // A workforce continuation can be the first path to create a BGV
+      // tracker. Persist the same durable release boundary as the engine so
+      // the now-tracked case is not excluded from untracked recovery before
+      // trusted BGV/HRIS evidence arrives.
+      await withCaseDerivedLifecycleWrite({
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+      }, (tx) => tx.update(onbCases).set({
+        lifecycleStage: "preboarding",
+        orchestrationStatus: "checklist-blocked",
+        orchestrationCheckpoint: "waiting:standard-operations-release",
+        orchestrationClaimOwner: null,
+        orchestrationClaimUntil: null,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(onbCases.id, input.caseId),
+        eq(onbCases.organizationId, input.organizationId),
+      )));
+      // Keep the committed task continuation durable. The heartbeat will
+      // retry this exact, journal-fenced provider operation after the
+      // outstanding Standard Operations evidence is reconciled; deleting it
+      // here would make a manual payroll date-impact resolution inert until
+      // some unrelated orchestration path happened to run.
+      return;
     }
     if (input.dependencies?.resume) {
       await input.dependencies.resume(input.caseId);
@@ -1522,6 +1551,27 @@ export async function applyOperationalRequestAction(input: {
       );
     }
     const governanceWorkflow = governanceWorkflowForOperationalRequest(request);
+    // Completing an access/asset request is a release assertion, not merely a
+    // progress update. Re-evaluate the case-owned standard-operations guard
+    // under the same transaction that owns this request state so a manual hold
+    // or unresolved start-date impact cannot race into a completed status.
+    if (
+      input.action === "complete" &&
+      (request.id === "access" || request.id === "assets" || request.runtimeWorkstream === "assets")
+    ) {
+      const standardOperations = await getStandardOperationsViewInTransaction(
+        tx,
+        input.organizationId,
+        input.caseId,
+        caseRow,
+      );
+      const release = request.id === "access" ? standardOperations.release.access : standardOperations.release.assets;
+      if (!release.eligible) {
+        throw new OperationalRequestConflictError(
+          `Access/asset completion is blocked: ${release.blockers.join(" ")}`,
+        );
+      }
+    }
     // This is server-persisted classification, not a caller-supplied bypass.
     // Local simulation records never authorize provider I/O or real readiness.
     if (!request.simulated && governanceWorkflow && ["start", "progress", "complete"].includes(input.action)) {
