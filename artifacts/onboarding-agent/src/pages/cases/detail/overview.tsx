@@ -11,6 +11,7 @@ import {
   getApprovalVersionLabel,
   isApprovalAcknowledgement,
 } from '../../../lib/approval-actions';
+import { CasePrivacyControls } from './case-privacy-controls';
 
 export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
   return (
@@ -25,6 +26,7 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
         <div className="md:sticky md:top-[120px] space-y-6">
           <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} />
            <WorkforceContextCard c={c} />
+          <CasePrivacyControls caseId={caseId} />
           <CaseOwnerCard events={events} approvals={approvals} />
           <LatestCommunicationCard comms={comms} setTab={setTab} />
           <DocumentsSummaryCard docs={docs} setTab={setTab} />

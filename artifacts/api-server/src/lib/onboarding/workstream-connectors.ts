@@ -273,6 +273,7 @@ function documentSeedFrom(
 async function productionWrite(
   mutation: Readonly<ConnectorMutation>,
   _c: WorkstreamConnectorCase,
+  tx?: OnboardingDbTransaction,
 ): Promise<void> {
   if (
     mutation.connector === "documents" &&
@@ -293,7 +294,7 @@ async function productionWrite(
       `Approved system ${payload.system} does not match ${mutation.connector}:${mutation.operation}`,
     );
   }
-  await trackCaseSystems(payload.caseId, [system]);
+  await trackCaseSystems(payload.caseId, [system], tx);
 }
 
 /**
@@ -305,6 +306,7 @@ async function journaledProductionWrite(input: {
   mutation: Readonly<ConnectorMutation>;
   c: WorkstreamConnectorCase;
   proposal: ApprovalProposal;
+  tx?: OnboardingDbTransaction;
 }): Promise<void> {
   const identity = {
     logicalOperationKey: input.proposal.logicalOperationKey,
@@ -330,7 +332,7 @@ async function journaledProductionWrite(input: {
     throw new Error("Effect is already being dispatched by another worker");
   }
   try {
-    await productionWrite(input.mutation, input.c);
+    await productionWrite(input.mutation, input.c, input.tx);
     if (!(await confirmEffect({
       logicalOperationKey: identity.logicalOperationKey,
       organizationId: identity.organizationId,
@@ -410,15 +412,22 @@ export async function dispatchCaseConnectorMutation(input: {
         };
       });
   const now = input.dependencies?.now?.() ?? new Date();
-  const baseWrite = input.dependencies?.write
-    ? input.dependencies.write
-    : (mutation: Readonly<ConnectorMutation>, c: WorkstreamConnectorCase) =>
-        journaledProductionWrite({ mutation, c, proposal });
+  const baseWrite: (
+    mutation: Readonly<ConnectorMutation>,
+    c: WorkstreamConnectorCase,
+    tx?: OnboardingDbTransaction,
+  ) => Promise<void> = input.dependencies?.write
+    ? (mutation, c) => input.dependencies!.write!(mutation, c)
+    : (mutation, c, tx) => journaledProductionWrite({ mutation, c, proposal, tx });
   // The outer connector adapter holds the compound-authority fence. This
   // nested backend-owned dispatch fence re-reads the governance state directly
   // before the physical writer, so an approval/revocation race cannot pass the
   // preliminary check above.
-  const write = async (mutation: Readonly<ConnectorMutation>, c: WorkstreamConnectorCase) => {
+  const write = async (
+    mutation: Readonly<ConnectorMutation>,
+    c: WorkstreamConnectorCase,
+    authorityTx?: OnboardingDbTransaction,
+  ) => {
     const dispatched = await withGovernanceDispatch({
       organizationId: c.organizationId,
       operation: `${mutation.connector}:${mutation.operation}`,
@@ -436,7 +445,7 @@ export async function dispatchCaseConnectorMutation(input: {
       if (!finalGate.allowed) {
         return { blockedReason: `governance:${finalGate.blockers.map((blocker) => blocker.kind).join(",")}` };
       }
-      await baseWrite(mutation, c);
+      await baseWrite(mutation, c, authorityTx);
       return { blockedReason: null };
     });
     if (dispatched.blockedReason) {
@@ -528,7 +537,7 @@ export async function dispatchCaseConnectorMutation(input: {
         return performWrite(tx);
       }),
     },
-    write: (mutation) => write(mutation, input.c),
+    write: (mutation, tx) => write(mutation, input.c, tx),
   });
 }
 /** Startup recovery is intentionally limited to the missing document-pack

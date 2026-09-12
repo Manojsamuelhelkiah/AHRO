@@ -2,6 +2,9 @@ import { db } from "@workspace/db";
 import { onbCases, onbDocuments } from "@workspace/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { sensitiveClassForDocument } from "./sensitive-access";
+import { SensitiveLifecycleConflictError } from "./sensitive-lifecycle";
+import { ConnectorDispatchRejectedError } from "./connector-adapters";
 
 /**
  * Document checklist ("documentation pack") — real per-case records for
@@ -113,7 +116,6 @@ export async function backfillDocumentPacks(scope?: {
       ...(scope?.caseId ? [eq(onbCases.id, scope.caseId)] : []),
     ));
   const { dispatchDocumentPackRecovery } = await import("./workstream-connectors");
-  const { createApproval } = await import("./engine");
   let insertedDocuments = 0;
   for (const c of missing) {
     if (isSyntheticOfflineCase(c)) continue;
@@ -124,13 +126,25 @@ export async function backfillDocumentPacks(scope?: {
           and ${onbDocuments.caseId} = ${c.id}`,
       );
       insertedDocuments += documents.length;
-    } catch {
-      // Startup is never an authority bypass. Held cases are recovered after
-      // Gate A and the current legal document-envelope decision are present.
-      // A durable creator lets the ordinary approval queue provide that
-      // recovery path. Legacy no-principal rows remain held for an explicit
-      // administrator-initiated provenance review rather than inventing one.
-      if (c.createdByUserId) {
+    } catch (error) {
+      if (error instanceof SensitiveLifecycleConflictError) {
+        // A missing/blocked lifecycle jurisdiction is a restricted state, not
+        // completion. Skip only this legacy case so another eligible tenant's
+        // startup backfill can proceed; the case remains without a pack until
+        // an operator resolves its policy/context.
+        console.warn(
+          `[onboarding documents] restricted lifecycle backfill skipped case ${c.id}: ${error.message.slice(0, 300)}`,
+        );
+        continue;
+      }
+      if (!(error instanceof ConnectorDispatchRejectedError)) throw error;
+      // A known connector/governance denial is an expected safe hold, not an
+      // infrastructure failure. Preserve the established recovery path that
+      // creates a durable human authorization task when a trusted requester
+      // already exists; never invent one for legacy no-principal records.
+      if (!c.createdByUserId) continue;
+      const { createApproval } = await import("./engine");
+      try {
         await createApproval({
           caseId: c.id,
           authorityScope: "legal-approve",
@@ -142,6 +156,11 @@ export async function backfillDocumentPacks(scope?: {
           resumeAction: "recover-document-envelope",
           idempotencyKey: `orchestration:${c.id}:approval:execution:documents`,
         });
+      } catch (approvalError) {
+        if (!(approvalError instanceof SensitiveLifecycleConflictError)) throw approvalError;
+        console.warn(
+          `[onboarding documents] restricted lifecycle recovery approval skipped case ${c.id}: ${approvalError.message.slice(0, 300)}`,
+        );
       }
     }
   }
@@ -164,8 +183,15 @@ export function documentsSummary(docs: DocumentRow[]): string {
   if (docs.length === 0) return "No document checklist on file.";
   return docs
     .map(
-      (d) =>
-        `- ${d.label} [${d.status}${d.required ? "" : ", optional"}]${d.status === "pending" && d.required ? " — still needed from the new hire" : ""}`,
+      (d) => {
+        // LLM callers have no live specialist assignment. They receive only
+        // the operational state for protected document classes, never labels
+        // or notes that disclose bank/tax, identity, medical, or BGV detail.
+        if (sensitiveClassForDocument(d).length > 0) {
+          return `- Restricted document [${d.status}${d.required ? "" : ", optional"}]`;
+        }
+        return `- ${d.label} [${d.status}${d.required ? "" : ", optional"}]${d.status === "pending" && d.required ? " — still needed from the new hire" : ""}`;
+      },
     )
     .join("\n");
 }

@@ -3,7 +3,7 @@ import { after, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { onbApprovals, onbCases, onbChecklistProfiles, onbConnectors, onbPolicyAuthorities, onbPolicyEvidence, organizationsTable } from "@workspace/db/schema";
+import { onbApprovals, onbCases, onbChecklistProfiles, onbConnectors, onbPolicyAuthorities, onbPolicyEvidence, onbSensitiveLifecyclePolicies, organizationsTable } from "@workspace/db/schema";
 import { verifyChecklistEvidence } from "./checklist";
 import { decideApproval } from "./approval-decisions";
 import {
@@ -11,6 +11,7 @@ import {
   resolveEffectiveWorkforcePolicy,
 } from "./checklist-profiles";
 import { WORKFORCE_STARTER_TEMPLATES } from "./workforce-policies";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const organizationId = `workforce-safety-${randomUUID()}`;
@@ -25,18 +26,20 @@ describe("workforce evidence safety (real DB)", { skip: !hasDb }, () => {
     }
     await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, organizationId));
     await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, organizationId));
+    await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
     await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
   });
 
   test("scoped authority, prerequisites, and version fences are enforced", async () => {
     await db.insert(organizationsTable).values({ id: organizationId, name: "Workforce safety test", slug: organizationId, joinCodeHash: organizationId, createdByUserId: "test" });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
     const snapshot = [
       { id: "safety", label: "Safety sign-off", order: 1, enabled: true, mandatory: true, evidenceRequired: true, enforcementStage: "before-workstreams" as const, responsibleRole: "hse", completionAuthority: "designated-human" as const },
       { id: "medical", label: "Medical fitness", order: 2, enabled: true, mandatory: true, evidenceRequired: true, enforcementStage: "before-workstreams" as const, responsibleRole: "occupational-health", completionAuthority: "designated-human" as const, prerequisites: ["safety"] },
     ];
     const [created] = await db.insert(onbCases).values({
       organizationId, workerName: "Test", workerEmail: "safety@example.invalid", workerCategory: "employee", hireType: "new-hire", role: "Operator", department: "Ops", geography: "US", legalEntity: "Test", managerName: "M", recruiterName: "R", joiningDate: "2030-01-01",
-      workforceContext: { site: "yard", safetyCritical: true, siteExposure: true, workEnvironment: "site" },
+      workforceContext: { workCountry: "US", site: "yard", safetyCritical: true, siteExposure: true, workEnvironment: "site" },
       checklistSnapshot: snapshot, readiness: snapshot.map((x) => ({ key: x.id, label: x.label, status: "pending" })),
     }).returning({ id: onbCases.id });
     caseId = created.id;
@@ -68,7 +71,7 @@ describe("workforce evidence safety (real DB)", { skip: !hasDb }, () => {
       completionAuthority: "designated-human" as const,
     };
     await db.update(onbCases).set({
-      workforceContext: { workEnvironment: "office", siteExposure: false, safetyCritical: false, hazards: [] },
+      workforceContext: { workCountry: "US", workEnvironment: "office", siteExposure: false, safetyCritical: false, hazards: [] },
       workforceContextVersion: 2,
       checklistSnapshot: [officeGate],
       readiness: [{ key: officeGate.id, label: officeGate.label, status: "pending" }],
@@ -89,14 +92,14 @@ describe("workforce evidence safety (real DB)", { skip: !hasDb }, () => {
     ));
     assert.ok(officeEvidence.authorityAssignmentId.includes("__organization__"));
     await db.update(onbCases).set({
-      workforceContext: { workEnvironment: "site", site: "yard", siteExposure: true, safetyCritical: true },
+      workforceContext: { workCountry: "US", workEnvironment: "site", site: "yard", siteExposure: true, safetyCritical: true },
       workforceContextVersion: 3,
     }).where(eq(onbCases.id, caseId));
     assert.deepEqual(await verifyChecklistEvidence({
       ...officeInput, expected: { ...expected, contextVersion: 3 },
     }), { ok: false, code: "not-designated" });
     await db.update(onbCases).set({
-      workforceContext: {}, workforceContextVersion: 4,
+      workforceContext: { workCountry: "US" }, workforceContextVersion: 4,
     }).where(eq(onbCases.id, caseId));
     assert.deepEqual(await verifyChecklistEvidence({
       ...officeInput, expected: { ...expected, contextVersion: 4 },
@@ -112,7 +115,7 @@ describe("workforce evidence safety (real DB)", { skip: !hasDb }, () => {
       completionAuthority: "designated-human" as const,
     };
     await db.update(onbCases).set({
-      workforceContext: { workEnvironment: "site", site: "yard", siteExposure: true, safetyCritical: true },
+      workforceContext: { workCountry: "US", workEnvironment: "site", site: "yard", siteExposure: true, safetyCritical: true },
       workforceContextVersion: 5,
       checklistSnapshot: [rejectionGate],
       readiness: [{ key: rejectionGate.id, label: rejectionGate.label, status: "ready" }],

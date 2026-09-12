@@ -19,6 +19,7 @@ import { reminderEligible } from "./document-validation-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import { externalProviderDispatchDenied } from "./provider-policy";
 import { isChecklistAdministrator } from "./checklist";
+import { sensitiveClassForDocument, withSensitiveAuthorityFence } from "./sensitive-access";
 
 export type ActionCenterScope = "active" | "completed" | "all";
 export type ActionCenterWorkforceFilter = "white-collar" | "blue-collar-frontline" | "mixed" | "needs-review" | "unclassified";
@@ -117,6 +118,12 @@ function actionPublic(row: ActionRow, providerEffectId: string | null = null) {
     createdAt: row.createdAt.toISOString(),
   };
 }
+
+type DocumentReminderActionResult = {
+  action: ReturnType<typeof actionPublic>;
+  idempotent: boolean;
+  actionVersion: number;
+};
 
 function reminderEffectKey(providerIdempotencyKey: string): string {
   return `candidate-communication:${providerIdempotencyKey}`;
@@ -381,7 +388,7 @@ export async function recordWorkItem(input: {
   };
 }
 
-export async function recordDocumentReminder(input: {
+type DocumentReminderInput = {
   organizationId: string;
   actorUserId: string;
   actorName: string;
@@ -390,7 +397,65 @@ export async function recordDocumentReminder(input: {
   caseId: number;
   documentId: number;
   mode: DocumentReminderMode;
-}) {
+};
+
+const inFlightDocumentReminders = new Map<string, Promise<DocumentReminderActionResult>>();
+
+/**
+ * Coalesce genuinely overlapping attempts for one document before either
+ * caller observes the post-send cooldown. This is not a cooldown bypass:
+ * once the first promise settles, a later request takes the normal due-date
+ * path and is rejected.
+ */
+export async function recordDocumentReminder(input: DocumentReminderInput): Promise<DocumentReminderActionResult> {
+  const key = `${input.organizationId}:${input.caseId}:${input.documentId}:${input.mode}`;
+  const existing = inFlightDocumentReminders.get(key);
+  if (existing) return existing;
+  const operation = recordDocumentReminderOnce(input);
+  inFlightDocumentReminders.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    if (inFlightDocumentReminders.get(key) === operation) {
+      inFlightDocumentReminders.delete(key);
+    }
+  }
+}
+
+async function recordDocumentReminderOnce(input: DocumentReminderInput): Promise<DocumentReminderActionResult> {
+  const [document] = await db.select({
+    key: onbDocuments.key,
+    label: onbDocuments.label,
+    category: onbDocuments.category,
+  }).from(onbDocuments).where(and(
+    eq(onbDocuments.id, input.documentId),
+    eq(onbDocuments.organizationId, input.organizationId),
+    eq(onbDocuments.caseId, input.caseId),
+  ));
+  if (!document) throw new ActionCenterNotFoundError("Case or document not found.");
+  const classes = sensitiveClassForDocument(document);
+  return withSensitiveAuthorityFence({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+    actorUserId: input.actorUserId,
+    classification: classes[0]!,
+    additionalClassifications: classes.slice(1),
+    // Keep the authority lock through replay recovery and provider dispatch,
+    // not merely through its initial Action Center reservation.
+    mutate: () => recordDocumentReminderUnsafe(input),
+  });
+}
+
+async function recordDocumentReminderUnsafe(input: {
+  organizationId: string;
+  actorUserId: string;
+  actorName: string;
+  organizationRole?: string;
+  requestId: string;
+  caseId: number;
+  documentId: number;
+  mode: DocumentReminderMode;
+}): Promise<DocumentReminderActionResult> {
   assertActionCenterMutationAuthorized(input.organizationId, input.organizationRole, input.mode);
   const [existingAction] = await db.select().from(onbActionCenterActions).where(and(
     eq(onbActionCenterActions.organizationId, input.organizationId),
@@ -580,7 +645,7 @@ export async function recordDocumentReminder(input: {
     // Another request may have inserted the durable reservation between the
     // initial lookup and this transaction. Re-enter the replay/reconciliation
     // path rather than returning a stale `sending` row.
-    return recordDocumentReminder(input);
+    return recordDocumentReminderUnsafe(input);
   }
 
   try {
@@ -721,6 +786,7 @@ export async function getActionCenter(
       caseId: c.id,
       key: doc.key,
       label: doc.label,
+      category: doc.category,
       status: doc.status,
       required: doc.required,
       reminderCount: doc.reminderCount,

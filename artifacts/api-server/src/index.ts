@@ -13,6 +13,7 @@ import { db, organizationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { verifyProtectedAudit } from "./lib/onboarding/protected-audit";
 import { enforceRegulatedProductionStartupGuard } from "./lib/regulated-production-startup-guard";
+import { startSensitiveLifecycleDeletionWorker } from "./lib/onboarding/sensitive-lifecycle";
 
 const rawPort = process.env["PORT"];
 const validationMode = process.env["API_VALIDATION_MODE"] === "true";
@@ -59,6 +60,7 @@ app.listen(port, (err) => {
   startEmailWatch();
   startApproverInboxPolling();
   startConnectedReadinessAutomation();
+  startSensitiveLifecycleDeletionWorker();
   backfillDocumentPacks().catch((err) =>
     logger.error({ err }, "document pack backfill failed"),
   );

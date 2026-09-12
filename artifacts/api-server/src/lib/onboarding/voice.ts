@@ -51,6 +51,11 @@ import {
   evaluateProviderGovernanceGate,
   PROVIDER_GOVERNANCE_WORKFLOW,
 } from "./governance-provider-boundary";
+import {
+  evaluateSensitiveLifecycleGate,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 export type VoiceScenario = "day-before" | "sla-escalation";
 
@@ -704,36 +709,52 @@ async function persistCallOutcome(
     .map((t) => `${t.role === "agent" ? "Assistant" : c.workerName.split(" ")[0]}: ${t.text}`)
     .join("\n");
   const label = session.scenario === "day-before" ? "Day-before check-in call" : "SLA escalation call";
-
   if (!progress["transcript"]) {
-    await db
-      .insert(onbCommunications)
-      .values({
-        caseId: session.caseId,
-        organizationId: c.organizationId,
-        channel: "voice",
-        direction: "outbound",
-        toAddress: c.workerPhone ? maskPhone(c.workerPhone) : "unknown",
-        subject: `${isSyntheticOfflineCase(c) ? "[DEMO] " : ""}${label}${session.simulated ? " (simulated)" : ""}`,
-        body: transcript || "(call not answered)",
-        status: callOutcome,
-        failureReason: null,
-        sensitive: false,
-        // Unique per call: even if the progress write below is lost in a
-        // crash, a retried insert conflicts here instead of duplicating.
-        externalMessageId: session.simulated ? null : `voice-call:${session.token}`,
-      })
-      .onConflictDoNothing({
-        target: [
-          onbCommunications.organizationId,
-          onbCommunications.externalMessageId,
-        ],
+    const persistTranscript = async () => {
+      await db
+        .insert(onbCommunications)
+        .values({
+          caseId: session.caseId,
+          organizationId: c.organizationId,
+          channel: "voice",
+          direction: "outbound",
+          audience: "candidate",
+          toAddress: c.workerPhone ? maskPhone(c.workerPhone) : "unknown",
+          subject: `${isSyntheticOfflineCase(c) ? "[DEMO] " : ""}${label}${session.simulated ? " (simulated)" : ""}`,
+          body: transcript || "(call not answered)",
+          status: callOutcome,
+          failureReason: null,
+          sensitive: true,
+          sensitiveDataClass: "candidate-voice",
+          // Unique per call: even if the progress write below is lost in a
+          // crash, a retried insert conflicts here instead of duplicating.
+          externalMessageId: session.simulated ? null : `voice-call:${session.token}`,
+        })
+        .onConflictDoNothing({
+          target: [
+            onbCommunications.organizationId,
+            onbCommunications.externalMessageId,
+          ],
+        });
+    };
+    const stored = isSyntheticOfflineCase(c)
+      ? (await persistTranscript(), true)
+      : await withSensitiveLifecycleFence(c.organizationId, async () => {
+        const lifecycle = await evaluateSensitiveLifecycleGate({
+          organizationId: c.organizationId,
+          jurisdiction: jurisdictionForWorkforceContext(c.workforceContext),
+          dataClass: "candidate-voice",
+          disclosure: false,
+        });
+        if (!lifecycle.allowed) return false;
+        await persistTranscript();
+        return true;
       });
     // A controller-authorized synthetic call may retain its transcript, but
     // inbound webhooks must never promote it into ordinary engine decisions,
     // approvals, payroll, or connector work after finalization.
     if (isSyntheticOfflineCase(c) && !session.simulated) return;
-    await markOutcomeStep(session, progress, "transcript");
+    if (stored) await markOutcomeStep(session, progress, "transcript");
   }
 
   const deduped = new Map(session.decisions.map((d) => [d.decision, d]));
@@ -967,7 +988,6 @@ async function startVoiceCallUnsafe(opts: {
       { hitlPattern: "hard-block", ruleRef: "Governance provider boundary" });
     return { status: "logged-only", note: governance.reason! };
   }
-
   const session: Session = {
     token: randomBytes(16).toString("hex"),
     caseId: opts.caseId,
@@ -1041,7 +1061,24 @@ async function startVoiceCallUnsafe(opts: {
   // start win — a lost claim means another call is already live. It also
   // means the very first webhook finds the session even if this process
   // dies right after the Twilio API call.
-  let claimed = await claimCallStart(session);
+  // The durable session contains greeting/reason/transcript state before any
+  // Twilio call is made. Keep the lifecycle decision and claim together so a
+  // hold or policy withdrawal cannot race this sensitive storage write.
+  const collectionClaim = await withSensitiveLifecycleFence(c.organizationId, async () => {
+    const lifecycle = await evaluateSensitiveLifecycleGate({
+      organizationId: c.organizationId,
+      jurisdiction: jurisdictionForWorkforceContext(c.workforceContext),
+      dataClass: "candidate-voice",
+      disclosure: false,
+    });
+    return lifecycle.allowed
+      ? { allowed: true, claimed: await claimCallStart(session) }
+      : { allowed: false, claimed: false, reason: lifecycle.reason };
+  });
+  if (!collectionClaim.allowed) {
+    return { status: "logged-only", note: collectionClaim.reason ?? "Voice-session collection is blocked by the sensitive lifecycle policy." };
+  }
+  let claimed = collectionClaim.claimed;
   if (!claimed) {
     // The blocker may be a stale leftover from a crash (past TTL): finalize
     // it as interrupted (recovery would eventually do this) and retry once.
@@ -1060,7 +1097,15 @@ async function startVoiceCallUnsafe(opts: {
       } catch (err) {
         console.error(`[voice] failed to finalize stale blocking session for case ${opts.caseId}:`, err);
       }
-      claimed = await claimCallStart(session);
+      claimed = await withSensitiveLifecycleFence(c.organizationId, async () => {
+        const lifecycle = await evaluateSensitiveLifecycleGate({
+          organizationId: c.organizationId,
+          jurisdiction: jurisdictionForWorkforceContext(c.workforceContext),
+          dataClass: "candidate-voice",
+          disclosure: false,
+        });
+        return lifecycle.allowed && await claimCallStart(session);
+      });
     }
     if (!claimed) {
       if (
@@ -1268,6 +1313,7 @@ async function startVoiceCallUnsafe(opts: {
       caseRow: c,
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.voice,
       operation: `voice-call:${c.id}:${session.requestId}`,
+      providerId: "twilio",
       allowIsolatedProviderDispatch: demoLiveCall,
       dispatch: () => fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
         method: "POST",

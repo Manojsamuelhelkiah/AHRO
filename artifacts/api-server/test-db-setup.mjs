@@ -9,6 +9,9 @@ const migrationTable = "__api_test_schema_migrations";
 const statementBreakpoint = "--> statement-breakpoint";
 const advisoryLockKey = 1_514_151;
 const reviewedAutomaticPolicyExceptionHashes = new Set([
+  // Reviewed forward repair: scan cursors are disposable checkpoints and must
+  // not retain tenants through a foreign key after tenant cleanup.
+  "f4bb75c7a3a39c6cf4b88ab1520c219cb4e4d20acad3cc6cfc03037cc1e05af2",
   // Historical destructive, procedural, or data migrations that predate the
   // automatic post-merge safety policy. Exact hashes prevent edited files
   // from inheriting an exception.
@@ -83,6 +86,19 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Reviewed normalization of historical receipt constraints/defaults. The
   // repair preserves rows and append-only triggers while converging indexes.
   "8c1f7381d55d049b7b237676d7e7f0c047684ba0524bc1607ac7795bf7975a13",
+  // Reviewed case-derived relational lifecycle expansion: adds durable job
+  // identity and redacts supported representations while preserving protected
+  // audit evidence. It contains required historical backfill/constraint DDL.
+  "7deda70cfda8d790907f7d0a9220c0bf6a18d11e2457c44e1cbb9db8da81a2d5",
+  // Reviewed conservative classification inventory for communications and
+  // related records. Its UPDATE is an explicit server-owned legacy backfill.
+  "9ee423dbd55e7ea420526ebc9057cd1b079aee9ee9a36b8b6b28d3e239b02cb0",
+  // Reviewed correction narrows that backfill to the authoritative BGV
+  // namespace and replaces the superseded constraint without deleting rows.
+  "acd19549bfd0d73dc122e0a3a9c05b306d84a57a6252e411214d9a152c154cc4",
+  // Reviewed NULL-key correction classifies otherwise unprovable legacy
+  // communications conservatively; it is an idempotent data correction.
+  "1f0268bfd05f7e8b9262ec4a636ac60307dbb2de94c33f51580cfc9e66ef7cb9",
 ]);
 // The authority migration sequence was renumbered after it landed in
 // parallel with the workforce sequence. These are ledger identifiers only:
@@ -742,6 +758,13 @@ function rewritePublicSchema(statement, schema) {
   return statement.replaceAll('"public".', `${quoteIdentifier(schema)}.`);
 }
 
+function rewriteExpectedSchema(statement, schema) {
+  return rewritePublicSchema(statement, schema).replace(
+    /DROP INDEX IF EXISTS "([^"]+)"/gi,
+    (_match, index) => `DROP INDEX IF EXISTS ${quoteIdentifier(schema)}.${quoteIdentifier(index)}`,
+  );
+}
+
 export async function loadCheckedInMigrations(options = {}) {
   const [journalSource, directoryEntries] = await Promise.all([
     readFile(journalUrl, "utf8"),
@@ -1303,9 +1326,56 @@ async function buildExpectedSchemaFromReceipt(
           `ADD CONSTRAINT ${quoteIdentifier(constraintName)} ${constraint.definition}`,
       );
     }
-    for (const migration of migrations) {
-      for (const statement of migration.statements) {
-        await client.query(rewritePublicSchema(statement, expectedSchema));
+    for (const [migrationIndex, migration] of migrations.entries()) {
+      for (const [statementIndex, statement] of migration.statements.entries()) {
+        const statementSavepoint = `expected_receipt_${migrationIndex}_${statementIndex}`;
+        await client.query(`SAVEPOINT ${statementSavepoint}`);
+        try {
+          await client.query(rewriteExpectedSchema(statement, expectedSchema));
+          await client.query(`RELEASE SAVEPOINT ${statementSavepoint}`);
+        } catch (error) {
+          await client.query(`ROLLBACK TO SAVEPOINT ${statementSavepoint}`);
+          await client.query(`RELEASE SAVEPOINT ${statementSavepoint}`);
+          // Receipt snapshots from the pre-generation anchor rollout can
+          // represent the 0048 provider uniqueness as a UNIQUE constraint,
+          // although its immutable SQL created a unique index. PostgreSQL then
+          // rejects 0054's historical DROP INDEX after its matching DROP
+          // CONSTRAINT was replayed against the reconstructed receipt shape.
+          // This is an expected-schema reconstruction bridge only: it drops
+          // the constraint that owns precisely that index, then replays the
+          // byte-identical reviewed statement. Live migration application
+          // still executes the checked-in SQL and records its pinned hash.
+          const providerIndexDrop =
+            statement.includes('DROP INDEX IF EXISTS "onb_audit_anchor_receipts_organization_idempotency_provider_unique"') &&
+            error?.code === "2BP01" &&
+            String(error?.message).includes("onb_audit_anchor_receipts_organization_idempotency_provider_uni");
+          if (!providerIndexDrop) throw error;
+          const indexName = "onb_audit_anchor_receipts_organization_idempotency_provider_uni";
+          const owning = await client.query(
+            `SELECT constraint_name
+             FROM information_schema.table_constraints tc
+             JOIN pg_constraint c ON c.conname = tc.constraint_name
+             JOIN pg_class i ON i.oid = c.conindid
+             JOIN pg_namespace n ON n.oid = i.relnamespace
+             WHERE tc.table_schema = $1
+               AND tc.table_name = 'onb_audit_anchor_receipts'
+               AND tc.constraint_type = 'UNIQUE'
+               AND n.nspname = $1
+               AND i.relname = $2`,
+            [expectedSchema, indexName],
+          );
+          if (owning.rows.length !== 1) throw error;
+          await client.query(
+            `ALTER TABLE ${quotedExpectedSchema}."onb_audit_anchor_receipts" ` +
+              `DROP CONSTRAINT ${quoteIdentifier(owning.rows[0].constraint_name)}`,
+          );
+          // Unqualified DROP INDEX resolves the live public index in this
+          // receipt-builder's mixed search path. Target the disposable schema
+          // explicitly; the checked-in migration itself remains unmodified.
+          await client.query(
+            `DROP INDEX IF EXISTS ${quotedExpectedSchema}.${quoteIdentifier(indexName)}`,
+          );
+        }
       }
     }
     return await describeSchema(client, expectedSchema, [

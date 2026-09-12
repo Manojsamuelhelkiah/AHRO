@@ -1,4 +1,5 @@
-import { onbCases } from "@workspace/db/schema";
+import { db, onbCases } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import {
   evaluateStoredCaseGovernanceGate,
   type GovernanceExecutionGate,
@@ -8,6 +9,13 @@ import {
   withGovernanceDispatch,
   type GovernanceDispatchResult,
 } from "./governance-dispatch";
+import {
+  evaluateSensitiveLifecycleGate,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+  SENSITIVE_DATA_CLASSES,
+  type SensitiveDataClass,
+} from "./sensitive-lifecycle";
 
 /**
  * Canonical provider-boundary scopes. These are server-owned constants: a
@@ -40,6 +48,8 @@ export type ProviderGovernanceCase = Pick<
   | "notes"
   | "hireType"
   | "workerCategory"
+  | "workforceContext"
+  | "workforceContextVersion"
   | "processPolicySnapshot"
 >;
 
@@ -54,6 +64,13 @@ export type ProviderGovernanceDispatch<T> =
   | { dispatched: true; value: T }
   | { dispatched: false; reason: string };
 const PROVIDER_GOVERNANCE_DENIED = Symbol("provider-governance-denied");
+
+const SENSITIVE_CLASS_BY_WORKFLOW: Readonly<Record<ProviderGovernanceWorkflow, SensitiveDataClass>> = {
+  "candidate-communications": "candidate-contact",
+  "candidate-voice": "candidate-voice",
+  "candidate-portal": "candidate-portal",
+  "worker-record-documents": "candidate-document",
+};
 
 /**
  * Evaluate current tenant governance at an actual provider or sensitive
@@ -103,6 +120,16 @@ export async function dispatchWithProviderGovernance<T>(input: {
   caseRow: ProviderGovernanceCase;
   workflow: ProviderGovernanceWorkflow;
   operation: string;
+  /** Stable provider identifier matched against the approved policy allowlist. */
+  providerId: string;
+  /** Server-derived data class for document-specific provider disclosures. */
+  dataClass?: SensitiveDataClass;
+  /**
+   * Only server-owned fixed projections may opt out of opaque-message
+   * classification. Caller labels, persisted channel values, and client text
+   * are not evidence that a payload is minimal.
+   */
+  minimalTypedPayload?: boolean;
   /** Only narrowly authorized communication/voice demo paths may opt in. */
   allowIsolatedProviderDispatch?: boolean;
   dispatch: () => Promise<T>;
@@ -131,20 +158,76 @@ export async function dispatchWithProviderGovernance<T>(input: {
         disposition: "definitive-not-sent",
       };
     }
-    const gate = await evaluateProviderGovernanceGate(
-      input.caseRow,
-      input.workflow,
-      { allowIsolatedProviderDispatch: input.allowIsolatedProviderDispatch },
-    );
-    if (!gate.allowed) {
-      deniedReason = gate.reason ?? "Live provider dispatch is blocked by current governance review.";
-      return {
-        value: PROVIDER_GOVERNANCE_DENIED,
-        disposition: "definitive-not-sent",
-      };
-    }
-    const dispatched = await input.dispatch();
-    return { value: dispatched, disposition: input.disposition(dispatched) };
+    // This is intentionally inside the durable provider dispatch fence. A
+    // route-level preflight cannot authorize a later external disclosure.
+    return withSensitiveLifecycleFence(input.caseRow.organizationId, async () => {
+      // The caller may have loaded this record before a workforce correction
+      // or an upload-reservation context bind. Take a short current-row lock
+      // after the lifecycle fence, then release it before arbitrary provider
+      // callbacks. The lifecycle fence remains held through I/O, so compliant
+      // context writers cannot replace the jurisdiction between this final
+      // read and dispatch, while a callback cannot self-deadlock by opening
+      // its own case/authority transaction.
+      const currentCase = await db.transaction(async (tx) => {
+        const [row] = await tx.select().from(onbCases).where(and(
+          eq(onbCases.organizationId, input.caseRow.organizationId),
+          eq(onbCases.id, input.caseRow.id),
+        )).for("update");
+        return row ?? null;
+      });
+      if (!currentCase) {
+        deniedReason = "The onboarding case no longer exists in this organization.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
+      if (
+        input.caseRow.workforceContextVersion === null ||
+        input.caseRow.workforceContextVersion === undefined ||
+        currentCase.workforceContextVersion !== input.caseRow.workforceContextVersion
+      ) {
+        deniedReason = "The case workforce context changed after this provider payload was composed; rebuild it from the current approved context.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
+      const unresolvedContextHold = currentCase.checklistSnapshot.some((item) =>
+        item.enabled && item.mandatory &&
+        (item.id === "policy-rebase-required" || item.id === "workforce-context-review") &&
+        currentCase.readiness.find((readiness) => readiness.key === item.id)?.status !== "ready",
+      );
+      if (unresolvedContextHold) {
+        deniedReason = "The case has a pending workforce policy rebase or migration review hold; rebuild and explicitly release it before provider dispatch.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
+      const gate = await evaluateProviderGovernanceGate(
+        currentCase,
+        input.workflow,
+        { allowIsolatedProviderDispatch: input.allowIsolatedProviderDispatch },
+      );
+      if (!gate.allowed) {
+        deniedReason = gate.reason ?? "Live provider dispatch is blocked by current governance review.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
+      const channelClass = input.dataClass ?? SENSITIVE_CLASS_BY_WORKFLOW[input.workflow];
+      // A workflow name or server-derived routing label does not prove the
+      // provider payload is class-minimal. Opaque document bytes (and all
+      // other non-proven projections) must satisfy every class policy at the
+      // final provider boundary.
+      const lifecycleClasses: readonly SensitiveDataClass[] =
+        input.minimalTypedPayload ? [channelClass] : SENSITIVE_DATA_CLASSES;
+      for (const dataClass of lifecycleClasses) {
+        const lifecycle = await evaluateSensitiveLifecycleGate({
+          organizationId: currentCase.organizationId,
+          jurisdiction: jurisdictionForWorkforceContext(currentCase.workforceContext),
+          dataClass,
+          disclosure: true,
+          providerId: input.providerId,
+        });
+        if (!lifecycle.allowed) {
+          deniedReason = lifecycle.reason ?? "Sensitive lifecycle policy blocks external disclosure.";
+          return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+        }
+      }
+      const dispatched = await input.dispatch();
+      return { value: dispatched, disposition: input.disposition(dispatched) };
+    });
   });
   if (value === PROVIDER_GOVERNANCE_DENIED) {
     return {

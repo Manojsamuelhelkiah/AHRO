@@ -1081,10 +1081,21 @@ test(
             tag !== "0050_governance_dispatch_fence" &&
             tag !== "0051_trusted_connector_evidence" &&
             tag !== "0052_organization_membership_lifecycle" &&
+             tag !== "0052_sensitive_lifecycle_controls" &&
+             tag !== "0053_sensitive_relational_lifecycle" &&
+             tag !== "0054_sensitive_relational_inventory" &&
+             tag !== "0055_correct_communication_lifecycle_backfill" &&
+             tag !== "0056_correct_null_communication_lifecycle_backfill" &&
+             tag !== "0057_case_derived_sensitive_lifecycle" &&
+             tag !== "0058_case_derived_lifecycle_scan_cursor" &&
+             tag !== "0059_remove_cursor_tenant_cleanup_fk" &&
             tag !== "0053_organization_membership_revision" &&
+             tag !== "0060_governed_minimal_approval_history" &&
+             tag !== "0061_candidate_upload_reservations" &&
+              tag !== "0062_candidate_upload_reservation_context_version" &&
+             tag !== "0053_governed_hr_policy_library" &&
              tag !== "0053_external_audit_anchor_receipt_generation" &&
              tag !== "0054_external_audit_anchor_receipt_constraints" &&
-             tag !== "0053_governed_hr_policy_library" &&
              tag !== "0054_hr_policy_review_authority_category" &&
              tag !== "0055_hr_policy_publication_receipts_and_excerpts" &&
              tag !== "0056_hr_policy_reminders",

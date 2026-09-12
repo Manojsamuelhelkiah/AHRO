@@ -58,6 +58,33 @@ test("retained evidence is exempt only from parent existence checks, not tenant-
   assert.deepEqual(findTenantSafeguardFailures(passingSnapshot()), []);
 });
 
+test("covers every tenant-owned sensitive lifecycle and upload reservation table", () => {
+  const lifecycleTables = [
+    "onb_candidate_upload_reservations",
+    "onb_sensitive_lifecycle_policies",
+    "onb_sensitive_lifecycle_holds",
+    "onb_sensitive_object_manifests",
+    "onb_sensitive_object_derivatives",
+    "onb_sensitive_lifecycle_confirmations",
+    "onb_sensitive_lifecycle_deletion_jobs",
+    "onb_sensitive_lifecycle_scan_cursors",
+  ];
+  for (const table of lifecycleTables) assert.ok(tenantTables.includes(table), `${table} is missing from tenant safeguards`);
+
+  // Only the disposable scan cursor lacks an organization parent FK; the
+  // remaining lifecycle/upload records must be orphan-checked.
+  assert.ok(!organizationParentValidatedTenantTables.includes("onb_sensitive_lifecycle_scan_cursors"));
+  for (const table of lifecycleTables.filter((table) => table !== "onb_sensitive_lifecycle_scan_cursors")) {
+    assert.ok(organizationParentValidatedTenantTables.includes(table), `${table} must have an organization parent FK`);
+  }
+  assert.ok(expectedForeignKeys.some((fk) =>
+    fk.table === "onb_sensitive_object_derivatives" &&
+    fk.columns.join(",") === "manifest_id" &&
+    fk.referencedTable === "onb_sensitive_object_manifests" &&
+    fk.referencedColumns.join(",") === "id",
+  ));
+});
+
 test("an orphan in an ordinary organization-owned table still fails verification", () => {
   const snapshot = passingSnapshot();
   snapshot.organizationOrphanCount = 1;

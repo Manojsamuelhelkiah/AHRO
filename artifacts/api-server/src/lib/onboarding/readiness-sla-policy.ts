@@ -35,6 +35,10 @@ import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import {
+  assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 type CaseRow = typeof onbCases.$inferSelect;
 type SlaTx = Pick<OnboardingDbTransaction, "select" | "insert" | "update" | "execute">;
@@ -107,7 +111,7 @@ export async function saveReadinessSlaPolicy(input: {
   if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 0) {
     throw new Error("expectedVersion must be a non-negative integer");
   }
-  return db.transaction(async (tx) => {
+  return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     await acquireReadinessSlaPolicyLock(tx, input.organizationId);
     const [current] = await tx
       .select()
@@ -144,7 +148,7 @@ export async function saveReadinessSlaPolicy(input: {
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });
     return { version, policy };
-  });
+  }));
 }
 
 export async function acquireReadinessSlaPolicyLock(
@@ -223,7 +227,7 @@ export async function ensureReadinessSlaEnrollment(
   createdBy = "readiness-sla-worker",
   allowCompleted = false,
 ): Promise<ReadinessSlaEnrollment | null> {
-  return db.transaction(async (tx) => {
+  return withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
     await acquireReadinessSlaPolicyLock(tx, organizationId);
     const [c] = await tx.select().from(onbCases).where(and(
       eq(onbCases.id, caseId),
@@ -231,6 +235,7 @@ export async function ensureReadinessSlaEnrollment(
     )).for("update");
     if (!c) return null;
     if (isSyntheticOfflineCase(c)) return null;
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
     const [existingState] = await tx.select().from(onbReadinessSlaCaseState).where(and(
       eq(onbReadinessSlaCaseState.caseId, caseId),
       eq(onbReadinessSlaCaseState.organizationId, organizationId),
@@ -290,7 +295,7 @@ export async function ensureReadinessSlaEnrollment(
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });
     return { snapshot, state };
-  });
+  }));
 }
 
 /** Used by legacy connector sweeps to avoid emitting a second timed SLA. */
@@ -754,13 +759,14 @@ export async function rebaseReadinessSlaCase(input: {
 }): Promise<ReadinessSlaEnrollment> {
   const reason = input.reason.trim();
   if (!reason) throw new Error("A reason is required for a readiness SLA rebase");
-  return db.transaction(async (tx) => {
+  return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     await acquireReadinessSlaPolicyLock(tx, input.organizationId);
     const [c] = await tx.select().from(onbCases).where(and(
       eq(onbCases.id, input.caseId),
       eq(onbCases.organizationId, input.organizationId),
     )).for("update");
     if (!c) throw new Error("Case not found");
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
     const [state] = await tx.select().from(onbReadinessSlaCaseState).where(and(
       eq(onbReadinessSlaCaseState.caseId, input.caseId),
       eq(onbReadinessSlaCaseState.organizationId, input.organizationId),
@@ -829,7 +835,7 @@ export async function rebaseReadinessSlaCase(input: {
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });
     return { snapshot, state: nextState };
-  });
+  }));
 }
 
 export async function setReadinessSlaPayrollCutoff(input: {
@@ -843,12 +849,13 @@ export async function setReadinessSlaPayrollCutoff(input: {
   const reason = input.reason.trim();
   if (!reason) throw new Error("A reason is required for the payroll cutoff");
   if (Number.isNaN(input.payrollCutoff.getTime())) throw new Error("Payroll cutoff must be a valid timestamp");
-  return db.transaction(async (tx) => {
+  return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     const [c] = await tx.select().from(onbCases).where(and(
       eq(onbCases.id, input.caseId),
       eq(onbCases.organizationId, input.organizationId),
     )).for("update");
     if (!c) throw new Error("Case not found");
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
     const [state] = await tx.select().from(onbReadinessSlaCaseState).where(and(
       eq(onbReadinessSlaCaseState.caseId, input.caseId),
       eq(onbReadinessSlaCaseState.organizationId, input.organizationId),
@@ -890,7 +897,7 @@ export async function setReadinessSlaPayrollCutoff(input: {
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });
     return { snapshot, state: nextState };
-  });
+  }));
 }
 
 export async function recordReadinessSlaAttestation(input: {
@@ -905,12 +912,13 @@ export async function recordReadinessSlaAttestation(input: {
 }): Promise<typeof onbReadinessSlaAttestations.$inferSelect> {
   const reason = input.reason.trim();
   if (!reason) throw new Error("A reason is required for a readiness attestation");
-  return db.transaction(async (tx) => {
+  return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     const [c] = await tx.select().from(onbCases).where(and(
       eq(onbCases.id, input.caseId),
       eq(onbCases.organizationId, input.organizationId),
     )).for("update");
     if (!c) throw new Error("Case not found");
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
     const [state] = await tx.select().from(onbReadinessSlaCaseState).where(and(
       eq(onbReadinessSlaCaseState.caseId, input.caseId),
       eq(onbReadinessSlaCaseState.organizationId, input.organizationId),
@@ -956,5 +964,5 @@ export async function recordReadinessSlaAttestation(input: {
       );
     }
     return row;
-  });
+  }));
 }

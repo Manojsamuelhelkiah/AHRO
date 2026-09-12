@@ -6,23 +6,62 @@ import { getOrganizationId } from "../lib/organization-scope";
 import { portalEmailRequested, validateLogistics } from "../lib/onboarding/candidate-portal";
 import { ensureCaseLogistics } from "../lib/onboarding/case-logistics";
 import { issueCandidatePortalLink, portalPublicBase } from "../lib/onboarding/portal-link-issuance";
+import {
+  SensitiveLifecycleConflictError,
+  withCaseDerivedLifecycleWrite,
+  withSensitiveLifecycleFence,
+} from "../lib/onboarding/sensitive-lifecycle";
+import {
+  SensitiveAuthorityRequiredError,
+  withSensitiveAuthorityFence,
+} from "../lib/onboarding/sensitive-access";
 
 const router: IRouter = Router();
+
+function withFullOpaqueCaseAuthority<T>(input: {
+  organizationId: string;
+  caseId: number;
+  actorUserId: string;
+  mutate: () => Promise<T>;
+}): Promise<T> {
+  // Lifecycle is the outer fence. The nested authority transaction holds the
+  // live case-scoped grants/revocations through the entire sensitive action.
+  return withSensitiveLifecycleFence(input.organizationId, () => withSensitiveAuthorityFence({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+    actorUserId: input.actorUserId,
+    classification: "identity",
+    additionalClassifications: ["medical", "payroll", "bgv"],
+    mutate: input.mutate,
+  }));
+}
 
 router.get("/onboarding/cases/:id/portal", async (req, res, next) => {
   try {
     const caseId = Number(req.params.id); const organizationId = getOrganizationId(req);
-    const [c] = await db.select({ id: onbCases.id, joiningDate: onbCases.joiningDate })
+    const [c] = await db.select({ id: onbCases.id })
       .from(onbCases).where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, organizationId)));
     if (!c) { res.status(404).json({ message: "Case not found" }); return; }
-    const [logistics, [link]] = await Promise.all([
-      ensureCaseLogistics(organizationId, caseId, c.joiningDate),
-      db.select({ id: onbCandidateLinks.id, expiresAt: onbCandidateLinks.expiresAt, revokedAt: onbCandidateLinks.revokedAt, createdAt: onbCandidateLinks.createdAt })
-        .from(onbCandidateLinks).where(and(eq(onbCandidateLinks.caseId, caseId), eq(onbCandidateLinks.organizationId, organizationId), isNull(onbCandidateLinks.revokedAt)))
-        .orderBy(desc(onbCandidateLinks.createdAt)).limit(1),
-    ]);
+    const { logistics, link } = await withFullOpaqueCaseAuthority({
+      organizationId, caseId, actorUserId: req.authUserId!,
+      mutate: async () => {
+        const [logistics, [link]] = await Promise.all([
+          ensureCaseLogistics(organizationId, caseId),
+          db.select({ id: onbCandidateLinks.id, expiresAt: onbCandidateLinks.expiresAt, revokedAt: onbCandidateLinks.revokedAt, createdAt: onbCandidateLinks.createdAt })
+            .from(onbCandidateLinks).where(and(eq(onbCandidateLinks.caseId, caseId), eq(onbCandidateLinks.organizationId, organizationId), isNull(onbCandidateLinks.revokedAt)))
+            .orderBy(desc(onbCandidateLinks.createdAt)).limit(1),
+        ]);
+        return { logistics, link };
+      },
+    });
     res.json({ logistics: logistics ?? null, activeLink: link ?? null });
-  } catch (error) { next(error); return; }
+  } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "Current case-scoped sensitive authority is required to access candidate logistics." });
+      return;
+    }
+    next(error); return;
+  }
 });
 
 router.put("/onboarding/cases/:id/logistics", async (req, res, next) => {
@@ -34,10 +73,27 @@ router.put("/onboarding/cases/:id/logistics", async (req, res, next) => {
     try { values = validateLogistics(req.body ?? {}); } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : "Invalid logistics" }); return;
     }
-    const [row] = await db.insert(onbCaseLogistics).values({ organizationId, caseId, ...values })
-      .onConflictDoUpdate({ target: [onbCaseLogistics.organizationId, onbCaseLogistics.caseId], set: { ...values, updatedAt: new Date() } }).returning();
+    const rows = await withFullOpaqueCaseAuthority({
+      organizationId, caseId, actorUserId: req.authUserId!,
+      mutate: () => withCaseDerivedLifecycleWrite<Array<typeof onbCaseLogistics.$inferSelect>>(
+        { organizationId, caseId },
+        (tx) => tx.insert(onbCaseLogistics).values({ organizationId, caseId, ...values })
+          .onConflictDoUpdate({ target: [onbCaseLogistics.organizationId, onbCaseLogistics.caseId], set: { ...values, updatedAt: new Date() } }).returning(),
+      ),
+    });
+    const [row] = rows;
     res.json(row);
-  } catch (error) { next(error); return; }
+  } catch (error) {
+    if (error instanceof SensitiveLifecycleConflictError) {
+      res.status(409).json({ message: error.message.replace(/^SENSITIVE_LIFECYCLE_BLOCKED:/, "") });
+      return;
+    }
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "Current case-scoped sensitive authority is required to change candidate logistics." });
+      return;
+    }
+    next(error); return;
+  }
 });
 
 router.post("/onboarding/cases/:id/portal-links", async (req, res, next) => {
@@ -60,6 +116,9 @@ router.post("/onboarding/cases/:id/portal-links", async (req, res, next) => {
       if (error instanceof Error && error.message === "Unable to determine the portal URL") {
         res.status(400).json({ message: error.message }); return;
       }
+      if (error instanceof SensitiveAuthorityRequiredError) {
+        res.status(403).json({ message: "Current case-scoped sensitive authority is required to issue a candidate portal link." }); return;
+      }
       throw error;
     }
     if (!result) { res.status(404).json({ message: "Case not found" }); return; }
@@ -75,9 +134,13 @@ router.post("/onboarding/cases/:id/portal-links", async (req, res, next) => {
 router.delete("/onboarding/cases/:id/portal-links/:linkId", async (req, res, next) => {
   try {
     const caseId = Number(req.params.id); const linkId = Number(req.params.linkId); const organizationId = getOrganizationId(req);
-    const [row] = await db.update(onbCandidateLinks).set({ revokedAt: new Date() }).where(and(
-      eq(onbCandidateLinks.id, linkId), eq(onbCandidateLinks.caseId, caseId), eq(onbCandidateLinks.organizationId, organizationId),
-    )).returning({ id: onbCandidateLinks.id });
+    // Credential removal is deliberately not lifecycle-gated: a missing
+    // collection policy must never prevent a tenant from revoking access.
+    const [row] = await withSensitiveLifecycleFence(organizationId, () =>
+      db.update(onbCandidateLinks).set({ revokedAt: new Date() }).where(and(
+        eq(onbCandidateLinks.id, linkId), eq(onbCandidateLinks.caseId, caseId), eq(onbCandidateLinks.organizationId, organizationId),
+      )).returning({ id: onbCandidateLinks.id }),
+    );
     if (!row) { res.status(404).json({ message: "Portal link not found" }); return; }
     res.status(204).send();
   } catch (error) { next(error); return; }

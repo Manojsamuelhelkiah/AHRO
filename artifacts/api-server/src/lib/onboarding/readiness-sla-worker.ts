@@ -28,6 +28,11 @@ import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { sendAdministrativeEmail } from "./channels";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import {
+  assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  withCaseDerivedLifecycleWrite,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 export const READINESS_SLA_WORKER = "readiness-sla-worker";
 
@@ -95,12 +100,13 @@ async function reopenGateCIfNeeded(
   action: ReadinessSlaActionView,
   now: Date,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
+  await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
   const [c] = await tx.select().from(onbCases).where(and(
       eq(onbCases.id, caseId),
       eq(onbCases.organizationId, organizationId),
     )).for("update");
     if (!c || (c.lifecycleStage !== "complete" && c.lifecycleStage !== "day1-review")) return;
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
     // Re-read every source under the case lock. The view used to schedule the
     // tick may be stale while a source webhook/attestation is racing it.
     const fresh = await readinessSlaGateForCase(tx, organizationId, caseId);
@@ -133,7 +139,7 @@ async function reopenGateCIfNeeded(
     }).onConflictDoNothing({
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });
-  });
+  }));
 }
 
 async function createOrUpdateApproval(
@@ -147,11 +153,12 @@ async function createOrUpdateApproval(
 ): Promise<void> {
   const key = `readiness-sla:${caseId}:${snapshotVersion}:${action.key}:decision`;
   const detail = rationale(action, state, now);
-  await db.transaction(async (tx) => {
+  await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
     await tx.select({ id: onbCases.id }).from(onbCases).where(and(
       eq(onbCases.organizationId, organizationId),
       eq(onbCases.id, caseId),
     )).for("update");
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
     const [existing] = await tx.select().from(onbApprovals).where(and(
       eq(onbApprovals.organizationId, organizationId),
       eq(onbApprovals.caseId, caseId),
@@ -216,7 +223,7 @@ async function createOrUpdateApproval(
         ));
       }
     }
-  });
+  }));
 }
 
 async function resolveApprovalInTransaction(
@@ -251,6 +258,21 @@ async function recordActionState(
   view: ReadinessSlaView,
   now: Date,
 ): Promise<{ state: "warning" | "breach" | "escalated" | "resolved" | "none"; changed: boolean }> {
+  return withSensitiveLifecycleFence(organizationId, async () => {
+    await withCaseDerivedLifecycleWrite({ organizationId, caseId }, async () => undefined);
+    return recordActionStateUnlocked(organizationId, caseId, snapshotVersion, action, timing, view, now);
+  });
+}
+
+async function recordActionStateUnlocked(
+  organizationId: string,
+  caseId: number,
+  snapshotVersion: number,
+  action: ReadinessSlaActionView,
+  timing: ReadinessSlaActionTiming,
+  view: ReadinessSlaView,
+  now: Date,
+): Promise<{ state: "warning" | "breach" | "escalated" | "resolved" | "none"; changed: boolean }> {
   const [latest] = await db.select().from(onbReadinessSlaLedger).where(and(
     eq(onbReadinessSlaLedger.organizationId, organizationId),
     eq(onbReadinessSlaLedger.caseId, caseId),
@@ -265,6 +287,7 @@ async function recordActionState(
         eq(onbCases.organizationId, organizationId),
         eq(onbCases.id, caseId),
       )).for("update");
+      await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
       const [lockedLatest] = await tx.select().from(onbReadinessSlaLedger).where(and(
         eq(onbReadinessSlaLedger.organizationId, organizationId),
         eq(onbReadinessSlaLedger.caseId, caseId),
@@ -390,6 +413,20 @@ async function recordActionState(
 }
 
 async function enqueueNotification(
+  organizationId: string,
+  caseId: number,
+  ledgerId: number,
+  action: ReadinessSlaActionView,
+  state: "warning" | "breach" | "escalated",
+  now: Date,
+): Promise<void> {
+  return withSensitiveLifecycleFence(organizationId, async () => {
+    await withCaseDerivedLifecycleWrite({ organizationId, caseId }, async () => undefined);
+    return enqueueNotificationUnlocked(organizationId, caseId, ledgerId, action, state, now);
+  });
+}
+
+async function enqueueNotificationUnlocked(
   organizationId: string,
   caseId: number,
   ledgerId: number,
@@ -523,7 +560,10 @@ export async function claimReadinessSlaOutbox(
   owner: string,
   now: Date,
 ): Promise<typeof onbReadinessSlaOutbox.$inferSelect | null> {
-  return db.transaction(async (tx) => {
+  const [initial] = await db.select({ organizationId: onbReadinessSlaOutbox.organizationId })
+    .from(onbReadinessSlaOutbox).where(eq(onbReadinessSlaOutbox.id, rowId));
+  if (!initial) return null;
+  return withSensitiveLifecycleFence(initial.organizationId, () => db.transaction(async (tx) => {
     const [candidate] = await tx.select().from(onbReadinessSlaOutbox).where(
       eq(onbReadinessSlaOutbox.id, rowId),
     );
@@ -651,7 +691,7 @@ export async function claimReadinessSlaOutbox(
       lte(onbReadinessSlaOutbox.availableAt, now),
     )).returning();
     return claimed ?? null;
-  });
+  }));
 }
 
 async function deliverPendingOutbox(

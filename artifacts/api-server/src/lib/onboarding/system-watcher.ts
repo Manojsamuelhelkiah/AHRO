@@ -9,7 +9,7 @@ import {
   onbDocuments,
   type OnbReadinessItemRow,
 } from "@workspace/db/schema";
-import { and, eq, gt, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, ne, or, sql } from "drizzle-orm";
 import {
   autoEscalationCallsEnabled,
   checklistStageBlockers,
@@ -35,6 +35,12 @@ import { makeSharedTick } from "./shared-tick";
 import { sweepExpiredNonIdempotentEffects } from "./effect-journal";
 import { runDocumentReminderTick, runDocumentValidationTick } from "./document-validation";
 import { runGovernanceReminderTick } from "./governance";
+import {
+  assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  runSensitiveLifecycleDeletionTick,
+  SensitiveLifecycleConflictError,
+  withCaseDerivedLifecycleWrite,
+} from "./sensitive-lifecycle";
 import { runDocumentMalwareTick } from "./document-malware";
 import { documentMalwareGateSql } from "./document-malware-gate";
 import { runMalwareScannerMonitorTick } from "./malware-scanner-monitor";
@@ -43,7 +49,9 @@ import { documentationGateReady } from "./document-validation-policy";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readiness-sla-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import type { OnboardingDbTransaction } from "./settings";
 import { recoverWorkforceConnectorContinuations } from "./operational-requests";
+import { ConnectorDispatchRejectedError } from "./connector-adapters";
 import {
   recordBgvBlockedEpisode,
   recordBgvReleaseEpisode,
@@ -71,6 +79,21 @@ import {
 
 const POLL_INTERVAL_MS = 20_000;
 export const WATCHER_AGENT = "system-watcher";
+
+function reportRestrictedLifecycleRecovery(
+  operation: string,
+  input: { organizationId: string; caseId: number; checkId?: number },
+  error: SensitiveLifecycleConflictError,
+): void {
+  logger.warn({
+    component: "system-watcher",
+    operation,
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+    ...(input.checkId === undefined ? {} : { checkId: input.checkId }),
+    reason: error.message.slice(0, 300),
+  }, "case recovery restricted by sensitive lifecycle policy; skipped");
+}
 
 function classificationsForProviderStatus(
   status: string,
@@ -190,8 +213,23 @@ async function logEvent(
   detail: string,
   ruleRef: string,
   hitlPattern: string = "notify-only",
+  tx?: OnboardingDbTransaction,
 ) {
-  await db.insert(onbEvents).values({
+  if (tx) {
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
+    await tx.insert(onbEvents).values({
+      caseId,
+      organizationId,
+      agent: WATCHER_AGENT,
+      engine: "system",
+      hitlPattern,
+      ruleRef,
+      title,
+      detail,
+    });
+    return;
+  }
+  await withCaseDerivedLifecycleWrite({ organizationId, caseId }, (tx) => tx.insert(onbEvents).values({
     caseId,
     organizationId,
     agent: WATCHER_AGENT,
@@ -200,7 +238,7 @@ async function logEvent(
     ruleRef,
     title,
     detail,
-  });
+  }));
 }
 
 /** Close a check as done and update the case checklist. Idempotent. Exported for tests. */
@@ -494,7 +532,9 @@ async function escalateCheckUnlocked(
   // coloured status. The unique key makes webhook/mailbox/tick races converge
   // on one durable review item and explicitly avoids an automated adverse
   // employment decision.
-  await db.insert(onbApprovals).values({
+  await withCaseDerivedLifecycleWrite({
+    organizationId: check.organizationId, caseId: check.caseId,
+  }, (tx) => tx.insert(onbApprovals).values({
     organizationId: check.organizationId,
     caseId: check.caseId,
     agent: WATCHER_AGENT,
@@ -511,7 +551,7 @@ async function escalateCheckUnlocked(
     idempotencyKey: `gateway-${check.system}:${check.id}:${escalationAt.getTime()}:human-queue`,
   }).onConflictDoNothing({
     target: [onbApprovals.organizationId, onbApprovals.idempotencyKey],
-  });
+  }));
 
   await logEvent(
     check.caseId,
@@ -647,9 +687,17 @@ export async function maybeAutoEscalationCall(
 export async function trackCaseSystems(
   caseId: number,
   onlySystems?: readonly WatchedSystem[],
+  tx?: OnboardingDbTransaction,
 ): Promise<void> {
-  const [c] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+  const executor = tx ?? db;
+  const [c] = await executor.select().from(onbCases).where(eq(onbCases.id, caseId));
   if (!c) return;
+  if (tx) {
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, {
+      organizationId: c.organizationId,
+      caseId,
+    });
+  }
   const now = new Date();
   const defs = applicableSystems(c).filter(
     (def) => !onlySystems || onlySystems.includes(def.key),
@@ -662,7 +710,7 @@ export async function trackCaseSystems(
     const policyDueAt = policyManaged
       ? await readinessSlaDueAtForSystem(c.organizationId, caseId, def.key)
       : null;
-    const rows = await db
+    const rows = await executor
       .insert(onbSystemChecks)
       .values({
         caseId,
@@ -698,6 +746,8 @@ export async function trackCaseSystems(
               : `scheduled polling every ${POLL_INTERVAL_MS / 1000}s`
         }; ${policyManaged ? (policyDueAt ? `policy deadline ${policyDueAt.toISOString()}` : "deadline needs policy configuration") : `SLA ${def.slaSeconds}s`}.`,
         def.completionRuleRef,
+        "notify-only",
+        tx,
       );
     }
   }
@@ -910,11 +960,24 @@ export async function recoverUntrackedCaseSystems(
       try {
         await dispatchWorkstreamConnectorMutations(c);
       } catch (error) {
+        if (error instanceof ConnectorDispatchRejectedError) {
+          logger.warn({
+            component: "system-watcher",
+            operation: "untracked-workstream-recovery",
+            organizationId: c.organizationId,
+            caseId: c.id,
+            connector: error.connector,
+            reason: error.reason,
+          }, "case recovery blocked by connector policy; skipped");
+          continue;
+        }
+        if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
         // Historical rows without reviewed authority evidence stay held for
         // human migration review. One such case must not abort recovery for
         // another case or tenant in this heartbeat.
-        console.error(
-          `[system-watcher] untracked workstream recovery held case ${c.id}:`,
+        reportRestrictedLifecycleRecovery(
+          "untracked-workstream-recovery",
+          { organizationId: c.organizationId, caseId: c.id },
           error,
         );
       }
@@ -969,7 +1032,17 @@ export async function recoverDecidedApprovalContinuations(): Promise<void> {
     try {
       await reconcileDecidedApprovals(row.id);
     } catch (error) {
-      console.error(`[system-watcher] approval continuation recovery failed for case ${row.id}:`, error);
+      if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
+      const [caseRow] = await db.select({
+        organizationId: onbCases.organizationId,
+      }).from(onbCases).where(eq(onbCases.id, row.id));
+      if (caseRow) {
+        reportRestrictedLifecycleRecovery(
+          "approval-continuation-recovery",
+          { organizationId: caseRow.organizationId, caseId: row.id },
+          error,
+        );
+      }
     }
   }
 }
@@ -995,25 +1068,58 @@ export async function recoverApprovedDay1ReadinessGates(): Promise<void> {
   if (approvals.length === 0) return;
   const { completeDay1ReadinessGate } = await import("./engine");
   for (const approval of approvals) {
-    await completeDay1ReadinessGate(approval.caseId);
+    try {
+      await completeDay1ReadinessGate(approval.caseId);
+    } catch (error) {
+      if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
+      const [caseRow] = await db.select({
+        organizationId: onbCases.organizationId,
+      }).from(onbCases).where(eq(onbCases.id, approval.caseId));
+      if (caseRow) {
+        reportRestrictedLifecycleRecovery(
+          "day1-readiness-recovery",
+          { organizationId: caseRow.organizationId, caseId: approval.caseId },
+          error,
+        );
+      }
+    }
   }
 }
 
 /** Repairs the old split-write failure window: an overdue check always owns a queue item. */
-export async function recoverOverdueSystemApprovalQueues(): Promise<void> {
-  const overdue = await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.status, "overdue"));
+export async function recoverOverdueSystemApprovalQueues(
+  onlyCaseIds?: readonly number[],
+): Promise<void> {
+  if (onlyCaseIds?.length === 0) return;
+  const overdue = await db.select().from(onbSystemChecks)
+    .where(and(
+      eq(onbSystemChecks.status, "overdue"),
+      ...(onlyCaseIds ? [inArray(onbSystemChecks.caseId, [...onlyCaseIds])] : []),
+    ))
+    .orderBy(onbSystemChecks.id);
   for (const check of overdue) {
     const def = systemDef(check.system);
     if (!def) continue;
-    await db.insert(onbApprovals).values({
-      organizationId: check.organizationId, caseId: check.caseId, agent: WATCHER_AGENT,
-      ruleRef: check.system === "bgv" ? "Gate B — background verification" : def.slaRuleRef,
-      hitlPattern: "hard-block", resumeAction: "none",
-      recommendation: `Review the ${def.label} exception or SLA breach`,
-      rationale: `${def.label} (${check.externalRef}) remains overdue and requires human review; no automated adverse action was taken.`,
-       authorityScope: "hr-compliance-approve",
-      idempotencyKey: `gateway-${check.system}:${check.id}:${(check.escalatedAt ?? check.dueAt).getTime()}:human-queue`,
-    }).onConflictDoNothing({ target: [onbApprovals.organizationId, onbApprovals.idempotencyKey] });
+    try {
+      await withCaseDerivedLifecycleWrite({
+        organizationId: check.organizationId, caseId: check.caseId,
+      }, (tx) => tx.insert(onbApprovals).values({
+        organizationId: check.organizationId, caseId: check.caseId, agent: WATCHER_AGENT,
+        ruleRef: check.system === "bgv" ? "Gate B — background verification" : def.slaRuleRef,
+        hitlPattern: "hard-block", resumeAction: "none",
+        recommendation: `Review the ${def.label} exception or SLA breach`,
+        rationale: `${def.label} (${check.externalRef}) remains overdue and requires human review; no automated adverse action was taken.`,
+        authorityScope: "hr-compliance-approve",
+        idempotencyKey: `gateway-${check.system}:${check.id}:${(check.escalatedAt ?? check.dueAt).getTime()}:human-queue`,
+      }).onConflictDoNothing({ target: [onbApprovals.organizationId, onbApprovals.idempotencyKey] }));
+    } catch (error) {
+      if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
+      reportRestrictedLifecycleRecovery(
+        "overdue-system-approval-recovery",
+        { organizationId: check.organizationId, caseId: check.caseId, checkId: check.id },
+        error,
+      );
+    }
   }
 }
 
@@ -1068,6 +1174,10 @@ async function tickOnce(): Promise<void> {
   await runGovernanceReminderTick().catch((error) => {
     logger.error({ component: "governance-reminder", error: String(error).slice(0, 300) }, "governance reminder tick failed");
   });
+  // Timer-only lifecycle deletion can be frozen on autoscale. This shared
+  // heartbeat awaits an in-flight deletion tick and therefore cannot return
+  // while a claimed job is still between durable recovery boundaries.
+  await runSensitiveLifecycleDeletionTick();
   await recoverChecklistOrchestrations();
   // A human task response may have committed while its guarded connector
   // continuation was refused. Retry its durable record independently of the
@@ -1097,28 +1207,37 @@ async function tickOnce(): Promise<void> {
         (c) => c.system === def.key && c.mode === "poll",
       );
       for (const check of mine) {
-        const connected = await connectorConnected(def.connectorKey, check.organizationId);
-        if (!connected) {
-          // Disconnection explains a missed check, but is not itself an SLA
-          // breach. Preserve the check's deadline before escalating.
-          if (disconnectedCheckIsOverdue(check, now) &&
-              !(await hasReadinessSlaEnrollment(check.organizationId, check.caseId))) {
-            await escalateCheck(check, `${def.label} connector ("${def.connectorKey}") is disconnected — status API unreachable`, "poll");
+        try {
+          const connected = await connectorConnected(def.connectorKey, check.organizationId);
+          if (!connected) {
+            // Disconnection explains a missed check, but is not itself an SLA
+            // breach. Preserve the check's deadline before escalating.
+            if (disconnectedCheckIsOverdue(check, now) &&
+                !(await hasReadinessSlaEnrollment(check.organizationId, check.caseId))) {
+              await escalateCheck(check, `${def.label} connector ("${def.connectorKey}") is disconnected — status API unreachable`, "poll");
+            }
+            continue;
           }
-          continue;
-        }
-        await db
-          .update(onbSystemChecks)
-          .set({ lastCheckedAt: new Date() })
-          .where(and(eq(onbSystemChecks.id, check.id), eq(onbSystemChecks.organizationId, check.organizationId)));
-        const status = simulateVendorStatus(
-          def,
-          check.requestedAt,
-          check.caseId,
-          now,
-        );
-        if (status === "completed") {
-          await completeCheck(check, "scheduled poll", "simulated");
+          await db
+            .update(onbSystemChecks)
+            .set({ lastCheckedAt: new Date() })
+            .where(and(eq(onbSystemChecks.id, check.id), eq(onbSystemChecks.organizationId, check.organizationId)));
+          const status = simulateVendorStatus(
+            def,
+            check.requestedAt,
+            check.caseId,
+            now,
+          );
+          if (status === "completed") {
+            await completeCheck(check, "scheduled poll", "simulated");
+          }
+        } catch (error) {
+          if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
+          reportRestrictedLifecycleRecovery(
+            "poll-check",
+            { organizationId: check.organizationId, caseId: check.caseId, checkId: check.id },
+            error,
+          );
         }
       }
       t.lastSuccessAt = new Date();
@@ -1133,33 +1252,42 @@ async function tickOnce(): Promise<void> {
 
   // SLA sweep across every mode: late or stuck → escalate once.
   for (const check of await openChecks()) {
-    if (check.status !== "pending") continue;
-    // Enrolled cases have one deadline authority: their policy snapshot.
-    // Vendor exceptions/regressions above still independently require review.
-    if (await hasReadinessSlaEnrollment(check.organizationId, check.caseId)) continue;
-    if (now <= check.dueAt.getTime()) continue;
-    const def = systemDef(check.system);
-    if (!def) continue;
-    if (check.mode === "email") {
+    try {
+      if (check.status !== "pending") continue;
+      // Enrolled cases have one deadline authority: their policy snapshot.
+      // Vendor exceptions/regressions above still independently require review.
+      if (await hasReadinessSlaEnrollment(check.organizationId, check.caseId)) continue;
+      if (now <= check.dueAt.getTime()) continue;
+      const def = systemDef(check.system);
+      if (!def) continue;
+      if (check.mode === "email") {
+        await escalateCheck(
+          check,
+          `No status email quoting ${check.externalRef} has arrived in the watch mailbox.`,
+          undefined,
+          "overdue",
+          "simulated",
+        );
+        continue;
+      }
+      const connected = await connectorConnected(def.connectorKey, check.organizationId);
       await escalateCheck(
         check,
-        `No status email quoting ${check.externalRef} has arrived in the watch mailbox.`,
+        connected
+          ? `The ${def.mode === "push" ? "vendor has not pushed a completion webhook" : "vendor status API still reports in-progress"}.`
+          : `The ${def.label} connector is disconnected, so no status updates are arriving.`,
         undefined,
         "overdue",
         "simulated",
       );
-      continue;
+    } catch (error) {
+      if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
+      reportRestrictedLifecycleRecovery(
+        "sla-sweep",
+        { organizationId: check.organizationId, caseId: check.caseId, checkId: check.id },
+        error,
+      );
     }
-    const connected = await connectorConnected(def.connectorKey, check.organizationId);
-    await escalateCheck(
-      check,
-      connected
-        ? `The ${def.mode === "push" ? "vendor has not pushed a completion webhook" : "vendor status API still reports in-progress"}.`
-        : `The ${def.label} connector is disconnected, so no status updates are arriving.`,
-      undefined,
-      "overdue",
-      "simulated",
-    );
   }
 }
 

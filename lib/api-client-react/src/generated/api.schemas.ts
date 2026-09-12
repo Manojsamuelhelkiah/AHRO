@@ -7066,6 +7066,102 @@ export interface HrPolicyHandoffResolveResponse {
   externalDispatch: false;
 }
 
+export type SensitiveLifecyclePolicyInputDataClass = typeof SensitiveLifecyclePolicyInputDataClass[keyof typeof SensitiveLifecyclePolicyInputDataClass];
+
+
+export const SensitiveLifecyclePolicyInputDataClass = {
+  'candidate-document': 'candidate-document',
+  identity: 'identity',
+  medical: 'medical',
+  payroll: 'payroll',
+  bgv: 'bgv',
+  'candidate-contact': 'candidate-contact',
+  'candidate-voice': 'candidate-voice',
+  'candidate-portal': 'candidate-portal',
+} as const;
+
+export interface SensitiveLifecyclePolicyInput {
+  dataClass: SensitiveLifecyclePolicyInputDataClass;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  jurisdiction: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  purpose: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  lawfulBasis: string;
+  /**
+     * Tenant-approved period; this API supplies no statutory default.
+     * @minimum 0
+     * @maximum 365000
+     */
+  retentionDays: number;
+  providerSharingApproved: boolean;
+  /**
+     * Concrete provider identifiers. Sharing is denied unless the final provider matches this allowlist.
+     * @items.pattern ^[a-z0-9][a-z0-9-]{1,79}$
+     */
+  permittedProviders: string[];
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  policyReference: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  approvalReference: string;
+  /** @minimum 0 */
+  expectedRevision: number;
+}
+
+export interface SensitiveLifecyclePolicy {
+  /** @minimum 1 */
+  id: number;
+  dataClass: string;
+  jurisdiction: string;
+  /** @minimum 1 */
+  revision: number;
+  purpose: string;
+  lawfulBasis: string;
+  /** @minimum 0 */
+  retentionDays: number;
+  providerSharingApproved: boolean;
+  permittedProviders: string[];
+  policyReference: string;
+  approvalReference: string;
+  approvedAt: string;
+  isCurrent: boolean;
+}
+
+export interface SensitiveLifecyclePoliciesResponse {
+  policies: SensitiveLifecyclePolicy[];
+}
+
+export interface SensitiveLifecyclePolicyResponse {
+  policy: SensitiveLifecyclePolicy;
+}
+
+export interface SensitiveLifecycleShorteningPreview {
+  /** @minimum 1 */
+  confirmationId: number;
+  expiresAt: string;
+  /** @minimum 0 */
+  affectedObjectCount: number;
+  /** @minimum 0 */
+  heldRecordCount: number;
+  requiresExplicitAuthorizedConfirmation: true;
+  confirmationPhrase: 'AUTHORIZE RETENTION SHORTENING';
+}
+
 export type ReviseGovernanceDecisionBody = {
   /** @minimum 1 */
   expectedRevision: number;
@@ -7447,3 +7543,64 @@ export const ExportOnboardingProtectedAuditOutcome = {
   failure: 'failure',
 } as const;
 
+export type ConfirmSensitiveRetentionShorteningBodyConfirmationPhrase = typeof ConfirmSensitiveRetentionShorteningBodyConfirmationPhrase[keyof typeof ConfirmSensitiveRetentionShorteningBodyConfirmationPhrase];
+
+
+export const ConfirmSensitiveRetentionShorteningBodyConfirmationPhrase = {
+  AUTHORIZE_RETENTION_SHORTENING: 'AUTHORIZE RETENTION SHORTENING',
+} as const;
+
+export type ConfirmSensitiveRetentionShorteningBody = {
+  confirmationPhrase: ConfirmSensitiveRetentionShorteningBodyConfirmationPhrase;
+};
+
+export type ListSensitiveLifecycleHolds200HoldsItem = { [key: string]: unknown };
+
+export type ListSensitiveLifecycleHolds200 = {
+  holds: ListSensitiveLifecycleHolds200HoldsItem[];
+};
+
+export type SetSensitiveLifecycleHoldBodyDataClass = typeof SetSensitiveLifecycleHoldBodyDataClass[keyof typeof SetSensitiveLifecycleHoldBodyDataClass];
+
+
+export const SetSensitiveLifecycleHoldBodyDataClass = {
+  'candidate-document': 'candidate-document',
+  identity: 'identity',
+  medical: 'medical',
+  payroll: 'payroll',
+  bgv: 'bgv',
+  'candidate-contact': 'candidate-contact',
+  'candidate-voice': 'candidate-voice',
+  'candidate-portal': 'candidate-portal',
+} as const;
+
+export type SetSensitiveLifecycleHoldBody = {
+  dataClass?: SetSensitiveLifecycleHoldBodyDataClass;
+  /** @minimum 1 */
+  caseId?: number;
+  objectPath?: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reason: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reference: string;
+};
+
+export type ReleaseSensitiveLifecycleHoldBody = {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reference: string;
+};
+
+export type ListSensitiveLifecycleDeletionJobs200JobsItem = { [key: string]: unknown };
+
+export type ListSensitiveLifecycleDeletionJobs200 = {
+  jobs: ListSensitiveLifecycleDeletionJobs200JobsItem[];
+};

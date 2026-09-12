@@ -9,6 +9,7 @@ import {
   onbGovernanceHistory,
   onbGovernanceReminders,
   onbGovernanceRequirements,
+  onbSensitiveLifecyclePolicies,
   organizationsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -32,6 +33,7 @@ import {
   hasTrustedHrisActivationEvidence,
   hasTrustedProviderConfiguration,
 } from "./connector-evidence-provenance";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const legalAccess = {
   key: "lawful-access-release",
@@ -290,6 +292,7 @@ describe("governance case rebase persistence", { concurrency: false }, () => {
       joinCodeHash: `hash-${organizationId}`,
       createdByUserId: "test",
     });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
     try {
       const [legacy] = await db.insert(onbCases).values({
         organizationId, workerName: "Legacy governed case", workerEmail: `${organizationId}@example.invalid`,
@@ -297,6 +300,7 @@ describe("governance case rebase persistence", { concurrency: false }, () => {
         geography: "United Kingdom", legalEntity: "Example Ltd", managerName: "Manager",
         recruiterName: "Recruiter", joiningDate: "2030-01-01", lifecycleStage: "plan-generated",
         orchestrationStatus: "idle", readiness: [], workstreams: [],
+        workforceContext: { workCountry: "US" },
         processPolicySnapshot: { retainedPolicy: { immutable: true } },
       }).returning();
       const adopted = await rebaseGovernanceCase({
@@ -321,6 +325,7 @@ describe("governance case rebase persistence", { concurrency: false }, () => {
       await db.delete(onbGovernanceHistory).where(eq(onbGovernanceHistory.organizationId, organizationId));
       await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, organizationId));
       await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, organizationId));
+      await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
       await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
     }
   });

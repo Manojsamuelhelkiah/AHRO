@@ -3,7 +3,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import express from "express";
 import type { Server } from "node:http";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   actualsOverlaysTable,
   customIntentsTable,
@@ -19,10 +19,18 @@ import {
   onbEffectJournal,
   onbEvents,
   onbGuardrailEvents,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDecisions,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceHistory,
+  onbGovernanceReminders,
+  onbGovernanceRequirements,
   onbIntakeBatches,
   onbIntakeBatchPeople,
   onbSettings,
   onbReadinessSlaPolicies,
+  onbSensitiveLifecyclePolicies,
   organizationMembershipsTable,
   organizationsTable,
   pricingRateSetsTable,
@@ -37,7 +45,9 @@ import scenarioFilesRouter from "./scenario-files";
 import actualsRouter from "./actuals";
 import flowOverridesRouter from "./flow-overrides";
 import customIntentsRouter from "./custom-intents";
-import onboardingRouter from "./onboarding";
+import onboardingRouter, {
+  setAfterSensitiveLifecycleGateHookForTests,
+} from "./onboarding";
 import onboardingBatchIntakeRouter from "./onboarding-batch-intake";
 import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
@@ -58,6 +68,8 @@ import { errorHandler } from "../middlewares/error-handler";
 import { scenarioUploadObjectPath } from "../lib/objectStorage";
 import { withCaseDispatchGuard } from "../lib/onboarding/dispatch-guard";
 import { dispatchWorkstreamConnectorMutations } from "../lib/onboarding/workstream-connectors";
+import { seedApprovedSensitiveLifecyclePolicies } from "../test-utils/sensitive-lifecycle-fixtures";
+import { saveSensitiveLifecyclePolicy } from "../lib/onboarding/sensitive-lifecycle";
 
 const suffix = `${process.pid}-${Date.now()}`;
 const orgA = `isolation-a-${suffix}`;
@@ -194,8 +206,18 @@ before(async () => {
       managerName: "Manager",
       recruiterName: "Recruiter",
       joiningDate: "2030-01-01",
+      workforceContext: { workCountry: "US" },
     });
   }
+  await seedApprovedSensitiveLifecyclePolicies(orgA);
+  await db.insert(onbGovernanceAuthorityAssignments).values({
+    organizationId: orgA,
+    authorityRole: "privacy",
+    assigneeUserId: "test-user-a",
+    verificationStatus: "verified",
+    verifiedByUserId: "test-governance",
+    verificationReference: "test-lifecycle-policy-authority",
+  });
 
   const app = express();
   app.use(express.json());
@@ -236,6 +258,9 @@ after(async () => {
   await new Promise<void>((resolve, reject) =>
     server.close((error) => error ? reject(error) : resolve()),
   );
+  // These positive-lifecycle policies are test-owned and reference the
+  // temporary organization without a cascading foreign key.
+  await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, orgA));
   await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgA));
   await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgB));
   await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgA));
@@ -254,6 +279,27 @@ after(async () => {
   await db.delete(onbCaseLogistics).where(eq(onbCaseLogistics.organizationId, orgB));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgA));
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
+  // New-case governance snapshots seed ordinary decision/requirement rows.
+  // Remove those mutable fixtures after their cases, and remove dependent
+  // reviews/reminders before the decision revision rows.
+  await db.delete(onbGovernanceDecisionReviews).where(inArray(
+    onbGovernanceDecisionReviews.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceAuthorityAssignments).where(inArray(
+    onbGovernanceAuthorityAssignments.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceReminders).where(inArray(
+    onbGovernanceReminders.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDispatchMarkers).where(inArray(
+    onbGovernanceDispatchMarkers.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceRequirements).where(inArray(
+    onbGovernanceRequirements.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDecisions).where(inArray(
+    onbGovernanceDecisions.organizationId, [orgA, orgB],
+  ));
   await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, orgA));
   await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, orgB));
   await db.delete(eaAssessmentsTable).where(eq(eaAssessmentsTable.organizationId, orgA));
@@ -276,8 +322,32 @@ after(async () => {
   await db
     .delete(organizationMembershipsTable)
     .where(eq(organizationMembershipsTable.organizationId, orgB));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, orgA));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, orgB));
+  // Protected audit evidence and append-only governance history are never
+  // fixture cleanup targets. Keep their tenant shell when either exists;
+  // otherwise the temporary organization can be removed normally.
+  const [protectedAudits, immutableGovernanceHistory] = await Promise.all([
+    db.select({ organizationId: onbAuditEntries.organizationId })
+      .from(onbAuditEntries)
+      .where(inArray(onbAuditEntries.organizationId, [orgA, orgB]))
+      .limit(1),
+    db.select({ organizationId: onbGovernanceHistory.organizationId })
+      .from(onbGovernanceHistory)
+      .where(inArray(onbGovernanceHistory.organizationId, [orgA, orgB]))
+      .limit(1),
+  ]);
+  const retainedOrganizationIds = new Set([
+    ...protectedAudits.map((row) => row.organizationId),
+    ...immutableGovernanceHistory.map((row) => row.organizationId),
+  ]);
+  const removableOrganizationIds = [orgA, orgB].filter(
+    (organizationId) => !retainedOrganizationIds.has(organizationId),
+  );
+  if (removableOrganizationIds.length) {
+    await db.delete(organizationsTable).where(inArray(
+      organizationsTable.id,
+      removableOrganizationIds,
+    ));
+  }
 });
 
 async function get(path: string, organizationId: string) {
@@ -298,7 +368,6 @@ test("list route families do not expose another organization's records", async (
     ["/flow-overrides", "rationale"],
     ["/custom-intents", "key"],
     ["/pricing-sheets", "name"],
-    ["/onboarding/cases", "workerName"],
   ] as const;
 
   for (const [path, identifyingField] of cases) {
@@ -308,20 +377,24 @@ test("list route families do not expose another organization's records", async (
     assert.equal(rowsB.length, 1, path);
     assert.notEqual(rowsA[0]?.[identifyingField], rowsB[0]?.[identifyingField], path);
   }
+
+  const rowsA = await get("/onboarding/cases", orgA) as Array<Record<string, unknown>>;
+  const rowsB = await get("/onboarding/cases", orgB) as Array<Record<string, unknown>>;
+  assert.equal(rowsA.length, 1);
+  assert.equal(rowsB.length, 1);
+  assert.notEqual(rowsA[0]?.id, rowsB[0]?.id, "case records stay tenant-scoped");
+  assert.equal(rowsA[0]?.workerName, "Restricted candidate");
+  assert.equal(rowsB[0]?.workerName, "Restricted candidate");
 });
 
 test("dashboard includes tenant-owned monitor events without a case", async () => {
-  const titles = {
-    a: `Monitor unavailable ${orgA}`,
-    b: `Monitor unavailable ${orgB}`,
-  };
-  await db.insert(onbEvents).values([
+  const [eventA, eventB] = await db.insert(onbEvents).values([
     {
       organizationId: orgA,
       caseId: null,
       agent: "Inbound email monitor",
       engine: "test",
-      title: titles.a,
+      title: `Monitor unavailable ${orgA}`,
       detail: "Mailbox polling failed.",
     },
     {
@@ -329,10 +402,10 @@ test("dashboard includes tenant-owned monitor events without a case", async () =
       caseId: null,
       agent: "Inbound email monitor",
       engine: "test",
-      title: titles.b,
+      title: `Monitor unavailable ${orgB}`,
       detail: "Mailbox polling failed.",
     },
-  ]);
+  ]).returning({ id: onbEvents.id });
 
   const response = await fetch(`${baseUrl}/onboarding/dashboard`, {
     headers: {
@@ -342,15 +415,30 @@ test("dashboard includes tenant-owned monitor events without a case", async () =
   });
   assert.equal(response.status, 200);
   const dashboard = await response.json() as {
-    recentEvents: Array<{ caseId: number | null; title: string }>;
+    recentEvents: Array<{
+      id: number;
+      caseId: number | null;
+      title: string;
+      detail: string;
+    }>;
   };
-  assert.ok(
-    dashboard.recentEvents.some(
-      (event) => event.caseId === null && event.title === titles.a,
-    ),
-  );
-  assert.ok(
-    dashboard.recentEvents.every((event) => event.title !== titles.b),
+  const ownedEvent = dashboard.recentEvents.find((event) => event.id === eventA!.id);
+  assert.ok(ownedEvent, "the tenant-owned monitor event is returned");
+  assert.deepEqual({
+    id: ownedEvent.id,
+    caseId: ownedEvent.caseId,
+    title: ownedEvent.title,
+    detail: ownedEvent.detail,
+  }, {
+    id: eventA!.id,
+    caseId: null,
+    title: "Restricted confidential onboarding record.",
+    detail: "Restricted confidential onboarding record.",
+  });
+  assert.equal(
+    dashboard.recentEvents.some((event) => event.id === eventB!.id),
+    false,
+    "another tenant's monitor event is never returned",
   );
 });
 
@@ -641,6 +729,7 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
     checklistMatchedCriteria: {},
     checklistMatchExplanation: "Organization default selected.",
     readiness: readinessFromChecklist(LEGACY_CHECKLIST),
+    workforceContext: { workCountry: "US" },
   }).returning({ id: onbCases.id });
 
   const replace = (body: Record<string, unknown>) =>
@@ -698,7 +787,7 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
     body: JSON.stringify({
       expectedUpdatedAt: beforeCorrection.updatedAt.toISOString(),
       reason: "Correct post-workstream office context.",
-      workforceContext: { workEnvironment: "office", siteExposure: false, safetyCritical: false },
+      workforceContext: { workCountry: "US", workEnvironment: "office", siteExposure: false, safetyCritical: false },
     }),
   });
   assert.equal(correction.status, 200);
@@ -738,7 +827,7 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
     body: JSON.stringify({
       expectedUpdatedAt: completedCase.updatedAt.toISOString(),
       reason: "Attempt to alter completed legacy context.",
-      workforceContext: { workEnvironment: "office", siteExposure: false, safetyCritical: false },
+      workforceContext: { workCountry: "US", workEnvironment: "office", siteExposure: false, safetyCritical: false },
     }),
   });
   assert.equal(terminalCorrection.status, 409);
@@ -756,6 +845,135 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
     eq(onbCases.id, policyCase.id),
   ));
   assert.deepEqual(unchanged, { profileId: "default", templateVersion: 1 });
+});
+
+test("a checklist profile replacement holds the lifecycle fence from its successful gate through persistence", async () => {
+  const role = `lifecycle-fenced-profile-${suffix}`;
+  const headers = {
+    "content-type": "application/json",
+    "x-test-user": "test-user-a",
+    "x-organization-id": orgA,
+  };
+  const createdProfile = await fetch(`${baseUrl}/onboarding/checklist-profiles`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      name: `Lifecycle fenced profile ${suffix}`,
+      criteria: { role },
+      overrides: [{
+        id: `lifecycle-fenced-gate-${suffix}`,
+        label: "Lifecycle fenced profile gate",
+        order: LEGACY_CHECKLIST.length,
+        enabled: true,
+        mandatory: true,
+        enforcementStage: "before-workstreams",
+      }],
+      priority: 40,
+      enabled: true,
+    }),
+  });
+  assert.equal(createdProfile.status, 201);
+  const [caseRow] = await db.insert(onbCases).values({
+    organizationId: orgA,
+    workerName: "Lifecycle-fenced profile replacement",
+    workerEmail: `lifecycle-profile-${suffix}@example.com`,
+    hireType: "external",
+    workerCategory: "full-time",
+    role,
+    department: "Engineering",
+    geography: "US",
+    legalEntity: "Example",
+    managerName: "Manager",
+    recruiterName: "Recruiter",
+    joiningDate: "2030-01-01",
+    checklistTemplateVersion: 1,
+    checklistSnapshot: [...LEGACY_CHECKLIST],
+    checklistProfileId: "default",
+    checklistProfileName: "Organization default",
+    checklistProfileVersion: 1,
+    checklistMatchedCriteria: {},
+    checklistMatchExplanation: "Organization default selected.",
+    readiness: readinessFromChecklist(LEGACY_CHECKLIST),
+    workforceContext: { workCountry: "US" },
+  }).returning({ id: onbCases.id });
+  const [currentPolicy] = await db.select().from(onbSensitiveLifecyclePolicies).where(and(
+    eq(onbSensitiveLifecyclePolicies.organizationId, orgA),
+    eq(onbSensitiveLifecyclePolicies.dataClass, "candidate-document"),
+    eq(onbSensitiveLifecyclePolicies.jurisdiction, "US"),
+    eq(onbSensitiveLifecyclePolicies.isCurrent, true),
+  ));
+  assert.ok(currentPolicy);
+
+  let releaseGate!: () => void;
+  let gatePassed!: () => void;
+  const waitForRelease = new Promise<void>((resolve) => { releaseGate = resolve; });
+  const gatePassedPromise = new Promise<void>((resolve) => { gatePassed = resolve; });
+  setAfterSensitiveLifecycleGateHookForTests(async (mutation) => {
+    if (mutation !== "checklist-profile-replacement") return;
+    gatePassed();
+    await waitForRelease;
+  });
+
+  let policyChanged = false;
+  let replacement: Promise<Response> | undefined;
+  try {
+    replacement = fetch(`${baseUrl}/onboarding/cases/${caseRow!.id}/checklist-profile`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        action: "recalculate",
+        expectedChecklistTemplateVersion: 1,
+        expectedChecklistProfileId: "default",
+        expectedChecklistProfileVersion: 1,
+      }),
+    });
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const gateOutcome = await Promise.race([
+      gatePassedPromise.then(() => ({ kind: "gate" as const })),
+      replacement.then(
+        (response) => ({ kind: "response" as const, status: response.status }),
+        (error) => ({ kind: "error" as const, error }),
+      ),
+      new Promise<{ kind: "timeout" }>((resolve) => {
+        timeout = setTimeout(() => resolve({ kind: "timeout" }), 5_000);
+      }),
+    ]);
+    if (timeout) clearTimeout(timeout);
+    assert.equal(
+      gateOutcome.kind,
+      "gate",
+      gateOutcome.kind === "response"
+        ? `Checklist replacement completed with HTTP ${gateOutcome.status} before the lifecycle gate hook.`
+        : gateOutcome.kind === "error"
+          ? `Checklist replacement rejected before the lifecycle gate hook: ${String(gateOutcome.error)}`
+          : "Checklist replacement did not reach the lifecycle gate hook within five seconds.",
+    );
+    // The policy write is launched by the test's independent async context, so
+    // it cannot inherit the route's re-entrant lifecycle fence.
+    const policyChange = saveSensitiveLifecyclePolicy({
+      organizationId: orgA,
+      actorUserId: "test-user-a",
+      policy: {
+        dataClass: "candidate-document", jurisdiction: "US",
+        purpose: currentPolicy.purpose, lawfulBasis: currentPolicy.lawfulBasis,
+        retentionDays: currentPolicy.retentionDays + 1,
+        providerSharingApproved: false, permittedProviders: [],
+        policyReference: currentPolicy.policyReference,
+        approvalReference: currentPolicy.approvalReference,
+        expectedRevision: currentPolicy.revision,
+      },
+    }).then(() => { policyChanged = true; });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(policyChanged, false, "policy change must wait after the profile gate passes");
+    releaseGate();
+    assert.equal((await replacement).status, 200);
+    await policyChange;
+    assert.equal(policyChanged, true);
+  } finally {
+    setAfterSensitiveLifecycleGateHookForTests(undefined);
+    releaseGate?.();
+    await replacement?.catch(() => undefined);
+  }
 });
 
 test("policy mutations fence durable dispatch markers and a winning correction blocks stale recovery", async () => {
@@ -790,6 +1008,7 @@ test("policy mutations fence durable dispatch markers and a winning correction b
     checklistMatchExplanation: "Organization default selected.",
     readiness: readyChecklist,
     workforceContext: {
+      workCountry: "US",
       workEnvironment: "office",
       siteExposure: false,
       safetyCritical: false,
@@ -818,6 +1037,7 @@ test("policy mutations fence durable dispatch markers and a winning correction b
         expectedUpdatedAt,
         reason: "Correct the captured office work context.",
         workforceContext: {
+          workCountry: "US",
           workEnvironment: "remote",
           siteExposure: false,
           safetyCritical: false,
@@ -904,6 +1124,7 @@ test("corrected new and batch-held cases rebase before explicit release", async 
         expectedUpdatedAt,
         reason: "Correct the captured remote work arrangement.",
         workforceContext: {
+          workCountry: "US",
           workEnvironment: "remote",
           siteExposure: false,
           safetyCritical: false,
@@ -950,6 +1171,7 @@ test("corrected new and batch-held cases rebase before explicit release", async 
     checklistMatchedCriteria: {},
     checklistMatchExplanation: "Organization default selected.",
     readiness: readinessFromChecklist(LEGACY_CHECKLIST),
+    workforceContext: { workCountry: "US" },
     orchestrationStatus: "idle",
     lifecycleStage: "trigger-received",
   }).returning();
@@ -992,6 +1214,7 @@ test("corrected new and batch-held cases rebase before explicit release", async 
         recruiterName: "Recruiter",
         joiningDate: "2030-01-01",
         workforceContext: {
+          workCountry: "US",
           workEnvironment: "office",
           siteExposure: false,
           safetyCritical: false,

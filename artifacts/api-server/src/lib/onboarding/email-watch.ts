@@ -21,6 +21,10 @@ import { completeCheck, escalateCheck } from "./system-watcher";
 import { recordGuardrailEvent } from "./guardrails";
 import { makeSharedTick } from "./shared-tick";
 import { systemDef } from "./external-systems";
+import {
+  withCaseDerivedLifecycleWrite,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 /**
  * Watch-mailbox tracker — the System Watcher's "shallow integration"
@@ -168,6 +172,23 @@ export async function applyWatchEmail(opts: {
     return null;
   }
   const organizationId = opts.organizationId;
+  return withSensitiveLifecycleFence(organizationId, async () => {
+    // Watch-mail text is untrusted opaque content. Validate the current case
+    // jurisdiction and all case-derived classes before parsing, mutating a
+    // check, or retaining even a snippet. The short validation transaction
+    // releases its case row lock before watcher helpers open their own case
+    // transactions; the enclosing reentrant lifecycle fence remains held.
+    try {
+      await withCaseDerivedLifecycleWrite(
+        { organizationId, caseId: opts.check.caseId },
+        async () => undefined,
+      );
+    } catch {
+      // Do not insert a dedup row: once lifecycle approval is restored this
+      // Gmail message may be safely retried. No raw sender/subject/body has
+      // reached durable storage on this path.
+      return "Skipped — sensitive lifecycle review is required before retaining this watch email.";
+    }
   const [seen] = await db
     .select({ id: onbWatchEmails.id })
     .from(onbWatchEmails)
@@ -265,6 +286,7 @@ export async function applyWatchEmail(opts: {
   if (rows.length === 0) return null; // lost a race with a concurrent apply
 
   return action;
+  });
 }
 
 /* ------------------------------------------------------------------ */

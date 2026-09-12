@@ -342,6 +342,13 @@ export const onbCommunications = pgTable("onb_communications", {
   failureReason: text("failure_reason"),
   sensitive: boolean("sensitive").notNull().default(false),
   /**
+   * Server-owned lifecycle class for the durable payload. Never infer this
+   * from delivery channel: BGV notices can be email too.
+   */
+  sensitiveDataClass: text("sensitive_data_class").$type<
+    "candidate-contact" | "candidate-voice" | "bgv" | "unclassified-legacy"
+  >().notNull().default("candidate-contact"),
+  /**
    * Provider-side id for inbound messages (Gmail message id, Twilio
    * MessageSid). Used to deduplicate polling / webhook retries.
    */
@@ -355,6 +362,7 @@ export const onbCommunications = pgTable("onb_communications", {
 }, (t) => [
   unique("onb_communications_organization_external_message_id_unique").on(t.organizationId, t.externalMessageId),
   unique("onb_communications_organization_idempotency_key_unique").on(t.organizationId, t.idempotencyKey),
+  index("onb_communications_lifecycle_scan_idx").on(t.organizationId, t.sensitiveDataClass, t.createdAt),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "onb_communications_organization_case_fk" }).onDelete("cascade"),
 ]);
 

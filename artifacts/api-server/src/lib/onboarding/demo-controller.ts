@@ -27,6 +27,12 @@ import { getDemoEmailReadiness, sendOutbound } from "./channels";
 import { startVoiceCall, simulateVoiceCall } from "./voice";
 import { runWithDemoControllerLive } from "./provider-policy";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
+import {
+  evaluateCaseDerivedLifecycleGateInTransaction,
+  SensitiveLifecycleConflictError,
+  withCaseDerivedLifecycleWrite,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 export const DEMO_RUN_KEY_PREFIX = "demo-controller.run.v1:";
 const ALLOWED_SYSTEMS = ["bgv", "hris", "access", "assets", "payroll", "learning"] as const;
@@ -78,6 +84,39 @@ type Activity = {
 };
 
 const DEMO_EMAIL_SUBJECT = "[DEMO] Onboarding simulation";
+const DEMO_WORK_COUNTRIES: Readonly<Record<string, string>> = {
+  "united states": "US",
+  usa: "US",
+  us: "US",
+  india: "IN",
+  in: "IN",
+  "united kingdom": "GB",
+  uk: "GB",
+  gb: "GB",
+  germany: "DE",
+  de: "DE",
+  france: "FR",
+  fr: "FR",
+  "united arab emirates": "AE",
+  uae: "AE",
+  ae: "AE",
+  japan: "JP",
+  jp: "JP",
+  "south africa": "ZA",
+  za: "ZA",
+  singapore: "SG",
+  sg: "SG",
+};
+
+/**
+ * Demo geography is usable for lifecycle jurisdiction only when it is an
+ * explicit country label/code. Regional labels and legal-entity names are
+ * intentionally not inferred into a country.
+ */
+export function normalizedDemoWorkCountry(geography: unknown): string | null {
+  if (typeof geography !== "string") return null;
+  return DEMO_WORK_COUNTRIES[geography.trim().toLowerCase()] ?? null;
+}
 
 function demoEmailMessage(name: string | null): { subject: string; body: string } {
   return {
@@ -281,6 +320,7 @@ async function createCase(
   scenarioKey: string,
   volunteer: DemoVolunteer | null,
   runId: string,
+  workCountry: string,
 ) {
   const scenario = getScenario(scenarioKey) ?? SCENARIOS[0]!;
   const intake = volunteer
@@ -333,6 +373,7 @@ async function createCase(
     readiness: readinessFromChecklist(LEGACY_CHECKLIST),
     workstreams: defaultWorkstreams(),
     scenarioKey,
+    workforceContext: { workCountry },
     primarySkill: intake.primarySkill,
     skillCriticality: intake.skillCriticality,
     notes: `${SYNTHETIC_OFFLINE_MARKER}\n[demo-controller-run:${runId}]\n${intake.notes ?? "Synthetic case; no ordinary engine authority."}`,
@@ -341,6 +382,22 @@ async function createCase(
   }).returning();
   if (!row) throw error("DemoRunCreateError", "Unable to create synthetic demo case.");
   return row;
+}
+
+async function withDemoCaseDerivedLifecycleWrite<T>(
+  input: { organizationId: string; caseId: number },
+  write: (tx: any, caseRow: typeof onbCases.$inferSelect) => Promise<T>,
+): Promise<T> {
+  try {
+    return await withCaseDerivedLifecycleWrite(input, write);
+  } catch (caught) {
+    // The demo route already exposes DemoRunConflict as HTTP 409. Preserve
+    // that contract while retaining the lifecycle reason for clients.
+    if (caught instanceof SensitiveLifecycleConflictError) {
+      throw error("DemoRunConflict", caught.message);
+    }
+    throw caught;
+  }
 }
 
 export async function getDemoCapabilities(organizationId: string, role?: string) {
@@ -409,66 +466,82 @@ export async function createDemoRun(
   const readiness = await actualProviderReadiness();
   const runId = randomUUID();
   const createdAt = nowIso();
-  const row = await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
-    const c = await createCase(tx, organizationId, input.scenario, volunteer, runId);
-    const selected = volunteer ? volunteerView(volunteer, readiness) : null;
-    const run: DemoRun = {
-      runId,
-      caseId: c.id,
-      caseName: c.workerName,
-      scenario: input.scenario,
-      mode: "hybrid",
-      status: "active",
-      version: 0,
-      createdAt,
-      updatedAt: createdAt,
-      metadata: {
+  const workCountry = normalizedDemoWorkCountry(volunteer?.geography ?? scenario.intake.geography);
+  const row = await withSensitiveLifecycleFence(organizationId, async () => {
+    const created = await db.transaction(async (tx) => {
+      // Scenarios can include a real configured demo recipient, while a
+      // volunteer adds real contact and free-text profile data. This case does
+      // not yet exist, so fail closed before its first persistence when the
+      // recorded, explicit work country and its policy envelope cannot be
+      // proved. Never infer jurisdiction from a legal entity or region.
+      const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: workCountry,
+      });
+      if (!gate.allowed) {
+        throw error("DemoRunConflict", `SENSITIVE_LIFECYCLE_BLOCKED:${gate.reason}`);
+      }
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
+      const c = await createCase(tx, organizationId, input.scenario, volunteer, runId, workCountry!);
+      const selected = volunteer ? volunteerView(volunteer, readiness) : null;
+      const run: DemoRun = {
+        runId,
         caseId: c.id,
-        name: c.workerName,
-        email: c.workerEmail,
-        phone: c.workerPhone,
-        role: c.role,
-        department: c.department,
-        geography: c.geography,
-        joiningDate: c.joiningDate,
-        offlineMarker: SYNTHETIC_OFFLINE_MARKER,
-      },
-      checkpoints: initialCheckpoints(),
-      systems: initialSystems(),
-      clock: { now: createdAt, offsetHours: 0 },
-      activity: [{
-        id: randomUUID(),
-        at: createdAt,
-        actor,
-        kind: "run-created",
-        provenance: "simulated",
-        message: "Fresh synthetic case created. Ordinary orchestration and automatic outreach are blocked.",
-        transcript: null,
-        providerStatus: null,
-      }],
-      liveCapabilityReason: selected?.approved
-        ? "Live contact is available only through an explicit, recipient-pinned controller action."
-        : "Select an approved volunteer to enable explicit live email or call actions.",
-      selectedVolunteerId: selected?.id ?? null,
-      selectedVolunteer: selected,
-      renewedHRReviewRequired: false,
-      auditReason: null,
-      actions: {},
-      parentRunId: null,
-    };
-    await writeRun(tx, organizationId, run);
-    await addCaseEvent(tx, organizationId, c.id, run.activity[0]!, `demo-run:${runId}:created`);
-    return run;
-  });
-  await seedDocumentsForCase({
-    id: row.caseId,
-    organizationId,
-    workerCategory: volunteer?.workerCategory ?? scenario.intake.workerCategory,
-    geography: row.metadata.geography,
-    hireType: scenario.intake.hireType,
-    lifecycleStage: "intake",
-    synthetic: true,
+        caseName: c.workerName,
+        scenario: input.scenario,
+        mode: "hybrid",
+        status: "active",
+        version: 0,
+        createdAt,
+        updatedAt: createdAt,
+        metadata: {
+          caseId: c.id,
+          name: c.workerName,
+          email: c.workerEmail,
+          phone: c.workerPhone,
+          role: c.role,
+          department: c.department,
+          geography: c.geography,
+          joiningDate: c.joiningDate,
+          offlineMarker: SYNTHETIC_OFFLINE_MARKER,
+        },
+        checkpoints: initialCheckpoints(),
+        systems: initialSystems(),
+        clock: { now: createdAt, offsetHours: 0 },
+        activity: [{
+          id: randomUUID(),
+          at: createdAt,
+          actor,
+          kind: "run-created",
+          provenance: "simulated",
+          message: "Fresh synthetic case created. Ordinary orchestration and automatic outreach are blocked.",
+          transcript: null,
+          providerStatus: null,
+        }],
+        liveCapabilityReason: selected?.approved
+          ? "Live contact is available only through an explicit, recipient-pinned controller action."
+          : "Select an approved volunteer to enable explicit live email or call actions.",
+        selectedVolunteerId: selected?.id ?? null,
+        selectedVolunteer: selected,
+        renewedHRReviewRequired: false,
+        auditReason: null,
+        actions: {},
+        parentRunId: null,
+      };
+      await writeRun(tx, organizationId, run);
+      await addCaseEvent(tx, organizationId, c.id, run.activity[0]!, `demo-run:${runId}:created`);
+      return run;
+    });
+    await seedDocumentsForCase({
+      id: created.caseId,
+      organizationId,
+      workerCategory: volunteer?.workerCategory ?? scenario.intake.workerCategory,
+      geography: created.metadata.geography,
+      hireType: scenario.intake.hireType,
+      lifecycleStage: "intake",
+      synthetic: true,
+    });
+    return created;
   });
   return row;
 }
@@ -503,12 +576,8 @@ async function updateCaseForRun(
   run: DemoRun,
   action: RunAction,
   actor: string,
+  caseRow: typeof onbCases.$inferSelect,
 ) {
-  const [caseRow] = await tx.select().from(onbCases).where(and(
-    eq(onbCases.id, run.caseId),
-    eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
-  )).for("update");
-  if (!caseRow) throw error("DemoRunNotFound", "Run-owned synthetic case not found.");
   const readiness = [...caseRow.readiness];
   const workstreams = caseRow.workstreams.map((stream) => ({ ...stream, blockers: [...stream.blockers] }));
   if (action.kind === "load-documents") {
@@ -589,7 +658,12 @@ async function performMutation(
   action: RunAction,
 ): Promise<{ run: DemoRun; duplicate: boolean }> {
   const hash = actionHash(action);
-  return db.transaction(async (tx) => {
+  const discovered = await loadRun(organizationId, runId);
+  if (!discovered) throw error("DemoRunNotFound", "Demo run not found.");
+  return withDemoCaseDerivedLifecycleWrite({
+    organizationId,
+    caseId: discovered.caseId,
+  }, async (tx, caseRow) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
     const [stored] = await tx.select({ value: onbSettings.value })
       .from(onbSettings)
@@ -684,7 +758,7 @@ async function performMutation(
         message: "Run retired and preserved. Restart creates a new synthetic case and run; this run cannot dispatch again.",
       });
       await writeRun(tx, organizationId, run);
-      await updateCaseForRun(tx, run, action, actor);
+      await updateCaseForRun(tx, run, action, actor, caseRow);
       return { run, duplicate: false };
     }
     if (reviewWasApproved && materialEvidenceReason) {
@@ -698,7 +772,7 @@ async function performMutation(
     run.updatedAt = at;
     run.status = refreshStatus(run);
     await writeRun(tx, organizationId, run);
-    await updateCaseForRun(tx, run, action, actor);
+    await updateCaseForRun(tx, run, action, actor, caseRow);
     await addCaseEvent(tx, organizationId, run.caseId, activity, `demo-run:${runId}:action:${action.requestId}`);
     return { run, duplicate: false };
   });
@@ -747,7 +821,9 @@ async function terminalizeLiveClaim(
   providerStatus: "blocked" | "failed" | "unknown",
   message: string,
 ): Promise<DemoRun> {
-  return db.transaction(async (tx) => {
+  const claimed = await loadRun(organizationId, runId);
+  if (!claimed) throw error("DemoRunNotFound", "Demo run not found while terminalizing live action.");
+  return withDemoCaseDerivedLifecycleWrite({ organizationId, caseId: claimed.caseId }, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
     const [stored] = await tx.select({ value: onbSettings.value })
       .from(onbSettings)
@@ -864,7 +940,7 @@ async function finishLiveCommunication(
   // used by action mutations. Provider webhooks may have recorded a real call
   // outcome while the dispatch request was in flight; never overwrite that
   // newer state with the pre-I/O snapshot.
-  return db.transaction(async (tx) => {
+  return withDemoCaseDerivedLifecycleWrite({ organizationId, caseId: run.caseId }, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
     const [stored] = await tx.select({ value: onbSettings.value })
       .from(onbSettings)
@@ -908,7 +984,10 @@ export async function bindDemoVoiceCall(input: {
   callId: string;
 }): Promise<void> {
   if (!input.callId.trim()) throw error("DemoVoiceCallInvalid", "A provider call ID is required.");
-  await db.transaction(async (tx) => {
+  await withDemoCaseDerivedLifecycleWrite({
+    organizationId: DEMO_ORGANIZATION_ID,
+    caseId: input.caseId,
+  }, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${DEMO_ORGANIZATION_ID}`}))`);
     const [stored] = await tx.select({ value: onbSettings.value })
       .from(onbSettings)
@@ -956,7 +1035,10 @@ export async function recordDemoVoiceOutcome(input: {
     transcript: input.transcript,
     status: input.status,
   })).digest("hex");
-  await db.transaction(async (tx) => {
+  await withDemoCaseDerivedLifecycleWrite({
+    organizationId: DEMO_ORGANIZATION_ID,
+    caseId: input.caseId,
+  }, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${DEMO_ORGANIZATION_ID}`}))`);
     const rows = await tx.select({ key: onbSettings.key, value: onbSettings.value })
       .from(onbSettings)
@@ -1024,7 +1106,10 @@ export async function applyDemoAction(
       volunteerId: result.run.selectedVolunteerId,
       mode: "hybrid",
     });
-    await db.transaction(async (tx) => {
+    await withDemoCaseDerivedLifecycleWrite({
+      organizationId,
+      caseId: result.run.caseId,
+    }, async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
       const [stored] = await tx.select({ value: onbSettings.value })
         .from(onbSettings)
@@ -1055,7 +1140,10 @@ export async function applyDemoAction(
         `Body: ${email.body}`,
       ].join("\n");
       latest.activity[latest.activity.length - 1]!.providerStatus = "simulated";
-      await db.transaction(async (tx) => {
+      await withDemoCaseDerivedLifecycleWrite({
+        organizationId,
+        caseId: latest.caseId,
+      }, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
         await writeRun(tx, organizationId, latest);
       });
@@ -1069,7 +1157,10 @@ export async function applyDemoAction(
       latest.activity[latest.activity.length - 1]!.transcript = transcript;
       latest.activity[latest.activity.length - 1]!.message = "Simulated call completed; transcript is synthetic and excluded from genuine KPIs.";
       latest.activity[latest.activity.length - 1]!.providerStatus = "simulated";
-      await db.transaction(async (tx) => {
+      await withDemoCaseDerivedLifecycleWrite({
+        organizationId,
+        caseId: latest.caseId,
+      }, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
         await writeRun(tx, organizationId, latest);
       });

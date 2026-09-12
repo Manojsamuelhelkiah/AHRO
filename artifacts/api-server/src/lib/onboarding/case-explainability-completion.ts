@@ -1,4 +1,9 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
+import {
+  dispatchWithProviderGovernance,
+  PROVIDER_GOVERNANCE_WORKFLOW,
+  type ProviderGovernanceCase,
+} from "./governance-provider-boundary";
 
 const MODEL = "gpt-5-nano";
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -113,6 +118,7 @@ function completionError(
 }
 
 export async function completeExplainabilityJson(
+  caseRow: ProviderGovernanceCase,
   stage: ExplainabilityCompletionStage,
   system: string,
   user: string,
@@ -122,28 +128,48 @@ export async function completeExplainabilityJson(
   const schema = schemaFor(stage, sourceIds);
   let response;
   try {
-    response = await openai.chat.completions.create({
-      model: MODEL,
-      reasoning_effort: "low",
-      max_completion_tokens: MAX_COMPLETION_TOKENS,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: schema.name,
-          strict: true,
-          schema: schema.schema,
+    // This is the actual OpenAI boundary, not a route-level preflight. Keep
+    // the full prompt construction outside this module, but hold both the
+    // current governance and lifecycle/provider fences until this request has
+    // completed so configuration changes cannot authorize a stale prompt.
+    const guarded = await dispatchWithProviderGovernance({
+      caseRow,
+      workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
+      operation: `onboarding-case-explainability:${caseRow.id}:${stage}`,
+      providerId: "openai",
+      dataClass: "candidate-contact",
+      dispatch: () => openai.chat.completions.create({
+        model: MODEL,
+        reasoning_effort: "low",
+        max_completion_tokens: MAX_COMPLETION_TOKENS,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: schema.name,
+            strict: true,
+            schema: schema.schema,
+          },
         },
-      },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }, {
-      timeout: REQUEST_TIMEOUT_MS,
-      maxRetries: 0,
-      signal,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }, {
+        timeout: REQUEST_TIMEOUT_MS,
+        maxRetries: 0,
+        signal,
+      }),
+      disposition: () => "sent",
     });
+    if (!guarded.dispatched) {
+      throw new ExplainabilityCompletionError(
+        "Explainability model dispatch is not approved.",
+        { stage, code: "provider_governance_or_lifecycle_denied" },
+      );
+    }
+    response = guarded.value;
   } catch (error) {
+    if (error instanceof ExplainabilityCompletionError) throw error;
     throw completionError(stage, error, "request_failed");
   }
 

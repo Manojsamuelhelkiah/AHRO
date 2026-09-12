@@ -27,10 +27,16 @@ import {
   normalizedWorkforceContext,
 } from "../lib/onboarding/workforce-policies";
 import {
+  evaluateCaseDerivedLifecycleGateInTransaction,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+} from "../lib/onboarding/sensitive-lifecycle";
+import {
   governanceSnapshotForNewCase,
   withGovernanceDecisionSnapshot,
 } from "../lib/onboarding/governance-runtime";
 import { assertGovernanceMutationAllowed } from "../lib/onboarding/governance-dispatch";
+import { acquireCaseDispatchMutationLock } from "../lib/onboarding/dispatch-guard";
 
 const router: IRouter = Router();
 
@@ -125,101 +131,113 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
     }
     const organizationId = getOrganizationId(req);
     const payloadFingerprint = batchIntakePayloadFingerprint(name, parsedPeople);
-    const logisticsDefault = await getDay1LogisticsDefault(organizationId);
     // One exact approved decision set is adopted for newly inserted members;
     // reconciliation rows retain their original snapshots on retry.
-    await governanceSnapshotForNewCase(organizationId);
-    const result = await db.transaction(async (tx) => {
-      await assertGovernanceMutationAllowed(tx, organizationId);
-      const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
-      let [existing] = await tx.select().from(onbIntakeBatches).where(and(
-        eq(onbIntakeBatches.organizationId, organizationId),
-        eq(onbIntakeBatches.idempotencyKey, idempotencyKey),
-      )).for("update");
-      if (existing && existing.payloadFingerprint !== payloadFingerprint) {
-        throw Object.assign(new Error("This idempotency key was already used with different person details. Use a new key for a changed cohort."), { statusCode: 409 });
-      }
-      let batchId = existing?.batchId ?? randomUUID();
-      if (!existing) {
-        const inserted = await tx.insert(onbIntakeBatches).values({
-          organizationId, batchId, idempotencyKey, payloadFingerprint, name, createdBy: req.authUserId!,
-        }).onConflictDoNothing().returning();
-        if (!inserted[0]) {
-          [existing] = await tx.select().from(onbIntakeBatches).where(and(
-            eq(onbIntakeBatches.organizationId, organizationId),
-            eq(onbIntakeBatches.idempotencyKey, idempotencyKey),
-          )).for("update");
-          if (!existing) throw new Error("Batch intake retry could not be reconciled; please retry with the same key.");
-          if (existing.payloadFingerprint !== payloadFingerprint) {
-            throw Object.assign(new Error("This idempotency key was already used with different person details. Use a new key for a changed cohort."), { statusCode: 409 });
+    const result = await withSensitiveLifecycleFence(organizationId, async () => {
+      const logisticsDefault = await getDay1LogisticsDefault(organizationId);
+      await governanceSnapshotForNewCase(organizationId);
+      return db.transaction(async (tx) => {
+        await assertGovernanceMutationAllowed(tx, organizationId);
+        const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
+        let [existing] = await tx.select().from(onbIntakeBatches).where(and(
+          eq(onbIntakeBatches.organizationId, organizationId),
+          eq(onbIntakeBatches.idempotencyKey, idempotencyKey),
+        )).for("update");
+        if (existing && existing.payloadFingerprint !== payloadFingerprint) {
+          throw Object.assign(new Error("This idempotency key was already used with different person details. Use a new key for a changed cohort."), { statusCode: 409 });
+        }
+        let batchId = existing?.batchId ?? randomUUID();
+        if (!existing) {
+          const inserted = await tx.insert(onbIntakeBatches).values({
+            organizationId, batchId, idempotencyKey, payloadFingerprint, name, createdBy: req.authUserId!,
+          }).onConflictDoNothing().returning();
+          if (!inserted[0]) {
+            [existing] = await tx.select().from(onbIntakeBatches).where(and(
+              eq(onbIntakeBatches.organizationId, organizationId),
+              eq(onbIntakeBatches.idempotencyKey, idempotencyKey),
+            )).for("update");
+            if (!existing) throw new Error("Batch intake retry could not be reconciled; please retry with the same key.");
+            if (existing.payloadFingerprint !== payloadFingerprint) {
+              throw Object.assign(new Error("This idempotency key was already used with different person details. Use a new key for a changed cohort."), { statusCode: 409 });
+            }
+            batchId = existing.batchId;
           }
-          batchId = existing.batchId;
         }
-      }
-      const results: Array<{ personKey: string; caseId: number; status: "created" | "reconciled"; profileId: string; profileVersion: number }> = [];
-      for (const person of parsedPeople) {
-        const [prior] = await tx.select().from(onbIntakeBatchPeople).where(and(
-          eq(onbIntakeBatchPeople.organizationId, organizationId),
-          eq(onbIntakeBatchPeople.batchId, batchId),
-          eq(onbIntakeBatchPeople.personKey, person.personKey),
-        )).limit(1);
-        if (prior) {
-          const policy = prior.processPolicySnapshot as { profileId?: string; profileVersion?: number };
-          results.push({ personKey: person.personKey, caseId: prior.caseId, status: "reconciled", profileId: policy.profileId ?? "unknown", profileVersion: policy.profileVersion ?? 0 });
-          continue;
+        const results: Array<{ personKey: string; caseId: number; status: "created" | "reconciled"; profileId: string; profileVersion: number }> = [];
+        for (const person of parsedPeople) {
+          const [prior] = await tx.select().from(onbIntakeBatchPeople).where(and(
+            eq(onbIntakeBatchPeople.organizationId, organizationId),
+            eq(onbIntakeBatchPeople.batchId, batchId),
+            eq(onbIntakeBatchPeople.personKey, person.personKey),
+          )).limit(1);
+          if (prior) {
+            const policy = prior.processPolicySnapshot as { profileId?: string; profileVersion?: number };
+            results.push({ personKey: person.personKey, caseId: prior.caseId, status: "reconciled", profileId: policy.profileId ?? "unknown", profileVersion: policy.profileVersion ?? 0 });
+            continue;
+          }
+          const [jobProfile] = person.jobProfileId
+            ? await tx.select().from(onbJobProfiles).where(and(
+              eq(onbJobProfiles.organizationId, organizationId),
+              eq(onbJobProfiles.profileId, person.jobProfileId),
+              eq(onbJobProfiles.enabled, true),
+            )).orderBy(desc(onbJobProfiles.version)).limit(1)
+            : [];
+          if (person.jobProfileId && !jobProfile) throw new Error(`Selected job profile is not available for ${person.workerName}.`);
+          const workforceContext = normalizedWorkforceContext({
+            ...jobProfile?.context,
+            ...person.workforceContext,
+            hiringMode: "batch",
+            batchId,
+          });
+          const workforcePolicy = await resolveEffectiveWorkforcePolicyInTransaction(
+            tx,
+            organizationId,
+            workforceContext,
+            person,
+          );
+          const { profile, classification } = workforcePolicy;
+          const checklistSnapshot = workforcePolicy.effectiveItems;
+          const processPolicySnapshot = withGovernanceDecisionSnapshot({
+            profileId: profile.profileId, profileVersion: profile.profileVersion, templateVersion: profile.templateVersion,
+            processPolicy: profile.processPolicy ?? {}, classification,
+          }, governanceSnapshot);
+          // The case envelope, logistics, and the batch-person snapshot can
+          // retain opaque candidate facts. Check the server-normalized work
+          // jurisdiction immediately before their first write.
+          const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+            organizationId,
+            jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+          });
+          if (!lifecycle.allowed) {
+            throw Object.assign(new Error(lifecycle.reason), { statusCode: 409 });
+          }
+          const [created] = await tx.insert(onbCases).values({
+            organizationId,
+            workerName: person.workerName, workerEmail: person.workerEmail, workerPhone: person.workerPhone ?? null,
+            channelPreference: person.channelPreference ?? "email", hireType: person.hireType,
+            workerCategory: person.workerCategory, workerBand: person.workerBand ?? null, role: person.role,
+            department: person.department, geography: person.geography, legalEntity: person.legalEntity,
+            managerName: person.managerName, recruiterName: person.recruiterName, joiningDate: person.joiningDate,
+            urgency: person.urgency ?? "normal", notes: person.notes ?? null,
+            checklistTemplateVersion: profile.templateVersion, checklistSnapshot,
+            checklistProfileId: profile.profileId, checklistProfileName: profile.profileName,
+            checklistProfileVersion: profile.profileVersion, checklistMatchedCriteria: profile.matchedCriteria,
+            checklistMatchExplanation: profile.explanation, workforceContext, workforceClassification: classification,
+            processPolicySnapshot, jobProfileId: jobProfile?.profileId ?? null, jobProfileVersion: jobProfile?.version ?? null,
+            readiness: readinessFromChecklist(checklistSnapshot), workstreams: [], lifecycleStage: "trigger-received",
+            orchestrationStatus: "batch-intake-pending-review",
+          }).returning();
+          await tx.insert(onbCaseLogistics).values({
+            organizationId, caseId: created.id, ...logisticsForCase(logisticsDefault, created.joiningDate),
+          });
+          await tx.insert(onbIntakeBatchPeople).values({
+            organizationId, batchId, personKey: person.personKey, caseId: created.id,
+            workforceContextSnapshot: workforceContext, processPolicySnapshot,
+          });
+          results.push({ personKey: person.personKey, caseId: created.id, status: "created", profileId: profile.profileId, profileVersion: profile.profileVersion });
         }
-        const [jobProfile] = person.jobProfileId
-          ? await tx.select().from(onbJobProfiles).where(and(
-            eq(onbJobProfiles.organizationId, organizationId),
-            eq(onbJobProfiles.profileId, person.jobProfileId),
-            eq(onbJobProfiles.enabled, true),
-          )).orderBy(desc(onbJobProfiles.version)).limit(1)
-          : [];
-        if (person.jobProfileId && !jobProfile) throw new Error(`Selected job profile is not available for ${person.workerName}.`);
-        const workforceContext = normalizedWorkforceContext({
-          ...jobProfile?.context,
-          ...person.workforceContext,
-          hiringMode: "batch",
-          batchId,
-        });
-        const workforcePolicy = await resolveEffectiveWorkforcePolicyInTransaction(
-          tx,
-          organizationId,
-          workforceContext,
-          person,
-        );
-        const { profile, classification } = workforcePolicy;
-        const checklistSnapshot = workforcePolicy.effectiveItems;
-        const processPolicySnapshot = withGovernanceDecisionSnapshot({
-          profileId: profile.profileId, profileVersion: profile.profileVersion, templateVersion: profile.templateVersion,
-          processPolicy: profile.processPolicy ?? {}, classification,
-        }, governanceSnapshot);
-        const [created] = await tx.insert(onbCases).values({
-          organizationId,
-          workerName: person.workerName, workerEmail: person.workerEmail, workerPhone: person.workerPhone ?? null,
-          channelPreference: person.channelPreference ?? "email", hireType: person.hireType,
-          workerCategory: person.workerCategory, workerBand: person.workerBand ?? null, role: person.role,
-          department: person.department, geography: person.geography, legalEntity: person.legalEntity,
-          managerName: person.managerName, recruiterName: person.recruiterName, joiningDate: person.joiningDate,
-          urgency: person.urgency ?? "normal", notes: person.notes ?? null,
-          checklistTemplateVersion: profile.templateVersion, checklistSnapshot,
-          checklistProfileId: profile.profileId, checklistProfileName: profile.profileName,
-          checklistProfileVersion: profile.profileVersion, checklistMatchedCriteria: profile.matchedCriteria,
-          checklistMatchExplanation: profile.explanation, workforceContext, workforceClassification: classification,
-          processPolicySnapshot, jobProfileId: jobProfile?.profileId ?? null, jobProfileVersion: jobProfile?.version ?? null,
-          readiness: readinessFromChecklist(checklistSnapshot), workstreams: [], lifecycleStage: "trigger-received",
-          orchestrationStatus: "batch-intake-pending-review",
-        }).returning();
-        await tx.insert(onbCaseLogistics).values({
-          organizationId, caseId: created.id, ...logisticsForCase(logisticsDefault, created.joiningDate),
-        });
-        await tx.insert(onbIntakeBatchPeople).values({
-          organizationId, batchId, personKey: person.personKey, caseId: created.id,
-          workforceContextSnapshot: workforceContext, processPolicySnapshot,
-        });
-        results.push({ personKey: person.personKey, caseId: created.id, status: "created", profileId: profile.profileId, profileVersion: profile.profileVersion });
-      }
-      return { batchId, name: existing?.name ?? name, retry: Boolean(existing), results };
+        return { batchId, name: existing?.name ?? name, retry: Boolean(existing), results };
+      });
     });
     res.status(result.retry ? 200 : 201).json(result);
   } catch (err) {
@@ -247,7 +265,8 @@ router.post("/onboarding/batch-intake/:batchId/cases/:caseId/release", async (re
       return;
     }
     const organizationId = getOrganizationId(req);
-    const outcome = await db.transaction(async (tx) => {
+    const outcome = await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
+      await acquireCaseDispatchMutationLock(tx, organizationId, caseId);
       const [row] = await tx.select({ case: onbCases }).from(onbIntakeBatchPeople)
         .innerJoin(onbCases, and(
           eq(onbIntakeBatchPeople.organizationId, onbCases.organizationId),
@@ -268,6 +287,13 @@ router.post("/onboarding/batch-intake/:batchId/cases/:caseId/release", async (re
       if (row.case.orchestrationStatus !== "batch-intake-pending-review") {
         return { kind: "already-released" as const, status: row.case.orchestrationStatus };
       }
+      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(row.case.workforceContext),
+      });
+      if (!lifecycle.allowed) {
+        return { kind: "lifecycle-blocked" as const, message: lifecycle.reason };
+      }
       const [released] = await tx.update(onbCases).set({
         orchestrationStatus: "idle",
         orchestrationCheckpoint: null,
@@ -281,11 +307,12 @@ router.post("/onboarding/batch-intake/:batchId/cases/:caseId/release", async (re
         idempotencyKey: `batch-release:${batchId}:${caseId}`,
       }).onConflictDoNothing();
       return { kind: "released" as const, case: released };
-    });
+    }));
     if (outcome.kind === "not-found") return void res.status(404).json({ message: "Batch case not found in this organization." });
     if (outcome.kind === "gate-a-required") return void res.status(409).json({ message: "This case requires the dedicated Gate A offer-acceptance confirmation; batch release cannot bypass it." });
     if (outcome.kind === "policy-rebase-required") return void res.status(409).json({ message: "This batch case has a pending workforce context correction. Rebase its policy before explicit release." });
     if (outcome.kind === "already-released") return void res.status(409).json({ message: `This case is no longer held for batch review (status: ${outcome.status}).` });
+    if (outcome.kind === "lifecycle-blocked") return void res.status(409).json({ message: outcome.message });
     startOrchestration(caseId);
     res.json({ caseId, batchId, orchestrationStatus: outcome.case.orchestrationStatus });
   } catch (err) {

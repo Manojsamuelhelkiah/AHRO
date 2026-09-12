@@ -7,7 +7,7 @@ import {
 } from "@workspace/db/schema";
 import { sendOutbound } from "./channels";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { ensureCaseLogistics } from "./case-logistics";
+import { initializeCaseLogistics } from "./case-logistics";
 import { hashSecret, newSecret } from "./candidate-portal";
 import { withCaseDispatchGuard } from "./dispatch-guard";
 import {
@@ -15,6 +15,8 @@ import {
   evaluateProviderGovernanceGate,
   PROVIDER_GOVERNANCE_WORKFLOW,
 } from "./governance-provider-boundary";
+import { withCaseDerivedLifecycleWrite, withSensitiveLifecycleFence } from "./sensitive-lifecycle";
+import { withSensitiveAuthorityFence } from "./sensitive-access";
 
 export const AUTOMATED_PORTAL_EMAIL_KEY = (caseId: number) =>
   `orchestration:${caseId}:portal:email`;
@@ -42,11 +44,21 @@ export async function issueCandidatePortalLink(input: {
   authorizeEmail?: boolean;
   idempotencyKey?: string;
 }) {
-  return withCaseDispatchGuard(
-    input.caseId,
-    () => issueCandidatePortalLinkUnsafe(input),
-    { onOffline: () => issueCandidatePortalLinkUnsafe(input) },
-  );
+  // A returned URL is a bearer credential to the candidate’s identity,
+  // logistics, and document-upload surface. Do not infer this authority from
+  // an owner role, demo identity, or a prior case snapshot.
+  return withSensitiveLifecycleFence(input.organizationId, () => withSensitiveAuthorityFence({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+    actorUserId: input.issuedBy,
+    classification: "identity",
+    additionalClassifications: ["medical", "payroll", "bgv"],
+    mutate: () => withCaseDispatchGuard(
+      input.caseId,
+      () => issueCandidatePortalLinkUnsafe(input),
+      { onOffline: () => issueCandidatePortalLinkUnsafe(input) },
+    ),
+  }));
 }
 
 async function issueCandidatePortalLinkUnsafe(input: {
@@ -109,12 +121,17 @@ async function issueCandidatePortalLinkUnsafe(input: {
     }
   }
 
+  // Link issuance is an explicit, full-authority action. It is the safe
+  // legacy backfill point for a case that predates persisted Day-1 logistics;
+  // reads intentionally do not create this opaque record.
+  const logistics = await initializeCaseLogistics(input.organizationId, input.caseId);
   const token = newSecret();
   const expiresAt = new Date(Date.now() + expiresInHours * 3600_000);
   const linkDispatch = await dispatchWithProviderGovernance({
     caseRow: c,
     workflow: PROVIDER_GOVERNANCE_WORKFLOW.portal,
     operation: `candidate-portal-link:${input.caseId}:${input.idempotencyKey ?? "manual"}`,
+    providerId: "internal-candidate-portal",
     // Re-evaluate under the organization dispatch fence immediately before
     // persisting a new bearer credential. The separate email path is guarded
     // again by channels.ts before Gmail I/O.
@@ -138,25 +155,29 @@ async function issueCandidatePortalLinkUnsafe(input: {
 
   if (input.sendEmail) {
     if (input.authorizeEmail) {
-      await db.update(onbCases).set({
-        candidateEmailAuthorizedAt: new Date(),
-        candidateEmailAuthorizedBy: input.issuedBy,
-        updatedAt: new Date(),
-      }).where(and(
-        eq(onbCases.id, input.caseId),
-        eq(onbCases.organizationId, input.organizationId),
-      ));
+      await withCaseDerivedLifecycleWrite({
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+      }, (tx) =>
+        tx.update(onbCases).set({
+          candidateEmailAuthorizedAt: new Date(),
+          candidateEmailAuthorizedBy: input.issuedBy,
+          updatedAt: new Date(),
+        }).where(and(
+          eq(onbCases.id, input.caseId),
+          eq(onbCases.organizationId, input.organizationId),
+        )),
+      );
     }
-    const logistics = await ensureCaseLogistics(input.organizationId, input.caseId, c.joiningDate);
     const logisticsLines = [
-      logistics.orientationDate && `Date: ${logistics.orientationDate}`,
-      logistics.orientationTime && `Time: ${logistics.orientationTime}${logistics.timezone ? ` (${logistics.timezone})` : ""}`,
-      logistics.format && `Format: ${logistics.format}`,
-      logistics.venueAddress && `Venue: ${logistics.venueAddress}`,
-      logistics.googleMapsUrl && `Map: ${logistics.googleMapsUrl}`,
-      logistics.meetingUrl && `Meeting: ${logistics.meetingUrl}`,
-      logistics.reportingContact && `Reporting contact: ${logistics.reportingContact}`,
-      logistics.arrivalInstructions && `Arrival instructions: ${logistics.arrivalInstructions}`,
+      logistics?.orientationDate && `Date: ${logistics.orientationDate}`,
+      logistics?.orientationTime && `Time: ${logistics.orientationTime}${logistics.timezone ? ` (${logistics.timezone})` : ""}`,
+      logistics?.format && `Format: ${logistics.format}`,
+      logistics?.venueAddress && `Venue: ${logistics.venueAddress}`,
+      logistics?.googleMapsUrl && `Map: ${logistics.googleMapsUrl}`,
+      logistics?.meetingUrl && `Meeting: ${logistics.meetingUrl}`,
+      logistics?.reportingContact && `Reporting contact: ${logistics.reportingContact}`,
+      logistics?.arrivalInstructions && `Arrival instructions: ${logistics.arrivalInstructions}`,
     ].filter(Boolean).join("\n") || "Day-1 details will be shared in the portal when available.";
     delivery = await sendOutbound({
       caseId: input.caseId,

@@ -4695,6 +4695,114 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OnbProtectedAuditEntry" }
         "403": { description: Organization owner or admin required }
+  /privacy/lifecycle/policies:
+    get:
+      operationId: listSensitiveLifecyclePolicies
+      tags: [governance]
+      summary: List current approved sensitive lifecycle policies
+      responses:
+        "200":
+          description: Current class-specific policies
+          content: { application/json: { schema: { $ref: "#/components/schemas/SensitiveLifecyclePoliciesResponse" } } }
+    put:
+      operationId: saveSensitiveLifecyclePolicy
+      tags: [governance]
+      summary: Approve a new immutable sensitive lifecycle policy revision
+      description: Requires current server-verified privacy or legal authority; tenant owner/admin is never sufficient. Retention shortening uses the preview/confirm endpoints.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SensitiveLifecyclePolicyInput" } } }
+      responses:
+        "200": { description: Approved revision, content: { application/json: { schema: { $ref: "#/components/schemas/SensitiveLifecyclePolicyResponse" } } } }
+        "403": { description: Verified privacy or legal authority required }
+        "409": { description: Stale revision or shortening confirmation required }
+  /privacy/lifecycle/policies/shortening-preview:
+    post:
+      operationId: previewSensitiveRetentionShortening
+      tags: [governance]
+      summary: Preview a strictly shorter retention policy
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SensitiveLifecyclePolicyInput" } } }
+      responses:
+        "200": { description: Durable confirmation preview, content: { application/json: { schema: { $ref: "#/components/schemas/SensitiveLifecycleShorteningPreview" } } } }
+  /privacy/lifecycle/shortening-previews/{id}/confirm:
+    post:
+      operationId: confirmSensitiveRetentionShortening
+      tags: [governance]
+      summary: Explicitly authorize a previewed retention shortening
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmationPhrase]
+              properties:
+                confirmationPhrase: { type: string, enum: ["AUTHORIZE RETENTION SHORTENING"] }
+      responses:
+        "200": { description: Approved revised policy, content: { application/json: { schema: { $ref: "#/components/schemas/SensitiveLifecyclePolicyResponse" } } } }
+        "409": { description: "Preview expired, used, or policy changed" }
+  /privacy/lifecycle/holds:
+    get:
+      operationId: listSensitiveLifecycleHolds
+      tags: [governance]
+      summary: List tenant sensitive lifecycle holds
+      responses:
+        "200": { description: Holds, content: { application/json: { schema: { type: object, required: [holds], properties: { holds: { type: array, items: { type: object, additionalProperties: true } } } } } } }
+    post:
+      operationId: setSensitiveLifecycleHold
+      tags: [governance]
+      summary: Set a scoped legal or privacy hold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, reference]
+              properties:
+                dataClass: { type: string, enum: [candidate-document, identity, medical, payroll, bgv, candidate-contact, candidate-voice, candidate-portal] }
+                caseId: { type: integer, minimum: 1 }
+                objectPath: { type: string }
+                reason: { type: string, minLength: 1, maxLength: 2000 }
+                reference: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        "201": { description: Active hold }
+        "403": { description: Verified privacy or legal authority required }
+  /privacy/lifecycle/holds/{id}/release:
+    post:
+      operationId: releaseSensitiveLifecycleHold
+      tags: [governance]
+      summary: Release a scoped hold with verified authority
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reference], properties: { reference: { type: string, minLength: 1, maxLength: 2000 } } } } }
+      responses:
+        "200": { description: Released hold }
+        "403": { description: Verified privacy or legal authority required }
+  /privacy/lifecycle/deletion-jobs:
+    get:
+      operationId: listSensitiveLifecycleDeletionJobs
+      tags: [governance]
+      summary: List sensitive lifecycle deletion jobs
+      responses:
+        "200": { description: Deletion jobs, content: { application/json: { schema: { type: object, required: [jobs], properties: { jobs: { type: array, items: { type: object, additionalProperties: true } } } } } } }
+  /privacy/lifecycle/deletion-jobs/{id}/retry:
+    post:
+      operationId: retrySensitiveLifecycleDeletionJob
+      tags: [governance]
+      summary: Requeue one failed lifecycle deletion job
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200": { description: Requeued job }
+        "403": { description: Verified privacy or legal authority required }
+        "409": { description: Job is not failed or is absent }
 components:
   parameters:
     OnbChecklistProfileId:
@@ -11135,3 +11243,55 @@ components:
         handoff: { $ref: "#/components/schemas/HrPolicyHandoff" }
         externalDispatch: { type: boolean, const: false }
       required: [handoff, externalDispatch]
+    SensitiveLifecyclePolicyInput:
+      type: object
+      additionalProperties: false
+      required: [dataClass, jurisdiction, purpose, lawfulBasis, retentionDays, providerSharingApproved, permittedProviders, policyReference, approvalReference, expectedRevision]
+      properties:
+        dataClass: { type: string, enum: [candidate-document, identity, medical, payroll, bgv, candidate-contact, candidate-voice, candidate-portal] }
+        jurisdiction: { type: string, minLength: 1, maxLength: 2000 }
+        purpose: { type: string, minLength: 1, maxLength: 2000 }
+        lawfulBasis: { type: string, minLength: 1, maxLength: 2000 }
+        retentionDays: { type: integer, minimum: 0, maximum: 365000, description: Tenant-approved period; this API supplies no statutory default. }
+        providerSharingApproved: { type: boolean }
+        permittedProviders: { type: array, description: Concrete provider identifiers. Sharing is denied unless the final provider matches this allowlist., items: { type: string, pattern: '^[a-z0-9][a-z0-9-]{1,79}$' } }
+        policyReference: { type: string, minLength: 1, maxLength: 2000 }
+        approvalReference: { type: string, minLength: 1, maxLength: 2000 }
+        expectedRevision: { type: integer, minimum: 0 }
+    SensitiveLifecyclePolicy:
+      type: object
+      required: [id, dataClass, jurisdiction, revision, purpose, lawfulBasis, retentionDays, providerSharingApproved, permittedProviders, policyReference, approvalReference, approvedAt, isCurrent]
+      properties:
+        id: { type: integer, minimum: 1 }
+        dataClass: { type: string }
+        jurisdiction: { type: string }
+        revision: { type: integer, minimum: 1 }
+        purpose: { type: string }
+        lawfulBasis: { type: string }
+        retentionDays: { type: integer, minimum: 0 }
+        providerSharingApproved: { type: boolean }
+        permittedProviders: { type: array, items: { type: string } }
+        policyReference: { type: string }
+        approvalReference: { type: string }
+        approvedAt: { type: string, format: date-time }
+        isCurrent: { type: boolean }
+    SensitiveLifecyclePoliciesResponse:
+      type: object
+      required: [policies]
+      properties:
+        policies: { type: array, items: { $ref: "#/components/schemas/SensitiveLifecyclePolicy" } }
+    SensitiveLifecyclePolicyResponse:
+      type: object
+      required: [policy]
+      properties:
+        policy: { $ref: "#/components/schemas/SensitiveLifecyclePolicy" }
+    SensitiveLifecycleShorteningPreview:
+      type: object
+      required: [confirmationId, expiresAt, affectedObjectCount, heldRecordCount, requiresExplicitAuthorizedConfirmation, confirmationPhrase]
+      properties:
+        confirmationId: { type: integer, minimum: 1 }
+        expiresAt: { type: string, format: date-time }
+        affectedObjectCount: { type: integer, minimum: 0 }
+        heldRecordCount: { type: integer, minimum: 0 }
+        requiresExplicitAuthorizedConfirmation: { type: boolean, const: true }
+        confirmationPhrase: { type: string, const: "AUTHORIZE RETENTION SHORTENING" }

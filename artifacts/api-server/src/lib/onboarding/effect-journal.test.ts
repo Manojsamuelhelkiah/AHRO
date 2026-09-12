@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbApprovals, onbAuthorityAssignments, onbAuthorityGovernance, onbCases, onbCommunications, onbEffectJournal, onbEvents, organizationMembershipsTable } from "@workspace/db/schema";
+import { onbApprovals, onbAuthorityAssignments, onbAuthorityGovernance, onbCases, onbCommunications, onbEffectJournal, onbEvents, onbGovernanceDecisionReviews, onbGovernanceDecisions, onbGovernanceRequirements, onbSensitiveLifecyclePolicies, organizationMembershipsTable, organizationsTable } from "@workspace/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { addCandidateReplyReference, sendOutbound } from "./channels";
 import { createApproval, defaultReadiness, reconcileDecidedApprovals } from "./engine";
@@ -12,8 +12,10 @@ import {
   markAmbiguousEffectForManualRepair,
   sweepExpiredNonIdempotentEffects,
 } from "./effect-journal";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
+const DEMO_ORGANIZATION_ID = `effect-journal-${process.pid}`;
 const keys: string[] = [];
 const caseIds: number[] = [];
 const authorityId = `effect-journal-test-authority-${process.pid}`;
@@ -39,6 +41,14 @@ const identity = (caseId: number, suffix: string, providerIdempotency = false) =
 
 describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
   before(async () => {
+    await db.insert(organizationsTable).values({
+      id: DEMO_ORGANIZATION_ID,
+      name: "Effect journal test",
+      slug: DEMO_ORGANIZATION_ID,
+      joinCodeHash: `hash-${DEMO_ORGANIZATION_ID}`,
+      createdByUserId: "effect-journal-test",
+    });
+    await seedApprovedSensitiveLifecyclePolicies(DEMO_ORGANIZATION_ID);
     await db.insert(onbAuthorityGovernance).values({
       organizationId: DEMO_ORGANIZATION_ID, status: "governance-approved",
       approvedByUserId: "effect-journal-test", approvedAt: new Date(), governanceSource: "test", revision: 1,
@@ -65,6 +75,22 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, caseId));
       await db.delete(onbCases).where(eq(onbCases.id, caseId));
     }
+    await db.delete(onbSensitiveLifecyclePolicies).where(
+      eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
+    );
+    await db.delete(onbGovernanceDecisionReviews).where(
+      eq(onbGovernanceDecisionReviews.organizationId, DEMO_ORGANIZATION_ID),
+    );
+    await db.delete(onbGovernanceRequirements).where(
+      eq(onbGovernanceRequirements.organizationId, DEMO_ORGANIZATION_ID),
+    );
+    await db.delete(onbGovernanceDecisions).where(
+      eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID),
+    );
+    await db.delete(onbAuthorityGovernance).where(
+      eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID),
+    );
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
   });
 
   async function createCase() {
@@ -84,6 +110,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
         recruiterName: "Recruiter",
         createdByUserId: `effect-journal-requestor-${process.pid}`,
         joiningDate: "2026-09-08",
+        workforceContext: { workCountry: "US" },
       })
       .returning({ id: onbCases.id });
     caseIds.push(created.id);

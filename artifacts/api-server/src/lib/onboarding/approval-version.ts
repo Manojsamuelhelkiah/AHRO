@@ -5,9 +5,12 @@ import {
   onbApprovalNotifications,
   onbApprovals,
   onbEvents,
-  type OnbRecordsEvidenceItem,
 } from "@workspace/db/schema";
 import type { OnboardingDbTransaction } from "./settings";
+import {
+  assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 export type ApprovalDecision = "approved" | "rejected";
 export type ApprovalHistoryEvent = "decision" | "reopened";
@@ -71,37 +74,47 @@ export function parseApprovalReference(text: string): ApprovalReference | null {
     : null;
 }
 
-type ApprovalSnapshot = {
-  agent: string;
-  ruleRef: string | null;
-  hitlPattern: string;
-  recommendation: string;
-  rationale: string;
-  recordsEvidence: OnbRecordsEvidenceItem[] | null;
-  resumeAction: string | null;
-  idempotencyKey: string | null;
-  authorityScope: string | null;
-  requestedByUserId: string | null;
-  decidedAuthorityId: string | null;
-  decidedAuthorityRevision: number | null;
-  authorityReviewStatus: string;
+const GOVERNED_MINIMAL_APPROVAL_HISTORY_V1_PROJECTION = { schema: "governed-minimal-v1" };
+
+type GovernedMinimalApprovalHistoryV2Projection = {
+  schema: "governed-minimal-v2";
+  decidedAuthorityId: string;
+  decidedAuthorityRevision: number;
 };
 
-function snapshotOf(approval: typeof onbApprovals.$inferSelect): ApprovalSnapshot {
+/**
+ * Approval history is independent, append-only evidence. V2 retains only the
+ * verified authority assignment and revision that authorized a decision; its
+ * exact shape is recognized as lifecycle-safe without retaining approval
+ * recommendations, private comments, source-message content, or evidence.
+ */
+function governedMinimalApprovalHistoryProjection(
+  approval: typeof onbApprovals.$inferSelect,
+): {
+  projectionKind: "governed-minimal-v1" | "governed-minimal-v2";
+  snapshot: typeof GOVERNED_MINIMAL_APPROVAL_HISTORY_V1_PROJECTION |
+    GovernedMinimalApprovalHistoryV2Projection;
+} {
+  const authorityRevision = approval.decidedAuthorityRevision;
+  if (
+    typeof approval.decidedAuthorityId === "string" &&
+    approval.decidedAuthorityId.length > 0 &&
+    typeof authorityRevision === "number" &&
+    Number.isSafeInteger(authorityRevision) &&
+    authorityRevision > 0
+  ) {
+    return {
+      projectionKind: "governed-minimal-v2",
+      snapshot: {
+        schema: "governed-minimal-v2",
+        decidedAuthorityId: approval.decidedAuthorityId,
+        decidedAuthorityRevision: authorityRevision,
+      },
+    };
+  }
   return {
-    agent: approval.agent,
-    ruleRef: approval.ruleRef,
-    hitlPattern: approval.hitlPattern,
-    recommendation: approval.recommendation,
-    rationale: approval.rationale,
-    recordsEvidence: approval.recordsEvidence,
-    resumeAction: approval.resumeAction,
-    idempotencyKey: approval.idempotencyKey,
-    authorityScope: approval.authorityScope,
-    requestedByUserId: approval.requestedByUserId,
-    decidedAuthorityId: approval.decidedAuthorityId,
-    decidedAuthorityRevision: approval.decidedAuthorityRevision,
-    authorityReviewStatus: approval.authorityReviewStatus,
+    projectionKind: "governed-minimal-v1",
+    snapshot: GOVERNED_MINIMAL_APPROVAL_HISTORY_V1_PROJECTION,
   };
 }
 
@@ -114,6 +127,12 @@ export async function appendApprovalDecisionHistory(
   decidedAt: Date,
   reason = "Human approval decision recorded",
 ): Promise<void> {
+  // Immutable history is decision evidence, not a second long-lived copy of
+  // private recommendation/rationale/comment/evidence content. The marker and
+  // exact empty projection are server-owned and are validated by the lifecycle
+  // gate; legacy snapshots remain conservatively opaque.
+  void comment;
+  void reason;
   await tx.insert(onbApprovalHistory).values({
     organizationId: approval.organizationId,
     approvalId: approval.id,
@@ -122,10 +141,10 @@ export async function appendApprovalDecisionHistory(
     eventType: "decision",
     status: decision,
     decidedBy,
-    comment,
+    comment: null,
     decidedAt,
-    reason,
-    snapshot: snapshotOf(approval),
+    reason: null,
+    ...governedMinimalApprovalHistoryProjection(approval),
   }).onConflictDoNothing({
     target: [
       onbApprovalHistory.organizationId,
@@ -174,6 +193,9 @@ export async function reopenOnboardingApproval(
   tx: OnboardingDbTransaction,
   opts: ReopenApprovalOptions,
 ): Promise<ReopenApprovalResult> {
+  await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, {
+    organizationId: opts.organizationId, caseId: opts.caseId,
+  });
   const reopenStatuses = opts.reopenStatuses ?? ["approved"];
   const predicates = [
     eq(onbApprovals.organizationId, opts.organizationId),
@@ -228,10 +250,10 @@ export async function reopenOnboardingApproval(
     eventType: "reopened",
     status: approval.status,
     decidedBy: approval.decidedBy,
-    comment: approval.comment,
+    comment: null,
     decidedAt: approval.decidedAt,
-    reason: opts.reason,
-    snapshot: snapshotOf(approval),
+    reason: null,
+    ...governedMinimalApprovalHistoryProjection(approval),
   }).onConflictDoNothing({
     target: [
       onbApprovalHistory.organizationId,
@@ -267,5 +289,5 @@ export const reopenApprovalInTransaction = reopenOnboardingApproval;
 
 /** Convenience wrapper for callers that do not already hold a case tx. */
 export async function reopenApproval(opts: ReopenApprovalOptions): Promise<ReopenApprovalResult> {
-  return db.transaction((tx) => reopenOnboardingApproval(tx, opts));
+  return withSensitiveLifecycleFence(opts.organizationId, () => db.transaction((tx) => reopenOnboardingApproval(tx, opts)));
 }

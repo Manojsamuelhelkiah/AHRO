@@ -1,28 +1,56 @@
 import assert from "node:assert/strict";
-import { after, describe, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   db,
-  DEMO_ORGANIZATION_ID,
   onbApprovals,
+  onbGovernanceAuthorityAssignments,
   onbCases,
   onbReadinessSlaCaseState,
   onbReadinessSlaLedger,
   onbReadinessSlaOutbox,
   onbReadinessSlaSnapshots,
+  onbSensitiveLifecyclePolicies,
+  organizationMembershipsTable,
+  organizationsTable,
 } from "@workspace/db";
 import { approvalRef } from "./approval-version";
 import { defaultReadinessSlaPolicy, readinessSlaApplicability } from "./readiness-sla";
 import { claimReadinessSlaOutbox } from "./readiness-sla-worker";
 import { rebaseReadinessSlaCase } from "./readiness-sla-policy";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
-const organizationId = DEMO_ORGANIZATION_ID;
 const suffix = `readiness-sla-worker-${process.pid}-${randomUUID()}`;
+const organizationId = `${suffix}-organization`;
 const caseIds: number[] = [];
 
 describe("readiness SLA outbox claim fencing (real DB)", { skip: !hasDb }, () => {
+  before(async () => {
+    await db.insert(organizationsTable).values({
+      id: organizationId,
+      name: "Readiness SLA lifecycle fixture",
+      slug: organizationId,
+      joinCodeHash: `${organizationId}-join`,
+      createdByUserId: `${suffix}-owner`,
+    });
+    await db.insert(organizationMembershipsTable).values({
+      organizationId,
+      clerkUserId: `${suffix}-owner`,
+      role: "owner",
+    });
+    await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId,
+      authorityRole: "privacy",
+      assigneeUserId: `${suffix}-owner`,
+      verificationStatus: "verified",
+      verifiedByUserId: "test-verifier",
+      verificationReference: "test-sensitive-lifecycle-fixture",
+    });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
+  });
+
   after(async () => {
     for (const caseId of caseIds) {
       await db.delete(onbCases).where(and(
@@ -30,6 +58,13 @@ describe("readiness SLA outbox claim fencing (real DB)", { skip: !hasDb }, () =>
         eq(onbCases.id, caseId),
       ));
     }
+    await db.delete(onbSensitiveLifecyclePolicies).where(
+      eq(onbSensitiveLifecyclePolicies.organizationId, organizationId),
+    );
+    await db.delete(onbGovernanceAuthorityAssignments).where(
+      eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
+    );
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
   });
 
   async function createFixture() {
@@ -42,6 +77,7 @@ describe("readiness SLA outbox claim fencing (real DB)", { skip: !hasDb }, () =>
       role: "Engineer",
       department: "Engineering",
       geography: "US",
+      workforceContext: { workCountry: "US" },
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",

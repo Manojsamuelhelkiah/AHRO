@@ -30,8 +30,21 @@ import {
   evaluateProviderGovernanceGate,
   PROVIDER_GOVERNANCE_WORKFLOW,
 } from "./governance-provider-boundary";
+import {
+  evaluateSensitiveLifecycleGate,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 const connectors = new ReplitConnectors();
+let connectorProxy: typeof connectors.proxy = connectors.proxy.bind(connectors);
+
+/** Test-only seam for the process-owned connector instance. */
+export function setOnboardingConnectorProxyForTests(
+  proxy: typeof connectors.proxy | null,
+): void {
+  connectorProxy = proxy ? proxy : connectors.proxy.bind(connectors);
+}
 
 export type ChannelInfo = {
   configured: boolean;
@@ -298,7 +311,7 @@ export async function sendEmail(
       body,
     ].join("\r\n");
     const raw = Buffer.from(rfc2822).toString("base64url");
-    const resp = await connectors.proxy(
+    const resp = await connectorProxy(
       "google-mail",
       "/gmail/v1/users/me/messages/send",
       {
@@ -572,10 +585,18 @@ export async function sendOutbound(opts: {
   /** The caller has already added the case-bound reply reference. */
   skipCandidateReplyReference?: boolean;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
+  // The communication row freezes a sensitive body and recipient before the
+  // effect journal/provider boundary. Hold the lifecycle fence across the
+  // whole dispatch path, not only its preflight. Nested final-provider fences
+  // are reentrant for this tenant.
+  const [caseForFence] = await db.select({
+    organizationId: onbCases.organizationId,
+  }).from(onbCases).where(eq(onbCases.id, opts.caseId));
+  if (!caseForFence) throw new Error(`case ${opts.caseId} not found`);
   const guarded = await withCaseDispatchGuard(opts.caseId, () =>
-    sendOutboundUnsafe(opts),
+    withSensitiveLifecycleFence(caseForFence.organizationId, () => sendOutboundUnsafe(opts)),
     {
-      onOffline: () => sendOutboundUnsafe(opts),
+      onOffline: () => withSensitiveLifecycleFence(caseForFence.organizationId, () => sendOutboundUnsafe(opts)),
       isUnknownResult: (result) => result.status === "sending",
     },
   );
@@ -599,6 +620,19 @@ async function sendOutboundUnsafe(opts: {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  if (!isSyntheticOfflineCase(caseRow)) {
+    const lifecycle = await withSensitiveLifecycleFence(caseRow.organizationId, () =>
+      evaluateSensitiveLifecycleGate({
+        organizationId: caseRow.organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+        dataClass: "candidate-contact",
+        disclosure: false,
+      }),
+    );
+    if (!lifecycle.allowed) {
+      throw new Error(`Candidate communication collection is blocked: ${lifecycle.reason}`);
+    }
+  }
   // Authorize the address supplied by the caller first.  It is only a
   // capability check; candidateEmailAuthorization below is still the source
   // of the actual case recipient.
@@ -862,6 +896,7 @@ async function sendOutboundUnsafe(opts: {
       caseRow,
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
       operation: `candidate-email:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
+      providerId: "gmail",
       allowIsolatedProviderDispatch: demoLiveAtProvider,
       dispatch: () => sendEmail(actualAddress, subject ?? "Onboarding update", body),
       disposition: (value) => value.status === "sending"
@@ -882,6 +917,7 @@ async function sendOutboundUnsafe(opts: {
       caseRow,
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
       operation: `candidate-whatsapp:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
+      providerId: "twilio-whatsapp",
       allowIsolatedProviderDispatch: demoLiveAtProvider,
       dispatch: () => sendWhatsApp(actualAddress, body),
       disposition: (value) => value.status === "sending"
@@ -998,10 +1034,25 @@ async function sendAdministrativeEmailUnsafe(opts: {
     notes: onbCases.notes,
     hireType: onbCases.hireType,
     workerCategory: onbCases.workerCategory,
+    workforceContext: onbCases.workforceContext,
+    workforceContextVersion: onbCases.workforceContextVersion,
     processPolicySnapshot: onbCases.processPolicySnapshot,
   }).from(onbCases)
     .where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  if (!isSyntheticOfflineCase(caseRow)) {
+    const lifecycle = await withSensitiveLifecycleFence(caseRow.organizationId, () =>
+      evaluateSensitiveLifecycleGate({
+        organizationId: caseRow.organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+        dataClass: "candidate-contact",
+        disclosure: false,
+      }),
+    );
+    if (!lifecycle.allowed) {
+      throw new Error(`Candidate communication collection is blocked: ${lifecycle.reason}`);
+    }
+  }
   if (isSyntheticOfflineCase(caseRow)) {
     if (opts.idempotencyKey) {
       const [existing] = await db.select().from(onbCommunications).where(and(
@@ -1128,6 +1179,7 @@ async function sendAdministrativeEmailUnsafe(opts: {
       caseRow,
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
       operation: `administrative-email:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
+      providerId: "gmail",
       dispatch: () => sendEmail(opts.toAddress, opts.subject, opts.body),
       disposition: (value) => value.status === "sending"
         ? "unknown"
@@ -1320,6 +1372,7 @@ async function retryCandidateEmailUnsafe(
     caseRow: existing.candidate,
     workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
     operation: `candidate-email-retry:${caseId}:${communicationId}:${claimedAt.toISOString()}`,
+    providerId: "gmail",
     dispatch: () => send(authorization.address, msg.subject ?? "Onboarding update", msg.body),
     disposition: (value) => value.status === "sending"
       ? "unknown"

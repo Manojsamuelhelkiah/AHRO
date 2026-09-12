@@ -5,6 +5,7 @@ import { db } from "@workspace/db";
 import {
   onbCandidateUploads, onbCases, onbDocuments,
 } from "@workspace/db/schema";
+import type { OnbReadinessItemRow } from "@workspace/db/schema";
 import { getPrivateFile } from "../lib/objectStorage";
 import {
   CANDIDATE_COOKIE, MAX_CANDIDATE_FILE_BYTES, candidateContext,
@@ -12,7 +13,6 @@ import {
   detectCandidateFile, exchangeToken,
 } from "../lib/onboarding/candidate-portal";
 import { ensureCaseLogistics } from "../lib/onboarding/case-logistics";
-import { actionableCorrectionReason } from "../lib/onboarding/document-validation-policy";
 import { malwareUploadIsClean } from "../lib/onboarding/malware-policy";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
 import { reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
@@ -23,9 +23,21 @@ import {
   evaluateProviderGovernanceGate,
   PROVIDER_GOVERNANCE_WORKFLOW,
 } from "../lib/onboarding/governance-provider-boundary";
+import {
+  evaluateSensitiveLifecycleGate,
+  sensitiveDataClassForDocument,
+  jurisdictionForWorkforceContext,
+} from "../lib/onboarding/sensitive-lifecycle";
+import { sensitiveClassForDocument } from "../lib/onboarding/sensitive-access";
+import {
+  finalizeCandidateUploadReservation,
+  OPAQUE_CANDIDATE_UPLOAD_DATA_CLASSES,
+  saveReservedCandidateUpload,
+} from "../lib/onboarding/candidate-upload-reservations";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
+class CandidateUploadUnavailableError extends Error {}
 
 function candidateMalwareGuidance(state: string | null | undefined, clean = false): string | null {
   switch (state) {
@@ -80,7 +92,7 @@ router.get("/candidate/portal", async (req, res, next) => {
       .from(onbCases).where(and(eq(onbCases.organizationId, ctx.organizationId), eq(onbCases.id, ctx.caseId)));
     if (!c) return invalid(res);
     const [logistics, documents, uploads] = await Promise.all([
-      ensureCaseLogistics(ctx.organizationId, ctx.caseId, c.joiningDate),
+      ensureCaseLogistics(ctx.organizationId, ctx.caseId),
       db.select({ id: onbDocuments.id, label: onbDocuments.label, required: onbDocuments.required, status: onbDocuments.status, note: onbDocuments.note })
         .from(onbDocuments).where(and(eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId))).orderBy(onbDocuments.id),
       db.select({
@@ -105,12 +117,29 @@ router.get("/candidate/portal", async (req, res, next) => {
           const malwareScanState = upload?.malwareScanState ?? null;
           const malwareClean = upload ? malwareUploadIsClean(upload) : false;
           const securityBlocked = !!upload && !malwareClean;
+          const sensitiveClasses = sensitiveClassForDocument(doc);
+          const restrictedReview = sensitiveClasses.length > 0;
           return {
-            ...doc,
+            // A case-bound candidate may see the requested item and its
+            // operational submission state, never HR/provider notes, finding
+            // text, or validation reasons. This applies to the candidate's own
+            // BGV, medical, payroll, and identity document requests as well.
+            id: doc.id,
+            label: doc.label,
+            required: doc.required,
             status: securityBlocked && doc.status === "verified" ? "received" : doc.status,
-            note: securityBlocked ? "Security review is required before this document can be verified." : doc.note,
+            note: securityBlocked
+              ? "Security review is required before this document can be verified."
+              : restrictedReview
+                ? "Submitted items are reviewed through the restricted onboarding process."
+                : doc.status === "pending"
+                  ? "Action is required in this secure portal."
+                  : "Submission status recorded.",
             validationState: upload?.validationState ?? null,
-            correctionGuidance: upload?.validationReasons?.find(actionableCorrectionReason)?.message ?? null,
+            // Validation messages are staff/provider reasoning and can carry
+            // sensitive findings even for an otherwise ordinary document.
+            // Candidates receive the generic action state above instead.
+            correctionGuidance: null,
             malwareGuidance: upload ? candidateMalwareGuidance(malwareScanState, malwareClean) : null,
             malwareCheckPending: !!upload && (malwareScanState === "pending" || malwareScanState === "scanning"),
             malwareScannedAt: upload?.malwareScannedAt ?? null,
@@ -156,6 +185,27 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
       eq(onbDocuments.id, documentId), eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId),
     ));
     if (!doc) return res.status(404).json({ message: "Checklist item not found" });
+    const dataClass = sensitiveDataClassForDocument(doc);
+    if (!dataClass) {
+      return res.status(409).json({
+        message: "Document collection is blocked because its sensitive data classification is unresolved.",
+      });
+    }
+    // File bytes are opaque. The checklist category is routing metadata only:
+    // an apparent medical/identity document may contain any sensitive class.
+    const collectionGates = await Promise.all(OPAQUE_CANDIDATE_UPLOAD_DATA_CLASSES.map(async (dataClass) => ({
+      dataClass,
+      gate: await evaluateSensitiveLifecycleGate({
+        organizationId: ctx.organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(policyCase.workforceContext),
+        dataClass,
+        disclosure: false,
+      }),
+    })));
+    const collectionDenied = collectionGates.find(({ gate }) => !gate.allowed);
+    if (collectionDenied) {
+      return res.status(409).json({ message: collectionDenied.gate.reason });
+    }
     const chunks: Buffer[] = []; let size = 0;
     for await (const chunk of req) {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
@@ -176,6 +226,20 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
         message: "Document processing is unavailable pending required policy review.",
       });
     }
+    const storageGates = await Promise.all(OPAQUE_CANDIDATE_UPLOAD_DATA_CLASSES.map(async (dataClass) => ({
+      dataClass,
+      gate: await evaluateSensitiveLifecycleGate({
+        organizationId: ctx.organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(policyCase.workforceContext),
+        dataClass,
+        disclosure: true,
+        providerId: "replit-object-storage",
+      }),
+    })));
+    const storageDenied = storageGates.find(({ gate }) => !gate.allowed || !("policy" in gate));
+    if (storageDenied) {
+      return res.status(409).json({ message: storageDenied.gate.reason });
+    }
     if (!actualType || actualType !== declaredType) return res.status(415).json({ message: "File contents do not match an allowed type" });
 
     const auditAttempt = await appendProtectedAudit({
@@ -189,30 +253,95 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
       caseReference: `case:${ctx.caseId}`,
       source: "candidate-public",
     });
+    const initialPolicyGate = storageGates.find(({ dataClass: gateDataClass }) => gateDataClass === dataClass)?.gate;
+    const initialPolicy = initialPolicyGate && "policy" in initialPolicyGate
+      ? initialPolicyGate.policy
+      : undefined;
+    if (!initialPolicy) {
+      return res.status(409).json({ message: "Document processing approval is unavailable." });
+    }
     const objectPath = candidateObjectPath(ctx.organizationId, ctx.caseId);
     const storedFile = getPrivateFile(objectPath);
-
-    const storageDispatch = await dispatchWithProviderGovernance({
-      caseRow: policyCase,
-      workflow: PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
-      operation: `candidate-document-upload:${ctx.caseId}:${documentId}`,
-      dispatch: () => storedFile.save(bytes, { resumable: false, contentType: actualType }),
-      disposition: () => "sent",
-    });
-    if (!storageDispatch.dispatched) {
-      return res.status(409).json({
-        message: "Document processing is unavailable pending required policy review.",
-      });
-    }
-    const upload = await (async () => {
-      try {
-        const [created] = await db.transaction(async (tx) => {
+    let upload;
+    try {
+      upload = await saveReservedCandidateUpload({
+        reservation: {
+          organizationId: ctx.organizationId,
+          caseId: ctx.caseId,
+          documentId,
+          objectPath,
+          dataClass,
+          jurisdiction: jurisdictionForWorkforceContext(policyCase.workforceContext)!,
+          workforceContextVersion: policyCase.workforceContextVersion,
+          policyId: initialPolicy.id,
+          policyRevision: initialPolicy.revision,
+        },
+        // The reservation helper holds the same reentrant lifecycle fence
+        // through this save, the final policy check, metadata commit, and any
+        // compensation. A live timed-out save cannot race its recovery worker.
+        save: async () => {
+          const storageDispatch = await dispatchWithProviderGovernance({
+            caseRow: policyCase,
+            workflow: PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+            operation: `candidate-document-upload:${ctx.caseId}:${documentId}`,
+            providerId: "replit-object-storage",
+            dataClass,
+            minimalTypedPayload: false,
+            dispatch: () => storedFile.save(bytes, { resumable: false, contentType: actualType }),
+            disposition: () => "sent",
+          });
+          if (!storageDispatch.dispatched) {
+            throw new CandidateUploadUnavailableError(
+              "Document processing is unavailable pending required policy review.",
+            );
+          }
+        },
+        finalize: async (reservation) => {
+          // Policy/provider approvals are intentionally checked again after
+          // bytes were saved. A changed approval never creates an upload row;
+          // the reservation remains inventory until fenced cleanup succeeds.
+          return finalizeCandidateUploadReservation({
+            reservation,
+            finalize: async (tx, lockedReservation, currentCase) => {
+          // The reservation helper has a FOR UPDATE lock on the current case,
+          // and verifies its normalized jurisdiction/context version before
+          // this callback. Never reuse the request-time case snapshot here.
+          const currentGovernance = await evaluateProviderGovernanceGate(
+            currentCase,
+            PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+          );
+          if (!currentGovernance.allowed) {
+            throw new CandidateUploadUnavailableError(
+              "Document processing is unavailable pending required policy review.",
+            );
+          }
+           const currentStorageGates = await Promise.all(OPAQUE_CANDIDATE_UPLOAD_DATA_CLASSES.map(async (dataClass) => ({
+             dataClass,
+             gate: await evaluateSensitiveLifecycleGate({
+               organizationId: ctx.organizationId,
+               jurisdiction: jurisdictionForWorkforceContext(currentCase.workforceContext),
+               dataClass,
+               disclosure: true,
+               providerId: "replit-object-storage",
+             }),
+           })));
+           const currentDenied = currentStorageGates.find(({ gate }) => !gate.allowed || !("policy" in gate));
+           const currentPolicyGate = currentStorageGates.find(
+             ({ dataClass: gateDataClass }) => gateDataClass === lockedReservation.dataClass,
+           )?.gate;
+           const currentPolicy = currentPolicyGate && "policy" in currentPolicyGate
+             ? currentPolicyGate.policy
+             : undefined;
+           if (currentDenied ||
+              !currentPolicy ||
+              currentPolicy.id !== lockedReservation.policyId ||
+              currentPolicy.revision !== lockedReservation.policyRevision) {
+            throw new CandidateUploadUnavailableError(
+              "Document processing approval changed while the upload was in progress.",
+            );
+          }
           // Orchestration locks the case before checking its live evidence.
           // Demote readiness in this same transaction, not only after commit.
-          const [currentCase] = await tx.select().from(onbCases).where(and(
-            eq(onbCases.id, ctx.caseId), eq(onbCases.organizationId, ctx.organizationId),
-          )).for("update");
-          if (!currentCase) throw new Error("Candidate case is no longer available");
           // Case -> checklist -> upload is the shared lock order. Review and
           // scanner workers never acquire the case lock while holding the latter.
           await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(
@@ -242,7 +371,7 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
               actor: "candidate-portal",
             });
             await tx.update(onbCases).set({
-              readiness: currentCase.readiness.map((item) => item.key === "documentation"
+              readiness: (currentCase.readiness as OnbReadinessItemRow[]).map((item) => item.key === "documentation"
                 ? { ...item, status: "in-progress" as const, note: "Required document quarantined pending security scan and verification." }
                 : item),
               updatedAt: new Date(),
@@ -260,18 +389,17 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
             source: "candidate-public",
             correctionOfId: auditAttempt.id,
           });
-          return inserted;
-        });
-        return created;
-      } catch (error) {
-        try {
-          await storedFile.delete({ ignoreNotFound: true });
-        } catch (cleanupError) {
-          throw new AggregateError([error, cleanupError], "Candidate upload metadata write and object cleanup both failed");
-        }
-        throw error;
+              return { uploadId: inserted[0]!.id, value: inserted[0]! };
+            },
+          });
+        },
+      });
+    } catch (error) {
+      if (error instanceof CandidateUploadUnavailableError) {
+        return res.status(409).json({ message: error.message });
       }
-    })();
+      throw error;
+    }
     // A replacement must demote any cached checklist readiness after the
     // upload is durable. Keep the object: reconciliation failure must not
     // turn a persisted candidate submission into an orphaned object.

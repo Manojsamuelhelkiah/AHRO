@@ -8,6 +8,7 @@ import {
   onbCandidateSessions,
   onbCases,
   onbAuditLifecycles,
+  onbSensitiveLifecycleHolds,
   onbSettings,
 } from "@workspace/db/schema";
 import {
@@ -16,6 +17,12 @@ import {
   getCandidateLinkRetentionDays,
 } from "./settings";
 import { appendProtectedAudit, appendProtectedAuditInTransaction } from "./protected-audit";
+import {
+  evaluateSensitiveLifecycleGate,
+  jurisdictionForWorkforceContext,
+  sensitiveLifecycleDestructionHeld,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 export { validateLogistics } from "./logistics-validation";
 
 export const CANDIDATE_COOKIE = "onb_candidate_session";
@@ -119,44 +126,63 @@ export async function exchangeToken(token: string) {
     isNull(onbCandidateLinks.revokedAt),
   ));
   if (!link) return undefined;
-  const [caseRow] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
-    eq(onbCases.id, link.caseId), eq(onbCases.organizationId, link.organizationId),
-  ));
-  if (!caseRow) return undefined;
-  const secret = newSecret();
-  const sessionExpiry = new Date(Math.min(link.expiresAt.getTime(), Date.now() + 30 * 60_000));
-  // The raw candidate token is never passed to audit code. Once the token is
-  // verified and tenant attribution is safe, persist a durable pre-attempt.
-  const attempt = await appendProtectedAudit({
-    organizationId: link.organizationId,
-    actorKind: "system",
-    actorAuthority: "candidate-token:validated",
-    action: "onboarding.candidate-session.exchange.attempted",
-    outcome: "attempted",
-    objectType: "candidate-link",
-    objectId: String(link.id),
-    caseReference: `case:${link.caseId}`,
-    source: "candidate-public",
-  });
-  await db.transaction(async (tx) => {
-    await tx.insert(onbCandidateSessions).values({
-      idHash: hashSecret(secret), organizationId: link.organizationId,
-      caseId: link.caseId, linkId: link.id, expiresAt: sessionExpiry,
+  // A session hash is a durable bearer-credential derivative. Re-read the
+  // revocable link and keep policy evaluation through session persistence
+  // under one fence, so a hold/revocation cannot land between them.
+  return withSensitiveLifecycleFence(link.organizationId, async () => {
+    const [currentLink] = await db.select().from(onbCandidateLinks).where(and(
+      eq(onbCandidateLinks.id, link.id),
+      eq(onbCandidateLinks.organizationId, link.organizationId),
+      gt(onbCandidateLinks.expiresAt, new Date()),
+      isNull(onbCandidateLinks.revokedAt),
+    ));
+    if (!currentLink) return undefined;
+    const [caseRow] = await db.select({
+      id: onbCases.id, workforceContext: onbCases.workforceContext,
+    }).from(onbCases).where(and(
+      eq(onbCases.id, currentLink.caseId), eq(onbCases.organizationId, currentLink.organizationId),
+    ));
+    if (!caseRow) return undefined;
+    const lifecycle = await evaluateSensitiveLifecycleGate({
+      organizationId: currentLink.organizationId,
+      jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+      dataClass: "candidate-portal",
+      disclosure: false,
     });
-    await appendProtectedAuditInTransaction(tx, {
-      organizationId: link.organizationId,
+    if (!lifecycle.allowed) return undefined;
+    const secret = newSecret();
+    const sessionExpiry = new Date(Math.min(currentLink.expiresAt.getTime(), Date.now() + 30 * 60_000));
+    const attempt = await appendProtectedAudit({
+      organizationId: currentLink.organizationId,
       actorKind: "system",
       actorAuthority: "candidate-token:validated",
-      action: "onboarding.candidate-session.exchange.outcome",
-      outcome: "success",
+      action: "onboarding.candidate-session.exchange.attempted",
+      outcome: "attempted",
       objectType: "candidate-link",
-      objectId: String(link.id),
-      caseReference: `case:${link.caseId}`,
+      objectId: String(currentLink.id),
+      caseReference: `case:${currentLink.caseId}`,
       source: "candidate-public",
-      correctionOfId: attempt.id,
     });
+    await db.transaction(async (tx) => {
+      await tx.insert(onbCandidateSessions).values({
+        idHash: hashSecret(secret), organizationId: currentLink.organizationId,
+        caseId: currentLink.caseId, linkId: currentLink.id, expiresAt: sessionExpiry,
+      });
+      await appendProtectedAuditInTransaction(tx, {
+        organizationId: currentLink.organizationId,
+        actorKind: "system",
+        actorAuthority: "candidate-token:validated",
+        action: "onboarding.candidate-session.exchange.outcome",
+        outcome: "success",
+        objectType: "candidate-link",
+        objectId: String(currentLink.id),
+        caseReference: `case:${currentLink.caseId}`,
+        source: "candidate-public",
+        correctionOfId: attempt.id,
+      });
+    });
+    return { secret, expiresAt: sessionExpiry };
   });
-  return { secret, expiresAt: sessionExpiry };
 }
 
 async function auditLegalHoldActive(organizationId: string): Promise<boolean> {
@@ -167,6 +193,27 @@ async function auditLegalHoldActive(organizationId: string): Promise<boolean> {
 }
 
 export async function cleanupCandidateAccess(input: {
+  now?: Date;
+  organizationId?: string;
+  limit?: number;
+} = {}): Promise<{ expiredSessions: number; retainedLinksDeleted: number }> {
+  if (input.organizationId) {
+    return withSensitiveLifecycleFence(input.organizationId, async () => {
+      if (await sensitiveLifecycleDestructionHeld(input.organizationId!, "candidate-portal")) {
+        return { expiredSessions: 0, retainedLinksDeleted: 0 };
+      }
+      return cleanupCandidateAccessUnsafe(input);
+    });
+  }
+  return cleanupCandidateAccessUnsafe(input);
+}
+
+/**
+ * The long-standing settings-approved link cleanup remains intact. The public
+ * wrapper merely adds the common lifecycle hold fence; it does not replace a
+ * valid existing link-retention approval with an invented statutory period.
+ */
+async function cleanupCandidateAccessUnsafe(input: {
   now?: Date;
   organizationId?: string;
   limit?: number;
@@ -187,6 +234,12 @@ export async function cleanupCandidateAccess(input: {
       select 1 from ${onbAuditLifecycles}
       where ${onbAuditLifecycles.organizationId} = ${onbCandidateSessions.organizationId}
         and ${onbAuditLifecycles.legalHoldActive} = true
+    ) and not exists (
+      select 1 from ${onbSensitiveLifecycleHolds}
+      where ${onbSensitiveLifecycleHolds.organizationId} = ${onbCandidateSessions.organizationId}
+        and ${onbSensitiveLifecycleHolds.active} = true
+        and (${onbSensitiveLifecycleHolds.dataClass} is null or ${onbSensitiveLifecycleHolds.dataClass} = 'candidate-portal')
+        and (${onbSensitiveLifecycleHolds.caseId} is null or ${onbSensitiveLifecycleHolds.caseId} = ${onbCandidateSessions.caseId})
     )`;
   const expiredSessionIds = db
     .select({ idHash: onbCandidateSessions.idHash })
@@ -210,6 +263,12 @@ export async function cleanupCandidateAccess(input: {
       select 1 from ${onbAuditLifecycles}
       where ${onbAuditLifecycles.organizationId} = ${onbCandidateLinks.organizationId}
         and ${onbAuditLifecycles.legalHoldActive} = true
+    ) and not exists (
+      select 1 from ${onbSensitiveLifecycleHolds}
+      where ${onbSensitiveLifecycleHolds.organizationId} = ${onbCandidateLinks.organizationId}
+        and ${onbSensitiveLifecycleHolds.active} = true
+        and (${onbSensitiveLifecycleHolds.dataClass} is null or ${onbSensitiveLifecycleHolds.dataClass} = 'candidate-portal')
+        and (${onbSensitiveLifecycleHolds.caseId} is null or ${onbSensitiveLifecycleHolds.caseId} = ${onbCandidateLinks.caseId})
     )`;
   const retainedLongEnough = retentionDays === undefined
     ? or(

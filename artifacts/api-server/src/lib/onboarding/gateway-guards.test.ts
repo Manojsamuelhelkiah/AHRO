@@ -4,17 +4,25 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import {
   db,
-  DEMO_ORGANIZATION_ID,
   onbApprovals,
   onbAuthorityAssignments,
   onbAuthorityGovernance,
   onbCases,
   onbCommunications,
   onbEvents,
+  onbEffectJournal,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDecisions,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceRequirements,
   onbPolicyAuthorities,
   onbReadinessSlaAttestations,
+  onbReadinessSlaPolicies,
+  onbSensitiveLifecyclePolicies,
   onbSystemChecks,
   organizationMembershipsTable,
+  organizationsTable,
 } from "@workspace/db";
 import { decideApproval } from "./approval-decisions";
 import { verifyChecklistEvidence } from "./checklist";
@@ -27,17 +35,48 @@ import {
 } from "./engine";
 import { calculateOutcomeKpis } from "./outcome-kpis";
 import { ensureReadinessSlaEnrollment } from "./readiness-sla-policy";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
+import { governanceSnapshotForNewCase, withGovernanceDecisionSnapshot, type GovernanceCaseSnapshot } from "./governance-runtime";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `gateway-guards-${process.pid}-${randomUUID()}`;
+const DEMO_ORGANIZATION_ID = suffix;
 const caseIds: number[] = [];
+let governanceSnapshot: GovernanceCaseSnapshot;
 
 const authorityId = `${suffix}-occupational-health`;
+const freshAuthorityId = `${suffix}-fresh-occupational-health`;
 const authorityUserId = `${suffix}-specialist`;
 const requesterUserId = `${suffix}-requester`;
 
 describe("three onboarding gateway guards", { skip: !hasDb }, () => {
   before(async () => {
+    await db.insert(organizationsTable).values({
+      id: DEMO_ORGANIZATION_ID, name: "Gateway guards test", slug: DEMO_ORGANIZATION_ID,
+      joinCodeHash: `hash-${suffix}`, createdByUserId: requesterUserId,
+    });
+    await seedApprovedSensitiveLifecyclePolicies(DEMO_ORGANIZATION_ID);
+    await governanceSnapshotForNewCase(DEMO_ORGANIZATION_ID);
+    const decisions = await db.select().from(onbGovernanceDecisions)
+      .where(eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID));
+    for (const decision of decisions) {
+      const reviewer = `${suffix}:${decision.accountableRole}`;
+      const [assignment] = await db.insert(onbGovernanceAuthorityAssignments).values({
+        organizationId: DEMO_ORGANIZATION_ID, authorityRole: decision.accountableRole,
+        assigneeUserId: reviewer, verificationStatus: "verified",
+        verifiedByUserId: requesterUserId, verificationReference: reviewer,
+      }).returning({ id: onbGovernanceAuthorityAssignments.id });
+      await db.insert(onbGovernanceDecisionReviews).values({
+        organizationId: DEMO_ORGANIZATION_ID, decisionKey: decision.key, decisionRevision: decision.revision,
+        outcome: "approved", reason: "Gateway fixture approval", authorityAssignmentId: assignment!.id,
+        reviewedByUserId: reviewer, verificationReference: reviewer,
+      });
+      await db.update(onbGovernanceDecisions).set({ status: "approved", approvedByUserId: reviewer, approvedAt: new Date() })
+        .where(and(eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID), eq(onbGovernanceDecisions.key, decision.key), eq(onbGovernanceDecisions.revision, decision.revision)));
+    }
+    await db.update(onbGovernanceRequirements).set({ implemented: true, tested: true, configured: true, approvedForLive: true })
+      .where(eq(onbGovernanceRequirements.organizationId, DEMO_ORGANIZATION_ID));
+    governanceSnapshot = await governanceSnapshotForNewCase(DEMO_ORGANIZATION_ID);
     await db.insert(onbAuthorityGovernance).values({
       organizationId: DEMO_ORGANIZATION_ID,
       status: "governance-approved",
@@ -53,6 +92,29 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       organizationId: DEMO_ORGANIZATION_ID,
       clerkUserId: authorityUserId,
       role: "member",
+    }).onConflictDoNothing();
+    await db.insert(organizationMembershipsTable).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      clerkUserId: "hr-fresh",
+      role: "member",
+    }).onConflictDoNothing();
+    await db.insert(organizationMembershipsTable).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      clerkUserId: requesterUserId,
+      role: "member",
+    }).onConflictDoNothing();
+    await db.insert(onbAuthorityAssignments).values({
+      id: freshAuthorityId,
+      organizationId: DEMO_ORGANIZATION_ID,
+      personUserId: "hr-fresh",
+      authorityRole: "occupational-health",
+      scopes: ["occupational-health-approve"],
+      validFrom: new Date(Date.now() - 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "test",
+      source: "test",
+      governanceDecisionRef: "test",
     }).onConflictDoNothing();
     await db.insert(onbAuthorityAssignments).values({
       id: authorityId,
@@ -70,16 +132,35 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
   });
   after(async () => {
     for (const id of caseIds) {
+      await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, id));
       await db.delete(onbCases).where(and(
         eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
         eq(onbCases.id, id),
       ));
     }
     await db.delete(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.id, authorityId));
+    await db.delete(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbGovernanceDispatchMarkers).where(eq(onbGovernanceDispatchMarkers.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbGovernanceDecisionReviews).where(eq(onbGovernanceDecisionReviews.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbGovernanceAuthorityAssignments).where(eq(onbGovernanceAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbReadinessSlaPolicies).where(eq(onbReadinessSlaPolicies.organizationId, DEMO_ORGANIZATION_ID));
+    await db.delete(onbAuthorityGovernance).where(eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID));
     await db.delete(organizationMembershipsTable).where(and(
       eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
       eq(organizationMembershipsTable.clerkUserId, authorityUserId),
     ));
+    await db.delete(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, "hr-fresh"),
+    ));
+    await db.delete(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, requesterUserId),
+    ));
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
   });
 
   test("Gate A applies only to new external onboarding and rehires", () => {
@@ -102,6 +183,8 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       role: "Engineer",
       department: "Engineering",
       geography: "US",
+      workforceContext: { workCountry: "US" },
+       processPolicySnapshot: withGovernanceDecisionSnapshot({}, governanceSnapshot),
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",
@@ -141,6 +224,8 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       role: "Engineer",
       department: "Engineering",
       geography: "US",
+      workforceContext: { workCountry: "US" },
+       processPolicySnapshot: withGovernanceDecisionSnapshot({}, governanceSnapshot),
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",
@@ -211,7 +296,10 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
     const [current] = await db.select().from(onbCases).where(eq(onbCases.id, id));
     const events = await db.select().from(onbEvents).where(eq(onbEvents.caseId, id));
     assert.equal(current.lifecycleStage, "complete");
-    assert.equal(events.length, 1);
+    assert.equal(
+      events.filter((event) => event.idempotencyKey === `gateway-c:${id}:complete:v1`).length,
+      1,
+    );
   });
 
   test("Gate C waits behind a fenced assignment revocation and rejects stale evidence", async () => {
@@ -296,6 +384,7 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       offerAcceptanceComplete: true,
       offerAcceptanceCompletedAt: acceptanceAt,
       workforceContext: {
+         workCountry: "US",
         workEnvironment: "site",
         site: "yard",
         siteExposure: true,
@@ -392,6 +481,7 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       expectedVersion: 2,
       decision: "approved",
       decidedBy: "hr-fresh",
+      actorUserId: "hr-fresh",
       comment: "Fresh final review after replacement evidence",
     });
     assert.equal(freshDecision.outcome, "decided");

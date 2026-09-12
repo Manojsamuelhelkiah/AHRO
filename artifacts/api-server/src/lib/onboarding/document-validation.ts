@@ -32,12 +32,18 @@ import {
   evaluateProviderGovernanceGate,
   PROVIDER_GOVERNANCE_WORKFLOW,
 } from "./governance-provider-boundary";
+import {
+  sensitiveDataClassForDocument,
+  withCaseDerivedLifecycleWrite,
+} from "./sensitive-lifecycle";
 
 export type ValidationReason = { code: string; message: string; evidence?: string };
 
 
 /** Provider-neutral contract. Providers must never be treated as local proof. */
 export interface AuthoritativeDocumentProvider {
+  /** Stable ID that must appear in the approved class/jurisdiction policy. */
+  providerId?: string;
   verify(input: { checksumSha256: string; documentType: string; bytes: Buffer }): Promise<
     { status: "verified" | "rejected" | "manual_review"; reasons?: ValidationReason[] }
   >;
@@ -45,9 +51,10 @@ export interface AuthoritativeDocumentProvider {
 
 export async function reconcileDocumentationReadiness(organizationId: string, caseId: number): Promise<void> {
   let checklistResumeReady = false;
-  await db.transaction(async (tx) => {
-    const [c] = await tx.select().from(onbCases).where(and(eq(onbCases.organizationId, organizationId), eq(onbCases.id, caseId))).for("update");
-    if (!c) return;
+  // `readiness` is an opaque persisted JSON envelope. Even though this
+  // function changes only the documentation item, rewriting that envelope
+  // must not restore text minimized by lifecycle deletion.
+  await withCaseDerivedLifecycleWrite({ organizationId, caseId }, async (tx, c) => {
     const required = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true)));
     const verified = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified"), documentMalwareGateSql()));
     const [bgv] = await tx.select({ status: onbSystemChecks.status }).from(onbSystemChecks).where(and(eq(onbSystemChecks.organizationId, organizationId), eq(onbSystemChecks.caseId, caseId), eq(onbSystemChecks.system, "bgv")));
@@ -154,13 +161,30 @@ async function validateUpload(upload: typeof onbCandidateUploads.$inferSelect, o
       eq(onbCases.organizationId, upload.organizationId),
       eq(onbCases.id, upload.caseId),
     ));
+    const [document] = await db.select({
+      key: onbDocuments.key,
+      label: onbDocuments.label,
+      category: onbDocuments.category,
+    }).from(onbDocuments).where(and(
+      eq(onbDocuments.organizationId, upload.organizationId),
+      eq(onbDocuments.caseId, upload.caseId),
+      eq(onbDocuments.id, upload.documentId),
+    ));
+    const dataClass = document
+      ? sensitiveDataClassForDocument(document)
+      : null;
     const governance = caseRow
       ? await evaluateProviderGovernanceGate(
         caseRow,
         PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
       )
       : null;
-    if (!governance?.allowed) {
+    if (!dataClass) {
+      reasons.push({
+        code: "sensitive_data_class_unavailable",
+        message: "Authoritative document verification is blocked because the document has no server-classified sensitive data class.",
+      });
+    } else if (!governance?.allowed) {
       reasons.push({
         code: "governance_provider_dispatch_blocked",
         message: governance?.reason ??
@@ -172,6 +196,8 @@ async function validateUpload(upload: typeof onbCandidateUploads.$inferSelect, o
           caseRow,
           workflow: PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
           operation: `document-verification:${upload.id}:${upload.validationAttempts}`,
+          providerId: provider.providerId ?? "unidentified-document-provider",
+          dataClass,
           // The helper's callback is the final operation before the provider
           // receives candidate bytes. It re-evaluates under the durable
           // governance fence; simulated/source-mode evidence cannot stand in.
@@ -200,7 +226,10 @@ async function validateUpload(upload: typeof onbCandidateUploads.$inferSelect, o
     }
   } else reasons.push(unavailable);
   const state = decideValidationOutcome(reasons, providerStatus);
-  await db.transaction(async (tx) => {
+  await withCaseDerivedLifecycleWrite({
+    organizationId: upload.organizationId,
+    caseId: upload.caseId,
+  }, async (tx) => {
     // Serialize checklist transitions with upload replacement and HR decisions.
     await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.id, upload.documentId), eq(onbDocuments.organizationId, upload.organizationId), eq(onbDocuments.caseId, upload.caseId))).for("update");
     const [updated] = await tx.update(onbCandidateUploads).set({
@@ -239,6 +268,9 @@ export async function runDocumentValidationTick(provider?: AuthoritativeDocument
     and(eq(onbCandidateUploads.validationState, "processing"), or(isNull(onbCandidateUploads.validationClaimUntil), lt(onbCandidateUploads.validationClaimUntil, now))),
   ))).limit(25);
   for (const upload of uploads) {
+    // This claim changes only lease/status/timestamps and never copies an
+    // opaque payload. validateUpload owns the subsequent reason/note/event
+    // persistence behind withCaseDerivedLifecycleWrite.
     const [claimed] = await db.update(onbCandidateUploads).set({
       validationState: "processing", validationClaimOwner: owner, validationClaimUntil: new Date(Date.now() + 120_000),
       validationStartedAt: new Date(), validationAttempts: sql`${onbCandidateUploads.validationAttempts} + 1`,
@@ -281,7 +313,10 @@ async function prepareStableReminderBody(input: {
   body: string;
   idempotencyKey: string;
 }): Promise<string> {
-  return db.transaction(async (tx) => {
+  return withCaseDerivedLifecycleWrite({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+  }, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`document-reminder:${input.organizationId}:${input.idempotencyKey}`}))`);
     const [existing] = await tx.select({ body: onbCommunications.body })
       .from(onbCommunications)
@@ -424,6 +459,8 @@ export async function sendDocumentReminder(input: {
     ? await runWithProviderDeny(send)
     : await send();
   if (["sent", "delivered"].includes(delivery.status)) {
+    // Reminder bookkeeping is intentionally limited to counters and
+    // timestamps; it cannot recreate document text after minimisation.
     await db.update(onbDocuments).set({
       reminderCount: sql`${onbDocuments.reminderCount} + 1`,
       lastReminderAt: new Date(),

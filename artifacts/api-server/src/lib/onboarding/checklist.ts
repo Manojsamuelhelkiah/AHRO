@@ -5,6 +5,11 @@ import { LEGACY_CHECKLIST, mandatoryChecklistReady } from "./settings";
 import { resumeChecklistOrchestration } from "./engine";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { canonicalAuthorityRoleId, workforceAuthorityScope } from "./workforce-policies";
+import {
+  evaluateCaseDerivedLifecycleGateInTransaction,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 const CONNECTOR_MANAGED_IDS = new Set(LEGACY_CHECKLIST.map((item) => item.id));
 
@@ -16,7 +21,7 @@ export type ChecklistStatusResult =
   | { ok: true; changed: boolean; case: typeof onbCases.$inferSelect }
   | {
     ok: false;
-    code: "not-found" | "not-custom" | "disabled" | "evidence-required" | "unauthorized";
+    code: "not-found" | "not-custom" | "disabled" | "evidence-required" | "unauthorized" | "lifecycle-blocked";
   };
 
 /** Atomic, tenant-owned manual update. A retry of the same state is a no-op. */
@@ -30,7 +35,7 @@ export async function setCustomChecklistItemStatus(opts: {
   /** Caller-supplied live authority check runs after row/fence acquisition. */
   authorize?: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<boolean>;
 }): Promise<ChecklistStatusResult> {
-  const result = await db.transaction(async (tx): Promise<ChecklistStatusResult> => {
+  const mutate = () => db.transaction(async (tx): Promise<ChecklistStatusResult> => {
     // Keep the global lock order uniform: authority/revocation tenant fence,
     // then the case row. This prevents a checklist mutation from holding the
     // case while waiting on a decision/revocation that holds the fence.
@@ -56,6 +61,13 @@ export async function setCustomChecklistItemStatus(opts: {
     const readiness = c.readiness.map((item) => ({ ...item })) as OnbReadinessItemRow[];
     const item = readiness.find((row) => row.key === opts.itemId);
     if (!item) return { ok: false, code: "not-found" };
+    if (opts.note?.trim()) {
+      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId: opts.organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(c.workforceContext),
+      });
+      if (!lifecycle.allowed) return { ok: false, code: "lifecycle-blocked" };
+    }
     if (item.status === opts.status && (opts.note === undefined || item.note === opts.note)) {
       return { ok: true, changed: false, case: c };
     }
@@ -109,6 +121,9 @@ export async function setCustomChecklistItemStatus(opts: {
     });
     return { ok: true, changed: true, case: updated };
   });
+  const result = opts.note?.trim()
+    ? await withSensitiveLifecycleFence(opts.organizationId, mutate)
+    : await mutate();
   // Always retry the compare-and-set resume for a ready item. If a previous
   // request committed the status but crashed before resume, an idempotent
   // retry must still be able to continue the case.
@@ -123,7 +138,7 @@ export { mandatoryChecklistReady };
 
 export type EvidenceVerificationResult =
   | { ok: true; case: typeof onbCases.$inferSelect }
-  | { ok: false; code: "not-found" | "not-evidence-gate" | "wrong-authority" | "not-designated" | "prerequisites-unmet" | "stale-policy" };
+  | { ok: false; code: "not-found" | "not-evidence-gate" | "wrong-authority" | "not-designated" | "prerequisites-unmet" | "stale-policy" | "lifecycle-blocked" };
 
 /**
  * The only in-product completion path for a policy evidence gate. It stores
@@ -142,7 +157,7 @@ export async function verifyChecklistEvidence(opts: {
   verifierUserId: string;
   expected: { contextVersion: number; templateVersion: number; profileId: string; profileVersion: number };
 }): Promise<EvidenceVerificationResult> {
-  const result = await db.transaction(async (tx): Promise<EvidenceVerificationResult> => {
+  const result = await withSensitiveLifecycleFence(opts.organizationId, () => db.transaction(async (tx): Promise<EvidenceVerificationResult> => {
     const [c] = await tx.select().from(onbCases).where(and(
       eq(onbCases.id, opts.caseId),
       eq(onbCases.organizationId, opts.organizationId),
@@ -179,6 +194,11 @@ export async function verifyChecklistEvidence(opts: {
       isNull(onbPolicyAuthorities.revokedAt),
       )).limit(1);
     if (!authority) return { ok: false, code: "not-designated" };
+    const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+      organizationId: opts.organizationId,
+      jurisdiction: jurisdictionForWorkforceContext(c.workforceContext),
+    });
+    if (!lifecycle.allowed) return { ok: false, code: "lifecycle-blocked" };
     await tx.insert(onbPolicyEvidence).values({
       organizationId: opts.organizationId,
       caseId: opts.caseId,
@@ -238,7 +258,7 @@ export async function verifyChecklistEvidence(opts: {
       detail: `${opts.verifier} acting as assigned ${opts.authorityRole} recorded a ${opts.decision} decision for "${definition.label}". Sensitive evidence reference and rationale are restricted to the evidence register.`,
     });
     return { ok: true, case: updated };
-  });
+  }));
   if (result.ok && opts.decision === "verified") await resumeChecklistOrchestration(opts.caseId);
   return result;
 }

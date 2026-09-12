@@ -6,6 +6,7 @@ import {
   runWithDemoControllerLive,
   runWithProviderDeny,
 } from "./provider-policy";
+import { normalizedDemoWorkCountry } from "./demo-controller";
 import { isSyntheticOfflineCase, SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
 
 test("demo live provider scope is exact and does not become an org-wide bypass", () => {
@@ -42,4 +43,13 @@ test("ordinary provider-deny policy remains authoritative inside a demo scope", 
 test("synthetic marker remains the authoritative ordinary-engine boundary", () => {
   assert.equal(isSyntheticOfflineCase({ notes: SYNTHETIC_OFFLINE_MARKER }), true);
   assert.equal(isSyntheticOfflineCase({ notes: "edited name only" }), false);
+});
+
+test("demo lifecycle jurisdiction accepts only explicit country geography", () => {
+  assert.equal(normalizedDemoWorkCountry("US"), "US");
+  assert.equal(normalizedDemoWorkCountry("United States"), "US");
+  assert.equal(normalizedDemoWorkCountry("India"), "IN");
+  assert.equal(normalizedDemoWorkCountry("Europe"), null);
+  assert.equal(normalizedDemoWorkCountry("HRO Europe GmbH"), null);
+  assert.equal(normalizedDemoWorkCountry(""), null);
 });

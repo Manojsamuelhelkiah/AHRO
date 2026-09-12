@@ -27,6 +27,9 @@ export const tenantSafeguards = [
   { table: "onb_candidate_links", phaseB: false },
   { table: "onb_candidate_sessions", phaseB: false },
   { table: "onb_candidate_uploads", phaseB: false },
+  // Sensitive upload reservations deliberately retain interrupted-upload
+  // accountability independently of case/document cleanup.
+  { table: "onb_candidate_upload_reservations", phaseB: false },
   { table: "custom_intent_routing_labels", phaseB: true },
   { table: "pricing_rate_sets", phaseB: true },
   { table: "pricing_sheets", phaseB: true },
@@ -78,6 +81,18 @@ export const tenantSafeguards = [
   { table: "onb_governance_dispatch_markers", phaseB: false },
   { table: "onb_audit_anchor_outbox", phaseB: false, requiresOrganizationForeignKey: false },
   { table: "onb_audit_anchor_receipts", phaseB: false, requiresOrganizationForeignKey: false },
+  // Sensitive-data lifecycle records are tenant-owned from creation.
+  { table: "onb_sensitive_lifecycle_policies", phaseB: false },
+  // Holds, manifests, and deletion jobs intentionally do not cascade from a
+  // case: cleanup must never erase retention/deletion accountability.
+  { table: "onb_sensitive_lifecycle_holds", phaseB: false },
+  { table: "onb_sensitive_object_manifests", phaseB: false },
+  { table: "onb_sensitive_object_derivatives", phaseB: false },
+  { table: "onb_sensitive_lifecycle_confirmations", phaseB: false },
+  { table: "onb_sensitive_lifecycle_deletion_jobs", phaseB: false },
+  // A disposable cursor is recreated by workers; it intentionally has no
+  // organization parent FK so tenant cleanup cannot be blocked by a cursor.
+  { table: "onb_sensitive_lifecycle_scan_cursors", phaseB: false, requiresOrganizationForeignKey: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -189,5 +204,11 @@ export const expectedForeignKeys = [
     columns: ["organization_id", "case_id"],
     referencedTable: "onb_cases",
     referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_sensitive_object_derivatives",
+    columns: ["manifest_id"],
+    referencedTable: "onb_sensitive_object_manifests",
+    referencedColumns: ["id"],
   },
 ];

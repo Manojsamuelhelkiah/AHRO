@@ -226,7 +226,10 @@ function assertMutationBound(
 export async function dispatchConnectorMutation<T>(input: {
   mutation: ConnectorMutation;
   context: ConnectorDispatchContext;
-  write: (mutation: Readonly<ConnectorMutation>) => Promise<T>;
+  write: (
+    mutation: Readonly<ConnectorMutation>,
+    tx?: OnboardingDbTransaction,
+  ) => Promise<T>;
 }): Promise<T> {
   if (input.context.syntheticOffline) {
     throw new ConnectorDispatchRejectedError(
@@ -274,6 +277,10 @@ export async function dispatchConnectorMutation<T>(input: {
     if (!current.allowed) {
       throw new ConnectorDispatchRejectedError(input.mutation.connector, current.reason);
     }
-    return input.write(mutation);
+    // The authority fence deliberately retains its transaction through the
+    // physical effect. Case-derived writers must use this transaction rather
+    // than opening a second transaction that waits on the case row held by the
+    // fence.
+    return input.write(mutation, tx);
   });
 }

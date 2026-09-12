@@ -31,6 +31,7 @@ import { SyntheticResetCard } from './settings-synthetic-reset';
 import { ActionCenterIdentitiesSettings } from './action-center-settings';
 import { JobProfilesAndAuthorities } from './settings-job-profiles';
 import { OrganizationMembersSettings } from './settings-organization-members';
+import { PrivacyAdministrationCard } from './settings-privacy-tab';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -837,6 +838,7 @@ export function SettingsPage() {
       <SyntheticResetCard />
       <ReadinessSlaSettingsCard />
       <AuthorityGovernanceCard />
+      <PrivacyAdministrationCard />
       <OrganizationMembersSettings />
       <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">

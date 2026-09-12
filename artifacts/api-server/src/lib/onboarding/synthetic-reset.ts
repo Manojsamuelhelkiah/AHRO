@@ -32,6 +32,10 @@ import {
   SYNTHETIC_OFFLINE_WARNING,
 } from "./synthetic-offline";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
+import {
+  sensitiveLifecycleCaseDeletionBlockedInTransaction,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 function defaultWorkstreams() {
   return [
@@ -456,6 +460,26 @@ function addCaseSafetyBlockers(
       warnings.push(`Case #${approval.caseId} has a pending approval record; it is non-provider workflow state and will cascade with the legacy case.`);
     }
   }
+  // A case DELETE cascades these records. They can contain sensitive bodies,
+  // transcripts, BGV/system notes, notification payloads, or references to
+  // derivatives which are not yet managed by the lifecycle deletion worker.
+  // Do not relabel this one-off reset as retention processing: block it until
+  // a class-specific lifecycle path reconciles the records.
+  if (communications.length) {
+    blockers.push("Reset would cascade communication content; sensitive lifecycle reconciliation is required.");
+  }
+  if (voices.length) {
+    blockers.push("Reset would cascade voice/transcript metadata; sensitive lifecycle reconciliation is required.");
+  }
+  if (approvalNotifications.length) {
+    blockers.push("Reset would cascade approval notification bodies; sensitive lifecycle reconciliation is required.");
+  }
+  if (slaOutbox.length) {
+    blockers.push("Reset would cascade SLA payloads; sensitive lifecycle reconciliation is required.");
+  }
+  if (systemChecks.length) {
+    blockers.push("Reset would cascade BGV/system notes; sensitive lifecycle reconciliation is required.");
+  }
   for (const communication of communications) {
     if (communication.direction !== "outbound") continue;
     const reconciled =
@@ -594,6 +618,9 @@ async function loadInspection(
       blockers,
       warnings,
     );
+    if (uploads.length) {
+      blockers.push("Reset would cascade candidate-upload metadata while retained objects or derivatives may remain; lifecycle deletion must reconcile it first.");
+    }
     const relatedSnapshot = {
       approvals: approvals
         .map((row) => ({
@@ -973,6 +1000,28 @@ export async function executeSyntheticReset(input: {
   if (entries.length === 0) {
     return { kind: "conflict", envelope: await inspectSyntheticReset(input.organizationId, manifest) };
   }
+  // Do not wait behind the lifecycle fence if a durable provider marker is
+  // already active. Provider dispatch holds that fence through its external
+  // call, whereas the marker was deliberately committed first so reset can
+  // fail closed immediately rather than contend with in-flight I/O.
+  const preflight = await inspectSyntheticReset(input.organizationId, manifest);
+  if (preflight.status !== "ready") {
+    return { kind: "conflict", envelope: preflight };
+  }
+  if (preflight.revision !== input.expectedRevision) {
+    return {
+      kind: "conflict",
+      envelope: {
+        ...preflight,
+        status: "blocked",
+        blockers: [
+          ...preflight.blockers,
+          "Inventory changed since the preview; refresh before confirming.",
+        ],
+      },
+    };
+  }
+  return withSensitiveLifecycleFence(input.organizationId, async () => {
   const logisticsDefault = await getDay1LogisticsDefault(input.organizationId);
   const outcome = await db.transaction(async (tx) => {
     // A row lock alone cannot serialize two transactions when the receipt
@@ -993,6 +1042,13 @@ export async function executeSyntheticReset(input: {
       return { kind: "conflict" as const, inspection: await loadInspection(input.organizationId, manifest, tx, true) };
     }
     const inspection = await loadInspection(input.organizationId, manifest, tx, true);
+    if (await sensitiveLifecycleCaseDeletionBlockedInTransaction(
+      tx,
+      input.organizationId,
+      inspection.targetRows.map((row) => row.id),
+    )) {
+      return { kind: "conflict" as const, inspection: await loadInspection(input.organizationId, manifest, tx, true) };
+    }
     if (inspection.receipt || inspection.revision !== input.expectedRevision || inspection.blockers.length) {
       return { kind: "conflict" as const, inspection };
     }
@@ -1110,4 +1166,5 @@ export async function executeSyntheticReset(input: {
   }
   const envelope = await inspectSyntheticReset(input.organizationId, manifest);
   return { kind: "completed", envelope };
+  });
 }

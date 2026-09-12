@@ -24,10 +24,13 @@ import {
   checklistProfileMatchingAttributes,
   resolveChecklistProfileInTransaction,
 } from "./checklist-profiles";
+import { withSensitiveLifecycleFence } from "./sensitive-lifecycle";
 
 export const DRILL_WORKER_NAME = "Red Team Drill (simulated attacker)";
 export const DRILL_EMAIL = "red.team.drill@attacker.example";
 export const DRILL_PHONE = "+15550100999";
+/** Server-owned fixture marker; no request input can select this exemption. */
+export const DRILL_SYNTHETIC_FIXTURE_MARKER = "[security-drill-fixture:v1]";
 
 export interface DrillStep {
   step: string;
@@ -36,13 +39,27 @@ export interface DrillStep {
   outcome: string;
 }
 
+function isSecurityDrillFixture(row: {
+  workerName: string;
+  workerEmail: string;
+  workerPhone: string | null;
+  notes: string | null;
+}): boolean {
+  // Do not use the generic synthetic-offline marker here: it deliberately
+  // bypasses the real inbound enforcement paths this drill must exercise.
+  return row.workerName === DRILL_WORKER_NAME &&
+    row.workerEmail === DRILL_EMAIL &&
+    row.workerPhone === DRILL_PHONE &&
+    row.notes?.includes(DRILL_SYNTHETIC_FIXTURE_MARKER) === true;
+}
+
 async function drillLogEvent(
   organizationId: string,
   caseId: number,
   title: string,
   detail: string,
 ): Promise<void> {
-  await db.insert(onbEvents).values({
+  await withSensitiveLifecycleFence(organizationId, () => db.insert(onbEvents).values({
     organizationId,
     caseId,
     agent: "orchestrator",
@@ -50,86 +67,89 @@ async function drillLogEvent(
     hitlPattern: "notify-only",
     title,
     detail,
-  });
+  }));
 }
 
 async function drillCase(organizationId: string): Promise<{ id: number; created: boolean }> {
-  // Identify the drill case by its synthetic contacts, and only reuse a
-  // case whose name AND contacts all match — a real case can never be
-  // selected as the drill target.
-  const [existing] = await db
-    .select({
-      id: onbCases.id,
-      workerName: onbCases.workerName,
-      workerPhone: onbCases.workerPhone,
-      candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
-    })
-    .from(onbCases)
-    .where(and(
-      eq(onbCases.organizationId, organizationId),
-      eq(onbCases.workerEmail, DRILL_EMAIL),
-    ))
-    .orderBy(desc(onbCases.id));
-  if (existing && existing.workerName === DRILL_WORKER_NAME && existing.workerPhone === DRILL_PHONE) {
-    if (existing.candidateEmailAuthorizedAt !== null) {
-      throw new Error(
-        "Security drill aborted: the existing drill case has case-level candidate email authorization and cannot be safely reused.",
-      );
+  return withSensitiveLifecycleFence(organizationId, async () => {
+    // Identify the drill case by current server inventory, not by a caller
+    // role or a demo-looking contact alone.
+    const [existing] = await db
+      .select({
+        id: onbCases.id,
+        workerName: onbCases.workerName,
+        workerEmail: onbCases.workerEmail,
+        workerPhone: onbCases.workerPhone,
+        notes: onbCases.notes,
+        candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
+      })
+      .from(onbCases)
+      .where(and(
+        eq(onbCases.organizationId, organizationId),
+        eq(onbCases.workerEmail, DRILL_EMAIL),
+      ))
+      .orderBy(desc(onbCases.id));
+    if (existing && isSecurityDrillFixture(existing)) {
+      if (existing.candidateEmailAuthorizedAt !== null) {
+        throw new Error(
+          "Security drill aborted: the existing drill case has case-level candidate email authorization and cannot be safely reused.",
+        );
+      }
+      return { id: existing.id, created: false };
     }
-    return { id: existing.id, created: false };
-  }
-  const logisticsDefault = await getDay1LogisticsDefault(organizationId);
-  const joiningDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-  const row = await db.transaction(async (tx) => {
-    const checklist = await resolveChecklistProfileInTransaction(tx, organizationId, checklistProfileMatchingAttributes({}, {
-      workerBand: "white-collar",
-      role: "Security Drill Target",
-      hireType: "external-fte",
-      workerCategory: "white-collar",
-      geography: "United States",
-      department: "Security",
-      legalEntity: "Demo Corp",
-    }));
-    const [inserted] = await tx.insert(onbCases).values({
-      organizationId,
-      workerName: DRILL_WORKER_NAME,
-      workerEmail: DRILL_EMAIL,
-      workerPhone: DRILL_PHONE,
-      channelPreference: "email",
-      hireType: "external-fte",
-      workerCategory: "white-collar",
-      role: "Security Drill Target",
-      department: "Security",
-      geography: "United States",
-      legalEntity: "Demo Corp",
-      managerName: "Security Team",
-      recruiterName: "Security Team",
-      joiningDate,
-      notes: "Synthetic case for the guardrails security drill. Not a real person; contacts require explicit organization-scoped demo-volunteer authorization.",
-      checklistTemplateVersion: checklist.templateVersion,
-      checklistSnapshot: checklist.items,
-      checklistProfileId: checklist.profileId,
-      checklistProfileName: checklist.profileName,
-      checklistProfileVersion: checklist.profileVersion,
-      checklistMatchedCriteria: checklist.matchedCriteria,
-      checklistMatchExplanation: checklist.explanation,
-      readiness: readinessFromChecklist(checklist.items),
-      scenarioKey: null,
-      lifecycleStage: "in-progress",
-      candidateEmailAuthorizedAt: null,
-      candidateEmailAuthorizedBy: null,
-    }).returning({ id: onbCases.id });
-    await tx.insert(onbCaseLogistics).values({
-      organizationId,
-      caseId: inserted.id,
-      ...logisticsForCase(logisticsDefault, joiningDate),
+    const logisticsDefault = await getDay1LogisticsDefault(organizationId);
+    const joiningDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const row = await db.transaction(async (tx) => {
+      const checklist = await resolveChecklistProfileInTransaction(tx, organizationId, checklistProfileMatchingAttributes({}, {
+        workerBand: "white-collar",
+        role: "Security Drill Target",
+        hireType: "external-fte",
+        workerCategory: "white-collar",
+        geography: "United States",
+        department: "Security",
+        legalEntity: "Demo Corp",
+      }));
+      const [inserted] = await tx.insert(onbCases).values({
+        organizationId,
+        workerName: DRILL_WORKER_NAME,
+        workerEmail: DRILL_EMAIL,
+        workerPhone: DRILL_PHONE,
+        channelPreference: "email",
+        hireType: "external-fte",
+        workerCategory: "white-collar",
+        role: "Security Drill Target",
+        department: "Security",
+        geography: "United States",
+        legalEntity: "Demo Corp",
+        managerName: "Security Team",
+        recruiterName: "Security Team",
+        joiningDate,
+        notes: `${DRILL_SYNTHETIC_FIXTURE_MARKER}\nSynthetic case for the guardrails security drill. Not a real person; contacts require explicit organization-scoped demo-volunteer authorization.`,
+        checklistTemplateVersion: checklist.templateVersion,
+        checklistSnapshot: checklist.items,
+        checklistProfileId: checklist.profileId,
+        checklistProfileName: checklist.profileName,
+        checklistProfileVersion: checklist.profileVersion,
+        checklistMatchedCriteria: checklist.matchedCriteria,
+        checklistMatchExplanation: checklist.explanation,
+        readiness: readinessFromChecklist(checklist.items),
+        scenarioKey: null,
+        lifecycleStage: "in-progress",
+        candidateEmailAuthorizedAt: null,
+        candidateEmailAuthorizedBy: null,
+      }).returning({ id: onbCases.id });
+      await tx.insert(onbCaseLogistics).values({
+        organizationId,
+        caseId: inserted.id,
+        ...logisticsForCase(logisticsDefault, joiningDate),
+      });
+      return inserted;
     });
-    return inserted;
+    await drillLogEvent(organizationId, row.id, "Security drill case created",
+      "This case exists to demonstrate guardrails under attack. Every action below is a simulated attack that the live enforcement code blocked.",
+    );
+    return { id: row.id, created: true };
   });
-  await drillLogEvent(organizationId, row.id, "Security drill case created",
-    "This case exists to demonstrate guardrails under attack. Every action below is a simulated attack that the live enforcement code blocked.",
-  );
-  return { id: row.id, created: true };
 }
 
 type SecurityDrillPreflightDeps = {
@@ -165,7 +185,10 @@ export async function securityDrillPreflight(
  * re-running adds a fresh round of activations to the same drill case.
  */
 export async function runSecurityDrill(organizationId: string): Promise<{ caseId: number; created: boolean; steps: DrillStep[] }> {
-  return runWithProviderDeny(() => runSecurityDrillWithProviderDeny(organizationId));
+  return withSensitiveLifecycleFence(
+    organizationId,
+    () => runWithProviderDeny(() => runSecurityDrillWithProviderDeny(organizationId)),
+  );
 }
 
 async function runSecurityDrillWithProviderDeny(organizationId: string): Promise<{ caseId: number; created: boolean; steps: DrillStep[] }> {

@@ -6,6 +6,7 @@ import {
   onbCases,
   onbChecklistProfiles,
   onbChecklistTemplates,
+  onbSensitiveLifecyclePolicies,
   organizationsTable,
 } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
@@ -31,6 +32,7 @@ import {
   LEGACY_CHECKLIST,
   readinessFromChecklist,
 } from "./settings";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const profile = (
   profileId: string,
@@ -119,12 +121,9 @@ describe("targeted checklist profiles", () => {
     const base = LEGACY_CHECKLIST.map((item) => item.id === "documentation"
       ? { ...item, nonWaivableSafety: true }
       : { ...item });
-    const [protectedItem] = applyChecklistOverrides(base, [{
+    assert.throws(() => applyChecklistOverrides(base, [{
       id: "documentation", enabled: false, mandatory: false,
-    }]).filter((item) => item.id === "documentation");
-    assert.equal(protectedItem.nonWaivableSafety, true);
-    assert.equal(protectedItem.enabled, true);
-    assert.equal(protectedItem.mandatory, true);
+    }]), /cannot be disabled or weakened/i);
   });
 
   test("profiles preserve migration-review holds for partial and all-item overlays", () => {
@@ -135,11 +134,10 @@ describe("targeted checklist profiles", () => {
     const partial = applyChecklistOverrides(base, [{
       id: "documentation", label: "Renamed historical control",
     }]).find((item) => item.id === "documentation");
-    const all = applyChecklistOverrides(base, base.map((item) => ({
+    assert.throws(() => applyChecklistOverrides(base, base.map((item) => ({
       id: item.id, enabled: false, mandatory: false, label: `Overlay ${item.id}`,
-    }))).find((item) => item.id === "documentation");
+    }))), /cannot be disabled or weakened/i);
     assert.equal(partial?.migrationReviewHold, true);
-    assert.equal(all?.migrationReviewHold, true);
   });
 
   test("combined criteria are ANDed and unmatched employees fall back", () => {
@@ -283,8 +281,10 @@ describe("targeted checklist profiles", () => {
       enforcementStage: "before-workstreams",
     }]);
     const readiness = readinessFromChecklist(snapshot);
+    const profileReadiness = readiness.find((item) => item.key === "profile");
+    assert.ok(profileReadiness, "selected snapshot includes the Gate A profile item");
+    profileReadiness.status = "ready";
     const readinessForReplacement = structuredClone(readiness);
-    readinessForReplacement[0].status = "ready";
     const laterProfile = applyChecklistOverrides(LEGACY_CHECKLIST, []);
     const merged = mergeChecklistReadiness([...laterProfile.filter((item) => item.id !== "documentation"), {
       id: "new-item", label: "New", order: 7, enabled: true, mandatory: true,
@@ -293,9 +293,15 @@ describe("targeted checklist profiles", () => {
     assert.equal(merged.find((item) => item.key === "profile")?.status, "ready");
     assert.equal(merged.find((item) => item.key === "new-item")?.status, "pending");
     assert.equal(merged.some((item) => item.key === "documentation"), false);
-    assert.equal(checklistStageBlockers({ checklistSnapshot: snapshot, readiness }, "before-employee-communications").length, 1);
+    // The accepted Gate A profile is ready, but the selected snapshot's
+    // before-workstreams requirement remains a blocker even after a later
+    // profile no longer contains it.
+    assert.equal(checklistStageBlockers({ checklistSnapshot: snapshot, readiness }, "before-workstreams").length, 1);
     assert.equal(snapshot[0].mandatory, true);
-    assert.equal(readiness[0].status, "pending");
+    const selectedRequirement = readiness.find((item) => item.key === "manual-security-review");
+    assert.ok(selectedRequirement);
+    selectedRequirement.status = "ready";
+    assert.equal(checklistStageBlockers({ checklistSnapshot: snapshot, readiness }, "before-workstreams").length, 0);
   });
 
   test("active replacement never silently introduces a requirement behind orchestration", () => {
@@ -390,6 +396,7 @@ describe("targeted checklist policy concurrency", { skip: !hasDb }, () => {
         joinCodeHash: `checklist-concurrency-${suffix}`,
         createdByUserId: "integration-test",
       });
+      await seedApprovedSensitiveLifecyclePolicies(organizationId);
       await db.insert(onbChecklistTemplates).values({
         organizationId,
         version: 1,
@@ -447,6 +454,7 @@ describe("targeted checklist policy concurrency", { skip: !hasDb }, () => {
           role: employee.role,
           department: "Engineering",
           geography: employee.location,
+          workforceContext: { workCountry: "US" },
           legalEntity: "Integration Test",
           managerName: "Manager",
           recruiterName: "Recruiter",
@@ -507,6 +515,7 @@ describe("targeted checklist policy concurrency", { skip: !hasDb }, () => {
       await db.delete(onbCases).where(eq(onbCases.organizationId, organizationId));
       await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, organizationId));
       await db.delete(onbChecklistTemplates).where(eq(onbChecklistTemplates.organizationId, organizationId));
+      await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
       await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
     }
   });

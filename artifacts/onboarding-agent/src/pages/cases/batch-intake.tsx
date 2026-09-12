@@ -23,7 +23,8 @@ function blankPerson(): BatchIntakePerson {
 function isReady(person: BatchIntakePerson) {
   return Boolean(person.workerName.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(person.workerEmail) &&
     person.role.trim() && person.department.trim() && person.geography.trim() && person.legalEntity.trim() &&
-    person.managerName.trim() && person.recruiterName.trim() && person.joiningDate);
+    person.managerName.trim() && person.recruiterName.trim() && person.joiningDate &&
+    person.workforceContext?.workCountry?.trim());
 }
 
 export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
@@ -80,6 +81,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
               <input className={control} placeholder="Recruiter *" value={person.recruiterName} onChange={(event) => edit(index, { recruiterName: event.target.value })} />
               <input className={control} type="date" value={person.joiningDate} onChange={(event) => edit(index, { joiningDate: event.target.value })} />
               <select className={control} value={person.jobProfileId ?? ''} onChange={(event) => edit(index, { jobProfileId: event.target.value || undefined })}><option value="">No reusable job profile</option>{profiles.data?.filter((profile) => profile.enabled).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.name} · v{profile.version}</option>)}</select>
+              <input className={control} placeholder="Work country (e.g. US) *" value={person.workforceContext?.workCountry ?? ''} onChange={(event) => editContext(index, 'workCountry', event.target.value)} />
               <select className={control} value={person.workforceContext?.workEnvironment ?? ''} onChange={(event) => editContext(index, 'workEnvironment', event.target.value || undefined)}><option value="">Work environment unknown</option><option value="office">Office</option><option value="remote">Remote</option><option value="site">Site</option><option value="field">Field</option><option value="mixed">Mixed</option></select>
               <input className={control} placeholder="Site (if applicable)" value={person.workforceContext?.site ?? ''} onChange={(event) => editContext(index, 'site', event.target.value)} />
             </div>

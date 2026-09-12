@@ -7,13 +7,22 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
   onbApprovals,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
   onbCases,
   onbCommunications,
   onbConnectors,
   onbDocuments,
   onbEffectJournal,
+  onbGovernanceDecisions,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceRequirements,
+  onbReadinessSlaAttestations,
   onbReadinessSlaPolicies,
   onbPolicyAuthorities,
+  onbSensitiveLifecyclePolicies,
   organizationMembershipsTable,
   onbSettings,
   onbSystemChecks,
@@ -28,8 +37,16 @@ import {
   WORKFORCE_CONTINUATION_SETTING_PREFIX,
 } from "./operational-requests";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
+import { SENSITIVE_DATA_CLASSES } from "./sensitive-lifecycle";
+import {
+  governanceSnapshotForNewCase,
+  withGovernanceDecisionSnapshot,
+  type GovernanceCaseSnapshot,
+} from "./governance-runtime";
+import { EXECUTION_AUTHORIZATION_RULES } from "./decision-authority";
 import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
 import { runWorkstreams } from "./engine";
+import { ensureReadinessSlaEnrollment } from "./readiness-sla-policy";
 
 const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `operational-a-${suffix}`;
@@ -43,11 +60,13 @@ let offlineCase: number;
 let workforceCase: number;
 let allNonblockingCase: number;
 let officeNoSiteCase: number;
+let liveGovernanceSnapshot: GovernanceCaseSnapshot;
 const unrelatedSpecialist = `unrelated-${suffix}`;
 
 function caseValues(organizationId: string, name: string, notes: string | null = null) {
   return {
     organizationId,
+    createdByUserId: user,
     workerName: name,
     workerEmail: `${name.toLowerCase().replaceAll(" ", ".")}@example.com`,
     hireType: "external-fte",
@@ -59,6 +78,7 @@ function caseValues(organizationId: string, name: string, notes: string | null =
     managerName: "Manager",
     recruiterName: "Recruiter",
     joiningDate: "2030-01-01",
+    workforceContext: { workCountry: "US" },
     notes,
     readiness: [
       { key: "access", label: "Access", status: "pending" },
@@ -66,6 +86,159 @@ function caseValues(organizationId: string, name: string, notes: string | null =
     ],
     workstreams: [],
   };
+}
+
+async function establishLiveGovernanceFixture(
+  organizationId: string,
+): Promise<GovernanceCaseSnapshot> {
+  await governanceSnapshotForNewCase(organizationId);
+  const decisions = await db.select().from(onbGovernanceDecisions).where(
+    eq(onbGovernanceDecisions.organizationId, organizationId),
+  );
+  for (const decision of decisions) {
+    const reviewer = `operational-fixture:${decision.accountableRole}`;
+    const [authority] = await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId,
+      authorityRole: decision.accountableRole,
+      assigneeUserId: reviewer,
+      verificationStatus: "verified",
+      verifiedByUserId: "operational-fixture",
+      verificationReference: reviewer,
+    }).returning({ id: onbGovernanceAuthorityAssignments.id });
+    await db.insert(onbGovernanceDecisionReviews).values({
+      organizationId,
+      decisionKey: decision.key,
+      decisionRevision: decision.revision,
+      outcome: "approved",
+      reason: "Operational request fixture approved decision",
+      authorityAssignmentId: authority!.id,
+      reviewedByUserId: reviewer,
+      verificationReference: reviewer,
+    });
+    await db.update(onbGovernanceDecisions).set({
+      status: "approved",
+      approvedByUserId: reviewer,
+      approvedAt: new Date(),
+    }).where(and(
+      eq(onbGovernanceDecisions.organizationId, organizationId),
+      eq(onbGovernanceDecisions.key, decision.key),
+      eq(onbGovernanceDecisions.revision, decision.revision),
+    ));
+  }
+  await db.update(onbGovernanceRequirements).set({
+    implemented: true,
+    tested: true,
+    configured: true,
+    approvedForLive: true,
+  }).where(eq(onbGovernanceRequirements.organizationId, organizationId));
+  for (const key of ["bgv", "itsm", "payroll"]) {
+    await db.insert(onbConnectors).values({
+      organizationId,
+      key,
+      label: key,
+      vendor: "operational-fixture-live",
+      availableVendors: ["operational-fixture-live"],
+      status: "connected",
+      trackingMode: "api",
+      description: "Fixture configured live provider",
+      authoritativeFor: [key],
+      lastSyncAt: new Date(),
+      configurationProvenance: "trusted-provider",
+    }).onConflictDoUpdate({
+      target: [onbConnectors.organizationId, onbConnectors.key],
+      set: {
+        status: "connected",
+        lastSyncAt: new Date(),
+        configurationProvenance: "trusted-provider",
+      },
+    });
+  }
+  return governanceSnapshotForNewCase(organizationId);
+}
+
+async function seedCurrentExecutionApprovals(caseId: number): Promise<void> {
+  await db.insert(onbAuthorityGovernance).values({
+    organizationId: orgA,
+    status: "governance-approved",
+    approvedByUserId: "operational-fixture",
+    approvedAt: new Date(),
+    governanceSource: "fixture",
+    revision: 1,
+  }).onConflictDoUpdate({
+    target: onbAuthorityGovernance.organizationId,
+    set: { status: "governance-approved", revision: 1, updatedAt: new Date() },
+  });
+  const operationAuthorities = [
+    ["documents", "legal", "legal-approve"],
+    ["background-verification", "hr-compliance", "hr-compliance-approve"],
+    ["iam", "it-security", "it-security-approve"],
+    ["payroll", "payroll", "payroll-approve"],
+  ] as const;
+  for (const [connector, authorityRole, authorityScope] of operationAuthorities) {
+    const reviewer = `operational-${connector}-reviewer`;
+    const authorityId = `operational-${connector}-${caseId}`;
+    await db.insert(organizationMembershipsTable).values({
+      organizationId: orgA,
+      clerkUserId: reviewer,
+      role: "member",
+    }).onConflictDoNothing();
+    await db.insert(onbAuthorityAssignments).values({
+      id: authorityId,
+      organizationId: orgA,
+      personUserId: reviewer,
+      authorityRole,
+      scopes: [authorityScope],
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: new Date(Date.now() + 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "operational-fixture",
+      source: "fixture",
+      governanceDecisionRef: "OPERATIONAL-FIXTURE",
+    });
+    await db.insert(onbApprovals).values({
+      organizationId: orgA,
+      caseId,
+      agent: "workstreams",
+      ruleRef: EXECUTION_AUTHORIZATION_RULES[connector],
+      hitlPattern: "approve-before-act",
+      recommendation: "Fixture-approved provider execution",
+      rationale: "Current scoped authority approved this fixture execution.",
+      resumeAction: "continue-after-plan",
+      status: "approved",
+      authorityScope,
+      decidedAuthorityId: authorityId,
+      decidedAuthorityRevision: 1,
+      idempotencyKey: `orchestration:${caseId}:approval:execution:${connector}`,
+    });
+  }
+}
+
+async function seedTrustedAccessReleaseEvidence(caseId: number): Promise<void> {
+  await db.insert(onbSystemChecks).values({
+    organizationId: orgA,
+    caseId,
+    system: "bgv",
+    mode: "push",
+    externalRef: `operational-fixture-bgv-${caseId}`,
+    status: "done",
+    dueAt: new Date(),
+    completedAt: new Date(),
+    lastCheckedAt: new Date(),
+    evidenceProvenance: "trusted-provider",
+  });
+  await ensureReadinessSlaEnrollment(orgA, caseId, "operational-fixture");
+  await db.insert(onbReadinessSlaAttestations).values({
+    organizationId: orgA,
+    caseId,
+    snapshotVersion: 1,
+    streamKey: "hris",
+    complete: true,
+    reason: "Operational fixture HRIS source attestation",
+    attestedBy: "operational-fixture",
+    attestedRole: "hr-operations",
+    evidenceProvenance: "trusted-provider",
+  });
 }
 
 async function call(
@@ -96,6 +269,24 @@ before(async () => {
     { organizationId: orgB, clerkUserId: user, role: "owner" },
     { organizationId: orgA, clerkUserId: unrelatedSpecialist, role: "member" },
   ]);
+  liveGovernanceSnapshot = await establishLiveGovernanceFixture(orgA);
+  await db.insert(onbSensitiveLifecyclePolicies).values(
+    [orgA, orgB].flatMap((organizationId) => SENSITIVE_DATA_CLASSES.map((dataClass) => ({
+      organizationId,
+      dataClass,
+      jurisdiction: "US",
+      revision: 1,
+      retentionDays: 365,
+      purpose: `Operational request ${dataClass} lifecycle`,
+      lawfulBasis: "Test-approved operational lifecycle basis",
+      providerSharingApproved: false,
+      permittedProviders: [],
+      policyReference: `operational-${dataClass}`,
+      approvalReference: `operational-${dataClass}`,
+      approvedByUserId: user,
+      approvedAuthorityAssignmentId: 1,
+    }))),
+  );
   [caseA, caseB, offlineCase, workforceCase, allNonblockingCase, officeNoSiteCase] = (await db.insert(onbCases).values([
     caseValues(orgA, "Operational Alpha"),
     caseValues(orgB, "Operational Beta"),
@@ -122,8 +313,8 @@ before(async () => {
         mandatory: false,
         enforcementStage: "before-workstreams",
       }],
-      workforceContext: { site: "test-site" },
-      processPolicySnapshot: {
+      workforceContext: { workCountry: "US", site: "test-site" },
+      processPolicySnapshot: withGovernanceDecisionSnapshot({
         processPolicy: {
           semanticsVersion: 2,
           learning: {
@@ -137,12 +328,12 @@ before(async () => {
             ],
           },
         },
-      },
+      }, liveGovernanceSnapshot),
     },
     {
       ...caseValues(orgA, "All Nonblocking"),
-      workforceContext: { site: "test-site" },
-      processPolicySnapshot: {
+      workforceContext: { workCountry: "US", site: "test-site" },
+      processPolicySnapshot: withGovernanceDecisionSnapshot({
         processPolicy: {
           semanticsVersion: 2,
           learning: {
@@ -151,12 +342,17 @@ before(async () => {
             steps: [{ id: "optional-welcome", label: "Optional welcome", nonblocking: true }],
           },
         },
-      },
+      }, liveGovernanceSnapshot),
     },
     {
       ...caseValues(orgA, "Office no site"),
-      workforceContext: { workEnvironment: "office", siteExposure: false, safetyCritical: false },
-      processPolicySnapshot: {
+      workforceContext: {
+        workCountry: "US",
+        workEnvironment: "office",
+        siteExposure: false,
+        safetyCritical: false,
+      },
+      processPolicySnapshot: withGovernanceDecisionSnapshot({
         processPolicy: {
           semanticsVersion: 2,
           learning: {
@@ -168,9 +364,15 @@ before(async () => {
             ],
           },
         },
-      },
+      }, liveGovernanceSnapshot),
     },
   ]).returning({ id: onbCases.id })).map((row) => row.id);
+  await Promise.all([
+    seedCurrentExecutionApprovals(workforceCase),
+    seedCurrentExecutionApprovals(officeNoSiteCase),
+    seedTrustedAccessReleaseEvidence(workforceCase),
+    seedTrustedAccessReleaseEvidence(officeNoSiteCase),
+  ]);
   await db.insert(onbPolicyAuthorities).values([
     { organizationId: orgA, userId: user, authorityRole: "l-d", caseId: workforceCase, itemId: "learning-role", site: "test-site", assignedBy: user },
     { organizationId: orgA, userId: user, authorityRole: "payroll-operations", caseId: workforceCase, itemId: "payroll-prerequisite", site: "test-site", assignedBy: user },
@@ -331,6 +533,14 @@ after(async () => {
   await db.delete(onbPolicyAuthorities).where(inArray(onbPolicyAuthorities.organizationId, [orgA, orgB]));
   await db.delete(onbEffectJournal).where(inArray(onbEffectJournal.organizationId, [orgA, orgB]));
   await db.delete(onbReadinessSlaPolicies).where(inArray(onbReadinessSlaPolicies.organizationId, [orgA, orgB]));
+  await db.delete(onbGovernanceDispatchMarkers).where(inArray(onbGovernanceDispatchMarkers.organizationId, [orgA, orgB]));
+  await db.delete(onbGovernanceDecisionReviews).where(inArray(onbGovernanceDecisionReviews.organizationId, [orgA, orgB]));
+  await db.delete(onbGovernanceAuthorityAssignments).where(inArray(onbGovernanceAuthorityAssignments.organizationId, [orgA, orgB]));
+  await db.delete(onbGovernanceRequirements).where(inArray(onbGovernanceRequirements.organizationId, [orgA, orgB]));
+  await db.delete(onbGovernanceDecisions).where(inArray(onbGovernanceDecisions.organizationId, [orgA, orgB]));
+  await db.delete(onbAuthorityAssignments).where(inArray(onbAuthorityAssignments.organizationId, [orgA, orgB]));
+  await db.delete(onbAuthorityGovernance).where(inArray(onbAuthorityGovernance.organizationId, [orgA, orgB]));
+  await db.delete(onbSensitiveLifecyclePolicies).where(inArray(onbSensitiveLifecyclePolicies.organizationId, [orgA, orgB]));
   await db.delete(onbConnectors).where(inArray(onbConnectors.organizationId, [orgA, orgB]));
   await db.delete(onbCases).where(inArray(onbCases.id, [caseA, caseB, offlineCase, workforceCase, allNonblockingCase, officeNoSiteCase]));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));

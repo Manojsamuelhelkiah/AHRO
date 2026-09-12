@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { after, describe, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   db,
-  DEMO_ORGANIZATION_ID,
   onbApprovalHistory,
   onbApprovalNotifications,
   onbApprovals,
@@ -14,6 +13,8 @@ import {
   onbEvents,
   onbSettings,
   organizationMembershipsTable,
+  organizationsTable,
+  onbSensitiveLifecyclePolicies,
 } from "@workspace/db";
 import { HR_APPROVER_EMAIL_KEY } from "./settings";
 import {
@@ -24,16 +25,33 @@ import {
 } from "./approval-decisions";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { resumeAfterDecision } from "./engine";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
-const organizationId = DEMO_ORGANIZATION_ID;
 const suffix = `approval-versioning-${process.pid}-${randomUUID()}`;
+const organizationId = `${suffix}-organization`;
 const caseIds: number[] = [];
 const approverUserId = `${suffix}-hr-specialist`;
 const requesterUserId = `${suffix}-requester`;
 
 describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }, () => {
   let previousApproverSetting: string | null | undefined;
+
+  before(async () => {
+    await db.insert(organizationsTable).values({
+      id: organizationId,
+      name: "Approval versioning lifecycle fixture",
+      slug: organizationId,
+      joinCodeHash: `${organizationId}-join`,
+      createdByUserId: requesterUserId,
+    });
+    await db.insert(organizationMembershipsTable).values({
+      organizationId,
+      clerkUserId: requesterUserId,
+      role: "owner",
+    });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
+  });
 
   after(async () => {
     for (const caseId of caseIds) {
@@ -54,10 +72,14 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       ));
     }
     await db.delete(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.id, `${suffix}-authority`));
+    await db.delete(onbSensitiveLifecyclePolicies).where(
+      eq(onbSensitiveLifecyclePolicies.organizationId, organizationId),
+    );
     await db.delete(organizationMembershipsTable).where(and(
       eq(organizationMembershipsTable.organizationId, organizationId),
       eq(organizationMembershipsTable.clerkUserId, approverUserId),
     ));
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
   });
 
   async function ensureDecisionAuthority() {
@@ -90,6 +112,7 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       role: "Engineer",
       department: "Engineering",
       geography: "US",
+      workforceContext: { workCountry: "US" },
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",
@@ -127,38 +150,50 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
 
   test("same-version concurrent decisions have one winner and one stale loser", async () => {
     const { caseId, approval } = await createFixture();
-    const [first, second] = await Promise.all([
-      decideApproval({
-        organizationId,
-        approvalId: approval.id,
-        expectedVersion: 1,
-        decision: "approved",
-        decidedBy: approverUserId,
-        actorUserId: approverUserId,
+    const decisions = [
+      {
+        decision: "approved" as const,
         comment: "first",
-      }),
+      },
+      {
+        decision: "rejected" as const,
+        comment: "losing race",
+      },
+    ];
+    const results = await Promise.all(decisions.map(({ decision, comment }) =>
       decideApproval({
         organizationId,
         approvalId: approval.id,
         expectedVersion: 1,
-        decision: "rejected",
+        decision,
         decidedBy: approverUserId,
         actorUserId: approverUserId,
-        comment: "losing race",
+        comment,
       }),
-    ]);
+    ));
     await settleContinuation();
 
-    assert.equal([first, second].filter((result) => result.outcome === "decided").length, 1);
-    assert.equal([first, second].filter((result) => result.outcome === "stale").length, 1);
+    assert.equal(results.filter((result) => result.outcome === "decided").length, 1);
+    assert.equal(results.filter((result) => result.outcome === "stale").length, 1);
+    const winningIndex = results.findIndex((result) => result.outcome === "decided");
+    assert.notEqual(winningIndex, -1);
+    const winningDecision = decisions[winningIndex]!.decision;
+    const winningResult = results[winningIndex]!;
+    assert.equal(winningResult.outcome, "decided");
+    if (winningResult.outcome === "decided") {
+      assert.equal(winningResult.approval.status, winningDecision);
+    }
     const [current] = await db.select().from(onbApprovals).where(eq(onbApprovals.id, approval.id));
-    assert.equal(current.status, "approved");
+    assert.equal(current.status, winningDecision);
     assert.equal(current.version, 1);
     const history = await db.select().from(onbApprovalHistory).where(and(
       eq(onbApprovalHistory.organizationId, organizationId),
       eq(onbApprovalHistory.approvalId, approval.id),
     ));
-    assert.deepEqual(history.map((row) => [row.version, row.eventType, row.status]), [[1, "decision", "approved"]]);
+    assert.deepEqual(
+      history.map((row) => [row.version, row.eventType, row.status]),
+      [[1, "decision", winningDecision]],
+    );
     assert.equal(caseId, current.caseId);
   });
 

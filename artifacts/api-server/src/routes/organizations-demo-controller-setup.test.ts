@@ -114,6 +114,7 @@ async function createIsolatedSchema(): Promise<void> {
       role text NOT NULL DEFAULT 'member',
       created_at timestamptz NOT NULL DEFAULT now(),
       revoked_at timestamptz,
+      membership_revision integer NOT NULL DEFAULT 0,
       UNIQUE (organization_id, clerk_user_id)
     );
     CREATE TABLE demo_controller_setup_requests (

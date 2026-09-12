@@ -125,6 +125,7 @@ export function createOnboardingCaseExplainabilityRouter(
           return;
         }
         const answer = await explainCase(
+          ownedCase,
           question,
           body.history,
           evidence,

@@ -16,3 +16,4 @@ export * from "./action-center";
 export * from "./external-audit-anchoring";
 export * from "./governance";
 export * from "./hr-policy-library";
+export * from "./sensitive-lifecycle";

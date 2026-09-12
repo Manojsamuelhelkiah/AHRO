@@ -14,6 +14,12 @@ import {
   onbCommunications,
   onbEffectJournal,
   onbEvents,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDecisions,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceRequirements,
+  onbSensitiveLifecyclePolicies,
   onbSettings,
   organizationsTable,
 } from "@workspace/db";
@@ -30,6 +36,12 @@ import { startVoiceCall } from "./voice";
 import { withCaseDispatchGuard } from "./dispatch-guard";
 import { retryCandidateEmail } from "./channels";
 import onboardingRouter from "../../routes/onboarding";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
+import {
+  governanceSnapshotForNewCase,
+  withGovernanceDecisionSnapshot,
+  type GovernanceCaseSnapshot,
+} from "./governance-runtime";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `synthetic-reset-${process.pid}-${randomUUID()}`;
@@ -76,7 +88,54 @@ async function seedOrganization(label = suffix): Promise<string> {
     joinCodeHash: `hash-${id}`,
     createdByUserId: "synthetic-reset-test",
   });
+  await seedApprovedSensitiveLifecyclePolicies(id);
   return id;
+}
+
+async function establishLiveGovernanceFixture(
+  organizationId: string,
+): Promise<GovernanceCaseSnapshot> {
+  await governanceSnapshotForNewCase(organizationId);
+  const decisions = await db.select().from(onbGovernanceDecisions).where(
+    eq(onbGovernanceDecisions.organizationId, organizationId),
+  );
+  for (const decision of decisions) {
+    const reviewer = `synthetic-reset-fixture:${decision.accountableRole}`;
+    const [authority] = await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId,
+      authorityRole: decision.accountableRole,
+      assigneeUserId: reviewer,
+      verificationStatus: "verified",
+      verifiedByUserId: "synthetic-reset-fixture",
+      verificationReference: reviewer,
+    }).returning({ id: onbGovernanceAuthorityAssignments.id });
+    await db.insert(onbGovernanceDecisionReviews).values({
+      organizationId,
+      decisionKey: decision.key,
+      decisionRevision: decision.revision,
+      outcome: "approved",
+      reason: "Stubbed Gmail reset-race fixture approval",
+      authorityAssignmentId: authority!.id,
+      reviewedByUserId: reviewer,
+      verificationReference: reviewer,
+    });
+    await db.update(onbGovernanceDecisions).set({
+      status: "approved",
+      approvedByUserId: reviewer,
+      approvedAt: new Date(),
+    }).where(and(
+      eq(onbGovernanceDecisions.organizationId, organizationId),
+      eq(onbGovernanceDecisions.key, decision.key),
+      eq(onbGovernanceDecisions.revision, decision.revision),
+    ));
+  }
+  await db.update(onbGovernanceRequirements).set({
+    implemented: true,
+    tested: true,
+    configured: true,
+    approvedForLive: true,
+  }).where(eq(onbGovernanceRequirements.organizationId, organizationId));
+  return governanceSnapshotForNewCase(organizationId);
 }
 
 async function seedCase(
@@ -85,6 +144,7 @@ async function seedCase(
     orchestrationStatus: string;
     orchestrationClaimOwner: string | null;
     notes: string | null;
+    processPolicySnapshot: Record<string, unknown> | null;
   }> = {},
 ) {
   const [row] = await db.insert(onbCases).values({
@@ -107,6 +167,10 @@ async function seedCase(
     orchestrationClaimUntil: null,
     notes: overrides.notes ?? null,
     scenarioKey: fixtureConfig.scenarioKey,
+    workforceContext: { workCountry: "US" },
+    ...(overrides.processPolicySnapshot
+      ? { processPolicySnapshot: overrides.processPolicySnapshot }
+      : {}),
     readiness: [],
     checklistSnapshot: [],
   }).returning();
@@ -121,6 +185,12 @@ async function cleanupOrganizations() {
   await db.delete(onbSettings).where(inArray(onbSettings.organizationId, ids));
   await db.delete(onbEvents).where(inArray(onbEvents.organizationId, ids));
   await db.delete(onbCases).where(inArray(onbCases.organizationId, ids));
+  await db.delete(onbGovernanceDispatchMarkers).where(inArray(onbGovernanceDispatchMarkers.organizationId, ids));
+  await db.delete(onbGovernanceDecisionReviews).where(inArray(onbGovernanceDecisionReviews.organizationId, ids));
+  await db.delete(onbGovernanceAuthorityAssignments).where(inArray(onbGovernanceAuthorityAssignments.organizationId, ids));
+  await db.delete(onbGovernanceRequirements).where(inArray(onbGovernanceRequirements.organizationId, ids));
+  await db.delete(onbGovernanceDecisions).where(inArray(onbGovernanceDecisions.organizationId, ids));
+  await db.delete(onbSensitiveLifecyclePolicies).where(inArray(onbSensitiveLifecyclePolicies.organizationId, ids));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, ids));
 }
 
@@ -188,9 +258,9 @@ describe("synthetic reset safety boundary", { skip: !hasDb }, () => {
 
     const manifest = manifestFor(organizationId, target.id);
     const preview = await inspectSyntheticReset(organizationId, manifest);
-    assert.equal(preview.status, "ready");
+    assert.equal(preview.status, "blocked");
     assert.equal(preview.preservedCount, 1);
-    assert.ok(preview.warnings.some((warning) => warning.includes("uploaded file")));
+    assert.ok(preview.blockers.some((blocker) => blocker.includes("candidate-upload metadata")));
 
     const result = await executeSyntheticReset({
       organizationId,
@@ -198,25 +268,24 @@ describe("synthetic reset safety boundary", { skip: !hasDb }, () => {
       expectedRevision: preview.revision,
       manifest,
     });
-    assert.equal(result.kind, "completed");
-    assert.equal(result.envelope.receipt?.retainedUploadCount, 1);
-    assert.equal(result.envelope.receipt?.deletedCaseIds.includes(target.id), true);
+    assert.equal(result.kind, "conflict");
+    assert.equal(result.envelope.receipt, null);
 
     const [preservedAfter] = await db.select().from(onbCases).where(eq(onbCases.id, preserved.id));
     const [otherAfter] = await db.select().from(onbCases).where(eq(onbCases.id, otherTenantTarget.id));
+    const [targetAfter] = await db.select().from(onbCases).where(eq(onbCases.id, target.id));
     assert.equal(preservedAfter?.workerName, "Preserved real-looking case");
     assert.equal(otherAfter?.workerName, fixtureConfig.workerName);
+    assert.equal(targetAfter?.id, target.id);
     const [journal] = await db.select().from(onbEffectJournal).where(
       eq(onbEffectJournal.logicalOperationKey, `synthetic-test:${target.id}`),
     );
-    assert.equal(journal?.caseId, null);
-    assert.equal(result.envelope.candidates.length, 6);
-    assert.ok(result.envelope.candidates.every((candidate) => candidate.workerName.startsWith("Synthetic — ")));
-    const events = await fetch(`${routeBaseUrl}/onboarding/cases/${result.envelope.candidates[0]!.id}/events`, {
-      headers: { "x-organization-id": organizationId, "x-test-role": "owner" },
-    });
-    assert.equal(events.status, 200, "Offline samples must retain read-only activity access");
-    assert.ok(Array.isArray(await events.json()));
+    assert.equal(journal?.caseId, target.id);
+    const [retainedUpload] = await db.select().from(onbCandidateUploads).where(eq(
+      onbCandidateUploads.caseId,
+      target.id,
+    ));
+    assert.equal(retainedUpload?.objectPath, `private/${organizationId}/${target.id}/resume.pdf`);
   });
 
   test("denies organization members before any manifest read or mutation", async () => {
@@ -418,9 +487,15 @@ describe("synthetic reset safety boundary", { skip: !hasDb }, () => {
     assert.equal(guard.status, "unknown_effect_manual_repair");
   });
 
-  test("retry provider boundary conflicts with reset while provider is in flight", async () => {
+  test("email retry provider boundary conflicts with reset while stubbed Gmail is in flight", async () => {
     const organizationId = await seedOrganization();
-    const target = await seedCase(organizationId);
+    await seedApprovedSensitiveLifecyclePolicies(organizationId, {
+      permittedProviders: ["gmail"],
+    });
+    const governanceSnapshot = await establishLiveGovernanceFixture(organizationId);
+    const target = await seedCase(organizationId, {
+      processPolicySnapshot: withGovernanceDecisionSnapshot({}, governanceSnapshot),
+    });
     await db.update(onbCases).set({
       candidateEmailAuthorizedAt: new Date(),
       candidateEmailAuthorizedBy: "synthetic-reset-test",

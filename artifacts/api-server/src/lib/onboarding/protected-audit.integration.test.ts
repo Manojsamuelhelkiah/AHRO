@@ -14,6 +14,7 @@ import {
   onbCandidateLinks,
   onbCandidateSessions,
   onbCases,
+  onbSensitiveLifecyclePolicies,
   organizationsTable,
 } from "@workspace/db";
 import { appendApprovalDecisionHistory } from "./approval-version";
@@ -50,6 +51,7 @@ import {
   recordExternalAuditArchiveDrill,
   saveExternalAuditArchiveConfig,
 } from "./settings";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const prefix = `audit-it-${process.pid}-${randomUUID()}`;
@@ -195,11 +197,12 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       joinCodeHash: `hash-${organizationId}`,
       createdByUserId: "audit-integration-owner",
     });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
     const [caseRow] = await db.insert(onbCases).values({
       organizationId, workerName: "Audit history fixture", workerEmail: `${organizationId}@example.invalid`,
       hireType: "new-hire", workerCategory: "employee", role: "Engineer", department: "Engineering",
       geography: "US", legalEntity: "Test Co", managerName: "Manager", recruiterName: "Recruiter",
-      joiningDate: "2031-01-01",
+      joiningDate: "2031-01-01", workforceContext: { workCountry: "US" },
     }).returning();
     const [approval] = await db.insert(onbApprovals).values({
       organizationId, caseId: caseRow.id, agent: "audit-history-test", ruleRef: "audit-history-test",
@@ -243,11 +246,12 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       id: organizationId, name: "Candidate cleanup hold fixture", slug: organizationId,
       joinCodeHash: `hash-${organizationId}`, createdByUserId: "audit-integration-owner",
     });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
     const [caseRow] = await db.insert(onbCases).values({
       organizationId, workerName: "Candidate cleanup fixture", workerEmail: `${organizationId}@example.invalid`,
       hireType: "new-hire", workerCategory: "employee", role: "Engineer", department: "Engineering",
       geography: "US", legalEntity: "Test Co", managerName: "Manager", recruiterName: "Recruiter",
-      joiningDate: "2031-01-01",
+      joiningDate: "2031-01-01", workforceContext: { workCountry: "US" },
     }).returning();
     const expired = new Date(Date.now() - 366 * 24 * 60 * 60_000);
     const [link] = await db.insert(onbCandidateLinks).values({
@@ -276,11 +280,12 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       id: organizationId, name: "Candidate exchange fixture", slug: organizationId,
       joinCodeHash: `hash-${organizationId}`, createdByUserId: "audit-integration-owner",
     });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
     const [caseRow] = await db.insert(onbCases).values({
       organizationId, workerName: "Candidate exchange fixture", workerEmail: `${organizationId}@example.invalid`,
       hireType: "new-hire", workerCategory: "employee", role: "Engineer", department: "Engineering",
       geography: "US", legalEntity: "Test Co", managerName: "Manager", recruiterName: "Recruiter",
-      joiningDate: "2031-01-01",
+      joiningDate: "2031-01-01", workforceContext: { workCountry: "US" },
     }).returning();
     const rawToken = `candidate-token-${randomUUID()}`;
     const [link] = await db.insert(onbCandidateLinks).values({

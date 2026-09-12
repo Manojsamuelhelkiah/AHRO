@@ -25,6 +25,10 @@ import {
 } from "./workforce-step-runtime";
 import { workforceAuthorityScope } from "./workforce-policies";
 import { evaluateStoredCaseGovernanceGate, type GovernanceWorkflow } from "./governance-runtime";
+import {
+  SensitiveLifecycleValidationError,
+  withCaseDerivedLifecycleWrite,
+} from "./sensitive-lifecycle";
 
 export const OPERATIONAL_REQUEST_SETTING_PREFIX = "operational_requests:";
 export const WORKFORCE_CONTINUATION_SETTING_PREFIX = "workforce_connector_continuation:";
@@ -232,6 +236,28 @@ const nowIso = () => new Date().toISOString();
 
 function settingKey(caseId: number): string {
   return `${OPERATIONAL_REQUEST_SETTING_PREFIX}${caseId}`;
+}
+
+/**
+ * Case-derived writes lock and evaluate lifecycle policy before the
+ * operational state lock. Preserve this module's public not-found contract
+ * when that authoritative case lookup finds no tenant-owned row.
+ */
+async function withOperationalRequestLifecycleWrite<T>(
+  input: { organizationId: string; caseId: number },
+  write: (tx: OperationalTransaction) => Promise<T>,
+): Promise<T> {
+  try {
+    return await withCaseDerivedLifecycleWrite(input, write);
+  } catch (error) {
+    if (
+      error instanceof SensitiveLifecycleValidationError &&
+      error.message === "Case-derived sensitive write requires a current tenant case."
+    ) {
+      throw new OperationalRequestNotFoundError();
+    }
+    throw error;
+  }
 }
 
 function continuationKey(caseId: number, requestId: string): string {
@@ -1086,20 +1112,13 @@ export async function reconcileWorkforceConnectorContinuation(input: {
     ));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    await db.insert(onbSettings).values({
+    await withCaseDerivedLifecycleWrite({
       organizationId: input.organizationId,
-      key,
-      value: JSON.stringify({
-        version: 1,
-        caseId: input.caseId,
-        requestId: input.requestId,
-        status: "pending",
-        lastError: detail.slice(0, 500),
-        updatedAt: nowIso(),
-      }),
-    }).onConflictDoUpdate({
-      target: [onbSettings.organizationId, onbSettings.key],
-      set: {
+      caseId: input.caseId,
+    }, async (tx) => {
+      await tx.insert(onbSettings).values({
+        organizationId: input.organizationId,
+        key,
         value: JSON.stringify({
           version: 1,
           caseId: input.caseId,
@@ -1108,21 +1127,33 @@ export async function reconcileWorkforceConnectorContinuation(input: {
           lastError: detail.slice(0, 500),
           updatedAt: nowIso(),
         }),
-        updatedAt: sql`now()`,
-      },
-    });
-    await db.insert(onbEvents).values({
-      organizationId: input.organizationId,
-      caseId: input.caseId,
-      agent: "workforce-continuation",
-      engine: "system",
-      hitlPattern: "retry",
-      ruleRef: "workforce-step-runtime/v1",
-      title: "Committed workforce continuation pending retry",
-      detail: `Human task completion is durable; guarded connector continuation remains pending: ${detail.slice(0, 300)}`,
-      idempotencyKey: `workforce-continuation:${input.caseId}:${input.requestId}:pending`,
-    }).onConflictDoNothing({
-      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+      }).onConflictDoUpdate({
+        target: [onbSettings.organizationId, onbSettings.key],
+        set: {
+          value: JSON.stringify({
+            version: 1,
+            caseId: input.caseId,
+            requestId: input.requestId,
+            status: "pending",
+            lastError: detail.slice(0, 500),
+            updatedAt: nowIso(),
+          }),
+          updatedAt: sql`now()`,
+        },
+      });
+      await tx.insert(onbEvents).values({
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+        agent: "workforce-continuation",
+        engine: "system",
+        hitlPattern: "retry",
+        ruleRef: "workforce-step-runtime/v1",
+        title: "Committed workforce continuation pending retry",
+        detail: `Human task completion is durable; guarded connector continuation remains pending: ${detail.slice(0, 300)}`,
+        idempotencyKey: `workforce-continuation:${input.caseId}:${input.requestId}:pending`,
+      }).onConflictDoNothing({
+        target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+      });
     });
     throw error;
   }
@@ -1193,7 +1224,10 @@ export async function initializeOperationalRequests(input: {
   actor: string;
 }): Promise<OperationalRequestMutationResult> {
   if (input.requestId !== undefined) assertRequestId(input.requestId);
-  return db.transaction(async (tx) => {
+  return withOperationalRequestLifecycleWrite({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+  }, async (tx) => {
     const { caseRow, state } = await lockAndLoad(
       tx,
       input.organizationId,
@@ -1305,7 +1339,10 @@ export async function initializeWorkforceStepTasks(input: {
   caseId: number;
   actor: string;
 }): Promise<WorkforceStepInitializationResult> {
-  return db.transaction(async (tx) => {
+  return withOperationalRequestLifecycleWrite({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+  }, async (tx) => {
     const { caseRow, state } = await lockAndLoad(
       tx,
       input.organizationId,
@@ -1467,7 +1504,10 @@ export async function applyOperationalRequestAction(input: {
 }): Promise<OperationalRequestMutationResult> {
   assertRequestId(input.requestId);
   let pendingContinuation: string | null = null;
-  const result = await db.transaction(async (tx) => {
+  const result = await withOperationalRequestLifecycleWrite({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+  }, async (tx) => {
     const { caseRow, state } = await lockAndLoad(
       tx,
       input.organizationId,
@@ -1533,7 +1573,11 @@ export async function applyOperationalRequestAction(input: {
             eq(onbPolicyAuthorities.itemId, request.id),
             isNull(onbPolicyAuthorities.revokedAt),
           ));
-        const authority = authorities.find((candidate) =>
+        const authority = authorities.find((candidate: {
+          userId: string;
+          authorityRole: string;
+          site: string;
+        }) =>
           candidate.site === authorityScope &&
           workforceAuthorityRoleId(candidate.authorityRole) === workforceAuthorityRoleId(request.responsibleRole ?? ""),
         );

@@ -40,6 +40,7 @@ import {
   isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "./synthetic-offline";
+import { withCaseDerivedLifecycleWrite } from "./sensitive-lifecycle";
 
 export const CONTACT_ACTIONS = [
   "candidate-email",
@@ -1356,42 +1357,50 @@ async function markClaimState(
   state: ContactDispatchState,
   failureReason?: string | null,
 ): Promise<void> {
-  const [row] = await db
-    .select({ detail: onbEvents.detail })
-    .from(onbEvents)
-    .where(
-      and(
-        eq(onbEvents.organizationId, input.organizationId),
-        eq(onbEvents.caseId, input.caseId),
-        eq(onbEvents.idempotencyKey, `contextual-contact:${input.requestId}`),
-      ),
-    );
-  if (!row) return;
-  let detail: ContactClaimDetail;
-  try {
-    detail = JSON.parse(row.detail) as ContactClaimDetail;
-  } catch {
-    detail = { claim: true };
-  }
-  detail.dispatchState = state;
-  detail.failureReason = failureReason ?? null;
-  await db
-    .update(onbEvents)
-    .set({ detail: JSON.stringify(detail) })
-    .where(
-      and(
-        eq(onbEvents.organizationId, input.organizationId),
-        eq(onbEvents.caseId, input.caseId),
-        eq(onbEvents.idempotencyKey, `contextual-contact:${input.requestId}`),
-      ),
-    );
+  await withCaseDerivedLifecycleWrite({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+  }, async (tx) => {
+    const [row] = await tx
+      .select({ detail: onbEvents.detail })
+      .from(onbEvents)
+      .where(
+        and(
+          eq(onbEvents.organizationId, input.organizationId),
+          eq(onbEvents.caseId, input.caseId),
+          eq(onbEvents.idempotencyKey, `contextual-contact:${input.requestId}`),
+        ),
+      );
+    if (!row) return;
+    let detail: ContactClaimDetail;
+    try {
+      detail = JSON.parse(row.detail) as ContactClaimDetail;
+    } catch {
+      detail = { claim: true };
+    }
+    detail.dispatchState = state;
+    detail.failureReason = failureReason ?? null;
+    await tx
+      .update(onbEvents)
+      .set({ detail: JSON.stringify(detail) })
+      .where(
+        and(
+          eq(onbEvents.organizationId, input.organizationId),
+          eq(onbEvents.caseId, input.caseId),
+          eq(onbEvents.idempotencyKey, `contextual-contact:${input.requestId}`),
+        ),
+      );
+  });
 }
 
 async function revalidateClaimBeforeDispatch(
   input: ContactRequest,
   expectedClaim: ContactClaimDetail,
 ): Promise<void> {
-  const outcome = await db.transaction(async (tx) => {
+  const outcome = await withCaseDerivedLifecycleWrite({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+  }, async (tx) => {
     const [caseRow] = await tx
       .select()
       .from(onbCases)
@@ -1579,7 +1588,10 @@ type PreparedContact =
 async function prepareContactRequest(
   input: ContactRequest,
 ): Promise<PreparedContact> {
-  return db.transaction(async (tx): Promise<PreparedContact> => {
+  return withCaseDerivedLifecycleWrite({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+  }, async (tx): Promise<PreparedContact> => {
     const c = await loadCase(input.caseId, input.organizationId, tx, true);
     const existing = await requestAlreadyClaimed(input, tx);
     if (existing) return { kind: "duplicate", claim: existing };

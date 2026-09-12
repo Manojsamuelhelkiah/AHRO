@@ -11,6 +11,7 @@ import {
   onbAuthorityAudit,
   onbAuthorityAssignments,
   onbAuthorityGovernance,
+  onbCaseLogistics,
   onbCases,
   onbConnectors,
   onbDocuments,
@@ -25,6 +26,7 @@ import {
   onbIntakeBatchPeople,
   onbIntakeBatches,
   onbReadinessSlaPolicies,
+  onbSensitiveLifecyclePolicies,
   onbSystemChecks,
   organizationMembershipsTable,
   organizationsTable,
@@ -32,6 +34,7 @@ import {
 import { reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
 import { decideApproval } from "../lib/onboarding/approval-decisions";
 import { backfillDocumentPacks } from "../lib/onboarding/documents";
+import { seedApprovedSensitiveLifecyclePolicies } from "../test-utils/sensitive-lifecycle-fixtures";
 import onboardingRouter from "./onboarding";
 import batchIntakeRouter from "./onboarding-batch-intake";
 
@@ -75,19 +78,19 @@ before(async () => {
     { id: orgA, name: "Gateway Route A", slug: orgA, joinCodeHash: `hash-${orgA}`, createdByUserId: user },
     { id: orgB, name: "Gateway Route B", slug: orgB, joinCodeHash: `hash-${orgB}`, createdByUserId: user },
   ]);
-  await db.insert(onbAuthorityGovernance).values({
-    organizationId: orgA,
+  await db.insert(onbAuthorityGovernance).values([orgA, orgB].map((organizationId) => ({
+    organizationId,
     status: "governance-approved",
     approvedByUserId: "test-governance",
     approvedAt: new Date(),
     governanceSource: "test",
     revision: 1,
-  });
-  await db.insert(organizationMembershipsTable).values({
-    organizationId: orgA,
-    clerkUserId: user,
-    role: "member",
-  });
+  })));
+  await db.insert(organizationMembershipsTable).values([
+    { organizationId: orgA, clerkUserId: user, role: "member" },
+    { organizationId: orgB, clerkUserId: user, role: "owner" },
+  ]);
+  await seedApprovedSensitiveLifecyclePolicies(orgA);
   await db.insert(onbAuthorityAssignments).values({
     id: `gate-a-authority-${suffix}`,
     organizationId: orgA,
@@ -136,9 +139,15 @@ before(async () => {
 
 after(async () => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  // The positive lifecycle fixture owns only these policy revisions. Remove
+  // them before the temporary organizations so their required organization FK
+  // cannot block teardown if a later fixture exits early.
+  await db.delete(onbSensitiveLifecyclePolicies).where(inArray(
+    onbSensitiveLifecyclePolicies.organizationId, [orgA, orgB],
+  ));
   // The route deliberately starts asynchronous orchestration. Fixtures use a
-  // deterministic intake hard-block below; wait for the claim to release
-  // before removing its case-owned rows so a late event cannot race deletion.
+  // normal detached orchestration path; wait for the claim to release before
+  // removing case-owned rows so a late event cannot race deletion.
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const rows = await db.select({
       orchestrationStatus: onbCases.orchestrationStatus,
@@ -206,8 +215,8 @@ function intake(name: string, offerAcceptanceComplete: boolean) {
     // confirms it below.
     createdByUserId: requesterUser,
     joiningDate: "2030-01-01",
-    notes: "bgv fixture hard-block",
     offerAcceptanceComplete,
+    workforceContext: { workCountry: "US" },
   };
 }
 
@@ -230,7 +239,39 @@ test("create refuses an asserted Gate A; dedicated confirmation owns its evidenc
   assert.equal(checked.status, 400);
 });
 
-test("batch intake snapshots under its tenant lock without deadlocking", async () => {
+test("batch intake rejects missing lifecycle policies before any case write", async () => {
+  const response = await callWithinIntakeTimeout("/onboarding/batch-intake", orgB, {
+    method: "POST",
+    body: JSON.stringify({
+      idempotencyKey: `missing-lifecycle-${suffix}`,
+      name: "Missing lifecycle policy",
+      people: [{
+        personKey: "missing-policy",
+        workerName: "Missing Lifecycle Policy",
+        workerEmail: `missing-lifecycle-${suffix}@example.com`,
+        hireType: "external-fte",
+        workerCategory: "employee",
+        role: "Engineer",
+        department: "Engineering",
+        geography: "US",
+        legalEntity: "Test Co",
+        managerName: "Manager",
+        recruiterName: "Recruiter",
+        joiningDate: "2030-01-01",
+        workforceContext: { workCountry: "US" },
+      }],
+    }),
+  });
+  assert.equal(response.status, 409);
+  assert.match((await response.json() as { message: string }).message, /policies are missing/i);
+  assert.equal((await db.select().from(onbCases).where(eq(onbCases.organizationId, orgB))).length, 0);
+  assert.equal((await db.select().from(onbCaseLogistics).where(eq(onbCaseLogistics.organizationId, orgB))).length, 0);
+  assert.equal((await db.select().from(onbEvents).where(eq(onbEvents.organizationId, orgB))).length, 0);
+  assert.equal((await db.select().from(onbIntakeBatches).where(eq(onbIntakeBatches.organizationId, orgB))).length, 0);
+  assert.equal((await db.select().from(onbIntakeBatchPeople).where(eq(onbIntakeBatchPeople.organizationId, orgB))).length, 0);
+});
+
+test("batch intake creates cases with all eight approved lifecycle policies", async () => {
   const response = await callWithinIntakeTimeout("/onboarding/batch-intake", orgA, {
     method: "POST",
     body: JSON.stringify({
@@ -249,6 +290,7 @@ test("batch intake snapshots under its tenant lock without deadlocking", async (
         managerName: "Manager",
         recruiterName: "Recruiter",
         joiningDate: "2030-01-01",
+        workforceContext: { workCountry: "US" },
       }],
     }),
   });
@@ -382,6 +424,7 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
     createdByUserId: requesterUser,
     joiningDate: "2030-01-01",
     notes: "bgv fixture hard-block",
+    workforceContext: { workCountry: "US" },
     orchestrationStatus: "waiting-approval",
     orchestrationCheckpoint: "waiting:offer-acceptance",
   }).returning();
@@ -429,6 +472,7 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
     eq(onbEvents.idempotencyKey, `gateway-a:${caseRow.id}:confirmed`),
   ));
   assert.equal(current.offerAcceptanceComplete, true);
+  assert.equal(current.offerAcceptanceCompletedBy, user);
   assert.equal(events.length, 1);
   const [gateApproval] = await db.select().from(onbApprovals).where(and(
     eq(onbApprovals.organizationId, orgA),
@@ -483,6 +527,7 @@ test("Gate A fails closed for a legacy case with no durable requester principal"
     createdByUserId: null,
     joiningDate: "2030-01-01",
     notes: "legacy requester provenance fixture",
+    workforceContext: { workCountry: "US" },
     orchestrationStatus: "waiting-approval",
     orchestrationCheckpoint: "waiting:offer-acceptance",
   }).returning();
@@ -544,6 +589,7 @@ test("outcome KPI analytics is tenant-scoped and honors period, region, and doma
     recruiterName: "Recruiter",
     joiningDate: "2030-01-01",
     notes: "outcome KPI route fixture",
+    workforceContext: { workCountry: "US" },
   }).returning();
   const [tenantB] = await db.insert(onbCases).values({
     organizationId: orgB,
@@ -560,6 +606,7 @@ test("outcome KPI analytics is tenant-scoped and honors period, region, and doma
     recruiterName: "Recruiter",
     joiningDate: "2030-01-01",
     notes: "outcome KPI route fixture",
+    workforceContext: { workCountry: "US" },
   }).returning();
   caseIds.push(tenantA.id, tenantB.id);
 

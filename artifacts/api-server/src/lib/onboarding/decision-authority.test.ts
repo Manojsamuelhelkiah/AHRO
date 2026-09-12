@@ -13,6 +13,7 @@ import {
   onbAuthorityAssignments,
   onbAuthorityGovernance,
   onbCases,
+  onbSensitiveLifecyclePolicies,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
@@ -24,6 +25,7 @@ import {
 import { decideApproval } from "./approval-decisions";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { verifyGmailApprovalTransport } from "./verified-email-transport";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `authority-security-${process.pid}-${randomUUID()}`;
@@ -38,6 +40,7 @@ async function createOrganization(id: string) {
     joinCodeHash: `${id}-join`,
     createdByUserId: "test-owner",
   });
+  await seedApprovedSensitiveLifecyclePolicies(id);
 }
 
 async function createCase(org: string, createdByUserId: string | null = "case-requester") {
@@ -50,6 +53,7 @@ async function createCase(org: string, createdByUserId: string | null = "case-re
     role: "Engineer",
     department: "Security",
     geography: "US",
+    workforceContext: { workCountry: "US" },
     legalEntity: "Example US",
     managerName: "Manager",
     recruiterName: "Requester",
@@ -114,6 +118,8 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
   after(async () => {
     await db.delete(onbCases).where(eq(onbCases.organizationId, organizationId));
     await db.delete(onbCases).where(eq(onbCases.organizationId, otherOrganizationId));
+    await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
+    await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, otherOrganizationId));
     await db.delete(organizationsTable).where(and(
       eq(organizationsTable.id, organizationId),
     ));
@@ -218,8 +224,8 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
       assert.equal(remoteDecision.outcome, "decided");
       if (remoteDecision.outcome === "decided") {
         assert.equal(remoteDecision.approval.decidedBy, "legal-specialist", "email decision audit uses actual Clerk principal");
-        assert.equal(remoteDecision.approval.decidedAuthorityId, assignment.id);
-        assert.equal(remoteDecision.approval.decidedAuthorityRevision, 1);
+        assert.equal(remoteDecision.approval.decidedAuthorityId, assignment.id, "decision response returns verified authority provenance");
+        assert.equal(remoteDecision.approval.decidedAuthorityRevision, 1, "decision response returns verified authority revision");
       }
       // Simulate a poller crash after decideApproval committed but before it
       // persisted the inbound Gmail message. A retry must replay the original
@@ -252,8 +258,9 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
         eq(onbApprovalHistory.approvalId, approval.id),
       ));
       assert.equal(historyBeforeReopen.decidedBy, "legal-specialist");
-      assert.equal((historyBeforeReopen.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, assignment.id);
-      assert.equal((historyBeforeReopen.snapshot as { decidedAuthorityRevision?: number }).decidedAuthorityRevision, 1);
+      assert.equal((historyBeforeReopen.snapshot as { schema?: string }).schema, "governed-minimal-v2");
+      assert.equal((historyBeforeReopen.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, assignment.id, "history snapshot retains verified authority provenance");
+      assert.equal((historyBeforeReopen.snapshot as { decidedAuthorityRevision?: number }).decidedAuthorityRevision, 1, "history snapshot retains verified authority revision");
       await db.transaction((tx) => reopenApprovalInTransaction(tx, {
         organizationId, caseId: approval.caseId, approvalId: approval.id,
         reason: "Remote-email history retention fixture", actor: "test",
@@ -263,7 +270,8 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
         eq(onbApprovalHistory.approvalId, approval.id),
       ));
       assert.equal(historyAfterReopen[0]?.decidedBy, "legal-specialist");
-      assert.equal((historyAfterReopen[0]?.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, assignment.id);
+      assert.equal((historyAfterReopen[0]?.snapshot as { schema?: string }).schema, "governed-minimal-v2");
+      assert.equal((historyAfterReopen[0]?.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, assignment.id, "reopened history snapshot retains verified authority provenance");
       const retryAfterReopen = await decideApproval({
         organizationId,
         approvalId: approval.id,
@@ -389,6 +397,7 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
       outcome: "unauthorized", reason: "requester_provenance_required",
     });
     await db.delete(onbCases).where(eq(onbCases.organizationId, org));
+    await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, org));
     await db.delete(organizationsTable).where(eq(organizationsTable.id, org));
   });
 
@@ -457,6 +466,7 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
       const [current] = await db.select().from(onbApprovals).where(eq(onbApprovals.id, approval.id));
       assert.equal(current.status, "pending");
       await db.delete(onbCases).where(eq(onbCases.organizationId, org));
+      await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, org));
       await db.delete(organizationsTable).where(eq(organizationsTable.id, org));
     }
   });

@@ -1,4 +1,5 @@
-import { test, describe, after } from "node:test";
+import { randomUUID } from "node:crypto";
+import { test, describe, after, before } from "node:test";
 import assert from "node:assert/strict";
 import {
   classifySystem,
@@ -6,13 +7,22 @@ import {
   disconnectedCheckIsOverdue,
   escalateCheck,
   handleSystemWebhook,
+  recoverOverdueSystemApprovalQueues,
   recoverChecklistRows,
 } from "./system-watcher";
 import { setSetting, AUTO_ESCALATION_CALLS_KEY } from "./settings";
-import { DEMO_ORGANIZATION_ID, onbCommunications } from "@workspace/db/schema";
+import {
+  onbCommunications,
+  onbEffectJournal,
+  onbGovernanceAuthorityAssignments,
+  onbSensitiveLifecyclePolicies,
+  onbSettings,
+  organizationMembershipsTable,
+  organizationsTable,
+} from "@workspace/db/schema";
 import { CONNECTOR_DEFAULTS } from "./connectors";
 import { db } from "@workspace/db";
-import { onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
+import { onbApprovals, onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import {
   applicableSystems,
@@ -23,9 +33,36 @@ import {
   systemDef,
   WATCHED_SYSTEMS,
 } from "./external-systems";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const T0 = Date.parse("2026-08-13T10:00:00Z");
 const INTERVAL = 20_000;
+const systemWatcherOrganizationId = `system-watcher-${process.pid}-${randomUUID()}`;
+const systemWatcherOwnerId = `${systemWatcherOrganizationId}-owner`;
+
+before(async () => {
+  await db.insert(organizationsTable).values({
+    id: systemWatcherOrganizationId,
+    name: "System watcher lifecycle fixture",
+    slug: systemWatcherOrganizationId,
+    joinCodeHash: `${systemWatcherOrganizationId}-join`,
+    createdByUserId: systemWatcherOwnerId,
+  });
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: systemWatcherOrganizationId,
+    clerkUserId: systemWatcherOwnerId,
+    role: "owner",
+  });
+  await db.insert(onbGovernanceAuthorityAssignments).values({
+    organizationId: systemWatcherOrganizationId,
+    authorityRole: "privacy",
+    assigneeUserId: systemWatcherOwnerId,
+    verificationStatus: "verified",
+    verifiedByUserId: "test-verifier",
+    verificationReference: "test-sensitive-lifecycle-fixture",
+  });
+  await seedApprovedSensitiveLifecyclePolicies(systemWatcherOrganizationId);
+});
 
 test("checklist recovery isolates one failed case and continues", async () => {
   const attempted: number[] = [];
@@ -42,6 +79,83 @@ test("checklist recovery isolates one failed case and continues", async () => {
   );
   assert.deepEqual(attempted, [101, 202, 303]);
   assert.deepEqual(suspended, [202]);
+});
+
+test("overdue approval recovery skips a lifecycle-blocked legacy case and reaches the next case", async () => {
+  const now = new Date();
+  const [blocked, eligible] = await db.insert(onbCases).values([
+    {
+      organizationId: systemWatcherOrganizationId,
+      workerName: `Watcher Legacy Blocked ${Date.now()}`,
+      workerEmail: `watcher-legacy-${Date.now()}@example.invalid`,
+      hireType: "new-hire",
+      workerCategory: "employee",
+      role: "Engineer",
+      department: "R&D",
+      geography: "US",
+      legalEntity: "Test Co",
+      managerName: "M",
+      recruiterName: "R",
+      joiningDate: "2026-09-01",
+      lifecycleStage: "preboarding",
+      readiness: [],
+      workstreams: [],
+    },
+    {
+      organizationId: systemWatcherOrganizationId,
+      workerName: `Watcher Eligible ${Date.now()}`,
+      workerEmail: `watcher-eligible-${Date.now()}@example.invalid`,
+      hireType: "new-hire",
+      workerCategory: "employee",
+      role: "Engineer",
+      department: "R&D",
+      geography: "US",
+      workforceContext: { workCountry: "US" },
+      legalEntity: "Test Co",
+      managerName: "M",
+      recruiterName: "R",
+      joiningDate: "2026-09-01",
+      lifecycleStage: "preboarding",
+      readiness: [],
+      workstreams: [],
+    },
+  ]).returning({ id: onbCases.id });
+  try {
+    await db.insert(onbSystemChecks).values([
+      {
+        organizationId: systemWatcherOrganizationId,
+        caseId: blocked!.id,
+        system: "itsm",
+        mode: "poll",
+        externalRef: `RITM-${blocked!.id}`,
+        status: "overdue",
+        requestedAt: now,
+        dueAt: now,
+      },
+      {
+        organizationId: systemWatcherOrganizationId,
+        caseId: eligible!.id,
+        system: "itsm",
+        mode: "poll",
+        externalRef: `RITM-${eligible!.id}`,
+        status: "overdue",
+        requestedAt: now,
+        dueAt: now,
+      },
+    ]);
+    await recoverOverdueSystemApprovalQueues([blocked!.id, eligible!.id]);
+    const [blockedApproval] = await db.select({ id: onbApprovals.id })
+      .from(onbApprovals)
+      .where(eq(onbApprovals.caseId, blocked!.id));
+    const [eligibleApproval] = await db.select({ id: onbApprovals.id })
+      .from(onbApprovals)
+      .where(eq(onbApprovals.caseId, eligible!.id));
+    assert.equal(blockedApproval, undefined);
+    assert.ok(eligibleApproval);
+  } finally {
+    await db.delete(onbCases).where(eq(onbCases.id, blocked!.id));
+    await db.delete(onbCases).where(eq(onbCases.id, eligible!.id));
+  }
 });
 
 function telemetry(overrides: Partial<Parameters<typeof classifySystem>[1]> = {}) {
@@ -198,7 +312,7 @@ describe("concurrent completions (real DB)", () => {
     const [c] = await db
       .insert(onbCases)
       .values({
-        organizationId: DEMO_ORGANIZATION_ID,
+        organizationId: systemWatcherOrganizationId,
         workerName: `Watcher Race Test ${Date.now()}`,
         workerEmail: "watcher-race@example.com",
         hireType: "new-hire",
@@ -206,6 +320,7 @@ describe("concurrent completions (real DB)", () => {
         role: "Engineer",
         department: "R&D",
         geography: "US",
+        workforceContext: { workCountry: "US" },
         legalEntity: "Test Co",
         managerName: "M",
         recruiterName: "R",
@@ -222,8 +337,8 @@ describe("concurrent completions (real DB)", () => {
     const checks = await db
       .insert(onbSystemChecks)
       .values([
-        { organizationId: DEMO_ORGANIZATION_ID, caseId: c.id, system: "bgv", mode: "push", externalRef: `BGV-${c.id}`, requestedAt: now, dueAt: due },
-        { organizationId: DEMO_ORGANIZATION_ID, caseId: c.id, system: "itsm", mode: "poll", externalRef: `RITM-${c.id}`, requestedAt: now, dueAt: due },
+        { organizationId: systemWatcherOrganizationId, caseId: c.id, system: "bgv", mode: "push", externalRef: `BGV-${c.id}`, requestedAt: now, dueAt: due },
+        { organizationId: systemWatcherOrganizationId, caseId: c.id, system: "itsm", mode: "poll", externalRef: `RITM-${c.id}`, requestedAt: now, dueAt: due },
       ])
       .returning();
 
@@ -258,7 +373,7 @@ describe("concurrent completions (real DB)", () => {
     const [c] = await db
       .insert(onbCases)
       .values({
-        organizationId: DEMO_ORGANIZATION_ID,
+        organizationId: systemWatcherOrganizationId,
         workerName: `Watcher Idem Test ${Date.now()}`,
         workerEmail: "watcher-idem@example.com",
         hireType: "new-hire",
@@ -266,6 +381,7 @@ describe("concurrent completions (real DB)", () => {
         role: "Engineer",
         department: "R&D",
         geography: "US",
+        workforceContext: { workCountry: "US" },
         legalEntity: "Test Co",
         managerName: "M",
         recruiterName: "R",
@@ -279,7 +395,7 @@ describe("concurrent completions (real DB)", () => {
     const [check] = await db
       .insert(onbSystemChecks)
       .values({
-        organizationId: DEMO_ORGANIZATION_ID,
+        organizationId: systemWatcherOrganizationId,
         caseId: c.id,
         system: "itsm",
         mode: "poll",
@@ -305,14 +421,14 @@ describe("automatic escalation calls (real DB)", () => {
   const created: number[] = [];
   after(async () => {
     for (const id of created) await db.delete(onbCases).where(eq(onbCases.id, id));
-    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, null);
+    await setSetting(systemWatcherOrganizationId, AUTO_ESCALATION_CALLS_KEY, null);
   });
 
   async function makeCase(quietHire: boolean) {
     const [c] = await db
       .insert(onbCases)
       .values({
-        organizationId: DEMO_ORGANIZATION_ID,
+        organizationId: systemWatcherOrganizationId,
         workerName: `Auto Call Test ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         workerEmail: "auto-call@example.com",
         // No workerPhone: startVoiceCall bails out with "failed" before any
@@ -322,6 +438,7 @@ describe("automatic escalation calls (real DB)", () => {
         role: "Engineer",
         department: "R&D",
         geography: "US",
+        workforceContext: { workCountry: "US" },
         legalEntity: "Test Co",
         managerName: "M",
         recruiterName: "R",
@@ -336,7 +453,7 @@ describe("automatic escalation calls (real DB)", () => {
     const [check] = await db
       .insert(onbSystemChecks)
       .values({
-        organizationId: DEMO_ORGANIZATION_ID,
+        organizationId: systemWatcherOrganizationId,
         caseId: c.id,
         system: "itsm",
         mode: "poll",
@@ -348,7 +465,7 @@ describe("automatic escalation calls (real DB)", () => {
     if (!quietHire) {
       await db.insert(onbCommunications).values({
         caseId: c.id,
-        organizationId: DEMO_ORGANIZATION_ID,
+          organizationId: systemWatcherOrganizationId,
         channel: "email",
         direction: "inbound",
         toAddress: "onboarding@example.com",
@@ -366,7 +483,7 @@ describe("automatic escalation calls (real DB)", () => {
   }
 
   test("setting off: escalation never triggers a call", async () => {
-    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, null);
+    await setSetting(systemWatcherOrganizationId, AUTO_ESCALATION_CALLS_KEY, null);
     const { check } = await makeCase(true);
     await escalateCheck(check, "Vendor still in progress.");
     const titles = await eventTitles(check.caseId);
@@ -375,7 +492,7 @@ describe("automatic escalation calls (real DB)", () => {
   });
 
   test("setting on + quiet hire: call is triggered and audit-trailed", async () => {
-    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, "on");
+    await setSetting(systemWatcherOrganizationId, AUTO_ESCALATION_CALLS_KEY, "on");
     const { check } = await makeCase(true);
     await escalateCheck(check, "Vendor still in progress.");
     const titles = await eventTitles(check.caseId);
@@ -385,7 +502,7 @@ describe("automatic escalation calls (real DB)", () => {
   });
 
   test("setting on but hire replied since tracking began: no call", async () => {
-    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, "on");
+    await setSetting(systemWatcherOrganizationId, AUTO_ESCALATION_CALLS_KEY, "on");
     const { check } = await makeCase(false);
     await escalateCheck(check, "Vendor still in progress.");
     const titles = await eventTitles(check.caseId);
@@ -394,7 +511,7 @@ describe("automatic escalation calls (real DB)", () => {
   });
 
   test("already-escalated check does not re-trigger a call", async () => {
-    await setSetting(DEMO_ORGANIZATION_ID, AUTO_ESCALATION_CALLS_KEY, "on");
+    await setSetting(systemWatcherOrganizationId, AUTO_ESCALATION_CALLS_KEY, "on");
     const { check } = await makeCase(true);
     await escalateCheck(check, "Vendor still in progress.");
     const [escalated] = await db
@@ -478,4 +595,19 @@ describe("applicableSystems", () => {
       }
     }
   });
+});
+
+after(async () => {
+  await db.delete(onbEffectJournal).where(
+    eq(onbEffectJournal.organizationId, systemWatcherOrganizationId),
+  );
+  await db.delete(onbCases).where(eq(onbCases.organizationId, systemWatcherOrganizationId));
+  await db.delete(onbSettings).where(eq(onbSettings.organizationId, systemWatcherOrganizationId));
+  await db.delete(onbSensitiveLifecyclePolicies).where(
+    eq(onbSensitiveLifecyclePolicies.organizationId, systemWatcherOrganizationId),
+  );
+  await db.delete(onbGovernanceAuthorityAssignments).where(
+    eq(onbGovernanceAuthorityAssignments.organizationId, systemWatcherOrganizationId),
+  );
+  await db.delete(organizationsTable).where(eq(organizationsTable.id, systemWatcherOrganizationId));
 });

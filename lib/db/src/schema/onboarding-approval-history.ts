@@ -26,6 +26,12 @@ export const onbApprovalHistory = pgTable("onb_approval_history", {
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   /** Human/system reason for a reopen, or a decision receipt description. */
   reason: text("reason"),
+  /**
+   * Legacy rows are opaque and therefore retention-blocking. New rows may use
+   * only the server-owned minimal projection, which is safe to retain as
+   * independent decision evidence.
+   */
+  projectionKind: text("projection_kind").notNull().default("legacy"),
   /** Exact approval content reviewed in this cycle. */
   snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

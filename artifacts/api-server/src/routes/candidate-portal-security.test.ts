@@ -11,6 +11,8 @@ import {
   onbCandidateExchangeFailures,
   onbCandidateSessions,
   onbCaseLogistics,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
   onbCandidateUploads,
   onbCommunications,
   onbCases,
@@ -18,7 +20,15 @@ import {
   onbDocuments,
   onbEffectJournal,
   onbEvents,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisions,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceRequirements,
+  onbSensitiveLifecyclePolicies,
   onbSettings,
+  type OnbAuthorityRole,
+  type OnbAuthorityScope,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
@@ -34,11 +44,21 @@ import {
   cleanupCandidateAccess,
   hashSecret,
 } from "../lib/onboarding/candidate-portal";
-import { CANDIDATE_LINK_RETENTION_DAYS_KEY, setSetting } from "../lib/onboarding/settings";
+import {
+  CANDIDATE_LINK_RETENTION_DAYS_KEY,
+  DAY1_LOGISTICS_DEFAULT_KEY,
+  setSetting,
+} from "../lib/onboarding/settings";
 import {
   AUTOMATED_PORTAL_EMAIL_KEY,
   issueCandidatePortalLink,
 } from "../lib/onboarding/portal-link-issuance";
+import { seedApprovedSensitiveLifecyclePolicies } from "../test-utils/sensitive-lifecycle-fixtures";
+import {
+  governanceSnapshotForNewCase,
+  withGovernanceDecisionSnapshot,
+  type GovernanceCaseSnapshot,
+} from "../lib/onboarding/governance-runtime";
 
 const suffix = `${process.pid}-${Date.now()}-${randomUUID().slice(0, 8)}`;
 const orgA = `candidate-security-a-${suffix}`;
@@ -57,6 +77,7 @@ let caseA2: number;
 let caseB: number;
 let documentA: number;
 let activeLinkId: number;
+const governanceSnapshots = new Map<string, GovernanceCaseSnapshot>();
 
 const caseValues = (organizationId: string, workerName: string) => ({
   organizationId,
@@ -71,7 +92,58 @@ const caseValues = (organizationId: string, workerName: string) => ({
   managerName: "Manager",
   recruiterName: "Recruiter",
   joiningDate: "2030-01-01",
+  workforceContext: { workCountry: "US" },
+  processPolicySnapshot: withGovernanceDecisionSnapshot(
+    {},
+    governanceSnapshots.get(organizationId)!,
+  ),
 });
+
+async function establishApprovedGovernanceFixture(
+  organizationId: string,
+): Promise<GovernanceCaseSnapshot> {
+  await governanceSnapshotForNewCase(organizationId);
+  const decisions = await db.select().from(onbGovernanceDecisions).where(
+    eq(onbGovernanceDecisions.organizationId, organizationId),
+  );
+  for (const decision of decisions) {
+    const reviewer = `candidate-security-fixture:${decision.accountableRole}`;
+    const [authority] = await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId,
+      authorityRole: decision.accountableRole,
+      assigneeUserId: reviewer,
+      verificationStatus: "verified",
+      verifiedByUserId: "candidate-security-fixture",
+      verificationReference: reviewer,
+    }).returning({ id: onbGovernanceAuthorityAssignments.id });
+    await db.insert(onbGovernanceDecisionReviews).values({
+      organizationId,
+      decisionKey: decision.key,
+      decisionRevision: decision.revision,
+      outcome: "approved",
+      reason: "Candidate portal security fixture approved decision",
+      authorityAssignmentId: authority!.id,
+      reviewedByUserId: reviewer,
+      verificationReference: reviewer,
+    });
+    await db.update(onbGovernanceDecisions).set({
+      status: "approved",
+      approvedByUserId: reviewer,
+      approvedAt: new Date(),
+    }).where(and(
+      eq(onbGovernanceDecisions.organizationId, organizationId),
+      eq(onbGovernanceDecisions.key, decision.key),
+      eq(onbGovernanceDecisions.revision, decision.revision),
+    ));
+  }
+  await db.update(onbGovernanceRequirements).set({
+    implemented: true,
+    tested: true,
+    configured: true,
+    approvedForLive: true,
+  }).where(eq(onbGovernanceRequirements.organizationId, organizationId));
+  return governanceSnapshotForNewCase(organizationId);
+}
 
 async function createSession(
   secret: string,
@@ -127,11 +199,54 @@ before(async () => {
     { organizationId: orgA, clerkUserId: userId, role: "owner" },
     { organizationId: orgB, clerkUserId: userId, role: "owner" },
   ]);
+  await db.insert(onbAuthorityGovernance).values([
+    { organizationId: orgA, status: "governance-approved", operatorUserId: userId, approvedByUserId: userId, governanceSource: "candidate-security-test" },
+    { organizationId: orgB, status: "governance-approved", operatorUserId: userId, approvedByUserId: userId, governanceSource: "candidate-security-test" },
+  ]);
+  await Promise.all([
+    // The exercised portal link and pre-storage validation path use the
+    // suite's in-process provider boundaries; no production mail provider is
+    // allowlisted here.
+    seedApprovedSensitiveLifecyclePolicies(orgA, {
+      permittedProviders: ["internal-candidate-portal", "replit-object-storage"],
+    }),
+    seedApprovedSensitiveLifecyclePolicies(orgB, {
+      permittedProviders: ["internal-candidate-portal", "replit-object-storage"],
+    }),
+  ]);
+  governanceSnapshots.set(orgA, await establishApprovedGovernanceFixture(orgA));
+  governanceSnapshots.set(orgB, await establishApprovedGovernanceFixture(orgB));
   [caseA, caseA2, caseB] = (await db.insert(onbCases).values([
     caseValues(orgA, "Candidate Alpha"),
     caseValues(orgA, "Candidate Alpha Two"),
     caseValues(orgB, "Candidate Beta"),
   ]).returning({ id: onbCases.id })).map((row) => row.id);
+  const fullCaseAuthorities: Array<{
+    organizationId: string;
+    caseId: number;
+    authorityRole: OnbAuthorityRole;
+    scopes: OnbAuthorityScope[];
+  }> = [
+      { organizationId: orgA, caseId: caseA, authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"] as const },
+      { organizationId: orgA, caseId: caseA, authorityRole: "occupational-health", scopes: ["occupational-health-approve"] as const },
+      { organizationId: orgA, caseId: caseA, authorityRole: "payroll", scopes: ["payroll-approve"] as const },
+      { organizationId: orgA, caseId: caseA2, authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"] as const },
+      { organizationId: orgA, caseId: caseA2, authorityRole: "occupational-health", scopes: ["occupational-health-approve"] as const },
+      { organizationId: orgA, caseId: caseA2, authorityRole: "payroll", scopes: ["payroll-approve"] as const },
+      { organizationId: orgB, caseId: caseB, authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"] as const },
+      { organizationId: orgB, caseId: caseB, authorityRole: "occupational-health", scopes: ["occupational-health-approve"] as const },
+      { organizationId: orgB, caseId: caseB, authorityRole: "payroll", scopes: ["payroll-approve"] as const },
+    ];
+  await db.insert(onbAuthorityAssignments).values(
+    fullCaseAuthorities.map((assignment) => ({
+      ...assignment,
+      id: `candidate-security-authority-${assignment.organizationId}-${assignment.caseId}-${assignment.authorityRole}`,
+      personUserId: userId,
+      grantorUserId: userId,
+      source: "test-fixture",
+      governanceDecisionRef: "candidate-security-test",
+    })),
+  );
   [documentA] = (await db.insert(onbDocuments).values({
     organizationId: orgA,
     caseId: caseA,
@@ -151,7 +266,7 @@ before(async () => {
   app.use(express.json());
   app.use(candidatePublicRouter);
   app.use((req, _res, next) => {
-    req.authUserId = userId;
+    req.authUserId = String(req.header("x-test-user") ?? userId);
     req.organizationId = String(req.header("x-organization-id") ?? orgA);
     next();
   });
@@ -171,6 +286,30 @@ after(async () => {
   await db.delete(onbCases).where(eq(onbCases.organizationId, orgB));
   await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgA));
   await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgB));
+  await db.delete(onbGovernanceDispatchMarkers).where(inArray(
+    onbGovernanceDispatchMarkers.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbAuthorityAssignments).where(inArray(
+    onbAuthorityAssignments.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbAuthorityGovernance).where(inArray(
+    onbAuthorityGovernance.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDecisionReviews).where(inArray(
+    onbGovernanceDecisionReviews.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceAuthorityAssignments).where(inArray(
+    onbGovernanceAuthorityAssignments.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceRequirements).where(inArray(
+    onbGovernanceRequirements.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDecisions).where(inArray(
+    onbGovernanceDecisions.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbSensitiveLifecyclePolicies).where(inArray(
+    onbSensitiveLifecyclePolicies.organizationId, [orgA, orgB],
+  ));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgA));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgB));
   await db.delete(organizationsTable).where(eq(organizationsTable.id, orgA));
@@ -189,7 +328,7 @@ test("expired and revoked links cannot be exchanged", async () => {
   }
 });
 
-test("admin portal access snapshots defaults for a case with missing logistics", async () => {
+test("admin portal access reports a clear missing state without inserting logistics on read", async () => {
   await db.delete(onbCaseLogistics).where(and(
     eq(onbCaseLogistics.organizationId, orgA),
     eq(onbCaseLogistics.caseId, caseA2),
@@ -199,16 +338,121 @@ test("admin portal access snapshots defaults for a case with missing logistics",
     headers: { "x-organization-id": orgA },
   });
   assert.equal(response.status, 200);
-  const body = await response.json() as { logistics: Record<string, string | null> };
-  assert.equal(body.logistics.orientationDate, "2030-01-01");
-  assert.equal(body.logistics.orientationTime, "09:30");
-  assert.equal(body.logistics.format, "hybrid");
+  const body = await response.json() as { logistics: Record<string, string | null> | null };
+  assert.equal(body.logistics, null);
 
   const [stored] = await db.select().from(onbCaseLogistics).where(and(
     eq(onbCaseLogistics.organizationId, orgA),
     eq(onbCaseLogistics.caseId, caseA2),
   ));
-  assert.equal(stored?.reportingContact, "Alex Example — Demo People Team");
+  assert.equal(stored, undefined);
+});
+
+test("missing lifecycle policy blocks logistics creation without an insert", async () => {
+  await db.delete(onbSensitiveLifecyclePolicies).where(and(
+    eq(onbSensitiveLifecyclePolicies.organizationId, orgA),
+    eq(onbSensitiveLifecyclePolicies.dataClass, "candidate-document"),
+  ));
+  const response = await fetch(`${baseUrl}/onboarding/cases/${caseA2}/logistics`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", "x-organization-id": orgA },
+    body: JSON.stringify({ orientationDate: "2030-01-01", format: "remote" }),
+  });
+  assert.equal(response.status, 409);
+  const [stored] = await db.select().from(onbCaseLogistics).where(and(
+    eq(onbCaseLogistics.organizationId, orgA),
+    eq(onbCaseLogistics.caseId, caseA2),
+  ));
+  assert.equal(stored, undefined);
+  await seedApprovedSensitiveLifecyclePolicies(orgA, {
+    permittedProviders: ["internal-candidate-portal", "replit-object-storage"],
+  });
+});
+
+test("bearer portal links and opaque logistics require live full case-scoped authority", async () => {
+  const ordinaryUser = `candidate-security-ordinary-${suffix}`;
+  const partialUser = `candidate-security-partial-${suffix}`;
+  const revokedUser = `candidate-security-revoked-${suffix}`;
+  await db.insert(organizationMembershipsTable).values([
+    { organizationId: orgA, clerkUserId: ordinaryUser, role: "member" },
+    { organizationId: orgA, clerkUserId: partialUser, role: "member" },
+    { organizationId: orgA, clerkUserId: revokedUser, role: "member", revokedAt: new Date() },
+  ]);
+  await db.insert(onbAuthorityAssignments).values([
+    {
+      id: `candidate-security-partial-${suffix}`,
+      organizationId: orgA, caseId: caseA, personUserId: partialUser,
+      authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"] as OnbAuthorityScope[],
+      grantorUserId: userId, source: "test-fixture", governanceDecisionRef: "candidate-security-test",
+    },
+    {
+      id: `candidate-security-revoked-hr-${suffix}`,
+      organizationId: orgA, caseId: caseA, personUserId: revokedUser,
+      authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"] as OnbAuthorityScope[],
+      grantorUserId: userId, source: "test-fixture", governanceDecisionRef: "candidate-security-test",
+    },
+    {
+      id: `candidate-security-revoked-medical-${suffix}`,
+      organizationId: orgA, caseId: caseA, personUserId: revokedUser,
+      authorityRole: "occupational-health", scopes: ["occupational-health-approve"] as OnbAuthorityScope[],
+      grantorUserId: userId, source: "test-fixture", governanceDecisionRef: "candidate-security-test",
+    },
+    {
+      id: `candidate-security-revoked-payroll-${suffix}`,
+      organizationId: orgA, caseId: caseA, personUserId: revokedUser,
+      authorityRole: "payroll", scopes: ["payroll-approve"] as OnbAuthorityScope[],
+      grantorUserId: userId, source: "test-fixture", governanceDecisionRef: "candidate-security-test",
+    },
+  ]);
+  const postLink = (actor: string, organizationId = orgA, id = caseA) => fetch(
+    `${baseUrl}/onboarding/cases/${id}/portal-links`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-organization-id": organizationId, "x-test-user": actor },
+      body: JSON.stringify({ sendEmail: false }),
+    },
+  );
+  assert.equal((await postLink(ordinaryUser)).status, 403);
+  assert.equal((await postLink(partialUser)).status, 403);
+  assert.equal((await postLink(revokedUser)).status, 403);
+  assert.equal((await postLink(userId, orgB)).status, 403, "cross-tenant paths never issue a bearer URL");
+  const full = await postLink(userId);
+  assert.equal(full.status, 201);
+  const fullBody = await full.json() as { portalUrl?: string };
+  assert.match(fullBody.portalUrl ?? "", /#token=/);
+  const [backfilled] = await db.select().from(onbCaseLogistics).where(and(
+    eq(onbCaseLogistics.organizationId, orgA),
+    eq(onbCaseLogistics.caseId, caseA),
+  ));
+  assert.ok(backfilled, "an explicit authorized link issue backfills legacy missing logistics once");
+  await setSetting(orgA, DAY1_LOGISTICS_DEFAULT_KEY, JSON.stringify({
+    orientationDate: "2040-01-01",
+    orientationTime: "08:00",
+    timezone: "Etc/UTC",
+    format: "remote",
+    venueAddress: null,
+    googleMapsUrl: null,
+    meetingUrl: "https://meet.example.test/new-default",
+    reportingContact: "New default",
+    arrivalInstructions: null,
+  }));
+  assert.equal((await postLink(userId)).status, 201);
+  const [unchanged] = await db.select().from(onbCaseLogistics).where(and(
+    eq(onbCaseLogistics.organizationId, orgA),
+    eq(onbCaseLogistics.caseId, caseA),
+  ));
+  assert.deepEqual(unchanged, backfilled, "later tenant defaults never overwrite persisted case logistics");
+
+  const ordinaryLogistics = await fetch(`${baseUrl}/onboarding/cases/${caseA}/portal`, {
+    headers: { "x-organization-id": orgA, "x-test-user": ordinaryUser },
+  });
+  assert.equal(ordinaryLogistics.status, 403);
+  const ordinaryLogisticsWrite = await fetch(`${baseUrl}/onboarding/cases/${caseA}/logistics`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", "x-organization-id": orgA, "x-test-user": ordinaryUser },
+    body: JSON.stringify({ orientationDate: "2030-01-01", format: "remote" }),
+  });
+  assert.equal(ordinaryLogisticsWrite.status, 403);
 });
 
 test("automatic portal delivery is idempotent and never persists the secret link", async () => {
@@ -442,6 +686,68 @@ test("upload route enforces type and size boundaries before storage", async () =
   });
   assert.equal(mismatched.status, 415);
   assert.equal(await oversizedUpload(secret), 413);
+});
+
+test("an opaque medical passport upload requires every class policy and exact storage-provider approval", async () => {
+  await db.update(onbDocuments).set({
+    // The label/category are deliberately medical, while the bytes remain
+    // opaque. Neither may bypass identity or payroll lifecycle decisions.
+    key: "passport",
+    label: "Medical passport packet",
+    category: "medical",
+  }).where(eq(onbDocuments.id, documentA));
+  const [link] = await db.insert(onbCandidateLinks).values({
+    organizationId: orgA,
+    caseId: caseA,
+    tokenHash: hashSecret(`opaque-upload-${suffix}`),
+    expiresAt: new Date(Date.now() + 60 * 60_000),
+    issuedBy: userId,
+  }).returning({ id: onbCandidateLinks.id });
+  const secret = `opaque-upload-session-${suffix}`;
+  await createSession(secret, orgA, caseA, link!.id);
+
+  await db.delete(onbSensitiveLifecyclePolicies).where(and(
+    eq(onbSensitiveLifecyclePolicies.organizationId, orgA),
+    eq(onbSensitiveLifecyclePolicies.dataClass, "identity"),
+  ));
+  const missingIdentity = await fetch(`${baseUrl}/candidate/documents/${documentA}/upload`, {
+    method: "POST",
+    headers: {
+      cookie: `${CANDIDATE_COOKIE}=${secret}`,
+      "x-file-name": "medical-passport.pdf",
+      "x-file-type": "application/pdf",
+    },
+    body: Buffer.from("opaque bytes"),
+  });
+  assert.equal(missingIdentity.status, 409);
+
+  await seedApprovedSensitiveLifecyclePolicies(orgA, {
+    permittedProviders: ["internal-candidate-portal", "replit-object-storage"],
+  });
+  await db.update(onbSensitiveLifecyclePolicies).set({
+    providerSharingApproved: true,
+    permittedProviders: ["internal-candidate-portal"],
+  }).where(and(
+    eq(onbSensitiveLifecyclePolicies.organizationId, orgA),
+    eq(onbSensitiveLifecyclePolicies.dataClass, "payroll"),
+  ));
+  const payrollProviderDenied = await fetch(`${baseUrl}/candidate/documents/${documentA}/upload`, {
+    method: "POST",
+    headers: {
+      cookie: `${CANDIDATE_COOKIE}=${secret}`,
+      "x-file-name": "medical-payroll.pdf",
+      "x-file-type": "application/pdf",
+    },
+    body: Buffer.from("opaque bytes"),
+  });
+  assert.equal(payrollProviderDenied.status, 409);
+  const [{ value: uploadCount }] = await db.select({ value: count() }).from(onbCandidateUploads).where(
+    eq(onbCandidateUploads.organizationId, orgA),
+  );
+  assert.equal(uploadCount, 0, "denied opaque uploads never reach object storage metadata");
+  await seedApprovedSensitiveLifecyclePolicies(orgA, {
+    permittedProviders: ["internal-candidate-portal", "replit-object-storage"],
+  });
 });
 
 test("candidate metadata uses generic security guidance and hides scan details", async () => {

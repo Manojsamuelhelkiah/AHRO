@@ -7,6 +7,12 @@ import { sendEmail } from "./channels";
 import { getSetting, HR_ALERT_EMAIL_KEY } from "./settings";
 import { makeSharedTick } from "./shared-tick";
 import { logger } from "../logger";
+import {
+  evaluateSensitiveLifecycleGate,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
+import { isSyntheticOfflineCase } from "./synthetic-offline";
 
 /**
  * Gmail inbox polling — closes the loop on real email replies.
@@ -436,28 +442,50 @@ export async function persistInbound(opts: InboundMessage): Promise<boolean> {
   // Provider ids belong to the shared mailbox, not to a tenant. A message
   // consumed by any inbox consumer must never be replayed into another org.
   if (await alreadyRecorded(opts.externalMessageId)) return false;
-  const rows = await db
-    .insert(onbCommunications)
-    .values({
-      caseId: opts.caseId,
-      organizationId: opts.organizationId,
-      channel: opts.channel,
-      direction: "inbound",
-      toAddress: opts.fromAddress,
-      subject: opts.subject,
-      body: opts.body,
-      status: "received",
-      sensitive: false,
-      externalMessageId: opts.externalMessageId,
+  // Keep the lifecycle decision and the durable message write on the same
+  // tenant fence. Checking then releasing the fence allowed a newly-created
+  // hold or withdrawn policy to race the sensitive body into storage.
+  return withSensitiveLifecycleFence(opts.organizationId, async () => {
+    const [caseRow] = await db.select({
+      workforceContext: onbCases.workforceContext, notes: onbCases.notes,
     })
-    .onConflictDoNothing({
-      target: [
-        onbCommunications.organizationId,
-        onbCommunications.externalMessageId,
-      ],
-    })
-    .returning({ id: onbCommunications.id });
-  return rows.length > 0;
+      .from(onbCases).where(and(
+        eq(onbCases.organizationId, opts.organizationId),
+        eq(onbCases.id, opts.caseId),
+      ));
+    if (!caseRow) return false;
+    if (!isSyntheticOfflineCase(caseRow)) {
+      const lifecycle = await evaluateSensitiveLifecycleGate({
+        organizationId: opts.organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+        dataClass: "candidate-contact",
+        disclosure: false,
+      });
+      if (!lifecycle.allowed) return false;
+    }
+    const rows = await db
+      .insert(onbCommunications)
+      .values({
+        caseId: opts.caseId,
+        organizationId: opts.organizationId,
+        channel: opts.channel,
+        direction: "inbound",
+        toAddress: opts.fromAddress,
+        subject: opts.subject,
+        body: opts.body,
+        status: "received",
+        sensitive: true,
+        externalMessageId: opts.externalMessageId,
+      })
+      .onConflictDoNothing({
+        target: [
+          onbCommunications.organizationId,
+          onbCommunications.externalMessageId,
+        ],
+      })
+      .returning({ id: onbCommunications.id });
+    return rows.length > 0;
+  });
 }
 
 /** Record an inbound message and route it to the agent. Dedup-safe. */

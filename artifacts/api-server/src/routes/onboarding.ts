@@ -83,7 +83,6 @@ import {
   candidateEmailAuthorization,
   whatsappChannelInfo,
 } from "../lib/onboarding/channels";
-import { llmComplete } from "../lib/onboarding/llm";
 import {
   getInboundEmailMonitorStatus,
   recordInbound,
@@ -160,6 +159,12 @@ import { requeueDocumentMalwareScan } from "../lib/onboarding/document-malware";
 import { malwareScanRetryable, malwareUploadIsClean } from "../lib/onboarding/malware-policy";
 import { latestRequiredUploadMalwareBlockers } from "../lib/onboarding/document-readiness-guard";
 import { documentationGateConfigured } from "../lib/onboarding/engine";
+import {
+  evaluateCaseDerivedLifecycleGateInTransaction,
+  evaluateSensitiveLifecycleGate,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+} from "../lib/onboarding/sensitive-lifecycle";
 import {
   calculateOutcomeKpis,
   type OutcomeBgvCheck,
@@ -251,9 +256,35 @@ import {
   DEMO_LOGIN_EMAIL,
   SHARED_DEMO_REVIEWER_METADATA_KEY,
 } from "../lib/demo-reviewer";
+import {
+  NO_SENSITIVE_ACCESS,
+  redactCaseWorkforceContext,
+  redactOperationalItems,
+  redactSensitiveText,
+  resolveSensitiveAccess,
+  SensitiveAuthorityRequiredError,
+  withSensitiveAuthorityFence,
+  restrictedDocumentView,
+  sensitiveClassForDocument,
+  hasOpaqueNarrativeAccess,
+  hasSensitiveAccess,
+  type SensitiveAccess,
+} from "../lib/onboarding/sensitive-access";
 
 const router: IRouter = Router();
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
+
+type SensitiveLifecycleGateMutation = "checklist-profile-replacement" | "evidence-decision";
+let afterSensitiveLifecycleGateHookForTests:
+  | ((mutation: SensitiveLifecycleGateMutation) => Promise<void>)
+  | undefined;
+
+/** Coordinates race-boundary tests without altering production gate behavior. */
+export function setAfterSensitiveLifecycleGateHookForTests(
+  hook: ((mutation: SensitiveLifecycleGateMutation) => Promise<void>) | undefined,
+): void {
+  afterSensitiveLifecycleGateHookForTests = hook;
+}
 
 function requireHrChecklistRole(
   req: Request,
@@ -340,6 +371,10 @@ router.post("/onboarding/demo-login", async (req, res, next) => {
     });
     res.json({ ticket: token.token });
   } catch (err) {
+    if (err instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "A current HR/compliance authority assignment is required to retry a candidate communication.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return;
+    }
     next(err);
   }
 });
@@ -398,13 +433,40 @@ async function deriveGateways(row: typeof onbCases.$inferSelect) {
   };
 }
 
-async function serializeCase(row: typeof onbCases.$inferSelect) {
+async function sensitiveAccessForCase(req: Request, row: Pick<typeof onbCases.$inferSelect, "organizationId" | "id">): Promise<SensitiveAccess> {
+  return resolveSensitiveAccess({
+    organizationId: row.organizationId,
+    caseId: row.id,
+    actorUserId: req.authUserId,
+  });
+}
+
+function redactWorkforceClassification(
+  classification: typeof onbCases.$inferSelect["workforceClassification"],
+  sensitiveAccess: SensitiveAccess,
+) {
+  if (!classification || hasOpaqueNarrativeAccess(sensitiveAccess)) return classification;
+  return {
+    label: classification.label,
+    source: classification.source,
+    confidence: classification.confidence,
+    rationale: "Restricted confidential workforce-classification rationale.",
+    ...(classification.correction
+      ? { correction: { label: classification.correction.label } }
+      : {}),
+  };
+}
+
+async function serializeCase(
+  row: typeof onbCases.$inferSelect,
+  sensitiveAccess: SensitiveAccess = NO_SENSITIVE_ACCESS,
+) {
   const gateways = await deriveGateways(row);
   return {
     id: row.id,
-    workerName: row.workerName,
-    workerEmail: row.workerEmail,
-    workerPhone: row.workerPhone,
+    workerName: sensitiveAccess.identity ? row.workerName : "Restricted candidate",
+    workerEmail: sensitiveAccess.identity ? row.workerEmail : null,
+    workerPhone: sensitiveAccess.identity ? row.workerPhone : null,
     channelPreference: row.channelPreference,
     hireType: row.hireType,
     workerCategory: row.workerCategory,
@@ -413,27 +475,27 @@ async function serializeCase(row: typeof onbCases.$inferSelect) {
     department: row.department,
     geography: row.geography,
     legalEntity: row.legalEntity,
-    managerName: row.managerName,
-    recruiterName: row.recruiterName,
+    managerName: sensitiveAccess.identity ? row.managerName : null,
+    recruiterName: sensitiveAccess.identity ? row.recruiterName : null,
     joiningDate: row.joiningDate,
     urgency: row.urgency,
     lifecycleStage: row.lifecycleStage,
     orchestrationStatus: row.orchestrationStatus,
-    readiness: row.readiness,
-    workstreams: row.workstreams,
+    readiness: redactOperationalItems(row.readiness, sensitiveAccess),
+    workstreams: redactOperationalItems(row.workstreams, sensitiveAccess),
     primarySkill: row.primarySkill,
     skillCriticality: row.skillCriticality,
     scenarioKey: row.scenarioKey,
-    planSummary: row.planSummary,
+    planSummary: redactSensitiveText(row.planSummary, sensitiveAccess) ?? null,
     checklistTemplateVersion: row.checklistTemplateVersion,
-    checklistSnapshot: row.checklistSnapshot,
+    checklistSnapshot: redactOperationalItems(row.checklistSnapshot, sensitiveAccess),
     checklistProfileId: row.checklistProfileId,
     checklistProfileName: row.checklistProfileName,
     checklistProfileVersion: row.checklistProfileVersion ?? row.checklistTemplateVersion,
     checklistMatchedCriteria: row.checklistMatchedCriteria,
-    checklistMatchExplanation: row.checklistMatchExplanation,
-    workforceContext: row.workforceContext,
-    workforceClassification: row.workforceClassification,
+    checklistMatchExplanation: redactSensitiveText(row.checklistMatchExplanation, sensitiveAccess) ?? null,
+    workforceContext: redactCaseWorkforceContext(row.workforceContext, sensitiveAccess),
+    workforceClassification: redactWorkforceClassification(row.workforceClassification, sensitiveAccess),
     workforceContextVersion: row.workforceContextVersion,
     processPolicySnapshot: row.processPolicySnapshot,
     jobProfileId: row.jobProfileId,
@@ -449,8 +511,28 @@ async function serializeCase(row: typeof onbCases.$inferSelect) {
   };
 }
 
-function serializeEvent(row: typeof onbEvents.$inferSelect) {
-  return { ...row, createdAt: row.createdAt.toISOString() };
+function serializeEvent(row: typeof onbEvents.$inferSelect, sensitiveAccess: SensitiveAccess = NO_SENSITIVE_ACCESS) {
+  return {
+    ...row,
+    title: redactSensitiveText(row.title, sensitiveAccess) ?? "Restricted confidential onboarding event.",
+    detail: redactSensitiveText(row.detail, sensitiveAccess) ?? "Restricted confidential onboarding event.",
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function serializeCaseForRequest(req: Request, row: typeof onbCases.$inferSelect) {
+  return serializeCase(row, await sensitiveAccessForCase(req, row));
+}
+
+async function serializeEventForRequest(req: Request, row: typeof onbEvents.$inferSelect) {
+  const sensitiveAccess = row.caseId === null
+    ? NO_SENSITIVE_ACCESS
+    : await resolveSensitiveAccess({
+      organizationId: row.organizationId,
+      caseId: row.caseId,
+      actorUserId: req.authUserId,
+    });
+  return serializeEvent(row, sensitiveAccess);
 }
 
 async function insertCaseAndStart(
@@ -461,7 +543,7 @@ async function insertCaseAndStart(
   // Snapshot before the insert only. Existing cases are intentionally never
   // rewritten when a governance revision later changes.
   await governanceSnapshotForNewCase(organizationId);
-  const row = await db.transaction(async (tx) => {
+  const row = await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
     await assertGovernanceMutationAllowed(tx, organizationId);
     const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
     const [jobProfile] = values.jobProfileId
@@ -482,6 +564,11 @@ async function insertCaseAndStart(
       workforceContext,
       values,
     );
+    const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+      organizationId,
+      jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+    });
+    if (!lifecycle.allowed) throw new Error(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
     const { profile, classification } = workforcePolicy;
     const [inserted] = await tx
       .insert(onbCases)
@@ -517,7 +604,7 @@ async function insertCaseAndStart(
       ...logisticsForCase(logisticsDefault, inserted.joiningDate),
     });
     return inserted;
-  });
+  }));
   startOrchestration(row.id);
   return row;
 }
@@ -568,7 +655,7 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
       hardBlocked: approvals.filter((approval) => approval.hitlPattern === "hard-block").length,
       day1AtRisk,
       readyCases: cases.filter((c) => c.readiness.every((r) => r.status === "ready")).length,
-      recentEvents: recent.map(serializeEvent),
+      recentEvents: await Promise.all(recent.map((event) => serializeEventForRequest(req, event))),
     });
   } catch (err) {
     next(err);
@@ -675,7 +762,7 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
       // anonymous seed; retain the immutable requester for approval SoD.
       createdByUserId: req.authUserId!,
     }, getOrganizationId(req));
-    res.status(201).json(await serializeCase(row));
+    res.status(201).json(await serializeCaseForRequest(req, row));
   } catch (err) {
     next(err);
   }
@@ -690,7 +777,7 @@ router.get("/onboarding/cases", async (req, res, next) => {
       .from(onbCases)
       .where(organizationWhere(onbCases, getOrganizationId(req)))
       .orderBy(desc(onbCases.id));
-    res.json(await Promise.all(rows.map(serializeCase)));
+    res.json(await Promise.all(rows.map((row) => serializeCaseForRequest(req, row))));
   } catch (err) {
     next(err);
   }
@@ -699,6 +786,16 @@ router.get("/onboarding/cases", async (req, res, next) => {
 router.post("/onboarding/cases", async (req, res, next) => {
   try {
     const body = CreateOnboardingCaseBody.parse(req.body);
+    // Intake does not have a specialist-owned medical/accommodation record
+    // path. Do not turn the general case note/context fields into an
+    // ungoverned special-category collection channel.
+    if ((body.notes && body.notes.trim()) ||
+      JSON.stringify(body.workforceContext ?? {}).toLowerCase().includes("accessibilityneeds")) {
+      res.status(409).json({
+        message: "Accessibility/medical details and free-form candidate notes cannot be collected in general case intake. Hand off to the authorized specialist workflow.",
+      });
+      return;
+    }
     if (body.offerAcceptanceComplete) {
       res.status(400).json({
         message: "Offer acceptance cannot be attested during case creation. Create the case, then use the dedicated Gate A confirmation endpoint.",
@@ -773,7 +870,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
         idempotencyKey: AUTOMATED_PORTAL_EMAIL_KEY(row.id),
       });
     }
-    res.status(201).json(await serializeCase(row));
+    res.status(201).json(await serializeCaseForRequest(req, row));
   } catch (err) {
     next(err);
   }
@@ -793,7 +890,7 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
       res.status(404).json({ message: "Case not found" });
       return;
     }
-    res.json(await serializeCase(row));
+    res.json(await serializeCaseForRequest(req, row));
   } catch (err) {
     next(err);
   }
@@ -827,13 +924,20 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
     if (before && offerAcceptanceRequired(before) && !before.offerAcceptanceComplete) {
       await enforceOfferAcceptanceGate(id);
     }
-    const outcome = await db.transaction(async (tx) => {
+    const outcome = await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
       const [current] = await tx.select().from(onbCases).where(and(
         eq(onbCases.id, id),
         eq(onbCases.organizationId, organizationId),
       )).for("update");
       if (!current) return { kind: "not-found" as const };
+      if (body.note.trim()) {
+        const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+          organizationId,
+          jurisdiction: jurisdictionForWorkforceContext(current.workforceContext),
+        });
+        if (!lifecycle.allowed) return { kind: "lifecycle-blocked" as const, message: lifecycle.reason };
+      }
       if (!offerAcceptanceRequired(current)) return { kind: "not-applicable" as const };
       const [gateApproval] = await tx.select().from(onbApprovals).where(and(
         eq(onbApprovals.organizationId, organizationId),
@@ -946,9 +1050,13 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
         target: [onbEvents.organizationId, onbEvents.idempotencyKey],
       });
       return { kind: "confirmed" as const, row };
-    });
+    }));
     if (outcome.kind === "not-found") {
       res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    if (outcome.kind === "lifecycle-blocked") {
+      res.status(409).json({ message: outcome.message });
       return;
     }
     if (outcome.kind === "unauthorized") {
@@ -976,7 +1084,7 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
     // Atomic case transition is the source of truth. If this process dies
     // before this wake-up, the shared heartbeat recovers offer-accepted rows.
     if (outcome.kind === "confirmed") startOrchestration(id);
-    res.json(await serializeCase(outcome.row));
+    res.json(await serializeCaseForRequest(req, outcome.row));
   } catch (err) {
     next(err);
   }
@@ -1045,7 +1153,7 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
       return;
     }
     const reviewer = await resolveReviewerName(req.authUserId!);
-    const outcome = await db.transaction(async (tx) => {
+    const outcome = await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
       await assertGovernanceMutationAllowed(tx, organizationId);
       await acquireCaseDispatchMutationLock(tx, organizationId, id);
       const [current] = await tx.select().from(onbCases).where(and(
@@ -1053,6 +1161,12 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
         organizationWhere(onbCases, organizationId),
       )).for("update");
       if (!current) return { kind: "not-found" as const };
+      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(current.workforceContext),
+      });
+      if (!lifecycle.allowed) return { kind: "lifecycle-blocked" as const, message: lifecycle.reason };
+      await afterSensitiveLifecycleGateHookForTests?.("checklist-profile-replacement");
       if (
         current.checklistTemplateVersion !== body.expectedChecklistTemplateVersion ||
         current.checklistProfileId !== body.expectedChecklistProfileId ||
@@ -1252,7 +1366,7 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
         detail: `${reviewer} (${req.authUserId}) changed ${current.checklistProfileName} v${current.checklistProfileVersion ?? current.checklistTemplateVersion} → ${profile.profileName} v${profile.profileVersion}.${body.reason ? ` Reason: ${body.reason.trim()}` : ""}${replacementDecision.forceReReview ? " Previously passed boundaries will not replay; the case was moved to a fresh mandatory-item review." : ""}`,
       });
       return { kind: "updated" as const, row };
-    });
+    }));
     if (outcome.kind === "not-found") {
       res.status(404).json({ message: "Case not found" });
       return;
@@ -1265,7 +1379,11 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
       res.status(409).json({ message: outcome.message });
       return;
     }
-    res.json(await serializeCase(outcome.row));
+    if (outcome.kind === "lifecycle-blocked") {
+      res.status(409).json({ message: outcome.message });
+      return;
+    }
+    res.json(await serializeCaseForRequest(req, outcome.row));
   } catch (err) {
     next(err);
   }
@@ -1288,9 +1406,15 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
       res.status(400).json({ message: "A workforce context, current updatedAt value, and 3–500 character correction reason are required." });
       return;
     }
+    if (JSON.stringify(body.workforceContext).toLowerCase().includes("accessibilityneeds")) {
+      res.status(409).json({
+        message: "Accessibility or medical details cannot be collected through general workforce-context corrections. Hand off to the authorized specialist workflow.",
+      });
+      return;
+    }
     const organizationId = getOrganizationId(req);
     const reviewer = await resolveReviewerName(req.authUserId!);
-    const outcome = await db.transaction(async (tx) => {
+    const outcome = await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
       await acquireCaseDispatchMutationLock(tx, organizationId, id);
       const [current] = await tx.select().from(onbCases).where(and(
         eq(onbCases.id, id), organizationWhere(onbCases, organizationId),
@@ -1307,6 +1431,11 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
         return { kind: "active-claim" as const };
       }
       const workforceContext = normalizedWorkforceContext(body.workforceContext as typeof current.workforceContext);
+      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+      });
+      if (!lifecycle.allowed) return { kind: "lifecycle-blocked" as const, message: lifecycle.reason };
       const derived = classifyWorkforceContext(workforceContext);
       const workforceClassification = derived && {
         ...derived,
@@ -1358,13 +1487,14 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
         detail: `${reviewer} corrected captured job context. Policy snapshot was not changed; deliberate rebase is required. Reason: ${reason}`,
       });
       return { kind: "updated" as const, row };
-    });
+    }));
     if (outcome.kind === "not-found") return void res.status(404).json({ message: "Case not found." });
     if (outcome.kind === "conflict") return void res.status(409).json({ message: "Case changed since it was loaded. Refresh before correcting context." });
     if (outcome.kind === "terminal") return void res.status(409).json({ message: "Completed cases are immutable; workforce context cannot be corrected after completion." });
     if (outcome.kind === "active-dispatch") return void res.status(409).json({ message: "This case has an active provider dispatch marker. Reconcile the dispatch before correcting workforce context." });
     if (outcome.kind === "active-claim") return void res.status(409).json({ message: "This case has an active orchestration claim. Wait for it to pause before correcting workforce context." });
-    res.json(await serializeCase(outcome.row));
+    if (outcome.kind === "lifecycle-blocked") return void res.status(409).json({ message: outcome.message });
+    res.json(await serializeCaseForRequest(req, outcome.row));
   } catch (err) {
     next(err);
   }
@@ -1399,18 +1529,19 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
         disabled: "Disabled checklist items cannot be changed.",
         "evidence-required": "This independent evidence gate can only be completed through its designated evidence workflow; a manual toggle, reminder, or agent result is not accepted.",
         unauthorized: "A current HR/compliance specialist authority assignment is required to attest a checklist item.",
+        "lifecycle-blocked": "This narrative update is blocked until all required sensitive-data lifecycle policies are approved for the case jurisdiction.",
       };
       res.status(
         result.code === "unauthorized"
           ? 403
-          : result.code === "not-custom" || result.code === "disabled" || result.code === "evidence-required"
+          : result.code === "not-custom" || result.code === "disabled" || result.code === "evidence-required" || result.code === "lifecycle-blocked"
             ? 409
             : 404,
       )
         .json({ message: messages[result.code] });
       return;
     }
-    res.json(await serializeCase(result.case));
+    res.json(await serializeCaseForRequest(req, result.case));
   } catch (err) {
     next(err);
   }
@@ -1460,11 +1591,12 @@ router.put("/onboarding/cases/:id/evidence/:itemId", async (req, res, next) => {
         "not-designated": "Your account is not assigned as the designated authority for this policy gate.",
         "prerequisites-unmet": "This evidence gate has unmet prerequisites and cannot be verified yet.",
         "stale-policy": "The policy changed before this evidence was submitted. Refresh and submit against the current policy.",
+        "lifecycle-blocked": "Evidence narratives are blocked until all required sensitive-data lifecycle policies are approved for the case jurisdiction.",
       };
       res.status(result.code === "not-found" ? 404 : 409).json({ message: messages[result.code] });
       return;
     }
-    res.json(await serializeCase(result.case));
+    res.json(await serializeCaseForRequest(req, result.case));
   } catch (err) {
     next(err);
   }
@@ -1707,9 +1839,12 @@ router.get("/onboarding/cases/:id/events", async (req, res, next) => {
     const rows = await db
       .select()
       .from(onbEvents)
-      .where(eq(onbEvents.caseId, id))
+      .where(and(
+        eq(onbEvents.caseId, id),
+        eq(onbEvents.organizationId, getOrganizationId(req)),
+      ))
       .orderBy(asc(onbEvents.createdAt), asc(onbEvents.id));
-    res.json(rows.map(serializeEvent));
+    res.json(await Promise.all(rows.map((row) => serializeEventForRequest(req, row))));
   } catch (err) {
     next(err);
   }
@@ -1729,9 +1864,55 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
     const rows = await db
       .select()
       .from(onbCommunications)
-      .where(eq(onbCommunications.caseId, id))
+      .where(and(
+        eq(onbCommunications.caseId, id),
+        eq(onbCommunications.organizationId, getOrganizationId(req)),
+      ))
       .orderBy(asc(onbCommunications.createdAt), asc(onbCommunications.id));
-    res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId: id,
+      actorUserId: req.authUserId,
+    });
+    res.json(rows.map((r) => {
+      // Subjects, bodies, and delivery failures are opaque narratives even
+      // when an older record carries a candidate-contact/voice label. Labels
+      // are not content classification and a single specialist must not gain
+      // access to a mixed candidate disclosure by a keyword match.
+      const restricted = !hasOpaqueNarrativeAccess(sensitiveAccess);
+      if (restricted) {
+        return {
+          id: r.id,
+          caseId: r.caseId,
+          channel: r.channel,
+          direction: r.direction,
+          audience: r.audience,
+          status: r.status,
+          sensitive: true,
+          subject: "Restricted confidential onboarding communication",
+          body: "Details are restricted to the assigned specialist.",
+          createdAt: r.createdAt.toISOString(),
+        };
+      }
+      return {
+        id: r.id,
+        caseId: r.caseId,
+        channel: r.channel,
+        direction: r.direction,
+        audience: r.audience,
+        toAddress: r.toAddress,
+        subject: r.subject,
+        body: r.body,
+        status: r.status,
+        failureReason: r.failureReason,
+        sensitive: r.sensitive,
+        sensitiveDataClass: r.sensitiveDataClass,
+        externalMessageId: r.externalMessageId,
+        idempotencyKey: r.idempotencyKey,
+        retriedAt: r.retriedAt?.toISOString() ?? null,
+        createdAt: r.createdAt.toISOString(),
+      };
+    }));
   } catch (err) {
     next(err);
   }
@@ -1742,6 +1923,18 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
 router.get("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next) => {
   try {
     const { caseId } = GetOnboardingBgvNotificationsParams.parse(req.params);
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    if (!hasSensitiveAccess(sensitiveAccess, ["bgv"])) {
+      res.status(403).json({
+        message: "BGV notification recipients and review history are restricted to an assigned HR/compliance specialist.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+      return;
+    }
     const result = await getBgvNotifications({
       organizationId: getOrganizationId(req),
       caseId,
@@ -1761,21 +1954,43 @@ router.put("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next)
   try {
     const { caseId } = GetOnboardingBgvNotificationsParams.parse(req.params);
     const body = parseBgvNotificationUpdateBody(req.body);
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    if (!hasSensitiveAccess(sensitiveAccess, ["bgv"])) {
+      res.status(403).json({
+        message: "A current HR/compliance specialist authority assignment is required to change BGV recipients.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+      return;
+    }
     if (!canManageBgvNotifications(getOrganizationId(req), req.organizationRole)) {
       res.status(403).json({
         message: "Owner or admin HR role required for BGV recipient configuration; Demo Organization members may save simulation-only configuration.",
       });
       return;
     }
-    const result = await updateBgvNotifications({
+    const result = await withSensitiveAuthorityFence({
       organizationId: getOrganizationId(req),
       caseId,
-      role: req.organizationRole,
-      version: body.version,
-      config: body.config,
+      actorUserId: req.authUserId!,
+      classification: "bgv",
+      mutate: () => updateBgvNotifications({
+        organizationId: getOrganizationId(req),
+        caseId,
+        role: req.organizationRole,
+        version: body.version,
+        config: body.config,
+      }),
     });
     res.json(result);
   } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to change BGV recipients.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return;
+    }
     if (error instanceof BgvNotificationNotFoundError) {
       res.status(404).json({ message: error.message });
       return;
@@ -1799,24 +2014,43 @@ router.post("/onboarding/cases/:caseId/bgv-notifications/reconcile", async (req,
   try {
     const { caseId } = GetOnboardingBgvNotificationsParams.parse(req.params);
     const body = ReconcileOnboardingBgvNotificationsBody.parse(req.body ?? {});
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    if (!hasSensitiveAccess(sensitiveAccess, ["bgv"])) {
+      res.status(403).json({
+        message: "A current HR/compliance specialist authority assignment is required to reconcile BGV notifications.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+      return;
+    }
     if (!canManageBgvNotifications(getOrganizationId(req), req.organizationRole)) {
       res.status(403).json({
         message: "Owner or admin HR role required to reconcile BGV notifications; Demo Organization members may reconcile simulation-only notices.",
       });
       return;
     }
-    const result = await reconcileBgvNotifications({
+    const result = await withSensitiveAuthorityFence({
       organizationId: getOrganizationId(req),
       caseId,
-      role: req.organizationRole,
-      // HTTP is always an actor-initiated manual action. Heartbeat/startup
-      // values are reserved for the in-process watcher and cannot bypass
-      // authorization when supplied by a client.
-      reason: "manual",
-      simulation: body.simulation || getOrganizationId(req) === DEMO_ORGANIZATION_ID,
+      actorUserId: req.authUserId!,
+      classification: "bgv",
+      mutate: () => reconcileBgvNotifications({
+        organizationId: getOrganizationId(req),
+        caseId,
+        role: req.organizationRole,
+        reason: "manual",
+        simulation: body.simulation || getOrganizationId(req) === DEMO_ORGANIZATION_ID,
+      }),
     });
     res.json(result);
   } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to reconcile BGV notifications.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return;
+    }
     if (error instanceof BgvNotificationNotFoundError) {
       res.status(404).json({ message: error.message });
       return;
@@ -1852,8 +2086,24 @@ router.get("/onboarding/cases/:caseId/operational-requests", async (req, res, ne
       res.status(400).json({ message: "Valid case id is required." });
       return;
     }
-    const result = await getOperationalRequests(getOrganizationId(req), caseId);
-    res.json(result);
+    const organizationId = getOrganizationId(req);
+    const result = await getOperationalRequests(organizationId, caseId);
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    res.json({
+      ...result,
+      requests: result.requests.map((request) => request.id === "payroll" && !sensitiveAccess.payroll
+        ? {
+            id: "payroll",
+            label: "Restricted payroll workstream",
+            status: request.status,
+            restricted: true,
+          }
+        : request),
+    });
   } catch (error) {
     if (error instanceof OperationalRequestNotFoundError) {
       res.status(404).json({ message: error.message });
@@ -1968,16 +2218,49 @@ router.post("/onboarding/cases/:id/communications/:communicationId/retry", async
       res.status(404).json({ message: "Case not found" });
       return;
     }
+    // Retrying replays a stored outbound message. Treat that as a disclosure
+    // operation rather than a harmless status update: tenant membership and
+    // display role are not sufficient authority for candidate-contact data.
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    if (!sensitiveAccess.identity) {
+      res.status(403).json({
+        message: "A current HR/compliance authority assignment is required to retry a candidate communication.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+      return;
+    }
     const reviewer = await resolveReviewerName(req.authUserId!);
-    const result = await retryCandidateEmail(caseId, communicationId, reviewer);
+    const result = await withSensitiveAuthorityFence({
+      organizationId: getOrganizationId(req),
+      caseId,
+      actorUserId: req.authUserId!,
+      classification: "identity",
+      mutate: () => retryCandidateEmail(caseId, communicationId, reviewer),
+    });
     if (!result.ok) {
       const status = result.code === "not-found" ? 404 : result.code === "not-retryable" ? 409 : 403;
       res.status(status).json({ message: result.reason });
       return;
     }
     const row = result.communication;
-    res.json({ ...row, createdAt: row.createdAt.toISOString(), retriedAt: iso(row.retriedAt) });
+    // The send result is deliberately a status receipt, not a copy of the
+    // message body or provider failure detail.
+    res.json({
+      id: row.id,
+      caseId: row.caseId,
+      status: row.status,
+      retriedAt: iso(row.retriedAt),
+      createdAt: row.createdAt.toISOString(),
+    });
   } catch (err) {
+    if (err instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "A current HR/compliance authority assignment is required to retry a candidate communication.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return;
+    }
     next(err);
   }
 });
@@ -2006,12 +2289,17 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
     )).orderBy(desc(onbCandidateUploads.id));
     const latestUploads = new Map<number, typeof uploads[number]>();
     for (const upload of uploads) if (!latestUploads.has(upload.documentId)) latestUploads.set(upload.documentId, upload);
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId: id,
+      actorUserId: req.authUserId,
+    });
     res.json(
       rows.map((r) => {
         const latest = latestUploads.get(r.id);
         const securityBlocked = !!latest && !malwareUploadIsClean(latest);
         const status = securityBlocked && r.status === "verified" ? "received" : r.status;
-        return {
+        return restrictedDocumentView({
           id: r.id,
           caseId: r.caseId,
           key: r.key,
@@ -2024,7 +2312,7 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
           lastReminderAt: iso(r.lastReminderAt),
           reminderNextAt: iso(r.reminderNextAt),
           updatedAt: r.updatedAt.toISOString(),
-        };
+        }, sensitiveAccess);
       }),
     );
   } catch (err) {
@@ -2049,16 +2337,41 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
       malwareScanState: onbCandidateUploads.malwareScanState,
       malwareScannedAt: onbCandidateUploads.malwareScannedAt,
       malwareScanSha256: onbCandidateUploads.malwareScanSha256,
-      label: onbDocuments.label, category: onbDocuments.category, required: onbDocuments.required,
+      key: onbDocuments.key, label: onbDocuments.label, category: onbDocuments.category, required: onbDocuments.required,
       reminderCount: onbDocuments.reminderCount, reminderNextAt: onbDocuments.reminderNextAt,
     }).from(onbCandidateUploads).innerJoin(onbDocuments, and(eq(onbDocuments.id, onbCandidateUploads.documentId), eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId))).where(and(eq(onbCandidateUploads.caseId, caseId), eq(onbCandidateUploads.organizationId, organizationId))).orderBy(desc(onbCandidateUploads.id));
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId,
+    });
     const latestByDocument = new Map<number, typeof rows[number]>();
     for (const row of rows) if (!latestByDocument.has(row.documentId)) latestByDocument.set(row.documentId, row);
-    return res.json(rows.map(({ checksumSha256, malwareScanSha256, ...row }) => {
+    const canReadNarratives = hasOpaqueNarrativeAccess(sensitiveAccess);
+    return res.json(rows.map(({ checksumSha256, malwareScanSha256, originalName, validationReasons, key, ...row }) => {
+      const classes = sensitiveClassForDocument({ key, ...row });
+      if (!hasSensitiveAccess(sensitiveAccess, classes)) {
+        return {
+          id: row.id,
+          documentId: row.documentId,
+          label: "Restricted confidential document evidence",
+          category: "restricted",
+          restricted: true,
+          validationState: "restricted",
+          malwareScanState: "restricted",
+          canReview: false,
+          canRequestCorrection: false,
+          canRetryScan: false,
+        };
+      }
       const isLatest = latestByDocument.get(row.documentId)?.id === row.id;
       const malwareClean = malwareUploadIsClean({ malwareScanState: row.malwareScanState, checksumSha256, malwareScanSha256 });
       return {
         ...row,
+        originalName: canReadNarratives ? originalName : "Restricted confidential filename.",
+        validationReasons: canReadNarratives
+          ? validationReasons
+          : [{ code: "restricted", message: "Validation details are restricted to the assigned confidential-record reviewers." }],
         fingerprint: checksumSha256?.slice(0, 12) ?? null,
         malwareScannedAt: iso(row.malwareScannedAt),
         malwareClean,
@@ -2071,7 +2384,12 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
         canRetryScan: isLatest && malwareScanCanRetry(row.malwareScanState),
       };
     }));
-  } catch (error) { return next(error); }
+  } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      return res.status(403).json({ message: "A current specialist authority assignment is required to requeue this sensitive document scan.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+    }
+    return next(error);
+  }
 });
 
 router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, res, next) => {
@@ -2083,17 +2401,52 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
     const decision = body.decision;
     const reason = body.reason.trim();
     const state = decision === "approve" ? "passed" : decision === "reject" ? "rejected" : "correction_requested";
-    const [target] = await db.select({ documentId: onbCandidateUploads.documentId }).from(onbCandidateUploads).where(and(
+    const [target] = await db.select({
+      documentId: onbCandidateUploads.documentId,
+      key: onbDocuments.key,
+      label: onbDocuments.label,
+      category: onbDocuments.category,
+    }).from(onbCandidateUploads).innerJoin(onbDocuments, and(
+      eq(onbDocuments.id, onbCandidateUploads.documentId),
+      eq(onbDocuments.organizationId, organizationId),
+      eq(onbDocuments.caseId, caseId),
+    )).where(and(
       eq(onbCandidateUploads.id, evidenceId),
       eq(onbCandidateUploads.caseId, caseId),
       eq(onbCandidateUploads.organizationId, organizationId),
     ));
     if (!target) return res.status(404).json({ message: "Evidence not found" });
-    const result = await db.transaction(async (tx) => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
-      if (!(await hasCurrentAuthorityScope(tx, {
-        organizationId, actorUserId: req.authUserId!, scope: "hr-compliance-approve", caseId,
-      }))) return { kind: "unauthorized" as const };
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    const sensitiveClasses = sensitiveClassForDocument(target);
+    if (!hasSensitiveAccess(sensitiveAccess, sensitiveClasses)) {
+      return res.status(403).json({
+        message: "A current specialist authority assignment is required to decide this sensitive document.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+    }
+    const result = await withSensitiveLifecycleFence(organizationId, () => withSensitiveAuthorityFence({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId!,
+      classification: sensitiveClasses[0]!,
+      additionalClassifications: sensitiveClasses.slice(1),
+      mutate: () => db.transaction(async (tx) => {
+      const [caseRow] = await tx.select({ workforceContext: onbCases.workforceContext })
+        .from(onbCases).where(and(
+          eq(onbCases.id, caseId),
+          eq(onbCases.organizationId, organizationId),
+        )).for("update");
+      if (!caseRow) return { kind: "not_found" as const };
+      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+      });
+      if (!lifecycle.allowed) return { kind: "lifecycle-blocked" as const, message: lifecycle.reason };
+      await afterSensitiveLifecycleGateHookForTests?.("evidence-decision");
       // Keep the lock order identical to candidate replacement and worker
       // transitions: document first, then the upload row(s).
       await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(
@@ -2136,15 +2489,31 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
         detail: reason, idempotencyKey: `document-decision:${evidenceId}:${row.validatedAt?.getTime()}`,
       }).onConflictDoNothing();
       return { kind: "updated" as const, row };
-    });
-    if (result.kind === "unauthorized") return res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to decide document evidence." });
+    }),
+    }));
     if (result.kind === "not_found") return res.status(404).json({ message: "Evidence not found" });
+    if (result.kind === "lifecycle-blocked") return res.status(409).json({ message: result.message });
     if (result.kind === "not_reviewable") return res.status(409).json({ message: "Evidence is not awaiting manual review." });
     if (result.kind === "stale") return res.status(409).json({ message: "Only the latest upload for this document can be used for this decision." });
     if (result.kind === "malware_blocked") return res.status(409).json({ message: "Approval is locked until the latest upload passes its security scan." });
     await reconcileDocumentationReadiness(organizationId, caseId);
-    return res.json({ id: result.row.id, validationState: result.row.validationState, validationReasons: result.row.validationReasons, validatedAt: result.row.validatedAt });
-  } catch (error) { return next(error); }
+    return res.json({
+      id: result.row.id,
+      validationState: result.row.validationState,
+      validationReasons: hasOpaqueNarrativeAccess(sensitiveAccess)
+        ? result.row.validationReasons
+        : [{ code: "restricted", message: "Validation details are restricted to the assigned confidential-record reviewers." }],
+      validatedAt: result.row.validatedAt,
+    });
+  } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      return res.status(403).json({
+        message: "A current specialist authority assignment is required to decide this sensitive document.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+    }
+    return next(error);
+  }
 });
 
 router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", async (req, res, next) => {
@@ -2167,6 +2536,27 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", asy
       eq(onbCandidateUploads.organizationId, organizationId),
     ));
     if (!upload) return res.status(404).json({ message: "Evidence not found" });
+    const [document] = await db.select({
+      key: onbDocuments.key,
+      label: onbDocuments.label,
+      category: onbDocuments.category,
+    }).from(onbDocuments).where(and(
+      eq(onbDocuments.id, upload.documentId),
+      eq(onbDocuments.organizationId, organizationId),
+      eq(onbDocuments.caseId, caseId),
+    ));
+    if (!document) return res.status(404).json({ message: "Document not found" });
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    if (!hasSensitiveAccess(sensitiveAccess, sensitiveClassForDocument(document))) {
+      return res.status(403).json({
+        message: "A current specialist authority assignment is required to requeue this sensitive document scan.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+    }
     const [latest] = await db.select({ id: onbCandidateUploads.id }).from(onbCandidateUploads).where(and(
       eq(onbCandidateUploads.documentId, upload.documentId),
       eq(onbCandidateUploads.caseId, caseId),
@@ -2178,10 +2568,23 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", asy
     if (!malwareScanCanRetry(upload.malwareScanState)) {
       return res.status(409).json({ message: "This security scan cannot be retried in its current state." });
     }
-    const requeued = await requeueDocumentMalwareScan(organizationId, caseId, evidenceId);
+    const classes = sensitiveClassForDocument(document);
+    const requeued = await withSensitiveAuthorityFence({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId!,
+      classification: classes[0]!,
+      additionalClassifications: classes.slice(1),
+      mutate: () => requeueDocumentMalwareScan(organizationId, caseId, evidenceId),
+    });
     if (!requeued) return res.status(409).json({ message: "This security scan could not be queued again." });
     return res.json({ id: evidenceId, malwareScanState: "pending", malwareScannedAt: null, canRetryScan: false });
-  } catch (error) { return next(error); }
+  } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      return res.status(403).json({ message: "A current specialist authority assignment is required to requeue this sensitive document scan.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+    }
+    return next(error);
+  }
 });
 
 router.get("/onboarding/cases/:id/bgv", async (req, res, next) => {
@@ -2189,15 +2592,40 @@ router.get("/onboarding/cases/:id/bgv", async (req, res, next) => {
     const caseId = Number(req.params.id);
     const [owned] = await db.select({ id: onbCases.id }).from(onbCases).where(and(eq(onbCases.id, caseId), organizationWhere(onbCases, getOrganizationId(req))));
     if (!owned) return res.status(404).json({ message: "Case not found" });
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId,
+      actorUserId: req.authUserId,
+    });
     const rows = await db.select({
       id: onbSystemChecks.id, system: onbSystemChecks.system, externalRef: onbSystemChecks.externalRef,
       status: onbSystemChecks.status, requestedAt: onbSystemChecks.requestedAt, dueAt: onbSystemChecks.dueAt,
       completedAt: onbSystemChecks.completedAt, note: onbSystemChecks.note,
     }).from(onbSystemChecks).where(and(eq(onbSystemChecks.caseId, caseId), eq(onbSystemChecks.organizationId, getOrganizationId(req)), eq(onbSystemChecks.system, "bgv")));
-    return res.json(rows.map((row) => ({
-      ...row,
-      status: normalizeBgvStatus(row.status),
-    })));
+    const canReadNarratives = hasOpaqueNarrativeAccess(sensitiveAccess);
+    return res.json(rows.map((row) => hasSensitiveAccess(sensitiveAccess, ["bgv"])
+      ? {
+          id: row.id,
+          system: row.system,
+          status: normalizeBgvStatus(row.status),
+          requestedAt: row.requestedAt,
+          dueAt: row.dueAt,
+          completedAt: row.completedAt,
+          ...(canReadNarratives
+            ? { externalRef: row.externalRef, note: row.note }
+            : {
+                externalRef: undefined,
+                note: "Background-verification narrative details are restricted to the assigned confidential-record reviewers.",
+                restrictedNarratives: true,
+              }),
+        }
+      : {
+          id: row.id,
+          system: "bgv",
+          status: normalizeBgvStatus(row.status),
+          restricted: true,
+          note: "Background-verification details are restricted to the assigned HR/compliance specialist.",
+        }));
   } catch (error) { return next(error); }
 });
 
@@ -2215,7 +2643,20 @@ router.get("/onboarding/cases/:id/records", async (req, res, next) => {
       res.status(404).json({ message: "Case not found" });
       return;
     }
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId: getOrganizationId(req),
+      caseId: id,
+      actorUserId: req.authUserId,
+    });
+    if (!hasSensitiveAccess(sensitiveAccess, ["identity"])) {
+      res.status(403).json({
+        message: "Archived employment records are restricted to an assigned HR/compliance specialist.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
+      return;
+    }
     const stints = await getArchivedStints(c.workerEmail, getOrganizationId(req));
+    const canReadNarratives = hasOpaqueNarrativeAccess(sensitiveAccess);
     res.json(
       stints.map((s) => ({
         id: s.id,
@@ -2225,12 +2666,16 @@ router.get("/onboarding/cases/:id/records", async (req, res, next) => {
         department: s.department,
         startDate: s.startDate,
         endDate: s.endDate,
-        exitReason: s.exitReason,
+        exitReason: canReadNarratives
+          ? s.exitReason
+          : "Restricted confidential archived-record narrative.",
         noticeRequiredDays: s.noticeRequiredDays,
         noticeServedDays: s.noticeServedDays,
         performanceRating: s.performanceRating,
         rehireEligible: s.rehireEligible,
-        notes: s.notes,
+        notes: canReadNarratives
+          ? s.notes
+          : "Restricted confidential archived-record narrative.",
       })),
     );
   } catch (err) {
@@ -2247,6 +2692,10 @@ router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
       return;
     }
     const organizationId = getOrganizationId(req);
+    if (!req.authUserId) {
+      res.status(401).json({ message: "Authentication required" });
+      return;
+    }
     const [c] = await db.select().from(onbCases).where(and(
       eq(onbCases.id, id),
       organizationWhere(onbCases, getOrganizationId(req)),
@@ -2255,25 +2704,61 @@ router.post("/onboarding/cases/:id/inbound", async (req, res, next) => {
       res.status(404).json({ message: "Case not found" });
       return;
     }
-    const from =
-      body.channel === "whatsapp" && c.workerPhone ? c.workerPhone : c.workerEmail;
-    const [row] = await db
-      .insert(onbCommunications)
-      .values({
-        ...organizationValues(organizationId),
-        caseId: id,
-        channel: body.channel,
-        direction: "inbound",
-        toAddress: from,
-        subject: null,
-        body: body.body,
-        status: "received",
-        sensitive: false,
-      })
-      .returning();
+    const row = await withSensitiveAuthorityFence({
+      organizationId,
+      caseId: id,
+      actorUserId: req.authUserId!,
+      classification: "identity",
+      mutate: async () => withSensitiveLifecycleFence(organizationId, async () => {
+        // The privacy/lifecycle gate is intentionally inside the authority
+        // fence too: a revoke or changed lifecycle policy cannot land between
+        // this decision and candidate-attributed content persistence.
+        const [currentCase] = await db.select().from(onbCases).where(and(
+          eq(onbCases.id, id), eq(onbCases.organizationId, organizationId),
+        ));
+        if (!currentCase) throw new Error("Case not found");
+        const lifecycle = await evaluateSensitiveLifecycleGate({
+            organizationId,
+            jurisdiction: jurisdictionForWorkforceContext(currentCase.workforceContext),
+            dataClass: "candidate-contact",
+            disclosure: false,
+          });
+        if (!lifecycle.allowed) throw new Error(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
+        const from = body.channel === "whatsapp" && currentCase.workerPhone ? currentCase.workerPhone : currentCase.workerEmail;
+        const [created] = await db.insert(onbCommunications).values({
+          ...organizationValues(organizationId),
+          caseId: id,
+          channel: body.channel,
+          direction: "inbound",
+          toAddress: from,
+          subject: null,
+          body: body.body,
+          status: "received",
+          sensitive: true,
+          sensitiveDataClass: "candidate-contact",
+        }).returning();
+        return created!;
+      }),
+    });
     handleInbound(id, body.channel as "email" | "whatsapp", body.body);
-    res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
+    res.status(201).json({
+      id: row.id,
+      caseId: row.caseId,
+      channel: row.channel,
+      direction: row.direction,
+      status: row.status,
+      sensitive: true,
+      createdAt: row.createdAt.toISOString(),
+    });
   } catch (err) {
+    if (err instanceof Error && err.message === "SENSITIVE_RECORD_ACCESS_REQUIRED") {
+      res.status(403).json({ message: "A current HR/compliance authority assignment is required to record inbound candidate communications." });
+      return;
+    }
+    if (err instanceof Error && err.message.startsWith("SENSITIVE_LIFECYCLE_BLOCKED:")) {
+      res.status(409).json({ message: err.message.slice("SENSITIVE_LIFECYCLE_BLOCKED:".length) });
+      return;
+    }
     next(err);
   }
 });
@@ -3066,8 +3551,13 @@ router.get("/onboarding/authority/unresolved-approvals", async (req, res, next) 
     ));
     res.json(rows.map((row) => ({
       id: row.id, caseId: row.caseId, status: row.status, version: row.version,
-      recommendation: row.recommendation, authorityScope: row.authorityScope,
+      // Historical approval narrative is opaque private evidence. Tenant
+      // administration permits remediation of the record, never disclosure
+      // of its recommendation/rationale/comment to an owner or admin.
+      recommendation: "Restricted historical approval evidence.",
+      authorityScope: row.authorityScope,
       createdAt: row.createdAt.toISOString(), decidedAt: iso(row.decidedAt),
+      restricted: true,
     })));
   } catch (err) {
     next(err);
@@ -3135,11 +3625,51 @@ router.get("/onboarding/approvals", async (req, res, next) => {
     const filtered = wantAll
       ? rows
       : rows.filter((row) => row.approval.status === "pending");
-    res.json(
-      filtered.map(({ approval: a, workerName }) => ({
+    res.json(await Promise.all(filtered.map(async ({ approval: a, workerName }) => {
+      const sensitiveAccess = await resolveSensitiveAccess({
+        organizationId: getOrganizationId(req),
+        caseId: a.caseId,
+        actorUserId: req.authUserId,
+      });
+      const scopeClasses = a.authorityScope === "occupational-health-approve"
+        ? ["medical"] as const
+        : a.authorityScope === "payroll-approve"
+          ? ["payroll"] as const
+          : a.authorityScope === "hr-compliance-approve"
+            ? ["identity", "bgv"] as const
+            : [];
+      // Approval recommendation, rationale, comment, and evidence are opaque
+      // narratives. Scope metadata can restrict access further, but cannot
+      // turn a partial specialist assignment into a grant for mixed text.
+      const restricted = !hasOpaqueNarrativeAccess(sensitiveAccess) ||
+        !hasSensitiveAccess(sensitiveAccess, scopeClasses);
+      if (restricted) {
+        return {
+          id: a.id,
+          caseId: a.caseId,
+          caseWorkerName: sensitiveAccess.identity ? workerName : "Restricted candidate",
+          agent: a.agent,
+          ruleRef: "restricted-sensitive-approval",
+          hitlPattern: a.hitlPattern,
+          recommendation: "Restricted specialist approval pending or recorded.",
+          rationale: "Details are restricted to the assigned specialist.",
+          recordsEvidence: null,
+          status: a.status,
+          version: a.version,
+          authorityScope: a.authorityScope,
+          authorityReviewStatus: a.authorityReviewStatus,
+          decidedAuthorityId: null,
+          decidedBy: null,
+          comment: null,
+          createdAt: a.createdAt.toISOString(),
+          decidedAt: iso(a.decidedAt),
+          restricted: true,
+        };
+      }
+      return {
         id: a.id,
         caseId: a.caseId,
-        caseWorkerName: workerName,
+        caseWorkerName: sensitiveAccess.identity ? workerName : "Restricted candidate",
         agent: a.agent,
         ruleRef: a.ruleRef,
         hitlPattern: a.hitlPattern,
@@ -3155,8 +3685,8 @@ router.get("/onboarding/approvals", async (req, res, next) => {
         comment: a.comment,
         createdAt: a.createdAt.toISOString(),
         decidedAt: iso(a.decidedAt),
-      })),
-    );
+      };
+    })));
   } catch (err) {
     next(err);
   }
@@ -3170,10 +3700,27 @@ router.get("/onboarding/approvals/:id/history", async (req, res, next) => {
       return;
     }
     const organizationId = getOrganizationId(req);
-    const [approval] = await db.select({ id: onbApprovals.id }).from(onbApprovals)
+    const [approval] = await db.select({
+      id: onbApprovals.id,
+      caseId: onbApprovals.caseId,
+      authorityScope: onbApprovals.authorityScope,
+    }).from(onbApprovals)
       .where(and(eq(onbApprovals.id, approvalId), eq(onbApprovals.organizationId, organizationId)));
     if (!approval) {
       res.status(404).json({ message: "Approval not found" });
+      return;
+    }
+    const authorityScope = approval.authorityScope;
+    if (!authorityScope || !(await db.transaction((tx) => hasCurrentAuthorityScope(tx, {
+      organizationId,
+      actorUserId: req.authUserId!,
+      scope: authorityScope,
+      caseId: approval.caseId,
+    })))) {
+      res.status(403).json({
+        message: "Approval-history detail is restricted to the currently assigned specialist.",
+        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+      });
       return;
     }
     res.json(await getApprovalHistory({ organizationId, approvalId }));
@@ -4174,33 +4721,56 @@ router.post("/onboarding/demo/volunteers/seed", async (req, res, next) => {
 
 /* --------------------------- system watcher --------------------------- */
 
-router.get("/onboarding/systems/watcher", async (_req, res, next) => {
+router.get("/onboarding/systems/watcher", async (req, res, next) => {
   try {
-    await ensureConnectorsSeeded(getOrganizationId(_req));
+    const organizationId = getOrganizationId(req);
+    await ensureConnectorsSeeded(organizationId);
     const rows = await db
       .select({ check: onbSystemChecks, workerName: onbCases.workerName })
       .from(onbSystemChecks)
       .innerJoin(onbCases, eq(onbSystemChecks.caseId, onbCases.id))
-      .where(organizationWhere(onbCases, getOrganizationId(_req)))
+      .where(organizationWhere(onbCases, organizationId))
       .orderBy(desc(onbSystemChecks.id));
     res.json({
       connectors: getSystemWatcherHealth(),
       malwareScanner: await getMalwareScannerMonitorHealth(),
-      checks: rows.map(({ check: c, workerName }) => ({
+      checks: await Promise.all(rows.map(async ({ check: c, workerName }) => {
+        const sensitiveAccess = await resolveSensitiveAccess({
+          organizationId,
+          caseId: c.caseId,
+          actorUserId: req.authUserId,
+        });
+        if ((c.system === "bgv" && !sensitiveAccess.bgv) || (c.system === "payroll" && !sensitiveAccess.payroll)) {
+          return {
+            id: c.id,
+            caseId: c.caseId,
+            caseWorkerName: sensitiveAccess.identity ? workerName : "Restricted candidate",
+            system: c.system,
+            label: c.system === "bgv" ? "Restricted background-verification check" : "Restricted payroll check",
+            status: c.status,
+            restricted: true,
+          };
+        }
+        const canReadNarratives = hasOpaqueNarrativeAccess(sensitiveAccess);
+        return {
         id: c.id,
         caseId: c.caseId,
-        caseWorkerName: workerName,
+        caseWorkerName: sensitiveAccess.identity ? workerName : "Restricted candidate",
         system: c.system,
         label: systemDef(c.system)?.label ?? c.system,
         mode: c.mode,
-        externalRef: c.externalRef,
+        externalRef: canReadNarratives ? c.externalRef : undefined,
         status: c.status,
         requestedAt: c.requestedAt.toISOString(),
         dueAt: c.dueAt.toISOString(),
         completedAt: iso(c.completedAt),
         lastCheckedAt: iso(c.lastCheckedAt),
         escalatedAt: iso(c.escalatedAt),
-        note: c.note,
+        note: canReadNarratives
+          ? c.note
+          : "System-provider narrative details are restricted to the assigned confidential-record reviewers.",
+        ...(canReadNarratives ? {} : { restrictedNarratives: true }),
+        };
       })),
     });
   } catch (err) {
@@ -4251,13 +4821,6 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
 /* ----------------------------- analytics ----------------------------- */
 
 const SUPPRESSION_THRESHOLD = 3;
-
-type NarrativeCacheEntry = {
-  signature: string | null;
-  text: string | null;
-  generatingFor: string | null;
-};
-const narrativeCache = new Map<string, NarrativeCacheEntry>();
 
 router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
   try {
@@ -4461,8 +5024,10 @@ router.get("/onboarding/analytics", async (req, res, next) => {
       skillMap.set(c.primarySkill, cur);
     }
     const skillInflow = Array.from(skillMap.entries()).map(([skill, v]) => {
-      const suppressed =
-        v.count < SUPPRESSION_THRESHOLD && v.criticality !== "standard";
+      // Cohort suppression applies before any presentation or downstream
+      // processing. A standard criticality label is still an opaque,
+      // organization-specific skill label and cannot make a small cohort safe.
+      const suppressed = v.count < SUPPRESSION_THRESHOLD;
       return {
         skill: suppressed ? "Suppressed (small population)" : skill,
         count: v.count,
@@ -4497,48 +5062,20 @@ router.get("/onboarding/analytics", async (req, res, next) => {
       readinessMap.set(key, (readinessMap.get(key) ?? 0) + 1);
     }
 
-    // Narrative generation is non-blocking: the endpoint returns chart data
-    // immediately with a cached narrative (or null on first load), and kicks
-    // off LLM generation in the background. The client refetches until the
-    // narrative for the current data signature is ready.
-    const signature = JSON.stringify({
-      n: cases.length,
-      skills: Array.from(skillMap.entries()).map(([s, v]) => [s, v.count, v.criticality]),
-      pending: approvals.filter((a) => a.status === "pending").length,
-      readiness: Array.from(readinessMap.entries()),
-    });
-    let narrative: string | null = null;
-    const cache = narrativeCache.get(organizationId) ?? {
-      signature: null,
-      text: null,
-      generatingFor: null,
-    };
-    narrativeCache.set(organizationId, cache);
-    if (cases.length > 0) {
-      if (cache.signature === signature) {
-        narrative = cache.text;
-      } else {
-        narrative = cache.text;
-        if (cache.generatingFor !== signature) {
-          cache.generatingFor = signature;
-          void llmComplete(
-            "You are the intelligence layer of an autonomous HR operations platform. The data you receive covers the onboarding domain only — speak to that scope and do not claim insight into domains you have no data for. Write a 3-4 sentence executive insight for HR leadership: how much onboarding work is progressing autonomously, where human intervention is concentrated, and what deserves attention next. Only trend-level statements — never name or judge an individual. Plain text, clear enterprise language, no technical jargon.",
-            `Aggregate onboarding data: ${cases.length} cases. Skill inflow: ${Array.from(skillMap.entries()).map(([s, v]) => `${s} x${v.count} (${v.criticality})`).join("; ")}. Pending human reviews: ${approvals.filter((a) => a.status === "pending").length}. Readiness: ${Array.from(readinessMap.entries()).map(([k, v]) => `${k}=${v}`).join(", ")}. Suppression threshold: groups under ${SUPPRESSION_THRESHOLD} are not reported individually.`,
-            300,
-          )
-            .then((text) => {
-              cache.signature = signature;
-              cache.text = text;
-            })
-            .catch((err) => {
-              console.error("[analytics] narrative generation failed:", err);
-            })
-            .finally(() => {
-              if (cache.generatingFor === signature) cache.generatingFor = null;
-            });
-        }
-      }
-    }
+    // Analytics has no case-scoped governance snapshot that could authorize
+    // provider disclosure of opaque skill labels or small cohort attributes.
+    // Keep its narrative local and deterministic; it is derived only from
+    // already-suppressed aggregate counts and never invokes an LLM.
+    const pendingReviewCount = approvals.filter((a) => a.status === "pending").length;
+    const narrative = cases.length === 0
+      ? null
+      : `${cases.length} onboarding cases are represented in this aggregate. ${
+        pendingReviewCount > 0
+          ? `${pendingReviewCount} human review${pendingReviewCount === 1 ? " is" : "s are"} pending.`
+          : "No human reviews are currently pending."
+      } Readiness is reported only as aggregate status counts; skill cohorts below ${
+        SUPPRESSION_THRESHOLD
+      } are suppressed.`;
 
     res.json({
       skillInflow,

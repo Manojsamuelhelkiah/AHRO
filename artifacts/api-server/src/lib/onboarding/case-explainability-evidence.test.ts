@@ -6,6 +6,8 @@ import {
   db,
   onbCases,
   onbCommunications,
+  onbDocuments,
+  onbEvents,
   organizationsTable,
 } from "@workspace/db";
 import {
@@ -80,6 +82,24 @@ describe("case evidence communications (real DB, read-only collector)", { skip: 
         sensitive: false,
       },
     ]);
+    await db.insert(onbDocuments).values({
+      organizationId,
+      caseId,
+      key: "custom-private-attachment",
+      label: "HIV laboratory attachment",
+      category: "custom",
+      required: true,
+      status: "received",
+      note: "HIV positive result supplied by provider",
+    });
+    await db.insert(onbEvents).values({
+      organizationId,
+      caseId,
+      agent: "test",
+      engine: "test",
+      title: "HIV positive result received",
+      detail: "Free-form event detail must never reach explainability context.",
+    });
   });
 
   after(async () => {
@@ -92,7 +112,7 @@ describe("case evidence communications (real DB, read-only collector)", { skip: 
     await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
   });
 
-  test("excludes sensitive communications, includes redacted voice excerpts, and does not mutate DB", async () => {
+  test("uses allowlisted operational evidence only and does not mutate DB", async () => {
     const beforeRows = await db.select({
       id: onbCommunications.id,
       body: onbCommunications.body,
@@ -105,10 +125,12 @@ describe("case evidence communications (real DB, read-only collector)", { skip: 
     assert.ok(evidence);
     const communications = evidence.sources.filter((source) =>
       source.tab === "communications");
-    assert.equal(communications.length, 1);
-    assert.equal(communications[0]?.kind, "voice-transcript");
-    assert.doesNotMatch(communications[0]?.excerpt ?? "", /evidence-worker-|private\.example|secret-value/i);
-    assert.match(communications[0]?.excerpt ?? "", /redacted/i);
+    assert.equal(communications.length, 0);
+    const serialized = JSON.stringify(evidence.sources);
+    assert.doesNotMatch(
+      serialized,
+      /evidence-worker-|private\.example|secret-value|HIV|positive|free-form event/i,
+    );
 
     const afterRows = await db.select({
       id: onbCommunications.id,

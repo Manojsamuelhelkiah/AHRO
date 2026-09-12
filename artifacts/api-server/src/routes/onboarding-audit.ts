@@ -17,6 +17,10 @@ import {
   enqueueAuditLegalHoldInTransaction,
   legalHoldReasonFingerprint,
 } from "../lib/onboarding/external-audit-anchor";
+import {
+  hasOpaqueNarrativeAccess,
+  resolveSensitiveAccess,
+} from "../lib/onboarding/sensitive-access";
 
 const router: IRouter = Router();
 
@@ -223,8 +227,40 @@ router.get("/onboarding/audit/approval-history/:approvalId", async (req, res, ne
       res.status(400).json({ message: "approvalId must be a positive integer." });
       return;
     }
-    const entries = await listRetainedApprovalHistory(getOrganizationId(req), approvalId);
-    res.json(entries);
+    const organizationId = getOrganizationId(req);
+    const entries = await listRetainedApprovalHistory(organizationId, approvalId);
+    res.json(await Promise.all(entries.map(async (entry) => {
+      const opaqueSnapshotPresent = Boolean(
+        entry.comment ||
+        entry.reason ||
+        (entry.snapshot && Object.keys(entry.snapshot).length > 0),
+      );
+      const access = await resolveSensitiveAccess({
+        organizationId,
+        caseId: entry.caseId,
+        actorUserId: req.authUserId,
+      });
+      if (opaqueSnapshotPresent && !hasOpaqueNarrativeAccess(access)) {
+        // Historical evidence remains append-only in storage, but the
+        // reviewer-facing projection does not disclose its sensitive content
+        // merely because the reviewer is a tenant owner/admin.
+        return {
+          id: entry.id,
+          approvalId: entry.approvalId,
+          caseId: entry.caseId,
+          version: entry.version,
+          eventType: entry.eventType,
+          status: entry.status,
+          restricted: true,
+          comment: null,
+          reason: "Restricted specialist approval history.",
+          snapshot: { restricted: true },
+          createdAt: entry.createdAt,
+          decidedAt: entry.decidedAt,
+        };
+      }
+      return entry;
+    })));
   } catch (error) {
     next(error);
   }

@@ -7,15 +7,19 @@
  *  - finalization is claim-based and idempotent (no duplicate side effects)
  *  - a stale in-flight turn save cannot flip a finalized row back
  */
-import { test, describe, after } from "node:test";
+import { test, describe, after, before } from "node:test";
 import assert from "node:assert/strict";
 import { db } from "@workspace/db";
 import {
   onbCases,
   onbCommunications,
+  onbEffectJournal,
   onbEvents,
+  onbGovernanceDecisions,
+  onbGovernanceRequirements,
+  onbSensitiveLifecyclePolicies,
   onbVoiceSessions,
-  DEMO_ORGANIZATION_ID,
+  organizationsTable,
 } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import {
@@ -29,12 +33,15 @@ import {
   type Session,
 } from "./voice";
 import { onbApprovals, onbCallSlots } from "@workspace/db/schema";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
+
+const organizationId = `voice-persistence-${process.pid}-${Date.now()}`;
 
 async function makeCase(): Promise<number> {
   const [c] = await db
     .insert(onbCases)
     .values({
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId,
       workerName: "Voice Test Hire",
       workerEmail: "voice-test@example.com",
       workerPhone: "+15550001111",
@@ -47,6 +54,7 @@ async function makeCase(): Promise<number> {
       managerName: "M Manager",
       recruiterName: "R Recruiter",
       joiningDate: "2026-09-01",
+      workforceContext: { workCountry: "US" },
     })
     .returning({ id: onbCases.id });
   return c.id;
@@ -75,7 +83,7 @@ function liveSession(token: string, caseId: number, startedAt = Date.now()): Ses
 async function insertSessionRow(s: Session): Promise<void> {
   await db.insert(onbVoiceSessions).values({
     token: s.token,
-    organizationId: s.organizationId ?? DEMO_ORGANIZATION_ID,
+    organizationId: s.organizationId ?? organizationId,
     caseId: s.caseId,
     scenario: s.scenario,
     reason: s.reason,
@@ -87,8 +95,31 @@ async function insertSessionRow(s: Session): Promise<void> {
 
 describe("voice session persistence (real DB)", () => {
   const caseIds: number[] = [];
+  before(async () => {
+    await db.insert(organizationsTable).values({
+      id: organizationId,
+      name: "Voice persistence test",
+      slug: organizationId,
+      joinCodeHash: `hash-${organizationId}`,
+      createdByUserId: "voice-persistence-test",
+    });
+    // Voice outcome persistence retains a candidate-voice transcript. These
+    // are explicit collection-only lifecycle approvals, not a provider bypass.
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
+  });
   after(async () => {
     for (const id of caseIds) await db.delete(onbCases).where(eq(onbCases.id, id));
+    await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, organizationId));
+    await db.delete(onbSensitiveLifecyclePolicies).where(
+      eq(onbSensitiveLifecyclePolicies.organizationId, organizationId),
+    );
+    await db.delete(onbGovernanceRequirements).where(
+      eq(onbGovernanceRequirements.organizationId, organizationId),
+    );
+    await db.delete(onbGovernanceDecisions).where(
+      eq(onbGovernanceDecisions.organizationId, organizationId),
+    );
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
   });
 
   test("a session survives a 'restart': fresh read sees turns and binds CallSid", async () => {
@@ -234,7 +265,7 @@ describe("voice session persistence (real DB)", () => {
     // then the process died before the decision/summary steps.
     await db.insert(onbCommunications).values({
       caseId,
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId,
       channel: "voice",
       direction: "outbound",
       toAddress: "masked",
@@ -305,7 +336,7 @@ describe("voice session persistence (real DB)", () => {
     // present) but the process died before markOutcomeStep committed.
     await db.insert(onbEvents).values({
       caseId,
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId,
       agent: "channel",
       engine: "llm",
       title: "Hire confirmed ready on call",
@@ -415,7 +446,7 @@ describe("voice session persistence (real DB)", () => {
     const storedSlots = [{ n: 1, startIso: "2026-08-20T10:00:00.000Z", label: "Thu 20 Aug, 10:00 AM IST" }];
     await db.insert(onbCallSlots).values({
       caseId,
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId,
       slots: storedSlots,
       status: "proposed",
       dedupeKey: `voice:${s.token}:reschedule-slots`,

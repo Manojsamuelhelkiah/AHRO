@@ -36,10 +36,166 @@ import {
   ActionCenterIdentityValidationError,
   updateActionCenterIdentities,
 } from "../lib/onboarding/action-center-identities";
+import {
+  hasSensitiveAccess,
+  hasOpaqueNarrativeAccess,
+  resolveSensitiveAccess,
+  SensitiveAuthorityRequiredError,
+  sensitiveClassForDocument,
+  type SensitiveAccess,
+} from "../lib/onboarding/sensitive-access";
 
 const router: IRouter = Router();
 
+/**
+ * Action Center is a derived surface, not an entitlement shortcut.  Its
+ * source rows include free-form action/approval/communication text, so this
+ * projection intentionally retains only typed operational state for callers
+ * without a live specialist assignment.
+ */
+async function sensitiveActionCenterProjection(
+  organizationId: string,
+  actorUserId: string | undefined,
+  result: Awaited<ReturnType<typeof getActionCenter>>,
+) {
+  const accessByCase = new Map<number, SensitiveAccess>();
+  const accessFor = async (caseId: number) => {
+    const cached = accessByCase.get(caseId);
+    if (cached) return cached;
+    const access = await resolveSensitiveAccess({ organizationId, caseId, actorUserId });
+    accessByCase.set(caseId, access);
+    return access;
+  };
+  const safeClassification = (classification: {
+    label: string;
+    source: string;
+    confidence: string;
+    rationale: string;
+    correction?: { label: string };
+  } | null, access: SensitiveAccess) => {
+    if (!classification || hasOpaqueNarrativeAccess(access)) return classification;
+    return {
+      label: classification.label,
+      source: classification.source,
+      confidence: classification.confidence,
+      rationale: "Restricted confidential workforce-classification rationale.",
+      ...(classification.correction ? { correction: { label: classification.correction.label } } : {}),
+    };
+  };
+  const safeCase = async <T extends {
+    workerName: string;
+    workerEmail: string;
+    workforceClassification: {
+      label: string;
+      source: string;
+      confidence: string;
+      rationale: string;
+      correction?: { label: string };
+    } | null;
+  }>(entry: T, caseId: number) => {
+    const access = await accessFor(caseId);
+    return access.identity
+      ? { ...entry, workforceClassification: safeClassification(entry.workforceClassification, access) }
+      : {
+          ...entry,
+          workerName: "Restricted candidate",
+          workerEmail: "restricted",
+          // Classification rationale is server-derived free text, not a
+          // general Action Center entitlement.
+          workforceClassification: null,
+        };
+  };
+  const documentFollowups = await Promise.all(result.documentFollowups.map(async (item) => {
+    const access = await accessFor(item.caseId);
+    const { category, ...publicItem } = item;
+    const classes = sensitiveClassForDocument({ key: item.key, label: item.label, category });
+    if (hasSensitiveAccess(access, classes)) return { ...publicItem, case: await safeCase(item.case, item.caseId) };
+    return {
+      ...publicItem,
+      key: "restricted",
+      label: "Restricted document",
+      validationState: "restricted",
+      action: "remind" as const,
+      eligibleForReminder: false,
+      capabilities: { canRemind: false },
+      case: await safeCase(item.case, item.caseId),
+    };
+  }));
+  const approvals = await Promise.all(result.approvals.map(async (item) => ({
+    ...item,
+    // Approval recommendation/rationale are opaque free text. Do not pass
+    // them through a list/dashboard merely because their wording had no
+    // classifier hit.
+    ruleRef: "restricted-sensitive-approval",
+    recommendation: "Restricted specialist approval pending or recorded.",
+    rationale: "Details are restricted to the assigned specialist.",
+    case: await safeCase(item.case, item.caseId),
+  })));
+  const notifications = result.notifications.map((item) => ({
+    ...item,
+    // BGV clearance state is operationally visible; raw event/message text,
+    // provider recipient, and actor identity are not.
+    title: item.kind === "bgv"
+      ? "Background-verification clearance needs attention"
+      : "Restricted onboarding notification",
+    detail: item.kind === "bgv"
+      ? `Background-verification clearance state: ${item.status}.`
+      : "Operational state recorded; details are restricted.",
+    recipient: "Restricted",
+    initiator: "Restricted",
+  }));
+  const workItems = result.workItems.map((item) => ({
+    ...item,
+    owner: null,
+    assignee: null,
+    reason: null,
+    actor: "Restricted",
+  }));
+  const completed = result.completed.map((item) => ({
+    ...item,
+    summary: "Restricted onboarding action recorded.",
+    actor: "Restricted",
+  }));
+  const opportunities = result.opportunities.map((item) => ({
+    id: item.id,
+    caseId: item.caseId,
+    actionVersion: item.actionVersion,
+    kind: item.kind,
+    priority: item.priority,
+    title: item.kind === "bgv-checkpoint"
+      ? "Background-verification clearance checkpoint"
+      : "Restricted onboarding checkpoint",
+    description: item.kind === "bgv-checkpoint"
+      ? "A recorded BGV clearance state requires attention."
+      : "Operational checkpoint requires attention; details are restricted.",
+    benefit: {
+      type: "mandatory-checkpoint" as const,
+      checkpoint: item.kind === "bgv-checkpoint" ? "background-verification" : "restricted",
+      delta: null,
+    },
+    evidence: { source: "restricted-operational-state" },
+    capabilities: { canAct: false },
+    caseHref: item.caseHref,
+  }));
+  return {
+    ...result,
+    approvals,
+    notifications,
+    documentFollowups,
+    workItems,
+    completed,
+    opportunities,
+  };
+}
+
 function clientError(error: unknown, res: Response): boolean {
+  if (error instanceof SensitiveAuthorityRequiredError) {
+    res.status(403).json({
+      message: "A current case-scoped specialist authority assignment is required for this sensitive action.",
+      code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+    });
+    return true;
+  }
   if (error instanceof ActionCenterNotFoundError || /case or document not found|case not found/i.test(String((error as Error).message))) {
     res.status(404).json({ message: error instanceof Error ? error.message : "Action Center record not found." });
     return true;
@@ -74,8 +230,9 @@ router.get("/onboarding/action-center", async (req, res, next) => {
       res.status(400).json({ message: parsed.error.message });
       return;
     }
+    const organizationId = getOrganizationId(req);
     const result = await getActionCenter(
-      getOrganizationId(req),
+      organizationId,
       parsed.data.scope,
       parsed.data.limit,
       {
@@ -84,7 +241,9 @@ router.get("/onboarding/action-center", async (req, res, next) => {
         siteExposure: parsed.data.siteExposure,
       },
     );
-    res.json(GetOnboardingActionCenterResponse.parse(result));
+    res.json(GetOnboardingActionCenterResponse.parse(
+      await sensitiveActionCenterProjection(organizationId, req.authUserId, result),
+    ));
   } catch (error) {
     if (clientError(error, res)) return;
     next(error);
@@ -149,9 +308,10 @@ router.post("/onboarding/action-center/actions/manual-call-outcome", async (req,
 router.post("/onboarding/action-center/actions/remind-document", async (req, res, next) => {
   try {
     const body = RemindOnboardingActionCenterDocumentBody.parse(req.body);
-    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, body.mode);
+    const organizationId = getOrganizationId(req);
+    assertActionCenterMutationAuthorized(organizationId, req.organizationRole, body.mode);
     const result = await recordDocumentReminder({
-      organizationId: getOrganizationId(req),
+      organizationId,
       actorUserId: req.authUserId!,
       actorName: await resolveReviewerName(req.authUserId!),
       organizationRole: req.organizationRole,

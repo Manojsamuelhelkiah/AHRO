@@ -7,31 +7,39 @@ import {
   onbCandidateUploads,
   onbCases,
   onbDocuments,
-  DEMO_ORGANIZATION_ID,
+  onbSensitiveLifecyclePolicies,
+  organizationsTable,
 } from "@workspace/db";
 import { LEGACY_CHECKLIST, readinessFromChecklist } from "./settings";
 import { documentationGateConfigured, resumeChecklistOrchestration } from "./engine";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `engine-document-gate-${process.pid}-${randomUUID()}`;
+const organizationId = `${suffix}-tenant`;
 const caseIds: number[] = [];
 let sequence = 0;
 
 describe("live document malware gate in orchestration", { skip: !hasDb }, () => {
   before(async () => {
-    // Keep this suite's fixtures isolated from demo and other database-backed
-    // tests while still using the already-provisioned demo tenant.
     sequence = 0;
+    await db.insert(organizationsTable).values({
+      id: organizationId, name: organizationId, slug: organizationId,
+      joinCodeHash: `${organizationId}-join`, createdByUserId: "test-owner",
+    });
+    await seedApprovedSensitiveLifecyclePolicies(organizationId);
   });
 
   after(async () => {
     for (const caseId of caseIds) {
       // Case-owned rows cascade from this parent.
       await db.delete(onbCases).where(and(
-        eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
+          eq(onbCases.organizationId, organizationId),
         eq(onbCases.id, caseId),
       ));
     }
+    await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
   });
 
   async function createCase() {
@@ -41,7 +49,7 @@ describe("live document malware gate in orchestration", { skip: !hasDb }, () => 
       note: "Fixture deliberately has a cached ready snapshot",
     }));
     const [created] = await db.insert(onbCases).values({
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId,
       workerName: `Engine Gate ${sequence}`,
       workerEmail: `engine-gate-${suffix}-${sequence}@example.com`,
       hireType: "external",
@@ -49,6 +57,7 @@ describe("live document malware gate in orchestration", { skip: !hasDb }, () => 
       role: "Engineer",
       department: "Engineering",
       geography: "US",
+      workforceContext: { workCountry: "US" },
       legalEntity: "Test Co",
       managerName: "Manager",
       recruiterName: "Recruiter",
@@ -67,7 +76,7 @@ describe("live document malware gate in orchestration", { skip: !hasDb }, () => 
 
   async function createDocument(caseId: number, key: string, required = true) {
     const [document] = await db.insert(onbDocuments).values({
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId,
       caseId,
       key,
       label: key,
@@ -86,7 +95,7 @@ describe("live document malware gate in orchestration", { skip: !hasDb }, () => 
     malwareScanState: "pending" | "clean" = "pending",
   ) {
     const [upload] = await db.insert(onbCandidateUploads).values({
-      organizationId: DEMO_ORGANIZATION_ID,
+      organizationId,
       caseId,
       documentId,
       objectPath: `engine-document-gate/${suffix}/${id}.pdf`,
@@ -145,7 +154,7 @@ describe("live document malware gate in orchestration", { skip: !hasDb }, () => 
         .for("update");
       replacementHasCaseLock();
       await tx.insert(onbCandidateUploads).values({
-        organizationId: DEMO_ORGANIZATION_ID,
+        organizationId,
         caseId,
         documentId: document.id,
         objectPath: `engine-document-gate/${suffix}/raced-new.pdf`,

@@ -474,50 +474,127 @@
     {
       "idx": 67,
       "version": "7",
-      "when": 1789026000016,
-      "tag": "0053_organization_membership_revision",
+      "when": 1789026000015,
+      "tag": "0052_sensitive_lifecycle_controls",
       "breakpoints": true
     },
     {
       "idx": 68,
       "version": "7",
       "when": 1789026000016,
-      "tag": "0053_governed_hr_policy_library",
+      "tag": "0053_sensitive_relational_lifecycle",
       "breakpoints": true
     },
     {
       "idx": 69,
+      "version": "7",
+      "when": 1789026000017,
+      "tag": "0054_sensitive_relational_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1789026000018,
+      "tag": "0055_correct_communication_lifecycle_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1789026000019,
+      "tag": "0056_correct_null_communication_lifecycle_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1789026000020,
+      "tag": "0057_case_derived_sensitive_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1789026000021,
+      "tag": "0058_case_derived_lifecycle_scan_cursor",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1789026000022,
+      "tag": "0059_remove_cursor_tenant_cleanup_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1789026000016,
+      "tag": "0053_organization_membership_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1789026000023,
+      "tag": "0060_governed_minimal_approval_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1789026000024,
+      "tag": "0061_candidate_upload_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1789026000016,
+      "tag": "0053_governed_hr_policy_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
       "version": "7",
       "when": 1789026000018,
       "tag": "0053_external_audit_anchor_receipt_generation",
       "breakpoints": true
     },
     {
-      "idx": 70,
+      "idx": 80,
       "version": "7",
       "when": 1789026000017,
       "tag": "0054_hr_policy_review_authority_category",
       "breakpoints": true
     },
     {
-      "idx": 71,
+      "idx": 81,
       "version": "7",
       "when": 1789026000020,
       "tag": "0054_external_audit_anchor_receipt_constraints",
       "breakpoints": true
     },
     {
-      "idx": 72,
+      "idx": 82,
       "version": "7",
       "when": 1789026000018,
       "tag": "0055_hr_policy_publication_receipts_and_excerpts",
       "breakpoints": true
     },
     {
-      "idx": 73,
+      "idx": 83,
       "version": "7",
       "when": 1789026000019,
       "tag": "0056_hr_policy_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1789194000000,
+      "tag": "0062_candidate_upload_reservation_context_version",
       "breakpoints": true
     }
   ]

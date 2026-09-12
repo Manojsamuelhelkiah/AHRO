@@ -105,3 +105,40 @@ export const onbCandidateUploads = pgTable("onb_candidate_uploads", {
   index("onb_candidate_uploads_validation_queue_idx").on(t.validationState, t.validationClaimUntil),
   index("onb_candidate_uploads_malware_queue_idx").on(t.malwareScanState, t.malwareScanDeadlineAt),
 ]);
+
+/**
+ * A private object is reserved and inventoried before its first byte is sent
+ * to object storage.  This deliberately has no case/document FK: a cascade
+ * must never erase the only durable record of an interrupted sensitive upload.
+ */
+export const onbCandidateUploadReservations = pgTable("onb_candidate_upload_reservations", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  caseId: integer("case_id").notNull(),
+  documentId: integer("document_id").notNull(),
+  objectPath: text("object_path").notNull(),
+  dataClass: text("data_class").notNull(),
+  jurisdiction: text("jurisdiction").notNull(),
+  /** Immutable case-context version captured with the normalized jurisdiction. */
+  workforceContextVersion: integer("workforce_context_version").notNull(),
+  policyId: integer("policy_id").notNull(),
+  policyRevision: integer("policy_revision").notNull(),
+  /**
+   * This token fences the request which reserved the object from a recovering
+   * worker or a stale request completion.
+   */
+  ownerToken: text("owner_token"),
+  state: text("state").$type<"reserved" | "cleanup-processing" | "finalized" | "cleanup-completed">().notNull().default("reserved"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }).notNull(),
+  finalizedUploadId: integer("finalized_upload_id"),
+  lastError: text("last_error"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("onb_candidate_upload_reservation_path_unique").on(t.organizationId, t.objectPath),
+  unique("onb_candidate_upload_reservation_owner_path_unique").on(t.ownerToken, t.objectPath),
+  index("onb_candidate_upload_reservation_recovery_idx").on(t.state, t.leaseUntil, t.createdAt),
+  check("onb_candidate_upload_reservation_policy_revision_check", sql`${t.policyRevision} > 0`),
+  check("onb_candidate_upload_reservation_state_check", sql`${t.state} in ('reserved','cleanup-processing','finalized','cleanup-completed')`),
+]);

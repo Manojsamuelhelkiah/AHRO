@@ -30,6 +30,7 @@ import onboardingAuditRouter from "./onboarding-audit";
 import { protectedAuditCapture } from "../middlewares/protected-audit";
 import governanceRouter from "./governance";
 import hrPolicyRouter from "./hr-policies";
+import privacyLifecycleRouter from "./privacy-lifecycle";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -70,6 +71,7 @@ router.use(onboardingBatchIntakeRouter);
 router.use(actionCenterRouter);
 router.use(governanceRouter);
 router.use(hrPolicyRouter);
+router.use(privacyLifecycleRouter);
 router.use(onboardingDemoControllerRouter);
 router.use(onboardingSlaRouter);
 router.use(onboardingContactRouter);

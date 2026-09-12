@@ -1,12 +1,12 @@
-import { test, describe } from "node:test";
+import { after, before, test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { twilioSignatureValid } from "./twilio-signature";
 import { stripQuotedReply, persistInbound, alreadyRecorded } from "./inbound-email";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
-import { onbCases, onbCommunications } from "@workspace/db/schema";
+import { onbCases, onbCommunications, onbSensitiveLifecyclePolicies, organizationsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 /* ------------------------- stripQuotedReply ------------------------- */
 
@@ -87,8 +87,26 @@ describe("twilioSignatureValid", () => {
 /* ------------------- inbound dedup (integration) --------------------- */
 
 const hasDb = Boolean(process.env.DATABASE_URL);
+const DEMO_ORGANIZATION_ID = `inbound-dedup-${process.pid}`;
 
 describe("inbound dedup by provider message id", { skip: !hasDb }, () => {
+  before(async () => {
+    await db.insert(organizationsTable).values({
+      id: DEMO_ORGANIZATION_ID,
+      name: "Inbound dedup test",
+      slug: DEMO_ORGANIZATION_ID,
+      joinCodeHash: `hash-${DEMO_ORGANIZATION_ID}`,
+      createdByUserId: "inbound-dedup-test",
+    });
+    await seedApprovedSensitiveLifecyclePolicies(DEMO_ORGANIZATION_ID);
+  });
+  after(async () => {
+    await db.delete(onbSensitiveLifecyclePolicies).where(
+      eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
+    );
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
+  });
+
   test("duplicate provider ids and own outbound ids are skipped", async () => {
     const [c] = await db
       .insert(onbCases)
@@ -105,6 +123,7 @@ describe("inbound dedup by provider message id", { skip: !hasDb }, () => {
         managerName: "Mgr",
         recruiterName: "Rec",
         joiningDate: "2026-09-01",
+        workforceContext: { workCountry: "US" },
       })
       .returning({ id: onbCases.id, organizationId: onbCases.organizationId });
     try {

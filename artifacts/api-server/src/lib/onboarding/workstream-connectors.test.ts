@@ -17,6 +17,7 @@ import {
   onbGovernanceRequirements,
   onbReadinessSlaAttestations,
   onbReadinessSlaCaseState,
+  onbSensitiveLifecyclePolicies,
   onbSystemChecks,
   organizationsTable,
 } from "@workspace/db/schema";
@@ -42,6 +43,7 @@ import {
   governanceSnapshotForNewCase,
   withGovernanceDecisionSnapshot,
 } from "./governance-runtime";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
 const createdCaseIds: number[] = [];
 const unitOrganizationId = `workstream-guard-${process.pid}-${randomUUID()}`;
@@ -109,6 +111,7 @@ before(async () => {
     joinCodeHash: `hash-${unitOrganizationId}`,
     createdByUserId: "workstream-connector-test",
   });
+  await seedApprovedSensitiveLifecyclePolicies(unitOrganizationId);
 });
 
 beforeEach(async () => {
@@ -128,6 +131,7 @@ beforeEach(async () => {
     managerName: "Manager",
     recruiterName: "Recruiter",
     joiningDate: "2030-01-01",
+    workforceContext: { workCountry: "US" },
     lifecycleStage: "plan-generated",
     orchestrationStatus: "running",
     offerAcceptanceComplete: true,
@@ -147,6 +151,7 @@ after(async () => {
   await db.delete(onbGovernanceAuthorityAssignments).where(eq(onbGovernanceAuthorityAssignments.organizationId, unitOrganizationId));
   await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, unitOrganizationId));
   await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, unitOrganizationId));
+  await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, unitOrganizationId));
   await db.delete(organizationsTable).where(eq(organizationsTable.id, unitOrganizationId));
   for (const id of createdCaseIds) {
     await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, id));
@@ -170,6 +175,7 @@ async function createDatabaseCase(lifecycleStage: string) {
       managerName: "Manager",
       recruiterName: "Recruiter",
       joiningDate: "2026-10-01",
+      workforceContext: { workCountry: "US" },
       lifecycleStage,
       orchestrationStatus: "running",
       offerAcceptanceComplete: true,
@@ -270,6 +276,7 @@ async function createApprovedInternalTransferCase() {
     managerName: "Manager",
     recruiterName: "Recruiter",
     joiningDate: "2030-01-01",
+    workforceContext: { workCountry: "US" },
     lifecycleStage: "plan-generated",
     orchestrationStatus: "running",
     offerAcceptanceComplete: false,

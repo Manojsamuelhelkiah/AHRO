@@ -14,10 +14,19 @@ import {
   onbEffectJournal,
   onbEvents,
   onbApprovals,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDecisions,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceRequirements,
   onbSettings,
   onbSystemChecks,
   onbReadinessSlaPolicies,
+  onbSensitiveLifecyclePolicies,
   onbWatchEmails,
+  organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
 import onboardingRouter from "../../routes/onboarding";
@@ -34,6 +43,14 @@ import {
   withBgvNotificationCaseFence,
 } from "./bgv-notifications";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
+import {
+  governanceSnapshotForNewCase,
+  withGovernanceDecisionSnapshot,
+} from "./governance-runtime";
+import {
+  evaluateSensitiveLifecycleGate,
+  SENSITIVE_DATA_CLASSES,
+} from "./sensitive-lifecycle";
 
 /**
  * This suite deliberately runs only in development.  It uses a real
@@ -179,6 +196,12 @@ async function createCase(
 ): Promise<number> {
   const workerEmail = `bgv-candidate-${createdCases.length}-${suffix}@example.test`;
   allowAddress(workerEmail);
+  const processPolicySnapshot = organizationId === DEMO_ORGANIZATION_ID
+    ? undefined
+    : withGovernanceDecisionSnapshot(
+      {},
+      await governanceSnapshotForNewCase(organizationId),
+    );
   const [created] = await db.insert(onbCases).values({
     organizationId,
     workerName: `BGV Regression Candidate ${createdCases.length}`,
@@ -190,18 +213,63 @@ async function createCase(
     department: "Engineering",
     geography: "US",
     legalEntity: "BGV Regression Co",
+    workforceContext: { workCountry: "US" },
     managerName: "Regression Manager",
     recruiterName: "Regression Recruiter",
     joiningDate: "2030-01-01",
     lifecycleStage: "preboarding",
     readiness: [],
     workstreams: [],
+    processPolicySnapshot,
     notes: options.offline ? SYNTHETIC_OFFLINE_MARKER : null,
     candidateEmailAuthorizedAt: options.candidateAuthorized ? new Date() : null,
     candidateEmailAuthorizedBy: options.candidateAuthorized ? testUser : null,
   }).returning({ id: onbCases.id });
   createdCases.push({ id: created.id, organizationId });
   return created.id;
+}
+
+async function establishLiveGovernanceFixture(organizationId: string): Promise<void> {
+  await governanceSnapshotForNewCase(organizationId);
+  const decisions = await db.select().from(onbGovernanceDecisions).where(
+    eq(onbGovernanceDecisions.organizationId, organizationId),
+  );
+  for (const decision of decisions) {
+    const reviewer = `bgv-fixture:${decision.accountableRole}`;
+    const [authority] = await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId,
+      authorityRole: decision.accountableRole,
+      assigneeUserId: reviewer,
+      verificationStatus: "verified",
+      verifiedByUserId: "bgv-fixture-operator",
+      verificationReference: reviewer,
+    }).returning({ id: onbGovernanceAuthorityAssignments.id });
+    await db.insert(onbGovernanceDecisionReviews).values({
+      organizationId,
+      decisionKey: decision.key,
+      decisionRevision: decision.revision,
+      outcome: "approved",
+      reason: "BGV fixture approved decision",
+      authorityAssignmentId: authority!.id,
+      reviewedByUserId: reviewer,
+      verificationReference: reviewer,
+    });
+    await db.update(onbGovernanceDecisions).set({
+      status: "approved",
+      approvedByUserId: reviewer,
+      approvedAt: new Date(),
+    }).where(and(
+      eq(onbGovernanceDecisions.organizationId, organizationId),
+      eq(onbGovernanceDecisions.key, decision.key),
+      eq(onbGovernanceDecisions.revision, decision.revision),
+    ));
+  }
+  await db.update(onbGovernanceRequirements).set({
+    implemented: true,
+    tested: true,
+    configured: true,
+    approvedForLive: true,
+  }).where(eq(onbGovernanceRequirements.organizationId, organizationId));
 }
 
 async function configureCase(
@@ -309,6 +377,50 @@ before(async () => {
     },
   ]);
   for (const address of Object.values(addresses)) allowAddress(address);
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: orgA,
+    clerkUserId: testUser,
+    role: "owner",
+  });
+  await db.insert(onbAuthorityGovernance).values({
+    organizationId: orgA,
+    status: "governance-approved",
+    operatorUserId: testUser,
+    approvedByUserId: testUser,
+    governanceSource: "bgv-test-sensitive-access",
+  });
+  await db.insert(onbAuthorityAssignments).values({
+    id: `bgv-sensitive-access-${suffix}`,
+    organizationId: orgA,
+    personUserId: testUser,
+    authorityRole: "hr-compliance",
+    scopes: ["hr-compliance-approve"],
+    grantorUserId: testUser,
+    source: "test-fixture",
+    governanceDecisionRef: "bgv-test-sensitive-access",
+  });
+  await establishLiveGovernanceFixture(orgA);
+  await establishLiveGovernanceFixture(orgB);
+  // Live BGV coordination carries opaque copies through case-derived
+  // lifecycle handling. The positive fixture must therefore satisfy every
+  // class policy at the concrete Gmail provider boundary.
+  await db.insert(onbSensitiveLifecyclePolicies).values(
+    SENSITIVE_DATA_CLASSES.map((dataClass) => ({
+      organizationId: orgA,
+      dataClass,
+      jurisdiction: "US",
+      revision: 1,
+      purpose: "Minimal BGV onboarding coordination notices",
+      lawfulBasis: "Approved test lifecycle basis",
+      retentionDays: 30,
+      providerSharingApproved: true,
+      permittedProviders: ["gmail"],
+      policyReference: `bgv-test-policy-${dataClass}`,
+      approvalReference: `bgv-test-approval-${dataClass}`,
+      approvedByUserId: testUser,
+      approvedAuthorityAssignmentId: 1,
+    })),
+  );
 
   const app = express();
   app.use(express.json());
@@ -341,7 +453,11 @@ after(async () => {
     );
   }
   const caseIds = createdCases.map(({ id }) => id);
-  const organizationIds = createdCases.map(({ organizationId }) => organizationId);
+  // Both organizations are suite-owned, even if a future focused selection
+  // creates no cases for one of them. Remove every ordinary settings row they
+  // created (including background-worker/checkpoint rows), not only BGV
+  // notification settings, before their organization rows are removed.
+  const organizationIds = [orgA, orgB];
   if (caseIds.length > 0) {
     await db.delete(onbConnectors).where(inArray(onbConnectors.organizationId, organizationIds));
     await db.delete(onbWatchEmails).where(inArray(onbWatchEmails.caseId, caseIds));
@@ -351,12 +467,37 @@ after(async () => {
     await db.delete(onbCommunications).where(inArray(onbCommunications.caseId, caseIds));
     await db.delete(onbSystemChecks).where(inArray(onbSystemChecks.caseId, caseIds));
     await db.delete(onbCases).where(inArray(onbCases.id, caseIds));
-    await db.delete(onbSettings).where(and(
-      inArray(onbSettings.organizationId, organizationIds),
-      sql`${onbSettings.key} like ${`${BGV_NOTIFICATION_SETTING_PREFIX}%`}`,
-    ));
   }
+  await db.delete(onbSettings).where(inArray(onbSettings.organizationId, organizationIds));
   await db.delete(onbReadinessSlaPolicies).where(inArray(onbReadinessSlaPolicies.organizationId, [orgA, orgB]));
+  await db.delete(onbSensitiveLifecyclePolicies).where(inArray(
+    onbSensitiveLifecyclePolicies.organizationId,
+    [orgA, orgB],
+  ));
+  await db.delete(onbAuthorityAssignments).where(inArray(
+    onbAuthorityAssignments.organizationId,
+    [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDispatchMarkers).where(inArray(
+    onbGovernanceDispatchMarkers.organizationId,
+    [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDecisionReviews).where(inArray(
+    onbGovernanceDecisionReviews.organizationId,
+    [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceAuthorityAssignments).where(inArray(
+    onbGovernanceAuthorityAssignments.organizationId,
+    [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceRequirements).where(inArray(
+    onbGovernanceRequirements.organizationId,
+    [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDecisions).where(inArray(
+    onbGovernanceDecisions.organizationId,
+    [orgA, orgB],
+  ));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
   if (oldAllowedRecipients === undefined) delete process.env.ONBOARDING_ALLOWED_RECIPIENTS;
   else process.env.ONBOARDING_ALLOWED_RECIPIENTS = oldAllowedRecipients;
@@ -523,6 +664,7 @@ test("trusted provider notices include all required stakeholders without exposin
 
   const rows = await communicationRows(caseId);
   assert.equal(rows.length, 9, "six stakeholder rows plus three simulated internal holds");
+  assert.ok(rows.every((row) => row.sensitive));
   assert.ok(rows.every((row) => !row.body.includes("SSN-RAW-REGRESSION-123")));
   assert.ok(rows.every((row) => !row.body.includes("raw adverse finding")));
   const liveRows = rows.filter((row) => row.status === "sent");
@@ -530,17 +672,17 @@ test("trusted provider notices include all required stakeholders without exposin
   assert.ok(liveRows.every((row) => row.externalMessageId?.startsWith("provider-message-")));
   const complianceRow = rows.find((row) => row.idempotencyKey?.includes(":compliance:purpose"));
   assert.ok(complianceRow?.sensitive);
-  assert.match(complianceRow?.body ?? "", /restricted human review/i);
+  assert.match(complianceRow?.body ?? "", /restricted case state requires human review/i);
   assert.doesNotMatch(complianceRow?.body ?? "", /SSN-RAW-REGRESSION-123/);
   const stakeholderRows = rows.filter((row) => !row.idempotencyKey?.includes(":internal:"));
   assert.ok(stakeholderRows.every((row) =>
     row.subject?.includes(`Case #${caseId}`) &&
     row.body.includes(`Case #${caseId}`),
   ));
-  for (const role of ["hr", "recruiter", "hiringManager"]) {
-    const row = rows.find((candidate) => candidate.idempotencyKey?.includes(`:${role}:purpose`));
-    assert.match(row?.body ?? "", /2030-01-01/);
-  }
+  assert.ok(stakeholderRows.every((row) =>
+    !row.body.includes("BGV Regression Candidate") &&
+    !row.body.includes("2030-01-01"),
+  ));
   assert.doesNotMatch(complianceRow?.body ?? "", /BGV workspace|authorized review workspace/i);
 
   const effects = await db.select().from(onbEffectJournal).where(eq(onbEffectJournal.caseId, caseId));
@@ -550,6 +692,147 @@ test("trusted provider notices include all required stakeholders without exposin
     effect.providerIdempotency === false &&
     effect.status === "confirmed" &&
     effect.externalEffectId?.startsWith("provider-message-"),
+  ));
+});
+
+test("an injected BGV sender is fenced by the exact approved Gmail lifecycle provider", async () => {
+  const caseId = await createCase(orgB, { candidateAuthorized: true });
+  await configureCase(orgB, caseId, {
+    bgvTeam: recipient(null, false, false),
+    recruiter: recipient(null, false, false),
+    hiringManager: recipient(null, false, false),
+    compliance: recipient(null, false, false),
+    candidate: { enabled: false, purposeAuthorized: false },
+  });
+  const sender = makeSender();
+  const [storedCase] = await db.select({ workforceContext: onbCases.workforceContext })
+    .from(onbCases)
+    .where(eq(onbCases.id, caseId));
+  assert.deepEqual(storedCase?.workforceContext, { workCountry: "US" });
+
+  const denied = await recordBgvBlockedEpisode({
+    organizationId: orgB,
+    caseId,
+    source: "webhook",
+    provenance: "trusted-provider",
+    reason: "provider exception requires review",
+    sender: sender.sender,
+  });
+  assert.equal(sender.calls.length, 0);
+  const deniedHr = rowForRole(await communicationRows(caseId), publicCycle(denied).cycleId, "hr");
+  // Collection is denied before a BGV communication row is created; a
+  // lifecycle-policy absence must not be converted into retained evidence.
+  assert.equal(deniedHr, undefined);
+
+  const [wrongProviderPolicy] = await db.insert(onbSensitiveLifecyclePolicies).values({
+    organizationId: orgB,
+    dataClass: "bgv",
+    jurisdiction: "US",
+    revision: 1,
+    purpose: "Minimal BGV onboarding coordination notices",
+    lawfulBasis: "Approved test lifecycle basis",
+    retentionDays: 30,
+    providerSharingApproved: true,
+    permittedProviders: ["not-gmail"],
+    policyReference: "bgv-wrong-provider-test-policy",
+    approvalReference: "bgv-wrong-provider-test-approval",
+    approvedByUserId: testUser,
+    approvedAuthorityAssignmentId: 1,
+  }).returning();
+  assert.equal(wrongProviderPolicy.isCurrent, true);
+  const wrongProviderGate = await evaluateSensitiveLifecycleGate({
+    organizationId: orgB,
+    jurisdiction: "US",
+    dataClass: "bgv",
+    disclosure: true,
+    providerId: "gmail",
+  });
+  assert.equal(wrongProviderGate.allowed, false);
+  assert.match(
+    wrongProviderGate.reason ?? "",
+    /does not authorize this concrete provider disclosure/i,
+  );
+  // Keep the wrong-provider assertion isolated to BGV. All other classes are
+  // approved for Gmail before the concrete BGV provider policy is corrected.
+  await db.insert(onbSensitiveLifecyclePolicies).values(
+    SENSITIVE_DATA_CLASSES
+      .filter((dataClass) => dataClass !== "bgv")
+      .map((dataClass) => ({
+        organizationId: orgB,
+        dataClass,
+        jurisdiction: "US",
+        revision: 1,
+        purpose: "Minimal BGV onboarding coordination notices",
+        lawfulBasis: "Approved test lifecycle basis",
+        retentionDays: 30,
+        providerSharingApproved: true,
+        permittedProviders: ["gmail"],
+        policyReference: `bgv-wrong-provider-supporting-policy-${dataClass}`,
+        approvalReference: `bgv-wrong-provider-supporting-approval-${dataClass}`,
+        approvedByUserId: testUser,
+        approvedAuthorityAssignmentId: 1,
+      })),
+  );
+  const wrongProviderCase = await createCase(orgB, { candidateAuthorized: true });
+  await configureCase(orgB, wrongProviderCase, {
+    bgvTeam: recipient(null, false, false),
+    recruiter: recipient(null, false, false),
+    hiringManager: recipient(null, false, false),
+    compliance: recipient(null, false, false),
+    candidate: { enabled: false, purposeAuthorized: false },
+  });
+  const wrongProvider = await recordBgvBlockedEpisode({
+    organizationId: orgB,
+    caseId: wrongProviderCase,
+    source: "webhook",
+    provenance: "trusted-provider",
+    reason: "provider exception requires review",
+    sender: sender.sender,
+  });
+  assert.equal(sender.calls.length, 0);
+  const wrongProviderHr = rowForRole(
+    await communicationRows(wrongProviderCase),
+    publicCycle(wrongProvider).cycleId,
+    "hr",
+  );
+  assert.equal(wrongProviderHr?.status, "logged-only");
+  assert.match(
+    wrongProviderHr?.failureReason ?? "",
+    /does not authorize this concrete provider disclosure/i,
+  );
+
+  await db.update(onbSensitiveLifecyclePolicies).set({
+    permittedProviders: ["gmail"],
+  }).where(and(
+    eq(onbSensitiveLifecyclePolicies.organizationId, orgB),
+    eq(onbSensitiveLifecyclePolicies.dataClass, "bgv"),
+    eq(onbSensitiveLifecyclePolicies.isCurrent, true),
+  ));
+  const approvedCase = await createCase(orgB, { candidateAuthorized: true });
+  await configureCase(orgB, approvedCase, {
+    bgvTeam: recipient(null, false, false),
+    recruiter: recipient(null, false, false),
+    hiringManager: recipient(null, false, false),
+    compliance: recipient(null, false, false),
+    candidate: { enabled: false, purposeAuthorized: false },
+  });
+  const approved = await recordBgvBlockedEpisode({
+    organizationId: orgB,
+    caseId: approvedCase,
+    source: "webhook",
+    provenance: "trusted-provider",
+    reason: "provider exception requires review",
+    sender: sender.sender,
+  });
+  assert.equal(sender.calls.length, 1);
+  const approvedHr = rowForRole(
+    await communicationRows(approvedCase),
+    publicCycle(approved).cycleId,
+    "hr",
+  );
+  assert.equal(approvedHr?.status, "sent");
+  assert.ok(sender.calls.every((call) =>
+    !/provider exception|discrepancy|adverse|BGV Regression Candidate/i.test(call.body),
   ));
 });
 
@@ -915,7 +1198,7 @@ test("ordinary members cannot forge heartbeat/startup reasons, and admin reconci
     });
     assert.equal(forged.status, 403, `forged ${reason} must remain forbidden`);
     const body = await forged.json() as { message?: string };
-    assert.match(body.message ?? "", /owner or admin/i);
+    assert.match(body.message ?? "", /HR\/compliance specialist authority|owner or admin/i);
   }
 
   const admin = await routeCall(reconcilePath, orgA, "admin", {
@@ -1304,7 +1587,7 @@ test("configuration is version fenced, role protected with 403, and tenant scope
     orgB,
     "owner",
   );
-  assert.equal(crossTenantRead.status, 404);
+  assert.equal(crossTenantRead.status, 403);
   const crossTenantWrite = await routeCall(
     `/onboarding/cases/${caseA}/bgv-notifications`,
     orgB,
@@ -1314,7 +1597,7 @@ test("configuration is version fenced, role protected with 403, and tenant scope
       body: JSON.stringify({ version: loaded.version, config: loaded.config }),
     },
   );
-  assert.equal(crossTenantWrite.status, 404);
+  assert.equal(crossTenantWrite.status, 403);
 
   const ownerPut = await routeCall(
     `/onboarding/cases/${caseA}/bgv-notifications`,

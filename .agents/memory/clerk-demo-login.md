@@ -7,9 +7,9 @@ Clerk device verification sends an email code at sign-in (status `needs_second_f
 
 **Why:** The shared demo reviewer account hit this — password accepted, then stuck on an email code nobody can receive.
 
-When a browser-testing worker resets, do not assume rerunning a synthetic sign-in helper restores the same Clerk identity.
+Verify the authenticated subject before treating unexpected tenant permissions as an authorization regression.
 
-**Why:** A recovered test session had a different Clerk subject and joined the original test organization as a member; this initially looked like an owner-role regression. The persisted owner membership was correct.
+**Why:** Synthetic sign-in helpers may create a different identity, while tenant ownership remains bound to the original subject.
 
 **How to apply:** Compare the current authenticated subject with the fixture's owner user ID before diagnosing tenant authorization. Resume the exact identity or create a fresh owned fixture; never broaden a demo-login endpoint to accept arbitrary accounts.
 

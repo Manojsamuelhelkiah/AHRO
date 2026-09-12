@@ -21,6 +21,10 @@ import { reopenGateCApprovalInTransaction } from "./readiness-sla-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import { assertGovernanceMutationAllowed } from "./governance-dispatch";
 import {
+  assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
+import {
   hasTrustedBgvClearanceEvidence,
   hasTrustedHrisActivationEvidence,
   hasTrustedProviderConfiguration,
@@ -926,8 +930,9 @@ export async function rebaseGovernanceCase(input: {
     throw new GovernanceCaseRebaseConflictError("A non-negative expected governance snapshot version is required.");
   }
   await ensureGovernanceSeeded(input.organizationId);
-  return db.transaction(async (tx) => {
+  return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     await assertGovernanceMutationAllowed(tx, input.organizationId);
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
     await acquireCaseDispatchMutationLock(tx, input.organizationId, input.caseId);
     const [caseRow] = await tx.select().from(onbCases).where(and(
       eq(onbCases.organizationId, input.organizationId),
@@ -1007,5 +1012,5 @@ export async function rebaseGovernanceCase(input: {
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });
     return prepared.nextSnapshot;
-  });
+  }));
 }

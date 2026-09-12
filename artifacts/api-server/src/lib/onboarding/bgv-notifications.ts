@@ -18,10 +18,8 @@ import { getSetting, HR_ALERT_EMAIL_KEY, HR_APPROVER_EMAIL_KEY, isValidEmail } f
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import {
   ACTION_IDENTITY_SETTING_KEY,
-  formatEmailIdentityLines,
   identityForRole,
   parseActionIdentityConfig,
-  type EmailDeliveryMode,
   type NamedStakeholders,
 } from "./email-identity";
 import {
@@ -29,6 +27,15 @@ import {
   ensureEffectJournalEntry,
 } from "./effect-journal";
 import { onbEffectJournal } from "@workspace/db/schema";
+import {
+  dispatchWithProviderGovernance,
+  PROVIDER_GOVERNANCE_WORKFLOW,
+} from "./governance-provider-boundary";
+import {
+  evaluateSensitiveLifecycleGate,
+  jurisdictionForWorkforceContext,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 
 type AdvisoryClient = {
   query<T = unknown>(text: string, values?: unknown[]): Promise<{ rows: T[] }>;
@@ -741,13 +748,32 @@ function rolePurpose(role: BgvNotificationRole, cycle: StoredCycle): string {
   }[role];
 }
 
+/**
+ * BGV notices deliberately do not use the normal email identity footer: it
+ * repeats display names and delivery addresses in the message body. The
+ * recipient is authorized separately, but this BGV message may contain only
+ * its generic case/reference and bounded action language.
+ */
+function boundedBgvNoticeLines(
+  caseId: number,
+  reference: string,
+  actionRequired: string,
+  simulated = false,
+): string[] {
+  return [
+    simulated
+      ? "SIMULATED ONLY — no external provider action was sent."
+      : "This notice contains only a generic onboarding case reference.",
+    `Action required: ${actionRequired}`,
+    `Reference: ${reference}`,
+    `Secure case reference: Case #${caseId}`,
+  ];
+}
+
 function copyFor(
   role: BgvNotificationRole,
   cycle: StoredCycle,
   c: typeof onbCases.$inferSelect,
-  namedStakeholders: NamedStakeholders,
-  deliveryMode: EmailDeliveryMode,
-  deliveryAddress: string | null,
 ): { subject: string; body: string } {
   const caseReference = `Case #${c.id}`;
   const reference = `BGV-${c.id}-${cycle.cycleId}`;
@@ -765,56 +791,32 @@ function copyFor(
     const body =
       role === "candidate"
         ? `${caseReference}: A generic onboarding hold was released. Please continue using the secure onboarding portal or contact HR for next steps. This is not an employment clearance.`
-        : `${caseReference}: A generic onboarding hold for ${c.workerName} was released after the source reported completion. Please review the existing onboarding case or contact HR for next steps. This is not an employment clearance or an automated employment decision.`;
+        : `${caseReference}: A generic onboarding hold was released. Review the existing onboarding case or contact HR for next steps. This is not an employment clearance or an automated employment decision.`;
     return {
       subject: `Onboarding hold update — ${caseReference}`,
       body: [
-        `Employee: ${c.workerName}`,
         body,
         "",
-        ...formatEmailIdentityLines({
-          stakeholder: stakeholderFor(role, c, namedStakeholders),
-          deliveryAddress,
-          requestedBy: "bgv-notifications",
-          requestedByKind: "agent",
-          deliveryMode,
-          actionRequired,
-          reference,
-          appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(c.id))}&reference=${encodeURIComponent(reference)}`,
-        }),
+        ...boundedBgvNoticeLines(c.id, reference, actionRequired),
       ].join("\n"),
     };
   }
-  const joiningDate =
-    ["hr", "recruiter", "hiringManager"].includes(role) && c.joiningDate
-      ? ` The recorded joining date is ${c.joiningDate}.`
-      : "";
   const body = {
-    hr: `${caseReference}: Background verification for ${c.workerName} requires human HR review. The onboarding case remains on a generic hold pending review.${joiningDate} Review the existing onboarding case and coordinate the HR review. No automated employment decision was made.`,
+    hr: `${caseReference}: This onboarding case requires human HR review. The case remains on a generic hold pending review. Review the existing case and coordinate the HR review. No finding details are included and no automated employment decision was made.`,
     bgvTeam: `${caseReference}: SIMULATED ONLY: please review the existing provider case through the authorized provider workflow and update the status. No provider action was sent.`,
-    recruiter: `${caseReference}: Please coordinate with HR about the background-verification onboarding hold for ${c.workerName} and any start-date impact.${joiningDate} Review the existing onboarding case with HR. No finding details are included in this notice.`,
-    hiringManager: `${caseReference}: Please coordinate with HR about the background-verification onboarding hold for ${c.workerName} and any start-date impact.${joiningDate} Review the existing onboarding case with HR. No finding details are included in this notice.`,
-    compliance: `${caseReference} for ${c.workerName}: A background-verification state requires restricted human review. Review the existing case through the authorized restricted review process and coordinate with HR. This notice contains no raw finding and makes no automated employment decision.`,
+    recruiter: `${caseReference}: Please coordinate with HR about a generic onboarding hold and any operational timing impact. Review the existing onboarding case with HR. No finding details are included in this notice.`,
+    hiringManager: `${caseReference}: Please coordinate with HR about a generic onboarding hold and any operational timing impact. Review the existing onboarding case with HR. No finding details are included in this notice.`,
+    compliance: `${caseReference}: A restricted case state requires human review. Review the existing case through the authorized restricted review process and coordinate with HR. This notice contains no raw finding and makes no automated employment decision.`,
     candidate: `${caseReference}: Please use the secure onboarding portal or contact HR to provide the requested information. This notice does not describe a discrepancy or adverse finding.`,
   }[role];
   return {
     subject: role === "compliance"
-      ? `BGV review required — ${caseReference}`
-      : `Background verification onboarding update — ${caseReference}`,
+      ? `Onboarding case review required — ${caseReference}`
+      : `Onboarding case update — ${caseReference}`,
     body: [
-      `Employee: ${c.workerName}`,
       body,
       "",
-      ...formatEmailIdentityLines({
-        stakeholder: stakeholderFor(role, c, namedStakeholders),
-        deliveryAddress,
-        requestedBy: "bgv-notifications",
-        requestedByKind: "agent",
-        deliveryMode,
-        actionRequired,
-        reference,
-        appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(c.id))}&reference=${encodeURIComponent(reference)}`,
-      }),
+      ...boundedBgvNoticeLines(c.id, reference, actionRequired),
     ].join("\n"),
   };
 }
@@ -823,46 +825,35 @@ function internalCopy(
   internal: (typeof INTERNAL_HOLDS)[number],
   episode: "blocked" | "release",
   caseId: number,
-  workerName: string,
 ): { subject: string; body: string } {
   const caseReference = `Case #${caseId}`;
-  const employeeReference = `Employee: ${workerName}`;
+  const reference = `BGV-${caseId}-${internal}`;
   if (episode === "release") {
     return {
       subject: `Simulated generic onboarding hold release — ${caseReference}`,
       body: [
-        `${caseReference}: SIMULATED ONLY: generic ${internal} onboarding hold/release coordination for ${workerName} was recorded. No external ${internal} system was changed and this does not represent employment clearance.`,
-        employeeReference,
+        `${caseReference}: generic ${internal} onboarding hold/release coordination was recorded. No external ${internal} system was changed and this does not represent employment clearance.`,
         "",
-        ...formatEmailIdentityLines({
-          stakeholder: { name: "", role: `${internal} stakeholder` },
-          deliveryAddress: null,
-          requestedBy: "bgv-notifications",
-          requestedByKind: "agent",
-          deliveryMode: "simulated",
-          actionRequired: `Review the simulated ${internal} coordination only; no external system was changed.`,
-          reference: `BGV-${caseId}-${internal}`,
-          appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(caseId))}&reference=${encodeURIComponent(`BGV-${caseId}-${internal}`)}`,
-        }),
+        ...boundedBgvNoticeLines(
+          caseId,
+          reference,
+          `Review the simulated ${internal} coordination only; no external system was changed.`,
+          true,
+        ),
       ].join("\n"),
     };
   }
   return {
     subject: `Simulated generic onboarding hold — ${caseReference}`,
     body: [
-      `${caseReference}: SIMULATED ONLY: generic ${internal} onboarding work for ${workerName} is held while a BGV case receives human review. No finding details, employee decision, or external ${internal} action is included.`,
-      employeeReference,
+      `${caseReference}: generic ${internal} onboarding work is held while a BGV case receives human review. No finding details, employee decision, or external ${internal} action is included.`,
       "",
-      ...formatEmailIdentityLines({
-        stakeholder: { name: "", role: `${internal} stakeholder` },
-        deliveryAddress: null,
-        requestedBy: "bgv-notifications",
-        requestedByKind: "agent",
-        deliveryMode: "simulated",
-        actionRequired: `Record and review the simulated ${internal} hold only; no external system was changed.`,
-        reference: `BGV-${caseId}-${internal}`,
-        appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(caseId))}&reference=${encodeURIComponent(`BGV-${caseId}-${internal}`)}`,
-      }),
+      ...boundedBgvNoticeLines(
+        caseId,
+        reference,
+        `Record and review the simulated ${internal} hold only; no external system was changed.`,
+        true,
+      ),
     ].join("\n"),
   };
 }
@@ -1218,7 +1209,8 @@ async function insertSimulated(
   toAddress: string,
   subject: string,
   body: string,
-): Promise<number> {
+): Promise<number | null> {
+  return withBgvCollectionFence(organizationId, caseId, async () => {
   const [row] = await db.insert(onbCommunications).values({
     organizationId,
     caseId,
@@ -1230,7 +1222,8 @@ async function insertSimulated(
     body,
     status: "simulated",
     failureReason: "Simulation only; no external message was sent.",
-    sensitive: false,
+    sensitive: true,
+    sensitiveDataClass: "bgv",
     idempotencyKey: key,
   }).onConflictDoNothing({
     target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
@@ -1242,6 +1235,7 @@ async function insertSimulated(
   ));
   if (!existing) throw new Error("Simulated BGV communication claim disappeared.");
   return existing.id;
+  });
 }
 
 async function insertSkipped(
@@ -1251,7 +1245,8 @@ async function insertSkipped(
   toAddress: string,
   subject: string,
   body: string,
-): Promise<number> {
+): Promise<number | null> {
+  return withBgvCollectionFence(organizationId, caseId, async () => {
   const [row] = await db.insert(onbCommunications).values({
     organizationId,
     caseId,
@@ -1263,7 +1258,8 @@ async function insertSkipped(
     body,
     status: "skipped",
     failureReason: body,
-    sensitive: false,
+    sensitive: true,
+    sensitiveDataClass: "bgv",
     idempotencyKey: key,
   }).onConflictDoNothing({
     target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
@@ -1275,6 +1271,34 @@ async function insertSkipped(
   ));
   if (!existing) throw new Error("Skipped BGV communication claim disappeared.");
   return existing.id;
+  });
+}
+
+/** Gate BGV collection itself, not just the later Gmail disclosure. */
+async function withBgvCollectionFence<T>(
+  organizationId: string,
+  caseId: number,
+  write: () => Promise<T>,
+): Promise<T> {
+  return withSensitiveLifecycleFence(organizationId, async () => {
+    const [caseRow] = await db.select({
+      workforceContext: onbCases.workforceContext,
+    }).from(onbCases).where(and(
+      eq(onbCases.organizationId, organizationId),
+      eq(onbCases.id, caseId),
+    ));
+    if (!caseRow) return null as T;
+    const lifecycle = await evaluateSensitiveLifecycleGate({
+      organizationId,
+      jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+      dataClass: "bgv",
+      disclosure: false,
+    });
+    if (!lifecycle.allowed) {
+      return null as T;
+    }
+    return write();
+  });
 }
 
 async function dispatchEmail(
@@ -1285,6 +1309,7 @@ async function dispatchEmail(
   subject: string,
   body: string,
   retryFailed: boolean,
+  caseRow: typeof onbCases.$inferSelect,
   sender: typeof sendEmail = sendEmail,
   fence?: {
     cycleId: string;
@@ -1293,22 +1318,43 @@ async function dispatchEmail(
     role: BgvNotificationRole;
   },
 ): Promise<{ id: number; status: BgvNotificationDeliveryState; failureReason: string | null }> {
-  const [inserted] = await db.insert(onbCommunications).values({
-    organizationId,
-    caseId,
-    channel: "email",
-    direction: "outbound",
-    audience: "admin",
-    toAddress: recipient,
-    subject,
-    body,
-    status: "queued",
-    failureReason: null,
-    sensitive: /\breview|discrepancy|adverse/i.test(subject + body),
-    idempotencyKey: key,
-  }).onConflictDoNothing({
-    target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
-  }).returning({ id: onbCommunications.id });
+  // This row itself is sensitive BGV collection, independently of whether a
+  // later Gmail dispatch is approved. Keep the class-specific lifecycle
+  // decision and its first durable write under the same fence.
+  let collectionDeniedReason: string | null = null;
+  const inserted = await withSensitiveLifecycleFence(organizationId, async () => {
+    const lifecycle = await evaluateSensitiveLifecycleGate({
+      organizationId,
+      jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+      dataClass: "bgv",
+      disclosure: false,
+    });
+    if (!lifecycle.allowed) {
+      collectionDeniedReason = lifecycle.reason ?? "BGV communication collection is blocked by the sensitive lifecycle policy.";
+      return undefined;
+    }
+    const [row] = await db.insert(onbCommunications).values({
+      organizationId,
+      caseId,
+      channel: "email",
+      direction: "outbound",
+      audience: "admin",
+      toAddress: recipient,
+      subject,
+      body,
+      status: "queued",
+      failureReason: null,
+      sensitive: true,
+      sensitiveDataClass: "bgv",
+      idempotencyKey: key,
+    }).onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
+    }).returning({ id: onbCommunications.id });
+    return row;
+  });
+  if (collectionDeniedReason) {
+    return { id: 0, status: "skipped", failureReason: collectionDeniedReason };
+  }
   let row = inserted;
   if (!row) {
     const [existing] = await db.select().from(onbCommunications).where(and(
@@ -1406,7 +1452,46 @@ async function dispatchEmail(
   }
   let result: Awaited<ReturnType<typeof sendEmail>>;
   try {
-    result = await boundedProviderAttempt(sender, recipient, subject, body);
+    // The injected sender is still an external effect. It must not bypass the
+    // final provider boundary used by the direct Gmail sender: current
+    // governance and the BGV lifecycle policy must approve this exact Gmail
+    // disclosure after the durable dispatch claim and immediately before I/O.
+    // Re-read the case at the final boundary. Besides making a deleted or
+    // re-scoped case fail closed, this supplies the current jurisdiction to
+    // the exact provider-policy evaluation rather than relying on an earlier
+    // reconciliation snapshot.
+    const [currentCase] = await db.select().from(onbCases).where(and(
+      eq(onbCases.id, caseId),
+      eq(onbCases.organizationId, organizationId),
+    ));
+    if (!currentCase) {
+      result = {
+        status: "logged-only",
+        failureReason: "Case is no longer available for external BGV notification dispatch.",
+        externalMessageId: null,
+      };
+    } else {
+      const finalDispatch = await dispatchWithProviderGovernance({
+        caseRow: currentCase,
+        workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
+        operation: `bgv-email:${caseId}:${key}`,
+        providerId: "gmail",
+        dataClass: "bgv",
+        dispatch: () => boundedProviderAttempt(sender, recipient, subject, body),
+        disposition: (value) => value.status === "sending"
+          ? "unknown"
+          : value.status === "sent" || value.status === "delivered"
+            ? "sent"
+            : "definitive-not-sent",
+      });
+      result = finalDispatch.dispatched
+        ? finalDispatch.value
+        : {
+            status: "logged-only",
+            failureReason: finalDispatch.reason,
+            externalMessageId: null,
+          };
+    }
   } catch (error) {
     result = {
       status: "sending",
@@ -1513,8 +1598,10 @@ async function reconcileCycle(
         `BGV notification not sent — Case #${caseId}`,
         `Case #${caseId}: No BGV notification was sent to ${role}: live-authorization-required. The case remains in human review; no finding details are exposed.`,
       );
-      if (!existing) created.push(id);
-      else skipped.push(id);
+      if (id !== null) {
+        if (!existing) created.push(id);
+        else skipped.push(id);
+      }
       continue;
     }
     if (simulatedBase || role === "bgvTeam") {
@@ -1522,9 +1609,6 @@ async function reconcileCycle(
         role,
         cycle,
         caseRow,
-        namedStakeholders,
-        "simulated",
-        rc.email,
       );
       const id = await insertSimulated(
         organizationId,
@@ -1534,8 +1618,10 @@ async function reconcileCycle(
         copy.subject,
         `SIMULATED ONLY — no email was sent.\n\n${copy.body}`,
       );
-      if (!existing) created.push(id);
-      else skipped.push(id);
+      if (id !== null) {
+        if (!existing) created.push(id);
+        else skipped.push(id);
+      }
       continue;
     }
     const reason = liveReason(cycle, role, rc, candidateAuthorized, state.config);
@@ -1548,17 +1634,16 @@ async function reconcileCycle(
         `BGV notification not sent — Case #${caseId}`,
         `Case #${caseId}: Notification skipped: ${reason}. No silent simulation fallback was used.`,
       );
-      if (!existing) created.push(id);
-      else skipped.push(id);
+      if (id !== null) {
+        if (!existing) created.push(id);
+        else skipped.push(id);
+      }
       continue;
     }
     const copy = copyFor(
       role,
       cycle,
       caseRow,
-      namedStakeholders,
-      "real",
-      rc.email,
     );
     if (!(await dispatchFenceValid({
       organizationId,
@@ -1584,6 +1669,7 @@ async function reconcileCycle(
       copy.subject,
       copy.body,
       wasFailed,
+      caseRow,
       sender,
       {
         cycleId: cycle.cycleId,
@@ -1601,7 +1687,7 @@ async function reconcileCycle(
   // IT/payroll/facilities system or imply an employment decision.
   for (const internal of INTERNAL_HOLDS) {
     const key = `bgv:${caseId}:${cycle.cycleId}:internal:${internal}`;
-    const copy = internalCopy(internal, cycle.episode, caseId, caseRow.workerName);
+    const copy = internalCopy(internal, cycle.episode, caseId);
     const id = await insertSimulated(
       organizationId,
       caseId,
@@ -1610,7 +1696,7 @@ async function reconcileCycle(
       copy.subject,
       copy.body,
     );
-    if (!rows.some((row) => row.idempotencyKey === key)) created.push(id);
+    if (id !== null && !rows.some((row) => row.idempotencyKey === key)) created.push(id);
   }
   return { created, retried, skipped };
 }

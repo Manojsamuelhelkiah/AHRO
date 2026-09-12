@@ -13,6 +13,6 @@ Rule: treat generated Zod ordering as unsafe whenever OpenAPI numeric constraint
 
 Pin the generator's Zod target to the installed major rather than relying on automatic detection with pnpm catalog dependencies.
 
-**Why:** Catalog-based version metadata led Orval to emit Zod 4-only top-level UUID validators while the workspace used Zod 3; generation succeeded but the shared build failed.
+**Why:** Catalog-based version metadata can make inference select a different major version from the library consuming the generated validators.
 
-**How to apply:** Keep the generator target aligned when changing Zod versions, and run the shared-library build after regeneration.
+**How to apply:** Keep the target aligned with the consuming library when changing versions. Regenerate rather than hand-edit validators, then build the shared libraries.

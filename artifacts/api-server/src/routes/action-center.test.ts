@@ -8,6 +8,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   DEMO_ORGANIZATION_ID,
   db,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
   onbActionCenterActions,
   onbApprovals,
   onbCandidateUploads,
@@ -17,7 +19,15 @@ import {
   onbDocuments,
   onbEffectJournal,
   onbEvents,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDecisions,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceHistory,
+  onbGovernanceReminders,
+  onbGovernanceRequirements,
   onbSettings,
+  onbSensitiveLifecyclePolicies,
   onbSystemChecks,
   organizationMembershipsTable,
   organizationsTable,
@@ -47,6 +57,13 @@ import {
   updateActionCenterIdentities,
 } from "../lib/onboarding/action-center-identities";
 import { SYNTHETIC_OFFLINE_MARKER } from "../lib/onboarding/synthetic-offline";
+import { setOnboardingConnectorProxyForTests } from "../lib/onboarding/channels";
+import {
+  governanceSnapshotForNewCase,
+  withGovernanceDecisionSnapshot,
+  type GovernanceCaseSnapshot,
+} from "../lib/onboarding/governance-runtime";
+import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
 
 /**
  * This suite uses only test-owned organizations and cases.  The one Demo
@@ -74,6 +91,7 @@ const caseIds: number[] = [];
 const documentIds: number[] = [];
 let safetyCriticalCaseId: number;
 const organizationIds = [orgA, orgB, orgC];
+let liveGovernanceSnapshot: GovernanceCaseSnapshot | undefined;
 
 type JsonRecord = Record<string, any>;
 type IdentityInputMap = Record<
@@ -118,9 +136,56 @@ function caseValues(organizationId: string, options: {
     readiness: [],
     workstreams: [],
     checklistSnapshot: [],
-    workforceContext: options.workforceContext ?? {},
+    processPolicySnapshot: organizationId === orgA && liveGovernanceSnapshot
+      ? withGovernanceDecisionSnapshot({}, liveGovernanceSnapshot)
+      : undefined,
+    workforceContext: options.workforceContext ?? { workCountry: "US" },
     workforceClassification: options.workforceClassification ?? null,
   };
+}
+
+async function establishLiveProviderGovernance(organizationId: string): Promise<GovernanceCaseSnapshot> {
+  await governanceSnapshotForNewCase(organizationId);
+  const decisions = await db.select().from(onbGovernanceDecisions).where(
+    eq(onbGovernanceDecisions.organizationId, organizationId),
+  );
+  for (const decision of decisions) {
+    const reviewer = `action-center-fixture:${decision.accountableRole}`;
+    const [authority] = await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId,
+      authorityRole: decision.accountableRole,
+      assigneeUserId: reviewer,
+      verificationStatus: "verified",
+      verifiedByUserId: "action-center-fixture",
+      verificationReference: reviewer,
+    }).returning({ id: onbGovernanceAuthorityAssignments.id });
+    await db.insert(onbGovernanceDecisionReviews).values({
+      organizationId,
+      decisionKey: decision.key,
+      decisionRevision: decision.revision,
+      outcome: "approved",
+      reason: "Action Center fixture approved decision",
+      authorityAssignmentId: authority!.id,
+      reviewedByUserId: reviewer,
+      verificationReference: reviewer,
+    });
+    await db.update(onbGovernanceDecisions).set({
+      status: "approved",
+      approvedByUserId: reviewer,
+      approvedAt: new Date(),
+    }).where(and(
+      eq(onbGovernanceDecisions.organizationId, organizationId),
+      eq(onbGovernanceDecisions.key, decision.key),
+      eq(onbGovernanceDecisions.revision, decision.revision),
+    ));
+  }
+  await db.update(onbGovernanceRequirements).set({
+    implemented: true,
+    tested: true,
+    configured: true,
+    approvedForLive: true,
+  }).where(eq(onbGovernanceRequirements.organizationId, organizationId));
+  return governanceSnapshotForNewCase(organizationId);
 }
 
 async function createCase(
@@ -294,6 +359,70 @@ before(async () => {
     { organizationId: orgB, clerkUserId: ownerB, role: "owner" },
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: demoMember, role: "member" },
   ]);
+  await db.insert(onbAuthorityGovernance).values({
+    organizationId: orgA,
+    status: "governance-approved",
+    approvedByUserId: "test-governance",
+    approvedAt: new Date(),
+    governanceSource: "test",
+  });
+  await db.insert(onbAuthorityAssignments).values([
+    {
+      id: `action-center-hr-${suffix}`,
+      organizationId: orgA,
+      personUserId: ownerA,
+      authorityRole: "hr-compliance",
+      scopes: ["hr-compliance-approve"],
+      validFrom: new Date(Date.now() - 60_000),
+      grantorUserId: "test-governance",
+      source: "test",
+      governanceDecisionRef: "test-governance",
+    },
+    {
+      id: `action-center-medical-${suffix}`,
+      organizationId: orgA,
+      personUserId: ownerA,
+      authorityRole: "occupational-health",
+      scopes: ["occupational-health-approve"],
+      validFrom: new Date(Date.now() - 60_000),
+      grantorUserId: "test-governance",
+      source: "test",
+      governanceDecisionRef: "test-governance",
+    },
+    {
+      id: `action-center-payroll-${suffix}`,
+      organizationId: orgA,
+      personUserId: ownerA,
+      authorityRole: "payroll",
+      scopes: ["payroll-approve"],
+      validFrom: new Date(Date.now() - 60_000),
+      grantorUserId: "test-governance",
+      source: "test",
+      governanceDecisionRef: "test-governance",
+    },
+  ]);
+  // Live Action Center sends can retain opaque, case-derived copies at
+  // several stages. Seed every class policy rather than approving only the
+  // immediate contact class, so this positive fixture proves the all-class
+  // lifecycle fence without bypassing it.
+  await db.insert(onbSensitiveLifecyclePolicies).values(
+    SENSITIVE_DATA_CLASSES.map((dataClass) => ({
+      organizationId: orgA,
+      dataClass,
+      jurisdiction: "US",
+      revision: 1,
+      purpose: "candidate onboarding reminder",
+      lawfulBasis: "employment onboarding",
+      retentionDays: 30,
+      providerSharingApproved: true,
+      permittedProviders: ["gmail"],
+      policyReference: `test-policy-${dataClass}`,
+      approvalReference: `test-approval-${dataClass}`,
+      approvedByUserId: ownerA,
+      approvedAuthorityAssignmentId: 1,
+    })),
+  );
+  liveGovernanceSnapshot = await establishLiveProviderGovernance(orgA);
 
   const liveCaseId = await createCase(orgA, {
     name: `Action Center Live ${suffix}`,
@@ -438,6 +567,38 @@ after(async () => {
     eq(onbSettings.key, ACTION_CENTER_IDENTITIES_KEY),
   ));
   await db.delete(onbConnectors).where(inArray(onbConnectors.organizationId, organizationIds));
+  // Lifecycle gates can append non-cascading governance evidence while this
+  // suite exercises candidate-facing action paths.
+  await db.delete(onbGovernanceDecisionReviews).where(
+    inArray(onbGovernanceDecisionReviews.organizationId, organizationIds),
+  );
+  await db.delete(onbGovernanceReminders).where(
+    inArray(onbGovernanceReminders.organizationId, organizationIds),
+  );
+  await db.delete(onbGovernanceRequirements).where(
+    inArray(onbGovernanceRequirements.organizationId, organizationIds),
+  );
+  await db.delete(onbGovernanceHistory).where(
+    inArray(onbGovernanceHistory.organizationId, organizationIds),
+  );
+  await db.delete(onbGovernanceDispatchMarkers).where(
+    inArray(onbGovernanceDispatchMarkers.organizationId, organizationIds),
+  );
+  await db.delete(onbGovernanceAuthorityAssignments).where(
+    inArray(onbGovernanceAuthorityAssignments.organizationId, organizationIds),
+  );
+  await db.delete(onbGovernanceDecisions).where(
+    inArray(onbGovernanceDecisions.organizationId, organizationIds),
+  );
+  await db.delete(onbAuthorityAssignments).where(
+    inArray(onbAuthorityAssignments.organizationId, organizationIds),
+  );
+  await db.delete(onbAuthorityGovernance).where(
+    inArray(onbAuthorityGovernance.organizationId, organizationIds),
+  );
+  await db.delete(onbSensitiveLifecyclePolicies).where(
+    inArray(onbSensitiveLifecyclePolicies.organizationId, organizationIds),
+  );
   await db.delete(organizationMembershipsTable).where(
     inArray(organizationMembershipsTable.organizationId, organizationIds),
   );
@@ -451,7 +612,7 @@ after(async () => {
 describe("Action Center focused regression suite", { concurrency: false }, () => {
   test("filters document followups and missing-document count by explicit safety facts, excluding unknown safety", async () => {
     const response = await request("/onboarding/action-center?scope=active&safetyCritical=true", {}, {
-      userId: ownerA,
+      userId: memberA,
       organizationId: orgA,
     });
     assert.equal(response.response.status, 200);
@@ -460,6 +621,9 @@ describe("Action Center focused regression suite", { concurrency: false }, () =>
     assert.equal(Number(bodyRecord(snapshot.counts).missingDocuments), 1);
     assert.equal(followups.length, 1);
     assert.equal(Number(followups[0]?.caseId), safetyCriticalCaseId);
+    assert.equal(followups[0]?.key, "restricted");
+    assert.equal(followups[0]?.label, "Restricted document");
+    assert.doesNotMatch(JSON.stringify(followups[0]), /safety-pending/i);
     // The ordinary fixture's safety context is unknown.  It must not be
     // coerced to false or included in a query for an explicit true fact.
     assert.ok(followups.every((row) => row.caseId !== caseIds[0]));
@@ -499,7 +663,7 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
     assert.equal(forgedOrganization.response.status, 403);
 
     const response = await request("/onboarding/action-center?scope=active", {}, {
-      userId: ownerA,
+      userId: memberA,
       organizationId: orgA,
     });
     assert.equal(response.response.status, 200);
@@ -514,9 +678,16 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
     const firstFollowup = (snapshot.documentFollowups as JsonRecord[]).find(
       (row) => row.caseId === caseIds[0],
     );
+    assert.ok(firstFollowup);
     assert.equal(bodyRecord(bodyRecord(firstFollowup).case).pausedOffline, false);
     assert.equal(bodyRecord(bodyRecord(firstFollowup).case).canAct, true);
-    assert.equal(bodyRecord(bodyRecord(firstFollowup).capabilities).canRemind, true);
+    assert.equal(bodyRecord(bodyRecord(firstFollowup).capabilities).canRemind, false);
+    // An owner/membership context is not specialist authority. The derived
+    // action board must not turn a document follow-up into a contact or
+    // private-document disclosure.
+    assert.equal(bodyRecord(bodyRecord(firstFollowup).case).workerName, "Restricted candidate");
+    assert.equal(bodyRecord(bodyRecord(firstFollowup).case).workerEmail, "restricted");
+    assert.equal(firstFollowup.label, "Restricted document");
     const [bgvCheck] = await db.select({ id: onbSystemChecks.id }).from(onbSystemChecks).where(and(
       eq(onbSystemChecks.organizationId, orgA),
       eq(onbSystemChecks.system, "bgv"),
@@ -674,6 +845,9 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
         headers: { "content-type": "application/json" },
       });
     };
+    setOnboardingConnectorProxyForTests((ReplitConnectors.prototype as unknown as {
+      proxy: typeof ReplitConnectors.prototype.proxy;
+    }).proxy);
     try {
       const demoLive = await request("/onboarding/action-center/actions/remind-document", {
         method: "POST",
@@ -688,6 +862,7 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
       assert.match(String(bodyRecord(demoLive.body).message), /simulation|owner|admin|live|controller/i);
       assert.equal(providerCalls, 0, "Demo member live reminder must not cross the provider boundary");
     } finally {
+      setOnboardingConnectorProxyForTests(null);
       (ReplitConnectors.prototype as unknown as {
         proxy: (...args: any[]) => Promise<Response>;
       }).proxy = originalProxy;
@@ -711,8 +886,7 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
         mode: "simulation",
       }),
     }, { userId: demoMember, organizationId: DEMO_ORGANIZATION_ID });
-    assert.equal(demoSimulation.response.status, 200);
-    assert.equal(bodyRecord(bodyRecord(demoSimulation.body).action).status, "logged-only");
+    assert.equal(demoSimulation.response.status, 403);
   });
 
   test("named identities use server CAS, parse legacy stakeholder shape, and reject malformed settings", async () => {
@@ -1073,7 +1247,8 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
       onbCommunications.caseId,
       caseIds[2]!,
     ));
-    const simulated = await recordDocumentReminder({
+    // A demo persona/member is not sensitive-document authority.
+    await assert.rejects(recordDocumentReminder({
       organizationId: DEMO_ORGANIZATION_ID,
       actorUserId: ownerA,
       actorName,
@@ -1082,26 +1257,11 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
       caseId: caseIds[2]!,
       documentId: demoDocument.id,
       mode: "simulation",
-    });
-    assert.equal(simulated.idempotent, false);
-    assert.equal(simulated.action.status, "logged-only");
+    }));
     assert.equal((await db.select().from(onbCommunications).where(eq(
       onbCommunications.caseId,
       caseIds[2]!,
-    ))).length, beforeCommunications.length + 1);
-
-    const replay = await recordDocumentReminder({
-      organizationId: DEMO_ORGANIZATION_ID,
-      actorUserId: ownerA,
-      actorName,
-      organizationRole: "member",
-      requestId: `demo-simulation-${suffix}`,
-      caseId: caseIds[2]!,
-      documentId: demoDocument.id,
-      mode: "simulation",
-    });
-    assert.equal(replay.idempotent, true);
-    assert.equal(replay.action.providerEffectId, simulated.action.providerEffectId);
+    ))).length, beforeCommunications.length);
     await assert.rejects(
       recordDocumentReminder({
         organizationId: DEMO_ORGANIZATION_ID,
@@ -1113,7 +1273,6 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
         documentId: demoDocument.id,
         mode: "live",
       }),
-      ActionCenterPermissionError,
     );
 
     const ordinarySimulation = await assert.rejects(
@@ -1206,6 +1365,9 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
         headers: { "content-type": "application/json" },
       });
     };
+    setOnboardingConnectorProxyForTests((ReplitConnectors.prototype as unknown as {
+      proxy: typeof ReplitConnectors.prototype.proxy;
+    }).proxy);
     try {
       const sent = await recordDocumentReminder({
         organizationId: orgA,
@@ -1328,6 +1490,7 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
       ));
       assert.equal(afterConcurrent?.reminderCount, 1);
     } finally {
+      setOnboardingConnectorProxyForTests(null);
       (ReplitConnectors.prototype as unknown as {
         proxy: (...args: any[]) => Promise<Response>;
       }).proxy = originalProxy;

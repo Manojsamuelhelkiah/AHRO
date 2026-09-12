@@ -11,7 +11,6 @@ import {
   onbSystemChecks,
 } from "@workspace/db/schema";
 import { getReadinessSlaView } from "./readiness-sla-policy";
-
 export type ExplainabilityTab =
   | "overview"
   | "activity"
@@ -128,11 +127,6 @@ function dateText(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
 }
 
-function recorded(value: string | null | undefined): string {
-  const text = value?.trim();
-  return text || "not recorded";
-}
-
 function safeIso(value: string | null): string | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -158,10 +152,10 @@ function source(
 
 function caseStateExcerpt(row: ExplainableCase, identifiers: readonly string[]): string {
   const readiness = row.readiness.length > 0
-    ? row.readiness.map((item) => `${item.label}: ${item.status}`).join("; ")
+    ? row.readiness.map((item) => `Restricted onboarding check: ${item.status}`).join("; ")
     : "No case readiness items recorded";
   const workstreams = row.workstreams.length > 0
-    ? row.workstreams.map((item) => `${item.label}: ${item.status}`).join("; ")
+    ? row.workstreams.map((item) => `Restricted workstream: ${item.status}`).join("; ")
     : "No workstreams recorded";
   return redactExplainabilityText([
     `Lifecycle stage: ${row.lifecycleStage}.`,
@@ -282,13 +276,23 @@ export async function collectCaseExplainabilityEvidence(
   truncated = collectLimit(limitations, "System-check statuses", checks.length, MAX_CHECKS) || truncated;
   truncated = collectLimit(limitations, "Communication excerpts", communications.length, MAX_COMMUNICATIONS) || truncated;
 
+  // Explainability chat has no specialist-assignment credential. Rather than
+  // make an LLM a new disclosure path, exclude sensitive source rows before
+  // they can become excerpts or model context. A generic operational status
+  // remains available from the case/readiness source.
   const boundedEvents = events.slice(0, MAX_EVENTS);
-  const boundedApprovals = approvals.slice(0, MAX_APPROVALS);
-  const boundedApprovalHistory = approvalHistory.slice(0, MAX_APPROVAL_HISTORY);
-  const boundedDocuments = documents.slice(0, MAX_DOCUMENTS);
+  const boundedApprovals = approvals
+    .slice(0, MAX_APPROVALS);
+  const boundedApprovalHistory = approvalHistory
+    .slice(0, MAX_APPROVAL_HISTORY);
+  const boundedDocuments = documents
+    .slice(0, MAX_DOCUMENTS);
   const boundedUploads = uploads.slice(0, MAX_UPLOADS);
-  const boundedChecks = checks.slice(0, MAX_CHECKS);
-  const boundedCommunications = communications.slice(0, MAX_COMMUNICATIONS);
+  const boundedChecks = checks
+    .slice(0, MAX_CHECKS);
+  // Communication body/subject is entirely opaque. It is never an
+  // explainability-model source, even when the row was not marked sensitive.
+  const boundedCommunications: typeof communications = [];
 
   const sources: ExplainabilitySource[] = [
     source({
@@ -303,8 +307,8 @@ export async function collectCaseExplainabilityEvidence(
     ...boundedEvents.map((event) => source({
       id: `event:${event.id}`,
       kind: "event",
-      title: event.title,
-      excerpt: event.detail,
+      title: "Recorded onboarding activity",
+      excerpt: "An operational onboarding activity was recorded.",
       occurredAt: event.createdAt.toISOString(),
       tab: "activity",
       identifiers,
@@ -315,10 +319,9 @@ export async function collectCaseExplainabilityEvidence(
       title: `Human approval record v${approval.version} — ${approval.status}`,
       excerpt: [
         `Decision type: human approval record.`,
-        `Recommendation: ${approval.recommendation}.`,
-        `Recorded rationale: ${recorded(approval.rationale)}.`,
+        "Recommendation and rationale: restricted specialist content.",
         `Human decision actor: ${approval.decidedBy ? "recorded" : "not recorded"}.`,
-        approval.comment ? `Recorded reviewer comment: ${approval.comment}.` : "Reviewer comment: not recorded.",
+        "Reviewer comment: restricted specialist content.",
         `Decision: ${approval.status}.`,
       ].join(" "),
       occurredAt: dateText(approval.decidedAt ?? approval.createdAt),
@@ -332,9 +335,9 @@ export async function collectCaseExplainabilityEvidence(
       excerpt: [
         `Decision type: human approval history record.`,
         `Status: ${history.status}.`,
-        `Recorded reason: ${recorded(history.reason)}.`,
+        "Recorded reason: restricted specialist content.",
         `Human decision actor: ${history.decidedBy ? "recorded" : "not recorded"}.`,
-        history.comment ? `Recorded reviewer comment: ${history.comment}.` : "Reviewer comment: not recorded.",
+        "Reviewer comment: restricted specialist content.",
       ].join(" "),
       occurredAt: dateText(history.decidedAt ?? history.createdAt),
       tab: "approvals",
@@ -343,11 +346,11 @@ export async function collectCaseExplainabilityEvidence(
     ...boundedDocuments.map((document) => source({
       id: `document:${document.id}`,
       kind: "document-status",
-      title: `Document status — ${document.label}`,
+      title: "Restricted document status",
       excerpt: [
         `Status: ${document.status}.`,
         `Required: ${document.required ? "yes" : "no"}.`,
-        document.note ? `Recorded note: ${document.note}.` : "Recorded note: not recorded.",
+        "Document detail: restricted.",
       ].join(" "),
       occurredAt: document.updatedAt.toISOString(),
       tab: "documents",
@@ -371,13 +374,15 @@ export async function collectCaseExplainabilityEvidence(
     ...boundedChecks.map((check) => source({
       id: `check:${check.id}`,
       kind: "system-check-status",
-      title: `System check — ${check.system}`,
+      title: check.system === "bgv"
+        ? "Background-verification clearance status"
+        : "Restricted system-check status",
       excerpt: [
         `Status: ${check.status}.`,
         `Mode: ${check.mode}.`,
         `Requested at: ${check.requestedAt.toISOString()}.`,
         check.completedAt ? `Completed at: ${check.completedAt.toISOString()}.` : "Completed at: not recorded.",
-        check.note ? `Recorded note: ${check.note}.` : "Recorded note: not recorded.",
+        "System-check detail: restricted.",
       ].join(" "),
       occurredAt: dateText(check.completedAt ?? check.lastCheckedAt ?? check.requestedAt),
       tab: "activity",
@@ -407,7 +412,7 @@ export async function collectCaseExplainabilityEvidence(
         `Policy version: ${readiness.policyVersion ?? "not recorded"}.`,
         `Score: ${readiness.score} (${readiness.band}).`,
         `Passes: ${readiness.passes ? "yes" : "no"}.`,
-        `Recorded reason: ${recorded(readiness.reason)}.`,
+        "Recorded reason: restricted specialist content.",
       ].join(" "),
       occurredAt: null,
       tab: "overview",
@@ -417,11 +422,11 @@ export async function collectCaseExplainabilityEvidence(
       sources.push(source({
         id: `readiness:stream:${caseId}:${stream.key}`,
         kind: "readiness-stream",
-        title: `Readiness stream — ${stream.label}`,
+        title: "Restricted readiness stream",
         excerpt: [
           `Status: ${stream.status}.`,
           `Applicable: ${stream.applicable ? "yes" : "no"}.`,
-          `Recorded reason: ${recorded(stream.reason)}.`,
+          "Recorded reason: restricted specialist content.",
           stream.completedAt ? `Completed at: ${stream.completedAt}.` : "Completed at: not recorded.",
         ].join(" "),
         occurredAt: stream.completedAt,
@@ -433,10 +438,10 @@ export async function collectCaseExplainabilityEvidence(
       sources.push(source({
         id: `readiness:ledger:${caseId}:${action.key}`,
         kind: "readiness-ledger",
-        title: `Readiness ledger — ${action.label}`,
+        title: "Restricted readiness ledger entry",
         excerpt: [
           `Status: ${action.status}.`,
-          `Recorded reason: ${recorded(action.reason)}.`,
+          "Recorded reason: restricted specialist content.",
           action.dueAt ? `Due at: ${action.dueAt}.` : "Due at: not recorded.",
         ].join(" "),
         occurredAt: action.dueAt,
@@ -452,8 +457,8 @@ export async function collectCaseExplainabilityEvidence(
       sources.push(source({
         id: `readiness:history:${caseId}:${index}`,
         kind: "readiness-ledger-history",
-        title: `Readiness ledger history — ${entry.actionKey}`,
-        excerpt: `State: ${entry.state}. Recorded rationale: ${recorded(entry.rationale)}.`,
+        title: "Restricted readiness ledger history",
+        excerpt: `State: ${entry.state}. Recorded rationale: restricted specialist content.`,
         occurredAt: entry.at,
         tab: "activity",
         identifiers,

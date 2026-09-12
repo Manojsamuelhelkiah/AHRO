@@ -31,6 +31,10 @@ import {
 } from "./approval-email-templates";
 import type { OnboardingDbTransaction } from "./settings";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
+import {
+  assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  withSensitiveLifecycleFence,
+} from "./sensitive-lifecycle";
 import { roleMayExerciseScope, verifyDecisionAuthorityInTransaction } from "./decision-authority";
 import {
   isVerifiedGmailDkimTransport,
@@ -333,7 +337,7 @@ export async function decideApproval(opts: {
     decidedAt: Date;
     decisionActor: string;
   } | null = null;
-  const result = await db.transaction(async (tx) => {
+  const result = await withSensitiveLifecycleFence(opts.organizationId, () => db.transaction(async (tx) => {
     // Must precede approval/case locks: revocation, withdrawal, authority
     // grants, and connector dispatch all take this tenant fence first.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${opts.organizationId}))`);
@@ -352,6 +356,9 @@ export async function decideApproval(opts: {
     if (!currentCase) {
       return { outcome: "not-found" } as const;
     }
+    await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, {
+      organizationId: opts.organizationId, caseId: ownership.caseId,
+    });
     const [approval] = await tx.select().from(onbApprovals).where(and(
         eq(onbApprovals.organizationId, opts.organizationId),
         eq(onbApprovals.id, opts.approvalId),
@@ -618,7 +625,7 @@ export async function decideApproval(opts: {
       approval: updated,
       released: false,
     } as const;
-  });
+  }));
 
   const continuation = decided as {
     approval: ApprovalLike;
