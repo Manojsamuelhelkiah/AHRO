@@ -61,6 +61,8 @@ export const tenantSafeguards = [
   { table: "onb_authority_governance", phaseB: false },
   { table: "onb_authority_assignments", phaseB: false },
   { table: "onb_authority_audit", phaseB: false },
+  { table: "onb_audit_anchor_outbox", phaseB: false, requiresOrganizationForeignKey: false },
+  { table: "onb_audit_anchor_receipts", phaseB: false, requiresOrganizationForeignKey: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);

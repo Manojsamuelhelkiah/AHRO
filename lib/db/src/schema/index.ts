@@ -13,3 +13,4 @@ export * from "./candidate-portal";
 export * from "./onboarding-sla";
 export * from "./demo-controller-setup";
 export * from "./action-center";
+export * from "./external-audit-anchoring";

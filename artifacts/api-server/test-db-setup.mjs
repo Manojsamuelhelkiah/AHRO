@@ -70,6 +70,12 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Reviewed 0049 data correction: separates conservative migration-review
   // holds from explicitly designated occupational-health controls.
   "4472d9010d4389999c7f9a34de13b3078823451ae69c5877e9a781363487e6ec",
+  // Reviewed additive anchoring queue/receipt tables and append-only receipt
+  // triggers. The exact hash binds the reviewed DDL to automatic reconciliation.
+  "5d50fddef1b8b074b6d22ded30477218e77a206aa369ba335bf18666a98ce37c",
+  // Reviewed forward correction allowing one immutable receipt per provider
+  // for the same operation, so clients can transition from simulation.
+  "d4ddb9b88db2b521f4ccf397f925cfdfc44e9f90e6f555fa0c9d34eee7b1a421",
 ]);
 // The authority migration sequence was renumbered after it landed in
 // parallel with the workforce sequence. These are ledger identifiers only:

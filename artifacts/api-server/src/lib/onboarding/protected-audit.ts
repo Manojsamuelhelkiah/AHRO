@@ -4,10 +4,15 @@ import { db } from "@workspace/db";
 import {
   onbAuditEntries,
   onbAuditHeads,
+  onbAuditLifecycles,
   onbApprovalHistory,
   organizationMembershipsTable,
 } from "@workspace/db/schema";
 import type { OnboardingDbTransaction } from "./settings";
+import {
+  enqueueAuditCheckpointInTransaction,
+  externalAnchoringStatus,
+} from "./external-audit-anchor";
 
 export type AuditActorKind = "authenticated" | "system" | "historical";
 /** attempted is intentionally unresolved: a process may die before outcome capture. */
@@ -208,6 +213,17 @@ export async function appendProtectedAuditInTransaction(
     lastHash: entryHash,
     updatedAt: occurredAt,
   }).where(eq(onbAuditHeads.organizationId, normalized.organizationId));
+  const [lifecycle] = await tx.select({
+    retentionStatement: onbAuditLifecycles.retentionStatement,
+    legalHoldActive: onbAuditLifecycles.legalHoldActive,
+  }).from(onbAuditLifecycles).where(eq(onbAuditLifecycles.organizationId, normalized.organizationId));
+  await enqueueAuditCheckpointInTransaction(tx, {
+    organizationId: normalized.organizationId,
+    sequence,
+    hash: entryHash,
+    retentionStatementPresent: Boolean(lifecycle?.retentionStatement),
+    legalHoldActive: lifecycle?.legalHoldActive ?? false,
+  });
   return entry;
 }
 
@@ -320,18 +336,30 @@ export type AuditIntegrity = {
   headMatches: boolean;
   externalAnchoring: {
     requiredForLaunch: true;
+    providerId?: string;
+    providerKind?: "simulated" | "external";
     configured: boolean;
+    verified?: boolean;
+    comparison?: string;
     regulatedProductionLaunchBlocked: boolean;
     limitation: string;
+    recommendedOutageBehavior?: string;
   };
 };
 
-const externalAnchoring = {
+export const externalAnchoring = {
   requiredForLaunch: true as const,
   configured: false,
   regulatedProductionLaunchBlocked: true,
   limitation: "No independent anchoring/WORM implementation is connected. It remains a launch prerequisite; this database chain is not resistant to a privileged database administrator.",
 };
+
+export function regulatedProductionAuditLaunchBlocked(
+  localStatus: AuditIntegrity["status"],
+  externalBlocked: boolean,
+): boolean {
+  return localStatus !== "verified" || externalBlocked;
+}
 
 /**
  * Pure verifier used by reviewer requests and isolated integrity tests. It
@@ -393,7 +421,7 @@ export function verifyProtectedAuditRows(
 
 /** Recomputes the tenant hash chain and compares it to the stored head. */
 export async function verifyProtectedAudit(organizationId: string): Promise<AuditIntegrity> {
-  return db.transaction(async (tx) => {
+  const local = await db.transaction(async (tx) => {
     // Uses the same tenant-local lock as append. Locking the head alone does
     // not prevent a concurrent writer before the entries read under Read
     // Committed isolation.
@@ -406,4 +434,19 @@ export async function verifyProtectedAudit(organizationId: string): Promise<Audi
       .orderBy(asc(onbAuditEntries.sequence));
     return verifyProtectedAuditRows(entries, head);
   });
+  // Do this after releasing the tenant lock. The status check uses the normal
+  // pool and must not require a second connection while many verifiers run.
+  const anchoring = await externalAnchoringStatus(organizationId);
+  const localVerified = local.status === "verified";
+  return {
+    ...local,
+    externalAnchoring: {
+      ...anchoring,
+      configured: anchoring.configured && localVerified,
+      regulatedProductionLaunchBlocked: regulatedProductionAuditLaunchBlocked(
+        local.status,
+        anchoring.regulatedProductionLaunchBlocked,
+      ),
+    },
+  };
 }

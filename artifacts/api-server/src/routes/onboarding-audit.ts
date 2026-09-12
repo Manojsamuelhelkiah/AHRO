@@ -13,6 +13,10 @@ import {
   type AuditFilter,
   type AuditOutcome,
 } from "../lib/onboarding/protected-audit";
+import {
+  enqueueAuditLegalHoldInTransaction,
+  legalHoldReasonFingerprint,
+} from "../lib/onboarding/external-audit-anchor";
 
 const router: IRouter = Router();
 
@@ -111,7 +115,11 @@ export function protectedAuditCsv(
     `# integrity_status=${integrity.status}`,
     `# checked_entries=${integrity.checkedEntries}`,
     `# external_anchoring_required_for_launch=${integrity.externalAnchoring.requiredForLaunch}`,
+    `# external_anchoring_provider_kind=${integrity.externalAnchoring.providerKind ?? "unknown"}`,
     `# external_anchoring_configured=${integrity.externalAnchoring.configured}`,
+    `# external_anchoring_verified=${integrity.externalAnchoring.verified ?? false}`,
+    `# external_anchoring_local_comparison=${integrity.externalAnchoring.comparison ?? "unknown"}`,
+    `# regulated_production_launch_blocked=${integrity.externalAnchoring.regulatedProductionLaunchBlocked}`,
     "# export_page_limit=500",
     `# export_truncated=${nextCursor !== null}`,
     `# next_cursor=${nextCursor ?? ""}`,
@@ -289,13 +297,27 @@ router.post("/onboarding/audit/lifecycle/legal-hold", async (req, res, next) => 
       await tx.insert(onbAuditLifecycles).values({ organizationId, ...set }).onConflictDoUpdate({
         target: onbAuditLifecycles.organizationId, set,
       });
-      await appendProtectedAuditInTransaction(tx, {
+      const [lifecycle] = await tx.select({
+        retentionStatement: onbAuditLifecycles.retentionStatement,
+      }).from(onbAuditLifecycles).where(eq(onbAuditLifecycles.organizationId, organizationId));
+      const auditEntry = await appendProtectedAuditInTransaction(tx, {
         organizationId, actorId: req.authUserId!, actorKind: "authenticated",
         actorAuthority: `tenant-membership:${req.organizationRole}`,
         action: action === "set" ? "onboarding.audit.legal-hold.set" : "onboarding.audit.legal-hold.released",
         outcome: "success", objectType: "audit-lifecycle", source: "http",
         correlationId: req.header("x-request-id") ?? null,
         payload: { reasonProvided: true },
+      });
+      // The protected audit sequence is the durable transition identity. It
+      // prevents set/release/set with the same reason from colliding while
+      // keeping the lifecycle mutation, audit record, and provider outbox
+      // atomic.
+      await enqueueAuditLegalHoldInTransaction(tx, {
+        organizationId,
+        active: action === "set",
+        reasonFingerprint: legalHoldReasonFingerprint(reason),
+        retentionStatementPresent: Boolean(lifecycle?.retentionStatement),
+        transitionId: String(auditEntry.sequence),
       });
     });
     res.json(await lifecycleView(organizationId));

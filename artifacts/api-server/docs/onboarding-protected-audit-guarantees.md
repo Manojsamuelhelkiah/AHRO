@@ -80,3 +80,48 @@ Accordingly, the integrity result explicitly reports
 `regulatedProductionLaunchBlocked: true`. This blocks launch-readiness for
 DBA-resistant regulated production until independently operated anchoring/WORM
 exists; it does **not** block local development or the ordinary development API.
+
+## External anchoring provider boundary
+
+Each committed chain head also creates a tenant-scoped, durable checkpoint
+outbox row. A shared heartbeat worker retries delivery with exponential
+backoff, reclaims stale claims, and serializes claims per tenant across
+application instances. It will not claim a later operation while any lower-id
+checkpoint or legal-hold row is still undelivered. The tenant/idempotency key
+lets a provider safely return the same receipt after an ambiguous timeout.
+Legal-hold set/release operations use the same outbox and propagate only safe
+lifecycle facts (including a fingerprint of the supplied reason); a client
+provider is responsible for carrying those facts into its own
+retention/legal-hold system.
+If a client provider is installed after simulation delivery, the worker
+requeues delivered operations that lack that provider's receipt. Simulation
+receipts remain immutable evidence, while one immutable receipt per provider
+may be retained for the same operation.
+Provider anchor, receipt-verification, and current-checkpoint reads have a
+ bounded timeout. A timeout leaves the claim retryable; because the provider
+ must honor the idempotency key, an ambiguous completed call is safe to retry.
+ Provider anchors must also apply operations monotonically, or use a provider
+ side compare-and-set. A timed-out request may finish after a retry or a
+ higher operation, and must never move the provider's checkpoint or legal-hold
+ state backwards.
+
+The checked-in provider is deliberately a **simulation**. It returns a
+deterministically verifiable receipt so retry, duplicate, restore comparison,
+and outage behavior can be exercised, but it declares `independent: false`.
+Consequently simulation can never make `externalAnchoring.configured` true or
+unblock regulated production. Clients install an adapter implementing the
+provider-neutral interface and its independent verification method; configured
+status requires a freshly verified receipt from that external adapter and a
+local-head/external-checkpoint match. Verification fetches the provider's
+currently held checkpoint at restore/review time; copied local receipt rows
+are not treated as the provider's current truth. A restored database must run
+the integrity check and treat missing, behind, ahead, or mismatched external
+checkpoints as blocked, including a provider-ahead checkpoint after a local
+rollback.
+
+During an anchoring outage, continue local append-only capture, retain queued
+delivery for retry, alert reviewers, and do not claim external protection or
+regulated readiness. There is no automatic purge, statutory retention period,
+or implied legal conclusion: the reviewed retention statement remains the
+tenant's policy record, and active legal hold blocks destructive application
+work as described above.

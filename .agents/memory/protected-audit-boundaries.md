@@ -2,8 +2,8 @@
 name: Protected audit boundaries
 description: Limits of audit integrity claims and handling historical evidence.
 ---
-Protected onboarding audit evidence must never be described as absolutely tamper-proof. Independent anchoring or WORM infrastructure remains a separate launch prerequisite for resistance to privileged database operators.
+Protected onboarding audit evidence must never be described as absolutely tamper-proof. Independent anchoring or WORM infrastructure remains a separate launch prerequisite for resistance to privileged database operators. A simulation may exercise delivery and receipt handling, but it must never satisfy that prerequisite.
 
-**Why:** Application append-only enforcement and a locally stored hash chain cannot detect a privileged operator coherently rewriting both the chain and its head.
+**Why:** Application append-only enforcement and a locally stored hash chain cannot detect a privileged operator coherently rewriting both the chain and its head. A restored database can also contain an old, internally consistent receipt, so restore verification must query the provider's independently held current checkpoint rather than trust the restored receipt row.
 
-**How to apply:** Preserve explicit limits in review screens and exports. Do not mark external protection configured from a flag alone. Existing approval evidence must retain its historical coverage label; adding protection now does not certify earlier immutability or recover unknown actors. Never invent a statutory retention deadline.
+**How to apply:** Preserve explicit limits in review screens and exports. Mark protection configured only after fresh provider-side receipt verification, exact local/provider checkpoint comparison, and successful local-chain verification. Bound provider calls, fence delivery claims, and serialize each tenant's checkpoint and legal-hold operations; select the oldest undelivered row before applying global batch limits, and require provider-side idempotent monotonic/CAS writes for timeout ambiguity. Keep outages launch-blocking while retrying durably. Existing approval evidence must retain its historical coverage label; adding protection now does not certify earlier immutability or recover unknown actors. Never invent a statutory retention deadline.

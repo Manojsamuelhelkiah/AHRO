@@ -1067,7 +1067,12 @@ test(
            tag !== "0044_action_center" &&
            tag !== "0045_context_aware_workforce_policies" &&
            tag !== "0046_batch_intake_reconciliation" &&
-           tag !== "0045_protected_onboarding_audit",
+           tag !== "0045_protected_onboarding_audit" &&
+           tag !== "0047_verified_decision_authority" &&
+           tag !== "0048_authority_case_creator_principal" &&
+           tag !== "0049_nonwaivable_safety_policy" &&
+           tag !== "0050_authority_governance_withdrawn" &&
+           tag !== "0051_separate_migration_review_from_medical_safety",
       );
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(),
