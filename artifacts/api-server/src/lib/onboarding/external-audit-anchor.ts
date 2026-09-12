@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, lt, lte, or, sql } from "drizzle-orm";
-import { db, onbAuditAnchorOutbox, onbAuditAnchorReceipts, onbAuditHeads } from "@workspace/db";
+import {
+  db,
+  onbAuditAnchorOutbox,
+  onbAuditAnchorReceipts,
+  onbAuditHeads,
+} from "@workspace/db";
 import type { OnboardingDbTransaction } from "./settings";
 import { logger } from "../logger";
 
@@ -481,6 +486,136 @@ export async function runAuditAnchorTick(
   );
   return { delivered, failed, remaining: Number(count) };
 }
+
+/**
+ * This is deliberately a small public-safe health shape. In particular it
+ * never carries a provider id, receipt, outbox id/key, checkpoint hash, or
+ * provider error text. It is suitable for reviewer alerts and health UI.
+ */
+export type ExternalAuditAnchorSafeStatus = {
+  delivery: "clear" | "backlog";
+  providerRead: "not-applicable" | "ok" | "failed";
+  receiptVerification: "not-applicable" | "ok" | "failed";
+};
+
+export type ExternalAuditAnchorReviewerFault =
+  | "delivery-backlog"
+  | "provider-read-failed"
+  | "receipt-verification-failed";
+
+/**
+ * Read a provider's independent checkpoint only when an independent provider
+ * is configured. A normal, empty remote checkpoint is a successful read, not
+ * a provider outage; launch readiness remains fail-closed separately.
+ */
+export async function externalAuditAnchorSafeStatus(
+  organizationId: string,
+): Promise<ExternalAuditAnchorSafeStatus> {
+  const [undelivered] = await db
+    .select({ id: onbAuditAnchorOutbox.id })
+    .from(onbAuditAnchorOutbox)
+    .where(and(
+      eq(onbAuditAnchorOutbox.organizationId, organizationId),
+      or(
+        eq(onbAuditAnchorOutbox.status, "pending"),
+        eq(onbAuditAnchorOutbox.status, "sending"),
+        eq(onbAuditAnchorOutbox.status, "failed"),
+      ),
+    ))
+    .limit(1);
+
+  const status: ExternalAuditAnchorSafeStatus = {
+    delivery: undelivered ? "backlog" : "clear",
+    providerRead: "not-applicable",
+    receiptVerification: "not-applicable",
+  };
+  // The bundled simulation intentionally cannot represent an independent
+  // provider outage. It remains launch-blocking but must not page reviewers.
+  if (activeProvider.kind !== "external" || !activeProvider.independent) return status;
+  const [head] = await db.select({
+    lastSequence: onbAuditHeads.lastSequence,
+    lastHash: onbAuditHeads.lastHash,
+  }).from(onbAuditHeads).where(eq(onbAuditHeads.organizationId, organizationId));
+  const local = head && head.lastSequence > 0 && head.lastHash
+    ? { sequence: head.lastSequence, hash: head.lastHash }
+    : null;
+
+  let receipt: ExternalAnchorReceipt | null;
+  try {
+    receipt = await boundedProviderCall(
+      activeProvider.fetchCurrentCheckpoint(organizationId),
+      "audit anchor provider current checkpoint",
+    );
+    status.providerRead = "ok";
+  } catch {
+    status.providerRead = "failed";
+    return status;
+  }
+  // An empty provider is only acceptable when local audit capture is empty.
+  if (!receipt) {
+    if (local) status.receiptVerification = "failed";
+    return status;
+  }
+
+  // A current-checkpoint result must be a checkpoint receipt. Do not expose
+  // malformed provider material in a notification or status response.
+  if (
+    receipt.checkpointSequence === undefined ||
+    receipt.checkpointHash === undefined ||
+    !Number.isSafeInteger(receipt.checkpointSequence) ||
+    receipt.checkpointSequence <= 0 ||
+    !receipt.checkpointHash ||
+    receipt.providerId !== activeProvider.id ||
+    receipt.providerKind !== activeProvider.kind ||
+    receipt.operationKind !== "checkpoint" ||
+    receipt.organizationId !== organizationId
+  ) {
+    status.receiptVerification = "failed";
+    return status;
+  }
+  const operation: AuditAnchorOperation = {
+    kind: "checkpoint",
+    organizationId,
+    idempotencyKey: receipt.idempotencyKey,
+    sequence: receipt.checkpointSequence,
+    hash: receipt.checkpointHash,
+    retentionStatementPresent: receipt.retentionStatementPresent === true,
+    legalHoldActive: receipt.legalHoldActive === true,
+  };
+  try {
+    status.receiptVerification =
+      receiptMatchesOperation(receipt, operation) &&
+      await boundedProviderCall(
+        activeProvider.verifyReceipt(receipt, operation),
+        "audit anchor receipt verifier",
+      )
+        ? "ok"
+        : "failed";
+  } catch {
+    status.receiptVerification = "failed";
+  }
+  // A cryptographically valid receipt is not enough: this provider checkpoint
+  // must still be exactly the independently held counterpart of local truth.
+  if (
+    status.receiptVerification === "ok" &&
+    compareLocalAndExternalCheckpoint(local, {
+      sequence: receipt.checkpointSequence,
+      hash: receipt.checkpointHash,
+    }) !== "match"
+  ) status.receiptVerification = "failed";
+  return status;
+}
+
+export function externalAuditAnchorReviewerFaults(
+  status: ExternalAuditAnchorSafeStatus,
+): ExternalAuditAnchorReviewerFault[] {
+  const faults: ExternalAuditAnchorReviewerFault[] = [];
+  if (status.delivery === "backlog") faults.push("delivery-backlog");
+  if (status.providerRead === "failed") faults.push("provider-read-failed");
+  if (status.receiptVerification === "failed") faults.push("receipt-verification-failed");
+  return faults;
+}
+
 
 export type AnchorComparison = "empty" | "missing" | "match" | "external-behind" | "external-ahead" | "mismatch";
 

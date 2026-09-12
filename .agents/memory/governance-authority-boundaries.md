@@ -27,8 +27,8 @@ Provider status labels, timestamps, and completed checks do not establish real s
 
 **How to apply:** Require server-classified trusted provenance independently of policy approval and human attestations. Historical records without provenance remain untrusted.
 
-Governance reads beneath a tenant advisory lock must use the lock-owning transaction.
+Any stateful tenant workflow (including governance, alert episodes, and provider reconciliation) that reads beneath a tenant advisory lock must use the lock-owning transaction.
 
-**Why:** A snapshot helper that lazily seeds through another database session waits on the caller's lock while the caller awaits the helper, deadlocking both individual and batch intake.
+**Why:** A helper that lazily seeds or reads through another database session waits on the caller's lock while the caller awaits the helper, deadlocking both individual and batch processing.
 
-**How to apply:** Seed before acquiring the outer lock, then load the adopted snapshot through the existing transaction after acquiring it.
+**How to apply:** Seed before acquiring the outer lock, then load or mutate required state through the existing lock-owning transaction after acquiring it.

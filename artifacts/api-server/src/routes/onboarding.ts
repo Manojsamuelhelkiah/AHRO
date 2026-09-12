@@ -2,6 +2,10 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
+import {
+  getExternalAuditAnchorReviewerAmbiguousDeliveries,
+  reconcileExternalAuditAnchorReviewerAlert,
+} from "../lib/onboarding/external-audit-anchor-alerts";
 import { ensureReadinessSlaEnrollment } from "../lib/onboarding/readiness-sla-policy";
 import {
   governanceSnapshotForNewCase,
@@ -3468,6 +3472,47 @@ const watcherTick = async (req: Request, res: Response) => {
 
 router.get("/onboarding/webhooks/watcher-tick", watcherTick);
 router.post("/onboarding/webhooks/watcher-tick", watcherTick);
+
+// An ambiguity means the email provider may have accepted a reviewer alert
+// before the worker lost its response. Only an authenticated organization
+// administrator may reconcile that provider-side result; the API intentionally
+// accepts and returns no provider, receipt, or message identifiers.
+router.get("/onboarding/external-audit-anchor-alerts/reconcile", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res, "Organization owner or admin role required to view audit-alert delivery reconciliation.")) return;
+    res.json({ ambiguousDeliveries: await getExternalAuditAnchorReviewerAmbiguousDeliveries(getOrganizationId(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post("/onboarding/external-audit-anchor-alerts/reconcile", async (req, res, next) => {
+  try {
+    if (!requireHrChecklistRole(req, res, "Organization owner or admin role required to reconcile audit-alert delivery.")) return;
+    const body = req.body as Record<string, unknown>;
+    if (
+      typeof body.episodeId !== "string" || !/^[0-9a-f-]{16,}$/i.test(body.episodeId) ||
+      typeof body.attemptId !== "string" || !/^[0-9a-f-]{16,}$/i.test(body.attemptId) ||
+      (body.kind !== "outage" && body.kind !== "recovery") ||
+      (body.outcome !== "delivered" && body.outcome !== "not-delivered")
+    ) {
+      res.status(400).json({ message: "episodeId and attemptId must be opaque IDs; kind must be outage or recovery and outcome must be delivered or not-delivered." });
+      return;
+    }
+    const reconciled = await reconcileExternalAuditAnchorReviewerAlert(getOrganizationId(req), {
+      episodeId: body.episodeId,
+      attemptId: body.attemptId,
+      kind: body.kind,
+      outcome: body.outcome,
+    });
+    if (reconciled === "not-found") {
+      res.status(409).json({ message: "The selected ambiguous delivery is stale or no longer available." });
+      return;
+    }
+    res.json({ reconciled: true });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /* ---------------------------- email watch ---------------------------- */
 

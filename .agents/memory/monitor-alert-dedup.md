@@ -14,3 +14,15 @@ description: One-alert-per-outage guarantees cannot live in process memory; deri
 **Why:** A slow but valid multi-command probe can outlive a shorter lease. Repeated takeovers then discard every late result and make monitoring permanently stale despite a reachable service.
 
 **How to apply:** Sum all permitted sequential timeouts, allow persistence margin, and test another worker arriving after the old lease duration while the original probe is still pending. Bound completed notification history without dropping unresolved deliveries.
+
+**Rule:** Uncertain notification outcomes must not be treated as definitive delivery failures.
+
+**Why:** An email provider may have accepted a message before its response was lost. Automatically retrying an uncertain send defeats the one-notification-per-episode guarantee.
+
+**How to apply:** Persist uncertainty separately, retain it across restarts, and retry only confirmed non-delivery. Reconcile uncertain outcomes before allowing another send.
+
+**Rule:** Operator reconciliation must select an exact episode and delivery attempt, not the oldest unresolved notification.
+
+**Why:** Several ambiguous attempts may coexist after flapping; a generic resolution can acknowledge the wrong send or permit a duplicate.
+
+**How to apply:** Expose tenant-scoped opaque workflow tokens to authorized operators and compare-and-set the selected ambiguous attempt under the same state lock.
