@@ -17,6 +17,12 @@ Development schema changes must be represented by immutable, journaled SQL migra
 
 Receipt reconstruction must create standalone unique indexes before foreign keys that reference those indexed columns.
 
+When parallel merges collide on a migration journal index, repair the index without casually changing the migration tag, timestamp, or SQL.
+
+**Why:** Ledger identity includes the recorded timestamp and SQL hash; making timestamps look sequential can invalidate an already-applied migration even when its SQL is unchanged.
+
+**How to apply:** Distinguish journal ordering metadata from ledger identity, preserve recorded migration identity, and confirm the repair through the normal post-merge reconciliation.
+
 **Why:** PostgreSQL permits an FK to reference a standalone unique index, not only a named unique constraint. Rebuilding all FKs before indexes can reject a valid live schema.
 
 **How to apply:** Preserve dependency order when reconstructing trusted schema receipts; do not omit the FK or weaken comparisons to work around missing parent uniqueness.
