@@ -5,6 +5,7 @@ import {
   db,
   DEMO_ORGANIZATION_ID,
   organizationMembershipsTable,
+  onbSettings,
   organizationsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/require-auth";
@@ -23,6 +24,16 @@ import {
   removeOrganizationMember,
   reinstateOrganizationMember,
 } from "../lib/organization-memberships";
+import {
+  externalAnchoringStatus,
+  runExternalAuditArchiveDrill,
+} from "../lib/onboarding/external-audit-anchor";
+import {
+  EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY,
+  EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY,
+  parseExternalAuditArchiveConfig,
+  saveExternalAuditArchiveConfig,
+} from "../lib/onboarding/settings";
 
 const router: IRouter = Router();
 
@@ -99,10 +110,100 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
       : memberships.length === 1
         ? memberships[0]!.organizationId
         : null;
+
     res.json({
       needsSetup: memberships.length === 0,
       activeOrganizationId,
       memberships,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/organizations/current/audit-archive", async (req, res, next): Promise<void> => {
+  try {
+    const organizationId = req.header(ORGANIZATION_HEADER)?.trim();
+    if (!organizationId) {
+      res.status(400).json({ message: "An active organization is required" });
+      return;
+    }
+    const [membership] = await db
+      .select({ role: organizationMembershipsTable.role })
+      .from(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        eq(organizationMembershipsTable.clerkUserId, req.authUserId!),
+        isNull(organizationMembershipsTable.revokedAt),
+      ));
+    if (!membership) {
+      res.status(403).json({ message: "Organization membership required" });
+      return;
+    }
+    res.json({ auditArchive: await externalAnchoringStatus(organizationId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/organizations/current/audit-archive", async (req, res, next): Promise<void> => {
+  try {
+    const organizationId = req.header(ORGANIZATION_HEADER)?.trim();
+    if (!organizationId || req.body?.auditArchive === undefined) {
+      res.status(400).json({ message: "An organization and auditArchive configuration are required" });
+      return;
+    }
+    const [membership] = await db
+      .select({ role: organizationMembershipsTable.role })
+      .from(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        eq(organizationMembershipsTable.clerkUserId, req.authUserId!),
+        isNull(organizationMembershipsTable.revokedAt),
+      ));
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+      res.status(403).json({ message: "Organization owner or admin role required" });
+      return;
+    }
+    let auditArchive;
+    try {
+      auditArchive = parseExternalAuditArchiveConfig(req.body.auditArchive);
+    } catch (error) {
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Invalid audit archive configuration",
+      });
+      return;
+    }
+    await saveExternalAuditArchiveConfig(organizationId, auditArchive);
+    res.json({ auditArchive: await externalAnchoringStatus(organizationId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/organizations/current/audit-archive/drills", async (req, res, next): Promise<void> => {
+  try {
+    const organizationId = req.header(ORGANIZATION_HEADER)?.trim();
+    const kind = req.body?.kind;
+    if (!organizationId || (kind !== "restore" && kind !== "legal_hold")) {
+      res.status(400).json({ message: "organization and a restore or legal_hold drill kind are required" });
+      return;
+    }
+    const [membership] = await db
+      .select({ role: organizationMembershipsTable.role })
+      .from(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        eq(organizationMembershipsTable.clerkUserId, req.authUserId!),
+        isNull(organizationMembershipsTable.revokedAt),
+      ));
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+      res.status(403).json({ message: "Organization owner or admin role required" });
+      return;
+    }
+    res.json({
+      drill: await runExternalAuditArchiveDrill(organizationId, kind),
+      auditArchive: await externalAnchoringStatus(organizationId),
     });
   } catch (error) {
     next(error);
@@ -192,6 +293,15 @@ router.post("/organizations", async (req, res, next): Promise<void> => {
       .json({ message: "Organization name must be 2–100 characters" });
     return;
   }
+  let auditArchive = null;
+  try {
+    auditArchive = parseExternalAuditArchiveConfig(req.body?.auditArchive);
+  } catch (error) {
+    res.status(400).json({
+      message: error instanceof Error ? error.message : "Invalid audit archive configuration",
+    });
+    return;
+  }
   try {
     const id = `org_${randomUUID()}`;
     const joinCode = randomBytes(6).toString("hex").toUpperCase();
@@ -216,9 +326,26 @@ router.post("/organizations", async (req, res, next): Promise<void> => {
         clerkUserId: req.authUserId!,
         role: "owner",
       });
+      if (auditArchive) {
+        await tx.insert(onbSettings).values({
+          organizationId: id,
+          key: EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY,
+          value: JSON.stringify(auditArchive),
+        });
+        await tx.insert(onbSettings).values({
+          organizationId: id,
+          key: EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY,
+          value: "1",
+        });
+      }
       return created!;
     });
-    res.status(201).json({ organization, role: "owner", joinCode });
+    res.status(201).json({
+      organization,
+      role: "owner",
+      joinCode,
+      auditArchive: await externalAnchoringStatus(id),
+    });
   } catch (error) {
     next(error);
   }

@@ -68,6 +68,13 @@ export const tenantSafeguards = [
   { table: "onb_authority_governance", phaseB: false },
   { table: "onb_authority_assignments", phaseB: false },
   { table: "onb_authority_audit", phaseB: false },
+  { table: "onb_governance_decisions", phaseB: false },
+  { table: "onb_governance_decision_reviews", phaseB: false },
+  { table: "onb_governance_authority_assignments", phaseB: false },
+  { table: "onb_governance_requirements", phaseB: false },
+  { table: "onb_governance_history", phaseB: false },
+  { table: "onb_governance_reminders", phaseB: false },
+  { table: "onb_governance_dispatch_markers", phaseB: false },
   { table: "onb_audit_anchor_outbox", phaseB: false, requiresOrganizationForeignKey: false },
   { table: "onb_audit_anchor_receipts", phaseB: false, requiresOrganizationForeignKey: false },
 ];

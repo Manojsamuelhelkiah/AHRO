@@ -32,6 +32,10 @@ tags:
     description: Tenant-scoped revisioned decision, requirement coverage, and verified specialist authority register
   - name: hrPolicyLibrary
     description: Tenant-isolated, governed curated HR policy sources and cited answers; separate from case chat
+  - name: organizations
+    description: Authenticated organization selection, creation, and membership joining
+  - name: audit
+    description: Protected audit integrity and independently archived audit readiness
 paths:
   /policies/capabilities:
     get:
@@ -175,7 +179,7 @@ paths:
         "400": { description: Invalid publication input }
         "403": { description: Verified publishing authority required }
         "404": { description: Policy version not found }
-        "409": { description: Missing current review, stale, future or overdue source }
+        "409": { description: "Missing current review, stale, future or overdue source" }
   /policies/{policyId}/supersede:
     post:
       operationId: supersedeHrPolicyVersion
@@ -556,6 +560,113 @@ paths:
         "200": { description: Finalized reconciliation receipt }
         "403": { description: Server-verified operator required }
         "409": { description: Ambiguous dispatch absent or already finalized }
+  /organizations/current:
+    get:
+      operationId: getCurrentOrganization
+      tags: [organizations]
+      summary: Get the authenticated user's organization memberships and active selection
+      description: The optional X-Organization-Id header selects the active membership. A missing or invalid selection is returned as null rather than crossing tenant boundaries.
+      responses:
+        "200":
+          description: Current organization context
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationCurrentResponse" }
+        "401": { description: Authentication required }
+  /organizations:
+    post:
+      operationId: createOrganization
+      tags: [organizations]
+      summary: Create an organization and become its owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationCreateInput" }
+      responses:
+        "201":
+          description: Created organization and one-time join code
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationCreateResponse" }
+        "400": { description: Invalid organization or archive configuration }
+        "401": { description: Authentication required }
+  /organizations/join:
+    post:
+      operationId: joinOrganization
+      tags: [organizations]
+      summary: Join an organization with a join code
+      description: The demo flag joins the well-known synthetic Demo Organization and does not require a join code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationJoinInput" }
+      responses:
+        "200":
+          description: Joined organization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationJoinResponse" }
+        "400": { description: Join code or demo selection is required }
+        "401": { description: Authentication required }
+        "403": { description: Membership was revoked }
+        "404": { description: Join code was not found }
+        "409": { description: Membership changed during the join }
+  /organizations/current/audit-archive:
+    get:
+      operationId: getCurrentOrganizationAuditArchive
+      tags: [organizations, audit]
+      summary: Get external audit archive readiness for the selected organization
+      responses:
+        "200":
+          description: External archive readiness and comparison
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationAuditArchiveResponse" }
+        "400": { description: Active organization header is required }
+        "401": { description: Authentication required }
+        "403": { description: Organization membership required }
+    put:
+      operationId: updateCurrentOrganizationAuditArchive
+      tags: [organizations, audit]
+      summary: Configure or clear the selected organization's external audit archive
+      description: Stores references only; credential values are never accepted. Reconfiguration increments the archive generation and invalidates prior drills.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationAuditArchiveInput" }
+      responses:
+        "200":
+          description: Updated external archive readiness
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationAuditArchiveResponse" }
+        "400": { description: Invalid archive configuration }
+        "401": { description: Authentication required }
+        "403": { description: Organization owner or admin required }
+  /organizations/current/audit-archive/drills:
+    post:
+      operationId: runCurrentOrganizationAuditArchiveDrill
+      tags: [organizations, audit]
+      summary: Run a provider-owned restore or legal-hold archive drill
+      description: A drill is valid only when the configured independent provider returns a verifiable receipt for the current archive generation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationAuditArchiveDrillInput" }
+      responses:
+        "200":
+          description: Drill receipt and refreshed external archive readiness
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationAuditArchiveDrillResponse" }
+        "400": { description: Invalid drill kind }
+        "401": { description: Authentication required }
+        "403": { description: Organization owner or admin required }
+        "500": { description: Provider drill failed or returned an unverifiable receipt }
   /organizations/demo-controller-setup:
     get:
       operationId: getDemoControllerSetupStatus
@@ -4589,6 +4700,155 @@ components:
         type: integer
         minimum: 1
   schemas:
+    OrganizationSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+      required: [id, name, slug]
+    OrganizationMembership:
+      type: object
+      additionalProperties: false
+      properties:
+        organizationId: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        role: { type: string, enum: [owner, admin, member] }
+      required: [organizationId, name, slug, role]
+    OrganizationCurrentResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        needsSetup: { type: boolean }
+        activeOrganizationId: { type: [string, "null"] }
+        memberships:
+          type: array
+          items: { $ref: "#/components/schemas/OrganizationMembership" }
+      required: [needsSetup, activeOrganizationId, memberships]
+    OrganizationCreateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        auditArchive:
+          oneOf:
+            - $ref: "#/components/schemas/ExternalAuditArchiveConfig"
+            - type: "null"
+      required: [name]
+    OrganizationCreateResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        organization: { $ref: "#/components/schemas/OrganizationSummary" }
+        role: { type: string, const: owner }
+        joinCode: { type: string }
+        auditArchive: { $ref: "#/components/schemas/ExternalAuditArchiveStatus" }
+      required: [organization, role, joinCode, auditArchive]
+    OrganizationJoinInput:
+      anyOf:
+        - $ref: "#/components/schemas/OrganizationJoinByCode"
+        - $ref: "#/components/schemas/OrganizationJoinDemo"
+    OrganizationJoinByCode:
+      type: object
+      additionalProperties: false
+      properties:
+        joinCode: { type: string }
+        demo: { type: boolean }
+      required: [joinCode]
+    OrganizationJoinDemo:
+      type: object
+      additionalProperties: false
+      properties:
+        joinCode: { type: string }
+        demo: { type: boolean, const: true }
+      required: [demo]
+    OrganizationJoinResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        organization: { $ref: "#/components/schemas/OrganizationSummary" }
+        role: { type: string, enum: [owner, admin, member] }
+      required: [organization, role]
+    ExternalAuditArchiveConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        providerId: { type: string }
+        archiveNamespace: { type: string }
+        retentionPolicyStatementOrReference: { type: string }
+        independentAdministratorContact: { type: string }
+        independentAdministratorRole: { type: string }
+        credentialSecretReferenceName:
+          type: string
+          pattern: '^(env:[A-Z][A-Z0-9_]*|vault:[A-Za-z0-9][A-Za-z0-9_./:-]{0,238})$'
+      required: [providerId, archiveNamespace, retentionPolicyStatementOrReference, independentAdministratorContact, independentAdministratorRole, credentialSecretReferenceName]
+    ExternalAuditArchiveStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        requiredForLaunch: { type: boolean, const: true }
+        providerId: { type: string }
+        configuredProviderId: { type: [string, "null"] }
+        configGeneration: { type: integer }
+        providerKind: { type: string, enum: [simulated, external, unavailable] }
+        archiveNamespace: { type: [string, "null"] }
+        retentionPolicyStatementOrReference: { type: [string, "null"] }
+        independentAdministratorContact: { type: [string, "null"] }
+        independentAdministratorRole: { type: [string, "null"] }
+        credentialSecretReferenceNameConfigured: { type: boolean }
+        configured: { type: boolean }
+        verified: { type: boolean }
+        comparison:
+          type: string
+          enum: [empty, missing, match, external-behind, external-ahead, mismatch]
+        regulatedProductionLaunchBlocked: { type: boolean }
+        restoreDrillPassed: { type: boolean }
+        legalHoldDrillPassed: { type: boolean }
+        drillsInvalid: { type: boolean }
+        staleSnapshot: { type: boolean }
+        latestSequence: { type: [integer, "null"] }
+        latestReceiptAt: { type: [string, "null"], format: date-time }
+        limitation: { type: string }
+        recommendedOutageBehavior: { type: string }
+      required: [requiredForLaunch, providerId, configuredProviderId, configGeneration, providerKind, archiveNamespace, retentionPolicyStatementOrReference, independentAdministratorContact, independentAdministratorRole, credentialSecretReferenceNameConfigured, configured, verified, comparison, regulatedProductionLaunchBlocked, restoreDrillPassed, legalHoldDrillPassed, drillsInvalid, staleSnapshot, latestSequence, latestReceiptAt, limitation, recommendedOutageBehavior]
+    OrganizationAuditArchiveResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        auditArchive: { $ref: "#/components/schemas/ExternalAuditArchiveStatus" }
+      required: [auditArchive]
+    OrganizationAuditArchiveInput:
+      type: object
+      additionalProperties: false
+      properties:
+        auditArchive:
+          oneOf:
+            - $ref: "#/components/schemas/ExternalAuditArchiveConfig"
+            - type: "null"
+      required: [auditArchive]
+    OrganizationAuditArchiveDrillInput:
+      type: object
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [restore, legal_hold] }
+      required: [kind]
+    OrganizationAuditArchiveDrill:
+      type: object
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [restore, legal_hold] }
+        providerId: { type: string }
+        passed: { type: boolean, const: true }
+      required: [kind, providerId, passed]
+    OrganizationAuditArchiveDrillResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        drill: { $ref: "#/components/schemas/OrganizationAuditArchiveDrill" }
+        auditArchive: { $ref: "#/components/schemas/ExternalAuditArchiveStatus" }
+      required: [drill, auditArchive]
     OrganizationMember:
       type: object
       additionalProperties: false
@@ -4660,15 +4920,7 @@ components:
         checkedEntries: { type: integer, minimum: 0 }
         firstBrokenSequence: { type: ["integer", "null"] }
         headMatches: { type: boolean }
-        externalAnchoring:
-          type: object
-          additionalProperties: false
-          properties:
-            requiredForLaunch: { type: boolean, const: true }
-            configured: { type: boolean }
-            regulatedProductionLaunchBlocked: { type: boolean, const: true, description: DBA-resistant regulated production launch is blocked until independently operated anchoring/WORM exists; this does not block development API use. }
-            limitation: { type: string }
-          required: [requiredForLaunch, configured, regulatedProductionLaunchBlocked, limitation]
+        externalAnchoring: { $ref: "#/components/schemas/ExternalAuditArchiveStatus" }
       required: [status, checkedEntries, firstBrokenSequence, headMatches, externalAnchoring]
     OnbProtectedAuditPage:
       type: object
@@ -10620,7 +10872,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        policyId: { type: string, format: uuid }
+        policyId: { type: string }
         version: { type: integer, minimum: 1 }
         title: { type: string }
         sourceReference: { type: string }
@@ -10771,7 +11023,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        policyId: { type: string, format: uuid }
+        policyId: { type: string }
         version: { type: integer, minimum: 1 }
         excerptId: { type: string }
         text: { type: string }
@@ -10795,7 +11047,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        policyId: { type: string, format: uuid }
+        policyId: { type: string }
         version: { type: integer, minimum: 1 }
         excerptId: { type: string }
         text: { type: string }

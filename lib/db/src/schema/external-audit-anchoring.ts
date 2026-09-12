@@ -8,6 +8,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -57,6 +58,7 @@ export const onbAuditAnchorReceipts = pgTable("onb_audit_anchor_receipts", {
   outboxId: integer("outbox_id").notNull(),
   idempotencyKey: text("idempotency_key").notNull(),
   providerId: text("provider_id").notNull(),
+  configGeneration: integer("config_generation").notNull().default(0),
   providerKind: text("provider_kind").notNull(),
   receiptVersion: integer("receipt_version").notNull(),
   checkpointSequence: integer("checkpoint_sequence"),
@@ -65,10 +67,11 @@ export const onbAuditAnchorReceipts = pgTable("onb_audit_anchor_receipts", {
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
   verifiedAt: timestamp("verified_at", { withTimezone: true }),
 }, (t) => [
-  unique("onb_audit_anchor_receipts_organization_idempotency_provider_unique")
-    .on(t.organizationId, t.idempotencyKey, t.providerId),
+  uniqueIndex("onb_audit_anchor_receipts_organization_idempotency_provider_generation_unique")
+    .on(t.organizationId, t.idempotencyKey, t.providerId, t.configGeneration),
   index("onb_audit_anchor_receipts_organization_checkpoint_idx")
     .on(t.organizationId, t.checkpointSequence, t.receivedAt),
   check("onb_audit_anchor_receipts_provider_kind_check", sql`${t.providerKind} in ('simulated', 'external')`),
   check("onb_audit_anchor_receipts_version_check", sql`${t.receiptVersion} > 0`),
+  check("onb_audit_anchor_receipts_generation_check", sql`${t.configGeneration} >= 0`),
 ]);

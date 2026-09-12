@@ -10,6 +10,7 @@ import {
   onbAuditLifecycles,
   onbAuditAnchorOutbox,
   onbAuditAnchorReceipts,
+  onbSettings,
   onbCandidateLinks,
   onbCandidateSessions,
   onbCases,
@@ -31,13 +32,24 @@ import { cleanupCandidateAccess, exchangeToken, hashSecret } from "./candidate-p
 import { recordGuardrailEvent } from "./guardrails";
 import {
   enqueueAuditLegalHoldInTransaction,
+  externalAuditAnchorSafeStatus,
+  externalAnchoringStatus,
   legalHoldReasonFingerprint,
   registerExternalAuditAnchorProvider,
   resetExternalAuditAnchorProviderForTests,
+  runExternalAuditArchiveDrill,
   runAuditAnchorTick,
   type ExternalAnchorReceipt,
   type ExternalAuditAnchorProvider,
 } from "./external-audit-anchor";
+import {
+  EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY,
+  EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY,
+  getExternalAuditArchiveDrills,
+  getExternalAuditArchiveSnapshot,
+  recordExternalAuditArchiveDrill,
+  saveExternalAuditArchiveConfig,
+} from "./settings";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const prefix = `audit-it-${process.pid}-${randomUUID()}`;
@@ -63,6 +75,33 @@ const input = (organizationId: string, action = "onboarding.case.updated") => ({
   correlationId: "raw-correlation-must-not-persist",
   payload: { safeStatus: "updated", documentBody: "must-not-persist" },
 });
+
+async function configureArchiveProvider(organizationId: string, providerId: string): Promise<void> {
+  await db.insert(organizationsTable).values({
+    id: organizationId,
+    name: `Audit integration ${organizationId}`,
+    slug: `audit-integration-${organizationId}`,
+    joinCodeHash: `audit-integration-join-${organizationId}`,
+    createdByUserId: "audit-integration-test",
+  }).onConflictDoNothing({ target: organizationsTable.id });
+  await db.insert(onbSettings).values({
+    organizationId,
+    key: EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY,
+    value: JSON.stringify({
+      providerId,
+      archiveNamespace: `${organizationId}:archive`,
+      retentionPolicyStatementOrReference: "integration-test policy reference",
+      independentAdministratorContact: "integration-admin@example.test",
+      independentAdministratorRole: "independent archive administrator",
+      credentialSecretReferenceName: `vault:${providerId}`,
+    }),
+  });
+  await db.insert(onbSettings).values({
+    organizationId,
+    key: EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY,
+    value: "1",
+  });
+}
 
 describe("protected onboarding audit (isolated real database)", { skip: !hasDb }, () => {
   // Protected audit/history is intentionally append-only. These test tenants
@@ -346,12 +385,14 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
     assert.equal(integrity.externalAnchoring.configured, false);
     assert.equal(integrity.externalAnchoring.regulatedProductionLaunchBlocked, true);
 
-    let independentReceipt: ExternalAnchorReceipt | null = null;
+    let independentReceipt!: ExternalAnchorReceipt;
+    let receivedContext: { organizationId: string; archiveNamespace: string; credentialSecretReferenceName: string } | null = null;
     const externalProvider: ExternalAuditAnchorProvider = {
       id: "integration-independent-provider",
       kind: "external",
       independent: true,
-      async anchor(operation) {
+      async anchor(operation, context) {
+        receivedContext = context;
         independentReceipt = {
           receiptVersion: 1,
           providerId: this.id,
@@ -359,6 +400,8 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
           operationKind: operation.kind,
           idempotencyKey: operation.idempotencyKey,
           organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
           ...(operation.kind === "checkpoint"
             ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
             : {}),
@@ -376,14 +419,56 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       async fetchCurrentCheckpoint() {
         return independentReceipt;
       },
+      async runRestoreDrill(context) {
+        return {
+          providerId: this.id,
+          organizationId: context.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          kind: "restore",
+          passed: true,
+          proof: "independently-verified-restore-drill",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+      async runLegalHoldDrill(context) {
+        return {
+          providerId: this.id,
+          organizationId: context.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          kind: "legal_hold",
+          passed: true,
+          proof: "independently-verified-legal-hold-drill",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+      async verifyDrillReceipt(receipt) {
+        return receipt.proof.startsWith("independently-verified-");
+      },
     };
+    await configureArchiveProvider(organizationId, externalProvider.id);
     registerExternalAuditAnchorProvider(externalProvider);
     const reanchored = await runAuditAnchorTick({ organizationId });
     assert.equal(reanchored.delivered, 1);
+    assert.deepEqual(receivedContext, {
+      organizationId,
+      archiveNamespace: `${organizationId}:archive`,
+      credentialSecretReferenceName: `vault:${externalProvider.id}`,
+      providerId: externalProvider.id,
+      configGeneration: 1,
+    });
+    await runExternalAuditArchiveDrill(organizationId, "restore");
+    await runExternalAuditArchiveDrill(organizationId, "legal_hold");
     const receipts = await db.select().from(onbAuditAnchorReceipts).where(eq(
       onbAuditAnchorReceipts.organizationId, organizationId,
     ));
     assert.deepEqual(receipts.map((row) => row.providerKind).sort(), ["external", "simulated"]);
+    const outboxKey = queued[0]!.idempotencyKey;
+    assert.equal(outboxKey, `${organizationId}:checkpoint:${entry.sequence}:${entry.entryHash}`);
+    assert.ok(receipts.every((row) => row.idempotencyKey !== outboxKey));
+    assert.ok(receipts.some((row) => row.providerKind === "simulated" && /:g0:ctx[0-9a-f]{32}$/.test(row.idempotencyKey)));
+    assert.ok(receipts.some((row) => row.providerKind === "external" && /:g1:ctx[0-9a-f]{32}$/.test(row.idempotencyKey)));
     const configured = await verifyProtectedAudit(organizationId);
     assert.equal(configured.externalAnchoring.configured, true);
     assert.equal(configured.externalAnchoring.comparison, "match");
@@ -409,6 +494,200 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
     resetExternalAuditAnchorProviderForTests();
   });
 
+  test("an unconfigured tenant never falls back to a registered client adapter", async () => {
+    const configuredOrganizationId = tenant("configured-client-adapter");
+    const unconfiguredOrganizationId = tenant("unconfigured-client-adapter");
+    const calls = {
+      anchor: [] as string[],
+      fetchCurrentCheckpoint: 0,
+      legalHoldDrill: 0,
+    };
+    const provider: ExternalAuditAnchorProvider = {
+      id: "client-adapter-fallback-regression",
+      kind: "external",
+      independent: true,
+      async anchor(operation, context) {
+        calls.anchor.push(operation.kind);
+        return {
+          receiptVersion: 1,
+          providerId: this.id,
+          providerKind: this.kind,
+          operationKind: operation.kind,
+          idempotencyKey: operation.idempotencyKey,
+          organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          ...(operation.kind === "checkpoint"
+            ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
+            : {}),
+          ...(operation.kind === "legal_hold" ? { reasonFingerprint: operation.reasonFingerprint } : {}),
+          legalHoldActive: operation.legalHoldActive,
+          retentionStatementPresent: operation.retentionStatementPresent,
+          proof: "must-not-be-used-by-unconfigured-tenant",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+      async verifyReceipt() {
+        return true;
+      },
+      async fetchCurrentCheckpoint() {
+        calls.fetchCurrentCheckpoint += 1;
+        return null;
+      },
+      async runLegalHoldDrill() {
+        calls.legalHoldDrill += 1;
+        throw new Error("must not reach an unconfigured tenant");
+      },
+    };
+    await configureArchiveProvider(configuredOrganizationId, provider.id);
+    registerExternalAuditAnchorProvider(provider);
+
+    const entry = await appendProtectedAudit(input(
+      unconfiguredOrganizationId,
+      "onboarding.anchor.unconfigured-regression",
+    ));
+    await db.transaction((tx) => enqueueAuditLegalHoldInTransaction(tx, {
+      organizationId: unconfiguredOrganizationId,
+      active: true,
+      reasonFingerprint: legalHoldReasonFingerprint("unconfigured regression"),
+      retentionStatementPresent: false,
+      transitionId: `${unconfiguredOrganizationId}:regression`,
+    }));
+
+    // Separate ticks deliver the checkpoint and legal-hold operations in
+    // order. Both must use simulation rather than the registered adapter.
+    await runAuditAnchorTick({ organizationId: unconfiguredOrganizationId });
+    await runAuditAnchorTick({ organizationId: unconfiguredOrganizationId });
+    const receipts = await db.select({
+      providerKind: onbAuditAnchorReceipts.providerKind,
+      receipt: onbAuditAnchorReceipts.receipt,
+      checkpointSequence: onbAuditAnchorReceipts.checkpointSequence,
+    }).from(onbAuditAnchorReceipts).where(eq(
+      onbAuditAnchorReceipts.organizationId,
+      unconfiguredOrganizationId,
+    ));
+    assert.deepEqual(receipts.map(({ providerKind, receipt }) => [providerKind, receipt.operationKind]), [
+      ["simulated", "checkpoint"],
+      ["simulated", "legal_hold"],
+    ]);
+    assert.equal(receipts[0]?.checkpointSequence, entry.sequence);
+
+    const safeHealth = await externalAuditAnchorSafeStatus(unconfiguredOrganizationId);
+    assert.deepEqual(safeHealth, {
+      delivery: "clear",
+      providerRead: "not-applicable",
+      receiptVerification: "not-applicable",
+    });
+    const archiveHealth = await externalAnchoringStatus(unconfiguredOrganizationId);
+    assert.equal(archiveHealth.providerKind, "simulated");
+    assert.equal(archiveHealth.configured, false);
+    assert.equal(archiveHealth.regulatedProductionLaunchBlocked, true);
+    assert.equal(calls.anchor.length, 0);
+    assert.equal(calls.fetchCurrentCheckpoint, 0);
+    assert.equal(calls.legalHoldDrill, 0);
+  });
+
+  test("same provider is re-anchored after a generation and namespace replacement", async () => {
+    const organizationId = tenant("provider-generation-transition");
+    await configureArchiveProvider(organizationId, "generation-transition-provider");
+    await appendProtectedAudit(input(organizationId, "onboarding.anchor.generation.one"));
+    const contexts: string[] = [];
+    const providerKeys: string[] = [];
+    const cachedReceipts = new Map<string, ExternalAnchorReceipt>();
+    let anchorCalls = 0;
+    let latestReceipt: ExternalAnchorReceipt | null = null;
+    const provider: ExternalAuditAnchorProvider = {
+      id: "generation-transition-provider",
+      kind: "external",
+      independent: true,
+      async anchor(operation, context) {
+        anchorCalls += 1;
+        contexts.push(`${context.configGeneration}:${context.archiveNamespace}`);
+        providerKeys.push(operation.idempotencyKey);
+        const cached = cachedReceipts.get(operation.idempotencyKey);
+        if (cached) return cached;
+        const receipt: ExternalAnchorReceipt = {
+          receiptVersion: 1,
+          providerId: this.id,
+          providerKind: this.kind,
+          operationKind: operation.kind,
+          idempotencyKey: operation.idempotencyKey,
+          organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          ...(operation.kind === "checkpoint"
+            ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
+            : {}),
+          proof: `generation-${context.configGeneration}`,
+          issuedAt: new Date().toISOString(),
+        };
+        cachedReceipts.set(operation.idempotencyKey, receipt);
+        latestReceipt = receipt;
+        return receipt;
+      },
+      async verifyReceipt(receipt, _operation, context) {
+        return receipt.proof === `generation-${context.configGeneration}`;
+      },
+      async fetchCurrentCheckpoint(_organizationId, context) {
+        return latestReceipt && latestReceipt.proof === `generation-${context.configGeneration}`
+          ? latestReceipt
+          : null;
+      },
+    };
+    registerExternalAuditAnchorProvider(provider);
+    assert.equal((await runAuditAnchorTick({ organizationId })).delivered, 1);
+    assert.equal(anchorCalls, 1);
+
+    await saveExternalAuditArchiveConfig(organizationId, {
+      providerId: provider.id,
+      archiveNamespace: `${organizationId}:archive-b`,
+      retentionPolicyStatementOrReference: "generation transition policy reference",
+      independentAdministratorContact: "generation-admin@example.test",
+      independentAdministratorRole: "independent archive administrator",
+      credentialSecretReferenceName: "env:GENERATION_TRANSITION_TOKEN",
+    });
+    await appendProtectedAudit(input(organizationId, "onboarding.anchor.generation.two"));
+    // The first delivered operation is requeued because its explicit receipt
+    // generation is stale. The second operation cannot pass it in the same
+    // tick, so this call must invoke the same provider under generation 2.
+    await runAuditAnchorTick({ organizationId });
+    assert.equal(anchorCalls, 2);
+    assert.deepEqual(contexts, [
+      `1:${organizationId}:archive`,
+      `2:${organizationId}:archive-b`,
+    ]);
+    assert.equal(new Set(providerKeys).size, 2);
+    const transitionalStatus = await verifyProtectedAudit(organizationId);
+    assert.equal(transitionalStatus.externalAnchoring.comparison, "external-behind");
+    assert.equal(transitionalStatus.externalAnchoring.configured, false);
+    const receipts = await db.select({
+      configGeneration: onbAuditAnchorReceipts.configGeneration,
+      providerId: onbAuditAnchorReceipts.providerId,
+    }).from(onbAuditAnchorReceipts).where(eq(onbAuditAnchorReceipts.organizationId, organizationId));
+    assert.deepEqual(receipts.map((row) => row.configGeneration), [1, 2]);
+    assert.ok(receipts.every((row) => row.providerId === provider.id));
+    resetExternalAuditAnchorProviderForTests();
+  });
+
+  test("configured but unregistered providers never fall back to simulation", async () => {
+    const organizationId = tenant("missing-provider-adapter");
+    await configureArchiveProvider(organizationId, "missing-provider-adapter");
+    await appendProtectedAudit(input(organizationId, "onboarding.anchor.missing-provider"));
+    resetExternalAuditAnchorProviderForTests();
+    const tick = await runAuditAnchorTick({ organizationId });
+    assert.equal(tick.delivered, 0);
+    const [row] = await db.select({
+      status: onbAuditAnchorOutbox.status,
+      lastError: onbAuditAnchorOutbox.lastError,
+    }).from(onbAuditAnchorOutbox).where(eq(onbAuditAnchorOutbox.organizationId, organizationId));
+    assert.equal(row.status, "failed");
+    assert.match(row.lastError ?? "", /^missing-provider-adapter:missing-provider-adapter$/);
+    const status = await verifyProtectedAudit(organizationId);
+    assert.equal(status.externalAnchoring.providerKind, "unavailable");
+    assert.equal(status.externalAnchoring.configured, false);
+    assert.match(status.externalAnchoring.limitation, /not registered/);
+  });
+
   test("provider timeout and stale worker completion remain retryable and fenced", async () => {
     const organizationId = tenant("anchor-timeout-fence");
     await appendProtectedAudit(input(organizationId, "onboarding.anchor.timeout"));
@@ -427,6 +706,7 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
         return null;
       },
     };
+    await configureArchiveProvider(organizationId, hangingProvider.id);
     registerExternalAuditAnchorProvider(hangingProvider);
     const timedOut = await runAuditAnchorTick({ organizationId });
     assert.equal(timedOut.failed, 1);
@@ -446,7 +726,7 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       id: "delayed-independent-provider",
       kind: "external",
       independent: true,
-      async anchor(operation) {
+      async anchor(operation, context) {
         anchorStarted();
         await gate;
         return {
@@ -456,6 +736,8 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
           operationKind: operation.kind,
           idempotencyKey: operation.idempotencyKey,
           organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
           ...(operation.kind === "checkpoint"
             ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
             : {}),
@@ -473,6 +755,7 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
         return null;
       },
     };
+    await configureArchiveProvider(fenceOrganizationId, delayedProvider.id);
     registerExternalAuditAnchorProvider(delayedProvider);
     const tick = runAuditAnchorTick({ organizationId: fenceOrganizationId });
     await started;
@@ -492,6 +775,265 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
     resetExternalAuditAnchorProviderForTests();
   });
 
+  test("locally rewritten drill receipts remain blocked without provider verification", async () => {
+    const organizationId = tenant("anchor-unverifiable-drill");
+    const entry = await appendProtectedAudit(input(organizationId, "onboarding.anchor.drill"));
+    const provider: ExternalAuditAnchorProvider = {
+      id: "unverifiable-drill-provider",
+      kind: "external",
+      independent: true,
+      async anchor(operation, context) {
+        return {
+          receiptVersion: 1,
+          providerId: this.id,
+          providerKind: this.kind,
+          operationKind: operation.kind,
+          idempotencyKey: operation.idempotencyKey,
+          organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          ...(operation.kind === "checkpoint"
+            ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
+            : {}),
+          legalHoldActive: operation.legalHoldActive,
+          retentionStatementPresent: operation.retentionStatementPresent,
+          ...(operation.kind === "legal_hold" ? { reasonFingerprint: operation.reasonFingerprint } : {}),
+          proof: "valid-anchor-proof",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+      async verifyReceipt(receipt) {
+        return receipt.proof === "valid-anchor-proof";
+      },
+      async fetchCurrentCheckpoint(_organizationId, context) {
+        return {
+          receiptVersion: 1,
+          providerId: this.id,
+          providerKind: this.kind,
+          operationKind: "checkpoint",
+          idempotencyKey: `${organizationId}:checkpoint:${entry.sequence}:${entry.entryHash}`,
+          organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          checkpointSequence: entry.sequence,
+          checkpointHash: entry.entryHash,
+          legalHoldActive: false,
+          retentionStatementPresent: false,
+          proof: "valid-anchor-proof",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+      async verifyDrillReceipt() {
+        return false;
+      },
+    };
+    await configureArchiveProvider(organizationId, provider.id);
+    registerExternalAuditAnchorProvider(provider);
+    await runAuditAnchorTick({ organizationId });
+    const archiveNamespace = `${organizationId}:archive`;
+    await db.insert(onbSettings).values({
+      organizationId,
+      key: "external_audit_archive_drills",
+      value: JSON.stringify([
+        {
+          kind: "restore",
+          providerId: provider.id,
+          configGeneration: 1,
+          receipt: {
+            providerId: provider.id,
+            organizationId,
+            configGeneration: 1,
+            archiveNamespace,
+            kind: "restore",
+            passed: true,
+            proof: "forged-local-success",
+            issuedAt: new Date().toISOString(),
+          },
+          recordedAt: new Date().toISOString(),
+        },
+        {
+          kind: "legal_hold",
+          providerId: provider.id,
+          configGeneration: 1,
+          receipt: {
+            providerId: provider.id,
+            organizationId,
+            configGeneration: 1,
+            archiveNamespace,
+            kind: "legal_hold",
+            passed: true,
+            proof: "forged-local-success",
+            issuedAt: new Date().toISOString(),
+          },
+          recordedAt: new Date().toISOString(),
+        },
+      ]),
+    });
+    const integrity = await verifyProtectedAudit(organizationId);
+    assert.equal(integrity.externalAnchoring.restoreDrillPassed, false);
+    assert.equal(integrity.externalAnchoring.legalHoldDrillPassed, false);
+    assert.equal(integrity.externalAnchoring.regulatedProductionLaunchBlocked, true);
+    resetExternalAuditAnchorProviderForTests();
+  });
+
+  test("archive replacement fences simultaneous drill recording and clears old evidence", async () => {
+    const organizationId = tenant("archive-generation-race");
+    await configureArchiveProvider(organizationId, "generation-race-provider");
+    const oldDrill = {
+      kind: "restore" as const,
+      providerId: "generation-race-provider",
+      configGeneration: 1,
+      receipt: {
+        providerId: "generation-race-provider",
+        organizationId,
+        configGeneration: 1,
+        archiveNamespace: `${organizationId}:archive`,
+        kind: "restore" as const,
+        passed: true as const,
+        proof: "provider-signed-proof",
+        issuedAt: new Date().toISOString(),
+      },
+      recordedAt: new Date().toISOString(),
+    };
+    const [, replacement] = await Promise.allSettled([
+      recordExternalAuditArchiveDrill(organizationId, oldDrill),
+      saveExternalAuditArchiveConfig(organizationId, {
+        providerId: "replacement-provider",
+        archiveNamespace: `${organizationId}:replacement`,
+        retentionPolicyStatementOrReference: "replacement policy reference",
+        independentAdministratorContact: "replacement-admin@example.test",
+        independentAdministratorRole: "independent archive administrator",
+        credentialSecretReferenceName: "vault:replacement/provider",
+      }),
+    ]);
+    assert.equal(replacement.status, "fulfilled");
+    const snapshot = await getExternalAuditArchiveSnapshot(organizationId);
+    assert.equal(snapshot.generation, 2);
+    assert.equal(snapshot.config?.providerId, "replacement-provider");
+    assert.deepEqual(await getExternalAuditArchiveDrills(organizationId), []);
+  });
+
+  test("restore status fences an audit-head append that races provider verification", async () => {
+    const organizationId = tenant("stale-head-race");
+    const entry = await appendProtectedAudit(input(organizationId, "onboarding.anchor.race.initial"));
+    await configureArchiveProvider(organizationId, "stale-head-provider");
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => (started = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const provider: ExternalAuditAnchorProvider = {
+      id: "stale-head-provider",
+      kind: "external",
+      independent: true,
+      async anchor(operation, context) {
+        return {
+          receiptVersion: 1,
+          providerId: this.id,
+          providerKind: this.kind,
+          operationKind: operation.kind,
+          idempotencyKey: operation.idempotencyKey,
+          organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          ...(operation.kind === "checkpoint"
+            ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
+            : {}),
+          proof: "stale-head-proof",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+      async verifyReceipt(receipt) {
+        return receipt.proof === "stale-head-proof";
+      },
+      async fetchCurrentCheckpoint(_organizationId, context) {
+        started();
+        await gate;
+        return {
+          receiptVersion: 1,
+          providerId: this.id,
+          providerKind: this.kind,
+          operationKind: "checkpoint",
+          idempotencyKey: `${organizationId}:checkpoint:${entry.sequence}:${entry.entryHash}`,
+          organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          checkpointSequence: entry.sequence,
+          checkpointHash: entry.entryHash,
+          proof: "stale-head-proof",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+    };
+    registerExternalAuditAnchorProvider(provider);
+    const statusPromise = verifyProtectedAudit(organizationId);
+    await startedPromise;
+    await appendProtectedAudit(input(organizationId, "onboarding.anchor.race.concurrent"));
+    release();
+    const status = await statusPromise;
+    assert.equal(status.externalAnchoring.staleSnapshot, true);
+    assert.equal(status.externalAnchoring.regulatedProductionLaunchBlocked, true);
+    resetExternalAuditAnchorProviderForTests();
+  });
+
+  test("archive replacement waits for provider dispatch lock before changing context", async () => {
+    const organizationId = tenant("provider-context-race");
+    await appendProtectedAudit(input(organizationId, "onboarding.anchor.context-race"));
+    await configureArchiveProvider(organizationId, "context-race-provider");
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => (started = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const provider: ExternalAuditAnchorProvider = {
+      id: "context-race-provider",
+      kind: "external",
+      independent: true,
+      async anchor(operation, context) {
+        started();
+        await gate;
+        return {
+          receiptVersion: 1,
+          providerId: this.id,
+          providerKind: this.kind,
+          operationKind: operation.kind,
+          idempotencyKey: operation.idempotencyKey,
+          organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
+          ...(operation.kind === "checkpoint"
+            ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
+            : {}),
+          proof: "context-race-proof",
+          issuedAt: new Date().toISOString(),
+        };
+      },
+      async verifyReceipt(receipt) {
+        return receipt.proof === "context-race-proof";
+      },
+      async fetchCurrentCheckpoint() {
+        return null;
+      },
+    };
+    registerExternalAuditAnchorProvider(provider);
+    const tickPromise = runAuditAnchorTick({ organizationId });
+    await startedPromise;
+    const replacementPromise = saveExternalAuditArchiveConfig(organizationId, {
+      providerId: "replacement-context-provider",
+      archiveNamespace: `${organizationId}:replacement`,
+      retentionPolicyStatementOrReference: "replacement policy reference",
+      independentAdministratorContact: "replacement-admin@example.test",
+      independentAdministratorRole: "independent archive administrator",
+      credentialSecretReferenceName: "env:REPLACEMENT_AUDIT_TOKEN",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    release();
+    const [tick] = await Promise.all([tickPromise, replacementPromise]);
+    assert.equal(tick.delivered, 1);
+    const [row] = await db.select({ status: onbAuditAnchorOutbox.status }).from(onbAuditAnchorOutbox)
+      .where(eq(onbAuditAnchorOutbox.organizationId, organizationId));
+    assert.equal(row.status, "delivered");
+    resetExternalAuditAnchorProviderForTests();
+  });
+
   test("two workers cannot send a later checkpoint before an older delayed row", async () => {
     const organizationId = tenant("anchor-ordered-checkpoints");
     await appendProtectedAudit(input(organizationId, "onboarding.anchor.ordered.first"));
@@ -506,7 +1048,7 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       id: "ordered-checkpoint-provider",
       kind: "external",
       independent: true,
-      async anchor(operation) {
+      async anchor(operation, context) {
         const sequence = operation.kind === "checkpoint" ? operation.sequence : -1;
         calls.push(sequence);
         if (sequence === 1) {
@@ -520,6 +1062,8 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
           operationKind: operation.kind,
           idempotencyKey: operation.idempotencyKey,
           organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
           ...(operation.kind === "checkpoint"
             ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
             : {}),
@@ -538,6 +1082,7 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
         return current;
       },
     };
+    await configureArchiveProvider(organizationId, provider.id);
     registerExternalAuditAnchorProvider(provider);
     const firstWorker = runAuditAnchorTick({ organizationId });
     await started;
@@ -591,7 +1136,7 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       id: "ordered-hold-provider",
       kind: "external",
       independent: true,
-      async anchor(operation) {
+      async anchor(operation, context) {
         if (operation.kind !== "legal_hold") throw new Error("expected legal-hold operation");
         calls.push(operation.legalHoldActive);
         if (calls.length === 1) {
@@ -606,6 +1151,8 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
           operationKind: operation.kind,
           idempotencyKey: operation.idempotencyKey,
           organizationId: operation.organizationId,
+          configGeneration: context.configGeneration,
+          archiveNamespace: context.archiveNamespace,
           legalHoldActive: operation.legalHoldActive,
           retentionStatementPresent: operation.retentionStatementPresent,
           reasonFingerprint: operation.reasonFingerprint,
@@ -620,6 +1167,7 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
         return null;
       },
     };
+    await configureArchiveProvider(organizationId, provider.id);
     registerExternalAuditAnchorProvider(provider);
     const firstWorker = runAuditAnchorTick({ organizationId });
     await started;

@@ -1072,7 +1072,18 @@ test(
            tag !== "0048_authority_case_creator_principal" &&
            tag !== "0049_nonwaivable_safety_policy" &&
            tag !== "0050_authority_governance_withdrawn" &&
-           tag !== "0051_separate_migration_review_from_medical_safety",
+            tag !== "0051_separate_migration_review_from_medical_safety" &&
+            tag !== "0047_external_audit_anchoring" &&
+            tag !== "0048_external_audit_anchor_provider_transition" &&
+            tag !== "0047_governance_decision_register" &&
+            tag !== "0048_governance_authority_requests" &&
+            tag !== "0049_governance_requirement_coverage_state" &&
+            tag !== "0050_governance_dispatch_fence" &&
+            tag !== "0051_trusted_connector_evidence" &&
+            tag !== "0052_organization_membership_lifecycle" &&
+            tag !== "0053_organization_membership_revision" &&
+             tag !== "0053_external_audit_anchor_receipt_generation" &&
+             tag !== "0054_external_audit_anchor_receipt_constraints",
       );
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(),

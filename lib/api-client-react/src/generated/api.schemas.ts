@@ -5,13 +5,183 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export type OrganizationMemberRole = typeof OrganizationMemberRole[keyof typeof OrganizationMemberRole];
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  slug: string;
+}
 
+export type OrganizationMembershipRole =
+  (typeof OrganizationMembershipRole)[keyof typeof OrganizationMembershipRole];
+
+export const OrganizationMembershipRole = {
+  owner: "owner",
+  admin: "admin",
+  member: "member",
+} as const;
+
+export interface OrganizationMembership {
+  organizationId: string;
+  name: string;
+  slug: string;
+  role: OrganizationMembershipRole;
+}
+
+export interface OrganizationCurrentResponse {
+  needsSetup: boolean;
+  /** @nullable */
+  activeOrganizationId: string | null;
+  memberships: OrganizationMembership[];
+}
+
+export interface ExternalAuditArchiveConfig {
+  providerId: string;
+  archiveNamespace: string;
+  retentionPolicyStatementOrReference: string;
+  independentAdministratorContact: string;
+  independentAdministratorRole: string;
+  /** @pattern ^(env:[A-Z][A-Z0-9_]*|vault:[A-Za-z0-9][A-Za-z0-9_./:-]{0,238})$ */
+  credentialSecretReferenceName: string;
+}
+
+export interface OrganizationCreateInput {
+  name: string;
+  auditArchive?: ExternalAuditArchiveConfig | null;
+}
+
+export type ExternalAuditArchiveStatusProviderKind =
+  (typeof ExternalAuditArchiveStatusProviderKind)[keyof typeof ExternalAuditArchiveStatusProviderKind];
+
+export const ExternalAuditArchiveStatusProviderKind = {
+  simulated: "simulated",
+  external: "external",
+  unavailable: "unavailable",
+} as const;
+
+export type ExternalAuditArchiveStatusComparison =
+  (typeof ExternalAuditArchiveStatusComparison)[keyof typeof ExternalAuditArchiveStatusComparison];
+
+export const ExternalAuditArchiveStatusComparison = {
+  empty: "empty",
+  missing: "missing",
+  match: "match",
+  "external-behind": "external-behind",
+  "external-ahead": "external-ahead",
+  mismatch: "mismatch",
+} as const;
+
+export interface ExternalAuditArchiveStatus {
+  requiredForLaunch: true;
+  providerId: string;
+  /** @nullable */
+  configuredProviderId: string | null;
+  configGeneration: number;
+  providerKind: ExternalAuditArchiveStatusProviderKind;
+  /** @nullable */
+  archiveNamespace: string | null;
+  /** @nullable */
+  retentionPolicyStatementOrReference: string | null;
+  /** @nullable */
+  independentAdministratorContact: string | null;
+  /** @nullable */
+  independentAdministratorRole: string | null;
+  credentialSecretReferenceNameConfigured: boolean;
+  configured: boolean;
+  verified: boolean;
+  comparison: ExternalAuditArchiveStatusComparison;
+  regulatedProductionLaunchBlocked: boolean;
+  restoreDrillPassed: boolean;
+  legalHoldDrillPassed: boolean;
+  drillsInvalid: boolean;
+  staleSnapshot: boolean;
+  /** @nullable */
+  latestSequence: number | null;
+  /** @nullable */
+  latestReceiptAt: string | null;
+  limitation: string;
+  recommendedOutageBehavior: string;
+}
+
+export interface OrganizationCreateResponse {
+  organization: OrganizationSummary;
+  role: "owner";
+  joinCode: string;
+  auditArchive: ExternalAuditArchiveStatus;
+}
+
+export interface OrganizationJoinByCode {
+  joinCode: string;
+  demo?: boolean;
+}
+
+export interface OrganizationJoinDemo {
+  joinCode?: string;
+  demo: true;
+}
+
+export type OrganizationJoinInput =
+  OrganizationJoinByCode | OrganizationJoinDemo;
+
+export type OrganizationJoinResponseRole =
+  (typeof OrganizationJoinResponseRole)[keyof typeof OrganizationJoinResponseRole];
+
+export const OrganizationJoinResponseRole = {
+  owner: "owner",
+  admin: "admin",
+  member: "member",
+} as const;
+
+export interface OrganizationJoinResponse {
+  organization: OrganizationSummary;
+  role: OrganizationJoinResponseRole;
+}
+
+export interface OrganizationAuditArchiveResponse {
+  auditArchive: ExternalAuditArchiveStatus;
+}
+
+export interface OrganizationAuditArchiveInput {
+  auditArchive: ExternalAuditArchiveConfig | null;
+}
+
+export type OrganizationAuditArchiveDrillInputKind =
+  (typeof OrganizationAuditArchiveDrillInputKind)[keyof typeof OrganizationAuditArchiveDrillInputKind];
+
+export const OrganizationAuditArchiveDrillInputKind = {
+  restore: "restore",
+  legal_hold: "legal_hold",
+} as const;
+
+export interface OrganizationAuditArchiveDrillInput {
+  kind: OrganizationAuditArchiveDrillInputKind;
+}
+
+export type OrganizationAuditArchiveDrillKind =
+  (typeof OrganizationAuditArchiveDrillKind)[keyof typeof OrganizationAuditArchiveDrillKind];
+
+export const OrganizationAuditArchiveDrillKind = {
+  restore: "restore",
+  legal_hold: "legal_hold",
+} as const;
+
+export interface OrganizationAuditArchiveDrill {
+  kind: OrganizationAuditArchiveDrillKind;
+  providerId: string;
+  passed: true;
+}
+
+export interface OrganizationAuditArchiveDrillResponse {
+  drill: OrganizationAuditArchiveDrill;
+  auditArchive: ExternalAuditArchiveStatus;
+}
+
+export type OrganizationMemberRole =
+  (typeof OrganizationMemberRole)[keyof typeof OrganizationMemberRole];
 
 export const OrganizationMemberRole = {
-  owner: 'owner',
-  admin: 'admin',
-  member: 'member',
+  owner: "owner",
+  admin: "admin",
+  member: "member",
 } as const;
 
 export interface OrganizationMember {
@@ -21,13 +191,13 @@ export interface OrganizationMember {
   revokedAt?: string | null;
 }
 
-export type RemovedOrganizationMemberRole = typeof RemovedOrganizationMemberRole[keyof typeof RemovedOrganizationMemberRole];
-
+export type RemovedOrganizationMemberRole =
+  (typeof RemovedOrganizationMemberRole)[keyof typeof RemovedOrganizationMemberRole];
 
 export const RemovedOrganizationMemberRole = {
-  owner: 'owner',
-  admin: 'admin',
-  member: 'member',
+  owner: "owner",
+  admin: "admin",
+  member: "member",
 } as const;
 
 export interface RemovedOrganizationMember {
@@ -39,21 +209,21 @@ export interface RemovedOrganizationMember {
   revision: number;
 }
 
-export type OrganizationMemberRoleChangeExpectedRole = typeof OrganizationMemberRoleChangeExpectedRole[keyof typeof OrganizationMemberRoleChangeExpectedRole];
-
+export type OrganizationMemberRoleChangeExpectedRole =
+  (typeof OrganizationMemberRoleChangeExpectedRole)[keyof typeof OrganizationMemberRoleChangeExpectedRole];
 
 export const OrganizationMemberRoleChangeExpectedRole = {
-  owner: 'owner',
-  admin: 'admin',
-  member: 'member',
+  owner: "owner",
+  admin: "admin",
+  member: "member",
 } as const;
 
-export type OrganizationMemberRoleChangeRole = typeof OrganizationMemberRoleChangeRole[keyof typeof OrganizationMemberRoleChangeRole];
-
+export type OrganizationMemberRoleChangeRole =
+  (typeof OrganizationMemberRoleChangeRole)[keyof typeof OrganizationMemberRoleChangeRole];
 
 export const OrganizationMemberRoleChangeRole = {
-  admin: 'admin',
-  member: 'member',
+  admin: "admin",
+  member: "member",
 } as const;
 
 export interface OrganizationMemberRoleChange {
@@ -61,13 +231,13 @@ export interface OrganizationMemberRoleChange {
   role: OrganizationMemberRoleChangeRole;
 }
 
-export type OrganizationMemberRemovalExpectedRole = typeof OrganizationMemberRemovalExpectedRole[keyof typeof OrganizationMemberRemovalExpectedRole];
-
+export type OrganizationMemberRemovalExpectedRole =
+  (typeof OrganizationMemberRemovalExpectedRole)[keyof typeof OrganizationMemberRemovalExpectedRole];
 
 export const OrganizationMemberRemovalExpectedRole = {
-  owner: 'owner',
-  admin: 'admin',
-  member: 'member',
+  owner: "owner",
+  admin: "admin",
+  member: "member",
 } as const;
 
 export interface OrganizationMemberRemoval {
@@ -79,29 +249,29 @@ export interface OrganizationMemberReinstatement {
   /** @minimum 0 */
   expectedRevision: number;
   /**
-     * @minLength 1
-     * @maxLength 1000
-     */
+   * @minLength 1
+   * @maxLength 1000
+   */
   reason: string;
 }
 
-export type OnbProtectedAuditEntryActorKind = typeof OnbProtectedAuditEntryActorKind[keyof typeof OnbProtectedAuditEntryActorKind];
-
+export type OnbProtectedAuditEntryActorKind =
+  (typeof OnbProtectedAuditEntryActorKind)[keyof typeof OnbProtectedAuditEntryActorKind];
 
 export const OnbProtectedAuditEntryActorKind = {
-  authenticated: 'authenticated',
-  system: 'system',
-  historical: 'historical',
+  authenticated: "authenticated",
+  system: "system",
+  historical: "historical",
 } as const;
 
-export type OnbProtectedAuditEntryOutcome = typeof OnbProtectedAuditEntryOutcome[keyof typeof OnbProtectedAuditEntryOutcome];
-
+export type OnbProtectedAuditEntryOutcome =
+  (typeof OnbProtectedAuditEntryOutcome)[keyof typeof OnbProtectedAuditEntryOutcome];
 
 export const OnbProtectedAuditEntryOutcome = {
-  attempted: 'attempted',
-  success: 'success',
-  denied: 'denied',
-  failure: 'failure',
+  attempted: "attempted",
+  success: "success",
+  denied: "denied",
+  failure: "failure",
 } as const;
 
 /**
@@ -125,9 +295,9 @@ export interface OnbProtectedAuditEntry {
   /** @nullable */
   objectId: string | null;
   /**
-     * Pseudonymous surviving reference
-     * @nullable
-     */
+   * Pseudonymous surviving reference
+   * @nullable
+   */
   caseReference: string | null;
   /** @nullable */
   reviewedRevision: number | null;
@@ -142,22 +312,14 @@ export interface OnbProtectedAuditEntry {
   entryHash: string;
 }
 
-export type OnbProtectedAuditIntegrityStatus = typeof OnbProtectedAuditIntegrityStatus[keyof typeof OnbProtectedAuditIntegrityStatus];
-
+export type OnbProtectedAuditIntegrityStatus =
+  (typeof OnbProtectedAuditIntegrityStatus)[keyof typeof OnbProtectedAuditIntegrityStatus];
 
 export const OnbProtectedAuditIntegrityStatus = {
-  empty: 'empty',
-  verified: 'verified',
-  broken: 'broken',
+  empty: "empty",
+  verified: "verified",
+  broken: "broken",
 } as const;
-
-export type OnbProtectedAuditIntegrityExternalAnchoring = {
-  requiredForLaunch: true;
-  configured: boolean;
-  /** DBA-resistant regulated production launch is blocked until independently operated anchoring/WORM exists; this does not block development API use. */
-  regulatedProductionLaunchBlocked: true;
-  limitation: string;
-};
 
 export interface OnbProtectedAuditIntegrity {
   status: OnbProtectedAuditIntegrityStatus;
@@ -166,7 +328,7 @@ export interface OnbProtectedAuditIntegrity {
   /** @nullable */
   firstBrokenSequence: number | null;
   headMatches: boolean;
-  externalAnchoring: OnbProtectedAuditIntegrityExternalAnchoring;
+  externalAnchoring: ExternalAuditArchiveStatus;
 }
 
 export interface OnbProtectedAuditPage {
@@ -206,26 +368,26 @@ export interface OnbProtectedAuditLifecycle {
 
 export interface OnbProtectedAuditRetentionInput {
   /**
-     * @minLength 1
-     * @maxLength 2000
-     */
+   * @minLength 1
+   * @maxLength 2000
+   */
   retentionStatement: string;
 }
 
-export type OnbProtectedAuditLegalHoldInputAction = typeof OnbProtectedAuditLegalHoldInputAction[keyof typeof OnbProtectedAuditLegalHoldInputAction];
-
+export type OnbProtectedAuditLegalHoldInputAction =
+  (typeof OnbProtectedAuditLegalHoldInputAction)[keyof typeof OnbProtectedAuditLegalHoldInputAction];
 
 export const OnbProtectedAuditLegalHoldInputAction = {
-  set: 'set',
-  release: 'release',
+  set: "set",
+  release: "release",
 } as const;
 
 export interface OnbProtectedAuditLegalHoldInput {
   action: OnbProtectedAuditLegalHoldInputAction;
   /**
-     * @minLength 1
-     * @maxLength 2000
-     */
+   * @minLength 1
+   * @maxLength 2000
+   */
   reason: string;
 }
 
@@ -233,48 +395,46 @@ export interface OnbProtectedAuditCorrectionInput {
   /** @minimum 1 */
   entryId: number;
   /**
-     * @minLength 1
-     * @maxLength 2000
-     */
+   * @minLength 1
+   * @maxLength 2000
+   */
   reason: string;
 }
 
-export type EaAssessmentStatus = typeof EaAssessmentStatus[keyof typeof EaAssessmentStatus];
-
+export type EaAssessmentStatus =
+  (typeof EaAssessmentStatus)[keyof typeof EaAssessmentStatus];
 
 export const EaAssessmentStatus = {
-  active: 'active',
-  archived: 'archived',
+  active: "active",
+  archived: "archived",
 } as const;
 
-export type EaPhase = typeof EaPhase[keyof typeof EaPhase];
-
+export type EaPhase = (typeof EaPhase)[keyof typeof EaPhase];
 
 export const EaPhase = {
-  preliminary: 'preliminary',
-  'architecture-vision': 'architecture-vision',
-  business: 'business',
-  data: 'data',
-  application: 'application',
-  technology: 'technology',
-  'opportunities-solutions': 'opportunities-solutions',
-  'migration-planning': 'migration-planning',
-  'implementation-governance': 'implementation-governance',
-  'architecture-change-management': 'architecture-change-management',
+  preliminary: "preliminary",
+  "architecture-vision": "architecture-vision",
+  business: "business",
+  data: "data",
+  application: "application",
+  technology: "technology",
+  "opportunities-solutions": "opportunities-solutions",
+  "migration-planning": "migration-planning",
+  "implementation-governance": "implementation-governance",
+  "architecture-change-management": "architecture-change-management",
 } as const;
 
-export type EaDomain = typeof EaDomain[keyof typeof EaDomain];
-
+export type EaDomain = (typeof EaDomain)[keyof typeof EaDomain];
 
 export const EaDomain = {
-  business: 'business',
-  data: 'data',
-  application: 'application',
-  technology: 'technology',
-  integration: 'integration',
-  ai: 'ai',
-  security: 'security',
-  'operating-model': 'operating-model',
+  business: "business",
+  data: "data",
+  application: "application",
+  technology: "technology",
+  integration: "integration",
+  ai: "ai",
+  security: "security",
+  "operating-model": "operating-model",
 } as const;
 
 export interface EaTraceability {
@@ -296,47 +456,47 @@ export interface EaEvidence {
   notes?: string;
 }
 
-export type EaPhaseProgressStatus = typeof EaPhaseProgressStatus[keyof typeof EaPhaseProgressStatus];
-
+export type EaPhaseProgressStatus =
+  (typeof EaPhaseProgressStatus)[keyof typeof EaPhaseProgressStatus];
 
 export const EaPhaseProgressStatus = {
-  'not-started': 'not-started',
-  'in-progress': 'in-progress',
-  complete: 'complete',
-  blocked: 'blocked',
+  "not-started": "not-started",
+  "in-progress": "in-progress",
+  complete: "complete",
+  blocked: "blocked",
 } as const;
 
 export interface EaPhaseProgress {
   phase: EaPhase;
   status: EaPhaseProgressStatus;
   /**
-     * @minimum 0
-     * @maximum 100
-     */
+   * @minimum 0
+   * @maximum 100
+   */
   completionPercent: number;
   notes?: string;
   updatedAt?: string;
 }
 
-export type EaRequirementPriority = typeof EaRequirementPriority[keyof typeof EaRequirementPriority];
-
+export type EaRequirementPriority =
+  (typeof EaRequirementPriority)[keyof typeof EaRequirementPriority];
 
 export const EaRequirementPriority = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  critical: 'critical',
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
 } as const;
 
-export type EaRequirementStatus = typeof EaRequirementStatus[keyof typeof EaRequirementStatus];
-
+export type EaRequirementStatus =
+  (typeof EaRequirementStatus)[keyof typeof EaRequirementStatus];
 
 export const EaRequirementStatus = {
-  proposed: 'proposed',
-  approved: 'approved',
-  implemented: 'implemented',
-  verified: 'verified',
-  rejected: 'rejected',
+  proposed: "proposed",
+  approved: "approved",
+  implemented: "implemented",
+  verified: "verified",
+  rejected: "rejected",
 } as const;
 
 export interface EaRequirement {
@@ -353,37 +513,37 @@ export interface EaRequirement {
   traceability: EaTraceability;
 }
 
-export type EaInventoryItemCriticality = typeof EaInventoryItemCriticality[keyof typeof EaInventoryItemCriticality];
-
+export type EaInventoryItemCriticality =
+  (typeof EaInventoryItemCriticality)[keyof typeof EaInventoryItemCriticality];
 
 export const EaInventoryItemCriticality = {
-  unknown: 'unknown',
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  critical: 'critical',
+  unknown: "unknown",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
 } as const;
 
-export type EaInventoryItemLifecycle = typeof EaInventoryItemLifecycle[keyof typeof EaInventoryItemLifecycle];
-
+export type EaInventoryItemLifecycle =
+  (typeof EaInventoryItemLifecycle)[keyof typeof EaInventoryItemLifecycle];
 
 export const EaInventoryItemLifecycle = {
-  unknown: 'unknown',
-  planned: 'planned',
-  active: 'active',
-  tolerated: 'tolerated',
-  sunset: 'sunset',
-  retired: 'retired',
+  unknown: "unknown",
+  planned: "planned",
+  active: "active",
+  tolerated: "tolerated",
+  sunset: "sunset",
+  retired: "retired",
 } as const;
 
-export type EaInventoryItemConfidence = typeof EaInventoryItemConfidence[keyof typeof EaInventoryItemConfidence];
-
+export type EaInventoryItemConfidence =
+  (typeof EaInventoryItemConfidence)[keyof typeof EaInventoryItemConfidence];
 
 export const EaInventoryItemConfidence = {
-  unknown: 'unknown',
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
+  unknown: "unknown",
+  low: "low",
+  medium: "medium",
+  high: "high",
 } as const;
 
 export interface EaInventoryItem {
@@ -395,9 +555,9 @@ export interface EaInventoryItem {
   kind: string;
   description: string;
   /**
-     * @minimum 0
-     * @maximum 5
-     */
+   * @minimum 0
+   * @maximum 5
+   */
   maturity: number;
   criticality: EaInventoryItemCriticality;
   lifecycle: EaInventoryItemLifecycle;
@@ -418,25 +578,24 @@ export interface EaCurrentStateInventory {
   operatingModel: EaInventoryItem[];
 }
 
-export type EaGapSeverity = typeof EaGapSeverity[keyof typeof EaGapSeverity];
-
+export type EaGapSeverity = (typeof EaGapSeverity)[keyof typeof EaGapSeverity];
 
 export const EaGapSeverity = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  critical: 'critical',
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
 } as const;
 
-export type EaGapDisposition = typeof EaGapDisposition[keyof typeof EaGapDisposition];
-
+export type EaGapDisposition =
+  (typeof EaGapDisposition)[keyof typeof EaGapDisposition];
 
 export const EaGapDisposition = {
-  open: 'open',
-  accepted: 'accepted',
-  mitigated: 'mitigated',
-  deferred: 'deferred',
-  closed: 'closed',
+  open: "open",
+  accepted: "accepted",
+  mitigated: "mitigated",
+  deferred: "deferred",
+  closed: "closed",
 } as const;
 
 export interface EaGap {
@@ -454,15 +613,15 @@ export interface EaGap {
   traceability: EaTraceability;
 }
 
-export type EaTargetComponentStatus = typeof EaTargetComponentStatus[keyof typeof EaTargetComponentStatus];
-
+export type EaTargetComponentStatus =
+  (typeof EaTargetComponentStatus)[keyof typeof EaTargetComponentStatus];
 
 export const EaTargetComponentStatus = {
-  proposed: 'proposed',
-  approved: 'approved',
-  implementing: 'implementing',
-  live: 'live',
-  retired: 'retired',
+  proposed: "proposed",
+  approved: "approved",
+  implementing: "implementing",
+  live: "live",
+  retired: "retired",
 } as const;
 
 export interface EaTargetComponent {
@@ -492,14 +651,14 @@ export interface EaTargetRelationship {
   description: string;
 }
 
-export type EaSolutionOptionApproach = typeof EaSolutionOptionApproach[keyof typeof EaSolutionOptionApproach];
-
+export type EaSolutionOptionApproach =
+  (typeof EaSolutionOptionApproach)[keyof typeof EaSolutionOptionApproach];
 
 export const EaSolutionOptionApproach = {
-  build: 'build',
-  buy: 'buy',
-  reuse: 'reuse',
-  hybrid: 'hybrid',
+  build: "build",
+  buy: "buy",
+  reuse: "reuse",
+  hybrid: "hybrid",
 } as const;
 
 export interface EaSolutionOption {
@@ -528,15 +687,15 @@ export interface EaTransitionArchitecture {
   exitCriteria: string[];
 }
 
-export type EaWorkPackageStatus = typeof EaWorkPackageStatus[keyof typeof EaWorkPackageStatus];
-
+export type EaWorkPackageStatus =
+  (typeof EaWorkPackageStatus)[keyof typeof EaWorkPackageStatus];
 
 export const EaWorkPackageStatus = {
-  planned: 'planned',
-  ready: 'ready',
-  'in-progress': 'in-progress',
-  blocked: 'blocked',
-  complete: 'complete',
+  planned: "planned",
+  ready: "ready",
+  "in-progress": "in-progress",
+  blocked: "blocked",
+  complete: "complete",
 } as const;
 
 export interface EaWorkPackage {
@@ -556,13 +715,13 @@ export interface EaWorkPackage {
   estimatedCost: number;
 }
 
-export type EaRoadmapDependencyDependencyType = typeof EaRoadmapDependencyDependencyType[keyof typeof EaRoadmapDependencyDependencyType];
-
+export type EaRoadmapDependencyDependencyType =
+  (typeof EaRoadmapDependencyDependencyType)[keyof typeof EaRoadmapDependencyDependencyType];
 
 export const EaRoadmapDependencyDependencyType = {
-  'finish-start': 'finish-start',
-  'start-start': 'start-start',
-  external: 'external',
+  "finish-start": "finish-start",
+  "start-start": "start-start",
+  external: "external",
 } as const;
 
 export interface EaRoadmapDependency {
@@ -593,60 +752,60 @@ export interface EaPrioritization {
   /** @minLength 1 */
   workPackageId: string;
   /**
-     * @minimum 0
-     * @maximum 5
-     */
+   * @minimum 0
+   * @maximum 5
+   */
   value: number;
   /**
-     * @minimum 0
-     * @maximum 5
-     */
+   * @minimum 0
+   * @maximum 5
+   */
   risk: number;
   /**
-     * @minimum 0
-     * @maximum 5
-     */
+   * @minimum 0
+   * @maximum 5
+   */
   urgency: number;
   /**
-     * @minimum 0
-     * @maximum 5
-     */
+   * @minimum 0
+   * @maximum 5
+   */
   dependency: number;
   /**
-     * @minimum 0
-     * @maximum 5
-     */
+   * @minimum 0
+   * @maximum 5
+   */
   readiness: number;
   /**
-     * @minimum 0
-     * @maximum 5
-     */
+   * @minimum 0
+   * @maximum 5
+   */
   cost: number;
   totalScore: number;
   rationale: string;
 }
 
-export type EaGovernanceRecordRecordType = typeof EaGovernanceRecordRecordType[keyof typeof EaGovernanceRecordRecordType];
-
+export type EaGovernanceRecordRecordType =
+  (typeof EaGovernanceRecordRecordType)[keyof typeof EaGovernanceRecordRecordType];
 
 export const EaGovernanceRecordRecordType = {
-  contract: 'contract',
-  review: 'review',
-  deviation: 'deviation',
-  waiver: 'waiver',
-  remediation: 'remediation',
+  contract: "contract",
+  review: "review",
+  deviation: "deviation",
+  waiver: "waiver",
+  remediation: "remediation",
 } as const;
 
-export type EaGovernanceRecordStatus = typeof EaGovernanceRecordStatus[keyof typeof EaGovernanceRecordStatus];
-
+export type EaGovernanceRecordStatus =
+  (typeof EaGovernanceRecordStatus)[keyof typeof EaGovernanceRecordStatus];
 
 export const EaGovernanceRecordStatus = {
-  open: 'open',
-  scheduled: 'scheduled',
-  approved: 'approved',
-  rejected: 'rejected',
-  complete: 'complete',
-  expired: 'expired',
+  open: "open",
+  scheduled: "scheduled",
+  approved: "approved",
+  rejected: "rejected",
+  complete: "complete",
+  expired: "expired",
 } as const;
 
 export interface EaGovernanceRecord {
@@ -664,23 +823,23 @@ export interface EaGovernanceRecord {
   decisionIds: string[];
 }
 
-export type EaChangeRequestStatus = typeof EaChangeRequestStatus[keyof typeof EaChangeRequestStatus];
-
+export type EaChangeRequestStatus =
+  (typeof EaChangeRequestStatus)[keyof typeof EaChangeRequestStatus];
 
 export const EaChangeRequestStatus = {
-  submitted: 'submitted',
-  assessing: 'assessing',
-  approved: 'approved',
-  rejected: 'rejected',
-  implemented: 'implemented',
+  submitted: "submitted",
+  assessing: "assessing",
+  approved: "approved",
+  rejected: "rejected",
+  implemented: "implemented",
 } as const;
 
-export type EaChangeRequestClassification = typeof EaChangeRequestClassification[keyof typeof EaChangeRequestClassification];
-
+export type EaChangeRequestClassification =
+  (typeof EaChangeRequestClassification)[keyof typeof EaChangeRequestClassification];
 
 export const EaChangeRequestClassification = {
-  minor: 'minor',
-  'new-cycle': 'new-cycle',
+  minor: "minor",
+  "new-cycle": "new-cycle",
 } as const;
 
 export type EaChangeRequestImpact = {
@@ -714,13 +873,13 @@ export interface EaArchitectureVersion {
   changeRequestIds: string[];
 }
 
-export type EaDecisionStatus = typeof EaDecisionStatus[keyof typeof EaDecisionStatus];
-
+export type EaDecisionStatus =
+  (typeof EaDecisionStatus)[keyof typeof EaDecisionStatus];
 
 export const EaDecisionStatus = {
-  proposed: 'proposed',
-  approved: 'approved',
-  superseded: 'superseded',
+  proposed: "proposed",
+  approved: "approved",
+  superseded: "superseded",
 } as const;
 
 export interface EaDecision {
@@ -736,14 +895,13 @@ export interface EaDecision {
   traceability: EaTraceability;
 }
 
-export type EaRiskStatus = typeof EaRiskStatus[keyof typeof EaRiskStatus];
-
+export type EaRiskStatus = (typeof EaRiskStatus)[keyof typeof EaRiskStatus];
 
 export const EaRiskStatus = {
-  open: 'open',
-  mitigating: 'mitigating',
-  accepted: 'accepted',
-  closed: 'closed',
+  open: "open",
+  mitigating: "mitigating",
+  accepted: "accepted",
+  closed: "closed",
 } as const;
 
 export interface EaRisk {
@@ -753,26 +911,26 @@ export interface EaRisk {
   title: string;
   description: string;
   /**
-     * @minimum 1
-     * @maximum 5
-     */
+   * @minimum 1
+   * @maximum 5
+   */
   likelihood: number;
   /**
-     * @minimum 1
-     * @maximum 5
-     */
+   * @minimum 1
+   * @maximum 5
+   */
   impact: number;
   mitigation: string;
   owner: string;
   status: EaRiskStatus;
 }
 
-export type EaCostLinkLinkType = typeof EaCostLinkLinkType[keyof typeof EaCostLinkLinkType];
-
+export type EaCostLinkLinkType =
+  (typeof EaCostLinkLinkType)[keyof typeof EaCostLinkLinkType];
 
 export const EaCostLinkLinkType = {
-  scenario: 'scenario',
-  'pricing-sheet': 'pricing-sheet',
+  scenario: "scenario",
+  "pricing-sheet": "pricing-sheet",
 } as const;
 
 export type EaCostLinkScopeSnapshot = { [key: string]: unknown };
@@ -822,9 +980,9 @@ export type EaAssessmentContentChangeManagement = {
 
 export interface EaAssessmentContent {
   /**
-     * @minItems 10
-     * @maxItems 10
-     */
+   * @minItems 10
+   * @maxItems 10
+   */
   phaseProgress: EaPhaseProgress[];
   requirements: EaRequirement[];
   currentState: EaCurrentStateInventory;
@@ -841,14 +999,14 @@ export interface EaAssessmentContent {
 
 export interface EaAssessmentInput {
   /**
-     * @minLength 1
-     * @maxLength 200
-     */
+   * @minLength 1
+   * @maxLength 200
+   */
   name: string;
   /**
-     * @minLength 1
-     * @maxLength 200
-     */
+   * @minLength 1
+   * @maxLength 200
+   */
   clientName: string;
   currentPhase: EaPhase;
   content: EaAssessmentContent;
@@ -858,14 +1016,14 @@ export interface EaAssessmentUpdate {
   /** @minimum 1 */
   expectedVersion: number;
   /**
-     * @minLength 1
-     * @maxLength 200
-     */
+   * @minLength 1
+   * @maxLength 200
+   */
   name?: string;
   /**
-     * @minLength 1
-     * @maxLength 200
-     */
+   * @minLength 1
+   * @maxLength 200
+   */
   clientName?: string;
   currentPhase?: EaPhase;
   content?: EaAssessmentContent;
@@ -881,7 +1039,7 @@ export interface EaDeleteRequest {
   expectedVersion: number;
 }
 
-export type EaAssessment = EaAssessmentInput & ({
+export type EaAssessment = EaAssessmentInput & {
   id: number;
   status: EaAssessmentStatus;
   /** @minimum 1 */
@@ -889,18 +1047,18 @@ export type EaAssessment = EaAssessmentInput & ({
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
-});
+};
 
-export type EaBaselineViewpointBuildingBlocksItemSourceType = typeof EaBaselineViewpointBuildingBlocksItemSourceType[keyof typeof EaBaselineViewpointBuildingBlocksItemSourceType];
-
+export type EaBaselineViewpointBuildingBlocksItemSourceType =
+  (typeof EaBaselineViewpointBuildingBlocksItemSourceType)[keyof typeof EaBaselineViewpointBuildingBlocksItemSourceType];
 
 export const EaBaselineViewpointBuildingBlocksItemSourceType = {
-  intent: 'intent',
-  'flow-class': 'flow-class',
-  system: 'system',
-  model: 'model',
-  assumption: 'assumption',
-  'pricing-architecture': 'pricing-architecture',
+  intent: "intent",
+  "flow-class": "flow-class",
+  system: "system",
+  model: "model",
+  assumption: "assumption",
+  "pricing-architecture": "pricing-architecture",
 } as const;
 
 export type EaBaselineViewpointBuildingBlocksItem = {
@@ -927,9 +1085,9 @@ export type EaSolutionBaselineSourceCounts = {
 export interface EaSolutionBaseline {
   generatedAt: string;
   /**
-     * @minItems 8
-     * @maxItems 8
-     */
+   * @minItems 8
+   * @maxItems 8
+   */
   viewpoints: EaBaselineViewpoint[];
   sourceCounts: EaSolutionBaselineSourceCounts;
 }
@@ -1109,12 +1267,12 @@ export interface SystemInfo {
 /**
  * Multiplier per lifecycle domain applied to intent base weights
  */
-export type DistributionProfileDomainWeights = {[key: string]: number};
+export type DistributionProfileDomainWeights = { [key: string]: number };
 
 /**
  * Multiplier per size band (small|mid|large|enterprise) applied to per-employee volume
  */
-export type DistributionProfileSizeAdjustments = {[key: string]: number};
+export type DistributionProfileSizeAdjustments = { [key: string]: number };
 
 export interface DistributionProfile {
   sector: string;
@@ -1129,13 +1287,13 @@ export interface DistributionProfile {
 /**
  * Product demarcation: core = product fact identical for every client; configurable = client-set dial (no code change); custom = per-client engineering/content effort.
  */
-export type GlobalAssumptionProvisioning = typeof GlobalAssumptionProvisioning[keyof typeof GlobalAssumptionProvisioning];
-
+export type GlobalAssumptionProvisioning =
+  (typeof GlobalAssumptionProvisioning)[keyof typeof GlobalAssumptionProvisioning];
 
 export const GlobalAssumptionProvisioning = {
-  core: 'core',
-  configurable: 'configurable',
-  custom: 'custom',
+  core: "core",
+  configurable: "configurable",
+  custom: "custom",
 } as const;
 
 export interface GlobalAssumption {
@@ -1202,41 +1360,41 @@ export interface IntentEvidenceContract {
   required: string[];
 }
 
-export type IntentRouteRiskClass = typeof IntentRouteRiskClass[keyof typeof IntentRouteRiskClass];
-
+export type IntentRouteRiskClass =
+  (typeof IntentRouteRiskClass)[keyof typeof IntentRouteRiskClass];
 
 export const IntentRouteRiskClass = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  consequential: 'consequential',
+  low: "low",
+  medium: "medium",
+  high: "high",
+  consequential: "consequential",
 } as const;
 
-export type IntentRouteMaturity = typeof IntentRouteMaturity[keyof typeof IntentRouteMaturity];
-
+export type IntentRouteMaturity =
+  (typeof IntentRouteMaturity)[keyof typeof IntentRouteMaturity];
 
 export const IntentRouteMaturity = {
-  catalogued: 'catalogued',
-  simulated: 'simulated',
-  integrated: 'integrated',
-  verified: 'verified',
-  unsupported: 'unsupported',
+  catalogued: "catalogued",
+  simulated: "simulated",
+  integrated: "integrated",
+  verified: "verified",
+  unsupported: "unsupported",
 } as const;
 
-export type IntentRouteSource = typeof IntentRouteSource[keyof typeof IntentRouteSource];
-
+export type IntentRouteSource =
+  (typeof IntentRouteSource)[keyof typeof IntentRouteSource];
 
 export const IntentRouteSource = {
-  reference: 'reference',
-  custom: 'custom',
+  reference: "reference",
+  custom: "custom",
 } as const;
 
-export type IntentRouteStatus = typeof IntentRouteStatus[keyof typeof IntentRouteStatus];
-
+export type IntentRouteStatus =
+  (typeof IntentRouteStatus)[keyof typeof IntentRouteStatus];
 
 export const IntentRouteStatus = {
-  active: 'active',
-  retired: 'retired',
+  active: "active",
+  retired: "retired",
 } as const;
 
 export interface IntentRoute {
@@ -1255,21 +1413,21 @@ export interface IntentRoute {
   routable: boolean;
 }
 
-export type IntentExecutorRegistrationKind = typeof IntentExecutorRegistrationKind[keyof typeof IntentExecutorRegistrationKind];
-
+export type IntentExecutorRegistrationKind =
+  (typeof IntentExecutorRegistrationKind)[keyof typeof IntentExecutorRegistrationKind];
 
 export const IntentExecutorRegistrationKind = {
-  workflow: 'workflow',
-  'typed-tool': 'typed-tool',
+  workflow: "workflow",
+  "typed-tool": "typed-tool",
 } as const;
 
-export type IntentExecutorRegistrationMaximumMaturity = typeof IntentExecutorRegistrationMaximumMaturity[keyof typeof IntentExecutorRegistrationMaximumMaturity];
-
+export type IntentExecutorRegistrationMaximumMaturity =
+  (typeof IntentExecutorRegistrationMaximumMaturity)[keyof typeof IntentExecutorRegistrationMaximumMaturity];
 
 export const IntentExecutorRegistrationMaximumMaturity = {
-  simulated: 'simulated',
-  integrated: 'integrated',
-  verified: 'verified',
+  simulated: "simulated",
+  integrated: "integrated",
+  verified: "verified",
 } as const;
 
 export interface IntentExecutorRegistration {
@@ -1319,15 +1477,15 @@ export interface IntentRouteRepair {
   registryVersion: string;
 }
 
-export type IntentRouteErrorCode = typeof IntentRouteErrorCode[keyof typeof IntentRouteErrorCode];
-
+export type IntentRouteErrorCode =
+  (typeof IntentRouteErrorCode)[keyof typeof IntentRouteErrorCode];
 
 export const IntentRouteErrorCode = {
-  UNKNOWN_OUTCOME: 'UNKNOWN_OUTCOME',
-  RETIRED_OUTCOME: 'RETIRED_OUTCOME',
-  AMBIGUOUS_ALIAS: 'AMBIGUOUS_ALIAS',
-  UNSUPPORTED_OUTCOME: 'UNSUPPORTED_OUTCOME',
-  REGISTRY_VERSION_MISMATCH: 'REGISTRY_VERSION_MISMATCH',
+  UNKNOWN_OUTCOME: "UNKNOWN_OUTCOME",
+  RETIRED_OUTCOME: "RETIRED_OUTCOME",
+  AMBIGUOUS_ALIAS: "AMBIGUOUS_ALIAS",
+  UNSUPPORTED_OUTCOME: "UNSUPPORTED_OUTCOME",
+  REGISTRY_VERSION_MISMATCH: "REGISTRY_VERSION_MISMATCH",
 } as const;
 
 export interface IntentRouteError {
@@ -1359,37 +1517,39 @@ export interface CommercialAssumptions {
 /**
  * Optional manual overrides of intent shares (intent key to share fraction)
  */
-export type ScenarioInputsIntentShareOverrides = {[key: string]: number};
+export type ScenarioInputsIntentShareOverrides = { [key: string]: number };
 
 /**
  * Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.
  */
-export type ScenarioInputsAssumptionOverrides = {[key: string]: number};
+export type ScenarioInputsAssumptionOverrides = { [key: string]: number };
 
 /**
  * Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-* assumptions. Uncontained transactions still incur AI/infra cost but fall back to full as-is human handling and yield no benefit.
  */
-export type ScenarioInputsContainmentOverrides = {[key: string]: number};
+export type ScenarioInputsContainmentOverrides = { [key: string]: number };
 
 /**
  * Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.
  */
-export type ScenarioInputsContainmentRates = {[key: string]: number};
+export type ScenarioInputsContainmentRates = { [key: string]: number };
 
 /**
  * Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.
  */
-export type ScenarioInputsHitlSamplingRates = {[key: string]: number};
+export type ScenarioInputsHitlSamplingRates = { [key: string]: number };
 
 /**
  * Chosen AI model per role (router | reasoning | frontier | data), keys from /model-catalog. Defaults match the registered *-call-cost assumptions.
  */
-export type ScenarioInputsModelSelection = {[key: string]: string};
+export type ScenarioInputsModelSelection = { [key: string]: string };
 
 /**
  * Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup/cost engine. Absent keys fall back to the flow-class expansion from containmentRates/containmentOverrides.
  */
-export type ScenarioInputsIntentContainmentOverrides = {[key: string]: number};
+export type ScenarioInputsIntentContainmentOverrides = {
+  [key: string]: number;
+};
 
 export interface ScenarioInputs {
   /** Number of HR systems of record in the client landscape (drives Act fan-out) */
@@ -1429,10 +1589,10 @@ export interface ScenarioInputs {
   /** Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70. */
   containmentRates?: ScenarioInputsContainmentRates;
   /**
-     * Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].
-     * @minItems 3
-     * @maxItems 3
-     */
+   * Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].
+   * @minItems 3
+   * @maxItems 3
+   */
   adoptionRamp?: number[];
   /** Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60. */
   hitlSamplingRates?: ScenarioInputsHitlSamplingRates;
@@ -1476,16 +1636,16 @@ export interface ScenarioUpdate {
 
 export interface ScenarioFileUploadRequest {
   /**
-     * @minLength 1
-     * @maxLength 255
-     */
+   * @minLength 1
+   * @maxLength 255
+   */
   name: string;
   /** @minLength 1 */
   contentType: string;
   /**
-     * @minimum 1
-     * @maximum 10485760
-     */
+   * @minimum 1
+   * @maximum 10485760
+   */
   size: number;
 }
 
@@ -1498,16 +1658,16 @@ export interface ScenarioFileFinalizeRequest {
   /** @minLength 1 */
   objectPath: string;
   /**
-     * @minLength 1
-     * @maxLength 255
-     */
+   * @minLength 1
+   * @maxLength 255
+   */
   name: string;
   /** @minLength 1 */
   contentType: string;
   /**
-     * @minimum 1
-     * @maximum 10485760
-     */
+   * @minimum 1
+   * @maximum 10485760
+   */
   size: number;
   /** @minimum 1 */
   scenarioId?: number;
@@ -1524,49 +1684,49 @@ export interface ScenarioFile {
   createdAt: string;
 }
 
-export type PricingSheetInputsTenantTier = typeof PricingSheetInputsTenantTier[keyof typeof PricingSheetInputsTenantTier];
-
+export type PricingSheetInputsTenantTier =
+  (typeof PricingSheetInputsTenantTier)[keyof typeof PricingSheetInputsTenantTier];
 
 export const PricingSheetInputsTenantTier = {
-  pooled: 'pooled',
-  siloed: 'siloed',
-  dedicated: 'dedicated',
+  pooled: "pooled",
+  siloed: "siloed",
+  dedicated: "dedicated",
 } as const;
 
-export type PricingSheetInputsSecurityTier = typeof PricingSheetInputsSecurityTier[keyof typeof PricingSheetInputsSecurityTier];
-
+export type PricingSheetInputsSecurityTier =
+  (typeof PricingSheetInputsSecurityTier)[keyof typeof PricingSheetInputsSecurityTier];
 
 export const PricingSheetInputsSecurityTier = {
-  standard: 'standard',
-  regulated: 'regulated',
-  enterprise: 'enterprise',
+  standard: "standard",
+  regulated: "regulated",
+  enterprise: "enterprise",
 } as const;
 
-export type PricingSheetInputsTokenProfile = typeof PricingSheetInputsTokenProfile[keyof typeof PricingSheetInputsTokenProfile];
-
+export type PricingSheetInputsTokenProfile =
+  (typeof PricingSheetInputsTokenProfile)[keyof typeof PricingSheetInputsTokenProfile];
 
 export const PricingSheetInputsTokenProfile = {
-  light: 'light',
-  balanced: 'balanced',
-  rich: 'rich',
+  light: "light",
+  balanced: "balanced",
+  rich: "rich",
 } as const;
 
-export type PricingSheetInputsInfrastructureTier = typeof PricingSheetInputsInfrastructureTier[keyof typeof PricingSheetInputsInfrastructureTier];
-
+export type PricingSheetInputsInfrastructureTier =
+  (typeof PricingSheetInputsInfrastructureTier)[keyof typeof PricingSheetInputsInfrastructureTier];
 
 export const PricingSheetInputsInfrastructureTier = {
-  starter: 'starter',
-  production: 'production',
-  critical: 'critical',
+  starter: "starter",
+  production: "production",
+  critical: "critical",
 } as const;
 
-export type PricingSheetInputsSupportTier = typeof PricingSheetInputsSupportTier[keyof typeof PricingSheetInputsSupportTier];
-
+export type PricingSheetInputsSupportTier =
+  (typeof PricingSheetInputsSupportTier)[keyof typeof PricingSheetInputsSupportTier];
 
 export const PricingSheetInputsSupportTier = {
-  essential: 'essential',
-  premium: 'premium',
-  managed: 'managed',
+  essential: "essential",
+  premium: "premium",
+  managed: "managed",
 } as const;
 
 export interface PricingSheetInputs {
@@ -1588,9 +1748,9 @@ export interface PricingSheetInputs {
   infrastructureTier: PricingSheetInputsInfrastructureTier;
   supportTier: PricingSheetInputsSupportTier;
   /**
-     * @minimum 1
-     * @maximum 90
-     */
+   * @minimum 1
+   * @maximum 90
+   */
   grossMarginPct: number;
   /** @minimum 1 */
   buildAmortizationYears: number;
@@ -1632,14 +1792,14 @@ export interface SensitivityRequest {
   actualsOverlayId?: number;
 }
 
-export type SensitivityRowGroup = typeof SensitivityRowGroup[keyof typeof SensitivityRowGroup];
-
+export type SensitivityRowGroup =
+  (typeof SensitivityRowGroup)[keyof typeof SensitivityRowGroup];
 
 export const SensitivityRowGroup = {
-  assumption: 'assumption',
-  labor: 'labor',
-  containment: 'containment',
-  adoption: 'adoption',
+  assumption: "assumption",
+  labor: "labor",
+  containment: "containment",
+  adoption: "adoption",
 } as const;
 
 export interface SensitivityRow {
@@ -1734,13 +1894,13 @@ export interface YearSlice {
 /**
  * Whether role-level token profiles came from architecture estimates, calibrated logs, or both.
  */
-export type TokenUsageBasis = typeof TokenUsageBasis[keyof typeof TokenUsageBasis];
-
+export type TokenUsageBasis =
+  (typeof TokenUsageBasis)[keyof typeof TokenUsageBasis];
 
 export const TokenUsageBasis = {
-  estimated: 'estimated',
-  mixed: 'mixed',
-  measured: 'measured',
+  estimated: "estimated",
+  mixed: "mixed",
+  measured: "measured",
 } as const;
 
 export interface TokenUsage {
@@ -1823,13 +1983,13 @@ export interface CommercialSummary {
 /**
  * Product demarcation: core platform components vs custom per-client onboarding effort.
  */
-export type BuildComponentCostProvisioning = typeof BuildComponentCostProvisioning[keyof typeof BuildComponentCostProvisioning];
-
+export type BuildComponentCostProvisioning =
+  (typeof BuildComponentCostProvisioning)[keyof typeof BuildComponentCostProvisioning];
 
 export const BuildComponentCostProvisioning = {
-  core: 'core',
-  configurable: 'configurable',
-  custom: 'custom',
+  core: "core",
+  configurable: "configurable",
+  custom: "custom",
 } as const;
 
 export interface BuildComponentCost {
@@ -1956,25 +2116,25 @@ export interface ModelOption {
   isDefault: boolean;
 }
 
-export type CustomIntentRiskClass = typeof CustomIntentRiskClass[keyof typeof CustomIntentRiskClass];
-
+export type CustomIntentRiskClass =
+  (typeof CustomIntentRiskClass)[keyof typeof CustomIntentRiskClass];
 
 export const CustomIntentRiskClass = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  consequential: 'consequential',
+  low: "low",
+  medium: "medium",
+  high: "high",
+  consequential: "consequential",
 } as const;
 
-export type CustomIntentMaturity = typeof CustomIntentMaturity[keyof typeof CustomIntentMaturity];
-
+export type CustomIntentMaturity =
+  (typeof CustomIntentMaturity)[keyof typeof CustomIntentMaturity];
 
 export const CustomIntentMaturity = {
-  catalogued: 'catalogued',
-  simulated: 'simulated',
-  integrated: 'integrated',
-  verified: 'verified',
-  unsupported: 'unsupported',
+  catalogued: "catalogued",
+  simulated: "simulated",
+  integrated: "integrated",
+  verified: "verified",
+  unsupported: "unsupported",
 } as const;
 
 /**
@@ -2013,25 +2173,25 @@ export interface CustomIntent {
   updatedAt: string;
 }
 
-export type CustomIntentInputRiskClass = typeof CustomIntentInputRiskClass[keyof typeof CustomIntentInputRiskClass];
-
+export type CustomIntentInputRiskClass =
+  (typeof CustomIntentInputRiskClass)[keyof typeof CustomIntentInputRiskClass];
 
 export const CustomIntentInputRiskClass = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  consequential: 'consequential',
+  low: "low",
+  medium: "medium",
+  high: "high",
+  consequential: "consequential",
 } as const;
 
-export type CustomIntentInputMaturity = typeof CustomIntentInputMaturity[keyof typeof CustomIntentInputMaturity];
-
+export type CustomIntentInputMaturity =
+  (typeof CustomIntentInputMaturity)[keyof typeof CustomIntentInputMaturity];
 
 export const CustomIntentInputMaturity = {
-  catalogued: 'catalogued',
-  simulated: 'simulated',
-  integrated: 'integrated',
-  verified: 'verified',
-  unsupported: 'unsupported',
+  catalogued: "catalogued",
+  simulated: "simulated",
+  integrated: "integrated",
+  verified: "verified",
+  unsupported: "unsupported",
 } as const;
 
 /**
@@ -2061,25 +2221,25 @@ export interface CustomIntentInput {
   maturity?: CustomIntentInputMaturity;
 }
 
-export type CustomIntentUpdateRiskClass = typeof CustomIntentUpdateRiskClass[keyof typeof CustomIntentUpdateRiskClass];
-
+export type CustomIntentUpdateRiskClass =
+  (typeof CustomIntentUpdateRiskClass)[keyof typeof CustomIntentUpdateRiskClass];
 
 export const CustomIntentUpdateRiskClass = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  consequential: 'consequential',
+  low: "low",
+  medium: "medium",
+  high: "high",
+  consequential: "consequential",
 } as const;
 
-export type CustomIntentUpdateMaturity = typeof CustomIntentUpdateMaturity[keyof typeof CustomIntentUpdateMaturity];
-
+export type CustomIntentUpdateMaturity =
+  (typeof CustomIntentUpdateMaturity)[keyof typeof CustomIntentUpdateMaturity];
 
 export const CustomIntentUpdateMaturity = {
-  catalogued: 'catalogued',
-  simulated: 'simulated',
-  integrated: 'integrated',
-  verified: 'verified',
-  unsupported: 'unsupported',
+  catalogued: "catalogued",
+  simulated: "simulated",
+  integrated: "integrated",
+  verified: "verified",
+  unsupported: "unsupported",
 } as const;
 
 /**
@@ -2162,12 +2322,16 @@ export interface IntentActuals {
 /**
  * Measured containment rate per flow class (fc1-deterministic | fc2-policy | fc3-multiagent | fc4-frontier → 0-1). Overrides the corresponding containment assumption for all intents in that class unless a per-intent value is provided.
  */
-export type ActualsOverlayInputMeasuredContainmentByFlowClass = {[key: string]: number};
+export type ActualsOverlayInputMeasuredContainmentByFlowClass = {
+  [key: string]: number;
+};
 
 /**
  * Measured average token counts per model role (router | reasoning | frontier | data). When present for a role, the rollup reprices model calls from catalog per-token rates × measured tokens instead of the baked pricePerCallUsd.
  */
-export type ActualsOverlayInputTokenActualsByRole = {[key: string]: TokenRoleActuals};
+export type ActualsOverlayInputTokenActualsByRole = {
+  [key: string]: TokenRoleActuals;
+};
 
 /**
  * Calibration actuals overlay payload. All fields are optional; at least one measurement must be present.
@@ -2254,29 +2418,29 @@ export interface ActualsValidationResult {
   measuredFields: string[];
 }
 
-export type OnbReadinessItemCompletionAuthority = typeof OnbReadinessItemCompletionAuthority[keyof typeof OnbReadinessItemCompletionAuthority];
-
+export type OnbReadinessItemCompletionAuthority =
+  (typeof OnbReadinessItemCompletionAuthority)[keyof typeof OnbReadinessItemCompletionAuthority];
 
 export const OnbReadinessItemCompletionAuthority = {
-  'hr-admin': 'hr-admin',
-  'designated-human': 'designated-human',
+  "hr-admin": "hr-admin",
+  "designated-human": "designated-human",
 } as const;
 
-export type OnbReadinessItemExecutor = typeof OnbReadinessItemExecutor[keyof typeof OnbReadinessItemExecutor];
-
+export type OnbReadinessItemExecutor =
+  (typeof OnbReadinessItemExecutor)[keyof typeof OnbReadinessItemExecutor];
 
 export const OnbReadinessItemExecutor = {
-  'existing-workflow': 'existing-workflow',
-  'human-task': 'human-task',
+  "existing-workflow": "existing-workflow",
+  "human-task": "human-task",
 } as const;
 
-export type OnbChecklistEnforcementStage = typeof OnbChecklistEnforcementStage[keyof typeof OnbChecklistEnforcementStage];
-
+export type OnbChecklistEnforcementStage =
+  (typeof OnbChecklistEnforcementStage)[keyof typeof OnbChecklistEnforcementStage];
 
 export const OnbChecklistEnforcementStage = {
-  'before-workstreams': 'before-workstreams',
-  'before-employee-communications': 'before-employee-communications',
-  'before-day1-review': 'before-day1-review',
+  "before-workstreams": "before-workstreams",
+  "before-employee-communications": "before-employee-communications",
+  "before-day1-review": "before-day1-review",
 } as const;
 
 /**
@@ -2302,20 +2466,20 @@ export interface OnbReadinessItem {
   prerequisites?: string[];
 }
 
-export type OnbChecklistTemplateItemCompletionAuthority = typeof OnbChecklistTemplateItemCompletionAuthority[keyof typeof OnbChecklistTemplateItemCompletionAuthority];
-
+export type OnbChecklistTemplateItemCompletionAuthority =
+  (typeof OnbChecklistTemplateItemCompletionAuthority)[keyof typeof OnbChecklistTemplateItemCompletionAuthority];
 
 export const OnbChecklistTemplateItemCompletionAuthority = {
-  'hr-admin': 'hr-admin',
-  'designated-human': 'designated-human',
+  "hr-admin": "hr-admin",
+  "designated-human": "designated-human",
 } as const;
 
-export type OnbChecklistTemplateItemExecutor = typeof OnbChecklistTemplateItemExecutor[keyof typeof OnbChecklistTemplateItemExecutor];
-
+export type OnbChecklistTemplateItemExecutor =
+  (typeof OnbChecklistTemplateItemExecutor)[keyof typeof OnbChecklistTemplateItemExecutor];
 
 export const OnbChecklistTemplateItemExecutor = {
-  'existing-workflow': 'existing-workflow',
-  'human-task': 'human-task',
+  "existing-workflow": "existing-workflow",
+  "human-task": "human-task",
 } as const;
 
 export interface OnbChecklistTemplateItem {
@@ -2338,12 +2502,12 @@ export interface OnbChecklistTemplateItem {
   readonly migrationReviewHold?: boolean;
 }
 
-export type OnbChecklistProfileCriteriaSafetyCritical = typeof OnbChecklistProfileCriteriaSafetyCritical[keyof typeof OnbChecklistProfileCriteriaSafetyCritical];
-
+export type OnbChecklistProfileCriteriaSafetyCritical =
+  (typeof OnbChecklistProfileCriteriaSafetyCritical)[keyof typeof OnbChecklistProfileCriteriaSafetyCritical];
 
 export const OnbChecklistProfileCriteriaSafetyCritical = {
-  true: 'true',
-  false: 'false',
+  true: "true",
+  false: "false",
 } as const;
 
 export interface OnbChecklistProfileCriteria {
@@ -2386,20 +2550,20 @@ export interface OnbChecklistProfileCriteria {
   safetyCritical?: OnbChecklistProfileCriteriaSafetyCritical;
 }
 
-export type OnbChecklistItemOverrideCompletionAuthority = typeof OnbChecklistItemOverrideCompletionAuthority[keyof typeof OnbChecklistItemOverrideCompletionAuthority];
-
+export type OnbChecklistItemOverrideCompletionAuthority =
+  (typeof OnbChecklistItemOverrideCompletionAuthority)[keyof typeof OnbChecklistItemOverrideCompletionAuthority];
 
 export const OnbChecklistItemOverrideCompletionAuthority = {
-  'hr-admin': 'hr-admin',
-  'designated-human': 'designated-human',
+  "hr-admin": "hr-admin",
+  "designated-human": "designated-human",
 } as const;
 
-export type OnbChecklistItemOverrideExecutor = typeof OnbChecklistItemOverrideExecutor[keyof typeof OnbChecklistItemOverrideExecutor];
-
+export type OnbChecklistItemOverrideExecutor =
+  (typeof OnbChecklistItemOverrideExecutor)[keyof typeof OnbChecklistItemOverrideExecutor];
 
 export const OnbChecklistItemOverrideExecutor = {
-  'existing-workflow': 'existing-workflow',
-  'human-task': 'human-task',
+  "existing-workflow": "existing-workflow",
+  "human-task": "human-task",
 } as const;
 
 export interface OnbChecklistItemOverride {
@@ -2446,20 +2610,22 @@ export type OnbChecklistProfile = OnbChecklistProfileInput & {
 
 export interface OnbChecklistProfileDraftInput {
   /**
-     * Plain-language HR description of the desired targeted checklist profile. Do not include case or candidate details.
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * Plain-language HR description of the desired targeted checklist profile. Do not include case or candidate details.
+   * @minLength 1
+   * @maxLength 4000
+   */
   description: string;
 }
 
-export type OnbChecklistProfileDraftProposalProcessPolicy = { [key: string]: unknown };
+export type OnbChecklistProfileDraftProposalProcessPolicy = {
+  [key: string]: unknown;
+};
 
 export interface OnbChecklistProfileDraftProposal {
   /**
-     * @minLength 1
-     * @maxLength 120
-     */
+   * @minLength 1
+   * @maxLength 120
+   */
   name: string;
   criteria: OnbChecklistProfileCriteria;
   /** @maxItems 100 */
@@ -2478,19 +2644,19 @@ export interface OnbChecklistProfileDraftPreview {
   /** True when the bounded tenant case sample reached its safety limit. */
   activeCasesTruncated: boolean;
   /**
-     * Active tenant cases whose canonical matching attributes satisfy the proposed criteria.
-     * @minimum 0
-     */
+   * Active tenant cases whose canonical matching attributes satisfy the proposed criteria.
+   * @minimum 0
+   */
   matchingActiveCases: number;
   /**
-     * Active tenant cases missing a fact required to evaluate the proposed criteria or match rules.
-     * @minimum 0
-     */
+   * Active tenant cases missing a fact required to evaluate the proposed criteria or match rules.
+   * @minimum 0
+   */
   missingContextActiveCases: number;
   /**
-     * Active cases guaranteed unchanged because this endpoint never publishes or applies the disabled draft.
-     * @minimum 0
-     */
+   * Active cases guaranteed unchanged because this endpoint never publishes or applies the disabled draft.
+   * @minimum 0
+   */
   unchangedActiveCases: number;
 }
 
@@ -2499,9 +2665,9 @@ export interface OnbChecklistProfileDraftResponse {
   /** @minimum 1 */
   baseChecklistVersion: number;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   rationale: string;
   /** @items.maxLength 500 */
   warnings: string[];
@@ -2510,13 +2676,13 @@ export interface OnbChecklistProfileDraftResponse {
   preview: OnbChecklistProfileDraftPreview;
 }
 
-export type OnbChecklistProfileDraftErrorCode = typeof OnbChecklistProfileDraftErrorCode[keyof typeof OnbChecklistProfileDraftErrorCode];
-
+export type OnbChecklistProfileDraftErrorCode =
+  (typeof OnbChecklistProfileDraftErrorCode)[keyof typeof OnbChecklistProfileDraftErrorCode];
 
 export const OnbChecklistProfileDraftErrorCode = {
-  'invalid-request': 'invalid-request',
-  unavailable: 'unavailable',
-  invalidAI: 'invalidAI',
+  "invalid-request": "invalid-request",
+  unavailable: "unavailable",
+  invalidAI: "invalidAI",
 } as const;
 
 export interface OnbChecklistProfileDraftError {
@@ -2526,12 +2692,12 @@ export interface OnbChecklistProfileDraftError {
   unsupportedRequests?: string[];
 }
 
-export type OnbChecklistRecalculationInputAction = typeof OnbChecklistRecalculationInputAction[keyof typeof OnbChecklistRecalculationInputAction];
-
+export type OnbChecklistRecalculationInputAction =
+  (typeof OnbChecklistRecalculationInputAction)[keyof typeof OnbChecklistRecalculationInputAction];
 
 export const OnbChecklistRecalculationInputAction = {
-  recalculate: 'recalculate',
-  'replace-active': 'replace-active',
+  recalculate: "recalculate",
+  "replace-active": "replace-active",
 } as const;
 
 export interface OnbChecklistRecalculationInput {
@@ -2539,96 +2705,96 @@ export interface OnbChecklistRecalculationInput {
   /** @maxLength 500 */
   reason?: string;
   /**
-     * Default checklist snapshot version currently displayed for this case.
-     * @minimum 1
-     */
+   * Default checklist snapshot version currently displayed for this case.
+   * @minimum 1
+   */
   expectedChecklistTemplateVersion: number;
   /** Checklist profile identifier currently displayed for this case. */
   expectedChecklistProfileId: string;
   /**
-     * Checklist profile version currently displayed for this case.
-     * @minimum 1
-     */
+   * Checklist profile version currently displayed for this case.
+   * @minimum 1
+   */
   expectedChecklistProfileVersion: number;
 }
 
-export type OnbLearningPolicySchemaVersion = typeof OnbLearningPolicySchemaVersion[keyof typeof OnbLearningPolicySchemaVersion];
-
+export type OnbLearningPolicySchemaVersion =
+  (typeof OnbLearningPolicySchemaVersion)[keyof typeof OnbLearningPolicySchemaVersion];
 
 export const OnbLearningPolicySchemaVersion = {
-  'workforce-step-runtime/v1': 'workforce-step-runtime/v1',
+  "workforce-step-runtime/v1": "workforce-step-runtime/v1",
 } as const;
 
-export type OnbLearningPolicyTimingAnchor = typeof OnbLearningPolicyTimingAnchor[keyof typeof OnbLearningPolicyTimingAnchor];
-
+export type OnbLearningPolicyTimingAnchor =
+  (typeof OnbLearningPolicyTimingAnchor)[keyof typeof OnbLearningPolicyTimingAnchor];
 
 export const OnbLearningPolicyTimingAnchor = {
-  'joining-date': 'joining-date',
+  "joining-date": "joining-date",
 } as const;
 
 export type OnbLearningPolicyTiming = {
   anchor: OnbLearningPolicyTimingAnchor;
   /**
-     * @minimum -90
-     * @maximum 180
-     */
+   * @minimum -90
+   * @maximum 180
+   */
   offsetDays: number;
 };
 
 /**
  * The learning runtime has no connected portal executor. Candidate self-upload is configured by intake.channel instead.
  */
-export type OnbLearningPolicyChannel = typeof OnbLearningPolicyChannel[keyof typeof OnbLearningPolicyChannel];
-
+export type OnbLearningPolicyChannel =
+  (typeof OnbLearningPolicyChannel)[keyof typeof OnbLearningPolicyChannel];
 
 export const OnbLearningPolicyChannel = {
-  'manager-led': 'manager-led',
+  "manager-led": "manager-led",
 } as const;
 
-export type OnbLearningStepPermittedChannelsItem = typeof OnbLearningStepPermittedChannelsItem[keyof typeof OnbLearningStepPermittedChannelsItem];
-
+export type OnbLearningStepPermittedChannelsItem =
+  (typeof OnbLearningStepPermittedChannelsItem)[keyof typeof OnbLearningStepPermittedChannelsItem];
 
 export const OnbLearningStepPermittedChannelsItem = {
-  'manager-led': 'manager-led',
+  "manager-led": "manager-led",
 } as const;
 
-export type OnbLearningStepTimingAnchor = typeof OnbLearningStepTimingAnchor[keyof typeof OnbLearningStepTimingAnchor];
-
+export type OnbLearningStepTimingAnchor =
+  (typeof OnbLearningStepTimingAnchor)[keyof typeof OnbLearningStepTimingAnchor];
 
 export const OnbLearningStepTimingAnchor = {
-  'joining-date': 'joining-date',
+  "joining-date": "joining-date",
 } as const;
 
 export type OnbLearningStepTimingEscalation = {
   /**
-     * @minimum -90
-     * @maximum 180
-     */
+   * @minimum -90
+   * @maximum 180
+   */
   offsetDays: number;
   /**
-     * @minLength 1
-     * @maxLength 120
-     */
+   * @minLength 1
+   * @maxLength 120
+   */
   responsibleRole: string;
   /**
-     * @minLength 1
-     * @maxLength 120
-     * @nullable
-     */
+   * @minLength 1
+   * @maxLength 120
+   * @nullable
+   */
   assignedTo?: string | null;
 };
 
 export interface OnbLearningStepTiming {
   anchor?: OnbLearningStepTimingAnchor;
   /**
-     * @minimum -90
-     * @maximum 180
-     */
+   * @minimum -90
+   * @maximum 180
+   */
   notBeforeOffsetDays?: number;
   /**
-     * @minimum -90
-     * @maximum 180
-     */
+   * @minimum -90
+   * @maximum 180
+   */
   dueOffsetDays?: number;
   escalation?: OnbLearningStepTimingEscalation;
 }
@@ -2637,20 +2803,20 @@ export interface OnbLearningStep {
   /** @pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
   id: string;
   /**
-     * @minLength 1
-     * @maxLength 120
-     */
+   * @minLength 1
+   * @maxLength 120
+   */
   label: string;
   /**
-     * @minLength 1
-     * @maxLength 120
-     */
+   * @minLength 1
+   * @maxLength 120
+   */
   responsibleRole?: string;
   /**
-     * @minLength 1
-     * @maxLength 120
-     * @nullable
-     */
+   * @minLength 1
+   * @maxLength 120
+   * @nullable
+   */
   assignedTo?: string | null;
   mandatory?: boolean;
   evidenceRequired?: boolean;
@@ -2658,48 +2824,48 @@ export interface OnbLearningStep {
   /** @items.pattern ^[a-z0-9][a-z0-9_-]{0,63}$ */
   prerequisites?: string[];
   /**
-     * @minLength 1
-     * @maxLength 120
-     * @nullable
-     */
+   * @minLength 1
+   * @maxLength 120
+   * @nullable
+   */
   parallelGroup?: string | null;
   /** @minItems 1 */
   permittedChannels?: OnbLearningStepPermittedChannelsItem[];
   timing?: OnbLearningStepTiming;
 }
 
-export type OnbLearningPolicy = (unknown & {
+export type OnbLearningPolicy = unknown & {
   schemaVersion?: OnbLearningPolicySchemaVersion;
   timing: OnbLearningPolicyTiming;
   /**
-     * Compact ordered form. Do not send with steps.
-     * @minItems 1
-     * @maxItems 24
-     * @items.minLength 1
-     * @items.maxLength 120
-     */
+   * Compact ordered form. Do not send with steps.
+   * @minItems 1
+   * @maxItems 24
+   * @items.minLength 1
+   * @items.maxLength 120
+   */
   sequence?: string[];
   /**
-     * Typed accountable human-task form. Do not send with sequence.
-     * @minItems 1
-     * @maxItems 24
-     */
+   * Typed accountable human-task form. Do not send with sequence.
+   * @minItems 1
+   * @maxItems 24
+   */
   steps?: OnbLearningStep[];
   /** The learning runtime has no connected portal executor. Candidate self-upload is configured by intake.channel instead. */
   channel: OnbLearningPolicyChannel;
   /**
-     * @minLength 1
-     * @maxLength 120
-     */
+   * @minLength 1
+   * @maxLength 120
+   */
   ownership: string;
-});
+};
 
-export type OnbPolicyRecommendationDecisionDecision = typeof OnbPolicyRecommendationDecisionDecision[keyof typeof OnbPolicyRecommendationDecisionDecision];
-
+export type OnbPolicyRecommendationDecisionDecision =
+  (typeof OnbPolicyRecommendationDecisionDecision)[keyof typeof OnbPolicyRecommendationDecisionDecision];
 
 export const OnbPolicyRecommendationDecisionDecision = {
-  accepted: 'accepted',
-  rejected: 'rejected',
+  accepted: "accepted",
+  rejected: "rejected",
 } as const;
 
 export interface OnbPolicyRecommendationDecision {
@@ -2739,10 +2905,11 @@ export type OnbBroaderCompatibleCohortEvidenceSample = {
 /**
  * @nullable
  */
-export type OnbBroaderCompatibleCohortEvidenceOutcomeUncertainty95PercentDays = {
-  low: number;
-  high: number;
-} | null;
+export type OnbBroaderCompatibleCohortEvidenceOutcomeUncertainty95PercentDays =
+  {
+    low: number;
+    high: number;
+  } | null;
 
 export type OnbBroaderCompatibleCohortEvidenceOutcome = {
   /** @nullable */
@@ -2757,8 +2924,8 @@ export type OnbBroaderCompatibleCohortEvidenceOutcome = {
  * A same-tenant, wider-version descriptive cohort displayed only when the exact current profile-version cohort is insufficient. It is never eligible for publication.
  */
 export interface OnbBroaderCompatibleCohortEvidence {
-  scope: 'same-tenant-compatible-profile';
-  status: 'descriptive-only';
+  scope: "same-tenant-compatible-profile";
+  status: "descriptive-only";
   notEligibleForPublication: true;
   target: OnbBroaderCompatibleCohortEvidenceTarget;
   cohortDefinition: string;
@@ -2772,7 +2939,7 @@ export interface OnbBroaderCompatibleCohortEvidence {
 }
 
 export interface OnbPolicyRecommendationFallback {
-  status: 'insufficient-evidence';
+  status: "insufficient-evidence";
   message: string;
   /** @minimum 0 */
   candidateCases: number;
@@ -2791,26 +2958,26 @@ export type OnbPolicyRecommendationListWindow = {
   days: number;
 };
 
-export type OnbPolicyRecommendationListRecommendationsItemStatus = typeof OnbPolicyRecommendationListRecommendationsItemStatus[keyof typeof OnbPolicyRecommendationListRecommendationsItemStatus];
-
+export type OnbPolicyRecommendationListRecommendationsItemStatus =
+  (typeof OnbPolicyRecommendationListRecommendationsItemStatus)[keyof typeof OnbPolicyRecommendationListRecommendationsItemStatus];
 
 export const OnbPolicyRecommendationListRecommendationsItemStatus = {
-  proposed: 'proposed',
-  accepted: 'accepted',
-  rejected: 'rejected',
+  proposed: "proposed",
+  accepted: "accepted",
+  rejected: "rejected",
 } as const;
 
 export type OnbPolicyRecommendationListRecommendationsItemRecommendation = {
-  type?: 'cohort-learning-default';
+  type?: "cohort-learning-default";
   learning?: OnbLearningPolicy;
   [key: string]: unknown;
- };
+};
 
 export type OnbPolicyRecommendationListRecommendationsItemEvidenceSnapshot = {
   /** @pattern ^[a-f0-9]{64}$ */
   evidenceFingerprint?: string;
   [key: string]: unknown;
- };
+};
 
 export type OnbPolicyRecommendationListRecommendationsItem = {
   id: number;
@@ -2819,44 +2986,44 @@ export type OnbPolicyRecommendationListRecommendationsItem = {
   evidenceSnapshot: OnbPolicyRecommendationListRecommendationsItemEvidenceSnapshot;
   createdAt: string;
   [key: string]: unknown;
- };
+};
 
 /**
  * Each persisted recommendation preserves its full proposal and evidence snapshot. Evidence is cohort-scoped, excludes demo/simulation, reports missingness and uncertainty, and is descriptive rather than causal.
  */
 export interface OnbPolicyRecommendationList {
   asOf: string;
-  methodologyVersion: 'learning-cohort-v1';
+  methodologyVersion: "learning-cohort-v1";
   window: OnbPolicyRecommendationListWindow;
   recommendations: OnbPolicyRecommendationListRecommendationsItem[];
   /** @nullable */
   fallback: OnbPolicyRecommendationFallback | null;
   [key: string]: unknown;
- }
+}
 
-export type OnbChecklistItemStatusUpdateStatus = typeof OnbChecklistItemStatusUpdateStatus[keyof typeof OnbChecklistItemStatusUpdateStatus];
-
+export type OnbChecklistItemStatusUpdateStatus =
+  (typeof OnbChecklistItemStatusUpdateStatus)[keyof typeof OnbChecklistItemStatusUpdateStatus];
 
 export const OnbChecklistItemStatusUpdateStatus = {
-  ready: 'ready',
-  pending: 'pending',
+  ready: "ready",
+  pending: "pending",
 } as const;
 
 export interface OnbChecklistItemStatusUpdate {
   status: OnbChecklistItemStatusUpdateStatus;
   /**
-     * @maxLength 500
-     * @nullable
-     */
+   * @maxLength 500
+   * @nullable
+   */
   note?: string | null;
 }
 
-export type OnbEvidenceVerificationInputDecision = typeof OnbEvidenceVerificationInputDecision[keyof typeof OnbEvidenceVerificationInputDecision];
-
+export type OnbEvidenceVerificationInputDecision =
+  (typeof OnbEvidenceVerificationInputDecision)[keyof typeof OnbEvidenceVerificationInputDecision];
 
 export const OnbEvidenceVerificationInputDecision = {
-  verified: 'verified',
-  rejected: 'rejected',
+  verified: "verified",
+  rejected: "rejected",
 } as const;
 
 /**
@@ -2875,43 +3042,43 @@ export type OnbEvidenceVerificationInputExpectedPolicy = {
 
 export interface OnbEvidenceVerificationInput {
   /**
-     * @minLength 3
-     * @maxLength 500
-     */
+   * @minLength 3
+   * @maxLength 500
+   */
   evidenceReference: string;
   /**
-     * @minLength 2
-     * @maxLength 80
-     */
+   * @minLength 2
+   * @maxLength 80
+   */
   authorityRole: string;
   decision: OnbEvidenceVerificationInputDecision;
   /**
-     * @minLength 3
-     * @maxLength 500
-     */
+   * @minLength 3
+   * @maxLength 500
+   */
   reason: string;
   /** Exact case policy provenance the server locks and compares before recording independently verified evidence. */
   expectedPolicy: OnbEvidenceVerificationInputExpectedPolicy;
 }
 
-export type OnbWorkforceContextWorkEnvironment = typeof OnbWorkforceContextWorkEnvironment[keyof typeof OnbWorkforceContextWorkEnvironment];
-
+export type OnbWorkforceContextWorkEnvironment =
+  (typeof OnbWorkforceContextWorkEnvironment)[keyof typeof OnbWorkforceContextWorkEnvironment];
 
 export const OnbWorkforceContextWorkEnvironment = {
-  office: 'office',
-  remote: 'remote',
-  site: 'site',
-  field: 'field',
-  mixed: 'mixed',
+  office: "office",
+  remote: "remote",
+  site: "site",
+  field: "field",
+  mixed: "mixed",
 } as const;
 
-export type OnbWorkforceContextHiringMode = typeof OnbWorkforceContextHiringMode[keyof typeof OnbWorkforceContextHiringMode];
-
+export type OnbWorkforceContextHiringMode =
+  (typeof OnbWorkforceContextHiringMode)[keyof typeof OnbWorkforceContextHiringMode];
 
 export const OnbWorkforceContextHiringMode = {
-  individual: 'individual',
-  batch: 'batch',
-  seasonal: 'seasonal',
+  individual: "individual",
+  batch: "batch",
+  seasonal: "seasonal",
 } as const;
 
 /**
@@ -2946,14 +3113,14 @@ export interface OnbWorkforceContext {
   shiftPattern?: string;
   workEnvironment?: OnbWorkforceContextWorkEnvironment;
   /**
-     * @maxItems 30
-     * @items.maxLength 120
-     */
+   * @maxItems 30
+   * @items.maxLength 120
+   */
   hazards?: string[];
   /**
-     * @maxItems 30
-     * @items.maxLength 120
-     */
+   * @maxItems 30
+   * @items.maxLength 120
+   */
   requiredLicenses?: string[];
   hiringMode?: OnbWorkforceContextHiringMode;
   /** @maxLength 120 */
@@ -2971,9 +3138,9 @@ export interface OnbWorkforceContextCorrectionInput {
   workforceContext: OnbWorkforceContext;
   expectedUpdatedAt: string;
   /**
-     * @minLength 3
-     * @maxLength 500
-     */
+   * @minLength 3
+   * @maxLength 500
+   */
   reason: string;
 }
 
@@ -2992,31 +3159,31 @@ export interface OnbWorkstream {
   blockers: string[];
 }
 
-export type OnbWorkforceClassificationLabel = typeof OnbWorkforceClassificationLabel[keyof typeof OnbWorkforceClassificationLabel];
-
+export type OnbWorkforceClassificationLabel =
+  (typeof OnbWorkforceClassificationLabel)[keyof typeof OnbWorkforceClassificationLabel];
 
 export const OnbWorkforceClassificationLabel = {
-  'white-collar': 'white-collar',
-  'blue-collar-frontline': 'blue-collar-frontline',
-  mixed: 'mixed',
-  'needs-review': 'needs-review',
+  "white-collar": "white-collar",
+  "blue-collar-frontline": "blue-collar-frontline",
+  mixed: "mixed",
+  "needs-review": "needs-review",
 } as const;
 
-export type OnbWorkforceClassificationSource = typeof OnbWorkforceClassificationSource[keyof typeof OnbWorkforceClassificationSource];
-
+export type OnbWorkforceClassificationSource =
+  (typeof OnbWorkforceClassificationSource)[keyof typeof OnbWorkforceClassificationSource];
 
 export const OnbWorkforceClassificationSource = {
-  'deterministic-job-context': 'deterministic-job-context',
-  'authorized-correction': 'authorized-correction',
+  "deterministic-job-context": "deterministic-job-context",
+  "authorized-correction": "authorized-correction",
 } as const;
 
-export type OnbWorkforceClassificationConfidence = typeof OnbWorkforceClassificationConfidence[keyof typeof OnbWorkforceClassificationConfidence];
-
+export type OnbWorkforceClassificationConfidence =
+  (typeof OnbWorkforceClassificationConfidence)[keyof typeof OnbWorkforceClassificationConfidence];
 
 export const OnbWorkforceClassificationConfidence = {
-  high: 'high',
-  medium: 'medium',
-  uncertain: 'uncertain',
+  high: "high",
+  medium: "medium",
+  uncertain: "uncertain",
 } as const;
 
 /**
@@ -3032,26 +3199,26 @@ export interface OnbWorkforceClassification {
 /**
  * HR-selected contact channel(s) for this new hire
  */
-export type OnbCaseChannelPreference = typeof OnbCaseChannelPreference[keyof typeof OnbCaseChannelPreference];
-
+export type OnbCaseChannelPreference =
+  (typeof OnbCaseChannelPreference)[keyof typeof OnbCaseChannelPreference];
 
 export const OnbCaseChannelPreference = {
-  email: 'email',
-  whatsapp: 'whatsapp',
-  both: 'both',
+  email: "email",
+  whatsapp: "whatsapp",
+  both: "both",
 } as const;
 
 export type OnbCaseProcessPolicySnapshot = { [key: string]: unknown };
 
-export type OnbGatewayStatus = typeof OnbGatewayStatus[keyof typeof OnbGatewayStatus];
-
+export type OnbGatewayStatus =
+  (typeof OnbGatewayStatus)[keyof typeof OnbGatewayStatus];
 
 export const OnbGatewayStatus = {
-  complete: 'complete',
-  blocked: 'blocked',
-  pending: 'pending',
-  'human-review': 'human-review',
-  'not-applicable': 'not-applicable',
+  complete: "complete",
+  blocked: "blocked",
+  pending: "pending",
+  "human-review": "human-review",
+  "not-applicable": "not-applicable",
 } as const;
 
 export interface OnbGateway {
@@ -3074,9 +3241,9 @@ export interface OnbCase {
   workerName: string;
   workerEmail: string;
   /**
-     * E.164 phone for WhatsApp; null when not provided
-     * @nullable
-     */
+   * E.164 phone for WhatsApp; null when not provided
+   * @nullable
+   */
   workerPhone: string | null;
   /** HR-selected contact channel(s) for this new hire */
   channelPreference: OnbCaseChannelPreference;
@@ -3085,9 +3252,9 @@ export interface OnbCase {
   /** employee | contractor | vendor | intern */
   workerCategory: string;
   /**
-     * Employee band used for exact targeted checklist matching
-     * @nullable
-     */
+   * Employee band used for exact targeted checklist matching
+   * @nullable
+   */
   workerBand: string | null;
   role: string;
   department: string;
@@ -3109,19 +3276,19 @@ export interface OnbCase {
   /** @nullable */
   primarySkill: string | null;
   /**
-     * standard | scarce | client-critical
-     * @nullable
-     */
+   * standard | scarce | client-critical
+   * @nullable
+   */
   skillCriticality: string | null;
   /**
-     * Demo scenario this case came from, if any
-     * @nullable
-     */
+   * Demo scenario this case came from, if any
+   * @nullable
+   */
   scenarioKey: string | null;
   /**
-     * LLM-generated onboarding plan narrative
-     * @nullable
-     */
+   * LLM-generated onboarding plan narrative
+   * @nullable
+   */
   planSummary: string | null;
   /** @minimum 1 */
   checklistTemplateVersion: number;
@@ -3142,9 +3309,9 @@ export interface OnbCase {
   /** @nullable */
   jobProfileVersion: number | null;
   /**
-     * Last completed orchestration boundary, or the exact checklist gate currently blocking the case
-     * @nullable
-     */
+   * Last completed orchestration boundary, or the exact checklist gate currently blocking the case
+   * @nullable
+   */
   orchestrationCheckpoint: string | null;
   /** Whether this manually-created case currently authorizes live email to its candidate record address */
   candidateEmailAuthorized: boolean;
@@ -3160,20 +3327,20 @@ export interface OnbCase {
   updatedAt: string;
 }
 
-export type OnbCaseExplanationHistoryEntryRole = typeof OnbCaseExplanationHistoryEntryRole[keyof typeof OnbCaseExplanationHistoryEntryRole];
-
+export type OnbCaseExplanationHistoryEntryRole =
+  (typeof OnbCaseExplanationHistoryEntryRole)[keyof typeof OnbCaseExplanationHistoryEntryRole];
 
 export const OnbCaseExplanationHistoryEntryRole = {
-  user: 'user',
-  assistant: 'assistant',
+  user: "user",
+  assistant: "assistant",
 } as const;
 
 export interface OnbCaseExplanationHistoryEntry {
   role: OnbCaseExplanationHistoryEntryRole;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   content: string;
 }
 
@@ -3182,68 +3349,68 @@ export interface OnbCaseExplanationHistoryEntry {
  */
 export interface OnbCaseExplanationInput {
   /**
-     * @minLength 1
-     * @maxLength 2000
-     */
+   * @minLength 1
+   * @maxLength 2000
+   */
   question: string;
   /** @maxItems 8 */
   history?: OnbCaseExplanationHistoryEntry[];
 }
 
-export type OnbCaseExplanationParagraphKind = typeof OnbCaseExplanationParagraphKind[keyof typeof OnbCaseExplanationParagraphKind];
-
+export type OnbCaseExplanationParagraphKind =
+  (typeof OnbCaseExplanationParagraphKind)[keyof typeof OnbCaseExplanationParagraphKind];
 
 export const OnbCaseExplanationParagraphKind = {
-  supported: 'supported',
-  'not-recorded': 'not-recorded',
+  supported: "supported",
+  "not-recorded": "not-recorded",
 } as const;
 
 export interface OnbCaseExplanationParagraph {
   /**
-     * @minLength 1
-     * @maxLength 1500
-     */
+   * @minLength 1
+   * @maxLength 1500
+   */
   text: string;
   /**
-     * @maxItems 12
-     * @items.minLength 1
-     * @items.maxLength 160
-     */
+   * @maxItems 12
+   * @items.minLength 1
+   * @items.maxLength 160
+   */
   sourceIds: string[];
   kind: OnbCaseExplanationParagraphKind;
 }
 
-export type OnbCaseExplanationSourceTab = typeof OnbCaseExplanationSourceTab[keyof typeof OnbCaseExplanationSourceTab];
-
+export type OnbCaseExplanationSourceTab =
+  (typeof OnbCaseExplanationSourceTab)[keyof typeof OnbCaseExplanationSourceTab];
 
 export const OnbCaseExplanationSourceTab = {
-  overview: 'overview',
-  activity: 'activity',
-  communications: 'communications',
-  documents: 'documents',
-  approvals: 'approvals',
+  overview: "overview",
+  activity: "activity",
+  communications: "communications",
+  documents: "documents",
+  approvals: "approvals",
 } as const;
 
 export interface OnbCaseExplanationSource {
   /**
-     * @minLength 1
-     * @maxLength 160
-     */
+   * @minLength 1
+   * @maxLength 160
+   */
   id: string;
   /**
-     * @minLength 1
-     * @maxLength 80
-     */
+   * @minLength 1
+   * @maxLength 80
+   */
   kind: string;
   /**
-     * @minLength 1
-     * @maxLength 240
-     */
+   * @minLength 1
+   * @maxLength 240
+   */
   title: string;
   /**
-     * @minLength 1
-     * @maxLength 1000
-     */
+   * @minLength 1
+   * @maxLength 1000
+   */
   excerpt: string;
   /** @nullable */
   occurredAt: string | null;
@@ -3253,9 +3420,9 @@ export interface OnbCaseExplanationSource {
 export interface OnbCaseExplanation {
   asOf: string;
   /**
-     * @minItems 1
-     * @maxItems 12
-     */
+   * @minItems 1
+   * @maxItems 12
+   */
   paragraphs: OnbCaseExplanationParagraph[];
   /** @maxItems 100 */
   sources: OnbCaseExplanationSource[];
@@ -3272,13 +3439,13 @@ export interface OnbOfferAcceptanceConfirmation {
 /**
  * How the new hire should be contacted (defaults to both)
  */
-export type OnbCaseIntakeChannelPreference = typeof OnbCaseIntakeChannelPreference[keyof typeof OnbCaseIntakeChannelPreference];
-
+export type OnbCaseIntakeChannelPreference =
+  (typeof OnbCaseIntakeChannelPreference)[keyof typeof OnbCaseIntakeChannelPreference];
 
 export const OnbCaseIntakeChannelPreference = {
-  email: 'email',
-  whatsapp: 'whatsapp',
-  both: 'both',
+  email: "email",
+  whatsapp: "whatsapp",
+  both: "both",
 } as const;
 
 /**
@@ -3411,23 +3578,23 @@ export interface SecurityDrillResult {
   steps: SecurityDrillStep[];
 }
 
-export type OnbDocumentCategory = typeof OnbDocumentCategory[keyof typeof OnbDocumentCategory];
-
+export type OnbDocumentCategory =
+  (typeof OnbDocumentCategory)[keyof typeof OnbDocumentCategory];
 
 export const OnbDocumentCategory = {
-  identity: 'identity',
-  statutory: 'statutory',
-  contract: 'contract',
-  policy: 'policy',
+  identity: "identity",
+  statutory: "statutory",
+  contract: "contract",
+  policy: "policy",
 } as const;
 
-export type OnbDocumentStatus = typeof OnbDocumentStatus[keyof typeof OnbDocumentStatus];
-
+export type OnbDocumentStatus =
+  (typeof OnbDocumentStatus)[keyof typeof OnbDocumentStatus];
 
 export const OnbDocumentStatus = {
-  pending: 'pending',
-  received: 'received',
-  verified: 'verified',
+  pending: "pending",
+  received: "received",
+  verified: "verified",
 } as const;
 
 /**
@@ -3451,16 +3618,16 @@ export interface OnbDocument {
   reminderNextAt: string | null;
 }
 
-export type OnbDocumentEvidenceValidationState = typeof OnbDocumentEvidenceValidationState[keyof typeof OnbDocumentEvidenceValidationState];
-
+export type OnbDocumentEvidenceValidationState =
+  (typeof OnbDocumentEvidenceValidationState)[keyof typeof OnbDocumentEvidenceValidationState];
 
 export const OnbDocumentEvidenceValidationState = {
-  queued: 'queued',
-  processing: 'processing',
-  passed: 'passed',
-  manual_review: 'manual_review',
-  correction_requested: 'correction_requested',
-  rejected: 'rejected',
+  queued: "queued",
+  processing: "processing",
+  passed: "passed",
+  manual_review: "manual_review",
+  correction_requested: "correction_requested",
+  rejected: "rejected",
 } as const;
 
 export type OnbDocumentEvidenceValidationReasonsItem = {
@@ -3469,17 +3636,17 @@ export type OnbDocumentEvidenceValidationReasonsItem = {
   evidence?: string;
 };
 
-export type OnbDocumentEvidenceMalwareScanState = typeof OnbDocumentEvidenceMalwareScanState[keyof typeof OnbDocumentEvidenceMalwareScanState];
-
+export type OnbDocumentEvidenceMalwareScanState =
+  (typeof OnbDocumentEvidenceMalwareScanState)[keyof typeof OnbDocumentEvidenceMalwareScanState];
 
 export const OnbDocumentEvidenceMalwareScanState = {
-  pending: 'pending',
-  scanning: 'scanning',
-  clean: 'clean',
-  infected: 'infected',
-  unavailable: 'unavailable',
-  timeout: 'timeout',
-  indeterminate: 'indeterminate',
+  pending: "pending",
+  scanning: "scanning",
+  clean: "clean",
+  infected: "infected",
+  unavailable: "unavailable",
+  timeout: "timeout",
+  indeterminate: "indeterminate",
 } as const;
 
 export interface OnbDocumentEvidence {
@@ -3512,17 +3679,17 @@ export interface OnbDocumentEvidence {
   canRetryScan: boolean;
 }
 
-export type OnbBgvStatusStatus = typeof OnbBgvStatusStatus[keyof typeof OnbBgvStatusStatus];
-
+export type OnbBgvStatusStatus =
+  (typeof OnbBgvStatusStatus)[keyof typeof OnbBgvStatusStatus];
 
 export const OnbBgvStatusStatus = {
-  pending: 'pending',
-  incomplete: 'incomplete',
-  rejected: 'rejected',
-  overdue: 'overdue',
-  clear: 'clear',
-  manual_review: 'manual_review',
-  done: 'done',
+  pending: "pending",
+  incomplete: "incomplete",
+  rejected: "rejected",
+  overdue: "overdue",
+  clear: "clear",
+  manual_review: "manual_review",
+  done: "done",
 } as const;
 
 export interface OnbBgvStatus {
@@ -3567,23 +3734,23 @@ export interface OnbEmployeeRecord {
 export interface OnbEvent {
   id: number;
   /**
-     * Null for system-level events not tied to a case (e.g. inbox-monitor outages)
-     * @nullable
-     */
+   * Null for system-level events not tied to a case (e.g. inbox-monitor outages)
+   * @nullable
+   */
   caseId: number | null;
   /** intake | plan | documentation | access | assets | learning | analytics | orchestrator | human | channel */
   agent: string;
   /** llm | rules | ldm | orchestrator | human | system */
   engine: string;
   /**
-     * notify-only | approve-before-act | act-then-review | hard-block
-     * @nullable
-     */
+   * notify-only | approve-before-act | act-then-review | hard-block
+   * @nullable
+   */
   hitlPattern: string | null;
   /**
-     * SME-spec rule reference, e.g. "4.1 Intake Rule 5"
-     * @nullable
-     */
+   * SME-spec rule reference, e.g. "4.1 Intake Rule 5"
+   * @nullable
+   */
   ruleRef: string | null;
   title: string;
   /** Decision rationale */
@@ -3591,23 +3758,23 @@ export interface OnbEvent {
   createdAt: string;
 }
 
-export type OnbApprovalAuthorityReviewStatus = typeof OnbApprovalAuthorityReviewStatus[keyof typeof OnbApprovalAuthorityReviewStatus];
-
+export type OnbApprovalAuthorityReviewStatus =
+  (typeof OnbApprovalAuthorityReviewStatus)[keyof typeof OnbApprovalAuthorityReviewStatus];
 
 export const OnbApprovalAuthorityReviewStatus = {
-  'not-required': 'not-required',
-  unresolved: 'unresolved',
-  'reviewed-no-effect': 'reviewed-no-effect',
+  "not-required": "not-required",
+  unresolved: "unresolved",
+  "reviewed-no-effect": "reviewed-no-effect",
 } as const;
 
-export type OnbRecordsEvidenceItemScopeKind = typeof OnbRecordsEvidenceItemScopeKind[keyof typeof OnbRecordsEvidenceItemScopeKind];
-
+export type OnbRecordsEvidenceItemScopeKind =
+  (typeof OnbRecordsEvidenceItemScopeKind)[keyof typeof OnbRecordsEvidenceItemScopeKind];
 
 export const OnbRecordsEvidenceItemScopeKind = {
-  all: 'all',
-  latest: 'latest',
-  earliest: 'earliest',
-  yearRange: 'yearRange',
+  all: "all",
+  latest: "latest",
+  earliest: "earliest",
+  yearRange: "yearRange",
 } as const;
 
 /**
@@ -3640,14 +3807,14 @@ export interface OnbApproval {
   recommendation: string;
   rationale: string;
   /**
-     * Structured archive Q&A evidence with per-answer stint scope; null when the approval has no records evidence.
-     * @nullable
-     */
+   * Structured archive Q&A evidence with per-answer stint scope; null when the approval has no records evidence.
+   * @nullable
+   */
   recordsEvidence: OnbRecordsEvidenceItem[] | null;
   /**
-     * Verified specialist authority scope required for a new decision; a null historical value cannot be replayed.
-     * @nullable
-     */
+   * Verified specialist authority scope required for a new decision; a null historical value cannot be replayed.
+   * @nullable
+   */
   authorityScope: string | null;
   authorityReviewStatus: OnbApprovalAuthorityReviewStatus;
   /** @nullable */
@@ -3666,9 +3833,9 @@ export interface OnbApproval {
 export interface OnbApprovalCapability {
   canDecide: boolean;
   /**
-     * Machine-readable fail-closed reason when the current authenticated user cannot decide.
-     * @nullable
-     */
+   * Machine-readable fail-closed reason when the current authenticated user cannot decide.
+   * @nullable
+   */
   reason: string | null;
   /** @minimum 1 */
   version: number;
@@ -3682,14 +3849,14 @@ export interface OnbApprovalDecision {
   expectedVersion: number;
 }
 
-export type OnbAuthorityGovernanceStateGovernanceStatus = typeof OnbAuthorityGovernanceStateGovernanceStatus[keyof typeof OnbAuthorityGovernanceStateGovernanceStatus];
-
+export type OnbAuthorityGovernanceStateGovernanceStatus =
+  (typeof OnbAuthorityGovernanceStateGovernanceStatus)[keyof typeof OnbAuthorityGovernanceStateGovernanceStatus];
 
 export const OnbAuthorityGovernanceStateGovernanceStatus = {
-  unconfigured: 'unconfigured',
-  'operator-attested': 'operator-attested',
-  'governance-approved': 'governance-approved',
-  withdrawn: 'withdrawn',
+  unconfigured: "unconfigured",
+  "operator-attested": "operator-attested",
+  "governance-approved": "governance-approved",
+  withdrawn: "withdrawn",
 } as const;
 
 export type OnbAuthorityGovernanceStateGovernance = {
@@ -3705,12 +3872,12 @@ export type OnbAuthorityGovernanceStateGovernance = {
   revision: number;
 };
 
-export type OnbAuthorityAssignmentStatus = typeof OnbAuthorityAssignmentStatus[keyof typeof OnbAuthorityAssignmentStatus];
-
+export type OnbAuthorityAssignmentStatus =
+  (typeof OnbAuthorityAssignmentStatus)[keyof typeof OnbAuthorityAssignmentStatus];
 
 export const OnbAuthorityAssignmentStatus = {
-  active: 'active',
-  revoked: 'revoked',
+  active: "active",
+  revoked: "revoked",
 } as const;
 
 export interface OnbAuthorityAssignment {
@@ -3765,12 +3932,12 @@ export interface OnbAuthorityAssignmentRequest {
   governanceDecisionRef: string;
 }
 
-export type OnbApprovalHistoryEventType = typeof OnbApprovalHistoryEventType[keyof typeof OnbApprovalHistoryEventType];
-
+export type OnbApprovalHistoryEventType =
+  (typeof OnbApprovalHistoryEventType)[keyof typeof OnbApprovalHistoryEventType];
 
 export const OnbApprovalHistoryEventType = {
-  decision: 'decision',
-  reopened: 'reopened',
+  decision: "decision",
+  reopened: "reopened",
 } as const;
 
 export type OnbApprovalHistorySnapshot = { [key: string]: unknown };
@@ -3798,13 +3965,13 @@ export interface OnbApprovalHistory {
   createdAt: string;
 }
 
-export type OnbEvidenceDecisionDecision = typeof OnbEvidenceDecisionDecision[keyof typeof OnbEvidenceDecisionDecision];
-
+export type OnbEvidenceDecisionDecision =
+  (typeof OnbEvidenceDecisionDecision)[keyof typeof OnbEvidenceDecisionDecision];
 
 export const OnbEvidenceDecisionDecision = {
-  approve: 'approve',
-  reject: 'reject',
-  request_correction: 'request_correction',
+  approve: "approve",
+  reject: "reject",
+  request_correction: "request_correction",
 } as const;
 
 export interface OnbEvidenceDecision {
@@ -3816,12 +3983,12 @@ export interface OnbEvidenceDecision {
 /**
  * Candidate case communication or separate HR/HITL notification
  */
-export type OnbCommunicationAudience = typeof OnbCommunicationAudience[keyof typeof OnbCommunicationAudience];
-
+export type OnbCommunicationAudience =
+  (typeof OnbCommunicationAudience)[keyof typeof OnbCommunicationAudience];
 
 export const OnbCommunicationAudience = {
-  candidate: 'candidate',
-  admin: 'admin',
+  candidate: "candidate",
+  admin: "admin",
 } as const;
 
 export interface OnbCommunication {
@@ -3851,39 +4018,39 @@ export interface OnbCommunication {
   createdAt: string;
 }
 
-export type BgvNotificationClassification = typeof BgvNotificationClassification[keyof typeof BgvNotificationClassification];
-
+export type BgvNotificationClassification =
+  (typeof BgvNotificationClassification)[keyof typeof BgvNotificationClassification];
 
 export const BgvNotificationClassification = {
-  delay: 'delay',
-  'missing-info': 'missing-info',
-  discrepancy: 'discrepancy',
-  'review-required': 'review-required',
+  delay: "delay",
+  "missing-info": "missing-info",
+  discrepancy: "discrepancy",
+  "review-required": "review-required",
 } as const;
 
-export type BgvNotificationRole = typeof BgvNotificationRole[keyof typeof BgvNotificationRole];
-
+export type BgvNotificationRole =
+  (typeof BgvNotificationRole)[keyof typeof BgvNotificationRole];
 
 export const BgvNotificationRole = {
-  hr: 'hr',
-  bgvTeam: 'bgvTeam',
-  recruiter: 'recruiter',
-  hiringManager: 'hiringManager',
-  compliance: 'compliance',
-  candidate: 'candidate',
+  hr: "hr",
+  bgvTeam: "bgvTeam",
+  recruiter: "recruiter",
+  hiringManager: "hiringManager",
+  compliance: "compliance",
+  candidate: "candidate",
 } as const;
 
-export type BgvNotificationDeliveryState = typeof BgvNotificationDeliveryState[keyof typeof BgvNotificationDeliveryState];
-
+export type BgvNotificationDeliveryState =
+  (typeof BgvNotificationDeliveryState)[keyof typeof BgvNotificationDeliveryState];
 
 export const BgvNotificationDeliveryState = {
-  'missing-recipient': 'missing-recipient',
-  queued: 'queued',
-  sent: 'sent',
-  failed: 'failed',
-  uncertain: 'uncertain',
-  simulated: 'simulated',
-  skipped: 'skipped',
+  "missing-recipient": "missing-recipient",
+  queued: "queued",
+  sent: "sent",
+  failed: "failed",
+  uncertain: "uncertain",
+  simulated: "simulated",
+  skipped: "skipped",
 } as const;
 
 export interface BgvNotificationFlags {
@@ -3950,36 +4117,36 @@ export interface BgvNotificationRecipient {
   reason: string;
 }
 
-export type BgvNotificationCycleEpisode = typeof BgvNotificationCycleEpisode[keyof typeof BgvNotificationCycleEpisode];
-
+export type BgvNotificationCycleEpisode =
+  (typeof BgvNotificationCycleEpisode)[keyof typeof BgvNotificationCycleEpisode];
 
 export const BgvNotificationCycleEpisode = {
-  blocked: 'blocked',
-  release: 'release',
+  blocked: "blocked",
+  release: "release",
 } as const;
 
-export type BgvNotificationCycleSource = typeof BgvNotificationCycleSource[keyof typeof BgvNotificationCycleSource];
-
+export type BgvNotificationCycleSource =
+  (typeof BgvNotificationCycleSource)[keyof typeof BgvNotificationCycleSource];
 
 export const BgvNotificationCycleSource = {
-  webhook: 'webhook',
-  'scheduled-poll': 'scheduled-poll',
-  'status-email': 'status-email',
-  overdue: 'overdue',
-  reopened: 'reopened',
-  'hr-reconcile': 'hr-reconcile',
-  unknown: 'unknown',
+  webhook: "webhook",
+  "scheduled-poll": "scheduled-poll",
+  "status-email": "status-email",
+  overdue: "overdue",
+  reopened: "reopened",
+  "hr-reconcile": "hr-reconcile",
+  unknown: "unknown",
 } as const;
 
-export type BgvNotificationCycleSourceProvenance = typeof BgvNotificationCycleSourceProvenance[keyof typeof BgvNotificationCycleSourceProvenance];
-
+export type BgvNotificationCycleSourceProvenance =
+  (typeof BgvNotificationCycleSourceProvenance)[keyof typeof BgvNotificationCycleSourceProvenance];
 
 export const BgvNotificationCycleSourceProvenance = {
-  'trusted-provider': 'trusted-provider',
-  'human-authorized': 'human-authorized',
-  simulated: 'simulated',
-  offline: 'offline',
-  unknown: 'unknown',
+  "trusted-provider": "trusted-provider",
+  "human-authorized": "human-authorized",
+  simulated: "simulated",
+  offline: "offline",
+  unknown: "unknown",
 } as const;
 
 export interface BgvNotificationCycle {
@@ -4018,13 +4185,13 @@ export interface UpdateOnboardingBgvNotificationsRequest {
   config: BgvNotificationConfig;
 }
 
-export type ReconcileOnboardingBgvNotificationsRequestReason = typeof ReconcileOnboardingBgvNotificationsRequestReason[keyof typeof ReconcileOnboardingBgvNotificationsRequestReason];
-
+export type ReconcileOnboardingBgvNotificationsRequestReason =
+  (typeof ReconcileOnboardingBgvNotificationsRequestReason)[keyof typeof ReconcileOnboardingBgvNotificationsRequestReason];
 
 export const ReconcileOnboardingBgvNotificationsRequestReason = {
-  manual: 'manual',
-  heartbeat: 'heartbeat',
-  startup: 'startup',
+  manual: "manual",
+  heartbeat: "heartbeat",
+  startup: "startup",
 } as const;
 
 export interface ReconcileOnboardingBgvNotificationsRequest {
@@ -4032,37 +4199,38 @@ export interface ReconcileOnboardingBgvNotificationsRequest {
   simulation?: boolean;
 }
 
-export type ReconcileOnboardingBgvNotificationsResult = OnboardingBgvNotificationsEnvelope & {
-  createdCommunicationIds: number[];
-  retriedCommunicationIds: number[];
-  skippedCommunicationIds: number[];
-};
+export type ReconcileOnboardingBgvNotificationsResult =
+  OnboardingBgvNotificationsEnvelope & {
+    createdCommunicationIds: number[];
+    retriedCommunicationIds: number[];
+    skippedCommunicationIds: number[];
+  };
 
-export type OnbOperationalRequestMethod = typeof OnbOperationalRequestMethod[keyof typeof OnbOperationalRequestMethod];
-
+export type OnbOperationalRequestMethod =
+  (typeof OnbOperationalRequestMethod)[keyof typeof OnbOperationalRequestMethod];
 
 export const OnbOperationalRequestMethod = {
-  email: 'email',
-  agent: 'agent',
-  'human-task': 'human-task',
+  email: "email",
+  agent: "agent",
+  "human-task": "human-task",
 } as const;
 
-export type OnbOperationalRequestStatus = typeof OnbOperationalRequestStatus[keyof typeof OnbOperationalRequestStatus];
-
+export type OnbOperationalRequestStatus =
+  (typeof OnbOperationalRequestStatus)[keyof typeof OnbOperationalRequestStatus];
 
 export const OnbOperationalRequestStatus = {
-  requested: 'requested',
-  'in-progress': 'in-progress',
-  completed: 'completed',
-  blocked: 'blocked',
+  requested: "requested",
+  "in-progress": "in-progress",
+  completed: "completed",
+  blocked: "blocked",
 } as const;
 
-export type OnbAgentOrigin = typeof OnbAgentOrigin[keyof typeof OnbAgentOrigin];
-
+export type OnbAgentOrigin =
+  (typeof OnbAgentOrigin)[keyof typeof OnbAgentOrigin];
 
 export const OnbAgentOrigin = {
-  internal: 'internal',
-  external: 'external',
+  internal: "internal",
+  external: "external",
 } as const;
 
 /**
@@ -4093,28 +4261,28 @@ export interface OnbOperationalRequestHistoryEntry {
   agentIdentity?: OnbAgent | null;
 }
 
-export type OnbOperationalRequestRuntimeSchemaVersion = typeof OnbOperationalRequestRuntimeSchemaVersion[keyof typeof OnbOperationalRequestRuntimeSchemaVersion];
-
+export type OnbOperationalRequestRuntimeSchemaVersion =
+  (typeof OnbOperationalRequestRuntimeSchemaVersion)[keyof typeof OnbOperationalRequestRuntimeSchemaVersion];
 
 export const OnbOperationalRequestRuntimeSchemaVersion = {
-  'workforce-step-runtime/v1': 'workforce-step-runtime/v1',
+  "workforce-step-runtime/v1": "workforce-step-runtime/v1",
 } as const;
 
-export type OnbOperationalRequestRuntimeWorkstream = typeof OnbOperationalRequestRuntimeWorkstream[keyof typeof OnbOperationalRequestRuntimeWorkstream];
-
+export type OnbOperationalRequestRuntimeWorkstream =
+  (typeof OnbOperationalRequestRuntimeWorkstream)[keyof typeof OnbOperationalRequestRuntimeWorkstream];
 
 export const OnbOperationalRequestRuntimeWorkstream = {
-  intake: 'intake',
-  payroll: 'payroll',
-  assets: 'assets',
-  learning: 'learning',
+  intake: "intake",
+  payroll: "payroll",
+  assets: "assets",
+  learning: "learning",
 } as const;
 
-export type OnbOperationalRequestPermittedChannelsItem = typeof OnbOperationalRequestPermittedChannelsItem[keyof typeof OnbOperationalRequestPermittedChannelsItem];
-
+export type OnbOperationalRequestPermittedChannelsItem =
+  (typeof OnbOperationalRequestPermittedChannelsItem)[keyof typeof OnbOperationalRequestPermittedChannelsItem];
 
 export const OnbOperationalRequestPermittedChannelsItem = {
-  'manager-led': 'manager-led',
+  "manager-led": "manager-led",
 } as const;
 
 export interface OnbWorkforceStepEscalation {
@@ -4196,64 +4364,65 @@ export interface OnbOperationalRequestsEnvelope {
 
 export interface OnbOperationalRequestsInitialize {
   /**
-     * @minLength 1
-     * @maxLength 128
-     */
+   * @minLength 1
+   * @maxLength 128
+   */
   requestId?: string;
   method?: OnbOperationalRequestMethod;
   /**
-     * @minItems 1
-     * @maxItems 5
-     * @items.pattern ^[a-z0-9][a-z0-9_-]{0,63}$
-     */
+   * @minItems 1
+   * @maxItems 5
+   * @items.pattern ^[a-z0-9][a-z0-9_-]{0,63}$
+   */
   requestIds?: string[];
   /** @minimum 0 */
   expectedVersion?: number;
 }
 
-export type OnbOperationalRequestActionAction = typeof OnbOperationalRequestActionAction[keyof typeof OnbOperationalRequestActionAction];
-
+export type OnbOperationalRequestActionAction =
+  (typeof OnbOperationalRequestActionAction)[keyof typeof OnbOperationalRequestActionAction];
 
 export const OnbOperationalRequestActionAction = {
-  'select-method': 'select-method',
-  start: 'start',
-  progress: 'progress',
-  complete: 'complete',
-  block: 'block',
-  retry: 'retry',
+  "select-method": "select-method",
+  start: "start",
+  progress: "progress",
+  complete: "complete",
+  block: "block",
+  retry: "retry",
 } as const;
 
 export interface OnbOperationalRequestAction {
   /**
-     * Client idempotency id; reuse only for the identical action payload
-     * @minLength 1
-     * @maxLength 128
-     */
+   * Client idempotency id; reuse only for the identical action payload
+   * @minLength 1
+   * @maxLength 128
+   */
   requestId: string;
   action: OnbOperationalRequestActionAction;
   method?: OnbOperationalRequestMethod;
   /**
-     * @minLength 3
-     * @maxLength 500
-     */
+   * @minLength 3
+   * @maxLength 500
+   */
   reason?: string;
   /** @minimum 0 */
   expectedVersion: number;
 }
 
-export type OnbOperationalRequestsMutationResult = OnbOperationalRequestsEnvelope & ({
-  /**
+export type OnbOperationalRequestsMutationResult =
+  OnbOperationalRequestsEnvelope & {
+    /**
      * Stable operational request id for actions; initialization echoes its client idempotency id
      * @nullable
      */
-  requestId: string | null;
-  /** @nullable */
-  action: string | null;
-  idempotent: boolean;
-  /** The task action committed, but a follow-up connector continuation is pending durable automatic retry. */
-  continuationPending?: boolean;
-  initializedRequestIds: string[];
-});
+    requestId: string | null;
+    /** @nullable */
+    action: string | null;
+    idempotent: boolean;
+    /** The task action committed, but a follow-up connector continuation is pending durable automatic retry. */
+    continuationPending?: boolean;
+    initializedRequestIds: string[];
+  };
 
 export interface OnbDocumentRecoveryResult {
   message: string;
@@ -4269,12 +4438,12 @@ export interface OnbInboundMessage {
 /**
  * api = deep integration (poll/webhook) | email = watch-mailbox tracking via status emails
  */
-export type OnbConnectorTrackingMode = typeof OnbConnectorTrackingMode[keyof typeof OnbConnectorTrackingMode];
-
+export type OnbConnectorTrackingMode =
+  (typeof OnbConnectorTrackingMode)[keyof typeof OnbConnectorTrackingMode];
 
 export const OnbConnectorTrackingMode = {
-  api: 'api',
-  email: 'email',
+  api: "api",
+  email: "email",
 } as const;
 
 /**
@@ -4302,12 +4471,12 @@ export interface OnbConnector {
 /**
  * Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged
  */
-export type OnbConnectorUpdateTrackingMode = typeof OnbConnectorUpdateTrackingMode[keyof typeof OnbConnectorUpdateTrackingMode];
-
+export type OnbConnectorUpdateTrackingMode =
+  (typeof OnbConnectorUpdateTrackingMode)[keyof typeof OnbConnectorUpdateTrackingMode];
 
 export const OnbConnectorUpdateTrackingMode = {
-  api: 'api',
-  email: 'email',
+  api: "api",
+  email: "email",
 } as const;
 
 export interface OnbConnectorUpdate {
@@ -4338,11 +4507,11 @@ export interface OnbScenarioDef {
   expectedBehaviour: string;
 }
 
-export type OnbSyntheticResetRequestConfirmation = typeof OnbSyntheticResetRequestConfirmation[keyof typeof OnbSyntheticResetRequestConfirmation];
-
+export type OnbSyntheticResetRequestConfirmation =
+  (typeof OnbSyntheticResetRequestConfirmation)[keyof typeof OnbSyntheticResetRequestConfirmation];
 
 export const OnbSyntheticResetRequestConfirmation = {
-  REPLACE_SYNTHETIC_CASES: 'REPLACE SYNTHETIC CASES',
+  REPLACE_SYNTHETIC_CASES: "REPLACE SYNTHETIC CASES",
 } as const;
 
 export interface OnbSyntheticResetRequest {
@@ -4366,14 +4535,14 @@ export interface OnbSyntheticResetReceipt {
   retainedUploadCount?: number;
 }
 
-export type OnbSyntheticResetEnvelopeStatus = typeof OnbSyntheticResetEnvelopeStatus[keyof typeof OnbSyntheticResetEnvelopeStatus];
-
+export type OnbSyntheticResetEnvelopeStatus =
+  (typeof OnbSyntheticResetEnvelopeStatus)[keyof typeof OnbSyntheticResetEnvelopeStatus];
 
 export const OnbSyntheticResetEnvelopeStatus = {
-  ready: 'ready',
-  blocked: 'blocked',
-  completed: 'completed',
-  unavailable: 'unavailable',
+  ready: "ready",
+  blocked: "blocked",
+  completed: "completed",
+  unavailable: "unavailable",
 } as const;
 
 export interface OnbSyntheticResetEnvelope {
@@ -4412,37 +4581,37 @@ export interface OnbAnalytics {
   /** Minimum population before a trend is published */
   suppressionThreshold: number;
   /**
-     * LLM-written aggregated insight for HR/workforce planning
-     * @nullable
-     */
+   * LLM-written aggregated insight for HR/workforce planning
+   * @nullable
+   */
   narrative: string | null;
 }
 
-export type OnbOutcomeKpiDirection = typeof OnbOutcomeKpiDirection[keyof typeof OnbOutcomeKpiDirection];
-
+export type OnbOutcomeKpiDirection =
+  (typeof OnbOutcomeKpiDirection)[keyof typeof OnbOutcomeKpiDirection];
 
 export const OnbOutcomeKpiDirection = {
-  'at-most': 'at-most',
-  'at-least': 'at-least',
+  "at-most": "at-most",
+  "at-least": "at-least",
 } as const;
 
-export type OnbOutcomeKpiUnit = typeof OnbOutcomeKpiUnit[keyof typeof OnbOutcomeKpiUnit];
-
+export type OnbOutcomeKpiUnit =
+  (typeof OnbOutcomeKpiUnit)[keyof typeof OnbOutcomeKpiUnit];
 
 export const OnbOutcomeKpiUnit = {
-  days: 'days',
-  percent: 'percent',
-  score: 'score',
+  days: "days",
+  percent: "percent",
+  score: "score",
 } as const;
 
-export type OnbOutcomeKpiStatus = typeof OnbOutcomeKpiStatus[keyof typeof OnbOutcomeKpiStatus];
-
+export type OnbOutcomeKpiStatus =
+  (typeof OnbOutcomeKpiStatus)[keyof typeof OnbOutcomeKpiStatus];
 
 export const OnbOutcomeKpiStatus = {
-  met: 'met',
-  missed: 'missed',
-  'insufficient-data': 'insufficient-data',
-  'not-collected': 'not-collected',
+  met: "met",
+  missed: "missed",
+  "insufficient-data": "insufficient-data",
+  "not-collected": "not-collected",
 } as const;
 
 export interface OnbOutcomeKpi {
@@ -4479,14 +4648,14 @@ export interface OnbChannelInfo {
   target: string;
   note: string;
   /**
-     * WhatsApp only — the Twilio sandbox sender number hires message to (re)join a session
-     * @nullable
-     */
+   * WhatsApp only — the Twilio sandbox sender number hires message to (re)join a session
+   * @nullable
+   */
   sandboxNumber?: string | null;
   /**
-     * WhatsApp only — the sandbox join keyword (hires send "join <keyword>"), when configured
-     * @nullable
-     */
+   * WhatsApp only — the sandbox join keyword (hires send "join <keyword>"), when configured
+   * @nullable
+   */
   sandboxJoinKeyword?: string | null;
 }
 
@@ -4496,14 +4665,14 @@ export interface OnbChannelInfo {
 export interface OnbBlockedPublishBackupReadiness {
   ready: boolean;
   /**
-     * Masked backup WhatsApp destination
-     * @nullable
-     */
+   * Masked backup WhatsApp destination
+   * @nullable
+   */
   destination: string | null;
   /**
-     * Masked Twilio WhatsApp sender
-     * @nullable
-     */
+   * Masked Twilio WhatsApp sender
+   * @nullable
+   */
   sender: string | null;
   /** Non-secret setting categories that still need configuration */
   missing: string[];
@@ -4524,19 +4693,19 @@ export interface OnbInboundEmailMonitor {
   state: string;
   pollIntervalSeconds: number;
   /**
-     * When the most recent poll attempt started (ISO)
-     * @nullable
-     */
+   * When the most recent poll attempt started (ISO)
+   * @nullable
+   */
   lastPollAt: string | null;
   /**
-     * When the most recent poll completed successfully (ISO)
-     * @nullable
-     */
+   * When the most recent poll completed successfully (ISO)
+   * @nullable
+   */
   lastSuccessAt: string | null;
   /**
-     * Error message from the most recent failed poll, cleared on success
-     * @nullable
-     */
+   * Error message from the most recent failed poll, cleared on success
+   * @nullable
+   */
   lastError: string | null;
   /** @nullable */
   lastErrorAt: string | null;
@@ -4561,9 +4730,9 @@ export interface OnbSystemConnectorHealth {
   /** onb_connectors row this health is tied to */
   connectorKey: string;
   /**
-     * Null for push-mode systems
-     * @nullable
-     */
+   * Null for push-mode systems
+   * @nullable
+   */
   pollIntervalSeconds: number | null;
   running: boolean;
   /** healthy | initializing | broken | stopped */
@@ -4574,9 +4743,9 @@ export interface OnbSystemConnectorHealth {
   /** @nullable */
   lastSuccessAt: string | null;
   /**
-     * Push mode — when the last vendor webhook arrived
-     * @nullable
-     */
+   * Push mode — when the last vendor webhook arrived
+   * @nullable
+   */
   lastEventAt: string | null;
   eventsReceived: number;
   /** @nullable */
@@ -4614,24 +4783,24 @@ export interface OnbSystemCheck {
   note: string | null;
 }
 
-export type OnbMalwareScannerHealthConnectivity = typeof OnbMalwareScannerHealthConnectivity[keyof typeof OnbMalwareScannerHealthConnectivity];
-
+export type OnbMalwareScannerHealthConnectivity =
+  (typeof OnbMalwareScannerHealthConnectivity)[keyof typeof OnbMalwareScannerHealthConnectivity];
 
 export const OnbMalwareScannerHealthConnectivity = {
-  connected: 'connected',
-  unavailable: 'unavailable',
-  timeout: 'timeout',
-  indeterminate: 'indeterminate',
-  not_configured: 'not_configured',
+  connected: "connected",
+  unavailable: "unavailable",
+  timeout: "timeout",
+  indeterminate: "indeterminate",
+  not_configured: "not_configured",
 } as const;
 
-export type OnbMalwareScannerHealthSignatures = typeof OnbMalwareScannerHealthSignatures[keyof typeof OnbMalwareScannerHealthSignatures];
-
+export type OnbMalwareScannerHealthSignatures =
+  (typeof OnbMalwareScannerHealthSignatures)[keyof typeof OnbMalwareScannerHealthSignatures];
 
 export const OnbMalwareScannerHealthSignatures = {
-  current: 'current',
-  stale: 'stale',
-  unknown: 'unknown',
+  current: "current",
+  stale: "stale",
+  unknown: "unknown",
 } as const;
 
 /**
@@ -4648,41 +4817,42 @@ export interface OnbMalwareScannerHealth {
   checkedAt: string;
 }
 
-export type OnbMalwareScannerMonitorHealthStatus = typeof OnbMalwareScannerMonitorHealthStatus[keyof typeof OnbMalwareScannerMonitorHealthStatus];
-
+export type OnbMalwareScannerMonitorHealthStatus =
+  (typeof OnbMalwareScannerMonitorHealthStatus)[keyof typeof OnbMalwareScannerMonitorHealthStatus];
 
 export const OnbMalwareScannerMonitorHealthStatus = {
-  healthy: 'healthy',
-  outage: 'outage',
-  'stale-signatures': 'stale-signatures',
-  indeterminate: 'indeterminate',
-  not_configured: 'not_configured',
-  initializing: 'initializing',
-  'stale-data': 'stale-data',
+  healthy: "healthy",
+  outage: "outage",
+  "stale-signatures": "stale-signatures",
+  indeterminate: "indeterminate",
+  not_configured: "not_configured",
+  initializing: "initializing",
+  "stale-data": "stale-data",
 } as const;
 
 /**
  * @nullable
  */
-export type OnbMalwareScannerIncidentKind = typeof OnbMalwareScannerIncidentKind[keyof typeof OnbMalwareScannerIncidentKind] | null;
-
+export type OnbMalwareScannerIncidentKind =
+  | (typeof OnbMalwareScannerIncidentKind)[keyof typeof OnbMalwareScannerIncidentKind]
+  | null;
 
 export const OnbMalwareScannerIncidentKind = {
-  outage: 'outage',
-  'stale-signature': 'stale-signature',
+  outage: "outage",
+  "stale-signature": "stale-signature",
 } as const;
 
-export type OnbMalwareScannerNotificationSummaryState = typeof OnbMalwareScannerNotificationSummaryState[keyof typeof OnbMalwareScannerNotificationSummaryState];
-
+export type OnbMalwareScannerNotificationSummaryState =
+  (typeof OnbMalwareScannerNotificationSummaryState)[keyof typeof OnbMalwareScannerNotificationSummaryState];
 
 export const OnbMalwareScannerNotificationSummaryState = {
-  none: 'none',
-  pending: 'pending',
-  sending: 'sending',
-  sent: 'sent',
-  failed: 'failed',
-  ambiguous: 'ambiguous',
-  not_configured: 'not_configured',
+  none: "none",
+  pending: "pending",
+  sending: "sending",
+  sent: "sent",
+  failed: "failed",
+  ambiguous: "ambiguous",
+  not_configured: "not_configured",
 } as const;
 
 /**
@@ -4768,9 +4938,9 @@ export interface OnbEmailWatch {
   healthy: boolean;
   pollIntervalSeconds: number;
   /**
-     * The Gmail address vendors should CC status emails to; null when the mailbox is unreachable
-     * @nullable
-     */
+   * The Gmail address vendors should CC status emails to; null when the mailbox is unreachable
+   * @nullable
+   */
   mailbox: string | null;
   /** @nullable */
   lastPollAt: string | null;
@@ -4785,21 +4955,21 @@ export interface OnbEmailWatch {
   recent: OnbWatchEmail[];
 }
 
-export type OnbWatchEmailSimulateSystem = typeof OnbWatchEmailSimulateSystem[keyof typeof OnbWatchEmailSimulateSystem];
-
+export type OnbWatchEmailSimulateSystem =
+  (typeof OnbWatchEmailSimulateSystem)[keyof typeof OnbWatchEmailSimulateSystem];
 
 export const OnbWatchEmailSimulateSystem = {
-  bgv: 'bgv',
-  itsm: 'itsm',
-  payroll: 'payroll',
+  bgv: "bgv",
+  itsm: "itsm",
+  payroll: "payroll",
 } as const;
 
-export type OnbWatchEmailSimulateOutcome = typeof OnbWatchEmailSimulateOutcome[keyof typeof OnbWatchEmailSimulateOutcome];
-
+export type OnbWatchEmailSimulateOutcome =
+  (typeof OnbWatchEmailSimulateOutcome)[keyof typeof OnbWatchEmailSimulateOutcome];
 
 export const OnbWatchEmailSimulateOutcome = {
-  completed: 'completed',
-  exception: 'exception',
+  completed: "completed",
+  exception: "exception",
 } as const;
 
 export interface OnbWatchEmailSimulate {
@@ -4826,8 +4996,8 @@ export interface OnbChannelTestResult {
 /**
  * Number of days expired or revoked candidate-link metadata is retained
  */
-export type OnbSettingsCandidateLinkRetentionDays = typeof OnbSettingsCandidateLinkRetentionDays[keyof typeof OnbSettingsCandidateLinkRetentionDays];
-
+export type OnbSettingsCandidateLinkRetentionDays =
+  (typeof OnbSettingsCandidateLinkRetentionDays)[keyof typeof OnbSettingsCandidateLinkRetentionDays];
 
 export const OnbSettingsCandidateLinkRetentionDays = {
   NUMBER_30: 30,
@@ -4839,68 +5009,68 @@ export const OnbSettingsCandidateLinkRetentionDays = {
 /**
  * @nullable
  */
-export type OnbDay1LogisticsFormat = typeof OnbDay1LogisticsFormat[keyof typeof OnbDay1LogisticsFormat] | null;
-
+export type OnbDay1LogisticsFormat =
+  (typeof OnbDay1LogisticsFormat)[keyof typeof OnbDay1LogisticsFormat] | null;
 
 export const OnbDay1LogisticsFormat = {
-  physical: 'physical',
-  remote: 'remote',
-  hybrid: 'hybrid',
+  physical: "physical",
+  remote: "remote",
+  hybrid: "hybrid",
 } as const;
 
 export interface OnbDay1Logistics {
   /**
-     * Blank uses each new case's joining date when the default is copied
-     * @nullable
-     * @pattern ^\d{4}-\d{2}-\d{2}$
-     */
+   * Blank uses each new case's joining date when the default is copied
+   * @nullable
+   * @pattern ^\d{4}-\d{2}-\d{2}$
+   */
   orientationDate: string | null;
   /**
-     * @nullable
-     * @pattern ^(?:[01]\d|2[0-3]):[0-5]\d$
-     */
+   * @nullable
+   * @pattern ^(?:[01]\d|2[0-3]):[0-5]\d$
+   */
   orientationTime: string | null;
   /**
-     * @maxLength 100
-     * @nullable
-     */
+   * @maxLength 100
+   * @nullable
+   */
   timezone: string | null;
   /** @nullable */
   format: OnbDay1LogisticsFormat;
   /**
-     * @maxLength 1000
-     * @nullable
-     */
+   * @maxLength 1000
+   * @nullable
+   */
   venueAddress: string | null;
   /**
-     * @maxLength 1000
-     * @nullable
-     */
+   * @maxLength 1000
+   * @nullable
+   */
   googleMapsUrl: string | null;
   /**
-     * @maxLength 1000
-     * @nullable
-     */
+   * @maxLength 1000
+   * @nullable
+   */
   meetingUrl: string | null;
   /**
-     * @maxLength 500
-     * @nullable
-     */
+   * @maxLength 500
+   * @nullable
+   */
   reportingContact: string | null;
   /**
-     * @maxLength 4000
-     * @nullable
-     */
+   * @maxLength 4000
+   * @nullable
+   */
   arrivalInstructions: string | null;
 }
 
-export type CandidateAccessCleanupHealthState = typeof CandidateAccessCleanupHealthState[keyof typeof CandidateAccessCleanupHealthState];
-
+export type CandidateAccessCleanupHealthState =
+  (typeof CandidateAccessCleanupHealthState)[keyof typeof CandidateAccessCleanupHealthState];
 
 export const CandidateAccessCleanupHealthState = {
-  healthy: 'healthy',
-  delayed: 'delayed',
-  failed: 'failed',
+  healthy: "healthy",
+  delayed: "delayed",
+  failed: "failed",
 } as const;
 
 export interface CandidateAccessCleanupHealth {
@@ -4931,14 +5101,14 @@ export interface OnbSettings {
   /** Optional remote HR approver address; when set, new pending approvals are emailed there and a reply containing approve/reject from that exact sender decides them */
   hrApproverEmail: string | null;
   /**
-     * Effective immutable checklist template version
-     * @minimum 1
-     */
+   * Effective immutable checklist template version
+   * @minimum 1
+   */
   checklistVersion: number;
   /**
-     * @minItems 1
-     * @maxItems 100
-     */
+   * @minItems 1
+   * @maxItems 100
+   */
   day1Checklist: OnbChecklistTemplateItem[];
   day1LogisticsDefault: OnbDay1Logistics;
   /** Number of days expired or revoked candidate-link metadata is retained */
@@ -4949,8 +5119,8 @@ export interface OnbSettings {
 /**
  * Approved candidate-link metadata retention period. Omit to leave unchanged.
  */
-export type UpdateOnbSettingsCandidateLinkRetentionDays = typeof UpdateOnbSettingsCandidateLinkRetentionDays[keyof typeof UpdateOnbSettingsCandidateLinkRetentionDays];
-
+export type UpdateOnbSettingsCandidateLinkRetentionDays =
+  (typeof UpdateOnbSettingsCandidateLinkRetentionDays)[keyof typeof UpdateOnbSettingsCandidateLinkRetentionDays];
 
 export const UpdateOnbSettingsCandidateLinkRetentionDays = {
   NUMBER_30: 30,
@@ -4967,89 +5137,89 @@ export interface UpdateOnbSettings {
   /** New remote HR approver address; null or empty string clears the stored value. Omit to leave unchanged. */
   hrApproverEmail?: string | null;
   /**
-     * Required optimistic concurrency version when day1Checklist is supplied
-     * @minimum 1
-     */
+   * Required optimistic concurrency version when day1Checklist is supplied
+   * @minimum 1
+   */
   expectedChecklistVersion?: number;
   /**
-     * @minItems 1
-     * @maxItems 100
-     */
+   * @minItems 1
+   * @maxItems 100
+   */
   day1Checklist?: OnbChecklistTemplateItem[];
   day1LogisticsDefault?: OnbDay1Logistics;
   /** Approved candidate-link metadata retention period. Omit to leave unchanged. */
   candidateLinkRetentionDays?: UpdateOnbSettingsCandidateLinkRetentionDays;
 }
 
-export type OnbReadinessSlaStreamKey = typeof OnbReadinessSlaStreamKey[keyof typeof OnbReadinessSlaStreamKey];
-
+export type OnbReadinessSlaStreamKey =
+  (typeof OnbReadinessSlaStreamKey)[keyof typeof OnbReadinessSlaStreamKey];
 
 export const OnbReadinessSlaStreamKey = {
-  documentation: 'documentation',
-  bgv: 'bgv',
-  hris: 'hris',
-  'it-assets': 'it-assets',
-  payroll: 'payroll',
+  documentation: "documentation",
+  bgv: "bgv",
+  hris: "hris",
+  "it-assets": "it-assets",
+  payroll: "payroll",
 } as const;
 
 export interface OnbReadinessSlaStream {
   key: OnbReadinessSlaStreamKey;
   /**
-     * @minLength 1
-     * @maxLength 200
-     */
+   * @minLength 1
+   * @maxLength 200
+   */
   label: string;
   /**
-     * @minimum 0
-     * @maximum 100
-     */
+   * @minimum 0
+   * @maximum 100
+   */
   weight: number;
 }
 
-export type OnbReadinessSlaActionStreamKey = typeof OnbReadinessSlaActionStreamKey[keyof typeof OnbReadinessSlaActionStreamKey];
-
+export type OnbReadinessSlaActionStreamKey =
+  (typeof OnbReadinessSlaActionStreamKey)[keyof typeof OnbReadinessSlaActionStreamKey];
 
 export const OnbReadinessSlaActionStreamKey = {
-  documentation: 'documentation',
-  bgv: 'bgv',
-  hris: 'hris',
-  'it-assets': 'it-assets',
-  payroll: 'payroll',
+  documentation: "documentation",
+  bgv: "bgv",
+  hris: "hris",
+  "it-assets": "it-assets",
+  payroll: "payroll",
 } as const;
 
-export type OnbReadinessSlaActionAnchor = typeof OnbReadinessSlaActionAnchor[keyof typeof OnbReadinessSlaActionAnchor];
-
+export type OnbReadinessSlaActionAnchor =
+  (typeof OnbReadinessSlaActionAnchor)[keyof typeof OnbReadinessSlaActionAnchor];
 
 export const OnbReadinessSlaActionAnchor = {
-  joining: 'joining',
-  'action-start': 'action-start',
-  'payroll-cutoff': 'payroll-cutoff',
+  joining: "joining",
+  "action-start": "action-start",
+  "payroll-cutoff": "payroll-cutoff",
 } as const;
 
-export type OnbReadinessSlaActionCalendar = typeof OnbReadinessSlaActionCalendar[keyof typeof OnbReadinessSlaActionCalendar];
-
+export type OnbReadinessSlaActionCalendar =
+  (typeof OnbReadinessSlaActionCalendar)[keyof typeof OnbReadinessSlaActionCalendar];
 
 export const OnbReadinessSlaActionCalendar = {
-  days: 'days',
-  businessDays: 'businessDays',
+  days: "days",
+  businessDays: "businessDays",
 } as const;
 
 export interface OnbReadinessSlaAction {
   /**
-     * @minLength 1
-     * @maxLength 64
-     */
+   * @minLength 1
+   * @maxLength 64
+   */
   key: string;
   streamKey: OnbReadinessSlaActionStreamKey;
   /**
-     * @minLength 1
-     * @maxLength 200
-     */
+   * @minLength 1
+   * @maxLength 200
+   */
   label: string;
   /**
-     * @minLength 1
-     * @maxLength 200
-     */
+   * @minLength 1
+   * @maxLength 200
+   */
   owner: string;
   /** @nullable */
   backupEmail: string | null;
@@ -5057,29 +5227,29 @@ export interface OnbReadinessSlaAction {
   mandatory: boolean;
   anchor: OnbReadinessSlaActionAnchor;
   /**
-     * @minimum -3650
-     * @maximum 3650
-     */
+   * @minimum -3650
+   * @maximum 3650
+   */
   offsetDays: number;
   /** @pattern ^(?:[01]\d|2[0-3]):[0-5]\d$ */
   deadlineLocalTime: string;
   /**
-     * @minLength 1
-     * @maxLength 100
-     */
+   * @minLength 1
+   * @maxLength 100
+   */
   timezone: string;
   calendar: OnbReadinessSlaActionCalendar;
   /** @items.pattern ^\d{4}-\d{2}-\d{2}$ */
   holidayDates: string[];
   /**
-     * @minimum 0
-     * @maximum 8760
-     */
+   * @minimum 0
+   * @maximum 8760
+   */
   warnHours: number;
   /**
-     * @minimum 0
-     * @maximum 8760
-     */
+   * @minimum 0
+   * @maximum 8760
+   */
   escalationAfterHours: number;
   notifyInApp: boolean;
   notifyEmail: boolean;
@@ -5087,14 +5257,14 @@ export interface OnbReadinessSlaAction {
 
 export interface OnbReadinessSlaPolicy {
   /**
-     * @minItems 5
-     * @maxItems 5
-     */
+   * @minItems 5
+   * @maxItems 5
+   */
   streams: OnbReadinessSlaStream[];
   /**
-     * @minItems 1
-     * @maxItems 50
-     */
+   * @minItems 1
+   * @maxItems 50
+   */
   actions: OnbReadinessSlaAction[];
 }
 
@@ -5110,34 +5280,34 @@ export interface OnbReadinessSlaPolicyUpdate {
   policy: OnbReadinessSlaPolicy;
 }
 
-export type OnbReadinessSlaStreamViewKey = typeof OnbReadinessSlaStreamViewKey[keyof typeof OnbReadinessSlaStreamViewKey];
-
+export type OnbReadinessSlaStreamViewKey =
+  (typeof OnbReadinessSlaStreamViewKey)[keyof typeof OnbReadinessSlaStreamViewKey];
 
 export const OnbReadinessSlaStreamViewKey = {
-  documentation: 'documentation',
-  bgv: 'bgv',
-  hris: 'hris',
-  'it-assets': 'it-assets',
-  payroll: 'payroll',
+  documentation: "documentation",
+  bgv: "bgv",
+  hris: "hris",
+  "it-assets": "it-assets",
+  payroll: "payroll",
 } as const;
 
-export type OnbReadinessSlaStreamViewStatus = typeof OnbReadinessSlaStreamViewStatus[keyof typeof OnbReadinessSlaStreamViewStatus];
-
+export type OnbReadinessSlaStreamViewStatus =
+  (typeof OnbReadinessSlaStreamViewStatus)[keyof typeof OnbReadinessSlaStreamViewStatus];
 
 export const OnbReadinessSlaStreamViewStatus = {
-  complete: 'complete',
-  incomplete: 'incomplete',
-  'not-applicable': 'not-applicable',
-  'needs-configuration': 'needs-configuration',
+  complete: "complete",
+  incomplete: "incomplete",
+  "not-applicable": "not-applicable",
+  "needs-configuration": "needs-configuration",
 } as const;
 
 export interface OnbReadinessSlaStreamView {
   key: OnbReadinessSlaStreamViewKey;
   label: string;
   /**
-     * @minimum 0
-     * @maximum 100
-     */
+   * @minimum 0
+   * @maximum 100
+   */
   weight: number;
   applicable: boolean;
   status: OnbReadinessSlaStreamViewStatus;
@@ -5150,16 +5320,16 @@ export interface OnbReadinessSlaStreamView {
   completedAt: string | null;
 }
 
-export type OnbReadinessSlaActionViewStatus = typeof OnbReadinessSlaActionViewStatus[keyof typeof OnbReadinessSlaActionViewStatus];
-
+export type OnbReadinessSlaActionViewStatus =
+  (typeof OnbReadinessSlaActionViewStatus)[keyof typeof OnbReadinessSlaActionViewStatus];
 
 export const OnbReadinessSlaActionViewStatus = {
-  scheduled: 'scheduled',
-  warning: 'warning',
-  breach: 'breach',
-  escalated: 'escalated',
-  resolved: 'resolved',
-  'needs-configuration': 'needs-configuration',
+  scheduled: "scheduled",
+  warning: "warning",
+  breach: "breach",
+  escalated: "escalated",
+  resolved: "resolved",
+  "needs-configuration": "needs-configuration",
 } as const;
 
 export interface OnbReadinessSlaActionView {
@@ -5189,13 +5359,13 @@ export interface OnbReadinessSlaHistory {
   rationale: string;
 }
 
-export type OnbReadinessSlaViewBand = typeof OnbReadinessSlaViewBand[keyof typeof OnbReadinessSlaViewBand];
-
+export type OnbReadinessSlaViewBand =
+  (typeof OnbReadinessSlaViewBand)[keyof typeof OnbReadinessSlaViewBand];
 
 export const OnbReadinessSlaViewBand = {
-  green: 'green',
-  amber: 'amber',
-  red: 'red',
+  green: "green",
+  amber: "amber",
+  red: "red",
 } as const;
 
 export type OnbReadinessSlaViewThresholds = {
@@ -5208,19 +5378,19 @@ export interface OnbReadinessSlaView {
   caseId: number;
   enrolled: boolean;
   /**
-     * @minimum 1
-     * @nullable
-     */
+   * @minimum 1
+   * @nullable
+   */
   snapshotVersion: number | null;
   /**
-     * @minimum 0
-     * @nullable
-     */
+   * @minimum 0
+   * @nullable
+   */
   policyVersion: number | null;
   /**
-     * @minimum 0
-     * @maximum 100
-     */
+   * @minimum 0
+   * @maximum 100
+   */
   score: number;
   band: OnbReadinessSlaViewBand;
   passes: boolean;
@@ -5238,17 +5408,17 @@ export interface OnbReadinessSlaPayrollCutoffInput {
   expectedSnapshotVersion: number;
   payrollCutoff: string;
   /**
-     * @minLength 1
-     * @maxLength 1000
-     */
+   * @minLength 1
+   * @maxLength 1000
+   */
   reason: string;
 }
 
-export type OnbReadinessSlaAttestationInputStream = typeof OnbReadinessSlaAttestationInputStream[keyof typeof OnbReadinessSlaAttestationInputStream];
-
+export type OnbReadinessSlaAttestationInputStream =
+  (typeof OnbReadinessSlaAttestationInputStream)[keyof typeof OnbReadinessSlaAttestationInputStream];
 
 export const OnbReadinessSlaAttestationInputStream = {
-  hris: 'hris',
+  hris: "hris",
 } as const;
 
 export interface OnbReadinessSlaAttestationInput {
@@ -5257,9 +5427,9 @@ export interface OnbReadinessSlaAttestationInput {
   /** @minimum 1 */
   expectedSnapshotVersion: number;
   /**
-     * @minLength 1
-     * @maxLength 1000
-     */
+   * @minLength 1
+   * @maxLength 1000
+   */
   reason: string;
 }
 
@@ -5267,9 +5437,9 @@ export interface OnbReadinessSlaRebaseInput {
   /** @minimum 1 */
   expectedSnapshotVersion: number;
   /**
-     * @minLength 1
-     * @maxLength 1000
-     */
+   * @minLength 1
+   * @maxLength 1000
+   */
   reason: string;
 }
 
@@ -5327,29 +5497,29 @@ export interface PricingRateSetInput {
 
 export interface DemoScenarioChoice {
   /**
-     * @minLength 1
-     * @maxLength 80
-     */
+   * @minLength 1
+   * @maxLength 80
+   */
   key: string;
   title: string;
   description: string;
   expectedBehaviour: string;
 }
 
-export type DemoControllerVolunteerChannelPreference = typeof DemoControllerVolunteerChannelPreference[keyof typeof DemoControllerVolunteerChannelPreference];
-
+export type DemoControllerVolunteerChannelPreference =
+  (typeof DemoControllerVolunteerChannelPreference)[keyof typeof DemoControllerVolunteerChannelPreference];
 
 export const DemoControllerVolunteerChannelPreference = {
-  email: 'email',
-  whatsapp: 'whatsapp',
-  both: 'both',
+  email: "email",
+  whatsapp: "whatsapp",
+  both: "both",
 } as const;
 
 export interface DemoControllerVolunteer {
   /**
-     * Server-derived stable identifier; clients cannot use it to change volunteer records.
-     * @minLength 1
-     */
+   * Server-derived stable identifier; clients cannot use it to change volunteer records.
+   * @minLength 1
+   */
   id: string;
   name: string;
   email: string;
@@ -5363,40 +5533,40 @@ export interface DemoControllerVolunteer {
   capabilityReason: string | null;
 }
 
-export type DemoControllerCapabilitiesDefaultMode = typeof DemoControllerCapabilitiesDefaultMode[keyof typeof DemoControllerCapabilitiesDefaultMode];
-
+export type DemoControllerCapabilitiesDefaultMode =
+  (typeof DemoControllerCapabilitiesDefaultMode)[keyof typeof DemoControllerCapabilitiesDefaultMode];
 
 export const DemoControllerCapabilitiesDefaultMode = {
-  hybrid: 'hybrid',
+  hybrid: "hybrid",
 } as const;
 
-export type DemoControllerCapabilitiesAllowedSystemsItem = typeof DemoControllerCapabilitiesAllowedSystemsItem[keyof typeof DemoControllerCapabilitiesAllowedSystemsItem];
-
+export type DemoControllerCapabilitiesAllowedSystemsItem =
+  (typeof DemoControllerCapabilitiesAllowedSystemsItem)[keyof typeof DemoControllerCapabilitiesAllowedSystemsItem];
 
 export const DemoControllerCapabilitiesAllowedSystemsItem = {
-  bgv: 'bgv',
-  hris: 'hris',
-  access: 'access',
-  assets: 'assets',
-  payroll: 'payroll',
-  learning: 'learning',
+  bgv: "bgv",
+  hris: "hris",
+  access: "access",
+  assets: "assets",
+  payroll: "payroll",
+  learning: "learning",
 } as const;
 
-export type DemoRunSummaryStatus = typeof DemoRunSummaryStatus[keyof typeof DemoRunSummaryStatus];
-
+export type DemoRunSummaryStatus =
+  (typeof DemoRunSummaryStatus)[keyof typeof DemoRunSummaryStatus];
 
 export const DemoRunSummaryStatus = {
-  active: 'active',
-  completed: 'completed',
-  blocked: 'blocked',
-  restarted: 'restarted',
+  active: "active",
+  completed: "completed",
+  blocked: "blocked",
+  restarted: "restarted",
 } as const;
 
-export type DemoRunSummaryMode = typeof DemoRunSummaryMode[keyof typeof DemoRunSummaryMode];
-
+export type DemoRunSummaryMode =
+  (typeof DemoRunSummaryMode)[keyof typeof DemoRunSummaryMode];
 
 export const DemoRunSummaryMode = {
-  hybrid: 'hybrid',
+  hybrid: "hybrid",
 } as const;
 
 export interface DemoRunSummary {
@@ -5433,9 +5603,9 @@ export interface DemoControllerSetupRequest {
   /** @minLength 1 */
   requestId: string;
   /**
-     * Opaque 256-bit value shown only to the authenticated requester.
-     * @minLength 64
-     */
+   * Opaque 256-bit value shown only to the authenticated requester.
+   * @minLength 64
+   */
   approvalValue: string;
   expiresAt: string;
   approved: boolean;
@@ -5454,48 +5624,48 @@ export interface CompleteDemoControllerSetupBody {
   requestId: string;
 }
 
-export type DemoRunInputMode = typeof DemoRunInputMode[keyof typeof DemoRunInputMode];
-
+export type DemoRunInputMode =
+  (typeof DemoRunInputMode)[keyof typeof DemoRunInputMode];
 
 export const DemoRunInputMode = {
-  hybrid: 'hybrid',
+  hybrid: "hybrid",
 } as const;
 
 export interface DemoRunInput {
   /**
-     * @minLength 1
-     * @maxLength 80
-     */
+   * @minLength 1
+   * @maxLength 80
+   */
   scenario: string;
   /**
-     * @minLength 1
-     * @maxLength 200
-     * @nullable
-     */
+   * @minLength 1
+   * @maxLength 200
+   * @nullable
+   */
   volunteerId?: string | null;
   mode?: DemoRunInputMode;
 }
 
-export type DemoWorkflowCheckpointKey = typeof DemoWorkflowCheckpointKey[keyof typeof DemoWorkflowCheckpointKey];
-
+export type DemoWorkflowCheckpointKey =
+  (typeof DemoWorkflowCheckpointKey)[keyof typeof DemoWorkflowCheckpointKey];
 
 export const DemoWorkflowCheckpointKey = {
-  offer: 'offer',
-  documents: 'documents',
-  bgv: 'bgv',
-  systems: 'systems',
-  'hr-approval': 'hr-approval',
-  day1: 'day1',
+  offer: "offer",
+  documents: "documents",
+  bgv: "bgv",
+  systems: "systems",
+  "hr-approval": "hr-approval",
+  day1: "day1",
 } as const;
 
-export type DemoWorkflowCheckpointStatus = typeof DemoWorkflowCheckpointStatus[keyof typeof DemoWorkflowCheckpointStatus];
-
+export type DemoWorkflowCheckpointStatus =
+  (typeof DemoWorkflowCheckpointStatus)[keyof typeof DemoWorkflowCheckpointStatus];
 
 export const DemoWorkflowCheckpointStatus = {
-  pending: 'pending',
-  completed: 'completed',
-  overridden: 'overridden',
-  blocked: 'blocked',
+  pending: "pending",
+  completed: "completed",
+  overridden: "overridden",
+  blocked: "blocked",
 } as const;
 
 export interface DemoWorkflowCheckpoint {
@@ -5505,39 +5675,39 @@ export interface DemoWorkflowCheckpoint {
   reason: string | null;
 }
 
-export type DemoSystemStateSystem = typeof DemoSystemStateSystem[keyof typeof DemoSystemStateSystem];
-
+export type DemoSystemStateSystem =
+  (typeof DemoSystemStateSystem)[keyof typeof DemoSystemStateSystem];
 
 export const DemoSystemStateSystem = {
-  bgv: 'bgv',
-  hris: 'hris',
-  access: 'access',
-  assets: 'assets',
-  payroll: 'payroll',
-  learning: 'learning',
+  bgv: "bgv",
+  hris: "hris",
+  access: "access",
+  assets: "assets",
+  payroll: "payroll",
+  learning: "learning",
 } as const;
 
-export type DemoSystemStateStatus = typeof DemoSystemStateStatus[keyof typeof DemoSystemStateStatus];
-
+export type DemoSystemStateStatus =
+  (typeof DemoSystemStateStatus)[keyof typeof DemoSystemStateStatus];
 
 export const DemoSystemStateStatus = {
-  pending: 'pending',
-  complete: 'complete',
-  exception: 'exception',
-  overdue: 'overdue',
+  pending: "pending",
+  complete: "complete",
+  exception: "exception",
+  overdue: "overdue",
 } as const;
 
 /**
  * @nullable
  */
-export type DemoSystemStateOutcome = typeof DemoSystemStateOutcome[keyof typeof DemoSystemStateOutcome] | null;
-
+export type DemoSystemStateOutcome =
+  (typeof DemoSystemStateOutcome)[keyof typeof DemoSystemStateOutcome] | null;
 
 export const DemoSystemStateOutcome = {
-  pending: 'pending',
-  complete: 'complete',
-  exception: 'exception',
-  overdue: 'overdue',
+  pending: "pending",
+  complete: "complete",
+  exception: "exception",
+  overdue: "overdue",
 } as const;
 
 export interface DemoSystemState {
@@ -5554,18 +5724,18 @@ export interface DemoSystemState {
 export interface DemoClock {
   now: string;
   /**
-     * @minimum 0
-     * @maximum 8760
-     */
+   * @minimum 0
+   * @maximum 8760
+   */
   offsetHours: number;
 }
 
-export type DemoActivityProvenance = typeof DemoActivityProvenance[keyof typeof DemoActivityProvenance];
-
+export type DemoActivityProvenance =
+  (typeof DemoActivityProvenance)[keyof typeof DemoActivityProvenance];
 
 export const DemoActivityProvenance = {
-  simulated: 'simulated',
-  live: 'live',
+  simulated: "simulated",
+  live: "live",
 } as const;
 
 export interface DemoActivity {
@@ -5598,21 +5768,19 @@ export interface DemoCaseMetadata {
   offlineMarker: string;
 }
 
-export type DemoRunMode = typeof DemoRunMode[keyof typeof DemoRunMode];
-
+export type DemoRunMode = (typeof DemoRunMode)[keyof typeof DemoRunMode];
 
 export const DemoRunMode = {
-  hybrid: 'hybrid',
+  hybrid: "hybrid",
 } as const;
 
-export type DemoRunStatus = typeof DemoRunStatus[keyof typeof DemoRunStatus];
-
+export type DemoRunStatus = (typeof DemoRunStatus)[keyof typeof DemoRunStatus];
 
 export const DemoRunStatus = {
-  active: 'active',
-  completed: 'completed',
-  blocked: 'blocked',
-  restarted: 'restarted',
+  active: "active",
+  completed: "completed",
+  blocked: "blocked",
+  restarted: "restarted",
 } as const;
 
 export interface DemoRun {
@@ -5639,102 +5807,103 @@ export interface DemoRun {
   selectedVolunteer: DemoControllerVolunteer | null;
 }
 
-export type DemoRunActionKind = typeof DemoRunActionKind[keyof typeof DemoRunActionKind];
-
+export type DemoRunActionKind =
+  (typeof DemoRunActionKind)[keyof typeof DemoRunActionKind];
 
 export const DemoRunActionKind = {
-  'load-documents': 'load-documents',
-  'system-outcome': 'system-outcome',
-  'advance-time': 'advance-time',
-  advance: 'advance',
-  'override-step': 'override-step',
-  communication: 'communication',
-  restart: 'restart',
+  "load-documents": "load-documents",
+  "system-outcome": "system-outcome",
+  "advance-time": "advance-time",
+  advance: "advance",
+  "override-step": "override-step",
+  communication: "communication",
+  restart: "restart",
 } as const;
 
 /**
  * @nullable
  */
-export type DemoRunActionSystem = typeof DemoRunActionSystem[keyof typeof DemoRunActionSystem] | null;
-
+export type DemoRunActionSystem =
+  (typeof DemoRunActionSystem)[keyof typeof DemoRunActionSystem] | null;
 
 export const DemoRunActionSystem = {
-  bgv: 'bgv',
-  hris: 'hris',
-  access: 'access',
-  assets: 'assets',
-  payroll: 'payroll',
-  learning: 'learning',
+  bgv: "bgv",
+  hris: "hris",
+  access: "access",
+  assets: "assets",
+  payroll: "payroll",
+  learning: "learning",
 } as const;
 
 /**
  * @nullable
  */
-export type DemoRunActionOutcome = typeof DemoRunActionOutcome[keyof typeof DemoRunActionOutcome] | null;
-
+export type DemoRunActionOutcome =
+  (typeof DemoRunActionOutcome)[keyof typeof DemoRunActionOutcome] | null;
 
 export const DemoRunActionOutcome = {
-  pending: 'pending',
-  complete: 'complete',
-  exception: 'exception',
-  overdue: 'overdue',
+  pending: "pending",
+  complete: "complete",
+  exception: "exception",
+  overdue: "overdue",
 } as const;
 
 /**
  * @nullable
  */
-export type DemoRunActionStep = typeof DemoRunActionStep[keyof typeof DemoRunActionStep] | null;
-
+export type DemoRunActionStep =
+  (typeof DemoRunActionStep)[keyof typeof DemoRunActionStep] | null;
 
 export const DemoRunActionStep = {
-  offer: 'offer',
-  documents: 'documents',
-  bgv: 'bgv',
-  systems: 'systems',
-  'hr-approval': 'hr-approval',
-  day1: 'day1',
+  offer: "offer",
+  documents: "documents",
+  bgv: "bgv",
+  systems: "systems",
+  "hr-approval": "hr-approval",
+  day1: "day1",
 } as const;
 
 /**
  * @nullable
  */
-export type DemoRunActionChannel = typeof DemoRunActionChannel[keyof typeof DemoRunActionChannel] | null;
-
+export type DemoRunActionChannel =
+  (typeof DemoRunActionChannel)[keyof typeof DemoRunActionChannel] | null;
 
 export const DemoRunActionChannel = {
-  email: 'email',
-  call: 'call',
+  email: "email",
+  call: "call",
 } as const;
 
 /**
  * @nullable
  */
-export type DemoRunActionMode = typeof DemoRunActionMode[keyof typeof DemoRunActionMode] | null;
-
+export type DemoRunActionMode =
+  (typeof DemoRunActionMode)[keyof typeof DemoRunActionMode] | null;
 
 export const DemoRunActionMode = {
-  live: 'live',
-  simulated: 'simulated',
+  live: "live",
+  simulated: "simulated",
 } as const;
 
 /**
  * @nullable
  */
-export type DemoRunActionLiveConfirmation = typeof DemoRunActionLiveConfirmation[keyof typeof DemoRunActionLiveConfirmation] | null;
-
+export type DemoRunActionLiveConfirmation =
+  | (typeof DemoRunActionLiveConfirmation)[keyof typeof DemoRunActionLiveConfirmation]
+  | null;
 
 export const DemoRunActionLiveConfirmation = {
-  I_UNDERSTAND_LIVE_DEMO: 'I_UNDERSTAND_LIVE_DEMO',
+  I_UNDERSTAND_LIVE_DEMO: "I_UNDERSTAND_LIVE_DEMO",
 } as const;
 
 export interface DemoRunAction {
   /** @minimum 0 */
   expectedVersion: number;
   /**
-     * @minLength 36
-     * @maxLength 36
-     * @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
-     */
+   * @minLength 36
+   * @maxLength 36
+   * @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
+   */
   requestId: string;
   kind: DemoRunActionKind;
   /** @nullable */
@@ -5744,15 +5913,15 @@ export interface DemoRunAction {
   /** @nullable */
   step?: DemoRunActionStep;
   /**
-     * @maxLength 1000
-     * @nullable
-     */
+   * @maxLength 1000
+   * @nullable
+   */
   reason?: string | null;
   /**
-     * @minimum 0
-     * @maximum 8760
-     * @nullable
-     */
+   * @minimum 0
+   * @maximum 8760
+   * @nullable
+   */
   hours?: number | null;
   /** @nullable */
   channel?: DemoRunActionChannel;
@@ -5762,18 +5931,18 @@ export interface DemoRunAction {
   liveConfirmation?: DemoRunActionLiveConfirmation;
 }
 
-export type OnbActionCenterCapabilitiesReminderMode = typeof OnbActionCenterCapabilitiesReminderMode[keyof typeof OnbActionCenterCapabilitiesReminderMode];
-
+export type OnbActionCenterCapabilitiesReminderMode =
+  (typeof OnbActionCenterCapabilitiesReminderMode)[keyof typeof OnbActionCenterCapabilitiesReminderMode];
 
 export const OnbActionCenterCapabilitiesReminderMode = {
-  'existing-runner': 'existing-runner',
+  "existing-runner": "existing-runner",
 } as const;
 
-export type OnbActionCenterCapabilitiesAiCallMode = typeof OnbActionCenterCapabilitiesAiCallMode[keyof typeof OnbActionCenterCapabilitiesAiCallMode];
-
+export type OnbActionCenterCapabilitiesAiCallMode =
+  (typeof OnbActionCenterCapabilitiesAiCallMode)[keyof typeof OnbActionCenterCapabilitiesAiCallMode];
 
 export const OnbActionCenterCapabilitiesAiCallMode = {
-  'existing-control': 'existing-control',
+  "existing-control": "existing-control",
 } as const;
 
 export type OnbActionCenterCapabilitiesAiCall = {
@@ -5813,7 +5982,9 @@ export interface OnbActionCenterCounts {
 /**
  * @nullable
  */
-export type OnbActionCenterCaseWorkforceClassification = { [key: string]: unknown } | null;
+export type OnbActionCenterCaseWorkforceClassification = {
+  [key: string]: unknown;
+} | null;
 
 export interface OnbActionCenterCase {
   workerName: string;
@@ -5856,12 +6027,12 @@ export interface OnbActionCenterApproval {
   actions: OnbActionCenterApprovalActions;
 }
 
-export type OnbActionCenterNotificationKind = typeof OnbActionCenterNotificationKind[keyof typeof OnbActionCenterNotificationKind];
-
+export type OnbActionCenterNotificationKind =
+  (typeof OnbActionCenterNotificationKind)[keyof typeof OnbActionCenterNotificationKind];
 
 export const OnbActionCenterNotificationKind = {
-  bgv: 'bgv',
-  operational: 'operational',
+  bgv: "bgv",
+  operational: "operational",
 } as const;
 
 export type OnbActionCenterNotificationCapabilities = {
@@ -5886,13 +6057,13 @@ export interface OnbActionCenterNotification {
   caseHref: string;
 }
 
-export type OnbActionCenterDocumentFollowupAction = typeof OnbActionCenterDocumentFollowupAction[keyof typeof OnbActionCenterDocumentFollowupAction];
-
+export type OnbActionCenterDocumentFollowupAction =
+  (typeof OnbActionCenterDocumentFollowupAction)[keyof typeof OnbActionCenterDocumentFollowupAction];
 
 export const OnbActionCenterDocumentFollowupAction = {
-  remind: 'remind',
-  review: 'review',
-  correction: 'correction',
+  remind: "remind",
+  review: "review",
+  correction: "correction",
 } as const;
 
 export type OnbActionCenterDocumentFollowupCapabilities = {
@@ -5923,19 +6094,19 @@ export interface OnbActionCenterDocumentFollowup {
   caseHref: string;
 }
 
-export type OnbActionCenterWorkItemKind = typeof OnbActionCenterWorkItemKind[keyof typeof OnbActionCenterWorkItemKind];
-
+export type OnbActionCenterWorkItemKind =
+  (typeof OnbActionCenterWorkItemKind)[keyof typeof OnbActionCenterWorkItemKind];
 
 export const OnbActionCenterWorkItemKind = {
-  assign: 'assign',
-  escalate: 'escalate',
+  assign: "assign",
+  escalate: "escalate",
 } as const;
 
-export type OnbActionCenterWorkItemStatus = typeof OnbActionCenterWorkItemStatus[keyof typeof OnbActionCenterWorkItemStatus];
-
+export type OnbActionCenterWorkItemStatus =
+  (typeof OnbActionCenterWorkItemStatus)[keyof typeof OnbActionCenterWorkItemStatus];
 
 export const OnbActionCenterWorkItemStatus = {
-  open: 'open',
+  open: "open",
 } as const;
 
 export type OnbActionCenterWorkItemCapabilities = {
@@ -5978,22 +6149,22 @@ export interface OnbActionCenterCompleted {
   caseHref: string;
 }
 
-export type OnbActionCenterOpportunityPriority = typeof OnbActionCenterOpportunityPriority[keyof typeof OnbActionCenterOpportunityPriority];
-
+export type OnbActionCenterOpportunityPriority =
+  (typeof OnbActionCenterOpportunityPriority)[keyof typeof OnbActionCenterOpportunityPriority];
 
 export const OnbActionCenterOpportunityPriority = {
-  critical: 'critical',
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
+  critical: "critical",
+  high: "high",
+  medium: "medium",
+  low: "low",
 } as const;
 
-export type OnbActionCenterOpportunityBenefitType = typeof OnbActionCenterOpportunityBenefitType[keyof typeof OnbActionCenterOpportunityBenefitType];
-
+export type OnbActionCenterOpportunityBenefitType =
+  (typeof OnbActionCenterOpportunityBenefitType)[keyof typeof OnbActionCenterOpportunityBenefitType];
 
 export const OnbActionCenterOpportunityBenefitType = {
-  'mandatory-checkpoint': 'mandatory-checkpoint',
-  'existing-policy-delta': 'existing-policy-delta',
+  "mandatory-checkpoint": "mandatory-checkpoint",
+  "existing-policy-delta": "existing-policy-delta",
 } as const;
 
 export type OnbActionCenterOpportunityBenefit = {
@@ -6006,7 +6177,7 @@ export type OnbActionCenterOpportunityBenefit = {
 export type OnbActionCenterOpportunityEvidence = {
   source: string;
   [key: string]: unknown;
- };
+};
 
 export type OnbActionCenterOpportunityCapabilities = {
   canAct: boolean;
@@ -6042,29 +6213,29 @@ export interface OnbActionCenter {
   opportunities: OnbActionCenterOpportunity[];
 }
 
-export type OnbActionCenterIdentityValueMailboxType = typeof OnbActionCenterIdentityValueMailboxType[keyof typeof OnbActionCenterIdentityValueMailboxType];
-
+export type OnbActionCenterIdentityValueMailboxType =
+  (typeof OnbActionCenterIdentityValueMailboxType)[keyof typeof OnbActionCenterIdentityValueMailboxType];
 
 export const OnbActionCenterIdentityValueMailboxType = {
-  shared: 'shared',
-  individual: 'individual',
-  'not-configured': 'not-configured',
+  shared: "shared",
+  individual: "individual",
+  "not-configured": "not-configured",
 } as const;
 
-export type OnbActionCenterIdentityValueSource = typeof OnbActionCenterIdentityValueSource[keyof typeof OnbActionCenterIdentityValueSource];
-
+export type OnbActionCenterIdentityValueSource =
+  (typeof OnbActionCenterIdentityValueSource)[keyof typeof OnbActionCenterIdentityValueSource];
 
 export const OnbActionCenterIdentityValueSource = {
-  configured: 'configured',
-  'existing-profile': 'existing-profile',
-  'not-configured': 'not-configured',
+  configured: "configured",
+  "existing-profile": "existing-profile",
+  "not-configured": "not-configured",
 } as const;
 
 export interface OnbActionCenterIdentityValue {
   /**
-     * @maxLength 120
-     * @nullable
-     */
+   * @maxLength 120
+   * @nullable
+   */
   name: string | null;
   mailboxType: OnbActionCenterIdentityValueMailboxType;
   source: OnbActionCenterIdentityValueSource;
@@ -6084,20 +6255,20 @@ export interface OnbActionCenterIdentitySettings {
   identities: OnbActionCenterIdentityMap;
 }
 
-export type OnbActionCenterIdentityInputValueMailboxType = typeof OnbActionCenterIdentityInputValueMailboxType[keyof typeof OnbActionCenterIdentityInputValueMailboxType];
-
+export type OnbActionCenterIdentityInputValueMailboxType =
+  (typeof OnbActionCenterIdentityInputValueMailboxType)[keyof typeof OnbActionCenterIdentityInputValueMailboxType];
 
 export const OnbActionCenterIdentityInputValueMailboxType = {
-  shared: 'shared',
-  individual: 'individual',
-  'not-configured': 'not-configured',
+  shared: "shared",
+  individual: "individual",
+  "not-configured": "not-configured",
 } as const;
 
 export interface OnbActionCenterIdentityInputValue {
   /**
-     * @maxLength 120
-     * @nullable
-     */
+   * @maxLength 120
+   * @nullable
+   */
   name: string | null;
   mailboxType: OnbActionCenterIdentityInputValueMailboxType;
 }
@@ -6116,54 +6287,54 @@ export interface OnbActionCenterIdentitySettingsInput {
   identities: OnbActionCenterIdentityInputMap;
 }
 
-export type OnbActionCenterCallOutcomeInputOutcome = typeof OnbActionCenterCallOutcomeInputOutcome[keyof typeof OnbActionCenterCallOutcomeInputOutcome];
-
+export type OnbActionCenterCallOutcomeInputOutcome =
+  (typeof OnbActionCenterCallOutcomeInputOutcome)[keyof typeof OnbActionCenterCallOutcomeInputOutcome];
 
 export const OnbActionCenterCallOutcomeInputOutcome = {
-  reached: 'reached',
-  'no-answer': 'no-answer',
-  'left-voicemail': 'left-voicemail',
-  'wrong-number': 'wrong-number',
-  scheduled: 'scheduled',
-  declined: 'declined',
-  other: 'other',
+  reached: "reached",
+  "no-answer": "no-answer",
+  "left-voicemail": "left-voicemail",
+  "wrong-number": "wrong-number",
+  scheduled: "scheduled",
+  declined: "declined",
+  other: "other",
 } as const;
 
 export interface OnbActionCenterCallOutcomeInput {
   /**
-     * @minLength 1
-     * @maxLength 128
-     */
+   * @minLength 1
+   * @maxLength 128
+   */
   requestId: string;
   /** @minimum 1 */
   caseId: number;
   outcome: OnbActionCenterCallOutcomeInputOutcome;
   /**
-     * @maxLength 2000
-     * @nullable
-     */
+   * @maxLength 2000
+   * @nullable
+   */
   notes?: string | null;
   /**
-     * @maxLength 120
-     * @nullable
-     */
+   * @maxLength 120
+   * @nullable
+   */
   persona?: string | null;
   selfReported: true;
 }
 
-export type OnbActionCenterReminderInputMode = typeof OnbActionCenterReminderInputMode[keyof typeof OnbActionCenterReminderInputMode];
-
+export type OnbActionCenterReminderInputMode =
+  (typeof OnbActionCenterReminderInputMode)[keyof typeof OnbActionCenterReminderInputMode];
 
 export const OnbActionCenterReminderInputMode = {
-  live: 'live',
-  simulation: 'simulation',
+  live: "live",
+  simulation: "simulation",
 } as const;
 
 export interface OnbActionCenterReminderInput {
   /**
-     * @minLength 1
-     * @maxLength 128
-     */
+   * @minLength 1
+   * @maxLength 128
+   */
   requestId: string;
   /** @minimum 1 */
   caseId: number;
@@ -6172,60 +6343,60 @@ export interface OnbActionCenterReminderInput {
   mode: OnbActionCenterReminderInputMode;
 }
 
-export type OnbActionCenterWorkInputOwner = typeof OnbActionCenterWorkInputOwner[keyof typeof OnbActionCenterWorkInputOwner];
-
+export type OnbActionCenterWorkInputOwner =
+  (typeof OnbActionCenterWorkInputOwner)[keyof typeof OnbActionCenterWorkInputOwner];
 
 export const OnbActionCenterWorkInputOwner = {
-  hr: 'hr',
-  recruiter: 'recruiter',
-  'hiring-manager': 'hiring-manager',
-  'bgv-team': 'bgv-team',
-  documentation: 'documentation',
-  operations: 'operations',
-  compliance: 'compliance',
+  hr: "hr",
+  recruiter: "recruiter",
+  "hiring-manager": "hiring-manager",
+  "bgv-team": "bgv-team",
+  documentation: "documentation",
+  operations: "operations",
+  compliance: "compliance",
 } as const;
 
 export interface OnbActionCenterWorkInput {
   /**
-     * @minLength 1
-     * @maxLength 128
-     */
+   * @minLength 1
+   * @maxLength 128
+   */
   requestId: string;
   /** @minimum 1 */
   caseId: number;
   owner: OnbActionCenterWorkInputOwner;
   /**
-     * @maxLength 200
-     * @nullable
-     */
+   * @maxLength 200
+   * @nullable
+   */
   assignee?: string | null;
   /**
-     * @maxLength 2000
-     * @nullable
-     */
+   * @maxLength 2000
+   * @nullable
+   */
   reason?: string | null;
   /** @minimum 0 */
   expectedVersion: number;
 }
 
-export type OnbActionCenterWorkReassignInputOwner = typeof OnbActionCenterWorkReassignInputOwner[keyof typeof OnbActionCenterWorkReassignInputOwner];
-
+export type OnbActionCenterWorkReassignInputOwner =
+  (typeof OnbActionCenterWorkReassignInputOwner)[keyof typeof OnbActionCenterWorkReassignInputOwner];
 
 export const OnbActionCenterWorkReassignInputOwner = {
-  hr: 'hr',
-  recruiter: 'recruiter',
-  'hiring-manager': 'hiring-manager',
-  'bgv-team': 'bgv-team',
-  documentation: 'documentation',
-  operations: 'operations',
-  compliance: 'compliance',
+  hr: "hr",
+  recruiter: "recruiter",
+  "hiring-manager": "hiring-manager",
+  "bgv-team": "bgv-team",
+  documentation: "documentation",
+  operations: "operations",
+  compliance: "compliance",
 } as const;
 
 export interface OnbActionCenterWorkReassignInput {
   /**
-     * @minLength 1
-     * @maxLength 128
-     */
+   * @minLength 1
+   * @maxLength 128
+   */
   requestId: string;
   /** @minimum 1 */
   caseId: number;
@@ -6233,14 +6404,14 @@ export interface OnbActionCenterWorkReassignInput {
   workItemId: number;
   owner: OnbActionCenterWorkReassignInputOwner;
   /**
-     * @maxLength 200
-     * @nullable
-     */
+   * @maxLength 200
+   * @nullable
+   */
   assignee?: string | null;
   /**
-     * @maxLength 2000
-     * @nullable
-     */
+   * @maxLength 2000
+   * @nullable
+   */
   reason?: string | null;
   /** @minimum 0 */
   expectedVersion: number;
@@ -6248,9 +6419,9 @@ export interface OnbActionCenterWorkReassignInput {
 
 export interface OnbActionCenterWorkResolveInput {
   /**
-     * @minLength 1
-     * @maxLength 128
-     */
+   * @minLength 1
+   * @maxLength 128
+   */
   requestId: string;
   /** @minimum 1 */
   caseId: number;
@@ -6282,15 +6453,15 @@ export interface OnbActionCenterActionResult {
   actionVersion: number;
 }
 
-export type GovernanceDecisionStatus = typeof GovernanceDecisionStatus[keyof typeof GovernanceDecisionStatus];
-
+export type GovernanceDecisionStatus =
+  (typeof GovernanceDecisionStatus)[keyof typeof GovernanceDecisionStatus];
 
 export const GovernanceDecisionStatus = {
-  draft: 'draft',
-  provisional: 'provisional',
-  approved: 'approved',
-  rejected: 'rejected',
-  superseded: 'superseded',
+  draft: "draft",
+  provisional: "provisional",
+  approved: "approved",
+  rejected: "rejected",
+  superseded: "superseded",
 } as const;
 
 export interface GovernanceDecision {
@@ -6306,9 +6477,9 @@ export interface GovernanceDecision {
   /** @nullable */
   reviewDueAt?: string | null;
   /**
-     * @minimum 1
-     * @nullable
-     */
+   * @minimum 1
+   * @nullable
+   */
   approvedRevision?: number | null;
   impactedWorkflows: string[];
   /** @nullable */
@@ -6318,76 +6489,76 @@ export interface GovernanceDecision {
   createdAt: string;
   updatedAt: string;
   [key: string]: unknown;
- }
+}
 
 export interface GovernanceDecisionInput {
   /** @pattern ^[A-Za-z0-9][A-Za-z0-9-]{0,79}$ */
   key: string;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   title: string;
   proposedValue: unknown;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   rationale: string;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   risk: string;
   /**
-     * @minLength 1
-     * @maxLength 64
-     */
+   * @minLength 1
+   * @maxLength 64
+   */
   accountableRole: string;
   /** @nullable */
   reviewDueAt?: string | null;
   /** @maxItems 100 */
   impactedWorkflows?: string[];
   /**
-     * @maxLength 4000
-     * @nullable
-     */
+   * @maxLength 4000
+   * @nullable
+   */
   sourceReference?: string | null;
 }
 
 export interface GovernanceAuthorityAssignmentInput {
   /**
-     * @minLength 1
-     * @maxLength 64
-     */
+   * @minLength 1
+   * @maxLength 64
+   */
   role: string;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   assigneeUserId: string;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   verificationReference: string;
 }
 
 export interface GovernanceAuthorityNominationInput {
   /**
-     * @minLength 1
-     * @maxLength 64
-     */
+   * @minLength 1
+   * @maxLength 64
+   */
   role: string;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   assigneeUserId: string;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   assignmentReason: string;
   /** @nullable */
   expiresAt?: string | null;
@@ -6401,7 +6572,9 @@ export interface GovernanceDecisionResponse {
   decision: GovernanceDecision;
 }
 
-export type GovernanceDecisionHistoryResponseReviewsItem = { [key: string]: unknown };
+export type GovernanceDecisionHistoryResponseReviewsItem = {
+  [key: string]: unknown;
+};
 
 export interface GovernanceDecisionHistoryResponse {
   revisions: GovernanceDecision[];
@@ -6415,13 +6588,13 @@ export interface GovernanceDecisionReviewResponse {
   review: GovernanceDecisionReviewResponseReview;
 }
 
-export type GovernanceRequirementCoverageState = typeof GovernanceRequirementCoverageState[keyof typeof GovernanceRequirementCoverageState];
-
+export type GovernanceRequirementCoverageState =
+  (typeof GovernanceRequirementCoverageState)[keyof typeof GovernanceRequirementCoverageState];
 
 export const GovernanceRequirementCoverageState = {
-  gap: 'gap',
-  partial: 'partial',
-  covered: 'covered',
+  gap: "gap",
+  partial: "partial",
+  covered: "covered",
 } as const;
 
 export type GovernanceRequirementCoverage = {
@@ -6447,7 +6620,7 @@ export interface GovernanceRequirement {
   version: number;
   updatedAt: string;
   [key: string]: unknown;
- }
+}
 
 export interface GovernanceRequirementsResponse {
   requirements: GovernanceRequirement[];
@@ -6457,12 +6630,12 @@ export interface GovernanceRequirementResponse {
   requirement: GovernanceRequirement;
 }
 
-export type GovernanceAssignmentVerificationStatus = typeof GovernanceAssignmentVerificationStatus[keyof typeof GovernanceAssignmentVerificationStatus];
-
+export type GovernanceAssignmentVerificationStatus =
+  (typeof GovernanceAssignmentVerificationStatus)[keyof typeof GovernanceAssignmentVerificationStatus];
 
 export const GovernanceAssignmentVerificationStatus = {
-  pending: 'pending',
-  verified: 'verified',
+  pending: "pending",
+  verified: "verified",
 } as const;
 
 export interface GovernanceAssignment {
@@ -6481,7 +6654,7 @@ export interface GovernanceAssignment {
   revokedByUserId?: string | null;
   createdAt: string;
   [key: string]: unknown;
- }
+}
 
 export interface GovernanceAssignmentsResponse {
   assignments: GovernanceAssignment[];
@@ -6503,47 +6676,429 @@ export interface GovernanceReminderDispatchResponse {
   checkedAt: string;
 }
 
+export interface HrPolicyApplicability {
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  country?: string;
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  workerType?: string;
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  location?: string;
+}
+
+export type HrPolicyApplicabilityInput = HrPolicyApplicability | null;
+
+export type HrPolicyReviewAuthorityRole =
+  (typeof HrPolicyReviewAuthorityRole)[keyof typeof HrPolicyReviewAuthorityRole];
+
+export const HrPolicyReviewAuthorityRole = {
+  "hr-compliance": "hr-compliance",
+  legal: "legal",
+  "occupational-health": "occupational-health",
+  payroll: "payroll",
+} as const;
+
+export type HrPolicyCapabilitiesReviewAuthorityRolesItem = {
+  role: HrPolicyReviewAuthorityRole;
+  current: boolean;
+};
+
+export type HrPolicyCapabilitiesAnswerMode =
+  (typeof HrPolicyCapabilitiesAnswerMode)[keyof typeof HrPolicyCapabilitiesAnswerMode];
+
+export const HrPolicyCapabilitiesAnswerMode = {
+  "approved-ai-only": "approved-ai-only",
+} as const;
+
+export type HrPolicyAudienceRole =
+  (typeof HrPolicyAudienceRole)[keyof typeof HrPolicyAudienceRole];
+
+export const HrPolicyAudienceRole = {
+  owner: "owner",
+  admin: "admin",
+  member: "member",
+} as const;
+
+export interface HrPolicyCapabilities {
+  membershipRole: HrPolicyAudienceRole;
+  canMaintain: boolean;
+  canReview: boolean;
+  canPublish: boolean;
+  reviewAuthorityRoles: HrPolicyCapabilitiesReviewAuthorityRolesItem[];
+  canReviewHistory: boolean;
+  canResolveHandoffs: boolean;
+  answerMode: HrPolicyCapabilitiesAnswerMode;
+  externalDispatch: false;
+}
+
+export type HrPolicyStatus =
+  (typeof HrPolicyStatus)[keyof typeof HrPolicyStatus];
+
+export const HrPolicyStatus = {
+  draft: "draft",
+  in_review: "in_review",
+  published: "published",
+  superseded: "superseded",
+  retired: "retired",
+} as const;
+
+/**
+ * @nullable
+ */
+export type HrPolicyVersionMetadataReviewOutcome =
+  | (typeof HrPolicyVersionMetadataReviewOutcome)[keyof typeof HrPolicyVersionMetadataReviewOutcome]
+  | null;
+
+export const HrPolicyVersionMetadataReviewOutcome = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface HrPolicyVersionMetadata {
+  policyId: string;
+  /** @minimum 1 */
+  version: number;
+  title: string;
+  sourceReference: string;
+  /**
+   * @minItems 1
+   * @maxItems 3
+   */
+  audience: HrPolicyAudienceRole[];
+  applicability: HrPolicyApplicability;
+  reviewAuthorityRole: HrPolicyReviewAuthorityRole;
+  effectiveFrom: string;
+  /** @nullable */
+  effectiveUntil: string | null;
+  /** @nullable */
+  reviewBy: string | null;
+  status: HrPolicyStatus;
+  createdByUserId: string;
+  /** @nullable */
+  reviewedByUserId: string | null;
+  /** @nullable */
+  reviewOutcome: HrPolicyVersionMetadataReviewOutcome;
+  /** @nullable */
+  reviewerVerificationReference: string | null;
+  /** @nullable */
+  publishedAt: string | null;
+  /** @nullable */
+  publisherUserId: string | null;
+  /** @nullable */
+  publicationVerificationReference: string | null;
+  /** @nullable */
+  retiredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HrPolicyResponse {
+  policy: HrPolicyVersionMetadata;
+}
+
+export interface HrPolicyVersionDetailResponse {
+  policy: HrPolicyVersionMetadata;
+  text: string;
+}
+
+export interface HrPolicyListResponse {
+  policies: HrPolicyVersionMetadata[];
+}
+
+export interface HrPolicyHistoryResponse {
+  policies: HrPolicyVersionMetadata[];
+}
+
+export interface HrPolicyCreateInput {
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  sourceReference: string;
+  /**
+   * @minLength 1
+   * @maxLength 40000
+   */
+  text: string;
+  /**
+   * @minItems 1
+   * @maxItems 3
+   */
+  audience: HrPolicyAudienceRole[];
+  applicability?: HrPolicyApplicabilityInput;
+  reviewAuthorityRole: HrPolicyReviewAuthorityRole;
+  effectiveFrom: string;
+  /** @nullable */
+  effectiveUntil?: string | null;
+  /** @nullable */
+  reviewBy?: string | null;
+}
+
+export interface HrPolicyRevisionInput {
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  sourceReference: string;
+  /**
+   * @minLength 1
+   * @maxLength 40000
+   */
+  text: string;
+  /**
+   * @minItems 1
+   * @maxItems 3
+   */
+  audience: HrPolicyAudienceRole[];
+  applicability?: HrPolicyApplicabilityInput;
+  reviewAuthorityRole: HrPolicyReviewAuthorityRole;
+  effectiveFrom: string;
+  /** @nullable */
+  effectiveUntil?: string | null;
+  /** @nullable */
+  reviewBy?: string | null;
+  /** @minimum 1 */
+  expectedVersion: number;
+}
+
+export interface HrPolicySubmitReviewInput {
+  /** @minimum 1 */
+  expectedVersion: number;
+}
+
+export type HrPolicyReviewInputOutcome =
+  (typeof HrPolicyReviewInputOutcome)[keyof typeof HrPolicyReviewInputOutcome];
+
+export const HrPolicyReviewInputOutcome = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface HrPolicyReviewInput {
+  /** @minimum 1 */
+  version: number;
+  outcome: HrPolicyReviewInputOutcome;
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  verificationReference: string;
+}
+
+export type HrPolicyPublishInput = unknown & {
+  /** @minimum 1 */
+  expectedVersion: number;
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  publicationVerificationReference?: string;
+  /**
+   * Backward-compatible alias accepted by the route
+   * @minLength 1
+   * @maxLength 4000
+   */
+  reviewerDecisionRef?: string;
+};
+
+export interface HrPolicySupersedeInput {
+  /** @minimum 1 */
+  version: number;
+  /** @minimum 1 */
+  replacementVersion: number;
+}
+
+export interface HrPolicyRetireInput {
+  /** @minimum 1 */
+  version: number;
+}
+
+export interface HrPolicyAnswerInput {
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  question: string;
+  /** @nullable */
+  appliesOn?: string | null;
+  applicability?: HrPolicyApplicabilityInput;
+}
+
+export type HrPolicyAnswerLimitationCode =
+  (typeof HrPolicyAnswerLimitationCode)[keyof typeof HrPolicyAnswerLimitationCode];
+
+export const HrPolicyAnswerLimitationCode = {
+  OUTDATED_REVIEW: "OUTDATED_REVIEW",
+  FUTURE_EFFECTIVE: "FUTURE_EFFECTIVE",
+  OUTDATED_EFFECTIVE: "OUTDATED_EFFECTIVE",
+  NOT_EFFECTIVE_ON_SELECTED_DATE: "NOT_EFFECTIVE_ON_SELECTED_DATE",
+  MISSING_OR_INSUFFICIENT_SOURCE: "MISSING_OR_INSUFFICIENT_SOURCE",
+  CONFLICTING_SOURCES: "CONFLICTING_SOURCES",
+  SOURCE_CHANGED: "SOURCE_CHANGED",
+  UNTRUSTED_SOURCE_CONTENT: "UNTRUSTED_SOURCE_CONTENT",
+  INSUFFICIENT_SUPPORT: "INSUFFICIENT_SUPPORT",
+} as const;
+
+export interface HrPolicyAnswerLimitation {
+  code: HrPolicyAnswerLimitationCode;
+  message: string;
+}
+
+export interface HrPolicyCitation {
+  policyId: string;
+  /** @minimum 1 */
+  version: number;
+  excerptId: string;
+  text: string;
+  sourceReference: string;
+  effectiveFrom: string;
+}
+
+export interface HrPolicyAnswerResponse {
+  /** @nullable */
+  answer: string | null;
+  limitation: HrPolicyAnswerLimitation | null;
+  citations: HrPolicyCitation[];
+}
+
+export interface HrPolicyCitationExcerpt {
+  policyId: string;
+  /** @minimum 1 */
+  version: number;
+  excerptId: string;
+  text: string;
+  sourceReference: string;
+  effectiveFrom: string;
+  isCurrent: boolean;
+}
+
+export type HrPolicyHandoffStatus =
+  (typeof HrPolicyHandoffStatus)[keyof typeof HrPolicyHandoffStatus];
+
+export const HrPolicyHandoffStatus = {
+  open: "open",
+  resolved: "resolved",
+} as const;
+
+export interface HrPolicyHandoff {
+  /** @minimum 1 */
+  id: number;
+  organizationId: string;
+  requesterUserId: string;
+  fingerprint: string;
+  question: string;
+  /** @nullable */
+  appliesOn: string | null;
+  applicability: HrPolicyApplicability;
+  status: HrPolicyHandoffStatus;
+  /** @nullable */
+  resolvedByUserId: string | null;
+  /**
+   * @minimum 1
+   * @nullable
+   */
+  resolverAuthorityAssignmentId: number | null;
+  /** @nullable */
+  resolution: string | null;
+  /** @nullable */
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HrPolicyHandoffListResponse {
+  handoffs: HrPolicyHandoff[];
+}
+
+export interface HrPolicyHandoffCreateInput {
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  question: string;
+  /** @nullable */
+  appliesOn?: string | null;
+  applicability?: HrPolicyApplicabilityInput;
+}
+
+export interface HrPolicyHandoffCreateResponse {
+  handoff: HrPolicyHandoff;
+  deduplicated: boolean;
+  externalDispatch: false;
+}
+
+export interface HrPolicyHandoffResolveInput {
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  resolution: string;
+}
+
+export interface HrPolicyHandoffResolveResponse {
+  handoff: HrPolicyHandoff;
+  externalDispatch: false;
+}
+
 export type ReviseGovernanceDecisionBody = {
   /** @minimum 1 */
   expectedRevision: number;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   title?: string;
   proposedValue?: unknown;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   rationale?: string;
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   risk?: string;
   /**
-     * @minLength 1
-     * @maxLength 64
-     */
+   * @minLength 1
+   * @maxLength 64
+   */
   accountableRole?: string;
   /** @nullable */
   reviewDueAt?: string | null;
   /** @maxItems 100 */
   impactedWorkflows?: string[];
   /**
-     * @maxLength 4000
-     * @nullable
-     */
+   * @maxLength 4000
+   * @nullable
+   */
   sourceReference?: string | null;
 };
 
-export type ReviewGovernanceDecisionBodyOutcome = typeof ReviewGovernanceDecisionBodyOutcome[keyof typeof ReviewGovernanceDecisionBodyOutcome];
-
+export type ReviewGovernanceDecisionBodyOutcome =
+  (typeof ReviewGovernanceDecisionBodyOutcome)[keyof typeof ReviewGovernanceDecisionBodyOutcome];
 
 export const ReviewGovernanceDecisionBodyOutcome = {
-  approved: 'approved',
-  rejected: 'rejected',
+  approved: "approved",
+  rejected: "rejected",
 } as const;
 
 export type ReviewGovernanceDecisionBody = {
@@ -6554,13 +7109,13 @@ export type ReviewGovernanceDecisionBody = {
   verificationReference: string;
 };
 
-export type UpdateGovernanceRequirementCoverageBodyCoverageState = typeof UpdateGovernanceRequirementCoverageBodyCoverageState[keyof typeof UpdateGovernanceRequirementCoverageBodyCoverageState];
-
+export type UpdateGovernanceRequirementCoverageBodyCoverageState =
+  (typeof UpdateGovernanceRequirementCoverageBodyCoverageState)[keyof typeof UpdateGovernanceRequirementCoverageBodyCoverageState];
 
 export const UpdateGovernanceRequirementCoverageBodyCoverageState = {
-  gap: 'gap',
-  partial: 'partial',
-  covered: 'covered',
+  gap: "gap",
+  partial: "partial",
+  covered: "covered",
 } as const;
 
 export type UpdateGovernanceRequirementCoverageBody = {
@@ -6579,44 +7134,44 @@ export type UpdateGovernanceRequirementCoverageBody = {
 
 export type VerifyGovernanceAuthorityBody = {
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   verificationReference: string;
 };
 
 export type ListGovernanceHistoryParams = {
-/**
- * @minimum 1
- * @maximum 250
- */
-limit?: number;
+  /**
+   * @minimum 1
+   * @maximum 250
+   */
+  limit?: number;
 };
 
 export type ReconcileGovernanceDispatchBody = {
   /**
-     * @minLength 1
-     * @maxLength 4000
-     */
+   * @minLength 1
+   * @maxLength 4000
+   */
   reconciliationReference: string;
 };
 
 export type ListEaAssessmentsParams = {
-status?: EaAssessmentStatus;
+  status?: EaAssessmentStatus;
 };
 
 export type ListCustomIntentsParams = {
-/**
- * active (default) | all
- */
-status?: string;
+  /**
+   * active (default) | all
+   */
+  status?: string;
 };
 
 export type ExportScenarioWorkbookLinkParams = {
-/**
- * base64url-encoded JSON of {"inputs":ScenarioInputs}.
- */
-q: string;
+  /**
+   * base64url-encoded JSON of {"inputs":ScenarioInputs}.
+   */
+  q: string;
 };
 
 export type ImportScenarioWorkbookBody = {
@@ -6630,14 +7185,14 @@ export type ParseActualsLogBody = {
 };
 
 export type ListOnboardingPolicyRecommendationsParams = {
-/**
- * Case-created-at analysis window. Outcome evidence remains a dated final HR readiness event.
- */
-windowDays?: ListOnboardingPolicyRecommendationsWindowDays;
+  /**
+   * Case-created-at analysis window. Outcome evidence remains a dated final HR readiness event.
+   */
+  windowDays?: ListOnboardingPolicyRecommendationsWindowDays;
 };
 
-export type ListOnboardingPolicyRecommendationsWindowDays = typeof ListOnboardingPolicyRecommendationsWindowDays[keyof typeof ListOnboardingPolicyRecommendationsWindowDays];
-
+export type ListOnboardingPolicyRecommendationsWindowDays =
+  (typeof ListOnboardingPolicyRecommendationsWindowDays)[keyof typeof ListOnboardingPolicyRecommendationsWindowDays];
 
 export const ListOnboardingPolicyRecommendationsWindowDays = {
   NUMBER_30: 30,
@@ -6646,8 +7201,8 @@ export const ListOnboardingPolicyRecommendationsWindowDays = {
   NUMBER_365: 365,
 } as const;
 
-export type RefreshOnboardingPolicyRecommendationsBodyWindowDays = typeof RefreshOnboardingPolicyRecommendationsBodyWindowDays[keyof typeof RefreshOnboardingPolicyRecommendationsBodyWindowDays];
-
+export type RefreshOnboardingPolicyRecommendationsBodyWindowDays =
+  (typeof RefreshOnboardingPolicyRecommendationsBodyWindowDays)[keyof typeof RefreshOnboardingPolicyRecommendationsBodyWindowDays];
 
 export const RefreshOnboardingPolicyRecommendationsBodyWindowDays = {
   NUMBER_30: 30,
@@ -6661,42 +7216,42 @@ export type RefreshOnboardingPolicyRecommendationsBody = {
 };
 
 export type GetOnboardingActionCenterParams = {
-scope?: GetOnboardingActionCenterScope;
-/**
- * @minimum 1
- * @maximum 200
- */
-limit?: number;
-workforce?: GetOnboardingActionCenterWorkforce;
-safetyCritical?: boolean;
-siteExposure?: boolean;
+  scope?: GetOnboardingActionCenterScope;
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
+  limit?: number;
+  workforce?: GetOnboardingActionCenterWorkforce;
+  safetyCritical?: boolean;
+  siteExposure?: boolean;
 };
 
-export type GetOnboardingActionCenterScope = typeof GetOnboardingActionCenterScope[keyof typeof GetOnboardingActionCenterScope];
-
+export type GetOnboardingActionCenterScope =
+  (typeof GetOnboardingActionCenterScope)[keyof typeof GetOnboardingActionCenterScope];
 
 export const GetOnboardingActionCenterScope = {
-  active: 'active',
-  completed: 'completed',
-  all: 'all',
+  active: "active",
+  completed: "completed",
+  all: "all",
 } as const;
 
-export type GetOnboardingActionCenterWorkforce = typeof GetOnboardingActionCenterWorkforce[keyof typeof GetOnboardingActionCenterWorkforce];
-
+export type GetOnboardingActionCenterWorkforce =
+  (typeof GetOnboardingActionCenterWorkforce)[keyof typeof GetOnboardingActionCenterWorkforce];
 
 export const GetOnboardingActionCenterWorkforce = {
-  'white-collar': 'white-collar',
-  'blue-collar-frontline': 'blue-collar-frontline',
-  mixed: 'mixed',
-  'needs-review': 'needs-review',
-  unclassified: 'unclassified',
+  "white-collar": "white-collar",
+  "blue-collar-frontline": "blue-collar-frontline",
+  mixed: "mixed",
+  "needs-review": "needs-review",
+  unclassified: "unclassified",
 } as const;
 
-export type RetryOnboardingEvidenceMalwareScan200MalwareScanState = typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState[keyof typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState];
-
+export type RetryOnboardingEvidenceMalwareScan200MalwareScanState =
+  (typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState)[keyof typeof RetryOnboardingEvidenceMalwareScan200MalwareScanState];
 
 export const RetryOnboardingEvidenceMalwareScan200MalwareScanState = {
-  pending: 'pending',
+  pending: "pending",
 } as const;
 
 export type RetryOnboardingEvidenceMalwareScan200 = {
@@ -6712,13 +7267,13 @@ export type GetDemoVolunteers200 = {
   personas: DemoPersona[];
 };
 
-export type SeedDemoVolunteers200ResultsItemStatus = typeof SeedDemoVolunteers200ResultsItemStatus[keyof typeof SeedDemoVolunteers200ResultsItemStatus];
-
+export type SeedDemoVolunteers200ResultsItemStatus =
+  (typeof SeedDemoVolunteers200ResultsItemStatus)[keyof typeof SeedDemoVolunteers200ResultsItemStatus];
 
 export const SeedDemoVolunteers200ResultsItemStatus = {
-  seeded: 'seeded',
-  skipped: 'skipped',
-  invalid: 'invalid',
+  seeded: "seeded",
+  skipped: "skipped",
+  invalid: "invalid",
 } as const;
 
 export type SeedDemoVolunteers200ResultsItem = {
@@ -6738,12 +7293,12 @@ export type GetOnboardingGuardrails200 = {
   guardrails: Guardrail[];
 };
 
-export type StartOnboardingVoiceCallBodyScenario = typeof StartOnboardingVoiceCallBodyScenario[keyof typeof StartOnboardingVoiceCallBodyScenario];
-
+export type StartOnboardingVoiceCallBodyScenario =
+  (typeof StartOnboardingVoiceCallBodyScenario)[keyof typeof StartOnboardingVoiceCallBodyScenario];
 
 export const StartOnboardingVoiceCallBodyScenario = {
-  'day-before': 'day-before',
-  'sla-escalation': 'sla-escalation',
+  "day-before": "day-before",
+  "sla-escalation": "sla-escalation",
 } as const;
 
 export type StartOnboardingVoiceCallBody = {
@@ -6759,10 +7314,10 @@ export type StartOnboardingVoiceCall200 = {
 };
 
 export type ListOnboardingApprovalsParams = {
-/**
- * pending (default) | all
- */
-status?: string;
+  /**
+   * pending (default) | all
+   */
+  status?: string;
 };
 
 export type BootstrapOnboardingAuthorityGovernanceBody = {
@@ -6779,108 +7334,107 @@ export type RevokeOnboardingAuthorityAssignmentBody = {
 };
 
 export type GetOnboardingOutcomeKpisParams = {
-/**
- * Case-created-at window; this is not a joining-date cohort
- */
-period?: GetOnboardingOutcomeKpisPeriod;
-region?: string;
-hireType?: string;
-domain?: GetOnboardingOutcomeKpisDomain;
+  /**
+   * Case-created-at window; this is not a joining-date cohort
+   */
+  period?: GetOnboardingOutcomeKpisPeriod;
+  region?: string;
+  hireType?: string;
+  domain?: GetOnboardingOutcomeKpisDomain;
 };
 
-export type GetOnboardingOutcomeKpisPeriod = typeof GetOnboardingOutcomeKpisPeriod[keyof typeof GetOnboardingOutcomeKpisPeriod];
-
+export type GetOnboardingOutcomeKpisPeriod =
+  (typeof GetOnboardingOutcomeKpisPeriod)[keyof typeof GetOnboardingOutcomeKpisPeriod];
 
 export const GetOnboardingOutcomeKpisPeriod = {
-  NUMBER_7: '7',
-  NUMBER_30: '30',
-  NUMBER_90: '90',
-  All: 'All',
+  NUMBER_7: "7",
+  NUMBER_30: "30",
+  NUMBER_90: "90",
+  All: "All",
 } as const;
 
-export type GetOnboardingOutcomeKpisDomain = typeof GetOnboardingOutcomeKpisDomain[keyof typeof GetOnboardingOutcomeKpisDomain];
-
+export type GetOnboardingOutcomeKpisDomain =
+  (typeof GetOnboardingOutcomeKpisDomain)[keyof typeof GetOnboardingOutcomeKpisDomain];
 
 export const GetOnboardingOutcomeKpisDomain = {
-  Onboarding: 'Onboarding',
-  All_domains: 'All domains',
+  Onboarding: "Onboarding",
+  All_domains: "All domains",
 } as const;
 
 export type ListOnboardingProtectedAuditParams = {
-from?: string;
-to?: string;
-/**
- * @maxLength 160
- */
-action?: string;
-/**
- * @maxLength 120
- */
-objectType?: string;
-/**
- * @maxLength 200
- */
-objectId?: string;
-/**
- * @maxLength 200
- */
-actorId?: string;
-outcome?: ListOnboardingProtectedAuditOutcome;
-/**
- * @minimum 1
- */
-cursor?: number;
-/**
- * @minimum 1
- * @maximum 500
- */
-limit?: number;
+  from?: string;
+  to?: string;
+  /**
+   * @maxLength 160
+   */
+  action?: string;
+  /**
+   * @maxLength 120
+   */
+  objectType?: string;
+  /**
+   * @maxLength 200
+   */
+  objectId?: string;
+  /**
+   * @maxLength 200
+   */
+  actorId?: string;
+  outcome?: ListOnboardingProtectedAuditOutcome;
+  /**
+   * @minimum 1
+   */
+  cursor?: number;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
 };
 
-export type ListOnboardingProtectedAuditOutcome = typeof ListOnboardingProtectedAuditOutcome[keyof typeof ListOnboardingProtectedAuditOutcome];
-
+export type ListOnboardingProtectedAuditOutcome =
+  (typeof ListOnboardingProtectedAuditOutcome)[keyof typeof ListOnboardingProtectedAuditOutcome];
 
 export const ListOnboardingProtectedAuditOutcome = {
-  attempted: 'attempted',
-  success: 'success',
-  denied: 'denied',
-  failure: 'failure',
+  attempted: "attempted",
+  success: "success",
+  denied: "denied",
+  failure: "failure",
 } as const;
 
 export type ExportOnboardingProtectedAuditParams = {
-from?: string;
-to?: string;
-/**
- * @maxLength 160
- */
-action?: string;
-/**
- * @maxLength 120
- */
-objectType?: string;
-/**
- * @maxLength 200
- */
-objectId?: string;
-/**
- * @maxLength 200
- */
-actorId?: string;
-outcome?: ExportOnboardingProtectedAuditOutcome;
-/**
- * Continue from the `next_cursor` CSV footer.
- * @minimum 1
- */
-cursor?: number;
+  from?: string;
+  to?: string;
+  /**
+   * @maxLength 160
+   */
+  action?: string;
+  /**
+   * @maxLength 120
+   */
+  objectType?: string;
+  /**
+   * @maxLength 200
+   */
+  objectId?: string;
+  /**
+   * @maxLength 200
+   */
+  actorId?: string;
+  outcome?: ExportOnboardingProtectedAuditOutcome;
+  /**
+   * Continue from the `next_cursor` CSV footer.
+   * @minimum 1
+   */
+  cursor?: number;
 };
 
-export type ExportOnboardingProtectedAuditOutcome = typeof ExportOnboardingProtectedAuditOutcome[keyof typeof ExportOnboardingProtectedAuditOutcome];
-
+export type ExportOnboardingProtectedAuditOutcome =
+  (typeof ExportOnboardingProtectedAuditOutcome)[keyof typeof ExportOnboardingProtectedAuditOutcome];
 
 export const ExportOnboardingProtectedAuditOutcome = {
-  attempted: 'attempted',
-  success: 'success',
-  denied: 'denied',
-  failure: 'failure',
+  attempted: "attempted",
+  success: "success",
+  denied: "denied",
+  failure: "failure",
 } as const;
-

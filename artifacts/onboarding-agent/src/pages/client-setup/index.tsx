@@ -15,6 +15,10 @@ import {
   organizationSetupNavigation,
   organizationSetupNavigationNeedsReload,
 } from './organization-setup-navigation';
+import {
+  parseAuditArchiveSignupFile,
+  type AuditArchiveSignupConfig,
+} from './audit-archive-config';
 import { StepScope, StepLandscape, StepProcess, StepReview } from './wizard-steps';
 import { Button, PageHeader } from '@/components/ui-shared';
 import {
@@ -27,7 +31,7 @@ import {
   useListIntents,
 } from '@workspace/api-client-react';
 import type { Rollup, Scenario, ScenarioInputs } from '@workspace/api-client-react';
-import { Building2, Check, ChevronRight, Copy, FlaskConical, Users } from 'lucide-react';
+import { Building2, Check, ChevronRight, Copy, FileUp, FlaskConical, Users } from 'lucide-react';
 
 const STEPS = [
   { id: 'scope', label: 'Scope & Scale' },
@@ -429,14 +433,37 @@ function OrganizationSetup({
   const pendingOrganization = loadPendingOrganization();
   const [mode, setMode] = useState<'create' | 'join'>(initialMode);
   const [name, setName] = useState('');
+  const [auditArchive, setAuditArchive] = useState<AuditArchiveSignupConfig>({
+    providerId: '',
+    archiveNamespace: '',
+    retentionPolicyStatementOrReference: '',
+    independentAdministratorContact: '',
+    independentAdministratorRole: '',
+    credentialSecretReferenceName: '',
+  });
   const [joinCode, setJoinCode] = useState('');
   const [createdOrganization, setCreatedOrganization] = useState<OrganizationSummary | null>(
     pendingOrganization?.organization ?? null,
   );
+  const [createdAuditArchiveStatus, setCreatedAuditArchiveStatus] = useState<{
+    configured?: boolean;
+    providerKind?: string;
+    limitation?: string;
+  } | null>(null);
   const [createdJoinCode, setCreatedJoinCode] = useState(pendingOrganization?.joinCode ?? '');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const importAuditArchiveConfiguration = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    try {
+      setAuditArchive(parseAuditArchiveSignupFile(await file.text()));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not import audit archive configuration');
+    }
+  };
 
   const submit = async (kind: 'create' | 'join' | 'demo') => {
     setSaving(true);
@@ -448,7 +475,12 @@ function OrganizationSetup({
           method: 'POST',
           body: JSON.stringify(
             kind === 'create'
-              ? { name }
+              ? {
+                  name,
+                  ...(Object.values(auditArchive).some((value) => value.trim())
+                    ? { auditArchive }
+                    : {}),
+                }
               : kind === 'demo'
                 ? { demo: true }
                 : { joinCode },
@@ -474,6 +506,7 @@ function OrganizationSetup({
         }
         setCreatedOrganization(organization);
         setCreatedJoinCode(result.joinCode);
+        setCreatedAuditArchiveStatus(result.auditArchive ?? null);
         return;
       }
       onReady(organization);
@@ -549,6 +582,16 @@ function OrganizationSetup({
               <p className="mt-3 text-xs leading-5 text-slate-600">
                 Send this code to teammates you want to invite. They can enter it under “Join workspace.”
               </p>
+              <div className="mt-4 rounded-md border border-indigo-200 bg-white/70 p-3 text-xs leading-5 text-slate-600">
+                <p className="font-semibold text-slate-800">
+                  Independent audit archive:{' '}
+                  {createdAuditArchiveStatus?.configured ? 'configured' : 'not launch-ready'}
+                </p>
+                <p className="mt-1">
+                  {createdAuditArchiveStatus?.limitation ||
+                    'No provider is preselected. An approved external adapter, verified receipt, and both restore and legal-hold drills are required.'}
+                </p>
+              </div>
             </div>
             {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             <Button type="button" onClick={continueWithOrganization} className="mt-6 w-full justify-center bg-indigo-600 text-white">
@@ -567,10 +610,55 @@ function OrganizationSetup({
         </div>
 
         {mode === 'create' ? (
-          <label className="block text-sm font-semibold text-slate-700">
-            Organization name
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme People Operations" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-indigo-500" />
-          </label>
+          <>
+            <label className="block text-sm font-semibold text-slate-700">
+              Organization name
+              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme People Operations" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-indigo-500" />
+            </label>
+            <details className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                Independent audit archive (optional)
+              </summary>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                No provider is selected for you. Supply metadata for a client-approved provider after signup.
+                Never enter a credential or secret value; use only an explicit reference such as env:AUDIT_PROVIDER_TOKEN or vault:team/audit/provider.
+              </p>
+              <label className="mt-4 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-indigo-300 bg-white px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">
+                <FileUp className="h-4 w-4" />
+                Import approved provider configuration (.json)
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="sr-only"
+                  onChange={(event) => {
+                    void importAuditArchiveConfiguration(event.target.files?.[0]);
+                    event.currentTarget.value = '';
+                  }}
+                />
+              </label>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {([
+                  ['providerId', 'Provider id'],
+                  ['archiveNamespace', 'Archive namespace'],
+                  ['retentionPolicyStatementOrReference', 'Retention policy statement/reference'],
+                  ['independentAdministratorContact', 'Independent administrator contact'],
+                  ['independentAdministratorRole', 'Independent administrator role'],
+                  ['credentialSecretReferenceName', 'Credential secret reference name only'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="text-xs font-semibold text-slate-600">
+                    {label}
+                    <input
+                      value={auditArchive[key]}
+                      onChange={(event) => setAuditArchive((current) => ({ ...current, [key]: event.target.value }))}
+                      placeholder={key === 'credentialSecretReferenceName' ? 'env:AUDIT_PROVIDER_TOKEN or vault:team/audit/provider' : ''}
+                      autoComplete="off"
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal outline-none focus:border-indigo-500"
+                    />
+                  </label>
+                ))}
+              </div>
+            </details>
+          </>
         ) : (
           <label className="block text-sm font-semibold text-slate-700">
             Join code

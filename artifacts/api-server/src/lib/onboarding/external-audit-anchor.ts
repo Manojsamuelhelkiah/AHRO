@@ -6,8 +6,18 @@ import {
   onbAuditAnchorReceipts,
   onbAuditHeads,
 } from "@workspace/db";
-import type { OnboardingDbTransaction } from "./settings";
 import { logger } from "../logger";
+import {
+  acquireExternalAuditArchiveLock,
+  getExternalAuditArchiveDrills,
+  getExternalAuditArchiveSnapshot,
+  getExternalAuditArchiveSnapshotInTransaction,
+  recordExternalAuditArchiveDrill,
+  type ExternalAuditArchiveDrillKind,
+  type ExternalAuditArchiveDrillReceipt,
+  type ExternalAuditArchiveSnapshot,
+  type OnboardingDbTransaction,
+} from "./settings";
 
 export type AuditAnchorOperation =
   | {
@@ -35,6 +45,8 @@ export type ExternalAnchorReceipt = {
   operationKind: AuditAnchorOperation["kind"];
   idempotencyKey: string;
   organizationId: string;
+  configGeneration: number;
+  archiveNamespace: string;
   checkpointSequence?: number;
   checkpointHash?: string;
   legalHoldActive?: boolean;
@@ -42,6 +54,14 @@ export type ExternalAnchorReceipt = {
   reasonFingerprint?: string;
   proof: string;
   issuedAt: string;
+};
+
+export type ExternalAuditAnchorContext = {
+  organizationId: string;
+  providerId: string;
+  archiveNamespace: string;
+  credentialSecretReferenceName: string;
+  configGeneration: number;
 };
 
 /**
@@ -63,10 +83,13 @@ export interface ExternalAuditAnchorProvider {
    * so a later retry or a higher operation may arrive after that late
    * completion.
    */
-  anchor(operation: AuditAnchorOperation): Promise<ExternalAnchorReceipt>;
-  verifyReceipt(receipt: ExternalAnchorReceipt, operation: AuditAnchorOperation): Promise<boolean>;
+  anchor(operation: AuditAnchorOperation, context: ExternalAuditAnchorContext): Promise<ExternalAnchorReceipt>;
+  verifyReceipt(receipt: ExternalAnchorReceipt, operation: AuditAnchorOperation, context: ExternalAuditAnchorContext): Promise<boolean>;
   /** Reads the provider's current independently held checkpoint, not local DB state. */
-  fetchCurrentCheckpoint(organizationId: string): Promise<ExternalAnchorReceipt | null>;
+  fetchCurrentCheckpoint(organizationId: string, context: ExternalAuditAnchorContext): Promise<ExternalAnchorReceipt | null>;
+  runRestoreDrill?(context: ExternalAuditAnchorContext): Promise<ExternalAuditDrillReceipt>;
+  runLegalHoldDrill?(context: ExternalAuditAnchorContext): Promise<ExternalAuditDrillReceipt>;
+  verifyDrillReceipt?(receipt: ExternalAuditDrillReceipt, context: ExternalAuditAnchorContext): Promise<boolean>;
 }
 
 function stable(value: unknown): string {
@@ -100,7 +123,7 @@ const simulationProvider: ExternalAuditAnchorProvider = {
   id: "simulation",
   kind: "simulated",
   independent: false,
-  async anchor(operation) {
+  async anchor(operation, context) {
     const receipt = {
       receiptVersion: 1,
       providerId: this.id,
@@ -108,6 +131,8 @@ const simulationProvider: ExternalAuditAnchorProvider = {
       operationKind: operation.kind,
       idempotencyKey: operation.idempotencyKey,
       organizationId: operation.organizationId,
+      configGeneration: context.configGeneration,
+      archiveNamespace: context.archiveNamespace,
       ...(operation.kind === "checkpoint"
         ? { checkpointSequence: operation.sequence, checkpointHash: operation.hash }
         : {}),
@@ -142,18 +167,24 @@ const simulationProvider: ExternalAuditAnchorProvider = {
     }
     return receipt;
   },
-  async verifyReceipt(receipt, operation) {
+  async verifyReceipt(receipt, operation, context) {
     return receipt.providerId === this.id &&
       receipt.providerKind === this.kind &&
+      receipt.configGeneration === context.configGeneration &&
+      receipt.archiveNamespace === context.archiveNamespace &&
       receipt.proof === simulationProof(operation);
   },
-  async fetchCurrentCheckpoint(organizationId) {
-    return simulationCheckpoints.get(organizationId) ?? null;
+  async fetchCurrentCheckpoint(organizationId, context) {
+    const receipt = simulationCheckpoints.get(organizationId) ?? null;
+    return receipt &&
+      receipt.configGeneration === context.configGeneration &&
+      receipt.archiveNamespace === context.archiveNamespace
+      ? receipt
+      : null;
   },
 };
 
-let activeProvider: ExternalAuditAnchorProvider = simulationProvider;
-
+const providerRegistry = new Map<string, ExternalAuditAnchorProvider>();
 /** Clients install their independently operated adapter at application boot. */
 export function registerExternalAuditAnchorProvider(provider: ExternalAuditAnchorProvider): void {
   if (
@@ -165,11 +196,11 @@ export function registerExternalAuditAnchorProvider(provider: ExternalAuditAncho
   ) {
     throw new Error("An external anchor provider must declare a non-empty id, kind external, and independent=true");
   }
-  activeProvider = provider;
+  providerRegistry.set(provider.id, provider);
 }
 
 export function resetExternalAuditAnchorProviderForTests(): void {
-  activeProvider = simulationProvider;
+  providerRegistry.clear();
   simulationCheckpoints.clear();
   simulationLegalHolds.clear();
 }
@@ -179,9 +210,47 @@ export function legalHoldReasonFingerprint(reason: string): string {
 }
 
 export function currentExternalAuditAnchorProvider(): Pick<ExternalAuditAnchorProvider, "id" | "kind" | "independent"> {
-  return activeProvider;
+  return simulationProvider;
 }
 
+export type ExternalAuditAnchorResolution = ExternalAuditArchiveSnapshot & {
+  provider: ExternalAuditAnchorProvider | null;
+  providerAvailable: boolean;
+  context: ExternalAuditAnchorContext;
+};
+
+function externalAuditAnchorResolutionFromSnapshot(
+  organizationId: string,
+  snapshot: ExternalAuditArchiveSnapshot,
+): ExternalAuditAnchorResolution {
+  const provider = snapshot.config
+    ? providerRegistry.get(snapshot.config.providerId) ?? null
+    : simulationProvider;
+  return {
+    config: snapshot.config,
+    generation: snapshot.generation,
+    head: snapshot.head,
+    provider,
+    providerAvailable: provider !== null,
+    context: {
+      organizationId,
+      providerId: snapshot.config?.providerId ?? provider?.id ?? simulationProvider.id,
+      archiveNamespace: snapshot.config?.archiveNamespace ?? "",
+      credentialSecretReferenceName: snapshot.config?.credentialSecretReferenceName ?? "",
+      configGeneration: snapshot.generation,
+    },
+  };
+}
+
+async function resolveExternalAuditAnchorInTransaction(
+  tx: OnboardingDbTransaction,
+  organizationId: string,
+): Promise<ExternalAuditAnchorResolution> {
+  return externalAuditAnchorResolutionFromSnapshot(
+    organizationId,
+    await getExternalAuditArchiveSnapshotInTransaction(tx, organizationId),
+  );
+}
 export async function enqueueAuditCheckpointInTransaction(
   tx: OnboardingDbTransaction,
   input: {
@@ -259,16 +328,41 @@ function operationFromOutbox(row: typeof onbAuditAnchorOutbox.$inferSelect): Aud
   throw new Error(`Invalid audit anchor outbox row ${row.id}`);
 }
 
+function providerContextFingerprint(context: ExternalAuditAnchorContext): string {
+  return createHash("sha256").update(stable({
+    providerId: context.providerId,
+    archiveNamespace: context.archiveNamespace,
+    credentialSecretReferenceName: context.credentialSecretReferenceName,
+  })).digest("hex").slice(0, 32);
+}
+
+function operationForProvider(
+  operation: AuditAnchorOperation,
+  context: ExternalAuditAnchorContext,
+): AuditAnchorOperation {
+  return {
+    ...operation,
+    idempotencyKey: `${operation.idempotencyKey}:g${context.configGeneration}:ctx${providerContextFingerprint(context)}`,
+  };
+}
+
 function retryAt(attempts: number, now: Date): Date {
   const delay = Math.min(15 * 60_000, 1_000 * 2 ** Math.min(attempts, 9));
   return new Date(now.getTime() + delay);
 }
 
-function receiptMatchesOperation(receipt: ExternalAnchorReceipt, operation: AuditAnchorOperation): boolean {
+function receiptMatchesOperation(
+  receipt: ExternalAnchorReceipt,
+  operation: AuditAnchorOperation,
+  context: ExternalAuditAnchorContext,
+): boolean {
   if (
     receipt.operationKind !== operation.kind ||
     receipt.organizationId !== operation.organizationId ||
-    receipt.idempotencyKey !== operation.idempotencyKey
+    receipt.idempotencyKey !== operation.idempotencyKey ||
+    receipt.providerId !== context.providerId ||
+    receipt.configGeneration !== context.configGeneration ||
+    receipt.archiveNamespace !== context.archiveNamespace
   ) return false;
   if (operation.kind === "checkpoint") {
     return receipt.checkpointSequence === operation.sequence && receipt.checkpointHash === operation.hash;
@@ -283,7 +377,7 @@ export const externalAnchorProviderTimeoutMs = PROVIDER_CALL_TIMEOUT_MS;
 async function boundedProviderCall<T>(
   operation: Promise<T>,
   label: string,
-  timeoutMs = activeProvider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
+  timeoutMs = PROVIDER_CALL_TIMEOUT_MS,
 ): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
@@ -316,25 +410,46 @@ export async function runAuditAnchorTick(
     eq(onbAuditAnchorOutbox.status, "delivered"),
   ));
   for (const row of deliveredRows) {
+    const resolution = await resolveExternalAuditAnchor(row.organizationId);
+    const provider = resolution.provider;
+    if (!provider) {
+      await db.update(onbAuditAnchorOutbox).set({
+        status: "pending",
+        nextAttemptAt: now,
+        lastError: `missing-provider-adapter:${resolution.context.providerId}`,
+        deliveredAt: null,
+        receiptId: null,
+      }).where(and(
+        eq(onbAuditAnchorOutbox.id, row.id),
+        eq(onbAuditAnchorOutbox.organizationId, row.organizationId),
+        eq(onbAuditAnchorOutbox.status, "delivered"),
+      ));
+      continue;
+    }
     await db.transaction(async (tx) => {
       // This lock covers both provider-transition requeueing and claims. It
       // is intentionally held only for the database transition; provider
       // calls happen after the claim commits so stale-claim fencing remains
       // observable and recoverable by another instance.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`external-audit-anchor:${row.organizationId}`}))`);
-      const [providerReceipt] = await tx.select({ id: onbAuditAnchorReceipts.id })
+      const operation = operationForProvider(operationFromOutbox(row), resolution.context);
+      const [providerReceipt] = await tx.select({
+        id: onbAuditAnchorReceipts.id,
+        receipt: onbAuditAnchorReceipts.receipt,
+      })
         .from(onbAuditAnchorReceipts)
         .where(and(
           eq(onbAuditAnchorReceipts.organizationId, row.organizationId),
-          eq(onbAuditAnchorReceipts.idempotencyKey, row.idempotencyKey),
-          eq(onbAuditAnchorReceipts.providerId, activeProvider.id),
+          eq(onbAuditAnchorReceipts.idempotencyKey, operation.idempotencyKey),
+          eq(onbAuditAnchorReceipts.providerId, provider.id),
+          eq(onbAuditAnchorReceipts.configGeneration, resolution.generation),
         ))
         .limit(1);
       if (!providerReceipt) {
         await tx.update(onbAuditAnchorOutbox).set({
           status: "pending",
           nextAttemptAt: now,
-          lastError: `provider-transition-reanchor:${activeProvider.id}`,
+           lastError: `provider-transition-reanchor:${provider.id}`,
           deliveredAt: null,
           receiptId: null,
         }).where(and(
@@ -400,68 +515,100 @@ export async function runAuditAnchorTick(
     if (!row) continue;
 
     try {
-      const operation = operationFromOutbox(row);
-      const existing = await db.select().from(onbAuditAnchorReceipts).where(and(
-        eq(onbAuditAnchorReceipts.organizationId, row.organizationId),
-        eq(onbAuditAnchorReceipts.idempotencyKey, row.idempotencyKey),
-        eq(onbAuditAnchorReceipts.providerId, activeProvider.id),
-      ));
-      const receipt = existing[0]
-        ? {
-            ...(existing[0].receipt as ExternalAnchorReceipt),
-            receiptVersion: existing[0].receiptVersion,
-            providerId: existing[0].providerId,
-            providerKind: existing[0].providerKind as "simulated" | "external",
-          }
-        : await boundedProviderCall(
-            activeProvider.anchor(operation),
-            `audit anchor provider ${activeProvider.id}`,
-          );
-      const verified = receiptMatchesOperation(receipt, operation) &&
-        await boundedProviderCall(
-          activeProvider.verifyReceipt(receipt, operation),
-          `audit anchor receipt verifier ${activeProvider.id}`,
-        );
-      if (!verified) throw new Error(`Provider receipt verification failed for ${row.id}`);
-
-      let receiptRow = existing[0];
-      if (!receiptRow) {
-        const inserted = await db.insert(onbAuditAnchorReceipts).values({
-          organizationId: row.organizationId,
-          outboxId: row.id,
-          idempotencyKey: row.idempotencyKey,
-          providerId: receipt.providerId,
-          providerKind: receipt.providerKind,
-          receiptVersion: receipt.receiptVersion,
-          checkpointSequence: receipt.checkpointSequence ?? null,
-          checkpointHash: receipt.checkpointHash ?? null,
-          receipt: receipt as unknown as Record<string, unknown>,
-          verifiedAt: new Date(),
-        }).onConflictDoNothing({
-          target: [
-            onbAuditAnchorReceipts.organizationId,
-            onbAuditAnchorReceipts.idempotencyKey,
-            onbAuditAnchorReceipts.providerId,
-          ],
-        }).returning();
-        receiptRow = inserted[0] ?? (await db.select().from(onbAuditAnchorReceipts).where(and(
+      const completed = await db.transaction(async (tx) => {
+        // Hold the archive lock across final resolution, provider invocation,
+        // verification, and evidence persistence. Config replacement therefore
+        // cannot complete between choosing a context and remote dispatch.
+        await acquireExternalAuditArchiveLock(tx, row.organizationId);
+        const resolution = await resolveExternalAuditAnchorInTransaction(tx, row.organizationId);
+        if (!resolution.provider) {
+          await tx.update(onbAuditAnchorOutbox).set({
+            status: "failed",
+            lastError: `missing-provider-adapter:${resolution.context.providerId}`,
+            nextAttemptAt: retryAt(row.attempts, now),
+          }).where(and(
+            eq(onbAuditAnchorOutbox.id, row.id),
+            eq(onbAuditAnchorOutbox.organizationId, row.organizationId),
+            eq(onbAuditAnchorOutbox.status, "sending"),
+            eq(onbAuditAnchorOutbox.attempts, row.attempts),
+          ));
+          return { delivered: false, missingProvider: true };
+        }
+        const provider = resolution.provider;
+        const operation = operationForProvider(operationFromOutbox(row), resolution.context);
+        const existing = await tx.select().from(onbAuditAnchorReceipts).where(and(
           eq(onbAuditAnchorReceipts.organizationId, row.organizationId),
-          eq(onbAuditAnchorReceipts.idempotencyKey, row.idempotencyKey),
-          eq(onbAuditAnchorReceipts.providerId, activeProvider.id),
-        )))[0];
-      }
-      const completed = await db.update(onbAuditAnchorOutbox).set({
-        status: "delivered",
-        receiptId: receiptRow?.id ?? null,
-        deliveredAt: new Date(),
-        nextAttemptAt: new Date(),
-      }).where(and(
-        eq(onbAuditAnchorOutbox.id, row.id),
-        eq(onbAuditAnchorOutbox.organizationId, row.organizationId),
-        eq(onbAuditAnchorOutbox.status, "sending"),
-        eq(onbAuditAnchorOutbox.attempts, row.attempts),
-      )).returning({ id: onbAuditAnchorOutbox.id });
-      if (completed.length > 0) delivered += 1;
+          eq(onbAuditAnchorReceipts.idempotencyKey, operation.idempotencyKey),
+          eq(onbAuditAnchorReceipts.providerId, provider.id),
+          eq(onbAuditAnchorReceipts.configGeneration, resolution.generation),
+        ));
+        const receipt = existing[0]
+          ? {
+              ...(existing[0].receipt as ExternalAnchorReceipt),
+              receiptVersion: existing[0].receiptVersion,
+              providerId: existing[0].providerId,
+              providerKind: existing[0].providerKind as "simulated" | "external",
+              configGeneration: existing[0].configGeneration,
+            }
+          : await boundedProviderCall(
+              provider.anchor(operation, resolution.context),
+              `audit anchor provider ${provider.id}`,
+              provider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
+            );
+        const verified = receiptMatchesOperation(receipt, operation, resolution.context) &&
+          await boundedProviderCall(
+            provider.verifyReceipt(receipt, operation, resolution.context),
+            `audit anchor receipt verifier ${provider.id}`,
+            provider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
+          );
+        if (!verified) throw new Error(`Provider receipt verification failed for ${row.id}`);
+
+        let receiptRow = existing[0];
+        if (!receiptRow) {
+          const inserted = await tx.insert(onbAuditAnchorReceipts).values({
+            organizationId: row.organizationId,
+            outboxId: row.id,
+            idempotencyKey: receipt.idempotencyKey,
+            providerId: receipt.providerId,
+            configGeneration: receipt.configGeneration,
+            providerKind: receipt.providerKind,
+            receiptVersion: receipt.receiptVersion,
+            checkpointSequence: receipt.checkpointSequence ?? null,
+            checkpointHash: receipt.checkpointHash ?? null,
+            receipt: {
+              ...(receipt as unknown as Record<string, unknown>),
+            },
+            verifiedAt: new Date(),
+          }).onConflictDoNothing({
+            target: [
+              onbAuditAnchorReceipts.organizationId,
+              onbAuditAnchorReceipts.idempotencyKey,
+              onbAuditAnchorReceipts.providerId,
+              onbAuditAnchorReceipts.configGeneration,
+            ],
+          }).returning();
+          receiptRow = inserted[0] ?? (await tx.select().from(onbAuditAnchorReceipts).where(and(
+            eq(onbAuditAnchorReceipts.organizationId, row.organizationId),
+            eq(onbAuditAnchorReceipts.idempotencyKey, operation.idempotencyKey),
+            eq(onbAuditAnchorReceipts.providerId, provider.id),
+            eq(onbAuditAnchorReceipts.configGeneration, resolution.generation),
+          )))[0];
+        }
+        const updated = await tx.update(onbAuditAnchorOutbox).set({
+          status: "delivered",
+          receiptId: receiptRow?.id ?? null,
+          deliveredAt: new Date(),
+          nextAttemptAt: new Date(),
+        }).where(and(
+          eq(onbAuditAnchorOutbox.id, row.id),
+          eq(onbAuditAnchorOutbox.organizationId, row.organizationId),
+          eq(onbAuditAnchorOutbox.status, "sending"),
+          eq(onbAuditAnchorOutbox.attempts, row.attempts),
+        )).returning({ id: onbAuditAnchorOutbox.id });
+        return { delivered: updated.length > 0, missingProvider: false };
+      });
+      if (completed.delivered) delivered += 1;
+      if (completed.missingProvider) failed += 1;
     } catch (error) {
       const failedUpdate = await db.update(onbAuditAnchorOutbox).set({
         status: "failed",
@@ -511,6 +658,8 @@ export type ExternalAuditAnchorReviewerFault =
 export async function externalAuditAnchorSafeStatus(
   organizationId: string,
 ): Promise<ExternalAuditAnchorSafeStatus> {
+  const resolution = await resolveExternalAuditAnchor(organizationId);
+  const { config, provider, context } = resolution;
   const [undelivered] = await db
     .select({ id: onbAuditAnchorOutbox.id })
     .from(onbAuditAnchorOutbox)
@@ -531,7 +680,15 @@ export async function externalAuditAnchorSafeStatus(
   };
   // The bundled simulation intentionally cannot represent an independent
   // provider outage. It remains launch-blocking but must not page reviewers.
-  if (activeProvider.kind !== "external" || !activeProvider.independent) return status;
+  // The bundled simulation and a configured-but-unregistered provider are
+  // unavailable for independent reviewer health. The latter must not silently
+  // fall back to simulation.
+  if (
+    !provider ||
+    (config && provider.id !== config.providerId) ||
+    provider.kind !== "external" ||
+    !provider.independent
+  ) return status;
   const [head] = await db.select({
     lastSequence: onbAuditHeads.lastSequence,
     lastHash: onbAuditHeads.lastHash,
@@ -543,7 +700,7 @@ export async function externalAuditAnchorSafeStatus(
   let receipt: ExternalAnchorReceipt | null;
   try {
     receipt = await boundedProviderCall(
-      activeProvider.fetchCurrentCheckpoint(organizationId),
+      provider.fetchCurrentCheckpoint(organizationId, context),
       "audit anchor provider current checkpoint",
     );
     status.providerRead = "ok";
@@ -565,8 +722,8 @@ export async function externalAuditAnchorSafeStatus(
     !Number.isSafeInteger(receipt.checkpointSequence) ||
     receipt.checkpointSequence <= 0 ||
     !receipt.checkpointHash ||
-    receipt.providerId !== activeProvider.id ||
-    receipt.providerKind !== activeProvider.kind ||
+    receipt.providerId !== provider.id ||
+    receipt.providerKind !== provider.kind ||
     receipt.operationKind !== "checkpoint" ||
     receipt.organizationId !== organizationId
   ) {
@@ -584,9 +741,9 @@ export async function externalAuditAnchorSafeStatus(
   };
   try {
     status.receiptVerification =
-      receiptMatchesOperation(receipt, operation) &&
+      receiptMatchesOperation(receipt, operation, context) &&
       await boundedProviderCall(
-        activeProvider.verifyReceipt(receipt, operation),
+        provider.verifyReceipt(receipt, operation, context),
         "audit anchor receipt verifier",
       )
         ? "ok"
@@ -632,25 +789,107 @@ export function compareLocalAndExternalCheckpoint(
 }
 
 /**
+ * Runs a provider-owned drill and records its complete non-secret signed
+ * receipt. A caller cannot mark a drill passed without an adapter response and
+ * its cryptographic verifier.
+ */
+export async function runExternalAuditArchiveDrill(
+  organizationId: string,
+  kind: ExternalAuditArchiveDrillKind,
+): Promise<{ kind: ExternalAuditArchiveDrillKind; providerId: string; passed: boolean }> {
+  const resolution = await resolveExternalAuditAnchor(organizationId);
+  const { config, provider, context } = resolution;
+  if (!config || !provider || provider.kind !== "external" || !provider.independent || provider.id !== config.providerId) {
+    throw new Error("An independently registered provider configuration is required before running an archive drill.");
+  }
+  const run = kind === "restore" ? provider.runRestoreDrill : provider.runLegalHoldDrill;
+  if (!run || !provider.verifyDrillReceipt) {
+    throw new Error(`Provider ${provider.id} does not expose a cryptographically verifiable ${kind} drill.`);
+  }
+  const receipt = await boundedProviderCall(
+    run.call(provider, context),
+    `audit archive ${kind} drill ${provider.id}`,
+    provider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
+  );
+  const passed = receipt.providerId === provider.id &&
+    receipt.organizationId === organizationId &&
+    receipt.configGeneration === resolution.generation &&
+    receipt.archiveNamespace === config.archiveNamespace &&
+    receipt.kind === kind &&
+    receipt.passed &&
+    await boundedProviderCall(
+      provider.verifyDrillReceipt(receipt, context),
+      `audit archive ${kind} drill verifier ${provider.id}`,
+      provider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
+    );
+  if (!passed) throw new Error(`Provider ${provider.id} returned an unverifiable ${kind} drill receipt.`);
+  await recordExternalAuditArchiveDrill(organizationId, {
+    kind,
+    providerId: provider.id,
+    configGeneration: resolution.generation,
+    receipt,
+    recordedAt: new Date().toISOString(),
+  });
+  return { kind, providerId: provider.id, passed: true };
+}
+/**
  * Performs the restore-time comparison by querying the provider's current
  * independently held checkpoint. Local receipt rows are delivery evidence
  * only; they are never used as the provider's current truth.
  */
 export async function externalAnchoringStatus(organizationId: string) {
-  const [head] = await db.select().from(onbAuditHeads).where(eq(onbAuditHeads.organizationId, organizationId));
+  const resolution = await resolveExternalAuditAnchor(organizationId);
+  const { config, provider: configuredProvider, context } = resolution;
+  const head = resolution.head;
+  let drills: Awaited<ReturnType<typeof getExternalAuditArchiveDrills>> = [];
+  let drillsInvalid = false;
+  try {
+    drills = await getExternalAuditArchiveDrills(organizationId);
+  } catch {
+    // Malformed local evidence is fail-closed and remains launch-blocking.
+    drillsInvalid = true;
+  }
+  let restoreDrillPassed = false;
+  let legalHoldDrillPassed = false;
+  if (config && configuredProvider && configuredProvider.id === config.providerId && configuredProvider.verifyDrillReceipt) {
+    for (const drill of drills) {
+      if (
+        drill.providerId !== config.providerId ||
+        drill.configGeneration !== resolution.generation ||
+        drill.receipt.providerId !== config.providerId ||
+        drill.receipt.organizationId !== organizationId ||
+        drill.receipt.configGeneration !== resolution.generation ||
+        drill.receipt.archiveNamespace !== config.archiveNamespace ||
+        drill.receipt.kind !== drill.kind ||
+        drill.receipt.passed !== true
+      ) continue;
+      try {
+        const verifiedDrill = await boundedProviderCall(
+          configuredProvider.verifyDrillReceipt(drill.receipt, context),
+          `audit archive ${drill.kind} drill verifier ${configuredProvider.id}`,
+          configuredProvider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
+        );
+        if (verifiedDrill && drill.kind === "restore") restoreDrillPassed = true;
+        if (verifiedDrill && drill.kind === "legal_hold") legalHoldDrillPassed = true;
+      } catch {
+        // Provider verification outage or signature failure remains blocked.
+      }
+    }
+  }
   let verified = false;
   let fetched: ExternalAnchorReceipt | null = null;
-  if (activeProvider.independent || activeProvider.kind === "simulated") {
+  if (configuredProvider && (configuredProvider.independent || configuredProvider.kind === "simulated")) {
     try {
       fetched = await boundedProviderCall(
-        activeProvider.fetchCurrentCheckpoint(organizationId),
-        `audit anchor provider ${activeProvider.id} current checkpoint`,
+        configuredProvider.fetchCurrentCheckpoint(organizationId, context),
+        `audit anchor provider ${configuredProvider.id} current checkpoint`,
+        configuredProvider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
       );
     } catch {
       fetched = null;
     }
   }
-  if (fetched?.checkpointSequence !== undefined && fetched.checkpointHash !== undefined) {
+  if (configuredProvider && fetched?.checkpointSequence !== undefined && fetched.checkpointHash !== undefined) {
     const operation: AuditAnchorOperation = {
       kind: "checkpoint",
       organizationId,
@@ -662,12 +901,13 @@ export async function externalAnchoringStatus(organizationId: string) {
     };
     const receipt = fetched;
     try {
-      verified = receiptMatchesOperation(receipt, operation) &&
-        receipt.providerId === activeProvider.id &&
-        receipt.providerKind === activeProvider.kind &&
+      verified = receiptMatchesOperation(receipt, operation, context) &&
+        receipt.providerId === configuredProvider.id &&
+        receipt.providerKind === configuredProvider.kind &&
         await boundedProviderCall(
-          activeProvider.verifyReceipt(receipt, operation),
-          `audit anchor receipt verifier ${activeProvider.id}`,
+          configuredProvider.verifyReceipt(receipt, operation, context),
+          `audit anchor receipt verifier ${configuredProvider.id}`,
+          configuredProvider.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS,
         );
     } catch {
       // A verifier outage is evidence of an unverified state, not a reason to
@@ -681,24 +921,69 @@ export async function externalAnchoringStatus(organizationId: string) {
       ? { sequence: fetched.checkpointSequence, hash: fetched.checkpointHash }
       : null,
   );
+  const finalSnapshot = await getExternalAuditArchiveSnapshot(organizationId);
+  const staleSnapshot =
+    finalSnapshot.generation !== resolution.generation ||
+    finalSnapshot.head?.lastSequence !== head?.lastSequence ||
+    finalSnapshot.head?.lastHash !== head?.lastHash;
   // Simulation is useful for delivery/retry tests but is never independent.
-  const configured = activeProvider.kind === "external" &&
-    activeProvider.independent &&
+  const configured = !staleSnapshot && Boolean(config) &&
+    configuredProvider?.kind === "external" &&
+    configuredProvider.independent &&
     verified &&
-    comparison === "match";
+    comparison === "match" &&
+    !drillsInvalid &&
+    restoreDrillPassed &&
+    legalHoldDrillPassed;
   return {
     requiredForLaunch: true as const,
-    providerId: activeProvider.id,
-    providerKind: activeProvider.kind,
+    providerId: configuredProvider?.id ?? config?.providerId ?? "simulation",
+    configuredProviderId: config?.providerId ?? null,
+    configGeneration: resolution.generation,
+    providerKind: (configuredProvider?.kind ?? "unavailable") as "simulated" | "external" | "unavailable",
+    archiveNamespace: config?.archiveNamespace ?? null,
+    retentionPolicyStatementOrReference: config?.retentionPolicyStatementOrReference ?? null,
+    independentAdministratorContact: config?.independentAdministratorContact ?? null,
+    independentAdministratorRole: config?.independentAdministratorRole ?? null,
+    credentialSecretReferenceNameConfigured: Boolean(config?.credentialSecretReferenceName),
     configured,
     verified,
     comparison,
+    restoreDrillPassed,
+    legalHoldDrillPassed,
+    drillsInvalid,
+    staleSnapshot,
     latestSequence: fetched?.checkpointSequence ?? null,
     latestReceiptAt: fetched?.issuedAt ?? null,
     regulatedProductionLaunchBlocked: !configured || comparison !== "match",
     limitation: configured
-      ? "Configured only after an independently operated provider receipt is cryptographically verified; restore checks compare the local head with that receipt."
-      : "Simulation receipts exercise delivery and verification but are not independent protection. Outages leave local audit authoritative, queue delivery for retry, and keep regulated production blocked.",
+      ? "Configured only after an independently operated provider receipt is cryptographically verified and restore/legal-hold drills are recorded passed against that provider."
+      : staleSnapshot
+        ? "Tenant audit head or archive configuration changed while provider verification was in flight; the status is fenced and must be recomputed."
+        : !configuredProvider
+          ? `Configured provider ${config?.providerId ?? "unknown"} is not registered; delivery remains retryable and regulated launch stays blocked.`
+          : "No provider is preselected. Simulation receipts exercise delivery and verification but are not independent protection; both provider drills must have fresh provider verification and remain required for regulated launch.",
     recommendedOutageBehavior: "Continue local append-only capture, retry the durable outbox with idempotency, alert reviewers, and do not claim regulated protection until verification and local/external comparison recover.",
   };
 }
+
+/** Resolve config, generation, adapter, and context from one fenced snapshot. */
+export async function resolveExternalAuditAnchor(
+  organizationId: string,
+): Promise<ExternalAuditAnchorResolution> {
+  return externalAuditAnchorResolutionFromSnapshot(
+    organizationId,
+    await getExternalAuditArchiveSnapshot(organizationId),
+  );
+}
+
+/** Compatibility helper; dispatch paths use resolveExternalAuditAnchor. */
+export async function resolveExternalAuditAnchorProvider(
+  organizationId: string,
+): Promise<ExternalAuditAnchorProvider> {
+  const provider = (await resolveExternalAuditAnchor(organizationId)).provider;
+  if (!provider) throw new Error("Configured external audit provider is not registered.");
+  return provider;
+}
+
+export type ExternalAuditDrillReceipt = ExternalAuditArchiveDrillReceipt;

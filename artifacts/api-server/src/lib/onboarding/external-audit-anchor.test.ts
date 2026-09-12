@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import { afterEach, test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { DEMO_ORGANIZATION_ID, onbAuditHeads, onbSettings } from "@workspace/db/schema";
+import {
+  DEMO_ORGANIZATION_ID,
+  onbAuditHeads,
+  onbSettings,
+  organizationsTable,
+} from "@workspace/db/schema";
 import {
   compareLocalAndExternalCheckpoint,
   currentExternalAuditAnchorProvider,
@@ -12,6 +17,7 @@ import {
   registerExternalAuditAnchorProvider,
   resetExternalAuditAnchorProviderForTests,
 } from "./external-audit-anchor";
+import { saveExternalAuditArchiveConfig } from "./settings";
 import {
   getExternalAuditAnchorReviewerAmbiguousDeliveries,
   getExternalAuditAnchorReviewerAlertStatus,
@@ -30,9 +36,11 @@ afterEach(async () => {
       eq(onbSettings.key, key),
     )),
   ));
-  await Promise.all(anchorHealthOrganizations.splice(0).map((organizationId) =>
-    db.delete(onbAuditHeads).where(eq(onbAuditHeads.organizationId, organizationId)),
-  ));
+  await Promise.all(anchorHealthOrganizations.splice(0).map(async (organizationId) => {
+    await db.delete(onbAuditHeads).where(eq(onbAuditHeads.organizationId, organizationId));
+    await db.delete(onbSettings).where(eq(onbSettings.organizationId, organizationId));
+    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+  }));
 });
 
 function reviewerTestDeps(
@@ -92,6 +100,13 @@ test("a broken or empty local chain can never be launch-unblocked", () => {
 test("safe health fails a clear outbox when the independent provider checkpoint is absent, stale, divergent, or malformed", async () => {
   const organizationId = randomUUID();
   anchorHealthOrganizations.push(organizationId);
+  await db.insert(organizationsTable).values({
+    id: organizationId,
+    name: "External anchor health test",
+    slug: `external-anchor-health-${organizationId}`,
+    joinCodeHash: `external-anchor-health-${organizationId}`,
+    createdByUserId: "external-anchor-health-test",
+  });
   await db.insert(onbAuditHeads).values({ organizationId, lastSequence: 3, lastHash: "local-head" });
   let checkpoint: Record<string, unknown> | null = null;
   registerExternalAuditAnchorProvider({
@@ -100,9 +115,18 @@ test("safe health fails a clear outbox when the independent provider checkpoint 
     async verifyReceipt() { return true; },
     async fetchCurrentCheckpoint() { return checkpoint as never; },
   });
+  await saveExternalAuditArchiveConfig(organizationId, {
+    providerId: "health-test-provider",
+    archiveNamespace: `${organizationId}:archive`,
+    retentionPolicyStatementOrReference: "health test policy reference",
+    independentAdministratorContact: "health-test-admin@example.test",
+    independentAdministratorRole: "health test archive administrator",
+    credentialSecretReferenceName: "env:HEALTH_TEST_PROVIDER_TOKEN",
+  });
   const receipt = (sequence: number, hash: string) => ({
     receiptVersion: 1, providerId: "health-test-provider", providerKind: "external" as const,
     operationKind: "checkpoint" as const, organizationId, idempotencyKey: `health:${sequence}:${hash}`,
+    configGeneration: 1, archiveNamespace: `${organizationId}:archive`,
     checkpointSequence: sequence, checkpointHash: hash, retentionStatementPresent: false,
     legalHoldActive: false, proof: "opaque", issuedAt: new Date().toISOString(),
   });

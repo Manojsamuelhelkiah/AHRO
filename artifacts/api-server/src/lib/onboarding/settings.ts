@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import {
   onbCases,
+  onbAuditHeads,
   onbChecklistTemplates,
   onbSettings,
   type OnbChecklistTemplateItem,
@@ -45,6 +46,327 @@ export const CANDIDATE_LINK_RETENTION_DAYS_KEY = "candidate_link_retention_days"
 export const DEFAULT_CANDIDATE_LINK_RETENTION_DAYS = 90;
 export const ALLOWED_CANDIDATE_LINK_RETENTION_DAYS = [30, 90, 180, 365] as const;
 export type CandidateLinkRetentionDays = typeof ALLOWED_CANDIDATE_LINK_RETENTION_DAYS[number];
+
+/**
+ * Tenant-owned connection metadata for an independently operated audit
+ * archive. This deliberately contains no credential material: the adapter
+ * resolves credentialSecretReferenceName in its own secret manager.
+ */
+export const EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY = "external_audit_archive_config";
+export const EXTERNAL_AUDIT_ARCHIVE_DRILLS_KEY = "external_audit_archive_drills";
+export const EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY = "external_audit_archive_generation";
+
+export type ExternalAuditArchiveConfig = {
+  providerId: string;
+  archiveNamespace: string;
+  retentionPolicyStatementOrReference: string;
+  independentAdministratorContact: string;
+  independentAdministratorRole: string;
+  credentialSecretReferenceName: string;
+};
+
+const ARCHIVE_CONFIG_FIELDS = new Set([
+  "providerId",
+  "archiveNamespace",
+  "retentionPolicyStatementOrReference",
+  "independentAdministratorContact",
+  "independentAdministratorRole",
+  "credentialSecretReferenceName",
+]);
+const ARCHIVE_SECRET_FIELD = /secret|credential/i;
+
+function archiveText(value: unknown, field: string, max = 500): string {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > max) {
+    throw new Error(`${field} is required and must be a non-empty string of at most ${max} characters.`);
+  }
+  return value.trim();
+}
+
+/**
+ * Strict boundary parser used by organization signup and settings APIs.
+ * Unknown fields are rejected so a caller cannot accidentally send a secret
+ * value under a name we do not understand.
+ */
+export function parseExternalAuditArchiveConfig(input: unknown): ExternalAuditArchiveConfig | null {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("auditArchive must be an object when supplied.");
+  }
+  const record = input as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (!ARCHIVE_CONFIG_FIELDS.has(key) || (ARCHIVE_SECRET_FIELD.test(key) && key !== "credentialSecretReferenceName")) {
+      throw new Error(`Unsupported audit archive field "${key}". Secret values are never accepted.`);
+    }
+  }
+  const parsed: ExternalAuditArchiveConfig = {
+    providerId: archiveText(record.providerId, "providerId", 160),
+    archiveNamespace: archiveText(record.archiveNamespace, "archiveNamespace", 240),
+    retentionPolicyStatementOrReference: archiveText(
+      record.retentionPolicyStatementOrReference,
+      "retentionPolicyStatementOrReference",
+      2_000,
+    ),
+    independentAdministratorContact: archiveText(record.independentAdministratorContact, "independentAdministratorContact", 320),
+    independentAdministratorRole: archiveText(record.independentAdministratorRole, "independentAdministratorRole", 160),
+    credentialSecretReferenceName: archiveText(record.credentialSecretReferenceName, "credentialSecretReferenceName", 240),
+  };
+  if (!/^(env:[A-Z][A-Z0-9_]*|vault:[A-Za-z0-9][A-Za-z0-9_./:-]{0,238})$/.test(parsed.credentialSecretReferenceName)) {
+    throw new Error("credentialSecretReferenceName must use env:UPPER_SNAKE_NAME or vault:path reference syntax, not a secret value.");
+  }
+  return parsed;
+}
+
+export async function getExternalAuditArchiveConfig(
+  organizationId: string,
+): Promise<ExternalAuditArchiveConfig | null> {
+  const stored = await getSetting(organizationId, EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY);
+  if (!stored) return null;
+  try {
+    return parseExternalAuditArchiveConfig(JSON.parse(stored));
+  } catch (error) {
+    // Fail closed and visibly: invalid persisted metadata must not silently
+    // select simulation or invoke an adapter with unsafe configuration.
+    throw new Error(
+      `Stored external audit archive configuration is invalid: ${error instanceof Error ? error.message : "invalid JSON"}`,
+    );
+  }
+}
+
+export type ExternalAuditArchiveDrillKind = "restore" | "legal_hold";
+export type ExternalAuditArchiveDrillReceipt = {
+  providerId: string;
+  organizationId: string;
+  configGeneration: number;
+  archiveNamespace: string;
+  kind: ExternalAuditArchiveDrillKind;
+  passed: true;
+  proof: string;
+  issuedAt: string;
+};
+export type ExternalAuditArchiveDrill = {
+  kind: ExternalAuditArchiveDrillKind;
+  providerId: string;
+  configGeneration: number;
+  receipt: ExternalAuditArchiveDrillReceipt;
+  recordedAt: string;
+};
+
+export function parseExternalAuditArchiveDrills(stored: string | null): ExternalAuditArchiveDrill[] {
+  if (!stored) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch {
+    throw new Error("Stored external audit archive drill records are invalid JSON.");
+  }
+  if (!Array.isArray(parsed)) throw new Error("Stored external audit archive drill records must be an array.");
+  return parsed.map((item, index) => {
+    if (typeof item !== "object" || item === null) {
+      throw new Error(`Stored external audit archive drill ${index} is invalid.`);
+    }
+    const record = item as Record<string, unknown>;
+    if (Object.keys(record).some((key) => !["kind", "providerId", "configGeneration", "receipt", "recordedAt"].includes(key))) {
+      throw new Error(`Stored external audit archive drill ${index} contains unsupported fields.`);
+    }
+    if (record.kind !== "restore" && record.kind !== "legal_hold") {
+      throw new Error(`Stored external audit archive drill ${index} has an invalid kind.`);
+    }
+    if (typeof record.providerId !== "string" || !record.providerId || record.providerId.length > 160 ||
+      !Number.isSafeInteger(record.configGeneration) || (record.configGeneration as number) < 1 ||
+      typeof record.recordedAt !== "string" || !record.recordedAt || record.recordedAt.length > 80 ||
+      Number.isNaN(Date.parse(record.recordedAt))) {
+      throw new Error(`Stored external audit archive drill ${index} has invalid metadata.`);
+    }
+    if (typeof record.receipt !== "object" || record.receipt === null) {
+      throw new Error(`Stored external audit archive drill ${index} is missing its provider receipt.`);
+    }
+    const receipt = record.receipt as Record<string, unknown>;
+    const receiptKeys = ["providerId", "organizationId", "configGeneration", "archiveNamespace", "kind", "passed", "proof", "issuedAt"];
+    if (Object.keys(receipt).some((key) => !receiptKeys.includes(key)) ||
+      Object.keys(receipt).length !== receiptKeys.length ||
+      typeof receipt.providerId !== "string" ||
+      receipt.providerId.length > 160 ||
+      typeof receipt.organizationId !== "string" ||
+      !receipt.organizationId ||
+      receipt.organizationId.length > 200 ||
+      !Number.isSafeInteger(receipt.configGeneration) ||
+      (receipt.configGeneration as number) < 1 ||
+      typeof receipt.archiveNamespace !== "string" ||
+      receipt.archiveNamespace.length > 240 ||
+      (receipt.kind !== "restore" && receipt.kind !== "legal_hold") ||
+      receipt.passed !== true ||
+      typeof receipt.proof !== "string" ||
+      !receipt.proof ||
+      receipt.proof.length > 20_000 ||
+      typeof receipt.issuedAt !== "string" ||
+      !receipt.issuedAt ||
+      receipt.issuedAt.length > 80 ||
+      Number.isNaN(Date.parse(receipt.issuedAt))) {
+      throw new Error(`Stored external audit archive drill ${index} has an invalid provider receipt.`);
+    }
+    return {
+      kind: record.kind,
+      providerId: record.providerId,
+      configGeneration: record.configGeneration as number,
+      receipt: receipt as unknown as ExternalAuditArchiveDrillReceipt,
+      recordedAt: record.recordedAt,
+    };
+  });
+}
+
+export async function getExternalAuditArchiveDrills(
+  organizationId: string,
+): Promise<ExternalAuditArchiveDrill[]> {
+  return parseExternalAuditArchiveDrills(await getSetting(organizationId, EXTERNAL_AUDIT_ARCHIVE_DRILLS_KEY));
+}
+
+export async function acquireExternalAuditArchiveLock(
+  tx: Pick<OnboardingDbTransaction, "execute">,
+  organizationId: string,
+): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`external-audit-archive:${organizationId}`}, 0))`);
+}
+
+async function storedArchiveGeneration(
+  tx: Pick<OnboardingDbTransaction, "select">,
+  organizationId: string,
+): Promise<number> {
+  const [row] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, organizationId),
+    eq(onbSettings.key, EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY),
+  ));
+  const generation = row?.value ? Number(row.value) : 0;
+  if (!Number.isSafeInteger(generation) || generation < 0) {
+    throw new Error("Stored external audit archive generation is invalid.");
+  }
+  return generation;
+}
+
+export type ExternalAuditArchiveSnapshot = {
+  config: ExternalAuditArchiveConfig | null;
+  generation: number;
+  head: typeof onbAuditHeads.$inferSelect | undefined;
+};
+
+export async function getExternalAuditArchiveSnapshot(
+  organizationId: string,
+): Promise<ExternalAuditArchiveSnapshot> {
+  return db.transaction(async (tx) => {
+    await acquireExternalAuditArchiveLock(tx, organizationId);
+    return getExternalAuditArchiveSnapshotInTransaction(tx, organizationId);
+  });
+}
+
+export async function getExternalAuditArchiveSnapshotInTransaction(
+  tx: Pick<OnboardingDbTransaction, "select">,
+  organizationId: string,
+): Promise<ExternalAuditArchiveSnapshot> {
+  const [configRow] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, organizationId),
+    eq(onbSettings.key, EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY),
+  ));
+  let config: ExternalAuditArchiveConfig | null = null;
+  if (configRow?.value) {
+    try {
+      config = parseExternalAuditArchiveConfig(JSON.parse(configRow.value));
+    } catch (error) {
+      throw new Error(`Stored external audit archive configuration is invalid: ${error instanceof Error ? error.message : "invalid JSON"}`);
+    }
+  }
+  const [head] = await tx.select().from(onbAuditHeads).where(eq(onbAuditHeads.organizationId, organizationId));
+  return { config, generation: await storedArchiveGeneration(tx, organizationId), head };
+}
+
+export async function recordExternalAuditArchiveDrill(
+  organizationId: string,
+  drill: ExternalAuditArchiveDrill,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await acquireExternalAuditArchiveLock(tx, organizationId);
+    const [configRow] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+      eq(onbSettings.organizationId, organizationId),
+      eq(onbSettings.key, EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY),
+    ));
+    const [generationRow] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+      eq(onbSettings.organizationId, organizationId),
+      eq(onbSettings.key, EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY),
+    ));
+    const config = configRow?.value ? parseExternalAuditArchiveConfig(JSON.parse(configRow.value)) : null;
+    const generation = generationRow?.value ? Number(generationRow.value) : 0;
+    if (!config ||
+      generation !== drill.configGeneration ||
+      config.providerId !== drill.providerId ||
+      drill.receipt.providerId !== drill.providerId ||
+      drill.receipt.organizationId !== organizationId ||
+      drill.receipt.configGeneration !== generation ||
+      drill.receipt.archiveNamespace !== config.archiveNamespace ||
+      drill.receipt.kind !== drill.kind ||
+      drill.receipt.passed !== true) {
+      throw new Error("A passed drill must be recorded against the current configured tenant provider generation.");
+    }
+    const [existingRow] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+      eq(onbSettings.organizationId, organizationId),
+      eq(onbSettings.key, EXTERNAL_AUDIT_ARCHIVE_DRILLS_KEY),
+    ));
+    const existing = parseExternalAuditArchiveDrills(existingRow?.value ?? null);
+    if (existing.some((item) =>
+      item.kind === drill.kind &&
+      item.providerId === drill.providerId &&
+      item.configGeneration === generation
+    )) {
+      throw new Error(`A ${drill.kind} drill is already recorded for this provider generation.`);
+    }
+    await tx.insert(onbSettings).values({
+      organizationId,
+      key: EXTERNAL_AUDIT_ARCHIVE_DRILLS_KEY,
+      value: JSON.stringify([...existing, drill]),
+    }).onConflictDoUpdate({
+      target: [onbSettings.organizationId, onbSettings.key],
+      set: { value: JSON.stringify([...existing, drill]), updatedAt: sql`now()` },
+    });
+  });
+}
+
+export async function saveExternalAuditArchiveConfig(
+  organizationId: string,
+  input: unknown,
+): Promise<ExternalAuditArchiveConfig | null> {
+  const config = parseExternalAuditArchiveConfig(input);
+  await db.transaction(async (tx) => {
+    await acquireExternalAuditArchiveLock(tx, organizationId);
+    const generation = (await storedArchiveGeneration(tx, organizationId)) + 1;
+    if (config) {
+      await tx.insert(onbSettings).values({
+        organizationId,
+        key: EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY,
+        value: JSON.stringify(config),
+      }).onConflictDoUpdate({
+        target: [onbSettings.organizationId, onbSettings.key],
+        set: { value: JSON.stringify(config), updatedAt: sql`now()` },
+      });
+    } else {
+      await tx.delete(onbSettings).where(and(
+        eq(onbSettings.organizationId, organizationId),
+        eq(onbSettings.key, EXTERNAL_AUDIT_ARCHIVE_CONFIG_KEY),
+      ));
+    }
+    await tx.insert(onbSettings).values({
+      organizationId,
+      key: EXTERNAL_AUDIT_ARCHIVE_GENERATION_KEY,
+      value: String(generation),
+    }).onConflictDoUpdate({
+      target: [onbSettings.organizationId, onbSettings.key],
+      set: { value: String(generation), updatedAt: sql`now()` },
+    });
+    // Drill receipts are bound to the previous provider and namespace. Never
+    // carry them across a config replacement or clear operation.
+    await tx.delete(onbSettings).where(and(
+      eq(onbSettings.organizationId, organizationId),
+      eq(onbSettings.key, EXTERNAL_AUDIT_ARCHIVE_DRILLS_KEY),
+    ));
+  });
+  return config;
+}
 
 export function isAllowedCandidateLinkRetentionDays(value: unknown): value is CandidateLinkRetentionDays {
   return typeof value === "number"

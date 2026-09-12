@@ -353,11 +353,24 @@ export type AuditIntegrity = {
   externalAnchoring: {
     requiredForLaunch: true;
     providerId?: string;
-    providerKind?: "simulated" | "external";
+    configuredProviderId?: string | null;
+    configGeneration?: number;
+    providerKind?: "simulated" | "external" | "unavailable";
+    archiveNamespace?: string | null;
+    retentionPolicyStatementOrReference?: string | null;
+    independentAdministratorContact?: string | null;
+    independentAdministratorRole?: string | null;
+    credentialSecretReferenceNameConfigured?: boolean;
     configured: boolean;
     verified?: boolean;
-    comparison?: string;
+    comparison?: "empty" | "missing" | "match" | "external-behind" | "external-ahead" | "mismatch";
     regulatedProductionLaunchBlocked: boolean;
+    restoreDrillPassed?: boolean;
+    legalHoldDrillPassed?: boolean;
+    drillsInvalid?: boolean;
+    staleSnapshot?: boolean;
+    latestSequence?: number | null;
+    latestReceiptAt?: string | null;
     limitation: string;
     recommendedOutageBehavior?: string;
   };

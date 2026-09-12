@@ -67,11 +67,15 @@ documents, evidence, or protected audit records.
 This is tamper-evident against ordinary application paths and detects changed,
 reordered, or deleted entries relative to the stored tenant head. It is **not**
 DBA-proof: a privileged database administrator can alter rows, heads,
-functions, or triggers consistently. There is currently **no** independent
-anchor or WORM implementation. Independent externally operated anchoring/WORM
-storage is therefore an explicit unmet launch prerequisite; the integrity API
-always reports it as not configured rather than treating an environment flag
-as evidence.
+functions, or triggers consistently. No provider is preselected during
+organization signup. Independent externally operated anchoring/WORM storage is
+therefore an explicit launch prerequisite; tenant settings may record the
+approved provider metadata and secret-manager reference name, but never a
+secret value. The integrity API never treats an environment flag as evidence.
+An owner or administrator may replace or clear this tenant configuration after
+signup; no adapter is selected when the setting is absent.
+Credential references use only `env:UPPER_SNAKE_NAME` or `vault:path` syntax;
+token-shaped values such as `sk-…` are rejected.
 
 > Requirement: “Do not implement WORM: task explicitly out of scope DBA
 > immutability with prerequisite disclosure.”
@@ -94,12 +98,19 @@ lifecycle facts (including a fingerprint of the supplied reason); a client
 provider is responsible for carrying those facts into its own
 retention/legal-hold system.
 If a client provider is installed after simulation delivery, the worker
-requeues delivered operations that lack that provider's receipt. Simulation
-receipts remain immutable evidence, while one immutable receipt per provider
-may be retained for the same operation.
+requeues delivered operations that lack that provider's receipt. Receipt rows
+are bound by an explicit tenant configuration generation, so replacing a
+namespace or credential reference re-anchors even when the provider ID is
+unchanged. Simulation receipts remain immutable evidence, while one immutable
+receipt per provider and generation may be retained for the same operation.
 Provider anchor, receipt-verification, and current-checkpoint reads have a
  bounded timeout. A timeout leaves the claim retryable; because the provider
  must honor the idempotency key, an ambiguous completed call is safe to retry.
+Provider receipts must carry the current configuration generation and archive
+namespace; both are matched exactly before verification is accepted. The
+provider-visible idempotency key is deterministically derived from the original
+outbox identity, generation, and a non-secret context fingerprint, so a
+provider cannot replay a receipt cached under an earlier namespace.
  Provider anchors must also apply operations monotonically, or use a provider
  side compare-and-set. A timed-out request may finish after a retry or a
  higher operation, and must never move the provider's checkpoint or legal-hold
@@ -109,15 +120,27 @@ The checked-in provider is deliberately a **simulation**. It returns a
 deterministically verifiable receipt so retry, duplicate, restore comparison,
 and outage behavior can be exercised, but it declares `independent: false`.
 Consequently simulation can never make `externalAnchoring.configured` true or
-unblock regulated production. Clients install an adapter implementing the
-provider-neutral interface and its independent verification method; configured
-status requires a freshly verified receipt from that external adapter and a
-local-head/external-checkpoint match. Verification fetches the provider's
-currently held checkpoint at restore/review time; copied local receipt rows
-are not treated as the provider's current truth. A restored database must run
-the integrity check and treat missing, behind, ahead, or mismatched external
-checkpoints as blocked, including a provider-ahead checkpoint after a local
-rollback.
+unblock regulated production. Clients register an adapter implementing the
+provider-neutral interface and its independent verification method; the tenant
+resolver selects it by the persisted provider id. Configured status requires a
+freshly verified receipt from that adapter, a local-head/external-checkpoint
+match, and recorded passed restore and legal-hold drills against the same
+provider. Verification fetches the provider's currently held checkpoint at
+restore/review time; copied local receipt rows are not treated as the
+provider's current truth. A restored database must run the integrity check and
+treat missing, behind, ahead, or mismatched external checkpoints as blocked,
+including a provider-ahead checkpoint after a local rollback.
+If a tenant selects a provider ID that is not registered in the running
+process, the adapter is unavailable rather than silently resolving to
+simulation; its outbox remains retryable with an explicit missing-adapter
+failure and launch remains blocked.
+Every adapter operation receives a tenant context containing the selected
+archive namespace and credential reference name; adapters resolve credentials
+themselves and the service never reads those secret values.
+Drill records retain the complete non-secret provider-signed receipt and are
+strictly parsed and re-verified with the registered adapter on every status
+read; changing or clearing tenant archive configuration atomically removes the
+old drill evidence.
 
 During an anchoring outage, continue local append-only capture, retain queued
 delivery for retry, alert reviewers, and do not claim external protection or

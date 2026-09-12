@@ -80,6 +80,9 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // constraint. The exact hash permits the plain ADD CONSTRAINT statement
   // without allowing procedural migration guards.
   "6d7b99b22a51ed14f3853a731fd17e30929e8579a36551265c5da53d90ef5c19",
+  // Reviewed normalization of historical receipt constraints/defaults. The
+  // repair preserves rows and append-only triggers while converging indexes.
+  "8c1f7381d55d049b7b237676d7e7f0c047684ba0524bc1607ac7795bf7975a13",
 ]);
 // The authority migration sequence was renumbered after it landed in
 // parallel with the workforce sequence. These are ledger identifiers only:
@@ -97,6 +100,25 @@ const renamedMigrationTags = new Map([
   ],
 ]);
 const compatibleHistoricalMigrationHashes = new Map([
+  [
+    "0053_external_audit_anchor_receipt_generation",
+    new Set([
+      // The predecessor replaced receipt constraints and removed the temporary
+      // backfill default. Its resulting schema is stricter than the additive
+      // successor and remains compatible with generation/context-bound keys.
+      "146e891c637a063309d949f048b27dd356175378ea65640e1ac44f05fcf01ab5",
+    ]),
+  ],
+  [
+    "0048_external_audit_anchor_provider_transition",
+    new Set([
+      // The predecessor replaced the original organization/key constraint
+      // with a constraint-backed provider uniqueness relation. The additive
+      // successor keeps both protections and uses a unique index for new
+      // schemas; both shapes satisfy the receipt conflict target.
+      "d4ddb9b88db2b521f4ccf397f925cfdfc44e9f90e6f555fa0c9d34eee7b1a421",
+    ]),
+  ],
   [
     "0030_candidate_portal",
     new Set([

@@ -9,6 +9,10 @@ import { initDemoAllowlist } from "./lib/onboarding/demo-volunteers";
 import { recoverStaleVoiceSessions } from "./lib/onboarding/voice";
 import { startApproverInboxPolling } from "./lib/onboarding/approver-email";
 import { startConnectedReadinessAutomation } from "./lib/onboarding/connected-readiness-automation";
+import { db, organizationsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { verifyProtectedAudit } from "./lib/onboarding/protected-audit";
+import { enforceRegulatedProductionStartupGuard } from "./lib/regulated-production-startup-guard";
 
 const rawPort = process.env["PORT"];
 const validationMode = process.env["API_VALIDATION_MODE"] === "true";
@@ -24,6 +28,18 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+await enforceRegulatedProductionStartupGuard(process.env, {
+  organizationExists: async (organizationId) => {
+    const [organization] = await db
+      .select({ id: organizationsTable.id })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, organizationId))
+      .limit(1);
+    return organization !== undefined;
+  },
+  verifyProtectedAudit,
+});
 
 app.listen(port, (err) => {
   if (err) {
