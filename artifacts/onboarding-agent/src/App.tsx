@@ -32,6 +32,7 @@ import {
   type OrganizationBootstrapResponse,
 } from './lib/organization-bootstrap';
 import { AuditPage } from './pages/audit';
+import { PolicyReviewPage } from './pages/policy-review';
 
 const queryClient = new QueryClient();
 
@@ -289,6 +290,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         <Protected><SettingsPage /></Protected>
+      </Route>
+      <Route path="/policy-review">
+        <Protected><PolicyReviewPage /></Protected>
       </Route>
       <Route path="/recommendations">
         <Protected><RecommendationsPage /></Protected>

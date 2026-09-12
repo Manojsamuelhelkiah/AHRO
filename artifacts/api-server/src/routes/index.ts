@@ -27,6 +27,7 @@ import { requireAuth } from "../middlewares/require-auth";
 import { requireTenantContext } from "../middlewares/tenant-context";
 import onboardingAuditRouter from "./onboarding-audit";
 import { protectedAuditCapture } from "../middlewares/protected-audit";
+import governanceRouter from "./governance";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -62,6 +63,7 @@ router.use(onboardingRouter);
 router.use(onboardingAuditRouter);
 router.use(onboardingBatchIntakeRouter);
 router.use(actionCenterRouter);
+router.use(governanceRouter);
 router.use(onboardingDemoControllerRouter);
 router.use(onboardingSlaRouter);
 router.use(onboardingContactRouter);

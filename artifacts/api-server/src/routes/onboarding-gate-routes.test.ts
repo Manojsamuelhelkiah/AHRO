@@ -16,6 +16,14 @@ import {
   onbDocuments,
   onbEffectJournal,
   onbEvents,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDecisions,
+  onbGovernanceHistory,
+  onbGovernanceReminders,
+  onbGovernanceRequirements,
+  onbIntakeBatchPeople,
+  onbIntakeBatches,
   onbReadinessSlaPolicies,
   onbSystemChecks,
   organizationMembershipsTable,
@@ -23,8 +31,9 @@ import {
 } from "@workspace/db";
 import { reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
 import { decideApproval } from "../lib/onboarding/approval-decisions";
-import { backfillDocumentPacks, documentPackFor } from "../lib/onboarding/documents";
+import { backfillDocumentPacks } from "../lib/onboarding/documents";
 import onboardingRouter from "./onboarding";
+import batchIntakeRouter from "./onboarding-batch-intake";
 
 const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `gateway-route-a-${suffix}`;
@@ -45,6 +54,20 @@ async function call(path: string, organizationId: string, init?: RequestInit) {
       ...(init?.headers ?? {}),
     },
   });
+}
+
+async function callWithinIntakeTimeout(
+  path: string,
+  organizationId: string,
+  init: RequestInit,
+): Promise<Response> {
+  return await Promise.race([
+    call(path, organizationId, init),
+    new Promise<never>((_, reject) => setTimeout(
+      () => reject(new Error(`Intake route timed out: ${path}`)),
+      5_000,
+    )),
+  ]);
 }
 
 before(async () => {
@@ -103,6 +126,7 @@ before(async () => {
     next();
   });
   app.use(onboardingRouter);
+  app.use(batchIntakeRouter);
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
@@ -124,6 +148,12 @@ after(async () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   await new Promise((resolve) => setTimeout(resolve, 100));
+  await db.delete(onbIntakeBatchPeople).where(inArray(
+    onbIntakeBatchPeople.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbIntakeBatches).where(inArray(
+    onbIntakeBatches.organizationId, [orgA, orgB],
+  ));
   if (caseIds.length) await db.delete(onbCases).where(inArray(onbCases.id, caseIds));
   // If a route fails before returning its case id (for example while an
   // enrollment service is being rolled out), still remove every fixture case
@@ -137,6 +167,24 @@ after(async () => {
   await db.delete(onbReadinessSlaPolicies).where(inArray(
     onbReadinessSlaPolicies.organizationId,
     [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDecisionReviews).where(inArray(
+    onbGovernanceDecisionReviews.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceAuthorityAssignments).where(inArray(
+    onbGovernanceAuthorityAssignments.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceReminders).where(inArray(
+    onbGovernanceReminders.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceHistory).where(inArray(
+    onbGovernanceHistory.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceRequirements).where(inArray(
+    onbGovernanceRequirements.organizationId, [orgA, orgB],
+  ));
+  await db.delete(onbGovernanceDecisions).where(inArray(
+    onbGovernanceDecisions.organizationId, [orgA, orgB],
   ));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
 });
@@ -164,7 +212,7 @@ function intake(name: string, offerAcceptanceComplete: boolean) {
 }
 
 test("create refuses an asserted Gate A; dedicated confirmation owns its evidence", async () => {
-  const unchecked = await call("/onboarding/cases", orgA, {
+  const unchecked = await callWithinIntakeTimeout("/onboarding/cases", orgA, {
     method: "POST",
     body: JSON.stringify(intake("Unchecked Offer", false)),
   });
@@ -182,7 +230,34 @@ test("create refuses an asserted Gate A; dedicated confirmation owns its evidenc
   assert.equal(checked.status, 400);
 });
 
-test("legacy document recovery holds, binds the explicit requester, and dispatches only documents after legal approval", async () => {
+test("batch intake snapshots under its tenant lock without deadlocking", async () => {
+  const response = await callWithinIntakeTimeout("/onboarding/batch-intake", orgA, {
+    method: "POST",
+    body: JSON.stringify({
+      idempotencyKey: `governance-lock-${suffix}`,
+      name: "Governance lock regression",
+      people: [{
+        personKey: "one",
+        workerName: "Batch Governance Fixture",
+        workerEmail: `batch-governance-${suffix}@example.com`,
+        hireType: "external-fte",
+        workerCategory: "employee",
+        role: "Engineer",
+        department: "Engineering",
+        geography: "US",
+        legalEntity: "Test Co",
+        managerName: "Manager",
+        recruiterName: "Recruiter",
+        joiningDate: "2030-01-01",
+      }],
+    }),
+  });
+  assert.equal(response.status, 201);
+  const body = await response.json() as { results: Array<{ caseId: number }> };
+  caseIds.push(body.results[0]!.caseId);
+});
+
+test("legacy document recovery holds, binds the explicit requester, and does not bypass its missing governance snapshot", async () => {
   const legalUser = `legacy-document-legal-${suffix}`;
   await db.insert(organizationMembershipsTable).values({
     organizationId: orgA, clerkUserId: legalUser, role: "member",
@@ -268,19 +343,19 @@ test("legacy document recovery holds, binds the explicit requester, and dispatch
     documents = await db.select().from(onbDocuments).where(and(
       eq(onbDocuments.organizationId, orgA), eq(onbDocuments.caseId, legacy.id),
     ));
-    if (documents.length) break;
+    // The legal compound approval is intentionally insufficient to authorize
+    // a new live effect for a historical case without an adopted governance
+    // snapshot. Keep polling briefly to prove no delayed writer slips through.
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  assert.equal(documents.length, documentPackFor(legacy).length);
-  assert.ok(documents.every((document) => document.status === "pending"));
+  assert.equal(documents.length, 0);
   assert.equal((await db.select().from(onbSystemChecks).where(and(
     eq(onbSystemChecks.organizationId, orgA), eq(onbSystemChecks.caseId, legacy.id),
   ))).length, 0, "document recovery never opens BGV/IAM/payroll system work");
   const effects = await db.select().from(onbEffectJournal).where(and(
     eq(onbEffectJournal.organizationId, orgA), eq(onbEffectJournal.caseId, legacy.id),
   ));
-  assert.equal(effects.length, 1);
-  assert.match(effects[0]?.toolName ?? "", /documents/);
+  assert.equal(effects.length, 0, "governance denies before an effect is claimed");
   assert.equal(
     await backfillDocumentPacks({ organizationId: orgA, caseId: legacy.id }),
     0,

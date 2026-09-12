@@ -153,6 +153,14 @@ export const onbReadinessSlaAttestations = pgTable(
     snapshotVersion: integer("snapshot_version").notNull(),
     streamKey: text("stream_key").notNull(),
     complete: boolean("complete").notNull(),
+    /**
+     * Server-classified origin of the asserted stream state. Ordinary
+     * workflow/user attestations remain auditable but cannot impersonate a
+     * trusted external activation signal.
+     */
+    evidenceProvenance: text("evidence_provenance").$type<
+      "trusted-provider" | "human-authorized" | "simulated" | "offline" | "unknown"
+    >(),
     reason: text("reason").notNull(),
     attestedBy: text("attested_by").notNull(),
     attestedRole: text("attested_role").notNull(),

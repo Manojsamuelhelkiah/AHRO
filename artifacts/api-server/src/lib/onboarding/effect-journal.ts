@@ -290,6 +290,32 @@ export async function confirmEffect(input: {
   return Boolean(updated);
 }
 
+/** A policy denial before provider I/O releases the fenced claim for retry. */
+export async function rejectEffectDispatchBeforeWrite(input: {
+  logicalOperationKey: string;
+  organizationId: string;
+  owner: string;
+  fencingToken: number;
+  reason: string;
+}): Promise<boolean> {
+  const [updated] = await db
+    .update(onbEffectJournal)
+    .set({
+      status: "failed",
+      lastError: input.reason.slice(0, 500),
+      claimUntil: null,
+      updatedAt: sql`now()`,
+    })
+    .where(and(
+      eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+      eq(onbEffectJournal.organizationId, input.organizationId),
+      eq(onbEffectJournal.status, "dispatching"),
+      eq(onbEffectJournal.claimOwner, input.owner),
+      eq(onbEffectJournal.fencingToken, input.fencingToken),
+    ))
+    .returning({ key: onbEffectJournal.logicalOperationKey });
+  return Boolean(updated);
+}
 /**
  * A non-idempotent write that may have reached the provider is terminal until
  * a human reconciles it. The same fencing conditions prevent stale workers

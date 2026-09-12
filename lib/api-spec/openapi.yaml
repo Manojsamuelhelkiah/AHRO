@@ -28,7 +28,268 @@ tags:
     description: Isolated, synthetic onboarding demonstrations with explicit simulated or approved live communications
   - name: demoControllerSetup
     description: One-time, operator-approved Demo Controller bootstrap for a member-only Demo Organization
+  - name: governance
+    description: Tenant-scoped revisioned decision, requirement coverage, and verified specialist authority register
 paths:
+  /governance/decisions:
+    get:
+      operationId: listGovernanceDecisions
+      tags: [governance]
+      summary: List current tenant governance decisions
+      description: Seeds only missing provisional catalog records; never overwrites tenant decisions or policies.
+      responses:
+        "200":
+          description: Current decisions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GovernanceDecisionsResponse"
+    post:
+      operationId: createGovernanceDecision
+      tags: [governance]
+      summary: Create a draft decision revision one
+      description: Owner/admin may draft only. Approval requires separately verified specialist authority.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GovernanceDecisionInput" }
+      responses:
+        "201":
+          description: Draft decision
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceDecisionResponse" } } }
+        "400": { description: Invalid input }
+        "403": { description: Owner/admin required }
+        "409": { description: Key already exists }
+  /governance/decisions/{key}/history:
+    get:
+      operationId: getGovernanceDecisionHistory
+      tags: [governance]
+      summary: Read immutable revisions and reviews for a decision
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Revision and review history
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceDecisionHistoryResponse" } } }
+        "404": { description: Decision not found }
+  /governance/decisions/{key}/revisions:
+    post:
+      operationId: reviseGovernanceDecision
+      tags: [governance]
+      summary: Supersede the current decision with a new draft revision
+      description: Requires expectedRevision; active cases are not changed by this operation.
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision]
+              properties:
+                expectedRevision: { type: integer, minimum: 1 }
+                title: { type: string, minLength: 1, maxLength: 4000 }
+                proposedValue: {}
+                rationale: { type: string, minLength: 1, maxLength: 4000 }
+                risk: { type: string, minLength: 1, maxLength: 4000 }
+                accountableRole: { type: string, minLength: 1, maxLength: 64 }
+                reviewDueAt: { type: [string, "null"], format: date-time }
+                impactedWorkflows: { type: array, items: { type: string }, maxItems: 100 }
+                sourceReference: { type: [string, "null"], maxLength: 4000 }
+      responses:
+        "201":
+          description: New draft revision
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceDecisionResponse" } } }
+        "409": { description: Stale revision or decision changed }
+  /governance/decisions/{key}/reviews:
+    post:
+      operationId: reviewGovernanceDecision
+      tags: [governance]
+      summary: Approve or reject one exact decision revision
+      description: Requires an active server-verified assignment for the decision's accountable role. Tenant administration alone is insufficient.
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [revision, outcome, reason, verificationReference]
+              properties:
+                revision: { type: integer, minimum: 1 }
+                outcome: { type: string, enum: [approved, rejected] }
+                reason: { type: string }
+                verificationReference: { type: string }
+      responses:
+        "200":
+          description: Review receipt and current decision
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceDecisionReviewResponse" } } }
+        "403": { description: Verified active specialist authority required }
+        "409": { description: Stale or already-reviewed revision }
+  /governance/requirements:
+    get:
+      operationId: listGovernanceRequirements
+      tags: [governance]
+      summary: List tenant requirement coverage
+      description: Implemented, tested, configured, and approved-for-live remain independent facts.
+      responses:
+        "200":
+          description: Requirements
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceRequirementsResponse" } } }
+  /governance/requirements/{key}/coverage:
+    put:
+      operationId: updateGovernanceRequirementCoverage
+      tags: [governance]
+      summary: Attest independent coverage facts for one requirement
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                implemented: { type: boolean }
+                tested: { type: boolean }
+                configured: { type: boolean }
+                approvedForLive: { type: boolean }
+                coverageState: { type: string, enum: [gap, partial, covered] }
+                relatedImplementation: { type: [string, "null"] }
+                evidenceReference: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Updated coverage
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceRequirementResponse" } } }
+        "403": { description: Verified specialist authority required }
+        "409": { description: Stale coverage version }
+  /governance/assignments:
+    get:
+      operationId: listGovernanceAssignments
+      tags: [governance]
+      summary: List verified authority assignments
+      responses:
+        "200":
+          description: Assignments
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentsResponse" } } }
+    post:
+      operationId: assignGovernanceAuthority
+      tags: [governance]
+      summary: Assign or nominate specialist authority
+      description: A server allow-listed verified operator creates verified authority. Owner/admin may only create a pending nomination, which has no review authority until verified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/GovernanceAuthorityAssignmentInput"
+                - $ref: "#/components/schemas/GovernanceAuthorityNominationInput"
+      responses:
+        "201":
+          description: Verified assignment
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentResponse" } } }
+        "403": { description: Server-verified operator required }
+  /governance/assignments/{id}/verify:
+    post:
+      operationId: verifyGovernanceAuthority
+      tags: [governance]
+      summary: Verify a pending owner/admin authority nomination
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [verificationReference]
+              properties:
+                verificationReference: { type: string, minLength: 1, maxLength: 4000 }
+      responses:
+        "200": { description: Verified assignment }
+        "403": { description: Server-verified operator required }
+        "409": { description: "Pending assignment missing, revoked, or already verified" }
+  /governance/authority-bootstrap:
+    post:
+      operationId: bootstrapGovernanceAuthority
+      tags: [governance]
+      summary: Bootstrap verified specialist authority
+      description: Same server-verified operator controls as assignment; this is not a tenant-admin escalation path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GovernanceAuthorityAssignmentInput" }
+      responses:
+        "201":
+          description: Verified bootstrap assignment
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentResponse" } } }
+        "403": { description: Server-verified operator required }
+  /governance/assignments/{id}/revoke:
+    post:
+      operationId: revokeGovernanceAuthority
+      tags: [governance]
+      summary: Revoke a verified authority assignment
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Revoked assignment
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentResponse" } } }
+        "403": { description: Server-verified operator required }
+        "409": { description: Assignment absent or already revoked }
+  /governance/history:
+    get:
+      operationId: listGovernanceHistory
+      tags: [governance]
+      summary: Read tenant governance audit history
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 250, default: 100 } }
+      responses:
+        "200":
+          description: Governance audit events
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceHistoryResponse" } } }
+  /governance/reminders/dispatch:
+    post:
+      operationId: dispatchGovernanceReminders
+      tags: [governance]
+      summary: Sweep due durable tenant review reminders
+      description: Claims each persisted reminder once and writes an in-app audit event; it sends no external notification.
+      responses:
+        "200":
+          description: Durable reminder sweep receipt
+          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceReminderDispatchResponse" } } }
+        "403": { description: Owner/admin required }
+  /governance/dispatches/{dispatchId}/reconcile:
+    post:
+      operationId: reconcileGovernanceDispatch
+      tags: [governance]
+      summary: Finalize a durably ambiguous governance provider dispatch
+      description: Only a server-verified operator may reconcile an ambiguous fence after establishing the external outcome.
+      parameters:
+        - { name: dispatchId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reconciliationReference]
+              properties:
+                reconciliationReference: { type: string, minLength: 1, maxLength: 4000 }
+      responses:
+        "200": { description: Finalized reconciliation receipt }
+        "403": { description: Server-verified operator required }
+        "409": { description: Ambiguous dispatch absent or already finalized }
   /organizations/demo-controller-setup:
     get:
       operationId: getDemoControllerSetupStatus
@@ -9599,3 +9860,156 @@ components:
         idempotent: { type: boolean }
         actionVersion: { type: integer, minimum: 0 }
       required: [action, idempotent, actionVersion]
+    GovernanceDecision:
+      type: object
+      additionalProperties: true
+      required: [key, revision, title, proposedValue, rationale, risk, accountableRole, status, impactedWorkflows, isProvisional, isCurrent, createdAt, updatedAt]
+      properties:
+        key: { type: string }
+        revision: { type: integer, minimum: 1 }
+        title: { type: string }
+        proposedValue: {}
+        rationale: { type: string }
+        risk: { type: string }
+        accountableRole: { type: string }
+        status: { type: string, enum: [draft, provisional, approved, rejected, superseded] }
+        reviewDueAt: { type: [string, "null"], format: date-time }
+        approvedRevision: { type: [integer, "null"], minimum: 1 }
+        impactedWorkflows: { type: array, items: { type: string } }
+        sourceReference: { type: [string, "null"] }
+        isProvisional: { type: boolean }
+        isCurrent: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    GovernanceDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [key, title, proposedValue, rationale, risk, accountableRole]
+      properties:
+        key: { type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,79}$" }
+        title: { type: string, minLength: 1, maxLength: 4000 }
+        proposedValue: {}
+        rationale: { type: string, minLength: 1, maxLength: 4000 }
+        risk: { type: string, minLength: 1, maxLength: 4000 }
+        accountableRole: { type: string, minLength: 1, maxLength: 64 }
+        reviewDueAt: { type: [string, "null"], format: date-time }
+        impactedWorkflows: { type: array, items: { type: string }, maxItems: 100 }
+        sourceReference: { type: [string, "null"], maxLength: 4000 }
+    GovernanceAuthorityAssignmentInput:
+      type: object
+      additionalProperties: false
+      required: [role, assigneeUserId, verificationReference]
+      properties:
+        role: { type: string, minLength: 1, maxLength: 64 }
+        assigneeUserId: { type: string, minLength: 1, maxLength: 4000 }
+        verificationReference: { type: string, minLength: 1, maxLength: 4000 }
+    GovernanceAuthorityNominationInput:
+      type: object
+      additionalProperties: false
+      required: [role, assigneeUserId, assignmentReason]
+      properties:
+        role: { type: string, minLength: 1, maxLength: 64 }
+        assigneeUserId: { type: string, minLength: 1, maxLength: 4000 }
+        assignmentReason: { type: string, minLength: 1, maxLength: 4000 }
+        expiresAt: { type: [string, "null"], format: date-time }
+    GovernanceDecisionsResponse:
+      type: object
+      additionalProperties: false
+      required: [decisions]
+      properties:
+        decisions: { type: array, items: { $ref: "#/components/schemas/GovernanceDecision" } }
+    GovernanceDecisionResponse:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { $ref: "#/components/schemas/GovernanceDecision" }
+    GovernanceDecisionHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [revisions, reviews]
+      properties:
+        revisions: { type: array, items: { $ref: "#/components/schemas/GovernanceDecision" } }
+        reviews: { type: array, items: { type: object, additionalProperties: true } }
+    GovernanceDecisionReviewResponse:
+      type: object
+      additionalProperties: false
+      required: [decision, review]
+      properties:
+        decision: { $ref: "#/components/schemas/GovernanceDecision" }
+        review: { type: object, additionalProperties: true }
+    GovernanceRequirement:
+      type: object
+      additionalProperties: true
+      required: [key, title, sourceReference, reviewOwnerRole, relatedDecisionKeys, coverage, version, updatedAt]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        sourceReference: { type: string }
+        reviewOwnerRole: { type: string }
+        relatedDecisionKeys: { type: array, items: { type: string } }
+        coverageState: { type: string, enum: [gap, partial, covered] }
+        coverage:
+          type: object
+          required: [implemented, tested, configured, approvedForLive]
+          properties:
+            implemented: { type: boolean }
+            tested: { type: boolean }
+            configured: { type: boolean }
+            approvedForLive: { type: boolean }
+        relatedImplementation: { type: [string, "null"] }
+        evidenceReference: { type: [string, "null"] }
+        version: { type: integer, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+    GovernanceRequirementsResponse:
+      type: object
+      additionalProperties: false
+      required: [requirements]
+      properties:
+        requirements: { type: array, items: { $ref: "#/components/schemas/GovernanceRequirement" } }
+    GovernanceRequirementResponse:
+      type: object
+      additionalProperties: false
+      required: [requirement]
+      properties:
+        requirement: { $ref: "#/components/schemas/GovernanceRequirement" }
+    GovernanceAssignment:
+      type: object
+      additionalProperties: true
+      required: [id, role, assigneeUserId, verificationStatus, verifiedByUserId, verificationReference, createdAt]
+      properties:
+        id: { type: integer, minimum: 1 }
+        role: { type: string }
+        assigneeUserId: { type: string }
+        verificationStatus: { type: string, enum: [pending, verified] }
+        verifiedByUserId: { type: string }
+        verificationReference: { type: string }
+        expiresAt: { type: [string, "null"], format: date-time }
+        revokedAt: { type: [string, "null"], format: date-time }
+        revokedByUserId: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+    GovernanceAssignmentsResponse:
+      type: object
+      additionalProperties: false
+      required: [assignments]
+      properties:
+        assignments: { type: array, items: { $ref: "#/components/schemas/GovernanceAssignment" } }
+    GovernanceAssignmentResponse:
+      type: object
+      additionalProperties: false
+      required: [assignment]
+      properties:
+        assignment: { $ref: "#/components/schemas/GovernanceAssignment" }
+    GovernanceHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [history]
+      properties:
+        history: { type: array, items: { type: object, additionalProperties: true } }
+    GovernanceReminderDispatchResponse:
+      type: object
+      additionalProperties: false
+      required: [dispatched, checkedAt]
+      properties:
+        dispatched: { type: integer, minimum: 0 }
+        checkedAt: { type: string, format: date-time }

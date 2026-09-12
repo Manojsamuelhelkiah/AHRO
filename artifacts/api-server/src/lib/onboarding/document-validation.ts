@@ -27,6 +27,11 @@ import { malwareUploadIsClean } from "./malware-policy";
 import { runWithProviderDeny } from "./provider-policy";
 import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
 import { formatEmailIdentityLines } from "./email-identity";
+import {
+  dispatchWithProviderGovernance,
+  evaluateProviderGovernanceGate,
+  PROVIDER_GOVERNANCE_WORKFLOW,
+} from "./governance-provider-boundary";
 
 export type ValidationReason = { code: string; message: string; evidence?: string };
 
@@ -145,14 +150,53 @@ async function validateUpload(upload: typeof onbCandidateUploads.$inferSelect, o
   );
   let providerStatus: "verified" | "rejected" | "manual_review" | "unavailable" | "error" = "unavailable";
   if (provider && scanStillMatches) {
-    try {
-      const authoritative = await provider.verify({ checksumSha256: checksum, documentType: upload.contentType, bytes });
-      providerStatus = authoritative.status;
-      if (authoritative.reasons) reasons.push(...authoritative.reasons);
-      if (authoritative.status === "rejected") reasons.push({ code: "authoritative_rejection", message: "The authoritative source rejected this evidence." });
-    } catch {
-      providerStatus = "error";
-      reasons.push({ code: "authoritative_provider_error", message: "Authoritative verification is temporarily unavailable; manual review is required." });
+    const [caseRow] = await db.select().from(onbCases).where(and(
+      eq(onbCases.organizationId, upload.organizationId),
+      eq(onbCases.id, upload.caseId),
+    ));
+    const governance = caseRow
+      ? await evaluateProviderGovernanceGate(
+        caseRow,
+        PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+      )
+      : null;
+    if (!governance?.allowed) {
+      reasons.push({
+        code: "governance_provider_dispatch_blocked",
+        message: governance?.reason ??
+          "Authoritative document verification is blocked because the stored case is unavailable.",
+      });
+    } else {
+      try {
+        const providerDispatch = await dispatchWithProviderGovernance({
+          caseRow,
+          workflow: PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+          operation: `document-verification:${upload.id}:${upload.validationAttempts}`,
+          // The helper's callback is the final operation before the provider
+          // receives candidate bytes. It re-evaluates under the durable
+          // governance fence; simulated/source-mode evidence cannot stand in.
+          dispatch: () => provider.verify({
+            checksumSha256: checksum,
+            documentType: upload.contentType,
+            bytes,
+          }),
+          disposition: () => "sent",
+        });
+        if (!providerDispatch.dispatched) {
+          reasons.push({
+            code: "governance_provider_dispatch_blocked",
+            message: providerDispatch.reason,
+          });
+        } else {
+          const authoritative = providerDispatch.value;
+          providerStatus = authoritative.status;
+          if (authoritative.reasons) reasons.push(...authoritative.reasons);
+          if (authoritative.status === "rejected") reasons.push({ code: "authoritative_rejection", message: "The authoritative source rejected this evidence." });
+        }
+      } catch {
+        providerStatus = "error";
+        reasons.push({ code: "authoritative_provider_error", message: "Authoritative verification is temporarily unavailable; manual review is required." });
+      }
     }
   } else reasons.push(unavailable);
   const state = decideValidationOutcome(reasons, providerStatus);

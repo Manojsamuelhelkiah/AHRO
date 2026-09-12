@@ -11,6 +11,7 @@ import {
   type OnbReadinessItem,
   type OnbChecklistItemStatusUpdateStatus
 } from '@workspace/api-client-react';
+import { useGetGovernanceCaseImpact, usePostGovernanceCaseRebase } from '../../../hooks/use-governance-impact';
 import { CheckCircle2, Clock, AlertTriangle, Settings2, RefreshCw, Pencil } from 'lucide-react';
 import { Button, cn, Label } from '@/components/ui-shared';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -33,6 +34,9 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
   const [contextReason, setContextReason] = useState('');
   const [contextDraft, setContextDraft] = useState(c.workforceContext ?? {});
   const correctContext = useCorrectOnboardingWorkforceContext();
+
+  const { data: governanceImpact, isLoading: isLoadingGovernanceImpact } = useGetGovernanceCaseImpact(c.id);
+  const rebaseGovernance = usePostGovernanceCaseRebase();
 
   const readinessItems = [...(c.readiness || [])].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
   const systemManagedIds = new Set(['profile', 'documentation', 'payroll', 'access', 'assets', 'learning', 'checkpoints']);
@@ -105,6 +109,28 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
       }
     });
   };
+
+  const handleGovernanceRebase = () => {
+    if (!governanceImpact) return;
+    setError(null);
+    rebaseGovernance.mutate({
+      caseId: c.id,
+      // The API gives us the adopted snapshot version. A null snapshot is a
+      // documented legacy-adoption boundary and must use version 0 explicitly.
+      expectedSnapshotVersion: governanceImpact.snapshot?.version ?? 0,
+      reason: replaceReason.trim()
+    }, {
+      onSuccess: () => {
+        setManageOpen(false);
+        setReplaceReason('');
+      },
+      onError: (err: any) => {
+        setError(err?.response?.data?.message || err?.message || 'Failed to rebase governance policy.');
+      }
+    });
+  };
+  const governanceRebaseAvailable = governanceImpact !== undefined &&
+    (governanceImpact.snapshot === null || governanceImpact.impacts.length > 0);
   const submitEvidence = (decision: 'verified' | 'rejected') => {
     if (!evidenceItem?.id || !evidenceReference.trim() || !evidenceReason.trim()) return;
     setError(null);
@@ -209,6 +235,28 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
           {error}
         </div>
       )}
+      {!isLoadingGovernanceImpact && governanceImpact?.snapshot === null && (
+        <div data-testid="governance-legacy-snapshot" className="mb-4 rounded-[var(--radius-md)] border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-3 text-[var(--text-sm)] text-[var(--status-amber-fg)]">
+          <div className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div>
+            <p className="font-bold">Governance adoption needs review</p>
+            <p className="mt-1">This historical case has no governance adoption snapshot. An explicit audited rebase is required before a sensitive future live action; existing effects are not replayed.</p>
+          </div></div>
+        </div>
+      )}
+      {!isLoadingGovernanceImpact && governanceImpact?.impacts.length ? (
+        <div data-testid="governance-case-impacts" className="mb-4 rounded-[var(--radius-md)] border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-3 text-[var(--text-sm)] text-[var(--status-amber-fg)]">
+          <p className="font-bold">Governance changes affect this case</p>
+          <div className="mt-2 space-y-2">
+            {governanceImpact.impacts.map((impact) => (
+              <div key={`${impact.key}-${impact.currentRevision ?? 'missing'}`} className="rounded border border-[var(--status-amber)]/20 bg-[var(--surface)]/60 p-2 text-xs">
+                <p className="font-semibold">{impact.key}: adopted rev {impact.adoptedRevision ?? 'not adopted'} → current rev {impact.currentRevision ?? 'missing'}</p>
+                <p className="mt-0.5">{impact.reason.replace(/-/g, ' ')}{impact.blocksLiveActions ? ' — blocks affected live actions until an audited rebase and fresh final approval.' : ' — visible for review; it has not changed this active case.'}</p>
+                {impact.impactedWorkflows.length > 0 && <p className="mt-1 text-[11px]">Affected workflows: {impact.impactedWorkflows.join(', ')}.</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="space-y-3">
         {readinessItems.map(w => {
           const isCustom = !!w.id && !systemManagedIds.has(w.id);
@@ -350,43 +398,77 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Manage Case Checklist</DialogTitle>
+            <DialogTitle>Manage Case Checklist & Policy</DialogTitle>
             <DialogDescription>
-              Re-evaluate the targeted checklist profiles against this employee's current attributes.
+              Re-evaluate the targeted checklist profiles against this employee's current attributes, or rebase the case onto newer governance policy revisions.
             </DialogDescription>
           </DialogHeader>
 
           <div className="py-4">
-            {allowSimpleRecalculate ? (
-              <p className="text-[var(--text-sm)] text-[var(--text-secondary)]">
-                Orchestration has not yet started. You can safely recalculate the checklist.
-              </p>
-            ) : (
-              <div className="space-y-4">
+            <div className="space-y-4">
+              {isLoadingGovernanceImpact && <p className="text-[var(--text-sm)] text-[var(--text-muted)]">Checking the case’s adopted governance snapshot…</p>}
+              {governanceImpact?.snapshot === null && (
                 <div className="p-3 rounded-[var(--radius-md)] bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border border-[var(--status-amber)]/30 text-[var(--text-sm)]">
                   <AlertTriangle className="w-4 h-4 mb-1" />
-                  <p className="font-bold">This transaction has already started.</p>
-                  <p className="mt-1">Replacing its snapshot is a deliberate policy change. Existing item statuses are preserved where item IDs still match, and the reason is recorded in the audit timeline.</p>
+                  <p className="font-bold">Legacy governance adoption</p>
+                  <p className="mt-1">No valid adopted snapshot exists. This rebase will create the explicit version-0 adoption boundary and reopen Gate C for fresh final approval.</p>
                 </div>
+              )}
+              {governanceImpact?.impacts.length ? (
                 <div className="space-y-2">
-                  <Label>Reason for replacement</Label>
-                  <textarea
-                    value={replaceReason}
-                    onChange={(e) => setReplaceReason(e.target.value)}
-                    maxLength={500}
-                    placeholder="e.g. Employee band updated from L4 to L5"
-                    className="min-h-20 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text-sm)] text-[var(--text-primary)] outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
-                  />
+                  {governanceImpact.impacts.map((impact) => (
+                    <div key={impact.key} className={cn("p-3 rounded-[var(--radius-md)] border text-[var(--text-sm)]", impact.blocksLiveActions ? "bg-[var(--status-red-bg)] text-[var(--status-red-fg)] border-[var(--status-red)]/30" : "bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-[var(--status-amber)]/30")}>
+                      <p className="font-bold">{impact.key}: {impact.reason.replace(/-/g, ' ')}</p>
+                      <p className="mt-1">Adopted revision {impact.adoptedRevision ?? 'none'}; current revision {impact.currentRevision ?? 'missing'}. Workflows: {impact.impactedWorkflows.join(', ') || 'none recorded'}.</p>
+                      <p className="mt-1">{impact.blocksLiveActions ? 'Affected live actions are blocked until the explicit rebase and fresh final approval.' : 'This is prospective only until you explicitly rebase the case.'}</p>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              ) : null}
+               {allowSimpleRecalculate && !governanceRebaseAvailable ? (
+                <p className="text-[var(--text-sm)] text-[var(--text-secondary)]">
+                  Orchestration has not yet started. You can safely recalculate the checklist.
+                </p>
+              ) : (
+                <>
+                   {!governanceRebaseAvailable && (
+                    <div className="p-3 rounded-[var(--radius-md)] bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border border-[var(--status-amber)]/30 text-[var(--text-sm)]">
+                      <AlertTriangle className="w-4 h-4 mb-1" />
+                      <p className="font-bold">This transaction has already started.</p>
+                      <p className="mt-1">Replacing its snapshot is a deliberate policy change. Existing item statuses are preserved where item IDs still match, and the reason is recorded in the audit timeline.</p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Reason for replacement or rebase</Label>
+                    <textarea
+                      value={replaceReason}
+                      onChange={(e) => setReplaceReason(e.target.value)}
+                      maxLength={500}
+                      placeholder="e.g. Employee band updated from L4 to L5"
+                      className="min-h-20 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text-sm)] text-[var(--text-primary)] outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
+                    />
+                  </div>
+                  {rebaseGovernance.isError && error && (
+                    <div role="alert" className="rounded border border-[var(--status-red)]/30 bg-[var(--status-red-bg)] p-2 text-[var(--text-xs)] text-[var(--status-red-fg)]">
+                      {error}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setManageOpen(false)}>Cancel</Button>
-            <Button onClick={handleRecalculate} disabled={recalculate.isPending || (!allowSimpleRecalculate && !replaceReason.trim())} className="gap-2 bg-[var(--primary)] text-white">
-              <RefreshCw className="w-4 h-4" /> {allowSimpleRecalculate ? 'Recalculate Profile' : 'Force Replace Checklist'}
-            </Button>
+            {governanceRebaseAvailable ? (
+              <Button onClick={handleGovernanceRebase} disabled={rebaseGovernance.isPending || !replaceReason.trim()} className="gap-2 bg-[var(--status-red)] text-white hover:bg-[var(--status-red)]/90">
+                <Settings2 className="w-4 h-4" /> Rebase Governance Policy
+              </Button>
+            ) : (
+              <Button onClick={handleRecalculate} disabled={recalculate.isPending || (!allowSimpleRecalculate && !replaceReason.trim())} className="gap-2 bg-[var(--primary)] text-white">
+                <RefreshCw className="w-4 h-4" /> {allowSimpleRecalculate ? 'Recalculate Profile' : 'Force Replace Checklist'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

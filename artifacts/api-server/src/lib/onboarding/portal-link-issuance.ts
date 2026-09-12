@@ -10,6 +10,11 @@ import { isSyntheticOfflineCase } from "./synthetic-offline";
 import { ensureCaseLogistics } from "./case-logistics";
 import { hashSecret, newSecret } from "./candidate-portal";
 import { withCaseDispatchGuard } from "./dispatch-guard";
+import {
+  dispatchWithProviderGovernance,
+  evaluateProviderGovernanceGate,
+  PROVIDER_GOVERNANCE_WORKFLOW,
+} from "./governance-provider-boundary";
 
 export const AUTOMATED_PORTAL_EMAIL_KEY = (caseId: number) =>
   `orchestration:${caseId}:portal:email`;
@@ -71,6 +76,16 @@ async function issueCandidatePortalLinkUnsafe(input: {
   ) {
     throw new Error("Offer acceptance must be confirmed before issuing a candidate portal link");
   }
+  // Issuing a bearer link is privacy-sensitive processing even when HR chose
+  // not to email it. Evaluate inside the case dispatch fence before creating
+  // the token; old policy snapshots never serve as a permission fallback.
+  const governance = await evaluateProviderGovernanceGate(
+    c,
+    PROVIDER_GOVERNANCE_WORKFLOW.portal,
+  );
+  if (!governance.allowed) {
+    throw new Error(governance.reason!);
+  }
 
   if (input.idempotencyKey) {
     const [existingDelivery] = await db.select({
@@ -96,13 +111,28 @@ async function issueCandidatePortalLinkUnsafe(input: {
 
   const token = newSecret();
   const expiresAt = new Date(Date.now() + expiresInHours * 3600_000);
-  const [link] = await db.insert(onbCandidateLinks).values({
-    organizationId: input.organizationId,
-    caseId: input.caseId,
-    tokenHash: hashSecret(token),
-    expiresAt,
-    issuedBy: input.issuedBy,
-  }).returning();
+  const linkDispatch = await dispatchWithProviderGovernance({
+    caseRow: c,
+    workflow: PROVIDER_GOVERNANCE_WORKFLOW.portal,
+    operation: `candidate-portal-link:${input.caseId}:${input.idempotencyKey ?? "manual"}`,
+    // Re-evaluate under the organization dispatch fence immediately before
+    // persisting a new bearer credential. The separate email path is guarded
+    // again by channels.ts before Gmail I/O.
+    dispatch: async () => {
+      const [link] = await db.insert(onbCandidateLinks).values({
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+        tokenHash: hashSecret(token),
+        expiresAt,
+        issuedBy: input.issuedBy,
+      }).returning();
+      if (!link) throw new Error("Candidate portal link was not persisted.");
+      return link;
+    },
+    disposition: () => "sent",
+  });
+  if (!linkDispatch.dispatched) throw new Error(linkDispatch.reason);
+  const link = linkDispatch.value;
   const portalUrl = `${input.publicBase}/candidate#token=${encodeURIComponent(token)}`;
   let delivery = null;
 

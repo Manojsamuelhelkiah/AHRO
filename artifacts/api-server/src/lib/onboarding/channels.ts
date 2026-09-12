@@ -25,6 +25,11 @@ import {
   isSyntheticOfflineCase,
 } from "./synthetic-offline";
 import { withCaseDispatchGuard } from "./dispatch-guard";
+import {
+  dispatchWithProviderGovernance,
+  evaluateProviderGovernanceGate,
+  PROVIDER_GOVERNANCE_WORKFLOW,
+} from "./governance-provider-boundary";
 
 const connectors = new ReplitConnectors();
 
@@ -483,6 +488,72 @@ export function addCandidateReplyReference(body: string): string {
 }
 
 /**
+ * A governance denial is a local, durable communication outcome.  Do not
+ * touch an existing `sending` row: it may represent an earlier ambiguous
+ * provider attempt and must remain available for manual reconciliation.
+ */
+async function recordGovernanceBlockedCommunication(input: {
+  caseRow: Pick<typeof onbCases.$inferSelect, "organizationId">;
+  caseId: number;
+  channel: "email" | "whatsapp";
+  audience: "candidate" | "admin";
+  toAddress: string;
+  subject: string | null;
+  body: string;
+  sensitive?: boolean;
+  idempotencyKey?: string;
+  reason: string;
+}): Promise<{ id: number; status: string; failureReason: string | null }> {
+  if (input.idempotencyKey) {
+    const [existing] = await db.select().from(onbCommunications).where(and(
+      eq(onbCommunications.organizationId, input.caseRow.organizationId),
+      eq(onbCommunications.idempotencyKey, input.idempotencyKey),
+    ));
+    if (existing) {
+      if (existing.caseId !== input.caseId || existing.channel !== input.channel) {
+        throw new Error("Communication idempotency key is bound to another payload");
+      }
+      return {
+        id: existing.id,
+        status: existing.status,
+        failureReason: existing.failureReason,
+      };
+    }
+  }
+  const values: typeof onbCommunications.$inferInsert = {
+    organizationId: input.caseRow.organizationId,
+    caseId: input.caseId,
+    channel: input.channel,
+    direction: "outbound",
+    audience: input.audience,
+    toAddress: input.channel === "email" ? maskEmail(input.toAddress) : maskPhone(input.toAddress),
+    subject: input.subject,
+    body: input.body,
+    status: "blocked",
+    failureReason: input.reason,
+    sensitive: input.sensitive ?? false,
+    idempotencyKey: input.idempotencyKey ?? null,
+  };
+  const inserted = db.insert(onbCommunications).values(values);
+  const [blocked] = input.idempotencyKey
+    ? await inserted.onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
+    }).returning({ id: onbCommunications.id })
+    : await inserted.returning({ id: onbCommunications.id });
+  if (blocked) return { id: blocked.id, status: "blocked", failureReason: input.reason };
+  // A simultaneous retry wrote the same durable row. Read it rather than
+  // manufacturing another provider attempt.
+  const [existing] = input.idempotencyKey
+    ? await db.select().from(onbCommunications).where(and(
+      eq(onbCommunications.organizationId, input.caseRow.organizationId),
+      eq(onbCommunications.idempotencyKey, input.idempotencyKey),
+    ))
+    : [];
+  if (!existing) throw new Error("Governance-blocked communication was not recorded.");
+  return { id: existing.id, status: existing.status, failureReason: existing.failureReason };
+}
+
+/**
  * Send an outbound message on a channel and persist it to the case timeline.
  * Never throws — delivery failures are recorded on the communication row.
  */
@@ -613,6 +684,29 @@ async function sendOutboundUnsafe(opts: {
     }).returning({ id: onbCommunications.id });
     if (!blocked) throw new Error("Synthetic offline communication was not recorded.");
     return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
+  }
+  // This check is deliberately before the per-message effect-journal claim.
+  // The outer case dispatch guard serializes a governance revision/revocation
+  // with this decision; governance itself remains current-state based and
+  // never falls back to a legacy case snapshot.
+  const governance = await evaluateProviderGovernanceGate(
+    caseRow,
+    PROVIDER_GOVERNANCE_WORKFLOW.communication,
+    { allowIsolatedProviderDispatch: demoLiveAtProvider },
+  );
+  if (!governance.allowed) {
+    return recordGovernanceBlockedCommunication({
+      caseRow,
+      caseId: opts.caseId,
+      channel: opts.channel,
+      audience: "candidate",
+      toAddress: actualAddress,
+      subject: opts.subject ?? null,
+      body: opts.persistedBody ?? opts.body,
+      sensitive: opts.sensitive,
+      idempotencyKey: opts.idempotencyKey,
+      reason: governance.reason!,
+    });
   }
   // Shared-inbox replies are attributed only through this unguessable,
   // case-bound reference, never by sender address alone.
@@ -764,9 +858,45 @@ async function sendOutboundUnsafe(opts: {
       detail: `Hourly live-send cap (${MAX_LIVE_SENDS_PER_HOUR}/h) reached — ${opts.channel} message logged, not delivered.`,
     });
   } else if (opts.channel === "email") {
-    result = await sendEmail(actualAddress, subject ?? "Onboarding update", body);
+    const finalDispatch = await dispatchWithProviderGovernance({
+      caseRow,
+      workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
+      operation: `candidate-email:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
+      allowIsolatedProviderDispatch: demoLiveAtProvider,
+      dispatch: () => sendEmail(actualAddress, subject ?? "Onboarding update", body),
+      disposition: (value) => value.status === "sending"
+        ? "unknown"
+        : value.status === "sent" || value.status === "delivered"
+          ? "sent"
+          : "definitive-not-sent",
+    });
+    result = !finalDispatch.dispatched
+      ? {
+          status: "logged-only",
+          failureReason: finalDispatch.reason,
+          externalMessageId: null,
+        }
+      : finalDispatch.value;
   } else {
-    result = await sendWhatsApp(actualAddress, body);
+    const finalDispatch = await dispatchWithProviderGovernance({
+      caseRow,
+      workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
+      operation: `candidate-whatsapp:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
+      allowIsolatedProviderDispatch: demoLiveAtProvider,
+      dispatch: () => sendWhatsApp(actualAddress, body),
+      disposition: (value) => value.status === "sending"
+        ? "unknown"
+        : value.status === "sent" || value.status === "delivered"
+          ? "sent"
+          : "definitive-not-sent",
+    });
+    result = !finalDispatch.dispatched
+      ? {
+          status: "logged-only",
+          failureReason: finalDispatch.reason,
+          externalMessageId: null,
+        }
+      : finalDispatch.value;
   }
   if (dispatch) {
     const ambiguous = result.status === "sending";
@@ -860,11 +990,15 @@ async function sendAdministrativeEmailUnsafe(opts: {
   idempotencyKey?: string;
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   const [caseRow] = await db.select({
+    id: onbCases.id,
     organizationId: onbCases.organizationId,
     workerName: onbCases.workerName,
     workerEmail: onbCases.workerEmail,
     workerPhone: onbCases.workerPhone,
     notes: onbCases.notes,
+    hireType: onbCases.hireType,
+    workerCategory: onbCases.workerCategory,
+    processPolicySnapshot: onbCases.processPolicySnapshot,
   }).from(onbCases)
     .where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
@@ -893,6 +1027,23 @@ async function sendAdministrativeEmailUnsafe(opts: {
     }).returning({ id: onbCommunications.id });
     if (!blocked) throw new Error("Synthetic offline administrative communication was not recorded.");
     return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
+  }
+  const governance = await evaluateProviderGovernanceGate(
+    caseRow,
+    PROVIDER_GOVERNANCE_WORKFLOW.communication,
+  );
+  if (!governance.allowed) {
+    return recordGovernanceBlockedCommunication({
+      caseRow,
+      caseId: opts.caseId,
+      channel: "email",
+      audience: "admin",
+      toAddress: opts.toAddress,
+      subject: opts.subject,
+      body: opts.body,
+      idempotencyKey: opts.idempotencyKey,
+      reason: governance.reason!,
+    });
   }
   if (opts.idempotencyKey) {
     const [claimedRow] = await db.insert(onbCommunications).values({
@@ -973,7 +1124,20 @@ async function sendAdministrativeEmailUnsafe(opts: {
   } else if (!withinRateLimit()) {
     result = { status: "logged-only", failureReason: "Hourly live-send limit reached — notification logged, not delivered.", externalMessageId: null };
   } else {
-    result = await sendEmail(opts.toAddress, opts.subject, opts.body);
+    const finalDispatch = await dispatchWithProviderGovernance({
+      caseRow,
+      workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
+      operation: `administrative-email:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
+      dispatch: () => sendEmail(opts.toAddress, opts.subject, opts.body),
+      disposition: (value) => value.status === "sending"
+        ? "unknown"
+        : value.status === "sent" || value.status === "delivered"
+          ? "sent"
+          : "definitive-not-sent",
+    });
+    result = !finalDispatch.dispatched
+      ? { status: "logged-only", failureReason: finalDispatch.reason, externalMessageId: null }
+      : finalDispatch.value;
   }
   const dispatch = (opts as typeof opts & { __dispatch?: { owner: string; token: number; key: string; id: number } }).__dispatch;
   if (dispatch) {
@@ -1107,6 +1271,13 @@ async function retryCandidateEmailUnsafe(
   if (!retryAuthorized) {
     return { ok: false, code: "not-authorized", reason: authorization.reason! };
   }
+  const governance = await evaluateProviderGovernanceGate(
+    existing.candidate,
+    PROVIDER_GOVERNANCE_WORKFLOW.communication,
+  );
+  if (!governance.allowed) {
+    return { ok: false, code: "not-authorized", reason: governance.reason! };
+  }
   const claimedAt = new Date();
   const [claimed] = await db
     .update(onbCommunications)
@@ -1145,7 +1316,24 @@ async function retryCandidateEmailUnsafe(
     });
     return { ok: true, communication: capped ?? claimed };
   }
-  const result = await send(authorization.address, msg.subject ?? "Onboarding update", msg.body);
+  const finalDispatch = await dispatchWithProviderGovernance({
+    caseRow: existing.candidate,
+    workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
+    operation: `candidate-email-retry:${caseId}:${communicationId}:${claimedAt.toISOString()}`,
+    dispatch: () => send(authorization.address, msg.subject ?? "Onboarding update", msg.body),
+    disposition: (value) => value.status === "sending"
+      ? "unknown"
+      : value.status === "sent" || value.status === "delivered"
+        ? "sent"
+        : "definitive-not-sent",
+  });
+  const result = !finalDispatch.dispatched
+    ? {
+        status: "logged-only",
+        failureReason: finalDispatch.reason,
+        externalMessageId: null,
+      }
+    : finalDispatch.value;
   const [updated] = await db
     .update(onbCommunications)
     .set({

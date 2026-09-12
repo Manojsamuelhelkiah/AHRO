@@ -4096,6 +4096,7 @@ export type OnbOperationalRequestsMutationResult = OnbOperationalRequestsEnvelop
 export interface OnbDocumentRecoveryResult {
   message: string;
 }
+
 export interface OnbInboundMessage {
   /** email | whatsapp */
   channel: string;
@@ -6119,6 +6120,325 @@ export interface OnbActionCenterActionResult {
   actionVersion: number;
 }
 
+export type GovernanceDecisionStatus = typeof GovernanceDecisionStatus[keyof typeof GovernanceDecisionStatus];
+
+
+export const GovernanceDecisionStatus = {
+  draft: 'draft',
+  provisional: 'provisional',
+  approved: 'approved',
+  rejected: 'rejected',
+  superseded: 'superseded',
+} as const;
+
+export interface GovernanceDecision {
+  key: string;
+  /** @minimum 1 */
+  revision: number;
+  title: string;
+  proposedValue: unknown;
+  rationale: string;
+  risk: string;
+  accountableRole: string;
+  status: GovernanceDecisionStatus;
+  /** @nullable */
+  reviewDueAt?: string | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  approvedRevision?: number | null;
+  impactedWorkflows: string[];
+  /** @nullable */
+  sourceReference?: string | null;
+  isProvisional: boolean;
+  isCurrent: boolean;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: unknown;
+ }
+
+export interface GovernanceDecisionInput {
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9-]{0,79}$ */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  title: string;
+  proposedValue: unknown;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  rationale: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  risk: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  accountableRole: string;
+  /** @nullable */
+  reviewDueAt?: string | null;
+  /** @maxItems 100 */
+  impactedWorkflows?: string[];
+  /**
+     * @maxLength 4000
+     * @nullable
+     */
+  sourceReference?: string | null;
+}
+
+export interface GovernanceAuthorityAssignmentInput {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  role: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  assigneeUserId: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  verificationReference: string;
+}
+
+export interface GovernanceAuthorityNominationInput {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  role: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  assigneeUserId: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  assignmentReason: string;
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export interface GovernanceDecisionsResponse {
+  decisions: GovernanceDecision[];
+}
+
+export interface GovernanceDecisionResponse {
+  decision: GovernanceDecision;
+}
+
+export type GovernanceDecisionHistoryResponseReviewsItem = { [key: string]: unknown };
+
+export interface GovernanceDecisionHistoryResponse {
+  revisions: GovernanceDecision[];
+  reviews: GovernanceDecisionHistoryResponseReviewsItem[];
+}
+
+export type GovernanceDecisionReviewResponseReview = { [key: string]: unknown };
+
+export interface GovernanceDecisionReviewResponse {
+  decision: GovernanceDecision;
+  review: GovernanceDecisionReviewResponseReview;
+}
+
+export type GovernanceRequirementCoverageState = typeof GovernanceRequirementCoverageState[keyof typeof GovernanceRequirementCoverageState];
+
+
+export const GovernanceRequirementCoverageState = {
+  gap: 'gap',
+  partial: 'partial',
+  covered: 'covered',
+} as const;
+
+export type GovernanceRequirementCoverage = {
+  implemented: boolean;
+  tested: boolean;
+  configured: boolean;
+  approvedForLive: boolean;
+};
+
+export interface GovernanceRequirement {
+  key: string;
+  title: string;
+  sourceReference: string;
+  reviewOwnerRole: string;
+  relatedDecisionKeys: string[];
+  coverageState?: GovernanceRequirementCoverageState;
+  coverage: GovernanceRequirementCoverage;
+  /** @nullable */
+  relatedImplementation?: string | null;
+  /** @nullable */
+  evidenceReference?: string | null;
+  /** @minimum 1 */
+  version: number;
+  updatedAt: string;
+  [key: string]: unknown;
+ }
+
+export interface GovernanceRequirementsResponse {
+  requirements: GovernanceRequirement[];
+}
+
+export interface GovernanceRequirementResponse {
+  requirement: GovernanceRequirement;
+}
+
+export type GovernanceAssignmentVerificationStatus = typeof GovernanceAssignmentVerificationStatus[keyof typeof GovernanceAssignmentVerificationStatus];
+
+
+export const GovernanceAssignmentVerificationStatus = {
+  pending: 'pending',
+  verified: 'verified',
+} as const;
+
+export interface GovernanceAssignment {
+  /** @minimum 1 */
+  id: number;
+  role: string;
+  assigneeUserId: string;
+  verificationStatus: GovernanceAssignmentVerificationStatus;
+  verifiedByUserId: string;
+  verificationReference: string;
+  /** @nullable */
+  expiresAt?: string | null;
+  /** @nullable */
+  revokedAt?: string | null;
+  /** @nullable */
+  revokedByUserId?: string | null;
+  createdAt: string;
+  [key: string]: unknown;
+ }
+
+export interface GovernanceAssignmentsResponse {
+  assignments: GovernanceAssignment[];
+}
+
+export interface GovernanceAssignmentResponse {
+  assignment: GovernanceAssignment;
+}
+
+export type GovernanceHistoryResponseHistoryItem = { [key: string]: unknown };
+
+export interface GovernanceHistoryResponse {
+  history: GovernanceHistoryResponseHistoryItem[];
+}
+
+export interface GovernanceReminderDispatchResponse {
+  /** @minimum 0 */
+  dispatched: number;
+  checkedAt: string;
+}
+
+export type ReviseGovernanceDecisionBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  title?: string;
+  proposedValue?: unknown;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  rationale?: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  risk?: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  accountableRole?: string;
+  /** @nullable */
+  reviewDueAt?: string | null;
+  /** @maxItems 100 */
+  impactedWorkflows?: string[];
+  /**
+     * @maxLength 4000
+     * @nullable
+     */
+  sourceReference?: string | null;
+};
+
+export type ReviewGovernanceDecisionBodyOutcome = typeof ReviewGovernanceDecisionBodyOutcome[keyof typeof ReviewGovernanceDecisionBodyOutcome];
+
+
+export const ReviewGovernanceDecisionBodyOutcome = {
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export type ReviewGovernanceDecisionBody = {
+  /** @minimum 1 */
+  revision: number;
+  outcome: ReviewGovernanceDecisionBodyOutcome;
+  reason: string;
+  verificationReference: string;
+};
+
+export type UpdateGovernanceRequirementCoverageBodyCoverageState = typeof UpdateGovernanceRequirementCoverageBodyCoverageState[keyof typeof UpdateGovernanceRequirementCoverageBodyCoverageState];
+
+
+export const UpdateGovernanceRequirementCoverageBodyCoverageState = {
+  gap: 'gap',
+  partial: 'partial',
+  covered: 'covered',
+} as const;
+
+export type UpdateGovernanceRequirementCoverageBody = {
+  /** @minimum 1 */
+  expectedVersion: number;
+  implemented?: boolean;
+  tested?: boolean;
+  configured?: boolean;
+  approvedForLive?: boolean;
+  coverageState?: UpdateGovernanceRequirementCoverageBodyCoverageState;
+  /** @nullable */
+  relatedImplementation?: string | null;
+  /** @nullable */
+  evidenceReference?: string | null;
+};
+
+export type VerifyGovernanceAuthorityBody = {
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  verificationReference: string;
+};
+
+export type ListGovernanceHistoryParams = {
+/**
+ * @minimum 1
+ * @maximum 250
+ */
+limit?: number;
+};
+
+export type ReconcileGovernanceDispatchBody = {
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  reconciliationReference: string;
+};
+
 export type ListEaAssessmentsParams = {
 status?: EaAssessmentStatus;
 };
@@ -6401,3 +6721,4 @@ export const ExportOnboardingProtectedAuditOutcome = {
   denied: 'denied',
   failure: 'failure',
 } as const;
+

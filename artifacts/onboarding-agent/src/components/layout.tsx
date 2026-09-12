@@ -32,6 +32,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
       { path: '/demo-controller', label: 'Demo Center', icon: Presentation },
       { path: '/audit', label: 'Audit Trail', icon: Shield },
       { path: '/settings', label: 'Settings', icon: Settings },
+      { path: '/policy-review', label: 'Policy Review', icon: Shield },
       { path: '/client-setup', label: 'Client Setup', icon: Compass },
     ],
   },
@@ -196,7 +197,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <nav className="md:hidden flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2" aria-label="Primary navigation">
+        <nav className="md:hidden flex w-full max-w-full min-w-0 shrink-0 items-center gap-1 overflow-x-auto overscroll-x-contain touch-pan-x border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2" aria-label="Primary navigation" tabIndex={0}>
           {NAV_ITEMS.map((item) => {
             const isActive = location === item.path || (item.path !== '/' && location.startsWith(item.path));
             return (

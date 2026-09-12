@@ -18,6 +18,10 @@ import {
   setReadinessSlaPayrollCutoff,
 } from "../lib/onboarding/readiness-sla-policy";
 import { isChecklistAdministrator } from "../lib/onboarding/checklist";
+import {
+  governanceCaseImpact,
+  rebaseGovernanceCase,
+} from "../lib/onboarding/governance-runtime";
 
 const router: IRouter = Router();
 
@@ -48,11 +52,27 @@ function isValidationError(error: unknown): error is Error {
 function conflictOrBadRequest(error: unknown, res: Response): boolean {
   if (!(error instanceof Error)) return false;
   if (error.name.includes("Conflict") ||
-    /concurrently|changed since|active orchestration claim|completed cases/i.test(error.message)) {
+    /concurrently|changed since|active orchestration claim|active provider dispatch|completed cases/i.test(error.message)) {
     res.status(409).json({ message: error.message });
     return true;
   }
   return false;
+}
+
+function governanceRebaseBody(value: unknown): {
+  expectedSnapshotVersion: number;
+  reason: string;
+} | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  return typeof body.expectedSnapshotVersion === "number" &&
+    Number.isInteger(body.expectedSnapshotVersion) &&
+    body.expectedSnapshotVersion >= 0 &&
+    typeof body.reason === "string" &&
+    body.reason.trim().length > 0 &&
+    body.reason.trim().length <= 4_000
+    ? { expectedSnapshotVersion: body.expectedSnapshotVersion, reason: body.reason.trim() }
+    : null;
 }
 
 function clientInputError(error: unknown, res: Response): boolean {
@@ -243,6 +263,56 @@ router.post("/onboarding/cases/:id/readiness-sla/rebase", async (req, res, next)
       return;
     }
     res.json(view);
+  } catch (error) {
+    if (conflictOrBadRequest(error, res)) return;
+    if (clientInputError(error, res)) return;
+    next(error);
+  }
+});
+
+router.get("/onboarding/cases/:id/governance-impact", async (req, res, next) => {
+  try {
+    const id = caseId(req);
+    if (id === null) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    res.json(await governanceCaseImpact({
+      organizationId: getOrganizationId(req),
+      caseId: id,
+    }));
+  } catch (error) {
+    if (clientInputError(error, res)) return;
+    next(error);
+  }
+});
+
+router.post("/onboarding/cases/:id/governance-rebase", async (req, res, next) => {
+  try {
+    if (!requireReadinessSlaAdmin(req, res)) return;
+    const id = caseId(req);
+    if (id === null) {
+      res.status(400).json({ message: "Valid case id is required." });
+      return;
+    }
+    const body = governanceRebaseBody(req.body);
+    if (!body) {
+      res.status(400).json({
+        message: "expectedSnapshotVersion must be a non-negative integer and reason is required.",
+      });
+      return;
+    }
+    const snapshot = await rebaseGovernanceCase({
+      organizationId: getOrganizationId(req),
+      caseId: id,
+      expectedSnapshotVersion: body.expectedSnapshotVersion,
+      reason: body.reason,
+      changedBy: await resolveReviewerName(req.authUserId!),
+    });
+    res.json({
+      snapshot,
+      freshFinalApprovalRequired: true,
+    });
   } catch (error) {
     if (conflictOrBadRequest(error, res)) return;
     if (clientInputError(error, res)) return;

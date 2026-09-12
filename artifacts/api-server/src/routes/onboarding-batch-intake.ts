@@ -26,6 +26,11 @@ import { batchIntakePayloadFingerprint, eligibleForExplicitBatchRelease } from "
 import {
   normalizedWorkforceContext,
 } from "../lib/onboarding/workforce-policies";
+import {
+  governanceSnapshotForNewCase,
+  withGovernanceDecisionSnapshot,
+} from "../lib/onboarding/governance-runtime";
+import { assertGovernanceMutationAllowed } from "../lib/onboarding/governance-dispatch";
 
 const router: IRouter = Router();
 
@@ -121,7 +126,12 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
     const organizationId = getOrganizationId(req);
     const payloadFingerprint = batchIntakePayloadFingerprint(name, parsedPeople);
     const logisticsDefault = await getDay1LogisticsDefault(organizationId);
+    // One exact approved decision set is adopted for newly inserted members;
+    // reconciliation rows retain their original snapshots on retry.
+    await governanceSnapshotForNewCase(organizationId);
     const result = await db.transaction(async (tx) => {
+      await assertGovernanceMutationAllowed(tx, organizationId);
+      const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
       let [existing] = await tx.select().from(onbIntakeBatches).where(and(
         eq(onbIntakeBatches.organizationId, organizationId),
         eq(onbIntakeBatches.idempotencyKey, idempotencyKey),
@@ -180,10 +190,10 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
         );
         const { profile, classification } = workforcePolicy;
         const checklistSnapshot = workforcePolicy.effectiveItems;
-        const processPolicySnapshot = {
+        const processPolicySnapshot = withGovernanceDecisionSnapshot({
           profileId: profile.profileId, profileVersion: profile.profileVersion, templateVersion: profile.templateVersion,
           processPolicy: profile.processPolicy ?? {}, classification,
-        };
+        }, governanceSnapshot);
         const [created] = await tx.insert(onbCases).values({
           organizationId,
           workerName: person.workerName, workerEmail: person.workerEmail, workerPhone: person.workerPhone ?? null,

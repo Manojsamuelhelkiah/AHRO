@@ -43,6 +43,8 @@ import {
   markAmbiguousEffectForManualRepair,
 } from "./effect-journal";
 import type { OnboardingDbTransaction } from "./settings";
+import { evaluateStoredCaseGovernanceGate } from "./governance-runtime";
+import { withGovernanceDispatch } from "./governance-dispatch";
 type CaseRow = typeof onbCases.$inferSelect;
 
 export type WorkstreamConnectorCase = Pick<
@@ -373,6 +375,17 @@ export async function dispatchCaseConnectorMutation(input: {
   if (!(await mutationMayDispatch(input.c, input.mutation))) {
     throw new Error("Payroll connector dispatch blocked by incomplete runtime prerequisites.");
   }
+  const governanceGate = await evaluateStoredCaseGovernanceGate({
+    caseRow: input.c,
+    connector: input.mutation.connector,
+    operation: input.mutation.operation,
+  });
+  if (!governanceGate.allowed) {
+    throw new ConnectorDispatchRejectedError(
+      input.mutation.connector,
+      `governance:${governanceGate.blockers.map((blocker) => blocker.kind).join(",")}`,
+    );
+  }
   const authorization = input.dependencies?.authorize
     ? await input.dependencies.authorize(proposal, input.mutation)
     : await db.transaction(async (tx) => {
@@ -397,10 +410,39 @@ export async function dispatchCaseConnectorMutation(input: {
         };
       });
   const now = input.dependencies?.now?.() ?? new Date();
-  const write = input.dependencies?.write
+  const baseWrite = input.dependencies?.write
     ? input.dependencies.write
     : (mutation: Readonly<ConnectorMutation>, c: WorkstreamConnectorCase) =>
         journaledProductionWrite({ mutation, c, proposal });
+  // The outer connector adapter holds the compound-authority fence. This
+  // nested backend-owned dispatch fence re-reads the governance state directly
+  // before the physical writer, so an approval/revocation race cannot pass the
+  // preliminary check above.
+  const write = async (mutation: Readonly<ConnectorMutation>, c: WorkstreamConnectorCase) => {
+    const dispatched = await withGovernanceDispatch({
+      organizationId: c.organizationId,
+      operation: `${mutation.connector}:${mutation.operation}`,
+      adoptedCaseSnapshot:
+        c.processPolicySnapshot && typeof c.processPolicySnapshot === "object" &&
+          !Array.isArray(c.processPolicySnapshot)
+          ? c.processPolicySnapshot as Record<string, unknown>
+          : undefined,
+    }, async () => {
+      const finalGate = await evaluateStoredCaseGovernanceGate({
+        caseRow: c,
+        connector: mutation.connector,
+        operation: mutation.operation,
+      });
+      if (!finalGate.allowed) {
+        return { blockedReason: `governance:${finalGate.blockers.map((blocker) => blocker.kind).join(",")}` };
+      }
+      await baseWrite(mutation, c);
+      return { blockedReason: null };
+    });
+    if (dispatched.blockedReason) {
+      throw new ConnectorDispatchRejectedError(mutation.connector, dispatched.blockedReason);
+    }
+  };
 
   await dispatchConnectorMutation({
     mutation: input.mutation,
@@ -489,6 +531,161 @@ export async function dispatchCaseConnectorMutation(input: {
     write: (mutation) => write(mutation, input.c),
   });
 }
+/* Superseded conflicting implementation retained as rebase context. The
+ * implementation above composes its governance dispatch fence with Task141's
+ * verified compound-authority resolution and transaction fence.
+export async function dispatchCaseConnectorMutation(input: {
+  c: WorkstreamConnectorCase;
+  mutation: ConnectorMutation;
+  dependencies?: WorkstreamConnectorDependencies;
+}): Promise<void> {
+  const branches = requiredBranches(input.c);
+  const proposal = proposalFor(input.c, input.mutation, branches);
+  const effectIdentity = {
+    logicalOperationKey: proposal.logicalOperationKey,
+    organizationId: input.c.organizationId,
+    tenantId: input.c.organizationId,
+    caseId: input.c.id,
+    toolName: proposal.toolName,
+    argumentsHash: hashApprovalProposal(proposal),
+    providerIdempotency: true,
+  };
+  // Do not turn an already-confirmed journal fact into a rejected replay
+  // merely because an independent task subsequently became blocked.
+  if (await isConfirmedEffect(effectIdentity)) return;
+  if (!workstreamPolicyGateOpen(input.c)) {
+    throw new Error("Workstream connector dispatch blocked by an unmet before-workstreams policy gate.");
+  }
+  if (input.mutation.connector === "payroll" && workforceRuntimeEnabled((input.c.processPolicySnapshot ?? {}) as Record<string, unknown>)) {
+    const runtime = await evaluateWorkforceRuntimePrerequisites({ organizationId: input.c.organizationId, caseId: input.c.id, workstream: "payroll" });
+    if (!runtime.active || !runtime.allowed) {
+    throw new Error("Payroll connector dispatch blocked by incomplete runtime prerequisites.");
+    }
+  }
+  const governanceGate = await evaluateStoredCaseGovernanceGate({
+    caseRow: input.c,
+    connector: input.mutation.connector,
+    operation: input.mutation.operation,
+  });
+  if (!governanceGate.allowed) {
+    throw new ConnectorDispatchRejectedError(
+      input.mutation.connector,
+      `governance:${governanceGate.blockers.map((blocker) => blocker.kind).join(",")}`,
+    );
+  }
+  const authorization = input.dependencies?.authorize
+    ? await input.dependencies.authorize(proposal, input.mutation)
+    : {
+        binding: { proposalHash: hashApprovalProposal(proposal) },
+        decisions: [],
+      };
+  const now = input.dependencies?.now?.() ?? new Date();
+  const write = input.dependencies?.write ?? productionWrite;
+  // Validate every non-provider boundary before claiming a durable effect.
+  // A denial is not an attempted write and must not strand a journal claim.
+  await dispatchConnectorMutation({
+    mutation: input.mutation,
+    context: {
+      proposal, binding: authorization.binding, decisions: authorization.decisions,
+      actorIds: { requestor: `case:${input.c.id}:recruiter:${input.c.recruiterName}`, beneficiary: `case:${input.c.id}:worker:${input.c.workerEmail}`, executor: "onboarding-engine" },
+      deniedBlockers: blockersFor(input.c, input.mutation), now,
+      syntheticOffline: isSyntheticOfflineCase({ workerName: input.c.workerName ?? "", workerEmail: input.c.workerEmail, workerPhone: input.c.workerPhone ?? null, notes: input.c.notes ?? null }),
+    },
+    write: async () => undefined,
+  });
+
+  const logicalOperationKey = proposal.logicalOperationKey;
+  const owner = `workstream-dispatch:${input.c.id}:${logicalOperationKey}`;
+  const journal = await ensureEffectJournalEntry(effectIdentity);
+  const claim = await claimEffectDispatch({
+    logicalOperationKey,
+    organizationId: input.c.organizationId,
+    tenantId: input.c.organizationId,
+    caseId: input.c.id,
+    toolName: proposal.toolName,
+    argumentsHash: hashApprovalProposal(proposal),
+    providerIdempotency: true,
+    owner,
+    expectedFencingToken: journal.fencingToken,
+  });
+  if (claim.kind === "reuse_confirmed") return;
+  if (claim.kind !== "claimed") {
+    throw new Error(`Connector effect ${logicalOperationKey} is unavailable for dispatch (${claim.kind}).`);
+  }
+  try {
+    // Governance records are re-read directly before provider I/O. A decision
+    // revision or evidence regression after the preliminary validation cannot
+    // ride an already-created journal claim into a live effect.
+    const dispatched = await withGovernanceDispatch({
+      organizationId: input.c.organizationId,
+      operation: `${input.mutation.connector}:${input.mutation.operation}`,
+      adoptedCaseSnapshot:
+        input.c.processPolicySnapshot &&
+          typeof input.c.processPolicySnapshot === "object" &&
+          !Array.isArray(input.c.processPolicySnapshot)
+          ? input.c.processPolicySnapshot as Record<string, unknown>
+          : undefined,
+    }, async () => {
+      const finalGovernanceGate = await evaluateStoredCaseGovernanceGate({
+        caseRow: input.c,
+        connector: input.mutation.connector,
+        operation: input.mutation.operation,
+      });
+      if (!finalGovernanceGate.allowed) {
+        return {
+          blockedReason: `governance:${finalGovernanceGate.blockers.map((blocker) => blocker.kind).join(",")}`,
+        };
+      }
+      await dispatchConnectorMutation({
+        mutation: input.mutation,
+        context: {
+          proposal,
+          binding: authorization.binding,
+          decisions: authorization.decisions,
+          actorIds: {
+            requestor: `case:${input.c.id}:recruiter:${input.c.recruiterName}`,
+            beneficiary: `case:${input.c.id}:worker:${input.c.workerEmail}`,
+            executor: "onboarding-engine",
+          },
+          deniedBlockers: blockersFor(input.c, input.mutation),
+          now,
+          syntheticOffline: isSyntheticOfflineCase({
+            workerName: input.c.workerName ?? "",
+            workerEmail: input.c.workerEmail,
+            workerPhone: input.c.workerPhone ?? null,
+            notes: input.c.notes ?? null,
+          }),
+        },
+        write: (mutation) => write(mutation, input.c),
+      });
+      return { blockedReason: null };
+    });
+    if (dispatched.blockedReason) {
+      const reason = dispatched.blockedReason;
+      await rejectEffectDispatchBeforeWrite({
+        logicalOperationKey,
+        organizationId: input.c.organizationId,
+        owner,
+        fencingToken: claim.fencingToken,
+        reason,
+      });
+      throw new ConnectorDispatchRejectedError(input.mutation.connector, reason);
+    }
+    if (!await confirmEffect({
+      logicalOperationKey, organizationId: input.c.organizationId, owner, fencingToken: claim.fencingToken,
+    })) throw new Error("Connector write completed but effect confirmation lost its fencing claim.");
+  } catch (error) {
+    if (error instanceof ConnectorDispatchRejectedError) throw error;
+    // A write may have happened. Do not spin/replay a failed boundary without
+    // first reconciling the durable operation record.
+    await markAmbiguousEffectForManualRepair({
+      logicalOperationKey, organizationId: input.c.organizationId, owner, fencingToken: claim.fencingToken,
+      error: error instanceof Error ? error.message : "Unknown connector dispatch error",
+    });
+    throw error;
+  }
+}
+*/
 
 /** Startup recovery is intentionally limited to the missing document-pack
  * operation; it must not opportunistically dispatch the other workstreams. */

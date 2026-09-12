@@ -81,6 +81,7 @@ export async function ensureConnectorsSeeded(organizationId: string) {
         ...d,
         organizationId,
         status: "connected",
+        configurationProvenance: "simulated" as const,
         lastSyncAt: new Date(),
       })),
     );

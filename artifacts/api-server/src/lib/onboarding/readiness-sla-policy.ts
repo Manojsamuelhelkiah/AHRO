@@ -927,6 +927,7 @@ export async function recordReadinessSlaAttestation(input: {
       snapshotVersion: input.expectedSnapshotVersion,
       streamKey: input.streamKey,
       complete: input.complete,
+      evidenceProvenance: "human-authorized",
       reason,
       attestedBy: input.attestedBy,
       attestedRole: input.attestedRole,

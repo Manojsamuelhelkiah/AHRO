@@ -34,6 +34,7 @@ import { ensureConnectorsSeeded } from "./connectors";
 import { makeSharedTick } from "./shared-tick";
 import { sweepExpiredNonIdempotentEffects } from "./effect-journal";
 import { runDocumentReminderTick, runDocumentValidationTick } from "./document-validation";
+import { runGovernanceReminderTick } from "./governance";
 import { runDocumentMalwareTick } from "./document-malware";
 import { documentMalwareGateSql } from "./document-malware-gate";
 import { runMalwareScannerMonitorTick } from "./malware-scanner-monitor";
@@ -255,6 +256,7 @@ async function completeCheckUnlocked(
       .set({
         status: "done",
         completedAt: new Date(),
+        evidenceProvenance: notificationProvenance,
         lastCheckedAt: new Date(),
         note: `Confirmed via ${source} (${check.externalRef})`,
       })
@@ -268,6 +270,16 @@ async function completeCheckUnlocked(
       )
       .returning();
     if (!updated) return; // already closed by a concurrent path
+    if (notificationProvenance === "trusted-provider") {
+      await tx.update(onbConnectors).set({
+        status: "connected",
+        configurationProvenance: "trusted-provider",
+        lastSyncAt: new Date(),
+      }).where(and(
+        eq(onbConnectors.organizationId, check.organizationId),
+        eq(onbConnectors.key, def.connectorKey),
+      ));
+    }
 
     const [c] = await tx
       .select()
@@ -746,6 +758,19 @@ export async function handleSystemWebhook(opts: {
         ),
       );
     if (!check) return { ok: false, message: "No tracked check matching the provider reference" };
+    // This route is reached only after server-side webhook authentication.
+    // Persist the fact separately from the familiar `connected` display
+    // status so seeded simulated connectors cannot qualify as live sources.
+    if (opts.provenance === "trusted-provider") {
+      await db.update(onbConnectors).set({
+        status: "connected",
+        configurationProvenance: "trusted-provider",
+        lastSyncAt: new Date(),
+      }).where(and(
+        eq(onbConnectors.organizationId, owner.organizationId),
+        eq(onbConnectors.key, def.connectorKey),
+      ));
+    }
     t.lastEventAt = new Date();
     t.eventsReceived += 1;
     if (status === "completed") {
@@ -1037,6 +1062,11 @@ async function tickOnce(): Promise<void> {
   });
   await runDocumentReminderTick().catch((error) => {
     logger.error({ component: "document-reminder", error: String(error).slice(0, 300) }, "document reminder tick failed");
+  });
+  // Governance review reminders use the same externally-driven durable
+  // heartbeat. They only create persisted review work; no provider is called.
+  await runGovernanceReminderTick().catch((error) => {
+    logger.error({ component: "governance-reminder", error: String(error).slice(0, 300) }, "governance reminder tick failed");
   });
   await recoverChecklistOrchestrations();
   // A human task response may have committed while its guarded connector

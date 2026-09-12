@@ -60,6 +60,7 @@ import {
   authorityScopeForApproval,
   decisionAuthorityStillCurrent,
 } from "./decision-authority";
+import { evaluateStoredCaseGovernanceGate } from "./governance-runtime";
 type CaseRow = typeof onbCases.$inferSelect;
 
 export function checkpointSkipsPlanApproval(checkpoint: string | null | undefined): boolean {
@@ -1259,6 +1260,23 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
       eq(onbApprovals.status, "approved"),
     ));
     if (!approval || !(await decisionAuthorityStillCurrent(tx, approval))) return false;
+    // Gate C is a live frontline release. Keep the verified compound
+    // authority fence and independently fail closed on the adopted governance
+    // snapshot before changing the case to complete.
+    const governanceGate = await evaluateStoredCaseGovernanceGate({
+      caseRow: c,
+      workflow: "frontline-deployment",
+    });
+    if (!governanceGate.allowed) {
+      await reopenApprovalInTransaction(tx, {
+        organizationId: c.organizationId,
+        caseId,
+        idempotencyKey: `gateway-c:${caseId}:human-queue`,
+        reason: `Automatically reopened because final live release is blocked by governance: ${governanceGate.blockers.map((blocker) => blocker.kind).join(",")}.`,
+        actor: "day1-readiness-gate",
+      });
+      return false;
+    }
     const requiresMedicalSafety = mandatoryMedicalSafetyGate(c);
     const [medicalSafetyApproval] = requiresMedicalSafety
       ? await tx.select().from(onbApprovals).where(and(
@@ -1356,6 +1374,134 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     return true;
   });
 }
+/* Conflicting older Gate C implementation retained below only as rebase
+ * context; the authoritative implementation above composes authority and
+ * governance checks.
+/**
+ * Gate C's approval is intentionally narrower than generic approval handling.
+ * Re-evaluate the live mandatory/malware boundary while holding the case lock
+ * so an approval cannot race a document replacement or checklist reopen.
+ *
+export async function completeDay1ReadinessGate(caseId: number): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    if (!c) return false;
+    // Enrollment is additive: a legacy complete case must not be replayed by
+    // the approval recovery worker merely because it has an old approved row.
+    if (c.lifecycleStage === "complete") return false;
+    const [approval] = await tx.select({
+      id: onbApprovals.id,
+      version: onbApprovals.version,
+    }).from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, c.organizationId),
+      eq(onbApprovals.caseId, caseId),
+      eq(onbApprovals.idempotencyKey, `gateway-c:${caseId}:human-queue`),
+      eq(onbApprovals.status, "approved"),
+    ));
+    if (!approval) return false;
+    // A previously approved Gate C cannot bypass a later governance
+    // revocation/expiry or an unapproved safety, legal, or privacy decision.
+    // The case snapshot is not rewritten; this only blocks this future final
+    // release and opens a fresh human approval cycle.
+    const governanceGate = await evaluateStoredCaseGovernanceGate({
+      caseRow: c,
+      workflow: "frontline-deployment",
+    });
+    if (!governanceGate.allowed) {
+      await reopenApprovalInTransaction(tx, {
+        organizationId: c.organizationId,
+        caseId,
+        idempotencyKey: `gateway-c:${caseId}:human-queue`,
+        reason: `Automatically reopened because final live release is blocked by governance: ${governanceGate.blockers.map((blocker) => blocker.kind).join(",")}.`,
+        actor: "day1-readiness-gate",
+      });
+      return false;
+    }
+    const malwareBlockers = documentationGateConfigured(c)
+      ? await latestRequiredUploadMalwareBlockers(tx, c.organizationId, caseId)
+      : [];
+    const [bgv] = await tx.select({ status: onbSystemChecks.status }).from(onbSystemChecks).where(and(
+      eq(onbSystemChecks.organizationId, c.organizationId),
+      eq(onbSystemChecks.caseId, caseId),
+      eq(onbSystemChecks.system, "bgv"),
+    ));
+    // The weighted readiness policy is optional during rollout. When the SLA
+    // agent exports its hook, evaluate it inside this same final-review
+    // transaction so the score and the approval cannot observe different
+    // evidence. Historical complete cases intentionally bypass enrollment.
+    let weightedReadinessPass = true;
+    if (c.lifecycleStage !== "complete") {
+      try {
+        const slaModule = await import("./readiness-sla-policy");
+        const gate = (slaModule as unknown as {
+          readinessSlaGateForCase?: (tx: unknown, organizationId: string, caseId: number) => Promise<{ passes: boolean }>;
+        }).readinessSlaGateForCase;
+        if (gate) {
+          const weighted = await gate(tx, c.organizationId, caseId);
+          weightedReadinessPass = weighted.passes;
+        }
+      } catch (error) {
+        // The policy worker is a separately enrolled rollout. Preserve the
+        // existing Gate C authority until its module/schema is present, but do
+        // not hide failures from an installed policy hook.
+        const detail = String(error);
+        if (!/does not provide an export|Cannot find module|ERR_MODULE_NOT_FOUND/i.test(detail)) {
+          throw error;
+        }
+      }
+    }
+    // BGV is required only where the configured documentation gate and case
+    // pathway make it applicable. In that boundary, absence is not a green
+    // result; a configured live check must exist and be done.
+    const bgvRequired = documentationGateConfigured(c) && applicableSystems(c).some((system) => system.key === "bgv");
+    if (!weightedReadinessPass || !mandatoryChecklistReady(c) || malwareBlockers.length > 0 || (bgvRequired && (!bgv || bgv.status !== "done"))) {
+      // A previous Gate C approval authorizes only the readiness state that was
+      // reviewed. Reopening evidence/checks revokes that authority; recovery
+      // must never turn an old approval into a later automatic completion.
+      await reopenApprovalInTransaction(tx, {
+        organizationId: c.organizationId,
+        caseId,
+        idempotencyKey: `gateway-c:${caseId}:human-queue`,
+        reason: "Automatically reopened because live readiness evidence changed; fresh HR confirmation is required.",
+        actor: "day1-readiness-gate",
+      });
+      await tx.update(onbCases).set({
+        lifecycleStage: "preboarding",
+        orchestrationStatus: "checklist-blocked",
+        orchestrationCheckpoint: "blocked:re-review",
+        orchestrationClaimOwner: null,
+        orchestrationClaimUntil: null,
+        updatedAt: new Date(),
+      }).where(eq(onbCases.id, caseId));
+      return false;
+    }
+    await tx.update(onbCases).set({
+      lifecycleStage: "complete",
+      orchestrationStatus: "done",
+      orchestrationCheckpoint: "review-complete",
+      orchestrationClaimOwner: null,
+      orchestrationClaimUntil: null,
+      updatedAt: new Date(),
+    }).where(eq(onbCases.id, caseId));
+    await tx.insert(onbEvents).values({
+      organizationId: c.organizationId,
+      caseId,
+      agent: "day1-readiness-gate",
+      engine: "human",
+      hitlPattern: "approve-before-act",
+      ruleRef: DAY1_READINESS_GATE_RULE,
+      title: "Gate C Day-1 readiness confirmed by HR",
+      detail: "A human reviewer approved the final Day-1 readiness confirmation after current mandatory checklist and malware evidence were re-evaluated. No automated adverse employment action was taken.",
+      // Completion belongs to the approval cycle, not merely the case. A
+      // reopened Gate C must be able to record its later fresh confirmation.
+      idempotencyKey: `gateway-c:${caseId}:complete:v${approvalVersion(approval.version)}`,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
+    return true;
+  });
+}
+*/
 
 /* ------------------------------------------------------------------ */
 /* Public entry points                                                 */

@@ -547,6 +547,14 @@ export const onbSystemChecks = pgTable(
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
     dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    /**
+     * Immutable classification of the source that produced the terminal
+     * status. A simulated watcher completion must never be interpreted as
+     * external BGV/HRIS evidence by a live governance gate.
+     */
+    evidenceProvenance: text("evidence_provenance").$type<
+      "trusted-provider" | "human-authorized" | "simulated" | "offline" | "unknown"
+    >(),
     lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     escalatedAt: timestamp("escalated_at", { withTimezone: true }),
     note: text("note"),
@@ -566,6 +574,14 @@ export const onbConnectors = pgTable("onb_connectors", {
   vendor: text("vendor").notNull(),
   availableVendors: jsonb("available_vendors").$type<string[]>().notNull().default([]),
   status: text("status").notNull().default("connected"),
+  /**
+   * `connected` is a UI/tracking state only. This records whether a server
+   * verified a live provider configuration rather than the seeded simulator.
+   */
+  configurationProvenance: text("configuration_provenance")
+    .$type<"trusted-provider" | "simulated">()
+    .notNull()
+    .default("simulated"),
   /** api (deep integration: poll/webhook) | email (watch-mailbox tracking) */
   trackingMode: text("tracking_mode").notNull().default("api"),
   description: text("description").notNull(),

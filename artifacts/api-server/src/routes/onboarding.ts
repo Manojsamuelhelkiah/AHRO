@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
 import { ensureReadinessSlaEnrollment } from "../lib/onboarding/readiness-sla-policy";
+import {
+  governanceSnapshotForNewCase,
+  governanceDecisionSnapshotFromPolicy,
+  withGovernanceDecisionSnapshot,
+} from "../lib/onboarding/governance-runtime";
+import { assertGovernanceMutationAllowed } from "../lib/onboarding/governance-dispatch";
 import { and, desc, asc, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -448,7 +454,12 @@ async function insertCaseAndStart(
   organizationId: string,
 ) {
   const logisticsDefault = await getDay1LogisticsDefault(organizationId);
+  // Snapshot before the insert only. Existing cases are intentionally never
+  // rewritten when a governance revision later changes.
+  await governanceSnapshotForNewCase(organizationId);
   const row = await db.transaction(async (tx) => {
+    await assertGovernanceMutationAllowed(tx, organizationId);
+    const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
     const [jobProfile] = values.jobProfileId
       ? await tx.select().from(onbJobProfiles).where(and(
         eq(onbJobProfiles.organizationId, organizationId),
@@ -482,13 +493,13 @@ async function insertCaseAndStart(
         checklistMatchExplanation: profile.explanation,
         workforceContext,
         workforceClassification: classification,
-        processPolicySnapshot: {
+        processPolicySnapshot: withGovernanceDecisionSnapshot({
           profileId: profile.profileId,
           profileVersion: profile.profileVersion,
           templateVersion: profile.templateVersion,
           processPolicy: profile.processPolicy ?? {},
           classification,
-        },
+        }, governanceSnapshot),
         jobProfileId: jobProfile?.profileId ?? null,
         jobProfileVersion: jobProfile?.version ?? null,
         readiness: readinessFromChecklist(workforcePolicy.effectiveItems),
@@ -1031,6 +1042,7 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
     }
     const reviewer = await resolveReviewerName(req.authUserId!);
     const outcome = await db.transaction(async (tx) => {
+      await assertGovernanceMutationAllowed(tx, organizationId);
       await acquireCaseDispatchMutationLock(tx, organizationId, id);
       const [current] = await tx.select().from(onbCases).where(and(
         eq(onbCases.id, id),
@@ -1143,11 +1155,24 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
       if (!replacementDecision.ok) {
         return { kind: "conflict" as const, message: replacementDecision.reason };
       }
-      const nextProcessPolicySnapshot = {
+      const nextProcessPolicyBase = {
         profileId: profile.profileId, profileVersion: profile.profileVersion,
         templateVersion: profile.templateVersion, processPolicy: profile.processPolicy ?? {},
         classification: recalculatedClassification,
       };
+      // Checklist/workforce policy replacement is not governance adoption.
+      // Preserve the case's audited governance payload byte-for-byte (including
+      // a legacy malformed/missing marker) rather than rewriting it.
+      const existingPolicy = (current.processPolicySnapshot ?? {}) as Record<string, unknown>;
+      const existingGovernanceSnapshot = governanceDecisionSnapshotFromPolicy(existingPolicy);
+      const nextProcessPolicySnapshot = existingGovernanceSnapshot
+        ? withGovernanceDecisionSnapshot(nextProcessPolicyBase, existingGovernanceSnapshot)
+        : {
+            ...nextProcessPolicyBase,
+            ...(Object.prototype.hasOwnProperty.call(existingPolicy, "governanceDecisionSnapshot")
+              ? { governanceDecisionSnapshot: structuredClone(existingPolicy.governanceDecisionSnapshot) }
+              : {}),
+          };
       if (JSON.stringify(current.processPolicySnapshot) !== JSON.stringify(nextProcessPolicySnapshot)) {
         if (!preOrchestration && !["initial", "plan", "intake-approved", "plan-approved", "blocked:before-workstreams"].includes(current.orchestrationCheckpoint ?? "")) {
           return { kind: "conflict" as const, message: "This process-policy change requires task initialization before workstreams. The case has passed that boundary; its existing task history and obligations are preserved." };
@@ -3320,6 +3345,13 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
         vendor: body.vendor ?? row.vendor,
         status: body.status ?? row.status,
         trackingMode: body.trackingMode ?? row.trackingMode,
+        // Selecting a simulated catalog label, or changing transport mode,
+        // cannot retain an earlier server-verified provider configuration.
+        configurationProvenance:
+          (body.vendor !== undefined && body.vendor !== row.vendor) ||
+            (body.trackingMode !== undefined && body.trackingMode !== row.trackingMode)
+            ? "simulated"
+            : row.configurationProvenance,
         lastSyncAt: new Date(),
       })
       .where(and(

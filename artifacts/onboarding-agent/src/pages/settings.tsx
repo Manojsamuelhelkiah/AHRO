@@ -20,7 +20,7 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
-import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck } from 'lucide-react';
+import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck, Link } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
 import { formatDistanceToNowStrict } from 'date-fns';
@@ -808,6 +808,29 @@ export function SettingsPage() {
         title="Settings" 
         subtitle="Application-level configuration for the control tower." 
       />
+
+      <div className="flex flex-col gap-4">
+        <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <IconTile icon={ShieldCheck} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
+                <div>
+                  <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Governance & Policy</h3>
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
+                    Manage policy decisions, regulatory requirements, and authority assignments for the platform.
+                  </p>
+                </div>
+              </div>
+              <Link href="/policy-review">
+                <Button variant="secondary" className="gap-2">
+                  Open Policy Review
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <DemoVolunteersCard />
       <SyntheticResetCard />

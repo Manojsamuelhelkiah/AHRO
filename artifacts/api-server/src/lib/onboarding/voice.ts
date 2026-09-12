@@ -33,6 +33,7 @@ import { maskPhone, addressAllowed } from "./channels";
 import {
   demoControllerLiveContextValid,
   externalProviderDispatchDenied,
+  runWithProviderDeny,
 } from "./provider-policy";
 import {
   claimEffectDispatch,
@@ -45,6 +46,11 @@ import {
   SYNTHETIC_OFFLINE_WARNING,
 } from "./synthetic-offline";
 import { withCaseDispatchGuard } from "./dispatch-guard";
+import {
+  dispatchWithProviderGovernance,
+  evaluateProviderGovernanceGate,
+  PROVIDER_GOVERNANCE_WORKFLOW,
+} from "./governance-provider-boundary";
 
 export type VoiceScenario = "day-before" | "sla-escalation";
 
@@ -947,6 +953,20 @@ async function startVoiceCallUnsafe(opts: {
   if (!c.workerPhone) {
     return { status: "failed", note: "This hire has no phone number on file." };
   }
+  // The durable outer dispatch fence is already held by startVoiceCall. Check
+  // current governance before claiming either the call-session slot or the
+  // effect journal; a legacy case snapshot cannot reopen this live boundary.
+  const governance = await evaluateProviderGovernanceGate(
+    c,
+    PROVIDER_GOVERNANCE_WORKFLOW.voice,
+    { allowIsolatedProviderDispatch: demoLiveCall },
+  );
+  if (!governance.allowed) {
+    await logEvent(opts.caseId, "channel", "system", "Voice call withheld (governance)",
+      `A ${label} call to ${maskPhone(c.workerPhone)} was blocked by current governance review — no provider call was made.`,
+      { hitlPattern: "hard-block", ruleRef: "Governance provider boundary" });
+    return { status: "logged-only", note: governance.reason! };
+  }
 
   const session: Session = {
     token: randomBytes(16).toString("hex"),
@@ -1131,6 +1151,33 @@ async function startVoiceCallUnsafe(opts: {
   // The local session and effect journal are committed before either of the
   // Twilio HTTP requests below. A process restart can therefore reconcile the
   // exact request without opening a second live call.
+  // A governance decision may change after the durable effect claim but before
+  // the provider lookup. Do not disclose even provider account metadata when
+  // the current policy now denies this call.
+  const lookupGovernance = await evaluateProviderGovernanceGate(
+    c,
+    PROVIDER_GOVERNANCE_WORKFLOW.voice,
+    { allowIsolatedProviderDispatch: demoLiveCall },
+  );
+  if (!lookupGovernance.allowed) {
+    await db.update(onbEffectJournal).set({
+      status: "failed",
+      lastError: lookupGovernance.reason,
+      claimUntil: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbEffectJournal.organizationId, c.organizationId),
+      eq(onbEffectJournal.logicalOperationKey, logicalOperationKey),
+      eq(onbEffectJournal.status, "dispatching"),
+      eq(onbEffectJournal.claimOwner, effectOwner),
+      eq(onbEffectJournal.fencingToken, effectClaim.fencingToken),
+    ));
+    await db.delete(onbVoiceSessions).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return { status: "logged-only", note: lookupGovernance.reason! };
+  }
   const from = await voiceFromNumber();
   if (!from) {
     await db.update(onbEffectJournal).set({
@@ -1179,6 +1226,33 @@ async function startVoiceCallUnsafe(opts: {
       note: "The selected volunteer or demo run changed before provider dispatch; no call was placed.",
     };
   }
+  // This is the final check immediately before the mutating Twilio Calls API.
+  // Existing allowlist, Demo Controller, rate, and journal controls remain
+  // independent prerequisites; none of them is a governance substitute.
+  const finalGovernance = await evaluateProviderGovernanceGate(
+    c,
+    PROVIDER_GOVERNANCE_WORKFLOW.voice,
+    { allowIsolatedProviderDispatch: demoLiveCall },
+  );
+  if (!finalGovernance.allowed) {
+    await db.update(onbEffectJournal).set({
+      status: "failed",
+      lastError: finalGovernance.reason,
+      claimUntil: null,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(onbEffectJournal.organizationId, c.organizationId),
+      eq(onbEffectJournal.logicalOperationKey, logicalOperationKey),
+      eq(onbEffectJournal.status, "dispatching"),
+      eq(onbEffectJournal.claimOwner, effectOwner),
+      eq(onbEffectJournal.fencingToken, effectClaim.fencingToken),
+    ));
+    await db.delete(onbVoiceSessions).where(and(
+      eq(onbVoiceSessions.token, session.token),
+      eq(onbVoiceSessions.organizationId, c.organizationId),
+    ));
+    return { status: "logged-only", note: finalGovernance.reason! };
+  }
 
   let resp: Response;
   try {
@@ -1190,14 +1264,41 @@ async function startVoiceCallUnsafe(opts: {
       StatusCallbackEvent: "completed",
       Timeout: "25",
     });
-    resp = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
+    const providerDispatch = await dispatchWithProviderGovernance({
+      caseRow: c,
+      workflow: PROVIDER_GOVERNANCE_WORKFLOW.voice,
+      operation: `voice-call:${c.id}:${session.requestId}`,
+      allowIsolatedProviderDispatch: demoLiveCall,
+      dispatch: () => fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      }),
+      disposition: (value) => value.ok ? "sent" : "definitive-not-sent",
     });
+    if (!providerDispatch.dispatched) {
+      await db.update(onbEffectJournal).set({
+        status: "failed",
+        lastError: providerDispatch.reason,
+        claimUntil: null,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(onbEffectJournal.organizationId, c.organizationId),
+        eq(onbEffectJournal.logicalOperationKey, logicalOperationKey),
+        eq(onbEffectJournal.status, "dispatching"),
+        eq(onbEffectJournal.claimOwner, effectOwner),
+        eq(onbEffectJournal.fencingToken, effectClaim.fencingToken),
+      ));
+      await db.delete(onbVoiceSessions).where(and(
+        eq(onbVoiceSessions.token, session.token),
+        eq(onbVoiceSessions.organizationId, c.organizationId),
+      ));
+      return { status: "logged-only", note: providerDispatch.reason };
+    }
+    resp = providerDispatch.value;
   } catch (err) {
     const reason = `Delivery outcome unknown; Twilio request may have been accepted (${String(err).slice(0, 240)}). Do not retry automatically.`;
     session.providerStatus = "unknown_effect_manual_repair";
@@ -1370,7 +1471,9 @@ export async function simulateVoiceCall(
     const { done } = await voiceTurn(session, line);
     if (done) break;
   }
-  await finalizeVoiceCall(session, "completed");
+  // A source-mode simulation may exercise the same outcome code, but must
+  // never turn its scripted evidence into a real follow-up/provider effect.
+  await runWithProviderDeny(() => finalizeVoiceCall(session, "completed"));
   return { transcript: session.turns, decisions: session.decisions };
 }
 

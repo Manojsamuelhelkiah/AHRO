@@ -18,6 +18,11 @@ import { reconcileDocumentationReadiness } from "../lib/onboarding/document-vali
 import { reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
 import { candidatePortalIntakeAllowed } from "../lib/onboarding/workforce-step-runtime";
 import { appendProtectedAudit, appendProtectedAuditInTransaction } from "../lib/onboarding/protected-audit";
+import {
+  dispatchWithProviderGovernance,
+  evaluateProviderGovernanceGate,
+  PROVIDER_GOVERNANCE_WORKFLOW,
+} from "../lib/onboarding/governance-provider-boundary";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
@@ -119,10 +124,7 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
   try {
     const ctx = await candidateContext(req);
     if (!ctx) return invalid(res);
-    const [policyCase] = await db.select({
-      processPolicySnapshot: onbCases.processPolicySnapshot,
-      workforceContext: onbCases.workforceContext,
-    }).from(onbCases).where(and(
+    const [policyCase] = await db.select().from(onbCases).where(and(
       eq(onbCases.organizationId, ctx.organizationId),
       eq(onbCases.id, ctx.caseId),
     ));
@@ -133,6 +135,15 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
     });
     if (!portalAllowed.allowed) {
       return res.status(409).json({ message: portalAllowed.message });
+    }
+    const governance = await evaluateProviderGovernanceGate(
+      policyCase,
+      PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+    );
+    if (!governance.allowed) {
+      return res.status(409).json({
+        message: "Document processing is unavailable pending required policy review.",
+      });
     }
     const documentId = Number(req.params.documentId);
     const originalName = String(req.header("x-file-name") ?? "").trim();
@@ -155,6 +166,16 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
     if (!size) return res.status(400).json({ message: "File is empty" });
     const bytes = Buffer.concat(chunks);
     const actualType = detectCandidateFile(bytes);
+
+    const finalGovernance = await evaluateProviderGovernanceGate(
+      policyCase,
+      PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+    );
+    if (!finalGovernance.allowed) {
+      return res.status(409).json({
+        message: "Document processing is unavailable pending required policy review.",
+      });
+    }
     if (!actualType || actualType !== declaredType) return res.status(415).json({ message: "File contents do not match an allowed type" });
 
     const auditAttempt = await appendProtectedAudit({
@@ -170,7 +191,19 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
     });
     const objectPath = candidateObjectPath(ctx.organizationId, ctx.caseId);
     const storedFile = getPrivateFile(objectPath);
-    await storedFile.save(bytes, { resumable: false, contentType: actualType });
+
+    const storageDispatch = await dispatchWithProviderGovernance({
+      caseRow: policyCase,
+      workflow: PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+      operation: `candidate-document-upload:${ctx.caseId}:${documentId}`,
+      dispatch: () => storedFile.save(bytes, { resumable: false, contentType: actualType }),
+      disposition: () => "sent",
+    });
+    if (!storageDispatch.dispatched) {
+      return res.status(409).json({
+        message: "Document processing is unavailable pending required policy review.",
+      });
+    }
     const upload = await (async () => {
       try {
         const [created] = await db.transaction(async (tx) => {

@@ -24,6 +24,7 @@ import {
   type WorkforceStepRuntimeIssue,
 } from "./workforce-step-runtime";
 import { workforceAuthorityScope } from "./workforce-policies";
+import { evaluateStoredCaseGovernanceGate, type GovernanceWorkflow } from "./governance-runtime";
 
 export const OPERATIONAL_REQUEST_SETTING_PREFIX = "operational_requests:";
 export const WORKFORCE_CONTINUATION_SETTING_PREFIX = "workforce_connector_continuation:";
@@ -88,6 +89,15 @@ const OPERATIONAL_REQUEST_DEFINITIONS: readonly OperationalRequestDefinition[] =
     teamRecipientLabel: "L&D / Manager team",
   },
 ];
+
+function governanceWorkflowForOperationalRequest(request: StoredOperationalRequest): GovernanceWorkflow | null {
+  if (request.runtimeWorkstream === "assets" || request.id === "assets") return "assets-workplace";
+  if (request.runtimeWorkstream === "payroll" || request.id === "payroll") return "payroll-benefits";
+  if (request.id === "documentation") return "worker-record-documents";
+  if (request.id === "access") return "it-identity-access";
+  if (request.runtimeWorkstream === "learning") return "frontline-deployment";
+  return null;
+}
 
 type StatusHistoryEntry = {
   status: OperationalRequestStatus;
@@ -1469,6 +1479,20 @@ export async function applyOperationalRequestAction(input: {
       throw new OperationalRequestNotFoundError(
         `Operational request "${input.operationalRequestId}" was not found for this case.`,
       );
+    }
+    const governanceWorkflow = governanceWorkflowForOperationalRequest(request);
+    // This is server-persisted classification, not a caller-supplied bypass.
+    // Local simulation records never authorize provider I/O or real readiness.
+    if (!request.simulated && governanceWorkflow && ["start", "progress", "complete"].includes(input.action)) {
+      const governanceGate = await evaluateStoredCaseGovernanceGate({
+        caseRow,
+        workflow: governanceWorkflow,
+      });
+      if (!governanceGate.allowed) {
+        throw new OperationalRequestConflictError(
+          `Live workforce action is blocked by governance: ${governanceGate.blockers.map((blocker) => blocker.kind).join(",")}.`,
+        );
+      }
     }
     if (request.runtimeSchemaVersion === "workforce-step-runtime/v1") {
       if (!input.actorUserId) {

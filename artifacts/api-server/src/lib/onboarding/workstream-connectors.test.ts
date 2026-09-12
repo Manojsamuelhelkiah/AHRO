@@ -5,15 +5,23 @@ import {
   onbApprovals,
   onbAuthorityAssignments,
   onbAuthorityGovernance,
+  organizationMembershipsTable,
   onbCases,
+  onbConnectors,
   onbDocuments,
   onbEffectJournal,
+  onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisions,
+  onbGovernanceDecisionReviews,
+  onbGovernanceDispatchMarkers,
+  onbGovernanceRequirements,
+  onbReadinessSlaAttestations,
+  onbReadinessSlaCaseState,
   onbSystemChecks,
-  organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db/schema";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   BANK_CHANGE_APPROVAL_RULE,
   PRIVILEGED_ACCESS_APPROVAL_RULE,
@@ -29,10 +37,69 @@ import {
 } from "./workstream-connectors";
 import { recoverUntrackedCaseSystems } from "./system-watcher";
 import { EXECUTION_AUTHORIZATION_RULES } from "./decision-authority";
+import {
+  adoptGovernanceDecisionSnapshot,
+  governanceSnapshotForNewCase,
+  withGovernanceDecisionSnapshot,
+} from "./governance-runtime";
 
 const createdCaseIds: number[] = [];
 const unitOrganizationId = `workstream-guard-${process.pid}-${randomUUID()}`;
 let unitCaseId: number;
+let unitPolicySnapshot: Record<string, unknown>;
+
+async function establishLiveGovernanceFixture(caseId: number) {
+  await governanceSnapshotForNewCase(unitOrganizationId);
+  const decisions = await db.select().from(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, unitOrganizationId));
+  for (const decision of decisions) {
+    const reviewer = `fixture:${decision.accountableRole}`;
+    const [authority] = await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId: unitOrganizationId, authorityRole: decision.accountableRole, assigneeUserId: reviewer,
+      verificationStatus: "verified", verifiedByUserId: "fixture-operator", verificationReference: reviewer,
+    }).returning({ id: onbGovernanceAuthorityAssignments.id });
+    await db.insert(onbGovernanceDecisionReviews).values({
+      organizationId: unitOrganizationId, decisionKey: decision.key, decisionRevision: decision.revision,
+      outcome: "approved", reason: "Fixture approved decision", authorityAssignmentId: authority!.id,
+      reviewedByUserId: reviewer, verificationReference: reviewer,
+    }).onConflictDoNothing();
+    await db.update(onbGovernanceDecisions).set({
+      status: "approved", approvedByUserId: reviewer, approvedAt: new Date(),
+    }).where(and(
+      eq(onbGovernanceDecisions.organizationId, unitOrganizationId),
+      eq(onbGovernanceDecisions.key, decision.key),
+      eq(onbGovernanceDecisions.revision, decision.revision),
+    ));
+  }
+  await db.update(onbGovernanceRequirements).set({
+    implemented: true, tested: true, configured: true, approvedForLive: true,
+  }).where(eq(onbGovernanceRequirements.organizationId, unitOrganizationId));
+  for (const key of ["bgv", "itsm", "payroll"]) {
+    await db.insert(onbConnectors).values({
+      organizationId: unitOrganizationId, key, label: key, vendor: "fixture-live",
+      availableVendors: ["fixture-live"], status: "connected", trackingMode: "api",
+      description: "Fixture synchronized live provider", authoritativeFor: [key], lastSyncAt: new Date(),
+      configurationProvenance: "trusted-provider",
+    }).onConflictDoUpdate({
+      target: [onbConnectors.organizationId, onbConnectors.key],
+      set: { status: "connected", lastSyncAt: new Date(), configurationProvenance: "trusted-provider" },
+    });
+  }
+  unitPolicySnapshot = withGovernanceDecisionSnapshot({}, await governanceSnapshotForNewCase(unitOrganizationId));
+  await db.update(onbCases).set({ processPolicySnapshot: unitPolicySnapshot }).where(eq(onbCases.id, caseId));
+  await db.insert(onbSystemChecks).values({
+    organizationId: unitOrganizationId, caseId, system: "bgv", mode: "push", externalRef: `fixture-bgv-${caseId}`,
+    status: "done", dueAt: new Date(), completedAt: new Date(), lastCheckedAt: new Date(),
+    evidenceProvenance: "trusted-provider",
+  });
+  await db.insert(onbReadinessSlaCaseState).values({
+    organizationId: unitOrganizationId, caseId, snapshotVersion: 1,
+  });
+  await db.insert(onbReadinessSlaAttestations).values({
+    organizationId: unitOrganizationId, caseId, snapshotVersion: 1, streamKey: "hris", complete: true,
+    reason: "Fixture HRIS source attestation", attestedBy: "fixture", attestedRole: "hr-operations",
+    evidenceProvenance: "trusted-provider",
+  });
+}
 
 before(async () => {
   await db.insert(organizationsTable).values({
@@ -45,6 +112,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
+  await db.delete(onbGovernanceDispatchMarkers).where(eq(onbGovernanceDispatchMarkers.organizationId, unitOrganizationId));
   // Each authorization scenario needs a fresh operation identity. Confirmed
   // effects from an earlier test must not turn this into a replay-only test.
   const [created] = await db.insert(onbCases).values({
@@ -67,11 +135,18 @@ beforeEach(async () => {
     workstreams: [],
   }).returning({ id: onbCases.id });
   unitCaseId = created.id;
+  await establishLiveGovernanceFixture(unitCaseId);
 });
 
 after(async () => {
+  await db.delete(onbGovernanceDispatchMarkers).where(eq(onbGovernanceDispatchMarkers.organizationId, unitOrganizationId));
   await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, unitOrganizationId));
   await db.delete(onbCases).where(eq(onbCases.organizationId, unitOrganizationId));
+  await db.delete(onbGovernanceDecisionReviews).where(eq(onbGovernanceDecisionReviews.organizationId, unitOrganizationId));
+  await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, unitOrganizationId));
+  await db.delete(onbGovernanceAuthorityAssignments).where(eq(onbGovernanceAuthorityAssignments.organizationId, unitOrganizationId));
+  await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, unitOrganizationId));
+  await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, unitOrganizationId));
   await db.delete(organizationsTable).where(eq(organizationsTable.id, unitOrganizationId));
   for (const id of createdCaseIds) {
     await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, id));
@@ -101,6 +176,7 @@ async function createDatabaseCase(lifecycleStage: string) {
       createdByUserId: "database-case-requestor",
       readiness: [],
       workstreams: [],
+      processPolicySnapshot: unitPolicySnapshot,
     })
     .returning();
   createdCaseIds.push(created.id);
@@ -267,11 +343,48 @@ function caseRow(
     createdByUserId: null,
     updatedAt: new Date("2026-09-08T00:00:00Z"),
     workstreams: [],
+    processPolicySnapshot: unitPolicySnapshot,
     ...patch,
   };
 }
 
 describe("workstream connector runtime enforcement", () => {
+  test("a prospectively snapshotted case cannot reach a live writer while its tenant requirement lacks live approval", async () => {
+    let writes = 0;
+    await db.update(onbGovernanceRequirements).set({ approvedForLive: false }).where(and(
+      eq(onbGovernanceRequirements.organizationId, unitOrganizationId),
+      eq(onbGovernanceRequirements.key, "REQ-02"),
+    ));
+    const governanceSnapshot = adoptGovernanceDecisionSnapshot({
+      decisions: [],
+      adoptedAt: "2030-01-01T00:00:00.000Z",
+    });
+    await assert.rejects(
+      dispatchCaseConnectorMutation({
+        c: caseRow({
+          processPolicySnapshot: withGovernanceDecisionSnapshot({}, governanceSnapshot),
+        }),
+        mutation: {
+          connector: "documents",
+          operation: "send-envelope",
+          payload: {
+            caseId: unitCaseId,
+            workerCategory: "employee",
+            geography: "United Kingdom",
+            hireType: "external-fte",
+          },
+        },
+        dependencies: {
+          write: async () => {
+            writes += 1;
+          },
+        },
+      }),
+      /governance:.*requirement-not-approved-for-live/,
+    );
+    assert.equal(writes, 0);
+  });
+
   test("an unmet snapshotted before-workstreams evidence gate blocks every dispatch path", () => {
     assert.equal(workstreamPolicyGateOpen(caseRow({
       orchestrationStatus: "checklist-blocked",
@@ -282,9 +395,9 @@ describe("workstream connector runtime enforcement", () => {
       readiness: [{ key: "safety-sign-off", label: "Safety", status: "pending" }],
     })), false);
   });
-  test("the default writers seed the intended case then register every downstream system", async () => {
+  test("the default writers seed documents and BGV but do not release access before trusted clearance", async () => {
     const c = await createDatabaseCase("plan-generated");
-    await dispatchWorkstreamConnectorMutations(c);
+    await assert.rejects(dispatchWorkstreamConnectorMutations(c), /governance:.*bgv-not-clear/);
 
     const documents = await db
       .select()
@@ -299,11 +412,11 @@ describe("workstream connector runtime enforcement", () => {
     assert.ok(documents.every((document) => document.caseId === c.id));
     assert.deepEqual(
       checks.map((check) => check.system).sort(),
-      ["bgv", "itsm", "payroll"],
+      ["bgv"],
     );
   });
 
-  test("restart recovery uses the guarded default writers for an untracked case", async () => {
+  test("restart recovery preserves the trusted-evidence gate for an untracked case", async () => {
     const c = await createDatabaseCase("preboarding");
     await recoverUntrackedCaseSystems(c.id);
 
@@ -319,12 +432,14 @@ describe("workstream connector runtime enforcement", () => {
     assert.ok(documents.length > 0);
     assert.deepEqual(
       checks.map((check) => check.system).sort(),
-      ["bgv", "itsm", "payroll"],
+      ["bgv"],
     );
   });
 
   test("a legal continuation alone cannot authorize internal-transfer provider effects", async () => {
     const c = await createApprovedInternalTransferCase();
+    await establishLiveGovernanceFixture(c.id);
+    c.processPolicySnapshot = unitPolicySnapshot;
     await assert.rejects(
       dispatchWorkstreamConnectorMutations(c),
       /execution_authority_evidence_required/,
@@ -495,12 +610,18 @@ describe("workstream connector runtime enforcement", () => {
   });
 
   test("non-employee applicability omits payroll but still dispatches documents", async () => {
+    const [contractor] = await db.insert(onbCases).values({
+      organizationId: unitOrganizationId, workerName: "Contractor fixture", workerEmail: `contractor-${Date.now()}@example.invalid`,
+      workerCategory: "contractor", hireType: "contractor", role: "Operator", department: "Ops", geography: "United Kingdom",
+      legalEntity: "Example Ltd", managerName: "Manager", recruiterName: "Recruiter", joiningDate: "2030-01-01",
+      lifecycleStage: "plan-generated", orchestrationStatus: "running", offerAcceptanceComplete: true, readiness: [], workstreams: [],
+       processPolicySnapshot: unitPolicySnapshot,
+    }).returning();
+    createdCaseIds.push(contractor.id);
+    await establishLiveGovernanceFixture(contractor.id);
     const writes: ConnectorMutation[] = [];
     await dispatchWorkstreamConnectorMutations(
-      caseRow({
-        workerCategory: "contractor",
-        hireType: "contractor",
-      }),
+      contractor,
       {
         authorize: (proposal) => ({
           binding: { proposalHash: hashApprovalProposal(proposal) },
