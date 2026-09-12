@@ -6,6 +6,7 @@ import {
 import { Link, useLocation } from 'wouter';
 import { Plus, BookOpen, CheckCircle, ShieldAlert, ArrowRight, Loader2, Shield } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import { PolicyReminders } from './reminders';
 
 export function HrPolicyLibraryIndexPage() {
   const policiesQuery = usePolicies();
@@ -80,6 +81,7 @@ export function HrPolicyLibraryIndexPage() {
 
       {activeTab === 'policies' && (
         <div className="flex flex-col gap-6">
+          {capabilities?.canMaintain && <PolicyReminders />}
           {capabilities?.canMaintain && (
             <div className="flex justify-end">
               <CreatePolicyDialog membershipRole={capabilities.membershipRole} />

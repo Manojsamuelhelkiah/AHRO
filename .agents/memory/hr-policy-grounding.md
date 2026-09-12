@@ -12,3 +12,9 @@ Use extractive answers for the initial policy assistant, with the full authorize
 **Why:** A plausible generated paraphrase can introduce legal or benefit claims absent from the approved source, and an isolated sentence can omit a disqualifying exception elsewhere in the same policy.
 
 **How to apply:** Filter membership, audience, applicability, publication and freshness before model disclosure; reauthorize after model completion and when opening citations. Preserve explicit limitations instead of using general knowledge or an older source as fallback.
+
+Separate durable reminder persistence from transactions holding membership or authority locks; reauthorize before returning reminder contents.
+
+**Why:** Policy lifecycle operations do not share a single authority/version lock order. Reminder foreign-key checks also lock parent versions, so adding reminder writes to an authorization transaction can introduce a deadlock even without explicit version locking.
+
+**How to apply:** Authorize first, persist separately without authority locks, then reauthorize and read current lifecycle/audience/date state. A durable stale reminder must not imply current access or continued publication.

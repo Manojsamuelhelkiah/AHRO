@@ -73,6 +73,17 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
         "400": { description: Invalid policy input }
         "403": { description: Verified authority and source audience required }
+  /policies/reminders:
+    get:
+      operationId: listHrPolicyReminders
+      tags: [hrPolicyLibrary]
+      summary: List durable, currently actionable HR policy expiry reminders
+      description: Requires live tenant membership, verified active `hr-policy-maintain` authority, and the current membership role in each version's explicit audience. Published versions with review or effective-end dates overdue or within the next 30 UTC calendar days are returned; retired and superseded versions remain hidden. Reading lazily creates missing durable rows and never dispatches externally.
+      responses:
+        "200":
+          description: Current internal-only reminder rows
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/HrPolicyReminder" } } } }
+        "403": { description: Live membership and verified active maintenance authority required }
   /policies/{policyId}/history:
     get:
       operationId: getHrPolicyHistory
@@ -10927,6 +10938,19 @@ components:
           type: array
           items: { $ref: "#/components/schemas/HrPolicyVersionMetadata" }
       required: [policies]
+    HrPolicyReminder:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        policyId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        title: { type: string }
+        kind: { type: string, enum: [review_due, effective_end] }
+        dueOn: { type: string, format: date }
+        daysRemaining: { type: integer }
+        createdAt: { type: string, format: date-time }
+      required: [id, policyId, version, title, kind, dueOn, daysRemaining, createdAt]
     HrPolicyCreateInput:
       type: object
       additionalProperties: false

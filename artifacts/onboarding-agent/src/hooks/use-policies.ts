@@ -36,6 +36,17 @@ export interface PolicyDetail {
   text: string;
 }
 
+export interface PolicyReminder {
+  id: number;
+  policyId: string;
+  version: number;
+  title: string;
+  kind: 'review_due' | 'effective_end';
+  dueOn: string;
+  daysRemaining: number;
+  createdAt: string;
+}
+
 export interface PolicyCapabilities {
   membershipRole: PolicyMembershipRole;
   canMaintain: boolean;
@@ -131,6 +142,17 @@ export function usePolicies() {
     queryKey: getPoliciesKey(scope),
     queryFn: async () => (await request<{ policies: PolicyVersion[] }>('/api/policies')).policies,
     ...policyQueryOptions(scope),
+    refetchInterval: 15_000,
+  });
+}
+
+export function usePolicyReminders(enabled: boolean) {
+  const scope = usePolicyScope();
+  return useQuery({
+    queryKey: [...getPoliciesKey(scope), 'reminders'],
+    queryFn: () => request<PolicyReminder[]>('/api/policies/reminders'),
+    ...policyQueryOptions(scope),
+    enabled: Boolean(enabled && scope.organizationId && scope.userId),
     refetchInterval: 15_000,
   });
 }

@@ -112,3 +112,32 @@ export const onbHrPolicyHandoffs = pgTable("onb_hr_policy_handoffs", {
   check("onb_hr_policy_handoffs_status_check", sql`${t.status} in ('open', 'resolved')`),
   index("onb_hr_policy_handoffs_open_idx").on(t.organizationId, t.status, t.createdAt),
 ]);
+
+/**
+ * A durable, internal-only reminder for a published policy version. Rows are
+ * created lazily when an authorized maintainer reads the reminder list; the
+ * unique key makes concurrent reads idempotent without any dispatch side
+ * effect.
+ */
+export const onbHrPolicyReminders = pgTable("onb_hr_policy_reminders", {
+  id: serial("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  policyId: text("policy_id").notNull(),
+  version: integer("version").notNull(),
+  title: text("title").notNull(),
+  kind: text("kind").$type<"review_due" | "effective_end">().notNull(),
+  dueOn: date("due_on").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("onb_hr_policy_reminders_org_policy_version_kind_due_unique").on(
+    t.organizationId, t.policyId, t.version, t.kind, t.dueOn,
+  ),
+  check("onb_hr_policy_reminders_version_check", sql`${t.version} > 0`),
+  check("onb_hr_policy_reminders_kind_check", sql`${t.kind} in ('review_due', 'effective_end')`),
+  foreignKey({
+    columns: [t.organizationId, t.policyId, t.version],
+    foreignColumns: [onbHrPolicyVersions.organizationId, onbHrPolicyVersions.policyId, onbHrPolicyVersions.version],
+    name: "onb_hr_policy_reminders_version_fk",
+  }),
+  index("onb_hr_policy_reminders_lookup_idx").on(t.organizationId, t.dueOn),
+]);

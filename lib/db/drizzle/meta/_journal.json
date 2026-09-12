@@ -512,6 +512,13 @@
       "when": 1789026000018,
       "tag": "0055_hr_policy_publication_receipts_and_excerpts",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1789026000019,
+      "tag": "0056_hr_policy_reminders",
+      "breakpoints": true
     }
   ]
 }

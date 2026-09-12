@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
 import {
   db,
   onbGovernanceAuthorityAssignments,
   onbHrPolicyExcerpts,
   onbHrPolicyHandoffs,
+  onbHrPolicyReminders,
   onbHrPolicySources,
   onbHrPolicyVersions,
   organizationMembershipsTable,
@@ -211,6 +212,22 @@ function isAudience(row: { audience: PolicyRole[] }, role: PolicyRole) {
   return row.audience.includes(role);
 }
 
+function utcDateOnly(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function addUtcCalendarDays(dateValue: string, days: number): string {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return utcDateOnly(date);
+}
+
+function calendarDaysRemaining(dueOn: string, today: string): number {
+  const due = Date.parse(`${dueOn}T00:00:00.000Z`);
+  const current = Date.parse(`${today}T00:00:00.000Z`);
+  return Math.round((due - current) / 86_400_000);
+}
+
 export async function listPolicies(organizationId: string, userId: string) {
   return db.transaction(async (tx) => {
     const role = await liveMember(tx, organizationId, userId);
@@ -225,6 +242,145 @@ export async function listPolicies(organizationId: string, userId: string) {
     )).map(policyPublic);
   });
 }
+
+/**
+ * Lists durable, internal policy reminders. Generation is deliberately part of
+ * an authorized read: no worker, external dispatch, or policy-date mutation is
+ * involved. Authorization, persistence, and the final authorized read are
+ * separate transactions so no reminder transaction holds membership/authority
+ * locks while it inserts rows whose composite FK takes a version KEY SHARE.
+ */
+export async function listPolicyReminders(
+  organizationId: string,
+  userId: string,
+  now = new Date(),
+) {
+  const today = utcDateOnly(now);
+  const horizon = addUtcCalendarDays(today, 30);
+
+  // Phase one is the only authorization gate before the persistence phase.
+  // It deliberately touches no policy/version rows.
+  const precheckedRole = await db.transaction(async (tx) => {
+    await verifiedAuthority(tx, organizationId, userId, "hr-policy-maintain");
+    return liveMember(tx, organizationId, userId);
+  });
+
+  // Phase two may observe a concurrent lifecycle transition. It takes no
+  // explicit version locks and holds no membership/authority locks; stale candidates
+  // are harmless because the final authorized read rechecks current state.
+  await db.transaction(async (tx) => {
+    const candidates = await tx.select({
+      policyId: onbHrPolicyVersions.policyId,
+      version: onbHrPolicyVersions.version,
+      title: onbHrPolicyVersions.title,
+      audience: onbHrPolicyVersions.audience,
+      reviewBy: onbHrPolicyVersions.reviewBy,
+      effectiveUntil: onbHrPolicyVersions.effectiveUntil,
+    }).from(onbHrPolicyVersions).where(and(
+      eq(onbHrPolicyVersions.organizationId, organizationId),
+      eq(onbHrPolicyVersions.status, "published"),
+      or(
+        and(isNotNull(onbHrPolicyVersions.reviewBy), lte(onbHrPolicyVersions.reviewBy, horizon)),
+        and(isNotNull(onbHrPolicyVersions.effectiveUntil), lte(onbHrPolicyVersions.effectiveUntil, horizon)),
+      ),
+    )).orderBy(asc(onbHrPolicyVersions.policyId), asc(onbHrPolicyVersions.version));
+
+    const reminderValues: Array<{
+      organizationId: string;
+      policyId: string;
+      version: number;
+      title: string;
+      kind: "review_due" | "effective_end";
+      dueOn: string;
+    }> = [];
+    for (const candidate of candidates) {
+      if (!isAudience(candidate, precheckedRole)) continue;
+      if (candidate.reviewBy && candidate.reviewBy <= horizon) {
+        reminderValues.push({
+          organizationId,
+          policyId: candidate.policyId,
+          version: candidate.version,
+          title: candidate.title,
+          kind: "review_due",
+          dueOn: candidate.reviewBy,
+        });
+      }
+      if (candidate.effectiveUntil && candidate.effectiveUntil <= horizon) {
+        reminderValues.push({
+          organizationId,
+          policyId: candidate.policyId,
+          version: candidate.version,
+          title: candidate.title,
+          kind: "effective_end",
+          dueOn: candidate.effectiveUntil,
+        });
+      }
+    }
+    if (reminderValues.length > 0) {
+      await tx.insert(onbHrPolicyReminders).values(reminderValues).onConflictDoNothing({
+        target: [
+          onbHrPolicyReminders.organizationId,
+          onbHrPolicyReminders.policyId,
+          onbHrPolicyReminders.version,
+          onbHrPolicyReminders.kind,
+          onbHrPolicyReminders.dueOn,
+        ],
+      });
+    }
+  });
+
+  // Phase three is the only transaction that reads rows for the response.
+  // Reauthorization and current status/audience/date checks make stale durable
+  // rows invisible after revocation, supersession, retirement, or revision.
+  return db.transaction(async (tx) => {
+    await verifiedAuthority(tx, organizationId, userId, "hr-policy-maintain");
+    const role = await liveMember(tx, organizationId, userId);
+    const rows = await tx.select({
+      id: onbHrPolicyReminders.id,
+      policyId: onbHrPolicyVersions.policyId,
+      version: onbHrPolicyVersions.version,
+      title: onbHrPolicyVersions.title,
+      audience: onbHrPolicyVersions.audience,
+      kind: onbHrPolicyReminders.kind,
+      dueOn: onbHrPolicyReminders.dueOn,
+      createdAt: onbHrPolicyReminders.createdAt,
+    }).from(onbHrPolicyReminders).innerJoin(onbHrPolicyVersions, and(
+      eq(onbHrPolicyReminders.organizationId, onbHrPolicyVersions.organizationId),
+      eq(onbHrPolicyReminders.policyId, onbHrPolicyVersions.policyId),
+      eq(onbHrPolicyReminders.version, onbHrPolicyVersions.version),
+    )).where(and(
+      eq(onbHrPolicyReminders.organizationId, organizationId),
+      eq(onbHrPolicyVersions.status, "published"),
+      lte(onbHrPolicyReminders.dueOn, horizon),
+      or(
+        and(
+          eq(onbHrPolicyReminders.kind, "review_due"),
+          eq(onbHrPolicyReminders.dueOn, onbHrPolicyVersions.reviewBy),
+        ),
+        and(
+          eq(onbHrPolicyReminders.kind, "effective_end"),
+          eq(onbHrPolicyReminders.dueOn, onbHrPolicyVersions.effectiveUntil),
+        ),
+      ),
+    )).orderBy(asc(onbHrPolicyReminders.dueOn), asc(onbHrPolicyReminders.id));
+
+    // Recheck the per-version audience at return time. This keeps reminders
+    // hidden after a role change even when the durable row predates it.
+    return rows.filter((row) => isAudience(row, role)).map((row) => ({
+      id: row.id,
+      policyId: row.policyId,
+      version: row.version,
+      title: row.title,
+      kind: row.kind,
+      dueOn: row.dueOn,
+      daysRemaining: calendarDaysRemaining(row.dueOn, today),
+      createdAt: row.createdAt.toISOString(),
+    }));
+  });
+}
+
+/** Descriptive alias for callers that use the full HR-policy namespace. */
+export const listHrPolicyReminders = listPolicyReminders;
 
 export async function policyHistory(organizationId: string, userId: string, policyId: string) {
   return db.transaction(async (tx) => {

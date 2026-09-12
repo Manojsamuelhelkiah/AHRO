@@ -9,6 +9,7 @@ import {
   listPolicies,
   policyHistory,
   listPolicyHandoffs,
+  listPolicyReminders,
   policyCapabilities,
   publishPolicy,
   readPolicyExcerpt,
@@ -47,6 +48,10 @@ export function createHrPolicyRouter(): IRouter {
   });
   router.get("/policies", async (req, res, next) => {
     try { res.json({ policies: await listPolicies(getOrganizationId(req), req.authUserId!) }); }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+  router.get("/policies/reminders", async (req, res, next) => {
+    try { res.json(await listPolicyReminders(getOrganizationId(req), req.authUserId!)); }
     catch (error) { if (!errorResponse(error, res)) next(error); }
   });
   router.get("/policies/:policyId/history", async (req, res, next) => {

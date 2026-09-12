@@ -1083,7 +1083,11 @@ test(
             tag !== "0052_organization_membership_lifecycle" &&
             tag !== "0053_organization_membership_revision" &&
              tag !== "0053_external_audit_anchor_receipt_generation" &&
-             tag !== "0054_external_audit_anchor_receipt_constraints",
+             tag !== "0054_external_audit_anchor_receipt_constraints" &&
+             tag !== "0053_governed_hr_policy_library" &&
+             tag !== "0054_hr_policy_review_authority_category" &&
+             tag !== "0055_hr_policy_publication_receipts_and_excerpts" &&
+             tag !== "0056_hr_policy_reminders",
       );
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(),

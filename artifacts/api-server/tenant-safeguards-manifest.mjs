@@ -57,6 +57,7 @@ export const tenantSafeguards = [
   { table: "onb_hr_policy_versions", phaseB: false },
   { table: "onb_hr_policy_handoffs", phaseB: false },
   { table: "onb_hr_policy_excerpts", phaseB: false },
+  { table: "onb_hr_policy_reminders", phaseB: false },
   { table: "onb_intake_batches", phaseB: false },
   { table: "onb_intake_batch_people", phaseB: false },
   // Protected evidence has no business-record FK so deletion cannot cascade
@@ -161,6 +162,12 @@ export const expectedForeignKeys = [
   },
   {
     table: "onb_hr_policy_excerpts",
+    columns: ["organization_id", "policy_id", "version"],
+    referencedTable: "onb_hr_policy_versions",
+    referencedColumns: ["organization_id", "policy_id", "version"],
+  },
+  {
+    table: "onb_hr_policy_reminders",
     columns: ["organization_id", "policy_id", "version"],
     referencedTable: "onb_hr_policy_versions",
     referencedColumns: ["organization_id", "policy_id", "version"],
