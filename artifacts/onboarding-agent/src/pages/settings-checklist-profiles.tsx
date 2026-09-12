@@ -14,10 +14,12 @@ import {
   type OnbChecklistTemplateItem,
 } from '@workspace/api-client-react';
 import { customFetch } from '@workspace/api-client-react';
+import * as ApiClient from '@workspace/api-client-react';
 import { Button, cn, IconTile, LoadingBlock, Label, Badge } from '@/components/ui-shared';
-import { Layers, Plus, Edit2, Copy, PowerOff, X, Check, AlertTriangle } from 'lucide-react';
+import { Layers, Plus, Edit2, Copy, PowerOff, X, Check, AlertTriangle, Bot } from 'lucide-react';
 import { RecommendationsPage } from './recommendations';
 import { listPolicyAuthorityMembers, listWorkforceStarterTemplates } from '@/lib/workforce-policy-api';
+import { ChecklistProfileDrafter } from '@/components/checklist-profile-drafter';
 
 function mutationMessage(error: any, fallback: string) {
   return error?.data?.message
@@ -84,8 +86,7 @@ export function TargetedChecklistProfiles() {
 
   const [editingProfile, setEditingProfile] = useState<Partial<OnbChecklistProfile> | null>(null);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
-  const [studioTab, setStudioTab] = useState<'starters' | 'matching' | 'steps' | 'preview' | 'recommendations'>('starters');
-
+  const [studioTab, setStudioTab] = useState<'starters' | 'matching' | 'steps' | 'preview' | 'recommendations' | 'generate'>('starters');
   const activeProfiles = (profiles ?? []).filter(p => p.enabled).sort((a, b) => b.priority - a.priority);
   const inactiveProfiles = (profiles ?? []).filter(p => !p.enabled).sort((a, b) => b.priority - a.priority);
 
@@ -95,6 +96,11 @@ export function TargetedChecklistProfiles() {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: getListOnboardingChecklistProfilesQueryKey() }),
       onError: (err: any) => setDuplicateError(mutationMessage(err, 'Failed to duplicate profile.'))
     });
+  };
+
+  const handleDraftReview = (profile: OnbChecklistProfileInput) => {
+    setEditingProfile(profile);
+    setStudioTab('matching');
   };
 
   return (
@@ -110,14 +116,20 @@ export function TargetedChecklistProfiles() {
               </p>
             </div>
           </div>
-          <Button size="sm" onClick={() => { setStudioTab('matching'); setEditingProfile({ name: '', enabled: false, priority: 1, criteria: {}, overrides: [] }); }} className="gap-2">
-            <Plus className="w-4 h-4" /> Create Draft
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => { setStudioTab('generate'); setEditingProfile(null); }} className="gap-2 text-[var(--primary)] border-[var(--primary-light)] hover:bg-[var(--primary-light)]">
+              <Bot className="w-4 h-4" /> AI Draft
+            </Button>
+            <Button size="sm" onClick={() => { setStudioTab('matching'); setEditingProfile({ name: '', enabled: false, priority: 1, criteria: {}, overrides: [] }); }} className="gap-2">
+              <Plus className="w-4 h-4" /> Create Draft
+            </Button>
+          </div>
         </div>
       </div>
        <div className="flex overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-[var(--space-lg)]">
          {([
            ['starters', 'Starter templates'],
+           ['generate', 'AI Drafter'],
            ['matching', 'Matching rules'],
            ['steps', 'Process steps'],
            ['preview', 'Preview & publish'],
@@ -130,6 +142,9 @@ export function TargetedChecklistProfiles() {
          ))}
        </div>
       <div className="p-[var(--space-lg)] bg-[var(--surface)]">
+        {studioTab === 'generate' && !editingProfile && (
+          <ChecklistProfileDrafter onReview={handleDraftReview} />
+        )}
           {!editingProfile && studioTab === 'starters' && (
            <div className="mb-5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] p-3">
              <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-secondary)]">Reviewed starter templates</p>

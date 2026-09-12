@@ -14,6 +14,7 @@ import { Link } from 'wouter';
 import { statusOf, caseTypeOf } from './cases/index';
 
 import { OutcomeKpis } from './analytics/outcome-kpis';
+import { BottleneckSimulator } from './analytics/bottleneck-simulator';
 
 export function AnalyticsPage() {
   const queryClient = useQueryClient();
@@ -263,6 +264,10 @@ export function AnalyticsPage() {
         caseType={caseType} 
         agent={agent} 
       />
+
+      <section className="mb-14 mt-12">
+        <BottleneckSimulator period={period} region={region} domain={domain} caseType={caseType} />
+      </section>
 
       <section className="mb-14">
         <div className="mb-6">

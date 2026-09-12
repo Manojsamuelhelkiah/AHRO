@@ -9177,6 +9177,135 @@ export const CreateOnboardingChecklistProfileResponse = zod.object({
 
 
 /**
+ * HR-only, tenant-scoped proposal generation. The endpoint uses the approved OpenAI integration with strict JSON output, validates the result against the tenant's current additive checklist baseline, and never saves, publishes, or applies the proposal.
+ * @summary Draft a validated disabled checklist profile from plain-language HR description
+ */
+export const draftOnboardingChecklistProfileBodyDescriptionMax = 4000;
+
+
+
+export const DraftOnboardingChecklistProfileBody = zod.object({
+  "description": zod.string().min(1).max(draftOnboardingChecklistProfileBodyDescriptionMax).describe('Plain-language HR description of the desired targeted checklist profile. Do not include case or candidate details.')
+})
+
+export const draftOnboardingChecklistProfileResponseProposalNameMax = 120;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export const draftOnboardingChecklistProfileResponseProposalOverridesItemOrderMin = 0;
+
+export const draftOnboardingChecklistProfileResponseProposalOverridesMax = 100;
+
+export const draftOnboardingChecklistProfileResponseProposalPriorityMin = 0;
+
+
+export const draftOnboardingChecklistProfileResponseProposalEffectiveChecklistItemOrderMin = 0;
+
+
+export const draftOnboardingChecklistProfileResponseRationaleMax = 4000;
+
+export const draftOnboardingChecklistProfileResponseWarningsItemMax = 500;
+
+export const draftOnboardingChecklistProfileResponseUnsupportedRequestsItemMax = 500;
+
+export const draftOnboardingChecklistProfileResponsePreviewActiveCasesConsideredMin = 0;
+
+export const draftOnboardingChecklistProfileResponsePreviewMatchingActiveCasesMin = 0;
+
+export const draftOnboardingChecklistProfileResponsePreviewMissingContextActiveCasesMin = 0;
+
+export const draftOnboardingChecklistProfileResponsePreviewUnchangedActiveCasesMin = 0;
+
+
+
+export const DraftOnboardingChecklistProfileResponse = zod.object({
+  "proposal": zod.object({
+  "name": zod.string().min(1).max(draftOnboardingChecklistProfileResponseProposalNameMax),
+  "criteria": zod.object({
+  "band": zod.string().min(1).optional(),
+  "role": zod.string().min(1).optional(),
+  "employmentType": zod.string().min(1).optional(),
+  "location": zod.string().min(1).optional(),
+  "roleFamily": zod.string().min(1).optional(),
+  "department": zod.string().min(1).optional(),
+  "legalEntity": zod.string().min(1).optional(),
+  "businessUnit": zod.string().min(1).optional(),
+  "industry": zod.string().min(1).optional(),
+  "workCountry": zod.string().min(1).optional(),
+  "workState": zod.string().min(1).optional(),
+  "site": zod.string().min(1).optional(),
+  "employmentArrangement": zod.string().min(1).optional(),
+  "workerCategory": zod.string().min(1).optional(),
+  "payBasis": zod.string().min(1).optional(),
+  "shiftPattern": zod.string().min(1).optional(),
+  "workEnvironment": zod.string().min(1).optional(),
+  "hiringMode": zod.string().min(1).optional(),
+  "safetyCritical": zod.enum(['true', 'false']).optional()
+}),
+  "overrides": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1).optional(),
+  "order": zod.number().min(draftOnboardingChecklistProfileResponseProposalOverridesItemOrderMin).optional(),
+  "enabled": zod.boolean().optional(),
+  "mandatory": zod.boolean().optional(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']).optional(),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional()
+})).max(draftOnboardingChecklistProfileResponseProposalOverridesMax),
+  "priority": zod.number().min(draftOnboardingChecklistProfileResponseProposalPriorityMin),
+  "enabled": zod.literal(false).describe('Draft proposals are always disabled and can never be published by this endpoint.'),
+  "processPolicy": zod.record(zod.string(), zod.unknown()),
+  "effectiveChecklist": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string().min(1),
+  "order": zod.number().min(draftOnboardingChecklistProfileResponseProposalEffectiveChecklistItemOrderMin),
+  "enabled": zod.boolean(),
+  "mandatory": zod.boolean(),
+  "enforcementStage": zod.enum(['before-workstreams', 'before-employee-communications', 'before-day1-review']),
+  "evidenceRequired": zod.boolean().optional(),
+  "responsibleRole": zod.string().optional(),
+  "completionAuthority": zod.enum(['hr-admin', 'designated-human']).optional(),
+  "executor": zod.enum(['existing-workflow', 'human-task']).optional(),
+  "prerequisites": zod.array(zod.string()).optional(),
+  "nonWaivableSafety": zod.boolean().optional().describe('Immutable occupational-health\/safety policy bit. Profile edits cannot set, clear, or infer it from labels.'),
+  "migrationReviewHold": zod.boolean().optional().describe('Historical classification hold. This requires an explicit governance review and is not occupational-health\/safety evidence.')
+}))
+}),
+  "baseChecklistVersion": zod.number().min(1),
+  "rationale": zod.string().min(1).max(draftOnboardingChecklistProfileResponseRationaleMax),
+  "warnings": zod.array(zod.string().max(draftOnboardingChecklistProfileResponseWarningsItemMax)),
+  "unsupportedRequests": zod.array(zod.string().max(draftOnboardingChecklistProfileResponseUnsupportedRequestsItemMax)),
+  "preview": zod.object({
+  "activeCasesConsidered": zod.number().min(draftOnboardingChecklistProfileResponsePreviewActiveCasesConsideredMin),
+  "activeCasesTruncated": zod.boolean().describe('True when the bounded tenant case sample reached its safety limit.'),
+  "matchingActiveCases": zod.number().min(draftOnboardingChecklistProfileResponsePreviewMatchingActiveCasesMin).describe('Active tenant cases whose canonical matching attributes satisfy the proposed criteria.'),
+  "missingContextActiveCases": zod.number().min(draftOnboardingChecklistProfileResponsePreviewMissingContextActiveCasesMin).describe('Active tenant cases missing a fact required to evaluate the proposed criteria or match rules.'),
+  "unchangedActiveCases": zod.number().min(draftOnboardingChecklistProfileResponsePreviewUnchangedActiveCasesMin).describe('Active cases guaranteed unchanged because this endpoint never publishes or applies the disabled draft.')
+})
+})
+
+
+/**
  * @summary Create a new immutable version to edit, reprioritize, or disable a profile
  */
 export const UpdateOnboardingChecklistProfileParams = zod.object({

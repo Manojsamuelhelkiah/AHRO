@@ -2444,6 +2444,88 @@ export type OnbChecklistProfile = OnbChecklistProfileInput & {
   createdAt: string;
 };
 
+export interface OnbChecklistProfileDraftInput {
+  /**
+     * Plain-language HR description of the desired targeted checklist profile. Do not include case or candidate details.
+     * @minLength 1
+     * @maxLength 4000
+     */
+  description: string;
+}
+
+export type OnbChecklistProfileDraftProposalProcessPolicy = { [key: string]: unknown };
+
+export interface OnbChecklistProfileDraftProposal {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  criteria: OnbChecklistProfileCriteria;
+  /** @maxItems 100 */
+  overrides: OnbChecklistItemOverride[];
+  /** @minimum 0 */
+  priority: number;
+  /** Draft proposals are always disabled and can never be published by this endpoint. */
+  enabled: false;
+  processPolicy: OnbChecklistProfileDraftProposalProcessPolicy;
+  effectiveChecklist: OnbChecklistTemplateItem[];
+}
+
+export interface OnbChecklistProfileDraftPreview {
+  /** @minimum 0 */
+  activeCasesConsidered: number;
+  /** True when the bounded tenant case sample reached its safety limit. */
+  activeCasesTruncated: boolean;
+  /**
+     * Active tenant cases whose canonical matching attributes satisfy the proposed criteria.
+     * @minimum 0
+     */
+  matchingActiveCases: number;
+  /**
+     * Active tenant cases missing a fact required to evaluate the proposed criteria or match rules.
+     * @minimum 0
+     */
+  missingContextActiveCases: number;
+  /**
+     * Active cases guaranteed unchanged because this endpoint never publishes or applies the disabled draft.
+     * @minimum 0
+     */
+  unchangedActiveCases: number;
+}
+
+export interface OnbChecklistProfileDraftResponse {
+  proposal: OnbChecklistProfileDraftProposal;
+  /** @minimum 1 */
+  baseChecklistVersion: number;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  rationale: string;
+  /** @items.maxLength 500 */
+  warnings: string[];
+  /** @items.maxLength 500 */
+  unsupportedRequests: string[];
+  preview: OnbChecklistProfileDraftPreview;
+}
+
+export type OnbChecklistProfileDraftErrorCode = typeof OnbChecklistProfileDraftErrorCode[keyof typeof OnbChecklistProfileDraftErrorCode];
+
+
+export const OnbChecklistProfileDraftErrorCode = {
+  'invalid-request': 'invalid-request',
+  unavailable: 'unavailable',
+  invalidAI: 'invalidAI',
+} as const;
+
+export interface OnbChecklistProfileDraftError {
+  code: OnbChecklistProfileDraftErrorCode;
+  message: string;
+  /** @items.maxLength 500 */
+  unsupportedRequests?: string[];
+}
+
 export type OnbChecklistRecalculationInputAction = typeof OnbChecklistRecalculationInputAction[keyof typeof OnbChecklistRecalculationInputAction];
 
 

@@ -111,6 +111,9 @@ import type {
   OnbChannelTestResult,
   OnbChecklistItemStatusUpdate,
   OnbChecklistProfile,
+  OnbChecklistProfileDraftError,
+  OnbChecklistProfileDraftInput,
+  OnbChecklistProfileDraftResponse,
   OnbChecklistProfileInput,
   OnbChecklistProfileUpdate,
   OnbChecklistRecalculationInput,
@@ -7548,6 +7551,78 @@ export const useCreateOnboardingChecklistProfile = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateOnboardingChecklistProfileMutationOptions(options));
+    }
+
+export const getDraftOnboardingChecklistProfileUrl = () => {
+
+
+
+
+  return `/api/onboarding/checklist-profiles/draft-from-description`
+}
+
+/**
+ * HR-only, tenant-scoped proposal generation. The endpoint uses the approved OpenAI integration with strict JSON output, validates the result against the tenant's current additive checklist baseline, and never saves, publishes, or applies the proposal.
+ * @summary Draft a validated disabled checklist profile from plain-language HR description
+ */
+export const draftOnboardingChecklistProfile = async (onbChecklistProfileDraftInput: OnbChecklistProfileDraftInput, options?: RequestInit): Promise<OnbChecklistProfileDraftResponse> => {
+
+  return customFetch<OnbChecklistProfileDraftResponse>(getDraftOnboardingChecklistProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbChecklistProfileDraftInput)
+  }
+);}
+
+
+
+
+
+export const getDraftOnboardingChecklistProfileMutationOptions = <TError = ErrorType<OnbChecklistProfileDraftError | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftOnboardingChecklistProfile>>, TError,{data: BodyType<OnbChecklistProfileDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftOnboardingChecklistProfile>>, TError,{data: BodyType<OnbChecklistProfileDraftInput>}, TContext> => {
+
+const mutationKey = ['draftOnboardingChecklistProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftOnboardingChecklistProfile>>, {data: BodyType<OnbChecklistProfileDraftInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftOnboardingChecklistProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftOnboardingChecklistProfileMutationResult = NonNullable<Awaited<ReturnType<typeof draftOnboardingChecklistProfile>>>
+    export type DraftOnboardingChecklistProfileMutationBody = BodyType<OnbChecklistProfileDraftInput>
+    export type DraftOnboardingChecklistProfileMutationError = ErrorType<OnbChecklistProfileDraftError | void>
+
+    /**
+ * @summary Draft a validated disabled checklist profile from plain-language HR description
+ */
+export const useDraftOnboardingChecklistProfile = <TError = ErrorType<OnbChecklistProfileDraftError | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftOnboardingChecklistProfile>>, TError,{data: BodyType<OnbChecklistProfileDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftOnboardingChecklistProfile>>,
+        TError,
+        {data: BodyType<OnbChecklistProfileDraftInput>},
+        TContext
+      > => {
+      return useMutation(getDraftOnboardingChecklistProfileMutationOptions(options));
     }
 
 export const getUpdateOnboardingChecklistProfileUrl = (profileId: string,) => {

@@ -487,7 +487,14 @@ export type ChecklistProfileInput = {
   processPolicy?: Record<string, unknown>;
 };
 
-function validateProfileInput(input: ChecklistProfileInput): ChecklistProfileInput {
+/**
+ * Validate and normalize the profile shape shared by the editor, profile
+ * persistence, and non-publishing proposal flows.  Keeping this boundary
+ * exported lets proposal consumers prove that a generated profile is the
+ * same shape the editor would be allowed to save; it does not grant the
+ * caller any persistence authority.
+ */
+export function validateProfileInput(input: ChecklistProfileInput): ChecklistProfileInput {
   const criteria = normalizeCriteria(input.criteria);
   if (!input.name.trim() || input.name.trim().length > 120) throw new Error("Profile name must contain 1–120 characters.");
   if (Object.keys(criteria).length === 0) throw new Error("A targeted profile needs at least one criterion.");

@@ -1,5 +1,7 @@
 # Memory Index
 
+- [HRO proposals and simulations](hro-proposal-simulation-boundaries.md) — generated workflows need human review; aggregate what-if means are not causal forecasts or case-level SLA rates.
+
 - [Cost-explorer model conventions](cost-model-conventions.md) — assumptions register is the single source of truth; every input must move the result; reconcile rows/buckets/totals in tests.
 - [Scenario form/API mapping](scenario-form-mapping.md) — use the canonical mapper pair in `scenario-form.ts`; never spread raw API inputs into form state or stale overrides survive resets.
 - [Orval numeric-constraint TDZ](orval-codegen-max-tdz.md) — referenced numeric constraints can break generated Zod initialization; validate generated output and prefer app-side ranges.

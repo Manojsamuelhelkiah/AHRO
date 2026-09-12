@@ -2256,6 +2256,55 @@ paths:
           description: Invalid or ambiguous enabled profile
         "409":
           description: Enabled rule is ambiguous with an existing profile at the same priority
+  /onboarding/checklist-profiles/draft-from-description:
+    post:
+      operationId: draftOnboardingChecklistProfile
+      tags: [onboarding]
+      summary: Draft a validated disabled checklist profile from plain-language HR description
+      description: >
+        HR-only, tenant-scoped proposal generation. The endpoint uses the
+        approved OpenAI integration with strict JSON output, validates the
+        result against the tenant's current additive checklist baseline, and
+        never saves, publishes, or applies the proposal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnbChecklistProfileDraftInput"
+      responses:
+        "200":
+          description: Validated disabled proposal and aggregate-only tenant preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfileDraftResponse"
+        "400":
+          description: Invalid description input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfileDraftError"
+        "403":
+          description: Organization owner or admin HR role required
+        "422":
+          description: Request contains an unsupported constraint that cannot be represented safely
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfileDraftError"
+        "502":
+          description: AI returned malformed or schema-invalid output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfileDraftError"
+        "503":
+          description: AI provider is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfileDraftError"
   /onboarding/checklist-profiles/{profileId}:
     patch:
       operationId: updateOnboardingChecklistProfile
@@ -6816,6 +6865,91 @@ components:
                 $ref: "#/components/schemas/OnbChecklistTemplateItem"
             createdAt: { type: string }
           required: [profileId, version, effectiveChecklist, createdAt]
+    OnbChecklistProfileDraftInput:
+      type: object
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: Plain-language HR description of the desired targeted checklist profile. Do not include case or candidate details.
+      required: [description]
+    OnbChecklistProfileDraftProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        criteria:
+          $ref: "#/components/schemas/OnbChecklistProfileCriteria"
+        overrides:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/OnbChecklistItemOverride"
+        priority: { type: integer, minimum: 0 }
+        enabled:
+          type: boolean
+          enum: [false]
+          description: Draft proposals are always disabled and can never be published by this endpoint.
+        processPolicy:
+          type: object
+          additionalProperties: true
+        effectiveChecklist:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbChecklistTemplateItem"
+      required: [name, criteria, overrides, priority, enabled, processPolicy, effectiveChecklist]
+    OnbChecklistProfileDraftPreview:
+      type: object
+      additionalProperties: false
+      properties:
+        activeCasesConsidered: { type: integer, minimum: 0 }
+        activeCasesTruncated:
+          type: boolean
+          description: True when the bounded tenant case sample reached its safety limit.
+        matchingActiveCases:
+          type: integer
+          minimum: 0
+          description: Active tenant cases whose canonical matching attributes satisfy the proposed criteria.
+        missingContextActiveCases:
+          type: integer
+          minimum: 0
+          description: Active tenant cases missing a fact required to evaluate the proposed criteria or match rules.
+        unchangedActiveCases:
+          type: integer
+          minimum: 0
+          description: Active cases guaranteed unchanged because this endpoint never publishes or applies the disabled draft.
+      required: [activeCasesConsidered, activeCasesTruncated, matchingActiveCases, missingContextActiveCases, unchangedActiveCases]
+    OnbChecklistProfileDraftResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        proposal:
+          $ref: "#/components/schemas/OnbChecklistProfileDraftProposal"
+        baseChecklistVersion: { type: integer, minimum: 1 }
+        rationale: { type: string, minLength: 1, maxLength: 4000 }
+        warnings:
+          type: array
+          items: { type: string, maxLength: 500 }
+        unsupportedRequests:
+          type: array
+          items: { type: string, maxLength: 500 }
+        preview:
+          $ref: "#/components/schemas/OnbChecklistProfileDraftPreview"
+      required: [proposal, baseChecklistVersion, rationale, warnings, unsupportedRequests, preview]
+    OnbChecklistProfileDraftError:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [invalid-request, unavailable, invalidAI]
+        message: { type: string }
+        unsupportedRequests:
+          type: array
+          items: { type: string, maxLength: 500 }
+      required: [code, message]
     OnbChecklistRecalculationInput:
       type: object
       additionalProperties: false
