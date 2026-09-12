@@ -5,7 +5,7 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
-import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical } from 'lucide-react';
+import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
   {
@@ -20,6 +20,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     label: 'Intelligence',
     items: [
       { path: '/guardrails', label: 'Guardrails', icon: Shield },
+      { path: '/policy-assistant', label: 'HR Policy Assistant', icon: Search },
       { path: '/agents', label: 'AI Agents', icon: Bot },
       { path: '/analytics', label: 'Analytics', icon: BarChart3 },
       { path: '/recommendations', label: 'Recommendations', icon: FlaskConical },
@@ -31,6 +32,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
       { path: '/systems', label: 'Systems', icon: Server },
       { path: '/demo-controller', label: 'Demo Center', icon: Presentation },
       { path: '/audit', label: 'Audit Trail', icon: Shield },
+      { path: '/hr-policy-library', label: 'HR Policy Library', icon: BookOpen },
       { path: '/settings', label: 'Settings', icon: Settings },
       { path: '/policy-review', label: 'Policy Review', icon: Shield },
       { path: '/client-setup', label: 'Client Setup', icon: Compass },

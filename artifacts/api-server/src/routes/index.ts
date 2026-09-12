@@ -29,6 +29,7 @@ import { requireTenantContext } from "../middlewares/tenant-context";
 import onboardingAuditRouter from "./onboarding-audit";
 import { protectedAuditCapture } from "../middlewares/protected-audit";
 import governanceRouter from "./governance";
+import hrPolicyRouter from "./hr-policies";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -68,6 +69,7 @@ router.use(onboardingAuditRouter);
 router.use(onboardingBatchIntakeRouter);
 router.use(actionCenterRouter);
 router.use(governanceRouter);
+router.use(hrPolicyRouter);
 router.use(onboardingDemoControllerRouter);
 router.use(onboardingSlaRouter);
 router.use(onboardingContactRouter);

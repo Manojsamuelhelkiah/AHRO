@@ -31,6 +31,9 @@ import {
   resolveOrganizationBootstrap,
   type OrganizationBootstrapResponse,
 } from './lib/organization-bootstrap';
+import { PolicyAssistantPage } from './pages/policy-assistant';
+import { HrPolicyLibraryIndexPage } from './pages/hr-policy-library';
+import { HrPolicyLibraryDetailPage } from './pages/hr-policy-library/detail';
 import { AuditPage } from './pages/audit';
 import { PolicyReviewPage } from './pages/policy-review';
 
@@ -285,6 +288,9 @@ function Router() {
       <Route path="/guardrails">
         <Protected><GuardrailsPage /></Protected>
       </Route>
+      <Route path="/policy-assistant">
+        <Protected><PolicyAssistantPage /></Protected>
+      </Route>
       <Route path="/analytics">
         <Protected><AnalyticsPage /></Protected>
       </Route>
@@ -293,6 +299,12 @@ function Router() {
       </Route>
       <Route path="/policy-review">
         <Protected><PolicyReviewPage /></Protected>
+      </Route>
+      <Route path="/hr-policy-library">
+        <Protected><HrPolicyLibraryIndexPage /></Protected>
+      </Route>
+      <Route path="/hr-policy-library/:id">
+        <Protected><HrPolicyLibraryDetailPage /></Protected>
       </Route>
       <Route path="/recommendations">
         <Protected><RecommendationsPage /></Protected>

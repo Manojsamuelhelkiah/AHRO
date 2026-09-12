@@ -30,7 +30,273 @@ tags:
     description: One-time, operator-approved Demo Controller bootstrap for a member-only Demo Organization
   - name: governance
     description: Tenant-scoped revisioned decision, requirement coverage, and verified specialist authority register
+  - name: hrPolicyLibrary
+    description: Tenant-isolated, governed curated HR policy sources and cited answers; separate from case chat
 paths:
+  /policies/capabilities:
+    get:
+      operationId: getHrPolicyCapabilities
+      tags: [hrPolicyLibrary]
+      summary: Get current verified policy-library capabilities
+      responses:
+        "200":
+          description: Current capability flags
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyCapabilities" } } }
+        "403": { description: Current tenant membership required }
+  /policies:
+    get:
+      operationId: listHrPolicies
+      tags: [hrPolicyLibrary]
+      summary: List audience-authorized policy version metadata
+      responses:
+        "200":
+          description: Policy metadata; never restricted source text
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyListResponse" } } }
+        "403": { description: Current tenant membership required }
+    post:
+      operationId: createHrPolicy
+      tags: [hrPolicyLibrary]
+      summary: Create an immutable curated policy draft
+      description: Requires current verified hr-policy-maintain authority. Required `reviewAuthorityRole` is server-enforced as hr-compliance, legal, occupational-health, or payroll; external source references are never fetched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyCreateInput" }
+      responses:
+        "201":
+          description: Draft created
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
+        "400": { description: Invalid policy input }
+        "403": { description: Verified authority and source audience required }
+  /policies/{policyId}/history:
+    get:
+      operationId: getHrPolicyHistory
+      tags: [hrPolicyLibrary]
+      summary: Get audience-authorized immutable policy history
+      parameters: [{ name: policyId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: Version metadata
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyHistoryResponse" } } }
+        "403": { description: Current tenant membership required }
+        "404": { description: No visible policy source }
+  /policies/{policyId}/versions/{version}:
+    get:
+      operationId: getHrPolicyVersion
+      tags: [hrPolicyLibrary]
+      summary: Read audience-authorized policy text for maintenance or review
+      description: Draft/review text requires explicit maintainer or matching verified specialist authority; retired/superseded text requires verified historical review authority.
+      parameters:
+        - { name: policyId, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Authorized curated source
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyVersionDetailResponse" } } }
+        "400": { description: Invalid version request }
+        "403": { description: Source audience or specialist permission required }
+        "404": { description: No visible policy version }
+  /policies/{policyId}/draft:
+    patch:
+      operationId: reviseHrPolicyDraft
+      tags: [hrPolicyLibrary]
+      summary: Create a successor immutable draft
+      description: A published version remains current until its reviewed successor is published.
+      parameters: [{ name: policyId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyRevisionInput" }
+      responses:
+        "201":
+          description: Successor draft
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
+        "400": { description: Invalid policy input }
+        "403": { description: Verified authority and source audience required }
+        "404": { description: Policy source not found }
+        "409": { description: Stale or review-locked version }
+  /policies/{policyId}/submit-review:
+    post:
+      operationId: submitHrPolicyReview
+      tags: [hrPolicyLibrary]
+      summary: Submit current draft for independent review
+      parameters: [{ name: policyId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicySubmitReviewInput" }
+      responses:
+        "200":
+          description: Draft is in review
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
+        "400": { description: Invalid expected version }
+        "403": { description: Verified maintenance authority required }
+        "404": { description: Policy source not found }
+        "409": { description: Draft is stale or not eligible for review }
+  /policies/{policyId}/reviews:
+    post:
+      operationId: reviewHrPolicyVersion
+      tags: [hrPolicyLibrary]
+      summary: Approve or reject one exact policy version
+      description: Requires the source's verified specialist review authority, live membership, source audience, and separation from the author.
+      parameters: [{ name: policyId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyReviewInput" }
+      responses:
+        "200":
+          description: Immutable reviewer provenance recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
+        "400": { description: Invalid review input }
+        "403": { description: Verified review authority required }
+        "404": { description: Policy version not found }
+        "409": { description: Policy version is not awaiting review }
+  /policies/{policyId}/publish:
+    post:
+      operationId: publishHrPolicyVersion
+      tags: [hrPolicyLibrary]
+      summary: Publish an approved, date-valid policy version
+      description: Requires current source-category specialist authority, rechecks the independent review grant, and records a separate publisher receipt (`publicationVerificationReference`) before atomically superseding older guidance.
+      parameters: [{ name: policyId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyPublishInput" }
+      responses:
+        "200":
+          description: Published policy
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
+        "400": { description: Invalid publication input }
+        "403": { description: Verified publishing authority required }
+        "404": { description: Policy version not found }
+        "409": { description: Missing current review, stale, future or overdue source }
+  /policies/{policyId}/supersede:
+    post:
+      operationId: supersedeHrPolicyVersion
+      tags: [hrPolicyLibrary]
+      summary: Supersede a published version with a published replacement
+      parameters: [{ name: policyId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicySupersedeInput" }
+      responses:
+        "200":
+          description: Superseded policy
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
+        "400": { description: Invalid supersession input }
+        "403": { description: Verified policy authority required }
+        "404": { description: Policy version not found }
+        "409": { description: Published replacement is not valid }
+  /policies/{policyId}/retire:
+    post:
+      operationId: retireHrPolicyVersion
+      tags: [hrPolicyLibrary]
+      summary: Retire a published or superseded policy version
+      parameters: [{ name: policyId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyRetireInput" }
+      responses:
+        "200":
+          description: Retired policy
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
+        "400": { description: Invalid retirement input }
+        "403": { description: Verified policy authority required }
+        "404": { description: Policy version not found }
+        "409": { description: Only published or superseded policies can be retired }
+  /policies/answer:
+    post:
+      operationId: answerHrPolicyQuestion
+      tags: [hrPolicyLibrary]
+      summary: Answer only from a currently authorized, dated policy extract
+      description: Current membership, explicit audience, publication, allowlisted applicability (country, workerType, location), and current freshness are checked before content reaches approved AI. The AI receives the exact candidate plus full authorized source context only to reject insufficient, qualified, conflicting, or injected material; it can return only the exact server passage. Authorization is rechecked after AI returns.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyAnswerInput" }
+      responses:
+        "200":
+          description: Cited extractive answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyAnswerResponse" } } }
+        "400": { description: Invalid question or applicability }
+        "403": { description: Current tenant membership required }
+        "422":
+          description: Missing, conflicting, future, overdue, or insufficient source
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyAnswerResponse" } } }
+        "503": { description: Approved AI unavailable; no general-knowledge fallback }
+  /policies/{policyId}/versions/{version}/excerpts/{excerptId}:
+    get:
+      operationId: getHrPolicyCitationExcerpt
+      tags: [hrPolicyLibrary]
+      summary: Open an authorized cited source excerpt
+      description: "Retired, superseded, future, expired, or review-overdue sources require verified historical-review authority and return `isCurrent: false`."
+      parameters:
+        - { name: policyId, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: excerptId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Authorized source extract
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyCitationExcerpt" } } }
+        "400": { description: Invalid version or excerpt request }
+        "403": { description: Historical review authority required for non-current source }
+        "404": { description: No visible citation }
+  /policies/handoffs:
+    get:
+      operationId: listHrPolicyHandoffs
+      tags: [hrPolicyLibrary]
+      summary: List internal policy clarification work
+      responses:
+        "200":
+          description: Internal-only handoff queue
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyHandoffListResponse" } } }
+        "403": { description: Verified handoff resolution authority required }
+    post:
+      operationId: createHrPolicyHandoff
+      tags: [hrPolicyLibrary]
+      summary: Request internal human policy clarification
+      description: Tenant/user duplicate requests are deduplicated and no external message is sent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyHandoffCreateInput" }
+      responses:
+        "201":
+          description: Internal handoff
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyHandoffCreateResponse" } } }
+        "400": { description: Invalid handoff input }
+        "403": { description: Current tenant membership required }
+        "409": { description: Handoff changed during deduplication }
+  /policies/handoffs/{handoffId}/resolve:
+    post:
+      operationId: resolveHrPolicyHandoff
+      tags: [hrPolicyLibrary]
+      summary: Resolve an internal policy handoff
+      parameters: [{ name: handoffId, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HrPolicyHandoffResolveInput" }
+      responses:
+        "200":
+          description: Internal resolution recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyHandoffResolveResponse" } } }
+        "400": { description: Invalid resolution input }
+        "403": { description: Verified resolution authority required }
+        "404": { description: Open policy handoff not found }
   /governance/decisions:
     get:
       operationId: listGovernanceDecisions
@@ -10308,3 +10574,288 @@ components:
       properties:
         dispatched: { type: integer, minimum: 0 }
         checkedAt: { type: string, format: date-time }
+    HrPolicyApplicability:
+      type: object
+      additionalProperties: false
+      properties:
+        country: { type: string, minLength: 1, maxLength: 160 }
+        workerType: { type: string, minLength: 1, maxLength: 160 }
+        location: { type: string, minLength: 1, maxLength: 160 }
+    HrPolicyApplicabilityInput:
+      oneOf:
+        - $ref: "#/components/schemas/HrPolicyApplicability"
+        - type: "null"
+    HrPolicyCapabilities:
+      type: object
+      additionalProperties: false
+      properties:
+        membershipRole: { $ref: "#/components/schemas/HrPolicyAudienceRole" }
+        canMaintain: { type: boolean }
+        canReview: { type: boolean }
+        canPublish: { type: boolean }
+        reviewAuthorityRoles:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              role: { $ref: "#/components/schemas/HrPolicyReviewAuthorityRole" }
+              current: { type: boolean }
+            required: [role, current]
+        canReviewHistory: { type: boolean }
+        canResolveHandoffs: { type: boolean }
+        answerMode: { type: string, enum: [approved-ai-only] }
+        externalDispatch: { type: boolean, const: false }
+      required: [membershipRole, canMaintain, canReview, canPublish, reviewAuthorityRoles, canReviewHistory, canResolveHandoffs, answerMode, externalDispatch]
+    HrPolicyReviewAuthorityRole:
+      type: string
+      enum: [hr-compliance, legal, occupational-health, payroll]
+    HrPolicyAudienceRole:
+      type: string
+      enum: [owner, admin, member]
+    HrPolicyStatus:
+      type: string
+      enum: [draft, in_review, published, superseded, retired]
+    HrPolicyVersionMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        policyId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        title: { type: string }
+        sourceReference: { type: string }
+        audience:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/HrPolicyAudienceRole" }
+        applicability: { $ref: "#/components/schemas/HrPolicyApplicability" }
+        reviewAuthorityRole: { $ref: "#/components/schemas/HrPolicyReviewAuthorityRole" }
+        effectiveFrom: { type: string, format: date }
+        effectiveUntil: { type: ["string", "null"], format: date }
+        reviewBy: { type: ["string", "null"], format: date }
+        status: { $ref: "#/components/schemas/HrPolicyStatus" }
+        createdByUserId: { type: string }
+        reviewedByUserId: { type: ["string", "null"] }
+        reviewOutcome: { type: ["string", "null"], enum: [approved, rejected, null] }
+        reviewerVerificationReference: { type: ["string", "null"] }
+        publishedAt: { type: ["string", "null"], format: date-time }
+        publisherUserId: { type: ["string", "null"] }
+        publicationVerificationReference: { type: ["string", "null"] }
+        retiredAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [policyId, version, title, sourceReference, audience, applicability, reviewAuthorityRole, effectiveFrom, effectiveUntil, reviewBy, status, createdByUserId, reviewedByUserId, reviewOutcome, reviewerVerificationReference, publishedAt, publisherUserId, publicationVerificationReference, retiredAt, createdAt, updatedAt]
+    HrPolicyResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        policy: { $ref: "#/components/schemas/HrPolicyVersionMetadata" }
+      required: [policy]
+    HrPolicyVersionDetailResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        policy: { $ref: "#/components/schemas/HrPolicyVersionMetadata" }
+        text: { type: string }
+      required: [policy, text]
+    HrPolicyListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        policies:
+          type: array
+          items: { $ref: "#/components/schemas/HrPolicyVersionMetadata" }
+      required: [policies]
+    HrPolicyHistoryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        policies:
+          type: array
+          items: { $ref: "#/components/schemas/HrPolicyVersionMetadata" }
+      required: [policies]
+    HrPolicyCreateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 4000 }
+        sourceReference: { type: string, minLength: 1, maxLength: 4000 }
+        text: { type: string, minLength: 1, maxLength: 40000 }
+        audience:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/HrPolicyAudienceRole" }
+        applicability: { $ref: "#/components/schemas/HrPolicyApplicabilityInput" }
+        reviewAuthorityRole: { $ref: "#/components/schemas/HrPolicyReviewAuthorityRole" }
+        effectiveFrom: { type: string, format: date }
+        effectiveUntil: { type: ["string", "null"], format: date }
+        reviewBy: { type: ["string", "null"], format: date }
+      required: [title, sourceReference, text, audience, reviewAuthorityRole, effectiveFrom]
+    HrPolicyRevisionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 4000 }
+        sourceReference: { type: string, minLength: 1, maxLength: 4000 }
+        text: { type: string, minLength: 1, maxLength: 40000 }
+        audience:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/HrPolicyAudienceRole" }
+        applicability: { $ref: "#/components/schemas/HrPolicyApplicabilityInput" }
+        reviewAuthorityRole: { $ref: "#/components/schemas/HrPolicyReviewAuthorityRole" }
+        effectiveFrom: { type: string, format: date }
+        effectiveUntil: { type: ["string", "null"], format: date }
+        reviewBy: { type: ["string", "null"], format: date }
+        expectedVersion: { type: integer, minimum: 1 }
+      required: [title, sourceReference, text, audience, reviewAuthorityRole, effectiveFrom, expectedVersion]
+    HrPolicySubmitReviewInput:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+      required: [expectedVersion]
+    HrPolicyReviewInput:
+      type: object
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+        outcome: { type: string, enum: [approved, rejected] }
+        verificationReference: { type: string, minLength: 1, maxLength: 4000 }
+      required: [version, outcome, verificationReference]
+    HrPolicyPublishInput:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        publicationVerificationReference: { type: string, minLength: 1, maxLength: 4000 }
+        reviewerDecisionRef: { type: string, minLength: 1, maxLength: 4000, description: Backward-compatible alias accepted by the route }
+      required: [expectedVersion]
+      anyOf:
+        - required: [publicationVerificationReference]
+        - required: [reviewerDecisionRef]
+    HrPolicySupersedeInput:
+      type: object
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+        replacementVersion: { type: integer, minimum: 1 }
+      required: [version, replacementVersion]
+    HrPolicyRetireInput:
+      type: object
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+      required: [version]
+    HrPolicyAnswerInput:
+      type: object
+      additionalProperties: false
+      properties:
+        question: { type: string, minLength: 1, maxLength: 2000 }
+        appliesOn: { type: ["string", "null"], format: date }
+        applicability: { $ref: "#/components/schemas/HrPolicyApplicabilityInput" }
+      required: [question]
+    HrPolicyAnswerLimitation:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [OUTDATED_REVIEW, FUTURE_EFFECTIVE, OUTDATED_EFFECTIVE, NOT_EFFECTIVE_ON_SELECTED_DATE, MISSING_OR_INSUFFICIENT_SOURCE, CONFLICTING_SOURCES, SOURCE_CHANGED, UNTRUSTED_SOURCE_CONTENT, INSUFFICIENT_SUPPORT]
+        message: { type: string }
+      required: [code, message]
+    HrPolicyCitation:
+      type: object
+      additionalProperties: false
+      properties:
+        policyId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        excerptId: { type: string }
+        text: { type: string }
+        sourceReference: { type: string }
+        effectiveFrom: { type: string, format: date }
+      required: [policyId, version, excerptId, text, sourceReference, effectiveFrom]
+    HrPolicyAnswerResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        answer: { type: ["string", "null"] }
+        limitation:
+          oneOf:
+            - $ref: "#/components/schemas/HrPolicyAnswerLimitation"
+            - type: "null"
+        citations:
+          type: array
+          items: { $ref: "#/components/schemas/HrPolicyCitation" }
+      required: [answer, limitation, citations]
+    HrPolicyCitationExcerpt:
+      type: object
+      additionalProperties: false
+      properties:
+        policyId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        excerptId: { type: string }
+        text: { type: string }
+        sourceReference: { type: string }
+        effectiveFrom: { type: string, format: date }
+        isCurrent: { type: boolean }
+      required: [policyId, version, excerptId, text, sourceReference, effectiveFrom, isCurrent]
+    HrPolicyHandoff:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        organizationId: { type: string }
+        requesterUserId: { type: string }
+        fingerprint: { type: string }
+        question: { type: string }
+        appliesOn: { type: ["string", "null"], format: date }
+        applicability: { $ref: "#/components/schemas/HrPolicyApplicability" }
+        status: { type: string, enum: [open, resolved] }
+        resolvedByUserId: { type: ["string", "null"] }
+        resolverAuthorityAssignmentId: { type: ["integer", "null"], minimum: 1 }
+        resolution: { type: ["string", "null"] }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, organizationId, requesterUserId, fingerprint, question, appliesOn, applicability, status, resolvedByUserId, resolverAuthorityAssignmentId, resolution, resolvedAt, createdAt, updatedAt]
+    HrPolicyHandoffListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        handoffs:
+          type: array
+          items: { $ref: "#/components/schemas/HrPolicyHandoff" }
+      required: [handoffs]
+    HrPolicyHandoffCreateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        question: { type: string, minLength: 1, maxLength: 2000 }
+        appliesOn: { type: ["string", "null"], format: date }
+        applicability: { $ref: "#/components/schemas/HrPolicyApplicabilityInput" }
+      required: [question]
+    HrPolicyHandoffCreateResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        handoff: { $ref: "#/components/schemas/HrPolicyHandoff" }
+        deduplicated: { type: boolean }
+        externalDispatch: { type: boolean, const: false }
+      required: [handoff, deduplicated, externalDispatch]
+    HrPolicyHandoffResolveInput:
+      type: object
+      additionalProperties: false
+      properties:
+        resolution: { type: string, minLength: 1, maxLength: 4000 }
+      required: [resolution]
+    HrPolicyHandoffResolveResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        handoff: { $ref: "#/components/schemas/HrPolicyHandoff" }
+        externalDispatch: { type: boolean, const: false }
+      required: [handoff, externalDispatch]

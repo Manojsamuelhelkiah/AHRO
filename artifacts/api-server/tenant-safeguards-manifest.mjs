@@ -50,6 +50,13 @@ export const tenantSafeguards = [
   { table: "onb_policy_authorities", phaseB: false },
   { table: "onb_job_profiles", phaseB: false },
   { table: "onb_policy_recommendations", phaseB: false },
+  // Curated HR policy sources and handoffs are tenant-owned from creation.
+  // Their distinct tables are deliberately checked independently of the
+  // owner-managed checklist policy tables.
+  { table: "onb_hr_policy_sources", phaseB: false },
+  { table: "onb_hr_policy_versions", phaseB: false },
+  { table: "onb_hr_policy_handoffs", phaseB: false },
+  { table: "onb_hr_policy_excerpts", phaseB: false },
   { table: "onb_intake_batches", phaseB: false },
   { table: "onb_intake_batch_people", phaseB: false },
   // Protected evidence has no business-record FK so deletion cannot cascade
@@ -138,6 +145,18 @@ export const expectedForeignKeys = [
     columns: ["organization_id", "case_id"],
     referencedTable: "onb_cases",
     referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_hr_policy_versions",
+    columns: ["organization_id", "policy_id"],
+    referencedTable: "onb_hr_policy_sources",
+    referencedColumns: ["organization_id", "policy_id"],
+  },
+  {
+    table: "onb_hr_policy_excerpts",
+    columns: ["organization_id", "policy_id", "version"],
+    referencedTable: "onb_hr_policy_versions",
+    referencedColumns: ["organization_id", "policy_id", "version"],
   },
   {
     table: "onb_intake_batch_people",

@@ -9,9 +9,13 @@ import { prepareDatabaseBackedTests } from "./test-db-setup.mjs";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 rmSync(path.join(dir, "dist-test"), { recursive: true, force: true });
-const entryPoints = globSync("src/**/*.test.ts", { cwd: dir }).map((f) =>
+const requestedTestFile = process.env.TEST_FILE?.trim();
+const allEntryPoints = globSync("src/**/*.test.ts", { cwd: dir }).map((f) =>
   path.join(dir, f),
 );
+const entryPoints = requestedTestFile
+  ? allEntryPoints.filter((file) => path.relative(dir, file) === requestedTestFile)
+  : allEntryPoints;
 
 if (entryPoints.length === 0) {
   console.error("No test files found");
@@ -48,10 +52,12 @@ const result = spawnSync(
   process.execPath,
   [
     "--test",
-    path.join(dir, "test-db-setup.test.mjs"),
-    path.join(dir, "start-production.test.mjs"),
-    path.join(dir, "verify-tenant-safeguards.test.mjs"),
-    path.join(dir, "publish-safeguard-alert.test.mjs"),
+    ...(requestedTestFile ? [] : [
+      path.join(dir, "test-db-setup.test.mjs"),
+      path.join(dir, "start-production.test.mjs"),
+      path.join(dir, "verify-tenant-safeguards.test.mjs"),
+      path.join(dir, "publish-safeguard-alert.test.mjs"),
+    ]),
     ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).filter((f) => !f.endsWith("/bgv-notifications.test.mjs")).map((f) =>
       path.join(dir, f),
     ),
@@ -60,7 +66,9 @@ const result = spawnSync(
 );
 // This provider-stubbed suite explicitly requires development semantics.
 // Keep all other suites on their established production-mode harness.
-const bgvResult = spawnSync(process.execPath, [
-  "--test", path.join(dir, "dist-test/lib/onboarding/bgv-notifications.test.mjs"),
-], { stdio: "inherit", env: { ...process.env, NODE_ENV: "development" } });
+const bgvResult = requestedTestFile
+  ? { status: 0 }
+  : spawnSync(process.execPath, [
+    "--test", path.join(dir, "dist-test/lib/onboarding/bgv-notifications.test.mjs"),
+  ], { stdio: "inherit", env: { ...process.env, NODE_ENV: "development" } });
 process.exit((result.status ?? 1) || (bgvResult.status ?? 1));
