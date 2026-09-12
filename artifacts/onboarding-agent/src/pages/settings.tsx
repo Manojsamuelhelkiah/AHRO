@@ -32,6 +32,7 @@ import { ActionCenterIdentitiesSettings } from './action-center-settings';
 import { JobProfilesAndAuthorities } from './settings-job-profiles';
 import { OrganizationMembersSettings } from './settings-organization-members';
 import { PrivacyAdministrationCard } from './settings-privacy-tab';
+import { EarlyTenureSettingsCard } from './settings-early-tenure';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -837,6 +838,7 @@ export function SettingsPage() {
       <DemoVolunteersCard />
       <SyntheticResetCard />
       <ReadinessSlaSettingsCard />
+      <EarlyTenureSettingsCard />
       <AuthorityGovernanceCard />
       <PrivacyAdministrationCard />
       <OrganizationMembersSettings />

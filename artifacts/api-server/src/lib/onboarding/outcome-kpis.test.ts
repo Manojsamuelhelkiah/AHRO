@@ -3,7 +3,9 @@ import { describe, test } from "node:test";
 import {
   calculateOutcomeKpis,
   type OutcomeCase,
+  type OutcomeEmploymentEvidence,
   type OutcomeEvent,
+  type OutcomeSurveyResponse,
 } from "./outcome-kpis";
 
 const asOf = new Date("2025-01-31T00:00:00.000Z");
@@ -148,13 +150,29 @@ describe("onboarding outcome KPI calculations", () => {
           createdAt: date("2025-01-02"),
         },
       ],
+      surveyResponses: [{
+        caseId: 1, surveyKind: "onboarding-30-day", voluntary: true, score: 10,
+        submittedAt: date("2025-01-31"), actualJoinedAt: date("2025-01-01"), provenance: "human-authorized",
+        humanAuthorityVerified: true,
+      }],
+      bgvChecks: [{
+        id: 1, caseId: 1, system: "bgv", mode: "email", status: "done",
+        requestedAt: date("2025-01-01"),
+      }],
+      bgvEmails: [{
+        caseId: 1, checkId: 1, gmailMessageId: "provider-scenario",
+        parsedStatus: "completed", receivedAt: date("2025-01-02"),
+      }],
     });
     const result = metric(response, "cycle-time");
-    assert.equal(response.caseCount, 1);
-    assert.equal(result.eligibleCount, 1);
+    assert.equal(response.caseCount, 0);
+    assert.equal(result.eligibleCount, 0);
     assert.equal(result.sampleSize, 0);
-    assert.equal(result.unknownCount, 1);
+    assert.equal(result.unknownCount, 0);
     assert.equal(result.value, null);
+    assert.equal(metric(response, "enps").sampleSize, null);
+    assert.equal(metric(response, "bgv-turnaround").eligibleCount, 0);
+    assert.equal(metric(response, "bgv-turnaround").sampleSize, 0);
   });
 
   test("requires current final Gate C approval and complete lifecycle after evidence changes", () => {
@@ -214,8 +232,210 @@ describe("onboarding outcome KPI calculations", () => {
     assert.equal(metric(response, "day1-readiness").status, "not-collected");
     assert.equal(metric(response, "doc-completeness").status, "not-collected");
     assert.equal(metric(response, "provisioning-on-time").status, "not-collected");
-    assert.equal(metric(response, "enps").status, "not-collected");
-    assert.equal(metric(response, "attrition").status, "not-collected");
+    assert.equal(metric(response, "enps").status, "insufficient-data");
+    assert.equal(metric(response, "enps").sampleSize, null);
+    assert.equal(metric(response, "attrition").status, "insufficient-data");
+    assert.equal(metric(response, "attrition").sampleSize, null);
+  });
+
+  test("calculates eNPS only from qualifying voluntary 30-day evidence after its privacy threshold", () => {
+    const cases = [1, 2, 3, 4, 5, 6].map((id) => baseCase(id, "2025-01-01"));
+    const surveys: OutcomeSurveyResponse[] = [
+      { caseId: 1, surveyKind: "onboarding-30-day", voluntary: true, score: 10, submittedAt: date("2025-01-31"), actualJoinedAt: date("2025-01-01"), provenance: "trusted-provider", sourceConnectorKey: "survey" },
+      { caseId: 2, surveyKind: "onboarding-30-day", voluntary: true, score: 9, submittedAt: date("2025-01-31"), actualJoinedAt: date("2025-01-01"), provenance: "trusted-provider", sourceConnectorKey: "survey" },
+      { caseId: 3, surveyKind: "onboarding-30-day", voluntary: true, score: 6, submittedAt: date("2025-01-31"), actualJoinedAt: date("2025-01-01"), provenance: "trusted-provider", sourceConnectorKey: "survey" },
+      { caseId: 4, surveyKind: "onboarding-30-day", voluntary: true, score: 8, submittedAt: date("2025-01-31"), actualJoinedAt: date("2025-01-01"), provenance: "human-authorized", humanAuthorityVerified: true },
+      { caseId: 5, surveyKind: "onboarding-30-day", voluntary: true, score: 0, submittedAt: date("2025-01-31"), actualJoinedAt: date("2025-01-01"), provenance: "human-authorized", humanAuthorityVerified: true },
+      // Neither an involuntary row nor a simulated/demo-style source can
+      // inflate a restricted voluntary survey metric.
+      { caseId: 6, surveyKind: "onboarding-30-day", voluntary: false, score: 10, submittedAt: date("2025-01-31"), actualJoinedAt: date("2025-01-01"), provenance: "trusted-provider", sourceConnectorKey: "survey" },
+      { caseId: 6, surveyKind: "onboarding-30-day", voluntary: true, score: 10, submittedAt: date("2025-01-30"), actualJoinedAt: date("2025-01-01"), provenance: "simulated", sourceConnectorKey: "survey" },
+    ];
+    const result = metric(calculateOutcomeKpis({
+      asOf, period: "All", cases, surveyResponses: surveys,
+    }), "enps");
+    // 2 promoters, 2 detractors, 1 passive => 0; sample threshold is met.
+    assert.equal(result.sampleSize, 5);
+    assert.equal(result.unknownCount, 1);
+    assert.equal(result.value, 0);
+    assert.equal(result.status, "missed");
+    assert.match(result.note, /minimum of 5 distinct usable responses/i);
+  });
+
+  test("does not publish eNPS when qualifying voluntary responses are below the aggregation floor", () => {
+    const result = metric(calculateOutcomeKpis({
+      asOf,
+      period: "All",
+      cases: [1, 2, 3, 4].map((id) => baseCase(id, "2025-01-01")),
+      surveyResponses: [1, 2, 3, 4].map((caseId) => ({
+        caseId,
+        surveyKind: "onboarding-30-day",
+        voluntary: true,
+        score: 10,
+        submittedAt: date("2025-01-31"),
+        actualJoinedAt: date("2025-01-01"),
+        provenance: "trusted-provider",
+        sourceConnectorKey: "survey",
+      })),
+    }), "enps");
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.eligibleCount, null);
+    assert.equal(result.unknownCount, null);
+    assert.equal(result.value, null);
+    assert.equal(result.status, "insufficient-data");
+  });
+
+  test("rejects pre-join and pre-day-30 survey labels as outcome evidence", () => {
+    const result = metric(calculateOutcomeKpis({
+      asOf,
+      period: "All",
+      cases: [baseCase(1, "2025-01-01")],
+      surveyResponses: [{
+        caseId: 1,
+        surveyKind: "onboarding-30-day",
+        voluntary: true,
+        score: 10,
+        actualJoinedAt: date("2025-01-02"),
+        submittedAt: date("2025-01-31"),
+        provenance: "human-authorized",
+        humanAuthorityVerified: true,
+      }],
+    }), "enps");
+    assert.equal(result.value, null);
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.status, "insufficient-data");
+  });
+
+  test("calculates attrition only from dated actual joining and authorized employment outcomes", () => {
+    const cases = [1, 2, 3, 4, 5].map((id) => baseCase(id, "2024-10-01"));
+    const employment: OutcomeEmploymentEvidence[] = [
+      // Terminated in the 90-day window: attrition.
+      { caseId: 1, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated", effectiveAt: date("2024-11-01"), observedAt: date("2024-11-02"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      // Active after the anniversary: retained through the measured window.
+      { caseId: 2, actualJoinedAt: date("2024-10-01"), employmentStatus: "active", effectiveAt: null, observedAt: date("2025-01-01"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      // Human evidence is usable only when its authority was verified by the writer.
+      { caseId: 3, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated", effectiveAt: date("2025-01-15"), observedAt: date("2025-01-16"), provenance: "human-authorized", humanAuthorityVerified: true },
+      // Planned/current-looking data, early active status, and demo evidence
+      // cannot become a retention assertion.
+      { caseId: 4, actualJoinedAt: null, employmentStatus: "terminated", effectiveAt: date("2024-11-01"), observedAt: date("2024-11-02"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      { caseId: 5, actualJoinedAt: date("2024-10-01"), employmentStatus: "active", effectiveAt: null, observedAt: date("2024-11-01"), provenance: "simulated", sourceConnectorKey: "hris" },
+    ];
+    const result = metric(calculateOutcomeKpis({
+      asOf, period: "All", cases, employmentEvidence: employment,
+    }), "attrition");
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.unknownCount, null);
+    assert.equal(result.value, null);
+    assert.equal(result.status, "insufficient-data");
+  });
+
+  test("keeps early active employment observations unknown rather than calling them retained", () => {
+    const result = metric(calculateOutcomeKpis({
+      asOf,
+      period: "All",
+      cases: [baseCase(1, "2025-01-01")],
+      employmentEvidence: [{
+        caseId: 1,
+        actualJoinedAt: date("2025-01-01"),
+        employmentStatus: "active",
+        effectiveAt: null,
+        observedAt: date("2025-01-30"),
+        provenance: "trusted-provider",
+        sourceConnectorKey: "hris",
+      }],
+    }), "attrition");
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.unknownCount, null);
+    assert.equal(result.value, null);
+    assert.equal(result.status, "insufficient-data");
+  });
+
+  test("does not resolve conflicting actual joining anchors with a planned case date", () => {
+    const result = metric(calculateOutcomeKpis({
+      asOf,
+      period: "All",
+      cases: [baseCase(1, "2024-10-01")],
+      employmentEvidence: [
+        { id: 1, caseId: 1, actualJoinedAt: date("2024-10-01"), employmentStatus: "active", effectiveAt: null, observedAt: date("2025-01-01"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+        { id: 2, caseId: 1, actualJoinedAt: date("2024-10-02"), employmentStatus: "terminated", effectiveAt: date("2024-11-01"), observedAt: date("2024-11-02"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      ],
+    }), "attrition");
+    assert.equal(result.value, null);
+    assert.equal(result.unknownCount, null);
+  });
+
+  test("treats a termination followed by unlinked active status as unknown", () => {
+    const result = metric(calculateOutcomeKpis({
+      asOf,
+      period: "All",
+      cases: [baseCase(1, "2024-10-01")],
+      employmentEvidence: [
+        { id: 10, caseId: 1, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated", effectiveAt: date("2024-11-01"), observedAt: date("2024-11-02"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+        { id: 11, caseId: 1, actualJoinedAt: date("2024-10-01"), employmentStatus: "active", effectiveAt: null, observedAt: date("2025-01-15"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      ],
+    }), "attrition");
+    assert.equal(result.value, null);
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.status, "insufficient-data");
+  });
+
+  test("accepts an active correction only when it names the prior termination", () => {
+    const cases = [1, 2, 3, 4, 5].map((id) => baseCase(id, "2024-10-01"));
+    const employment = cases.flatMap((c) => [
+      { id: c.id * 10, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated" as const, effectiveAt: date("2024-11-01"), observedAt: date("2024-11-02"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      { id: c.id * 10 + 1, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "active" as const, effectiveAt: null, observedAt: date("2025-01-15"), provenance: "trusted-provider", sourceConnectorKey: "hris", correctsEvidenceId: c.id * 10 },
+    ]);
+    const result = metric(calculateOutcomeKpis({
+      asOf, period: "All", cases, employmentEvidence: employment,
+    }), "attrition");
+    assert.equal(result.sampleSize, 5);
+    assert.equal(result.value, 0);
+    assert.equal(result.status, "met");
+  });
+
+  test("does not let an active correction of one termination hide another outstanding exit", () => {
+    const cases = [1, 2, 3, 4, 5].map((id) => baseCase(id, "2024-10-01"));
+    const employment = cases.flatMap((c) => [
+      { id: c.id * 10, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated" as const, effectiveAt: date("2024-10-20"), observedAt: date("2024-10-21"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      { id: c.id * 10 + 1, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated" as const, effectiveAt: date("2024-11-01"), observedAt: date("2024-11-02"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      { id: c.id * 10 + 2, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "active" as const, effectiveAt: null, observedAt: date("2025-01-15"), provenance: "trusted-provider", sourceConnectorKey: "hris", correctsEvidenceId: c.id * 10 },
+    ]);
+    const result = metric(calculateOutcomeKpis({
+      asOf, period: "All", cases, employmentEvidence: employment,
+    }), "attrition");
+    assert.equal(result.value, null);
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.status, "insufficient-data");
+  });
+
+  test("keeps early then post-90 uncorrected termination dates contradictory", () => {
+    const cases = [1, 2, 3, 4, 5].map((id) => baseCase(id, "2024-10-01"));
+    const employment = cases.flatMap((c) => [
+      { id: c.id * 10, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated" as const, effectiveAt: date("2024-10-20"), observedAt: date("2024-10-21"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      { id: c.id * 10 + 1, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated" as const, effectiveAt: date("2025-01-15"), observedAt: date("2025-01-16"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+    ]);
+    const result = metric(calculateOutcomeKpis({
+      asOf, period: "All", cases, employmentEvidence: employment,
+    }), "attrition");
+    // Latest-row logic would falsely publish 0% here.
+    assert.equal(result.value, null);
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.status, "insufficient-data");
+  });
+
+  test("keeps post-90 then early uncorrected termination dates contradictory", () => {
+    const cases = [1, 2, 3, 4, 5].map((id) => baseCase(id, "2024-10-01"));
+    const employment = cases.flatMap((c) => [
+      { id: c.id * 10, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated" as const, effectiveAt: date("2025-01-15"), observedAt: date("2025-01-16"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+      { id: c.id * 10 + 1, caseId: c.id, actualJoinedAt: date("2024-10-01"), employmentStatus: "terminated" as const, effectiveAt: date("2024-10-20"), observedAt: date("2024-10-21"), provenance: "trusted-provider", sourceConnectorKey: "hris" },
+    ]);
+    const result = metric(calculateOutcomeKpis({
+      asOf, period: "All", cases, employmentEvidence: employment,
+    }), "attrition");
+    // Reversing row order must not turn the conflict into 100% attrition.
+    assert.equal(result.value, null);
+    assert.equal(result.sampleSize, null);
+    assert.equal(result.status, "insufficient-data");
   });
 
   test("measures only a verifiable non-simulated email BGV result", () => {
@@ -261,8 +481,13 @@ describe("onboarding outcome KPI calculations", () => {
     assert.equal(response.caseCount, 0);
     assert.match(response.cohortLabel, /Unsupported domain/);
     for (const item of response.metrics) {
-      assert.equal(item.eligibleCount, 0);
-      assert.equal(item.unknownCount, 0);
+      if (item.id === "enps" || item.id === "attrition") {
+        assert.equal(item.eligibleCount, null);
+        assert.equal(item.unknownCount, null);
+      } else {
+        assert.equal(item.eligibleCount, 0);
+        assert.equal(item.unknownCount, 0);
+      }
     }
   });
 

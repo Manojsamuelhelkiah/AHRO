@@ -35,6 +35,7 @@ import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tab
 import { DocumentsTab } from './detail/documents-tab';
 import { ExplainabilityTab } from './detail/explainability-tab';
 import { PortalControls } from './detail/portal-controls';
+import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 
 export function CaseDetailPage() {
@@ -45,7 +46,7 @@ export function CaseDetailPage() {
     const requested = typeof window === "undefined"
       ? null
       : new URLSearchParams(window.location.search).get("tab")?.toLowerCase();
-    return requested === "communications" ? "Communications" : "Overview";
+    return requested === "communications" ? "Communications" : requested === "early-tenure" ? "Early tenure" : "Overview";
   });
 
   const { data: c, isLoading, error: caseError } = useGetOnboardingCase(caseId, {
@@ -233,6 +234,7 @@ export function CaseDetailPage() {
           />
         )}
 
+        {activeTab === 'Early tenure' && <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />}
         {activeTab === 'Tasks' && <TasksTab c={c} />}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
         {activeTab === 'Activity' && <ActivityTab events={events || []} />}

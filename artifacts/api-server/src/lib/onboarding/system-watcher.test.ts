@@ -22,7 +22,10 @@ import {
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db/schema";
-import { CONNECTOR_DEFAULTS } from "./connectors";
+import {
+  ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS,
+  CONNECTOR_DEFAULTS,
+} from "./connectors";
 import { db } from "@workspace/db";
 import { onbApprovals, onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
@@ -627,6 +630,18 @@ describe("connector seed defaults", () => {
     const keys = new Set(CONNECTOR_DEFAULTS.map((d) => d.key));
     for (const def of WATCHED_SYSTEMS) {
       assert.ok(keys.has(def.connectorKey), `missing connector for ${def.key}`);
+    }
+  });
+
+  test("registers LMS and calendar activation requirements without claiming a fake integration", () => {
+    for (const key of ["lms", "calendar"] as const) {
+      const connector = CONNECTOR_DEFAULTS.find((item) => item.key === key);
+      assert.ok(connector);
+      assert.equal(connector.status, "activation-pending");
+      assert.equal(connector.vendor, "Not activated");
+      assert.deepEqual(connector.availableVendors, []);
+      assert.ok(ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS[key].length >= 4);
+      assert.match(connector.description, /No provider adapter.*simulated completion/i);
     }
   });
 });

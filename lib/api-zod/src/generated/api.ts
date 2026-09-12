@@ -15388,9 +15388,9 @@ export const GetOnboardingOutcomeKpisResponse = zod.object({
   "unit": zod.enum(['days', 'percent', 'score']),
   "value": zod.number().nullable(),
   "status": zod.enum(['met', 'missed', 'insufficient-data', 'not-collected']),
-  "sampleSize": zod.number(),
-  "eligibleCount": zod.number(),
-  "unknownCount": zod.number(),
+  "sampleSize": zod.number().nullable(),
+  "eligibleCount": zod.number().nullable(),
+  "unknownCount": zod.number().nullable(),
   "note": zod.string()
 }))
 })

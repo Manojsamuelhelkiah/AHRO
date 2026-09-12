@@ -38,8 +38,8 @@ export function ApprovalsPage() {
       <PageHeader title="Action Center" subtitle="One accountable view of employee followups and human decisions." />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:overflow-visible">
-          <TabsList className="w-max md:w-full min-w-full grid grid-cols-4 mb-4">
+        <div className="min-w-0 overflow-hidden pb-2">
+          <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4 mb-4">
             <TabsTrigger value="needs-attention">Needs Attention</TabsTrigger>
             <TabsTrigger value="approvals">Approvals</TabsTrigger>
             <TabsTrigger value="communications">Communications</TabsTrigger>

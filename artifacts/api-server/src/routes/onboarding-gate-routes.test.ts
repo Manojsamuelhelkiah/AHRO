@@ -617,12 +617,30 @@ test("outcome KPI analytics is tenant-scoped and honors period, region, and doma
   assert.equal(filtered.status, 200);
   const filteredBody = await filtered.json() as {
     caseCount: number;
-    metrics: Array<{ id: string; eligibleCount: number }>;
+    metrics: Array<{
+      id: string;
+      eligibleCount: number | null;
+      sampleSize: number | null;
+      unknownCount: number | null;
+      value: number | null;
+      status: string;
+    }>;
   };
   assert.equal(filteredBody.caseCount, 1);
   assert.equal(
     filteredBody.metrics.find((item) => item.id === "cycle-time")?.eligibleCount,
     1,
+  );
+  const restrictedEnps = filteredBody.metrics.find((item) => item.id === "enps");
+  assert.deepEqual(
+    {
+      status: restrictedEnps?.status,
+      value: restrictedEnps?.value,
+      sampleSize: restrictedEnps?.sampleSize,
+      eligibleCount: restrictedEnps?.eligibleCount,
+      unknownCount: restrictedEnps?.unknownCount,
+    },
+    { status: "insufficient-data", value: null, sampleSize: null, eligibleCount: null, unknownCount: null },
   );
 
   const unsupported = await call(
@@ -632,4 +650,49 @@ test("outcome KPI analytics is tenant-scoped and honors period, region, and doma
   assert.equal(unsupported.status, 200);
   const unsupportedBody = await unsupported.json() as { caseCount: number };
   assert.equal(unsupportedBody.caseCount, 0);
+});
+
+test("privacy-scoped outcome export requires a verified privacy/legal assignment and never emits case evidence", async () => {
+  const denied = await call("/onboarding/analytics/outcome-kpis/export", orgA);
+  assert.equal(denied.status, 403);
+
+  await db.insert(onbGovernanceAuthorityAssignments).values({
+    organizationId: orgA,
+    authorityRole: "privacy",
+    assigneeUserId: user,
+    verificationStatus: "verified",
+    verifiedByUserId: "test-governance",
+    verificationReference: "task254-outcome-export",
+  });
+  const allowed = await call("/onboarding/analytics/outcome-kpis/export?format=json", orgA);
+  assert.equal(allowed.status, 200);
+  const payload = await allowed.json() as {
+    integrationState: string;
+    individualLevelDataIncluded: boolean;
+    rows: Array<Record<string, unknown>>;
+  };
+  assert.equal(payload.integrationState, "pending-powerbi");
+  assert.equal(payload.individualLevelDataIncluded, false);
+  assert.ok(payload.rows.length > 0);
+  assert.ok(payload.rows.every((row) => !("caseId" in row) && !("workerName" in row)));
+  assert.ok(payload.rows.every((row) =>
+    row.publicationStatus === "published" || row.value === null,
+  ));
+
+  const csv = await call("/onboarding/analytics/outcome-kpis/export?format=csv", orgA);
+  assert.equal(csv.status, 200);
+  assert.match(await csv.text(), /# integration_state=pending-powerbi/);
+});
+
+test("LMS and calendar registry requirements cannot be toggled into a fake integration", async () => {
+  for (const key of ["lms", "calendar"]) {
+    const response = await call(`/onboarding/connectors/${key}`, orgA, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "connected" }),
+    });
+    assert.equal(response.status, 409);
+    const body = await response.json() as { code: string; requirements: string[] };
+    assert.equal(body.code, "CONNECTOR_ACTIVATION_REQUIREMENTS_PENDING");
+    assert.ok(body.requirements.length >= 4);
+  }
 });

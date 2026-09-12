@@ -19,3 +19,5 @@ export * from "./hr-policy-library";
 export * from "./sensitive-lifecycle";
 export * from "./standard-intake";
 export * from "./onboarding-standard-providers";
+export * from "./early-tenure";
+export * from "./outcome-reporting";

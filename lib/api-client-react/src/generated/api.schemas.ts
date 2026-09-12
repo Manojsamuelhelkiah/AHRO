@@ -4619,9 +4619,12 @@ export interface OnbOutcomeKpi {
   /** @nullable */
   value: number | null;
   status: OnbOutcomeKpiStatus;
-  sampleSize: number;
-  eligibleCount: number;
-  unknownCount: number;
+  /** @nullable */
+  sampleSize: number | null;
+  /** @nullable */
+  eligibleCount: number | null;
+  /** @nullable */
+  unknownCount: number | null;
   note: string;
 }
 

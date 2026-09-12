@@ -1101,6 +1101,15 @@ test(
               tag !== "0065_standard_intake_scheduled_activation" &&
               tag !== "0066_standard_intake_case_tombstones" &&
                tag !== "0067_hris_attestation_source_binding" &&
+                tag !== "0068_early_tenure_core" &&
+                tag !== "0069_outcome_reporting_evidence" &&
+                tag !== "0070_early_tenure_checkin_reminder_lead" &&
+                tag !== "0071_early_tenure_probation_decided_at" &&
+                tag !== "0072_outcome_reporting_evidence_corrections" &&
+                tag !== "0073_early_tenure_anchor_revision_fence" &&
+                tag !== "0074_outcome_authority_receipts" &&
+                tag !== "0075_early_tenure_probation_anchor_revision" &&
+                tag !== "0076_early_tenure_checkin_owners" &&
              tag !== "0053_governed_hr_policy_library" &&
              tag !== "0053_external_audit_anchor_receipt_generation" &&
              tag !== "0054_external_audit_anchor_receipt_constraints" &&

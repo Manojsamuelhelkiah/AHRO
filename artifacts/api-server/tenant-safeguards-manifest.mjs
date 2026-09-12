@@ -99,6 +99,18 @@ export const tenantSafeguards = [
   { table: "onb_standard_provider_configs", phaseB: false },
   { table: "onb_standard_provider_source_records", phaseB: false },
   { table: "onb_standard_provider_decisions", phaseB: false },
+  // Early-tenure and outcome evidence are created after the historic Phase
+  // A/B pair. They are tenant-owned from birth and must fail closed at startup.
+  { table: "onb_early_tenure_policy_versions", phaseB: false },
+  { table: "onb_early_tenure_case_snapshots", phaseB: false },
+  { table: "onb_early_tenure_assignments", phaseB: false },
+  { table: "onb_early_tenure_evidence", phaseB: false },
+  { table: "onb_early_tenure_checkins", phaseB: false },
+  { table: "onb_early_tenure_reminders", phaseB: false },
+  { table: "onb_probation_decisions", phaseB: false },
+  { table: "onb_early_tenure_survey_responses", phaseB: false },
+  { table: "onb_employment_outcome_evidence", phaseB: false },
+  { table: "onb_outcome_evidence_authority_receipts", phaseB: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -225,5 +237,26 @@ export const expectedForeignKeys = [
     columns: ["manifest_id"],
     referencedTable: "onb_sensitive_object_manifests",
     referencedColumns: ["id"],
+  },
+  ...[
+    "onb_early_tenure_case_snapshots",
+    "onb_early_tenure_assignments",
+    "onb_early_tenure_checkins",
+    "onb_early_tenure_reminders",
+    "onb_probation_decisions",
+    "onb_early_tenure_survey_responses",
+    "onb_employment_outcome_evidence",
+    "onb_outcome_evidence_authority_receipts",
+  ].map((table) => ({
+    table,
+    columns: ["organization_id", "case_id"],
+    referencedTable: "onb_cases",
+    referencedColumns: ["organization_id", "id"],
+  })),
+  {
+    table: "onb_early_tenure_evidence",
+    columns: ["organization_id", "assignment_id"],
+    referencedTable: "onb_early_tenure_assignments",
+    referencedColumns: ["organization_id", "id"],
   },
 ];

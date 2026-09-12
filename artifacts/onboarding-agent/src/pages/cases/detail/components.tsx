@@ -167,7 +167,7 @@ export function CaseHealthStrip({ c, pendingApprovals }: { c: any, pendingApprov
 }
 
 export function CaseTabs({ activeTab, setTab }: { activeTab: string, setTab: (t: string) => void }) {
-  const tabs = ['Overview', 'Tasks', 'Documents', 'Activity', 'Communications', 'Audit', 'Ask AI'];
+  const tabs = ['Overview', 'Early tenure', 'Tasks', 'Documents', 'Activity', 'Communications', 'Audit', 'Ask AI'];
   return (
     <div className="flex overflow-x-auto border-b border-[var(--border)] mb-6 hide-scrollbar -mx-6 md:mx-0 px-6 md:px-0">
       {tabs.map(t => (

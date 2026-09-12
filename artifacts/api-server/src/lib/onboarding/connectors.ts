@@ -1,8 +1,38 @@
 import { db } from "@workspace/db";
 import { onbConnectors } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
-export const CONNECTOR_DEFAULTS = [
+/**
+ * These are registry requirements, not provider adapters. They remain
+ * activation-pending until an accountable owner completes the documented
+ * approval, privacy, least-privilege and source-confirmation checks.
+ */
+export const ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS = {
+  lms: [
+    "Approved vendor and onboarding-learning purpose",
+    "Least-privilege service account and field mapping",
+    "Privacy, retention, and voluntary-survey review",
+    "Authenticated sandbox/source confirmation",
+  ],
+  calendar: [
+    "Approved calendar provider and check-in purpose",
+    "Least-privilege service account and organizer/attendee mapping",
+    "Privacy, retention, and scheduling-consent review",
+    "Authenticated sandbox/source confirmation",
+  ],
+} as const;
+
+type ConnectorDefault = {
+  key: string;
+  label: string;
+  vendor: string;
+  availableVendors: string[];
+  status?: string;
+  description: string;
+  authoritativeFor: string[];
+};
+
+export const CONNECTOR_DEFAULTS: readonly ConnectorDefault[] = [
   {
     key: "ats",
     label: "ATS / Recruiting",
@@ -46,10 +76,20 @@ export const CONNECTOR_DEFAULTS = [
   {
     key: "lms",
     label: "Learning (LMS)",
-    vendor: "Cornerstone (simulated)",
-    availableVendors: ["Cornerstone (simulated)", "SAP Litmos (simulated)", "Docebo (simulated)"],
-    description: "Induction, compliance learning and role-readiness path assignment.",
+    vendor: "Not activated",
+    availableVendors: [],
+    status: "activation-pending",
+    description: "Activation-pending LMS requirement. No provider adapter, credential, polling, webhook, or simulated completion is configured. Requires: approved vendor/purpose; least-privilege mapping; privacy/retention/voluntary-survey review; authenticated sandbox/source confirmation.",
     authoritativeFor: ["learning assignments", "compliance training status"],
+  },
+  {
+    key: "calendar",
+    label: "Calendar / Check-ins",
+    vendor: "Not activated",
+    availableVendors: [],
+    status: "activation-pending",
+    description: "Activation-pending calendar requirement. No provider adapter, credential, polling, webhook, or simulated completion is configured. Requires: approved provider/purpose; least-privilege organizer/attendee mapping; privacy/retention/scheduling-consent review; authenticated sandbox/source confirmation.",
+    authoritativeFor: ["manager check-in scheduling", "check-in delivery confirmation"],
   },
   {
     key: "bgv",
@@ -80,10 +120,36 @@ export async function ensureConnectorsSeeded(organizationId: string) {
       missing.map((d) => ({
         ...d,
         organizationId,
-        status: "connected",
+        status: d.status ?? "connected",
         configurationProvenance: "simulated" as const,
-        lastSyncAt: new Date(),
+        // No integration exists for activation-pending registry requirements,
+        // so a synthetic sync timestamp would be misleading.
+        lastSyncAt: d.status === "activation-pending" ? null : new Date(),
       })),
     );
   }
+  // Earlier demo data exposed a simulated LMS as connected. It was never a
+  // provider adapter, so convert only that explicitly simulated registry row
+  // to the activation-pending contract; a trusted provider configuration is
+  // never overwritten by seed maintenance.
+  await Promise.all(
+    CONNECTOR_DEFAULTS
+      .filter((definition) => definition.status === "activation-pending")
+      .map((definition) => db
+        .update(onbConnectors)
+        .set({
+          vendor: definition.vendor,
+          availableVendors: definition.availableVendors,
+          status: definition.status!,
+          description: definition.description,
+          authoritativeFor: definition.authoritativeFor,
+          lastSyncAt: null,
+        })
+        .where(and(
+          eq(onbConnectors.organizationId, organizationId),
+          eq(onbConnectors.key, definition.key),
+          eq(onbConnectors.configurationProvenance, "simulated"),
+        )),
+      ),
+  );
 }

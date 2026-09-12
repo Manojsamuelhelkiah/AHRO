@@ -19,6 +19,14 @@ import {
   onbCases,
   onbCommunications,
   onbDocuments,
+  onbEarlyTenureAssignments,
+  onbEarlyTenureCaseSnapshots,
+  onbEarlyTenureCheckins,
+  onbEarlyTenureEvidence,
+  onbEarlyTenureReminders,
+  onbEarlyTenureSurveyResponses,
+  onbEmploymentOutcomeEvidence,
+  onbOutcomeEvidenceAuthorityReceipts,
   onbEmployeeRecords,
   onbEvents,
   onbGovernanceAuthorityAssignments,
@@ -26,6 +34,7 @@ import {
   onbIntakeBatchPeople,
   onbPolicyAuthorities,
   onbPolicyEvidence,
+  onbProbationDecisions,
   onbReadinessSlaAttestations,
   onbReadinessSlaCaseState,
   onbReadinessSlaLedger,
@@ -1454,6 +1463,25 @@ async function newestCaseDerivedSourceAtInTransaction(
     newest(onbActionCenterActions, onbActionCenterActions.updatedAt, and(eq(onbActionCenterActions.organizationId, organizationId), eq(onbActionCenterActions.caseId, caseId))),
     newest(onbPolicyEvidence, onbPolicyEvidence.createdAt, and(eq(onbPolicyEvidence.organizationId, organizationId), eq(onbPolicyEvidence.caseId, caseId))),
     newest(onbPolicyAuthorities, onbPolicyAuthorities.createdAt, and(eq(onbPolicyAuthorities.organizationId, organizationId), eq(onbPolicyAuthorities.caseId, caseId))),
+    // Early-tenure tasks, actual-join anchors, acknowledgements and probation
+    // records are opaque case-derived evidence. Include every mutable source
+    // in the retention watermark so they cannot outlive an unnoticed later
+    // source representation.
+    newest(onbEarlyTenureCaseSnapshots, onbEarlyTenureCaseSnapshots.updatedAt, and(eq(onbEarlyTenureCaseSnapshots.organizationId, organizationId), eq(onbEarlyTenureCaseSnapshots.caseId, caseId))),
+    newest(onbEarlyTenureAssignments, onbEarlyTenureAssignments.updatedAt, and(eq(onbEarlyTenureAssignments.organizationId, organizationId), eq(onbEarlyTenureAssignments.caseId, caseId))),
+    newest(onbEarlyTenureCheckins, onbEarlyTenureCheckins.updatedAt, and(eq(onbEarlyTenureCheckins.organizationId, organizationId), eq(onbEarlyTenureCheckins.caseId, caseId))),
+    newest(onbEarlyTenureEvidence, onbEarlyTenureEvidence.createdAt, and(eq(onbEarlyTenureEvidence.organizationId, organizationId), eq(onbEarlyTenureEvidence.caseId, caseId))),
+    newest(onbEarlyTenureEvidence, onbEarlyTenureEvidence.observedAt, and(eq(onbEarlyTenureEvidence.organizationId, organizationId), eq(onbEarlyTenureEvidence.caseId, caseId))),
+    newest(onbEarlyTenureReminders, onbEarlyTenureReminders.updatedAt, and(eq(onbEarlyTenureReminders.organizationId, organizationId), eq(onbEarlyTenureReminders.caseId, caseId))),
+    newest(onbProbationDecisions, onbProbationDecisions.createdAt, and(eq(onbProbationDecisions.organizationId, organizationId), eq(onbProbationDecisions.caseId, caseId))),
+    // Restricted outcome evidence carries actual employment dates and survey
+    // scores. It is not safely redactable because its authorization/source
+    // checks are deliberately non-null, so the lifecycle worker deletes it.
+    newest(onbEarlyTenureSurveyResponses, onbEarlyTenureSurveyResponses.createdAt, and(eq(onbEarlyTenureSurveyResponses.organizationId, organizationId), eq(onbEarlyTenureSurveyResponses.caseId, caseId))),
+    newest(onbEarlyTenureSurveyResponses, onbEarlyTenureSurveyResponses.submittedAt, and(eq(onbEarlyTenureSurveyResponses.organizationId, organizationId), eq(onbEarlyTenureSurveyResponses.caseId, caseId))),
+    newest(onbEmploymentOutcomeEvidence, onbEmploymentOutcomeEvidence.createdAt, and(eq(onbEmploymentOutcomeEvidence.organizationId, organizationId), eq(onbEmploymentOutcomeEvidence.caseId, caseId))),
+    newest(onbEmploymentOutcomeEvidence, onbEmploymentOutcomeEvidence.observedAt, and(eq(onbEmploymentOutcomeEvidence.organizationId, organizationId), eq(onbEmploymentOutcomeEvidence.caseId, caseId))),
+    newest(onbOutcomeEvidenceAuthorityReceipts, onbOutcomeEvidenceAuthorityReceipts.verifiedAt, and(eq(onbOutcomeEvidenceAuthorityReceipts.organizationId, organizationId), eq(onbOutcomeEvidenceAuthorityReceipts.caseId, caseId))),
     newest(onbIntakeBatchPeople, onbIntakeBatchPeople.createdAt, and(eq(onbIntakeBatchPeople.organizationId, organizationId), eq(onbIntakeBatchPeople.caseId, caseId))),
     // Server-confirmed provider source IDs/evidence and standard-intake
     // snapshots are case-derived references. They are inventory roots even
@@ -1646,6 +1674,64 @@ async function processCaseDerivedEnvelopeDeletionJob(
     await tx.update(onbPolicyAuthorities).set({
       userId: sql`'minimized-' || ${onbPolicyAuthorities.userId}`, site: "[minimized]", assignedBy: "[minimized]",
     }).where(and(eq(onbPolicyAuthorities.organizationId, job.organizationId), eq(onbPolicyAuthorities.caseId, job.caseId)));
+    await tx.update(onbEarlyTenureCaseSnapshots).set({
+      plannedJoiningDate: "[minimized]", actualJoinedAt: null,
+      policy: {
+        applicability: {}, probationLengthDays: 1,
+        decisionAuthorityScope: "hr-compliance-approve", obligations: [], checkIns: [],
+      },
+      enrolledByUserId: "[minimized]", enrolledBy: "[minimized]", updatedAt: now,
+    }).where(and(eq(onbEarlyTenureCaseSnapshots.organizationId, job.organizationId), eq(onbEarlyTenureCaseSnapshots.caseId, job.caseId)));
+    await tx.update(onbEarlyTenureAssignments).set({
+      title: "[minimized]", ownerName: "[minimized]", ownerUserId: null,
+      requiredConnectorKey: null, taskDetails: {}, completedByUserId: null, updatedAt: now,
+    }).where(and(eq(onbEarlyTenureAssignments.organizationId, job.organizationId), eq(onbEarlyTenureAssignments.caseId, job.caseId)));
+    // Once a case has crossed the approved minimization boundary, outstanding
+    // early-tenure work cannot be resurrected by a later reminder scan. Keep
+    // completed historical structure intact, but terminally cancel active
+    // targets and suppress both unclaimed and already-claimed reminder rows.
+    await tx.update(onbEarlyTenureAssignments).set({
+      status: "cancelled", updatedAt: now,
+    }).where(and(
+      eq(onbEarlyTenureAssignments.organizationId, job.organizationId),
+      eq(onbEarlyTenureAssignments.caseId, job.caseId),
+      eq(onbEarlyTenureAssignments.status, "pending"),
+    ));
+    await tx.update(onbEarlyTenureEvidence).set({
+      evidenceReference: "[minimized]", sourceConnectorKey: null,
+      recordedByUserId: "[minimized]", recordedBy: "[minimized]", note: null,
+    }).where(and(eq(onbEarlyTenureEvidence.organizationId, job.organizationId), eq(onbEarlyTenureEvidence.caseId, job.caseId)));
+    await tx.update(onbEarlyTenureCheckins).set({
+      label: "[minimized]", ownerUserId: null, completedByUserId: null, evidenceReference: null, updatedAt: now,
+    }).where(and(eq(onbEarlyTenureCheckins.organizationId, job.organizationId), eq(onbEarlyTenureCheckins.caseId, job.caseId)));
+    await tx.update(onbEarlyTenureCheckins).set({
+      status: "cancelled", updatedAt: now,
+    }).where(and(
+      eq(onbEarlyTenureCheckins.organizationId, job.organizationId),
+      eq(onbEarlyTenureCheckins.caseId, job.caseId),
+      eq(onbEarlyTenureCheckins.status, "scheduled"),
+    ));
+    await tx.update(onbEarlyTenureReminders).set({
+      intendedRecipient: "[minimized]", recipientEmail: null, deliveryInfo: null, lastError: null,
+      status: sql`case when ${onbEarlyTenureReminders.status} in ('pending', 'claimed') then 'suppressed' else ${onbEarlyTenureReminders.status} end`,
+      claimOwner: null, claimUntil: null, updatedAt: now,
+    }).where(and(eq(onbEarlyTenureReminders.organizationId, job.organizationId), eq(onbEarlyTenureReminders.caseId, job.caseId)));
+    await tx.update(onbProbationDecisions).set({
+      rationale: "[minimized]", evidenceReference: "[minimized]", decidedByUserId: "[minimized]", decidedBy: "[minimized]",
+      authorityId: "[minimized]",
+    }).where(and(eq(onbProbationDecisions.organizationId, job.organizationId), eq(onbProbationDecisions.caseId, job.caseId)));
+    await tx.delete(onbEarlyTenureSurveyResponses).where(and(
+      eq(onbEarlyTenureSurveyResponses.organizationId, job.organizationId),
+      eq(onbEarlyTenureSurveyResponses.caseId, job.caseId),
+    ));
+    await tx.delete(onbEmploymentOutcomeEvidence).where(and(
+      eq(onbEmploymentOutcomeEvidence.organizationId, job.organizationId),
+      eq(onbEmploymentOutcomeEvidence.caseId, job.caseId),
+    ));
+    await tx.delete(onbOutcomeEvidenceAuthorityReceipts).where(and(
+      eq(onbOutcomeEvidenceAuthorityReceipts.organizationId, job.organizationId),
+      eq(onbOutcomeEvidenceAuthorityReceipts.caseId, job.caseId),
+    ));
     await tx.update(onbIntakeBatchPeople).set({
       personKey: sql`'minimized-' || ${onbIntakeBatchPeople.personKey}`,
       workforceContextSnapshot: {}, processPolicySnapshot: {},

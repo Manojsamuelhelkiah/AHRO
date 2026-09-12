@@ -22,8 +22,9 @@ const uuidv4 = () => Math.random().toString(36).substring(2, 15) + Math.random()
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useOrganizationRole } from '../hooks/use-organization-role';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActionCenterCreateWork } from './action-center-create-work';
+import { getEarlyTenureReminderInbox, postEarlyTenureInboxEvidence, type EarlyTenureInboxReminder } from '../lib/early-tenure-api';
 
 function WorkforceContextTags({ c }: { c: OnbActionCenter['documentFollowups'][0]['case'] }) {
   const label = (c.workforceClassification as { label?: string } | null)?.label ?? 'unclassified';
@@ -78,6 +79,7 @@ export function NeedsAttentionTab() {
         <label className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={safetyOnly} onChange={(event) => setSafetyOnly(event.target.checked)} /> Safety-critical only</label>
          <label className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={siteOnly} onChange={(event) => setSiteOnly(event.target.checked)} /> Site exposure only</label>
       </div>
+      <EarlyTenureReminderInbox />
       {totalActionable === 0 ? (
         <Card className="text-center border-dashed py-16" style={{ borderColor: 'var(--border)', backgroundColor: 'transparent', boxShadow: 'none' }}>
           <CheckCircle2 className="mx-auto h-12 w-12 text-[var(--status-green)] opacity-50 mb-4" />
@@ -141,6 +143,44 @@ export function NeedsAttentionTab() {
       )}
     </div>
   );
+}
+
+/** Member-scoped task prompts are intentionally separate from the HR case view.
+ * The server returns no worker or case narrative; its opaque action path is the
+ * only client-side completion capability. */
+export function EarlyTenureReminderInbox() {
+  const inbox = useQuery({
+    queryKey: ['early-tenure-reminder-inbox'],
+    queryFn: getEarlyTenureReminderInbox,
+    retry: false,
+    staleTime: 30_000,
+  });
+  if (inbox.isLoading) return <p className="text-xs text-[var(--text-muted)]" role="status">Loading assigned early-tenure reminders…</p>;
+  if (inbox.isError) return <p className="text-xs text-[var(--status-red)]" role="alert">Assigned early-tenure reminders could not be loaded.</p>;
+  const reminders = inbox.data ?? [];
+  return <section aria-labelledby="early-tenure-inbox-heading" className="min-w-0 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 id="early-tenure-inbox-heading" className="font-bold text-[var(--text-primary)]">My early-tenure reminders</h3><p className="mt-1 text-xs text-[var(--text-muted)]">Member-assigned label, timing, and opaque task reference only.</p></div><span className="rounded-full bg-[var(--primary-light)] px-2 py-1 text-[10px] font-bold text-[var(--primary)]">{reminders.length}</span></div>
+    {reminders.length ? <ul className="mt-3 divide-y divide-[var(--border)]">{reminders.map((reminder) => <EarlyTenureReminderRow key={reminder.id} reminder={reminder} />)}</ul> : <p className="mt-3 text-sm text-[var(--text-muted)]">No early-tenure reminders are currently assigned to you.</p>}
+  </section>;
+}
+
+function EarlyTenureReminderRow({ reminder }: { reminder: EarlyTenureInboxReminder }) {
+  const [evidenceReference, setEvidenceReference] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const complete = useMutation({
+    mutationFn: () => postEarlyTenureInboxEvidence<null>(reminder.evidenceCompletionPath!, { evidenceReference }),
+    onSuccess: () => {
+      setNotice('Completion evidence submitted.');
+      queryClient.setQueryData<EarlyTenureInboxReminder[]>(['early-tenure-reminder-inbox'], (current) => current?.filter((item) => item.id !== reminder.id));
+    },
+    onError: (error: any) => setNotice(error?.message || 'Completion evidence could not be submitted.'),
+  });
+  return <li className="min-w-0 py-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"><div className="min-w-0"><p className="break-words text-xs font-semibold text-[var(--text-primary)]">{reminder.label || `${reminder.targetType} reminder`}</p>{reminder.taskReference && <p className="mt-1 break-all font-mono text-[10px] text-[var(--text-muted)]">Task ref: {reminder.taskReference}</p>}</div><p className="shrink-0 text-xs text-[var(--text-secondary)]">Available {new Date(reminder.availableAt).toLocaleDateString()} · Due {new Date(reminder.dueAt).toLocaleDateString()}</p></div>
+    {reminder.evidenceCompletionPath && <div className="mt-2 flex flex-col gap-2 sm:flex-row"><input aria-label={`Completion evidence for ${reminder.label || reminder.targetType}`} value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Human-authorized evidence reference" className="h-9 min-w-0 flex-1 rounded border border-[var(--border)] px-2 text-sm" /><Button size="sm" disabled={!evidenceReference.trim() || complete.isPending} onClick={() => complete.mutate()}>{complete.isPending ? 'Submitting…' : 'Submit completion evidence'}</Button></div>}
+    {notice && <p role="status" className="mt-2 text-xs text-[var(--text-secondary)]">{notice}</p>}
+  </li>;
 }
 
 function NotificationCard({ notification }: { notification: OnbActionCenter['notifications'][0] }) {

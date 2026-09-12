@@ -72,7 +72,10 @@ import {
 } from "../lib/onboarding/engine";
 import { isChecklistAdministrator, setCustomChecklistItemStatus, verifyChecklistEvidence } from "../lib/onboarding/checklist";
 import { getScenario, SCENARIOS, DEMO_EMAIL } from "../lib/onboarding/scenarios";
-import { ensureConnectorsSeeded } from "../lib/onboarding/connectors";
+import {
+  ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS,
+  ensureConnectorsSeeded,
+} from "../lib/onboarding/connectors";
 import {
   blockedPublishBackupReadiness,
   emailChannelInfo,
@@ -164,6 +167,8 @@ import {
   evaluateCaseDerivedLifecycleGateInTransaction,
   evaluateSensitiveLifecycleGate,
   jurisdictionForWorkforceContext,
+  SensitiveLifecyclePermissionError,
+  verifiedSensitiveAuthorityInTransaction,
   withSensitiveLifecycleFence,
 } from "../lib/onboarding/sensitive-lifecycle";
 import {
@@ -172,6 +177,11 @@ import {
   type OutcomeBgvEmail,
   type OutcomeEvent,
 } from "../lib/onboarding/outcome-kpis";
+import {
+  loadOutcomeReportingEvidence,
+  privacyScopedOutcomeExport,
+  privacyScopedOutcomeExportCsv,
+} from "../lib/onboarding/outcome-reporting";
 import { clerkClient } from "@clerk/express";
 import {
   getOrganizationId,
@@ -3892,6 +3902,16 @@ router.patch("/onboarding/connectors/:key", async (req, res, next) => {
     const organizationId = getOrganizationId(req);
     await ensureConnectorsSeeded(organizationId);
     const body = UpdateOnboardingConnectorBody.parse(req.body);
+    if (req.params.key in ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS) {
+      res.status(409).json({
+        message: `${req.params.key.toUpperCase()} is activation-pending. Its registry requirement has no provider adapter or simulated completion; approved vendor, privacy, least-privilege, and authenticated source-confirmation evidence are required before connector activation.`,
+        code: "CONNECTOR_ACTIVATION_REQUIREMENTS_PENDING",
+        requirements: ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS[
+          req.params.key as keyof typeof ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS
+        ],
+      });
+      return;
+    }
     const [row] = await db
       .select()
       .from(onbConnectors)
@@ -4829,8 +4849,7 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
 
 const SUPPRESSION_THRESHOLD = 3;
 
-router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
-  try {
+async function loadOutcomeKpis(req: Request) {
     const rawDomain =
       typeof req.query.domain === "string"
         ? req.query.domain
@@ -4850,8 +4869,7 @@ router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
       domain: supportedDomain ? rawDomain : undefined,
     });
     if (!parsed.success) {
-      next(parsed.error);
-      return;
+      throw parsed.error;
     }
 
     const organizationId = getOrganizationId(req);
@@ -4877,16 +4895,21 @@ router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
           // Synthetic reset and demo-controller cases are deliberately not
           // evidence of a genuine onboarding outcome. Keep their simulated
           // activity visible on their own run timeline, never in KPI cohorts.
-          .filter((candidate) => !isSyntheticOfflineCase(candidate))
+          .filter((candidate) =>
+            !isSyntheticOfflineCase(candidate) &&
+            (candidate.scenarioKey === null || candidate.scenarioKey === undefined),
+          )
       : [];
 
     const caseIds = cases.map((row) => row.id);
     let events: OutcomeEvent[] = [];
     let bgvChecks: OutcomeBgvCheck[] = [];
     let bgvEmails: OutcomeBgvEmail[] = [];
+    let surveyResponses: Awaited<ReturnType<typeof loadOutcomeReportingEvidence>>["surveyResponses"] = [];
+    let employmentEvidence: Awaited<ReturnType<typeof loadOutcomeReportingEvidence>>["employmentEvidence"] = [];
     const gateCApprovalByCase = new Map<number, { id: number; status: string }>();
     if (caseIds.length > 0) {
-      const [eventRows, checkRows, emailRows, approvalRows] = await Promise.all([
+      const [eventRows, checkRows, emailRows, approvalRows, reportingEvidence] = await Promise.all([
         db
           .select({ event: onbEvents })
           .from(onbEvents)
@@ -4965,10 +4988,13 @@ router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
               sql`${onbApprovals.idempotencyKey} like 'gateway-c:%:human-queue'`,
             ),
           ),
+        loadOutcomeReportingEvidence(organizationId, caseIds),
       ]);
       events = eventRows.map(({ event }) => event);
       bgvChecks = checkRows.map(({ check }) => check);
       bgvEmails = emailRows.map(({ email }) => email);
+      surveyResponses = reportingEvidence.surveyResponses;
+      employmentEvidence = reportingEvidence.employmentEvidence;
       for (const approval of approvalRows) {
         const current = gateCApprovalByCase.get(approval.caseId);
         if (!current || approval.id > current.id) {
@@ -4984,19 +5010,82 @@ router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
       ...row,
       gateCApprovalStatus: gateCApprovalByCase.get(row.id)?.status ?? null,
     }));
-    res.json(
-      calculateOutcomeKpis({
-        cases: casesForCalculation,
-        events,
-        bgvChecks,
-        bgvEmails,
-        asOf,
-        period,
-        region: parsed.data.region,
-        hireType: parsed.data.hireType,
-        domain: supportedDomain ? parsed.data.domain : rawDomain,
-      }),
-    );
+    return calculateOutcomeKpis({
+      cases: casesForCalculation,
+      events,
+      bgvChecks,
+      bgvEmails,
+      surveyResponses,
+      employmentEvidence,
+      asOf,
+      period,
+      region: parsed.data.region,
+      hireType: parsed.data.hireType,
+      domain: supportedDomain ? parsed.data.domain : rawDomain,
+    });
+}
+
+router.get("/onboarding/analytics/outcome-kpis", async (req, res, next) => {
+  try {
+    res.json(await loadOutcomeKpis(req));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Aggregate-only handoff for the analytics team while a Power BI connector is
+ * pending. The request needs both an administrative role and a live,
+ * server-verified privacy/legal assignment; ordinary KPI viewing does not
+ * disclose this export surface.
+ */
+router.get("/onboarding/analytics/outcome-kpis/export", async (req, res, next) => {
+  try {
+    if (req.query.format !== undefined && req.query.format !== "json" && req.query.format !== "csv") {
+      res.status(400).json({ message: "format must be json or csv." });
+      return;
+    }
+    if (!isChecklistAdministrator(req.organizationRole) || !req.authUserId) {
+      res.status(403).json({ message: "Organization owner or admin role and an authenticated principal are required for analytics export." });
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    try {
+      await db.transaction((tx) => verifiedSensitiveAuthorityInTransaction(
+        tx,
+        organizationId,
+        req.authUserId!,
+      ));
+    } catch (error) {
+      if (error instanceof SensitiveLifecyclePermissionError) {
+        res.status(403).json({ message: error.message });
+        return;
+      }
+      throw error;
+    }
+    const exported = privacyScopedOutcomeExport(await loadOutcomeKpis(req));
+    await appendProtectedAudit({
+      organizationId,
+      actorId: req.authUserId,
+      actorKind: "authenticated",
+      actorAuthority: `tenant-membership:${req.organizationRole};privacy-or-legal:verified`,
+      action: "onboarding.analytics.outcome-kpis.export",
+      outcome: "success",
+      objectType: "privacy-scoped-outcome-export",
+      source: "http",
+      correlationId: req.header("x-request-id") ?? req.header("x-correlation-id") ?? null,
+      payload: {
+        exportFormat: req.query.format === "csv" ? "csv" : "json",
+        integrationState: exported.integrationState,
+        individualLevelDataIncluded: false,
+      },
+    });
+    if (req.query.format === "csv") {
+      res.type("text/csv").attachment("onboarding-outcome-aggregates.csv")
+        .send(privacyScopedOutcomeExportCsv(exported));
+      return;
+    }
+    res.json(exported);
   } catch (err) {
     next(err);
   }

@@ -10114,11 +10114,14 @@ components:
           type: string
           enum: [met, missed, insufficient-data, not-collected]
         sampleSize:
-          type: integer
+          type: [integer, "null"]
+          description: Null for privacy-suppressed sensitive outcome metrics
         eligibleCount:
-          type: integer
+          type: [integer, "null"]
+          description: Null for privacy-suppressed sensitive outcome metrics
         unknownCount:
-          type: integer
+          type: [integer, "null"]
+          description: Null for privacy-suppressed sensitive outcome metrics
         note:
           type: string
       required: [id, label, definition, baseline, targetLabel, targetValue, direction, unit, value, status, sampleSize, eligibleCount, unknownCount, note]

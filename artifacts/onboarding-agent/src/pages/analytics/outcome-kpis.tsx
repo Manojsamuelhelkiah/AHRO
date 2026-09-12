@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   useGetOnboardingOutcomeKpis, 
   getGetOnboardingOutcomeKpisQueryKey,
   type OnbOutcomeKpi
 } from '@workspace/api-client-react';
-import { CheckCircle2, XCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, AlertTriangle, Download, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui-shared';
+import { customFetch } from '@workspace/api-client-react';
+import { useOrganizationRole } from '../../hooks/use-organization-role';
 
 interface OutcomeKpisProps {
   period: string;
@@ -156,11 +158,11 @@ export function OutcomeKpisGrid({
                   </div>
                 )}
                 
-                {(kpi.eligibleCount !== undefined || kpi.sampleSize !== undefined || kpi.unknownCount !== undefined) && (
+                {(kpi.eligibleCount != null || kpi.sampleSize != null || kpi.unknownCount != null) && (
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-[var(--text-muted)]">
-                    {kpi.eligibleCount !== undefined && <span>Eligible: <strong className="text-[var(--text-secondary)]">{kpi.eligibleCount}</strong></span>}
-                    {kpi.sampleSize !== undefined && <span>Sample: <strong className="text-[var(--text-secondary)]">{kpi.sampleSize}</strong></span>}
-                    {(kpi.unknownCount !== undefined && kpi.unknownCount > 0) && (
+                    {kpi.eligibleCount != null && <span>Eligible: <strong className="text-[var(--text-secondary)]">{kpi.eligibleCount}</strong></span>}
+                    {kpi.sampleSize != null && <span>Sample: <strong className="text-[var(--text-secondary)]">{kpi.sampleSize}</strong></span>}
+                    {(kpi.unknownCount != null && kpi.unknownCount > 0) && (
                       <span>Missing: <strong className="text-[var(--text-secondary)]">{kpi.unknownCount}</strong></span>
                     )}
                   </div>
@@ -193,13 +195,67 @@ export function OutcomeKpis({ period, region, domain, caseType, agent }: Outcome
   });
 
   return (
-    <OutcomeKpisGrid
-      metrics={data?.metrics || []}
-      isLoading={isLoading}
-      isError={isError}
-      cohortLabel={data?.cohortLabel}
-      caseCount={data?.caseCount}
-      onRetry={() => refetch()}
-    />
+    <>
+      <OutcomeKpisGrid
+        metrics={data?.metrics || []}
+        isLoading={isLoading}
+        isError={isError}
+        cohortLabel={data?.cohortLabel}
+        caseCount={data?.caseCount}
+        onRetry={() => refetch()}
+      />
+      <ScopedOutcomeExport />
+    </>
+  );
+}
+
+function ScopedOutcomeExport() {
+  const { role, loading } = useOrganizationRole();
+  const [downloading, setDownloading] = useState(false);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const canRequest = role === 'owner' || role === 'admin';
+
+  const download = async () => {
+    setDownloading(true);
+    setNotice(null);
+    try {
+      const blob = await customFetch<Blob>('/api/onboarding/analytics/outcome-kpis/export?format=csv', {
+        responseType: 'blob',
+      });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = 'onboarding-outcome-aggregates.csv';
+      anchor.click();
+      URL.revokeObjectURL(href);
+      setNotice({ ok: true, text: 'Aggregate export downloaded. Individual-level survey and employment evidence is never included.' });
+    } catch (caught: any) {
+      const restricted = caught?.status === 403 || caught?.response?.status === 403;
+      setNotice({
+        ok: false,
+        text: restricted
+          ? 'Export restricted: a current owner/admin role and server-verified privacy or legal governance assignment are both required.'
+          : (caught?.message || 'Outcome export could not be prepared.'),
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <section className="mb-12 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)] md:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-light)] text-[var(--primary)]"><ShieldCheck className="h-4 w-4" /></div>
+          <div>
+            <h2 className="text-sm font-bold text-[var(--text-primary)]">Privacy-scoped analytics export</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--text-muted)]">Exports aggregate KPI rows only. Metrics below the five-observation cohort floor are suppressed by the server. Power BI integration remains pending.</p>
+          </div>
+        </div>
+        {!loading && canRequest && <Button onClick={() => void download()} disabled={downloading} className="shrink-0"><Download className="mr-2 h-4 w-4" />{downloading ? 'Preparing…' : 'Download CSV'}</Button>}
+      </div>
+      {!loading && !canRequest && <p className="mt-3 rounded-[var(--radius-md)] bg-[var(--surface-alt)] p-3 text-xs text-[var(--text-secondary)]">Export is available only to current tenant owners or admins with a server-verified privacy or legal governance assignment.</p>}
+      {notice && <p role={notice.ok ? 'status' : 'alert'} className={`mt-3 rounded-[var(--radius-md)] p-3 text-xs ${notice.ok ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]'}`}>{notice.text}</p>}
+    </section>
   );
 }
