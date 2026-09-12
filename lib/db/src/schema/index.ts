@@ -5,6 +5,7 @@ export * from "./actuals-overlays";
 export * from "./custom-intents";
 export * from "./onboarding";
 export * from "./onboarding-approval-history";
+export * from "./onboarding-audit";
 export * from "./pricing-rate-sets";
 export * from "./pricing-sheets";
 export * from "./enterprise-architecture";

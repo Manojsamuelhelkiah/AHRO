@@ -45,6 +45,7 @@ import type {
   EaHandoffSuggestion,
   EaSolutionBaseline,
   ErrorMessage,
+  ExportOnboardingProtectedAuditParams,
   ExportScenarioWorkbookLinkParams,
   FlowClass,
   FlowOverride,
@@ -65,6 +66,7 @@ import type {
   ListEaAssessmentsParams,
   ListOnboardingApprovalsParams,
   ListOnboardingPolicyRecommendationsParams,
+  ListOnboardingProtectedAuditParams,
   ModelOption,
   OnbActionCenter,
   OnbActionCenterActionResult,
@@ -113,6 +115,13 @@ import type {
   OnbOutcomeKpis,
   OnbPolicyRecommendationDecision,
   OnbPolicyRecommendationList,
+  OnbProtectedAuditCorrectionInput,
+  OnbProtectedAuditEntry,
+  OnbProtectedAuditIntegrity,
+  OnbProtectedAuditLegalHoldInput,
+  OnbProtectedAuditLifecycle,
+  OnbProtectedAuditPage,
+  OnbProtectedAuditRetentionInput,
   OnbReadinessSlaAttestationInput,
   OnbReadinessSlaPayrollCutoffInput,
   OnbReadinessSlaPolicyUpdate,
@@ -10912,5 +10921,619 @@ export const useCreatePricingRateSet = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getCreatePricingRateSetMutationOptions(options));
+    }
+
+export const getListOnboardingProtectedAuditUrl = (params?: ListOnboardingProtectedAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/audit?${stringifiedParams}` : `/api/onboarding/audit`
+}
+
+/**
+ * Owner/admin only. Existing legacy events are not retroactively certified by this endpoint.
+ * @summary Search minimized tenant-scoped protected audit evidence
+ */
+export const listOnboardingProtectedAudit = async (params?: ListOnboardingProtectedAuditParams, options?: RequestInit): Promise<OnbProtectedAuditPage> => {
+
+  return customFetch<OnbProtectedAuditPage>(getListOnboardingProtectedAuditUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingProtectedAuditQueryKey = (params?: ListOnboardingProtectedAuditParams,) => {
+    return [
+    `/api/onboarding/audit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListOnboardingProtectedAuditQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingProtectedAudit>>, TError = ErrorType<void>>(params?: ListOnboardingProtectedAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingProtectedAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingProtectedAuditQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingProtectedAudit>>> = ({ signal }) => listOnboardingProtectedAudit(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingProtectedAudit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingProtectedAuditQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingProtectedAudit>>>
+export type ListOnboardingProtectedAuditQueryError = ErrorType<void>
+
+
+/**
+ * @summary Search minimized tenant-scoped protected audit evidence
+ */
+
+export function useListOnboardingProtectedAudit<TData = Awaited<ReturnType<typeof listOnboardingProtectedAudit>>, TError = ErrorType<void>>(
+ params?: ListOnboardingProtectedAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingProtectedAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingProtectedAuditQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportOnboardingProtectedAuditUrl = (params?: ExportOnboardingProtectedAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/audit/export?${stringifiedParams}` : `/api/onboarding/audit/export`
+}
+
+/**
+ * Owner/admin only. Export contains no audit payload values or raw candidate/document data.
+ * @summary Export minimized protected audit evidence as CSV
+ */
+export const exportOnboardingProtectedAudit = async (params?: ExportOnboardingProtectedAuditParams, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getExportOnboardingProtectedAuditUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportOnboardingProtectedAuditQueryKey = (params?: ExportOnboardingProtectedAuditParams,) => {
+    return [
+    `/api/onboarding/audit/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportOnboardingProtectedAuditQueryOptions = <TData = Awaited<ReturnType<typeof exportOnboardingProtectedAudit>>, TError = ErrorType<void>>(params?: ExportOnboardingProtectedAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportOnboardingProtectedAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportOnboardingProtectedAuditQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportOnboardingProtectedAudit>>> = ({ signal }) => exportOnboardingProtectedAudit(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportOnboardingProtectedAudit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportOnboardingProtectedAuditQueryResult = NonNullable<Awaited<ReturnType<typeof exportOnboardingProtectedAudit>>>
+export type ExportOnboardingProtectedAuditQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export minimized protected audit evidence as CSV
+ */
+
+export function useExportOnboardingProtectedAudit<TData = Awaited<ReturnType<typeof exportOnboardingProtectedAudit>>, TError = ErrorType<void>>(
+ params?: ExportOnboardingProtectedAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportOnboardingProtectedAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportOnboardingProtectedAuditQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingProtectedAuditIntegrityUrl = () => {
+
+
+
+
+  return `/api/onboarding/audit/integrity`
+}
+
+/**
+ * @summary Verify the tenant audit hash chain and head
+ */
+export const getOnboardingProtectedAuditIntegrity = async ( options?: RequestInit): Promise<OnbProtectedAuditIntegrity> => {
+
+  return customFetch<OnbProtectedAuditIntegrity>(getGetOnboardingProtectedAuditIntegrityUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingProtectedAuditIntegrityQueryKey = () => {
+    return [
+    `/api/onboarding/audit/integrity`
+    ] as const;
+    }
+
+
+export const getGetOnboardingProtectedAuditIntegrityQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingProtectedAuditIntegrity>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditIntegrity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingProtectedAuditIntegrityQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingProtectedAuditIntegrity>>> = ({ signal }) => getOnboardingProtectedAuditIntegrity({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditIntegrity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingProtectedAuditIntegrityQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingProtectedAuditIntegrity>>>
+export type GetOnboardingProtectedAuditIntegrityQueryError = ErrorType<void>
+
+
+/**
+ * @summary Verify the tenant audit hash chain and head
+ */
+
+export function useGetOnboardingProtectedAuditIntegrity<TData = Awaited<ReturnType<typeof getOnboardingProtectedAuditIntegrity>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditIntegrity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingProtectedAuditIntegrityQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingProtectedAuditApprovalHistoryUrl = (approvalId: number,) => {
+
+
+
+
+  return `/api/onboarding/audit/approval-history/${approvalId}`
+}
+
+/**
+ * @summary Retrieve retained approval snapshots without requiring a live approval record
+ */
+export const getOnboardingProtectedAuditApprovalHistory = async (approvalId: number, options?: RequestInit): Promise<OnbApprovalHistory[]> => {
+
+  return customFetch<OnbApprovalHistory[]>(getGetOnboardingProtectedAuditApprovalHistoryUrl(approvalId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingProtectedAuditApprovalHistoryQueryKey = (approvalId: number,) => {
+    return [
+    `/api/onboarding/audit/approval-history/${approvalId}`
+    ] as const;
+    }
+
+
+export const getGetOnboardingProtectedAuditApprovalHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingProtectedAuditApprovalHistory>>, TError = ErrorType<void>>(approvalId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditApprovalHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingProtectedAuditApprovalHistoryQueryKey(approvalId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingProtectedAuditApprovalHistory>>> = ({ signal }) => getOnboardingProtectedAuditApprovalHistory(approvalId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: approvalId !== null && approvalId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditApprovalHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingProtectedAuditApprovalHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingProtectedAuditApprovalHistory>>>
+export type GetOnboardingProtectedAuditApprovalHistoryQueryError = ErrorType<void>
+
+
+/**
+ * @summary Retrieve retained approval snapshots without requiring a live approval record
+ */
+
+export function useGetOnboardingProtectedAuditApprovalHistory<TData = Awaited<ReturnType<typeof getOnboardingProtectedAuditApprovalHistory>>, TError = ErrorType<void>>(
+ approvalId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditApprovalHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingProtectedAuditApprovalHistoryQueryOptions(approvalId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingProtectedAuditLifecycleUrl = () => {
+
+
+
+
+  return `/api/onboarding/audit/lifecycle`
+}
+
+/**
+ * @summary Get reviewed audit retention and legal-hold state
+ */
+export const getOnboardingProtectedAuditLifecycle = async ( options?: RequestInit): Promise<OnbProtectedAuditLifecycle> => {
+
+  return customFetch<OnbProtectedAuditLifecycle>(getGetOnboardingProtectedAuditLifecycleUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingProtectedAuditLifecycleQueryKey = () => {
+    return [
+    `/api/onboarding/audit/lifecycle`
+    ] as const;
+    }
+
+
+export const getGetOnboardingProtectedAuditLifecycleQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingProtectedAuditLifecycle>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditLifecycle>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingProtectedAuditLifecycleQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingProtectedAuditLifecycle>>> = ({ signal }) => getOnboardingProtectedAuditLifecycle({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditLifecycle>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingProtectedAuditLifecycleQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingProtectedAuditLifecycle>>>
+export type GetOnboardingProtectedAuditLifecycleQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get reviewed audit retention and legal-hold state
+ */
+
+export function useGetOnboardingProtectedAuditLifecycle<TData = Awaited<ReturnType<typeof getOnboardingProtectedAuditLifecycle>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingProtectedAuditLifecycle>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingProtectedAuditLifecycleQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReviewOnboardingProtectedAuditRetentionUrl = () => {
+
+
+
+
+  return `/api/onboarding/audit/lifecycle/retention`
+}
+
+/**
+ * @summary Record owner/admin-reviewed audit retention statement
+ */
+export const reviewOnboardingProtectedAuditRetention = async (onbProtectedAuditRetentionInput: OnbProtectedAuditRetentionInput, options?: RequestInit): Promise<OnbProtectedAuditLifecycle> => {
+
+  return customFetch<OnbProtectedAuditLifecycle>(getReviewOnboardingProtectedAuditRetentionUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbProtectedAuditRetentionInput)
+  }
+);}
+
+
+
+
+
+export const getReviewOnboardingProtectedAuditRetentionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewOnboardingProtectedAuditRetention>>, TError,{data: BodyType<OnbProtectedAuditRetentionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewOnboardingProtectedAuditRetention>>, TError,{data: BodyType<OnbProtectedAuditRetentionInput>}, TContext> => {
+
+const mutationKey = ['reviewOnboardingProtectedAuditRetention'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewOnboardingProtectedAuditRetention>>, {data: BodyType<OnbProtectedAuditRetentionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reviewOnboardingProtectedAuditRetention(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewOnboardingProtectedAuditRetentionMutationResult = NonNullable<Awaited<ReturnType<typeof reviewOnboardingProtectedAuditRetention>>>
+    export type ReviewOnboardingProtectedAuditRetentionMutationBody = BodyType<OnbProtectedAuditRetentionInput>
+    export type ReviewOnboardingProtectedAuditRetentionMutationError = ErrorType<void>
+
+    /**
+ * @summary Record owner/admin-reviewed audit retention statement
+ */
+export const useReviewOnboardingProtectedAuditRetention = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewOnboardingProtectedAuditRetention>>, TError,{data: BodyType<OnbProtectedAuditRetentionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewOnboardingProtectedAuditRetention>>,
+        TError,
+        {data: BodyType<OnbProtectedAuditRetentionInput>},
+        TContext
+      > => {
+      return useMutation(getReviewOnboardingProtectedAuditRetentionMutationOptions(options));
+    }
+
+export const getSetOnboardingProtectedAuditLegalHoldUrl = () => {
+
+
+
+
+  return `/api/onboarding/audit/lifecycle/legal-hold`
+}
+
+/**
+ * @summary Set or release a legal hold with a reviewed reason
+ */
+export const setOnboardingProtectedAuditLegalHold = async (onbProtectedAuditLegalHoldInput: OnbProtectedAuditLegalHoldInput, options?: RequestInit): Promise<OnbProtectedAuditLifecycle> => {
+
+  return customFetch<OnbProtectedAuditLifecycle>(getSetOnboardingProtectedAuditLegalHoldUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbProtectedAuditLegalHoldInput)
+  }
+);}
+
+
+
+
+
+export const getSetOnboardingProtectedAuditLegalHoldMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setOnboardingProtectedAuditLegalHold>>, TError,{data: BodyType<OnbProtectedAuditLegalHoldInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setOnboardingProtectedAuditLegalHold>>, TError,{data: BodyType<OnbProtectedAuditLegalHoldInput>}, TContext> => {
+
+const mutationKey = ['setOnboardingProtectedAuditLegalHold'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setOnboardingProtectedAuditLegalHold>>, {data: BodyType<OnbProtectedAuditLegalHoldInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setOnboardingProtectedAuditLegalHold(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetOnboardingProtectedAuditLegalHoldMutationResult = NonNullable<Awaited<ReturnType<typeof setOnboardingProtectedAuditLegalHold>>>
+    export type SetOnboardingProtectedAuditLegalHoldMutationBody = BodyType<OnbProtectedAuditLegalHoldInput>
+    export type SetOnboardingProtectedAuditLegalHoldMutationError = ErrorType<void>
+
+    /**
+ * @summary Set or release a legal hold with a reviewed reason
+ */
+export const useSetOnboardingProtectedAuditLegalHold = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setOnboardingProtectedAuditLegalHold>>, TError,{data: BodyType<OnbProtectedAuditLegalHoldInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setOnboardingProtectedAuditLegalHold>>,
+        TError,
+        {data: BodyType<OnbProtectedAuditLegalHoldInput>},
+        TContext
+      > => {
+      return useMutation(getSetOnboardingProtectedAuditLegalHoldMutationOptions(options));
+    }
+
+export const getCreateOnboardingProtectedAuditCorrectionUrl = () => {
+
+
+
+
+  return `/api/onboarding/audit/corrections`
+}
+
+/**
+ * @summary Append a linked audit correction without editing existing evidence
+ */
+export const createOnboardingProtectedAuditCorrection = async (onbProtectedAuditCorrectionInput: OnbProtectedAuditCorrectionInput, options?: RequestInit): Promise<OnbProtectedAuditEntry> => {
+
+  return customFetch<OnbProtectedAuditEntry>(getCreateOnboardingProtectedAuditCorrectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onbProtectedAuditCorrectionInput)
+  }
+);}
+
+
+
+
+
+export const getCreateOnboardingProtectedAuditCorrectionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingProtectedAuditCorrection>>, TError,{data: BodyType<OnbProtectedAuditCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createOnboardingProtectedAuditCorrection>>, TError,{data: BodyType<OnbProtectedAuditCorrectionInput>}, TContext> => {
+
+const mutationKey = ['createOnboardingProtectedAuditCorrection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createOnboardingProtectedAuditCorrection>>, {data: BodyType<OnbProtectedAuditCorrectionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createOnboardingProtectedAuditCorrection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateOnboardingProtectedAuditCorrectionMutationResult = NonNullable<Awaited<ReturnType<typeof createOnboardingProtectedAuditCorrection>>>
+    export type CreateOnboardingProtectedAuditCorrectionMutationBody = BodyType<OnbProtectedAuditCorrectionInput>
+    export type CreateOnboardingProtectedAuditCorrectionMutationError = ErrorType<void>
+
+    /**
+ * @summary Append a linked audit correction without editing existing evidence
+ */
+export const useCreateOnboardingProtectedAuditCorrection = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingProtectedAuditCorrection>>, TError,{data: BodyType<OnbProtectedAuditCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createOnboardingProtectedAuditCorrection>>,
+        TError,
+        {data: BodyType<OnbProtectedAuditCorrectionInput>},
+        TContext
+      > => {
+      return useMutation(getCreateOnboardingProtectedAuditCorrectionMutationOptions(options));
     }
 

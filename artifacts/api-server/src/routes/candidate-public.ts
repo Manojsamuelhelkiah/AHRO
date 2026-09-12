@@ -17,6 +17,7 @@ import { malwareUploadIsClean } from "../lib/onboarding/malware-policy";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
 import { reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
 import { candidatePortalIntakeAllowed } from "../lib/onboarding/workforce-step-runtime";
+import { appendProtectedAudit, appendProtectedAuditInTransaction } from "../lib/onboarding/protected-audit";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
@@ -155,6 +156,18 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
     const bytes = Buffer.concat(chunks);
     const actualType = detectCandidateFile(bytes);
     if (!actualType || actualType !== declaredType) return res.status(415).json({ message: "File contents do not match an allowed type" });
+
+    const auditAttempt = await appendProtectedAudit({
+      organizationId: ctx.organizationId,
+      actorKind: "system",
+      actorAuthority: "candidate-session:validated",
+      action: "onboarding.candidate-document.upload.attempted",
+      outcome: "attempted",
+      objectType: "document",
+      objectId: String(documentId),
+      caseReference: `case:${ctx.caseId}`,
+      source: "candidate-public",
+    });
     const objectPath = candidateObjectPath(ctx.organizationId, ctx.caseId);
     const storedFile = getPrivateFile(objectPath);
     await storedFile.save(bytes, { resumable: false, contentType: actualType });
@@ -202,6 +215,18 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
               updatedAt: new Date(),
             }).where(and(eq(onbCases.id, ctx.caseId), eq(onbCases.organizationId, ctx.organizationId)));
           }
+          await appendProtectedAuditInTransaction(tx, {
+            organizationId: ctx.organizationId,
+            actorKind: "system",
+            actorAuthority: "candidate-session:validated",
+            action: "onboarding.candidate-document.upload.outcome",
+            outcome: "success",
+            objectType: "document",
+            objectId: String(documentId),
+            caseReference: `case:${ctx.caseId}`,
+            source: "candidate-public",
+            correctionOfId: auditAttempt.id,
+          });
           return inserted;
         });
         return created;

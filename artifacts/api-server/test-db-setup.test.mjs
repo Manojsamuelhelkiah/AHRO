@@ -1066,7 +1066,8 @@ test(
            tag !== "0043_demo_controller_setup" &&
            tag !== "0044_action_center" &&
            tag !== "0045_context_aware_workforce_policies" &&
-           tag !== "0046_batch_intake_reconciliation",
+           tag !== "0046_batch_intake_reconciliation" &&
+           tag !== "0045_protected_onboarding_audit",
       );
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(),

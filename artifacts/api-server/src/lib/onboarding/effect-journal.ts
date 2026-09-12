@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { onbEffectJournal } from "@workspace/db/schema";
 import { and, eq, or, sql } from "drizzle-orm";
+import { appendProtectedAuditInTransaction } from "./protected-audit";
 
 export type EffectJournalIdentity = {
   logicalOperationKey: string;
@@ -25,34 +26,56 @@ export type EffectDispatchClaim =
 
 /** Create the single durable row for a logical remote operation. */
 export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
-  await db
-    .insert(onbEffectJournal)
-    .values(input)
-    .onConflictDoNothing({
-      target: [
-        onbEffectJournal.organizationId,
-        onbEffectJournal.logicalOperationKey,
-      ],
-    });
-  const [entry] = await db
-    .select()
-    .from(onbEffectJournal)
-    .where(and(
-      eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
-      eq(onbEffectJournal.organizationId, input.organizationId),
-    ));
-  if (!entry) throw new Error("Effect journal entry could not be created");
-  if (
-    entry.organizationId !== input.organizationId ||
-    entry.tenantId !== input.tenantId ||
-    entry.caseId !== input.caseId ||
-    entry.toolName !== input.toolName ||
-    entry.argumentsHash !== input.argumentsHash ||
-    entry.providerIdempotency !== input.providerIdempotency
-  ) {
-    throw new Error("Logical operation key is already bound to a different effect");
-  }
-  return entry;
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(onbEffectJournal)
+      .values(input)
+      .onConflictDoNothing({
+        target: [
+          onbEffectJournal.organizationId,
+          onbEffectJournal.logicalOperationKey,
+        ],
+      })
+      .returning();
+    const [entry] = await tx
+      .select()
+      .from(onbEffectJournal)
+      .where(and(
+        eq(onbEffectJournal.logicalOperationKey, input.logicalOperationKey),
+        eq(onbEffectJournal.organizationId, input.organizationId),
+      ));
+    if (!entry) throw new Error("Effect journal entry could not be created");
+    if (
+      entry.organizationId !== input.organizationId ||
+      entry.tenantId !== input.tenantId ||
+      entry.caseId !== input.caseId ||
+      entry.toolName !== input.toolName ||
+      entry.argumentsHash !== input.argumentsHash ||
+      entry.providerIdempotency !== input.providerIdempotency
+    ) {
+      throw new Error("Logical operation key is already bound to a different effect");
+    }
+    if (created) {
+      await appendProtectedAuditInTransaction(tx, {
+        organizationId: input.organizationId,
+        actorKind: "system",
+        actorAuthority: "durable-effect-journal",
+        action: "onboarding.connector-effect.journaled",
+        outcome: "success",
+        objectType: "connector-effect",
+        objectId: input.logicalOperationKey,
+        caseReference: `case:${input.caseId}`,
+        source: "effect-journal",
+        correlationId: input.logicalOperationKey,
+        payload: {
+          toolName: input.toolName,
+          providerIdempotency: input.providerIdempotency,
+          journalStatus: entry.status,
+        },
+      });
+    }
+    return entry;
+  });
 }
 
 /**
@@ -118,7 +141,8 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
   }
 
   if (!input.providerIdempotency) {
-    const [ambiguous] = await db
+    const ambiguous = await db.transaction(async (tx) => {
+      const [updated] = await tx
       .update(onbEffectJournal)
       .set({
         status: "unknown_effect_manual_repair",
@@ -137,6 +161,24 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
         ),
       )
       .returning({ key: onbEffectJournal.logicalOperationKey });
+      if (updated) {
+        await appendProtectedAuditInTransaction(tx, {
+          organizationId: input.organizationId,
+          actorKind: "system",
+          actorAuthority: "durable-effect-journal",
+          action: "onboarding.connector-effect.manual-repair-required",
+          outcome: "failure",
+          objectType: "connector-effect",
+          objectId: input.logicalOperationKey,
+          caseReference: `case:${input.caseId}`,
+          reviewedRevision: input.expectedFencingToken,
+          source: "effect-journal",
+          correlationId: input.logicalOperationKey,
+          payload: { errorRecorded: true },
+        });
+      }
+      return updated;
+    });
     if (ambiguous) return { kind: "manual_repair_required" };
   }
 
@@ -144,7 +186,8 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
   if (!Number.isSafeInteger(leaseMs) || leaseMs <= 0) {
     throw new Error("Effect dispatch lease must be a positive integer");
   }
-  const [claimed] = await db
+  const claimed = await db.transaction(async (tx) => {
+    const [updated] = await tx
     .update(onbEffectJournal)
     .set({
       status: "dispatching",
@@ -171,6 +214,24 @@ export async function claimEffectDispatch(input: EffectJournalIdentity & {
       ),
     )
     .returning({ fencingToken: onbEffectJournal.fencingToken });
+    if (updated) {
+      await appendProtectedAuditInTransaction(tx, {
+      organizationId: input.organizationId,
+      actorKind: "system",
+      actorAuthority: "durable-effect-journal",
+      action: "onboarding.connector-effect.dispatch-claimed",
+      outcome: "success",
+      objectType: "connector-effect",
+      objectId: input.logicalOperationKey,
+      caseReference: `case:${input.caseId}`,
+       reviewedRevision: updated.fencingToken,
+      source: "effect-journal",
+      correlationId: input.logicalOperationKey,
+      payload: { providerIdempotency: input.providerIdempotency },
+      });
+    }
+    return updated;
+  });
   return claimed
     ? {
         kind: "claimed",
@@ -188,7 +249,8 @@ export async function confirmEffect(input: {
   fencingToken: number;
   externalEffectId?: string;
 }): Promise<boolean> {
-  const [updated] = await db
+  const updated = await db.transaction(async (tx) => {
+    const [confirmed] = await tx
     .update(onbEffectJournal)
     .set({
       status: "confirmed",
@@ -206,7 +268,25 @@ export async function confirmEffect(input: {
         eq(onbEffectJournal.fencingToken, input.fencingToken),
       ),
     )
-    .returning({ key: onbEffectJournal.logicalOperationKey });
+    .returning({ key: onbEffectJournal.logicalOperationKey, caseId: onbEffectJournal.caseId });
+    if (confirmed) {
+      await appendProtectedAuditInTransaction(tx, {
+      organizationId: input.organizationId,
+      actorKind: "system",
+      actorAuthority: "durable-effect-journal",
+      action: "onboarding.connector-effect.confirmed",
+      outcome: "success",
+      objectType: "connector-effect",
+      objectId: input.logicalOperationKey,
+      caseReference: confirmed.caseId === null ? null : `case:${confirmed.caseId}`,
+      reviewedRevision: input.fencingToken,
+      source: "effect-journal",
+      correlationId: input.logicalOperationKey,
+      payload: { externalEffectReferencePresent: Boolean(input.externalEffectId) },
+      });
+    }
+    return confirmed;
+  });
   return Boolean(updated);
 }
 
@@ -222,7 +302,8 @@ export async function markAmbiguousEffectForManualRepair(input: {
   fencingToken: number;
   error: string;
 }): Promise<boolean> {
-  const [updated] = await db
+  const updated = await db.transaction(async (tx) => {
+    const [repaired] = await tx
     .update(onbEffectJournal)
     .set({
       status: "unknown_effect_manual_repair",
@@ -240,7 +321,25 @@ export async function markAmbiguousEffectForManualRepair(input: {
         eq(onbEffectJournal.fencingToken, input.fencingToken),
       ),
     )
-    .returning({ key: onbEffectJournal.logicalOperationKey });
+    .returning({ key: onbEffectJournal.logicalOperationKey, caseId: onbEffectJournal.caseId });
+    if (repaired) {
+      await appendProtectedAuditInTransaction(tx, {
+      organizationId: input.organizationId,
+      actorKind: "system",
+      actorAuthority: "durable-effect-journal",
+      action: "onboarding.connector-effect.manual-repair-required",
+      outcome: "failure",
+      objectType: "connector-effect",
+      objectId: input.logicalOperationKey,
+      caseReference: repaired.caseId === null ? null : `case:${repaired.caseId}`,
+      reviewedRevision: input.fencingToken,
+      source: "effect-journal",
+      correlationId: input.logicalOperationKey,
+      payload: { errorRecorded: true },
+      });
+    }
+    return repaired;
+  });
   return Boolean(updated);
 }
 
@@ -251,7 +350,8 @@ export async function markAmbiguousEffectForManualRepair(input: {
 export async function sweepExpiredNonIdempotentEffects(): Promise<
   Array<{ logicalOperationKey: string; caseId: number | null }>
 > {
-  return db
+  const rows = await db.transaction(async (tx) => {
+    const recovered = await tx
     .update(onbEffectJournal)
     .set({
       status: "unknown_effect_manual_repair",
@@ -268,6 +368,26 @@ export async function sweepExpiredNonIdempotentEffects(): Promise<
     )
     .returning({
       logicalOperationKey: onbEffectJournal.logicalOperationKey,
+      organizationId: onbEffectJournal.organizationId,
       caseId: onbEffectJournal.caseId,
     });
+    // Acquire chain locks in a stable order to avoid cross-tenant deadlocks.
+    for (const row of [...recovered].sort((a, b) => a.organizationId.localeCompare(b.organizationId))) {
+      await appendProtectedAuditInTransaction(tx, {
+        organizationId: row.organizationId,
+        actorKind: "system",
+        actorAuthority: "durable-effect-journal",
+        action: "onboarding.connector-effect.manual-repair-required",
+        outcome: "failure",
+        objectType: "connector-effect",
+        objectId: row.logicalOperationKey,
+        caseReference: row.caseId === null ? null : `case:${row.caseId}`,
+        source: "effect-journal",
+        correlationId: row.logicalOperationKey,
+        payload: { recoverySweep: true },
+      });
+    }
+    return recovered;
+  });
+  return rows;
 }

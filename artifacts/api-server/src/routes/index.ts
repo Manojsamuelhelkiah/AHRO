@@ -25,9 +25,10 @@ import onboardingDemoControllerRouter from "./onboarding-demo-controller";
 import actionCenterRouter from "./action-center";
 import { requireAuth } from "../middlewares/require-auth";
 import { requireTenantContext } from "../middlewares/tenant-context";
+import onboardingAuditRouter from "./onboarding-audit";
+import { protectedAuditCapture } from "../middlewares/protected-audit";
 
 const router: IRouter = Router();
-
 router.use(healthRouter);
 router.use(organizationsRouter);
 router.use(candidatePublicRouter);
@@ -42,7 +43,9 @@ router.use((req, res, next) => {
     return;
   }
   requireAuth(req, res, () => {
-    void requireTenantContext(req, res, next);
+    void requireTenantContext(req, res, () => {
+      void protectedAuditCapture(req, res, next);
+    });
   });
 });
 router.use(corpusRouter);
@@ -56,6 +59,7 @@ router.use(sensitivityRouter);
 router.use(pricingSheetsRouter);
 router.use(slideDeckRouter);
 router.use(onboardingRouter);
+router.use(onboardingAuditRouter);
 router.use(onboardingBatchIntakeRouter);
 router.use(actionCenterRouter);
 router.use(onboardingDemoControllerRouter);

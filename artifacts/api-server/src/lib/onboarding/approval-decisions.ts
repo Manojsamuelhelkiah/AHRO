@@ -6,6 +6,7 @@ import {
   onbApprovals,
   onbCases,
   onbSettings,
+  organizationMembershipsTable,
 } from "@workspace/db/schema";
 import { sendAdministrativeEmail } from "./channels";
 import {
@@ -29,6 +30,7 @@ import {
   composeApprovalRequestEmail,
 } from "./approval-email-templates";
 import type { OnboardingDbTransaction } from "./settings";
+import { appendProtectedAuditInTransaction } from "./protected-audit";
 
 export type { ApprovalDecision };
 export type DecisionStaleReason = "version-mismatch" | "already-decided" | "not-pending";
@@ -270,6 +272,10 @@ export async function decideApproval(opts: {
   sourceMessageId?: string | null;
   sourceAddress?: string | null;
   decidedByKind?: RequesterKind;
+  /** Authenticated actor/authority when the decision came from the UI. */
+  auditActorId?: string | null;
+  auditActorAuthority?: string;
+  auditCorrelationId?: string | null;
 }): Promise<DecisionResult> {
   const expectedVersion = approvalVersion(opts.expectedVersion);
   let decided: {
@@ -400,6 +406,34 @@ export async function decideApproval(opts: {
       opts.comment ?? null,
       decidedAt,
     );
+    // This commits together with the decision and immutable approval snapshot.
+    const [auditMembership] = opts.auditActorId
+      ? await tx.select({ role: organizationMembershipsTable.role })
+          .from(organizationMembershipsTable)
+          .where(and(
+            eq(organizationMembershipsTable.organizationId, approval.organizationId),
+            eq(organizationMembershipsTable.clerkUserId, opts.auditActorId),
+          ))
+      : [];
+    await appendProtectedAuditInTransaction(tx, {
+      organizationId: approval.organizationId,
+      actorId: opts.auditActorId ?? null,
+      actorKind: opts.auditActorId ? "authenticated" : "system",
+      actorAuthority: auditMembership
+        ? `tenant-membership:${auditMembership.role}`
+        : opts.auditActorId
+          ? "tenant-membership:unverified"
+          : opts.auditActorAuthority ?? (opts.sourceAddress ? "verified-shared-mailbox" : "system-decision"),
+      action: "onboarding.approval.decision-recorded",
+      outcome: "success",
+      objectType: "approval",
+      objectId: String(approval.id),
+      caseReference: `case:${approval.caseId}`,
+      reviewedRevision: currentVersion,
+      source: opts.sourceAddress ? "approval-email" : "approval-decision",
+      correlationId: opts.auditCorrelationId ?? opts.sourceMessageId ?? null,
+      payload: { decision: opts.decision, approvalVersion: currentVersion },
+    });
     const [c] = await tx.select({ workerName: onbCases.workerName }).from(onbCases).where(and(
       eq(onbCases.organizationId, approval.organizationId),
       eq(onbCases.id, approval.caseId),

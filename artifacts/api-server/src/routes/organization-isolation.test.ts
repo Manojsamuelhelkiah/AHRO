@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import express from "express";
 import type { Server } from "node:http";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   actualsOverlaysTable,
   customIntentsTable,
@@ -12,6 +12,8 @@ import {
   flowOverridesTable,
   onbCaseLogistics,
   onbCases,
+  onbAuditEntries,
+  onbCommunications,
   onbChecklistProfiles,
   onbConnectors,
   onbEffectJournal,
@@ -20,6 +22,7 @@ import {
   onbIntakeBatches,
   onbIntakeBatchPeople,
   onbSettings,
+  onbReadinessSlaPolicies,
   organizationMembershipsTable,
   organizationsTable,
   pricingRateSetsTable,
@@ -237,6 +240,8 @@ after(async () => {
   await db.delete(onbEvents).where(eq(onbEvents.organizationId, orgB));
   await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgA));
   await db.delete(onbSettings).where(eq(onbSettings.organizationId, orgB));
+  await db.delete(onbReadinessSlaPolicies).where(eq(onbReadinessSlaPolicies.organizationId, orgA));
+  await db.delete(onbReadinessSlaPolicies).where(eq(onbReadinessSlaPolicies.organizationId, orgB));
   await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgA));
   await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, orgB));
   await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, orgA));
@@ -401,6 +406,50 @@ test("rejected Twilio webhooks persist an explicit platform audit event", async 
         .delete(onbGuardrailEvents)
         .where(eq(onbGuardrailEvents.id, auditId));
     }
+  }
+});
+
+test("accepted signed Twilio webhook records pre-attempt and linked outcome without callback data", async () => {
+  const [caseRow] = await db.select({ id: onbCases.id }).from(onbCases)
+    .where(eq(onbCases.organizationId, orgA)).limit(1);
+  assert.ok(caseRow);
+  const token = "organization-isolation-signed-webhook-token";
+  const messageSid = `SM-${randomUUID()}`;
+  await db.insert(onbCommunications).values({
+    organizationId: orgA, caseId: caseRow.id, channel: "whatsapp", direction: "outbound",
+    toAddress: "redacted", subject: null, body: "not callback data", status: "sent",
+    externalMessageId: messageSid,
+  });
+  const params = { MessageSid: messageSid, MessageStatus: "delivered" };
+  const path = "/onboarding/webhooks/twilio/whatsapp-status";
+  const signature = createHmac("sha1", token)
+    .update(`${baseUrl}${path}${Object.keys(params).sort().map((key) => `${key}${params[key as keyof typeof params]}`).join("")}`, "utf8")
+    .digest("base64");
+  process.env.TWILIO_AUTH_TOKEN = token;
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-twilio-signature": signature,
+        "x-organization-id": orgA,
+        "x-test-user": "test-user-a",
+      },
+      body: JSON.stringify(params),
+    });
+    assert.equal(response.status, 204, await response.text());
+    const audit = await db.select().from(onbAuditEntries).where(and(
+      eq(onbAuditEntries.organizationId, orgA),
+      sql`${onbAuditEntries.action} in ('onboarding.twilio.whatsapp-status.attempted', 'onboarding.twilio.whatsapp-status.accepted')`,
+    )).orderBy(desc(onbAuditEntries.sequence));
+    const accepted = audit.find((entry) => entry.action.endsWith(".accepted"));
+    const attempted = audit.find((entry) => entry.action.endsWith(".attempted"));
+    assert.ok(attempted);
+    assert.ok(accepted);
+    assert.equal(accepted.correctionOfId, attempted.id);
+    assert.ok(!JSON.stringify(audit).includes(params.MessageSid));
+  } finally {
+    delete process.env.TWILIO_AUTH_TOKEN;
   }
 });
 

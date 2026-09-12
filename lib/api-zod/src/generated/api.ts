@@ -16,7 +16,6 @@ import * as zod from 'zod';
 export const getDemoControllerSetupStatusResponseRequestOneApprovalValueMin = 64;
 
 
-
 export const GetDemoControllerSetupStatusResponse = zod.object({
   "eligible": zod.boolean(),
   "reason": zod.string().nullable(),
@@ -38,7 +37,6 @@ export const GetDemoControllerSetupStatusResponse = zod.object({
 export const requestDemoControllerSetupResponseRequestOneApprovalValueMin = 64;
 
 
-
 export const RequestDemoControllerSetupResponse = zod.object({
   "eligible": zod.boolean(),
   "reason": zod.string().nullable(),
@@ -58,14 +56,12 @@ export const RequestDemoControllerSetupResponse = zod.object({
  */
 
 
-
 export const CompleteDemoControllerSetupBody = zod.object({
   "requestId": zod.string().min(1)
 })
 
 
 export const completeDemoControllerSetupResponseRequestOneApprovalValueMin = 64;
-
 
 
 export const CompleteDemoControllerSetupResponse = zod.object({
@@ -88,9 +84,7 @@ export const CompleteDemoControllerSetupResponse = zod.object({
 export const getOnboardingDemoControllerResponseScenariosItemKeyMax = 80;
 
 
-
 export const getOnboardingDemoControllerResponseExistingSessionsItemVersionMin = 0;
-
 
 
 export const GetOnboardingDemoControllerResponse = zod.object({
@@ -155,8 +149,6 @@ export const createOnboardingDemoRunResponseVersionMin = 0;
 
 export const createOnboardingDemoRunResponseClockOffsetHoursMin = 0;
 export const createOnboardingDemoRunResponseClockOffsetHoursMax = 8760;
-
-
 
 
 export const CreateOnboardingDemoRunResponse = zod.object({
@@ -247,8 +239,6 @@ export const getOnboardingDemoRunResponseVersionMin = 0;
 
 export const getOnboardingDemoRunResponseClockOffsetHoursMin = 0;
 export const getOnboardingDemoRunResponseClockOffsetHoursMax = 8760;
-
-
 
 
 export const GetOnboardingDemoRunResponse = zod.object({
@@ -347,7 +337,6 @@ export const applyOnboardingDemoRunActionBodyHoursMin = 0;
 export const applyOnboardingDemoRunActionBodyHoursMax = 8760;
 
 
-
 export const ApplyOnboardingDemoRunActionBody = zod.object({
   "expectedVersion": zod.number().min(applyOnboardingDemoRunActionBodyExpectedVersionMin),
   "requestId": zod.string().min(applyOnboardingDemoRunActionBodyRequestIdMin).max(applyOnboardingDemoRunActionBodyRequestIdMax).regex(applyOnboardingDemoRunActionBodyRequestIdRegExp),
@@ -368,8 +357,6 @@ export const applyOnboardingDemoRunActionResponseVersionMin = 0;
 
 export const applyOnboardingDemoRunActionResponseClockOffsetHoursMin = 0;
 export const applyOnboardingDemoRunActionResponseClockOffsetHoursMax = 8760;
-
-
 
 
 export const ApplyOnboardingDemoRunActionResponse = zod.object({
@@ -465,7 +452,6 @@ export const getEnterpriseArchitectureBaselineResponseViewpointsMin = 8;
 export const getEnterpriseArchitectureBaselineResponseViewpointsMax = 8;
 
 
-
 export const GetEnterpriseArchitectureBaselineResponse = zod.object({
   "generatedAt": zod.string(),
   "viewpoints": zod.array(zod.object({
@@ -506,84 +492,36 @@ export const listEaAssessmentsResponseOneContentPhaseProgressMin = 10;
 export const listEaAssessmentsResponseOneContentPhaseProgressMax = 10;
 
 
-
-
-
-
 export const listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
-
-
-
-
 
 
 export const listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
-
-
-
-
 export const listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
-
-
-
-
 
 
 export const listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
-
-
-
-
 export const listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
-
-
-
-
 
 
 export const listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
-
-
-
-
 export const listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
-
-
-
-
 export const listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const listEaAssessmentsResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -591,11 +529,7 @@ export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemSequenceM
 export const listEaAssessmentsResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
-
 export const listEaAssessmentsResponseOneContentRoadmapWavesItemSequenceMin = 0;
-
-
-
 
 
 export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -617,30 +551,9 @@ export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMin
 export const listEaAssessmentsResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const listEaAssessmentsResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const listEaAssessmentsResponseOneContentRisksItemImpactMax = 5;
-
-
-
-
 
 
 export const ListEaAssessmentsResponseItem = zod.object({
@@ -1084,84 +997,36 @@ export const createEaAssessmentBodyContentPhaseProgressMin = 10;
 export const createEaAssessmentBodyContentPhaseProgressMax = 10;
 
 
-
-
-
-
 export const createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax = 5;
-
-
-
-
 
 
 export const createEaAssessmentBodyContentCurrentStateDataItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateDataItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax = 5;
-
-
-
-
 
 
 export const createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax = 5;
-
-
-
-
 
 
 export const createEaAssessmentBodyContentCurrentStateAiItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateAiItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const createEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax = 5;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const createEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -1169,11 +1034,7 @@ export const createEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0
 export const createEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
-
 export const createEaAssessmentBodyContentRoadmapWavesItemSequenceMin = 0;
-
-
-
 
 
 export const createEaAssessmentBodyContentRoadmapPrioritizationItemValueMin = 0;
@@ -1195,29 +1056,9 @@ export const createEaAssessmentBodyContentRoadmapPrioritizationItemCostMin = 0;
 export const createEaAssessmentBodyContentRoadmapPrioritizationItemCostMax = 5;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const createEaAssessmentBodyContentRisksItemLikelihoodMax = 5;
 
 export const createEaAssessmentBodyContentRisksItemImpactMax = 5;
-
-
-
 
 
 export const CreateEaAssessmentBody = zod.object({
@@ -1649,84 +1490,36 @@ export const createEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const createEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
-
-
-
-
 export const createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
-
-
-
-
 
 
 export const createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
-
-
-
-
 
 
 export const createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
-
-
-
-
 
 
 export const createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
-
-
-
-
 export const createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const createEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -1734,11 +1527,7 @@ export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequence
 export const createEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
-
 export const createEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
-
-
-
 
 
 export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -1760,30 +1549,9 @@ export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMi
 export const createEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const createEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const createEaAssessmentResponseOneContentRisksItemImpactMax = 5;
-
-
-
-
 
 
 export const CreateEaAssessmentResponse = zod.object({
@@ -2217,7 +1985,6 @@ export const CreateEaAssessmentResponse = zod.object({
  */
 
 
-
 export const GetEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -2233,84 +2000,36 @@ export const getEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const getEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
-
-
-
-
 export const getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
-
-
-
-
 
 
 export const getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
-
-
-
-
 export const getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
-
-
-
-
 
 
 export const getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
-
-
-
-
 export const getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
-
-
-
-
 
 
 export const getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
-
-
-
-
 export const getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
-
-
-
-
 export const getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const getEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -2318,11 +2037,7 @@ export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin
 export const getEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
-
 export const getEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
-
-
-
 
 
 export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -2344,30 +2059,9 @@ export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMin =
 export const getEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const getEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const getEaAssessmentResponseOneContentRisksItemImpactMax = 5;
-
-
-
-
 
 
 export const GetEaAssessmentResponse = zod.object({
@@ -2801,7 +2495,6 @@ export const GetEaAssessmentResponse = zod.object({
  */
 
 
-
 export const UpdateEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -2818,84 +2511,36 @@ export const updateEaAssessmentBodyContentPhaseProgressMin = 10;
 export const updateEaAssessmentBodyContentPhaseProgressMax = 10;
 
 
-
-
-
-
 export const updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateBusinessItemMaturityMax = 5;
-
-
-
-
 
 
 export const updateEaAssessmentBodyContentCurrentStateDataItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateDataItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateApplicationItemMaturityMax = 5;
-
-
-
-
 
 
 export const updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateIntegrationItemMaturityMax = 5;
-
-
-
-
 
 
 export const updateEaAssessmentBodyContentCurrentStateAiItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateAiItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateSecurityItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const updateEaAssessmentBodyContentCurrentStateOperatingModelItemMaturityMax = 5;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -2903,11 +2548,7 @@ export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemSequenceMin = 0
 export const updateEaAssessmentBodyContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
-
 export const updateEaAssessmentBodyContentRoadmapWavesItemSequenceMin = 0;
-
-
-
 
 
 export const updateEaAssessmentBodyContentRoadmapPrioritizationItemValueMin = 0;
@@ -2929,29 +2570,9 @@ export const updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMin = 0;
 export const updateEaAssessmentBodyContentRoadmapPrioritizationItemCostMax = 5;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const updateEaAssessmentBodyContentRisksItemLikelihoodMax = 5;
 
 export const updateEaAssessmentBodyContentRisksItemImpactMax = 5;
-
-
-
 
 
 export const UpdateEaAssessmentBody = zod.object({
@@ -3384,84 +3005,36 @@ export const updateEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const updateEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
-
-
-
-
 export const updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
-
-
-
-
 
 
 export const updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
-
-
-
-
 
 
 export const updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
-
-
-
-
 
 
 export const updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
-
-
-
-
 export const updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const updateEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -3469,11 +3042,7 @@ export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequence
 export const updateEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
-
 export const updateEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
-
-
-
 
 
 export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -3495,30 +3064,9 @@ export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMi
 export const updateEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const updateEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const updateEaAssessmentResponseOneContentRisksItemImpactMax = 5;
-
-
-
-
 
 
 export const UpdateEaAssessmentResponse = zod.object({
@@ -3952,12 +3500,9 @@ export const UpdateEaAssessmentResponse = zod.object({
  */
 
 
-
 export const DeleteEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
-
-
 
 
 export const DeleteEaAssessmentBody = zod.object({
@@ -3973,12 +3518,9 @@ export const DeleteEaAssessmentResponse = zod.void()
  */
 
 
-
 export const ArchiveEaAssessmentParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
-
-
 
 
 export const ArchiveEaAssessmentBody = zod.object({
@@ -3996,84 +3538,36 @@ export const archiveEaAssessmentResponseOneContentPhaseProgressMin = 10;
 export const archiveEaAssessmentResponseOneContentPhaseProgressMax = 10;
 
 
-
-
-
-
 export const archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateBusinessItemMaturityMax = 5;
-
-
-
-
 
 
 export const archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateDataItemMaturityMax = 5;
 
 
-
-
-
-
 export const archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateApplicationItemMaturityMax = 5;
-
-
-
-
 
 
 export const archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateTechnologyItemMaturityMax = 5;
 
 
-
-
-
-
 export const archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateIntegrationItemMaturityMax = 5;
-
-
-
-
 
 
 export const archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateAiItemMaturityMax = 5;
 
 
-
-
-
-
 export const archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateSecurityItemMaturityMax = 5;
 
 
-
-
-
-
 export const archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMin = 0;
 export const archiveEaAssessmentResponseOneContentCurrentStateOperatingModelItemMaturityMax = 5;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenceMin = 0;
@@ -4081,11 +3575,7 @@ export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemSequenc
 export const archiveEaAssessmentResponseOneContentRoadmapWorkPackagesItemEstimatedCostMin = 0;
 
 
-
 export const archiveEaAssessmentResponseOneContentRoadmapWavesItemSequenceMin = 0;
-
-
-
 
 
 export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemValueMin = 0;
@@ -4107,30 +3597,9 @@ export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostM
 export const archiveEaAssessmentResponseOneContentRoadmapPrioritizationItemCostMax = 5;
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const archiveEaAssessmentResponseOneContentRisksItemLikelihoodMax = 5;
 
 export const archiveEaAssessmentResponseOneContentRisksItemImpactMax = 5;
-
-
-
-
 
 
 export const ArchiveEaAssessmentResponse = zod.object({
@@ -4565,13 +4034,9 @@ export const ArchiveEaAssessmentResponse = zod.object({
  */
 
 
-
 export const CreateEaAssessmentHandoffParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
-
-
-
 
 
 export const CreateEaAssessmentHandoffBody = zod.object({
@@ -4908,7 +4373,6 @@ export const listScenariosResponseInputsAdoptionRampMin = 3;
 export const listScenariosResponseInputsAdoptionRampMax = 3;
 
 
-
 export const ListScenariosResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -4964,7 +4428,6 @@ export const createScenarioBodyInputsAdoptionRampMin = 3;
 export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
-
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -5010,7 +4473,6 @@ export const createScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const createScenarioResponseInputsAdoptionRampMin = 3;
 export const createScenarioResponseInputsAdoptionRampMax = 3;
-
 
 
 export const CreateScenarioResponse = zod.object({
@@ -5071,7 +4533,6 @@ export const getScenarioResponseInputsAdoptionRampMin = 3;
 export const getScenarioResponseInputsAdoptionRampMax = 3;
 
 
-
 export const GetScenarioResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -5130,7 +4591,6 @@ export const updateScenarioBodyInputsAdoptionRampMin = 3;
 export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
-
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -5176,7 +4636,6 @@ export const updateScenarioResponseInputsAssumptionOverridesMinOne = 0;
 
 export const updateScenarioResponseInputsAdoptionRampMin = 3;
 export const updateScenarioResponseInputsAdoptionRampMax = 3;
-
 
 
 export const UpdateScenarioResponse = zod.object({
@@ -5243,7 +4702,6 @@ export const createScenarioFileUploadIntentBodyNameMax = 255;
 export const createScenarioFileUploadIntentBodySizeMax = 10485760;
 
 
-
 export const CreateScenarioFileUploadIntentBody = zod.object({
   "name": zod.string().min(1).max(createScenarioFileUploadIntentBodyNameMax),
   "contentType": zod.string().min(1),
@@ -5277,9 +4735,6 @@ export const finalizeScenarioFileBodyNameMax = 255;
 
 
 export const finalizeScenarioFileBodySizeMax = 10485760;
-
-
-
 
 
 export const FinalizeScenarioFileBody = zod.object({
@@ -5354,8 +4809,6 @@ export const listPricingSheetsResponseInputsWorkflowsMin = 0;
 export const listPricingSheetsResponseInputsGrossMarginPctMax = 90;
 
 
-
-
 export const ListPricingSheetsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -5393,7 +4846,6 @@ export const ListPricingSheetsResponse = zod.array(ListPricingSheetsResponseItem
  */
 
 
-
 export const createPricingSheetBodyInputsChannelsMin = 0;
 
 export const createPricingSheetBodyInputsIntegrationsMin = 0;
@@ -5402,8 +4854,6 @@ export const createPricingSheetBodyInputsIntegrationsMin = 0;
 export const createPricingSheetBodyInputsWorkflowsMin = 0;
 
 export const createPricingSheetBodyInputsGrossMarginPctMax = 90;
-
-
 
 
 export const CreatePricingSheetBody = zod.object({
@@ -5426,7 +4876,6 @@ export const CreatePricingSheetBody = zod.object({
 })
 
 
-
 export const createPricingSheetResponseInputsChannelsMin = 0;
 
 export const createPricingSheetResponseInputsIntegrationsMin = 0;
@@ -5435,8 +4884,6 @@ export const createPricingSheetResponseInputsIntegrationsMin = 0;
 export const createPricingSheetResponseInputsWorkflowsMin = 0;
 
 export const createPricingSheetResponseInputsGrossMarginPctMax = 90;
-
-
 
 
 export const CreatePricingSheetResponse = zod.object({
@@ -5478,7 +4925,6 @@ export const GetPricingSheetParams = zod.object({
 })
 
 
-
 export const getPricingSheetResponseInputsChannelsMin = 0;
 
 export const getPricingSheetResponseInputsIntegrationsMin = 0;
@@ -5487,8 +4933,6 @@ export const getPricingSheetResponseInputsIntegrationsMin = 0;
 export const getPricingSheetResponseInputsWorkflowsMin = 0;
 
 export const getPricingSheetResponseInputsGrossMarginPctMax = 90;
-
-
 
 
 export const GetPricingSheetResponse = zod.object({
@@ -5530,8 +4974,6 @@ export const UpdatePricingSheetParams = zod.object({
 })
 
 
-
-
 export const updatePricingSheetBodyInputsChannelsMin = 0;
 
 export const updatePricingSheetBodyInputsIntegrationsMin = 0;
@@ -5540,8 +4982,6 @@ export const updatePricingSheetBodyInputsIntegrationsMin = 0;
 export const updatePricingSheetBodyInputsWorkflowsMin = 0;
 
 export const updatePricingSheetBodyInputsGrossMarginPctMax = 90;
-
-
 
 
 export const UpdatePricingSheetBody = zod.object({
@@ -5564,7 +5004,6 @@ export const UpdatePricingSheetBody = zod.object({
 })
 
 
-
 export const updatePricingSheetResponseInputsChannelsMin = 0;
 
 export const updatePricingSheetResponseInputsIntegrationsMin = 0;
@@ -5573,8 +5012,6 @@ export const updatePricingSheetResponseInputsIntegrationsMin = 0;
 export const updatePricingSheetResponseInputsWorkflowsMin = 0;
 
 export const updatePricingSheetResponseInputsGrossMarginPctMax = 90;
-
-
 
 
 export const UpdatePricingSheetResponse = zod.object({
@@ -6059,7 +5496,6 @@ export const computeSensitivityBodyInputsAdoptionRampMin = 3;
 export const computeSensitivityBodyInputsAdoptionRampMax = 3;
 
 
-
 export const ComputeSensitivityBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -6137,7 +5573,6 @@ export const exportScenarioWorkbookBodyInputsAdoptionRampMin = 3;
 export const exportScenarioWorkbookBodyInputsAdoptionRampMax = 3;
 
 
-
 export const ExportScenarioWorkbookBody = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -6194,7 +5629,6 @@ export const importScenarioWorkbookResponseInputsAdoptionRampMin = 3;
 export const importScenarioWorkbookResponseInputsAdoptionRampMax = 3;
 
 
-
 export const ImportScenarioWorkbookResponse = zod.object({
   "inputs": zod.object({
   "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
@@ -6241,7 +5675,6 @@ export const computeRollupBodyInputsAssumptionOverridesMinOne = 0;
 
 export const computeRollupBodyInputsAdoptionRampMin = 3;
 export const computeRollupBodyInputsAdoptionRampMax = 3;
-
 
 
 export const ComputeRollupBody = zod.object({
@@ -6712,7 +6145,6 @@ export const previewOnboardingSyntheticResetResponsePreservedCountMin = 0;
 export const previewOnboardingSyntheticResetResponseReceiptOneRetainedUploadCountMin = 0;
 
 
-
 export const PreviewOnboardingSyntheticResetResponse = zod.object({
   "organizationId": zod.string(),
   "status": zod.enum(['ready', 'blocked', 'completed', 'unavailable']),
@@ -6741,7 +6173,6 @@ export const PreviewOnboardingSyntheticResetResponse = zod.object({
  */
 
 
-
 export const ConfirmOnboardingSyntheticResetBody = zod.object({
   "expectedRevision": zod.string().min(1),
   "confirmation": zod.enum(['REPLACE SYNTHETIC CASES'])
@@ -6750,7 +6181,6 @@ export const ConfirmOnboardingSyntheticResetBody = zod.object({
 export const confirmOnboardingSyntheticResetResponsePreservedCountMin = 0;
 
 export const confirmOnboardingSyntheticResetResponseReceiptOneRetainedUploadCountMin = 0;
-
 
 
 export const ConfirmOnboardingSyntheticResetResponse = zod.object({
@@ -6785,26 +6215,7 @@ export const RunOnboardingScenarioParams = zod.object({
 export const runOnboardingScenarioResponseReadinessItemOrderMin = 0;
 
 
-
 export const runOnboardingScenarioResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const runOnboardingScenarioResponseWorkforceContextRoleFamilyMax = 120;
@@ -6846,8 +6257,6 @@ export const runOnboardingScenarioResponseWorkforceContextBatchIdMax = 120;
 export const runOnboardingScenarioResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const runOnboardingScenarioResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const RunOnboardingScenarioResponse = zod.object({
@@ -7003,26 +6412,7 @@ export const RunOnboardingScenarioResponse = zod.object({
 export const listOnboardingCasesResponseReadinessItemOrderMin = 0;
 
 
-
 export const listOnboardingCasesResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const listOnboardingCasesResponseWorkforceContextRoleFamilyMax = 120;
@@ -7064,8 +6454,6 @@ export const listOnboardingCasesResponseWorkforceContextBatchIdMax = 120;
 export const listOnboardingCasesResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const listOnboardingCasesResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const ListOnboardingCasesResponseItem = zod.object({
@@ -7262,8 +6650,6 @@ export const createOnboardingCaseBodyWorkforceContextAccessibilityNeedsMax = 500
 export const createOnboardingCaseBodyWorkforceContextLanguagePreferenceMax = 120;
 
 
-
-
 export const CreateOnboardingCaseBody = zod.object({
   "workerName": zod.string().min(1),
   "workerEmail": zod.string(),
@@ -7314,26 +6700,7 @@ export const CreateOnboardingCaseBody = zod.object({
 export const createOnboardingCaseResponseReadinessItemOrderMin = 0;
 
 
-
 export const createOnboardingCaseResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const createOnboardingCaseResponseWorkforceContextRoleFamilyMax = 120;
@@ -7375,8 +6742,6 @@ export const createOnboardingCaseResponseWorkforceContextBatchIdMax = 120;
 export const createOnboardingCaseResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const createOnboardingCaseResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const CreateOnboardingCaseResponse = zod.object({
@@ -7536,26 +6901,7 @@ export const GetOnboardingCaseParams = zod.object({
 export const getOnboardingCaseResponseReadinessItemOrderMin = 0;
 
 
-
 export const getOnboardingCaseResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const getOnboardingCaseResponseWorkforceContextRoleFamilyMax = 120;
@@ -7597,8 +6943,6 @@ export const getOnboardingCaseResponseWorkforceContextBatchIdMax = 120;
 export const getOnboardingCaseResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const getOnboardingCaseResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const GetOnboardingCaseResponse = zod.object({
@@ -7753,7 +7097,6 @@ export const GetOnboardingCaseResponse = zod.object({
  */
 
 
-
 export const ExplainOnboardingCaseParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -7763,7 +7106,6 @@ export const explainOnboardingCaseBodyQuestionMax = 2000;
 export const explainOnboardingCaseBodyHistoryItemContentMax = 4000;
 
 export const explainOnboardingCaseBodyHistoryMax = 8;
-
 
 
 export const ExplainOnboardingCaseBody = zod.object({
@@ -7795,7 +7137,6 @@ export const explainOnboardingCaseResponseSourcesMax = 100;
 export const explainOnboardingCaseResponseLimitationsItemMax = 500;
 
 
-
 export const ExplainOnboardingCaseResponse = zod.object({
   "asOf": zod.coerce.date(),
   "paragraphs": zod.array(zod.object({
@@ -7821,12 +7162,9 @@ export const ExplainOnboardingCaseResponse = zod.object({
  */
 
 
-
 export const ConfirmOnboardingOfferAcceptanceParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
-
-
 
 
 export const ConfirmOnboardingOfferAcceptanceBody = zod.object({
@@ -7836,26 +7174,7 @@ export const ConfirmOnboardingOfferAcceptanceBody = zod.object({
 export const confirmOnboardingOfferAcceptanceResponseReadinessItemOrderMin = 0;
 
 
-
 export const confirmOnboardingOfferAcceptanceResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const confirmOnboardingOfferAcceptanceResponseWorkforceContextRoleFamilyMax = 120;
@@ -7897,8 +7216,6 @@ export const confirmOnboardingOfferAcceptanceResponseWorkforceContextBatchIdMax 
 export const confirmOnboardingOfferAcceptanceResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const confirmOnboardingOfferAcceptanceResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
@@ -8053,15 +7370,11 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
  */
 
 
-
 export const RecalculateOnboardingChecklistProfileParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
 
 export const recalculateOnboardingChecklistProfileBodyReasonMax = 500;
-
-
-
 
 
 export const RecalculateOnboardingChecklistProfileBody = zod.object({
@@ -8075,26 +7388,7 @@ export const RecalculateOnboardingChecklistProfileBody = zod.object({
 export const recalculateOnboardingChecklistProfileResponseReadinessItemOrderMin = 0;
 
 
-
 export const recalculateOnboardingChecklistProfileResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const recalculateOnboardingChecklistProfileResponseWorkforceContextRoleFamilyMax = 120;
@@ -8136,8 +7430,6 @@ export const recalculateOnboardingChecklistProfileResponseWorkforceContextBatchI
 export const recalculateOnboardingChecklistProfileResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const recalculateOnboardingChecklistProfileResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const RecalculateOnboardingChecklistProfileResponse = zod.object({
@@ -8292,32 +7584,12 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
  */
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const listOnboardingChecklistProfilesResponseOneOverridesItemOrderMin = 0;
 
 export const listOnboardingChecklistProfilesResponseOnePriorityMin = 0;
 
 
-
 export const listOnboardingChecklistProfilesResponseTwoEffectiveChecklistItemOrderMin = 0;
-
 
 
 export const ListOnboardingChecklistProfilesResponseItem = zod.object({
@@ -8385,28 +7657,9 @@ export const ListOnboardingChecklistProfilesResponse = zod.array(ListOnboardingC
  */
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const createOnboardingChecklistProfileBodyOverridesItemOrderMin = 0;
 
 export const createOnboardingChecklistProfileBodyPriorityMin = 0;
-
 
 
 export const CreateOnboardingChecklistProfileBody = zod.object({
@@ -8451,33 +7704,12 @@ export const CreateOnboardingChecklistProfileBody = zod.object({
 })
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const createOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
 
 export const createOnboardingChecklistProfileResponseOnePriorityMin = 0;
 
 
-
 export const createOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
-
 
 
 export const CreateOnboardingChecklistProfileResponse = zod.object({
@@ -8547,30 +7779,9 @@ export const UpdateOnboardingChecklistProfileParams = zod.object({
 })
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const updateOnboardingChecklistProfileBodyOneOverridesItemOrderMin = 0;
 
 export const updateOnboardingChecklistProfileBodyOnePriorityMin = 0;
-
-
 
 
 export const UpdateOnboardingChecklistProfileBody = zod.object({
@@ -8617,33 +7828,12 @@ export const UpdateOnboardingChecklistProfileBody = zod.object({
 }))
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const updateOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
 
 export const updateOnboardingChecklistProfileResponseOnePriorityMin = 0;
 
 
-
 export const updateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
-
 
 
 export const UpdateOnboardingChecklistProfileResponse = zod.object({
@@ -8713,33 +7903,12 @@ export const DisableOnboardingChecklistProfileParams = zod.object({
 })
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const disableOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
 
 export const disableOnboardingChecklistProfileResponseOnePriorityMin = 0;
 
 
-
 export const disableOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
-
 
 
 export const DisableOnboardingChecklistProfileResponse = zod.object({
@@ -8809,33 +7978,12 @@ export const DuplicateOnboardingChecklistProfileParams = zod.object({
 })
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export const duplicateOnboardingChecklistProfileResponseOneOverridesItemOrderMin = 0;
 
 export const duplicateOnboardingChecklistProfileResponseOnePriorityMin = 0;
 
 
-
 export const duplicateOnboardingChecklistProfileResponseTwoEffectiveChecklistItemOrderMin = 0;
-
 
 
 export const DuplicateOnboardingChecklistProfileResponse = zod.object({
@@ -8961,7 +8109,6 @@ export const listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEviden
 export const listOnboardingPolicyRecommendationsResponseFallbackOneBroaderEvidenceItemSampleMissingOutcomeEvidenceMin = 0;
 
 
-
 export const ListOnboardingPolicyRecommendationsResponse = zod.object({
   "asOf": zod.coerce.date(),
   "methodologyVersion": zod.literal("learning-cohort-v1"),
@@ -9077,7 +8224,6 @@ export const RefreshOnboardingPolicyRecommendationsResponse = zod.unknown()
  */
 
 
-
 export const DecideOnboardingPolicyRecommendationParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -9119,7 +8265,6 @@ export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsItemTimin
 export const decideOnboardingPolicyRecommendationBodyLearningThreeStepsMax = 24;
 
 export const decideOnboardingPolicyRecommendationBodyLearningThreeOwnershipMax = 120;
-
 
 
 export const DecideOnboardingPolicyRecommendationBody = zod.object({
@@ -9238,7 +8383,6 @@ export const getOnboardingActionCenterQueryLimitDefault = 100;
 export const getOnboardingActionCenterQueryLimitMax = 200;
 
 
-
 export const GetOnboardingActionCenterQueryParams = zod.object({
   "scope": zod.enum(['active', 'completed', 'all']).default(getOnboardingActionCenterQueryScopeDefault),
   "limit": zod.coerce.number().min(1).max(getOnboardingActionCenterQueryLimitMax).default(getOnboardingActionCenterQueryLimitDefault),
@@ -9260,21 +8404,13 @@ export const getOnboardingActionCenterResponseCountsCompletedMin = 0;
 export const getOnboardingActionCenterResponseCountsOpportunitiesMin = 0;
 
 
-
-
-
-
-
 export const getOnboardingActionCenterResponseDocumentFollowupsItemReminderCountMin = 0;
-
 
 
 export const getOnboardingActionCenterResponseWorkItemsItemActionVersionMin = 0;
 
 
-
 export const getOnboardingActionCenterResponseOpportunitiesItemActionVersionMin = 0;
-
 
 
 export const GetOnboardingActionCenterResponse = zod.object({
@@ -9455,7 +8591,6 @@ export const getOnboardingActionCenterIdentitiesResponseIdentitiesHiringManagerN
 export const getOnboardingActionCenterIdentitiesResponseIdentitiesComplianceNameMax = 120;
 
 
-
 export const GetOnboardingActionCenterIdentitiesResponse = zod.object({
   "version": zod.number().min(1),
   "identities": zod.object({
@@ -9504,7 +8639,6 @@ export const updateOnboardingActionCenterIdentitiesBodyIdentitiesHiringManagerNa
 export const updateOnboardingActionCenterIdentitiesBodyIdentitiesComplianceNameMax = 120;
 
 
-
 export const UpdateOnboardingActionCenterIdentitiesBody = zod.object({
   "version": zod.number().min(1),
   "identities": zod.object({
@@ -9541,7 +8675,6 @@ export const updateOnboardingActionCenterIdentitiesResponseIdentitiesRecruiterNa
 export const updateOnboardingActionCenterIdentitiesResponseIdentitiesHiringManagerNameMax = 120;
 
 export const updateOnboardingActionCenterIdentitiesResponseIdentitiesComplianceNameMax = 120;
-
 
 
 export const UpdateOnboardingActionCenterIdentitiesResponse = zod.object({
@@ -9588,7 +8721,6 @@ export const recordOnboardingActionCenterCallOutcomeBodyNotesMax = 2000;
 export const recordOnboardingActionCenterCallOutcomeBodyPersonaMax = 120;
 
 
-
 export const RecordOnboardingActionCenterCallOutcomeBody = zod.object({
   "requestId": zod.string().min(1).max(recordOnboardingActionCenterCallOutcomeBodyRequestIdMax),
   "caseId": zod.number().min(1),
@@ -9599,9 +8731,7 @@ export const RecordOnboardingActionCenterCallOutcomeBody = zod.object({
 })
 
 
-
 export const recordOnboardingActionCenterCallOutcomeResponseActionVersionMin = 0;
-
 
 
 export const RecordOnboardingActionCenterCallOutcomeResponse = zod.object({
@@ -9628,9 +8758,6 @@ export const RecordOnboardingActionCenterCallOutcomeResponse = zod.object({
 export const remindOnboardingActionCenterDocumentBodyRequestIdMax = 128;
 
 
-
-
-
 export const RemindOnboardingActionCenterDocumentBody = zod.object({
   "requestId": zod.string().min(1).max(remindOnboardingActionCenterDocumentBodyRequestIdMax),
   "caseId": zod.number().min(1),
@@ -9639,9 +8766,7 @@ export const RemindOnboardingActionCenterDocumentBody = zod.object({
 })
 
 
-
 export const remindOnboardingActionCenterDocumentResponseActionVersionMin = 0;
-
 
 
 export const RemindOnboardingActionCenterDocumentResponse = zod.object({
@@ -9675,7 +8800,6 @@ export const assignOnboardingActionCenterWorkBodyReasonMax = 2000;
 export const assignOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
 
 
-
 export const AssignOnboardingActionCenterWorkBody = zod.object({
   "requestId": zod.string().min(1).max(assignOnboardingActionCenterWorkBodyRequestIdMax),
   "caseId": zod.number().min(1),
@@ -9686,9 +8810,7 @@ export const AssignOnboardingActionCenterWorkBody = zod.object({
 })
 
 
-
 export const assignOnboardingActionCenterWorkResponseActionVersionMin = 0;
-
 
 
 export const AssignOnboardingActionCenterWorkResponse = zod.object({
@@ -9722,7 +8844,6 @@ export const escalateOnboardingActionCenterWorkBodyReasonMax = 2000;
 export const escalateOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
 
 
-
 export const EscalateOnboardingActionCenterWorkBody = zod.object({
   "requestId": zod.string().min(1).max(escalateOnboardingActionCenterWorkBodyRequestIdMax),
   "caseId": zod.number().min(1),
@@ -9733,9 +8854,7 @@ export const EscalateOnboardingActionCenterWorkBody = zod.object({
 })
 
 
-
 export const escalateOnboardingActionCenterWorkResponseActionVersionMin = 0;
-
 
 
 export const EscalateOnboardingActionCenterWorkResponse = zod.object({
@@ -9762,13 +8881,11 @@ export const EscalateOnboardingActionCenterWorkResponse = zod.object({
 export const reassignOnboardingActionCenterWorkBodyRequestIdMax = 128;
 
 
-
 export const reassignOnboardingActionCenterWorkBodyAssigneeMax = 200;
 
 export const reassignOnboardingActionCenterWorkBodyReasonMax = 2000;
 
 export const reassignOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
-
 
 
 export const ReassignOnboardingActionCenterWorkBody = zod.object({
@@ -9782,9 +8899,7 @@ export const ReassignOnboardingActionCenterWorkBody = zod.object({
 })
 
 
-
 export const reassignOnboardingActionCenterWorkResponseActionVersionMin = 0;
-
 
 
 export const ReassignOnboardingActionCenterWorkResponse = zod.object({
@@ -9811,9 +8926,7 @@ export const ReassignOnboardingActionCenterWorkResponse = zod.object({
 export const resolveOnboardingActionCenterWorkBodyRequestIdMax = 128;
 
 
-
 export const resolveOnboardingActionCenterWorkBodyExpectedVersionMin = 0;
-
 
 
 export const ResolveOnboardingActionCenterWorkBody = zod.object({
@@ -9824,9 +8937,7 @@ export const ResolveOnboardingActionCenterWorkBody = zod.object({
 })
 
 
-
 export const resolveOnboardingActionCenterWorkResponseActionVersionMin = 0;
-
 
 
 export const ResolveOnboardingActionCenterWorkResponse = zod.object({
@@ -9852,7 +8963,6 @@ export const ResolveOnboardingActionCenterWorkResponse = zod.object({
  */
 
 
-
 export const GetOnboardingOperationalRequestsParams = zod.object({
   "caseId": zod.coerce.number().min(1)
 })
@@ -9862,7 +8972,6 @@ export const getOnboardingOperationalRequestsResponseVersionMin = 0;
 export const getOnboardingOperationalRequestsResponseRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const getOnboardingOperationalRequestsResponseRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const getOnboardingOperationalRequestsResponseRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-
 
 
 export const GetOnboardingOperationalRequestsResponse = zod.object({
@@ -9942,7 +9051,6 @@ export const GetOnboardingOperationalRequestsResponse = zod.object({
  */
 
 
-
 export const InitializeOnboardingOperationalRequestsParams = zod.object({
   "caseId": zod.coerce.number().min(1)
 })
@@ -9954,7 +9062,6 @@ export const initializeOnboardingOperationalRequestsBodyRequestIdsItemRegExp = n
 export const initializeOnboardingOperationalRequestsBodyRequestIdsMax = 5;
 
 export const initializeOnboardingOperationalRequestsBodyExpectedVersionMin = 0;
-
 
 
 export const InitializeOnboardingOperationalRequestsBody = zod.object({
@@ -9969,7 +9076,6 @@ export const initializeOnboardingOperationalRequestsResponseOneVersionMin = 0;
 export const initializeOnboardingOperationalRequestsResponseOneRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const initializeOnboardingOperationalRequestsResponseOneRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const initializeOnboardingOperationalRequestsResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-
 
 
 export const InitializeOnboardingOperationalRequestsResponse = zod.object({
@@ -10073,7 +9179,6 @@ export const applyOnboardingOperationalRequestActionBodyReasonMax = 500;
 export const applyOnboardingOperationalRequestActionBodyExpectedVersionMin = 0;
 
 
-
 export const ApplyOnboardingOperationalRequestActionBody = zod.object({
   "requestId": zod.string().min(1).max(applyOnboardingOperationalRequestActionBodyRequestIdMax).describe('Client idempotency id; reuse only for the identical action payload'),
   "action": zod.enum(['select-method', 'start', 'progress', 'complete', 'block', 'retry']),
@@ -10087,7 +9192,6 @@ export const applyOnboardingOperationalRequestActionResponseOneVersionMin = 0;
 export const applyOnboardingOperationalRequestActionResponseOneRequestsItemIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const applyOnboardingOperationalRequestActionResponseOneRequestsItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
 export const applyOnboardingOperationalRequestActionResponseOneRequestsItemHistoryItemAgentIdentityOneIdRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{0,63}$');
-
 
 
 export const ApplyOnboardingOperationalRequestActionResponse = zod.object({
@@ -10266,7 +9370,6 @@ export const DecideOnboardingEvidenceParams = zod.object({
 export const decideOnboardingEvidenceBodyReasonMin = 3;
 
 
-
 export const DecideOnboardingEvidenceBody = zod.object({
   "decision": zod.enum(['approve', 'reject', 'request_correction']),
   "reason": zod.string().min(decideOnboardingEvidenceBodyReasonMin)
@@ -10317,13 +9420,9 @@ export const GetOnboardingCaseBgvResponse = zod.array(GetOnboardingCaseBgvRespon
  */
 
 
-
 export const GetOnboardingBgvNotificationsParams = zod.object({
   "caseId": zod.coerce.number().min(1)
 })
-
-
-
 
 
 export const GetOnboardingBgvNotificationsResponse = zod.object({
@@ -10459,13 +9558,9 @@ export const GetOnboardingBgvNotificationsResponse = zod.object({
  */
 
 
-
 export const UpdateOnboardingBgvNotificationsParams = zod.object({
   "caseId": zod.coerce.number().min(1)
 })
-
-
-
 
 
 export const UpdateOnboardingBgvNotificationsBody = zod.object({
@@ -10510,9 +9605,6 @@ export const UpdateOnboardingBgvNotificationsBody = zod.object({
 }).optional()
 })
 })
-
-
-
 
 
 export const UpdateOnboardingBgvNotificationsResponse = zod.object({
@@ -10648,7 +9740,6 @@ export const UpdateOnboardingBgvNotificationsResponse = zod.object({
  */
 
 
-
 export const ReconcileOnboardingBgvNotificationsParams = zod.object({
   "caseId": zod.coerce.number().min(1)
 })
@@ -10657,9 +9748,6 @@ export const ReconcileOnboardingBgvNotificationsBody = zod.object({
   "reason": zod.enum(['manual', 'heartbeat', 'startup']).optional(),
   "simulation": zod.boolean().optional()
 })
-
-
-
 
 
 export const ReconcileOnboardingBgvNotificationsResponse = zod.object({
@@ -10808,7 +9896,6 @@ export const UpdateOnboardingChecklistItemParams = zod.object({
 export const updateOnboardingChecklistItemBodyNoteMax = 500;
 
 
-
 export const UpdateOnboardingChecklistItemBody = zod.object({
   "status": zod.enum(['ready', 'pending']),
   "note": zod.string().max(updateOnboardingChecklistItemBodyNoteMax).nullish()
@@ -10817,26 +9904,7 @@ export const UpdateOnboardingChecklistItemBody = zod.object({
 export const updateOnboardingChecklistItemResponseReadinessItemOrderMin = 0;
 
 
-
 export const updateOnboardingChecklistItemResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const updateOnboardingChecklistItemResponseWorkforceContextRoleFamilyMax = 120;
@@ -10878,8 +9946,6 @@ export const updateOnboardingChecklistItemResponseWorkforceContextBatchIdMax = 1
 export const updateOnboardingChecklistItemResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const updateOnboardingChecklistItemResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const UpdateOnboardingChecklistItemResponse = zod.object({
@@ -11058,7 +10124,6 @@ export const verifyOnboardingChecklistEvidenceBodyExpectedPolicyTemplateVersionM
 export const verifyOnboardingChecklistEvidenceBodyExpectedPolicyProfileVersionMin = 0;
 
 
-
 export const VerifyOnboardingChecklistEvidenceBody = zod.object({
   "evidenceReference": zod.string().min(verifyOnboardingChecklistEvidenceBodyEvidenceReferenceMin).max(verifyOnboardingChecklistEvidenceBodyEvidenceReferenceMax),
   "authorityRole": zod.string().min(verifyOnboardingChecklistEvidenceBodyAuthorityRoleMin).max(verifyOnboardingChecklistEvidenceBodyAuthorityRoleMax),
@@ -11075,26 +10140,7 @@ export const VerifyOnboardingChecklistEvidenceBody = zod.object({
 export const verifyOnboardingChecklistEvidenceResponseReadinessItemOrderMin = 0;
 
 
-
 export const verifyOnboardingChecklistEvidenceResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const verifyOnboardingChecklistEvidenceResponseWorkforceContextRoleFamilyMax = 120;
@@ -11136,8 +10182,6 @@ export const verifyOnboardingChecklistEvidenceResponseWorkforceContextBatchIdMax
 export const verifyOnboardingChecklistEvidenceResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const verifyOnboardingChecklistEvidenceResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
@@ -11307,7 +10351,6 @@ export const AssignOnboardingPolicyAuthorityResponse = zod.void()
  */
 
 
-
 export const CorrectOnboardingWorkforceContextParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -11356,7 +10399,6 @@ export const correctOnboardingWorkforceContextBodyReasonMin = 3;
 export const correctOnboardingWorkforceContextBodyReasonMax = 500;
 
 
-
 export const CorrectOnboardingWorkforceContextBody = zod.object({
   "workforceContext": zod.object({
   "roleFamily": zod.string().max(correctOnboardingWorkforceContextBodyWorkforceContextRoleFamilyMax).optional(),
@@ -11390,26 +10432,7 @@ export const CorrectOnboardingWorkforceContextBody = zod.object({
 export const correctOnboardingWorkforceContextResponseReadinessItemOrderMin = 0;
 
 
-
 export const correctOnboardingWorkforceContextResponseChecklistSnapshotItemOrderMin = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 export const correctOnboardingWorkforceContextResponseWorkforceContextRoleFamilyMax = 120;
@@ -11451,8 +10474,6 @@ export const correctOnboardingWorkforceContextResponseWorkforceContextBatchIdMax
 export const correctOnboardingWorkforceContextResponseWorkforceContextAccessibilityNeedsMax = 500;
 
 export const correctOnboardingWorkforceContextResponseWorkforceContextLanguagePreferenceMax = 120;
-
-
 
 
 export const CorrectOnboardingWorkforceContextResponse = zod.object({
@@ -11799,8 +10820,6 @@ export const ReceiveOnboardingInboundParams = zod.object({
 })
 
 
-
-
 export const ReceiveOnboardingInboundBody = zod.object({
   "channel": zod.string().describe('email | whatsapp'),
   "body": zod.string().min(1)
@@ -11830,8 +10849,6 @@ export const ReceiveOnboardingInboundResponse = zod.object({
 export const ListOnboardingApprovalsQueryParams = zod.object({
   "status": zod.coerce.string().optional()
 })
-
-
 
 
 export const ListOnboardingApprovalsResponseItem = zod.object({
@@ -11870,15 +10887,11 @@ export const DecideOnboardingApprovalParams = zod.object({
 })
 
 
-
-
 export const DecideOnboardingApprovalBody = zod.object({
   "decision": zod.string().describe('approved | rejected'),
   "comment": zod.string().optional(),
   "expectedVersion": zod.number().min(1)
 })
-
-
 
 
 export const DecideOnboardingApprovalResponse = zod.object({
@@ -11913,12 +10926,9 @@ export const DecideOnboardingApprovalResponse = zod.object({
  */
 
 
-
 export const GetOnboardingApprovalHistoryParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
-
-
 
 
 export const GetOnboardingApprovalHistoryResponseItem = zod.object({
@@ -12245,7 +11255,6 @@ export const getOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMa
 export const getOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax = 4000;
 
 
-
 export const GetOnboardingSettingsResponse = zod.object({
   "hrAlertEmail": zod.string().nullable().describe('Address stored via the settings screen, or null when not set'),
   "envFallback": zod.string().nullable().describe('Address from HR_ALERT_EMAIL \/ ONBOARDING_HR_ALERT_EMAIL, or null'),
@@ -12316,7 +11325,6 @@ export const updateOnboardingSettingsBodyDay1LogisticsDefaultReportingContactMax
 export const updateOnboardingSettingsBodyDay1LogisticsDefaultArrivalInstructionsMax = 4000;
 
 
-
 export const UpdateOnboardingSettingsBody = zod.object({
   "hrAlertEmail": zod.string().nullish().describe('New HR alert address; null or empty string clears the stored value. Omit to leave unchanged.'),
   "autoEscalationCalls": zod.boolean().optional().describe('Turn automatic SLA escalation voice calls on or off. Omit to leave unchanged.'),
@@ -12350,7 +11358,6 @@ export const UpdateOnboardingSettingsBody = zod.object({
 })
 
 
-
 export const updateOnboardingSettingsResponseDay1ChecklistItemOrderMin = 0;
 
 export const updateOnboardingSettingsResponseDay1ChecklistMax = 100;
@@ -12368,7 +11375,6 @@ export const updateOnboardingSettingsResponseDay1LogisticsDefaultMeetingUrlMax =
 export const updateOnboardingSettingsResponseDay1LogisticsDefaultReportingContactMax = 500;
 
 export const updateOnboardingSettingsResponseDay1LogisticsDefaultArrivalInstructionsMax = 4000;
-
 
 
 export const UpdateOnboardingSettingsResponse = zod.object({
@@ -12452,7 +11458,6 @@ export const getOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalationA
 export const getOnboardingReadinessSlaPolicyResponsePolicyActionsMax = 50;
 
 
-
 export const GetOnboardingReadinessSlaPolicyResponse = zod.object({
   "version": zod.number().min(getOnboardingReadinessSlaPolicyResponseVersionMin),
   "policy": zod.object({
@@ -12519,7 +11524,6 @@ export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsItemEscalationAf
 export const updateOnboardingReadinessSlaPolicyBodyPolicyActionsMax = 50;
 
 
-
 export const UpdateOnboardingReadinessSlaPolicyBody = zod.object({
   "expectedVersion": zod.number().min(updateOnboardingReadinessSlaPolicyBodyExpectedVersionMin),
   "policy": zod.object({
@@ -12582,7 +11586,6 @@ export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsItemEscalati
 export const updateOnboardingReadinessSlaPolicyResponsePolicyActionsMax = 50;
 
 
-
 export const UpdateOnboardingReadinessSlaPolicyResponse = zod.object({
   "version": zod.number().min(updateOnboardingReadinessSlaPolicyResponseVersionMin),
   "policy": zod.object({
@@ -12619,11 +11622,9 @@ export const UpdateOnboardingReadinessSlaPolicyResponse = zod.object({
  */
 
 
-
 export const GetOnboardingCaseReadinessSlaParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
-
 
 
 export const getOnboardingCaseReadinessSlaResponsePolicyVersionMin = 0;
@@ -12637,7 +11638,6 @@ export const getOnboardingCaseReadinessSlaResponseStreamsItemWeightMax = 100;
 export const getOnboardingCaseReadinessSlaResponseStreamsItemIncludedWeightMin = 0;
 
 export const getOnboardingCaseReadinessSlaResponseStreamsItemEarnedWeightMin = 0;
-
 
 
 export const GetOnboardingCaseReadinessSlaResponse = zod.object({
@@ -12694,11 +11694,9 @@ export const GetOnboardingCaseReadinessSlaResponse = zod.object({
  */
 
 
-
 export const EnrollOnboardingCaseReadinessSlaParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
-
 
 
 export const enrollOnboardingCaseReadinessSlaResponsePolicyVersionMin = 0;
@@ -12712,7 +11710,6 @@ export const enrollOnboardingCaseReadinessSlaResponseStreamsItemWeightMax = 100;
 export const enrollOnboardingCaseReadinessSlaResponseStreamsItemIncludedWeightMin = 0;
 
 export const enrollOnboardingCaseReadinessSlaResponseStreamsItemEarnedWeightMin = 0;
-
 
 
 export const EnrollOnboardingCaseReadinessSlaResponse = zod.object({
@@ -12769,7 +11766,6 @@ export const EnrollOnboardingCaseReadinessSlaResponse = zod.object({
  */
 
 
-
 export const SetOnboardingPayrollCutoffParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -12778,13 +11774,11 @@ export const SetOnboardingPayrollCutoffParams = zod.object({
 export const setOnboardingPayrollCutoffBodyReasonMax = 1000;
 
 
-
 export const SetOnboardingPayrollCutoffBody = zod.object({
   "expectedSnapshotVersion": zod.number().min(1),
   "payrollCutoff": zod.coerce.date(),
   "reason": zod.string().min(1).max(setOnboardingPayrollCutoffBodyReasonMax)
 })
-
 
 
 export const setOnboardingPayrollCutoffResponsePolicyVersionMin = 0;
@@ -12798,7 +11792,6 @@ export const setOnboardingPayrollCutoffResponseStreamsItemWeightMax = 100;
 export const setOnboardingPayrollCutoffResponseStreamsItemIncludedWeightMin = 0;
 
 export const setOnboardingPayrollCutoffResponseStreamsItemEarnedWeightMin = 0;
-
 
 
 export const SetOnboardingPayrollCutoffResponse = zod.object({
@@ -12855,7 +11848,6 @@ export const SetOnboardingPayrollCutoffResponse = zod.object({
  */
 
 
-
 export const AttestOnboardingReadinessParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -12864,14 +11856,12 @@ export const AttestOnboardingReadinessParams = zod.object({
 export const attestOnboardingReadinessBodyReasonMax = 1000;
 
 
-
 export const AttestOnboardingReadinessBody = zod.object({
   "stream": zod.enum(['hris']),
   "complete": zod.boolean(),
   "expectedSnapshotVersion": zod.number().min(1),
   "reason": zod.string().min(1).max(attestOnboardingReadinessBodyReasonMax)
 })
-
 
 
 export const attestOnboardingReadinessResponsePolicyVersionMin = 0;
@@ -12885,7 +11875,6 @@ export const attestOnboardingReadinessResponseStreamsItemWeightMax = 100;
 export const attestOnboardingReadinessResponseStreamsItemIncludedWeightMin = 0;
 
 export const attestOnboardingReadinessResponseStreamsItemEarnedWeightMin = 0;
-
 
 
 export const AttestOnboardingReadinessResponse = zod.object({
@@ -12942,7 +11931,6 @@ export const AttestOnboardingReadinessResponse = zod.object({
  */
 
 
-
 export const RebaseOnboardingReadinessSlaParams = zod.object({
   "id": zod.coerce.number().min(1)
 })
@@ -12951,12 +11939,10 @@ export const RebaseOnboardingReadinessSlaParams = zod.object({
 export const rebaseOnboardingReadinessSlaBodyReasonMax = 1000;
 
 
-
 export const RebaseOnboardingReadinessSlaBody = zod.object({
   "expectedSnapshotVersion": zod.number().min(1),
   "reason": zod.string().min(1).max(rebaseOnboardingReadinessSlaBodyReasonMax)
 })
-
 
 
 export const rebaseOnboardingReadinessSlaResponsePolicyVersionMin = 0;
@@ -12970,7 +11956,6 @@ export const rebaseOnboardingReadinessSlaResponseStreamsItemWeightMax = 100;
 export const rebaseOnboardingReadinessSlaResponseStreamsItemIncludedWeightMin = 0;
 
 export const rebaseOnboardingReadinessSlaResponseStreamsItemEarnedWeightMin = 0;
-
 
 
 export const RebaseOnboardingReadinessSlaResponse = zod.object({
@@ -13064,4 +12049,262 @@ export const CreatePricingRateSetResponse = zod.object({
   "createdAt": zod.string().describe('ISO 8601 creation timestamp.')
 }).describe('A single immutable pricing rate set version.')
 
+
+/**
+ * Owner/admin only. Existing legacy events are not retroactively certified by this endpoint.
+ * @summary Search minimized tenant-scoped protected audit evidence
+ */
+export const listOnboardingProtectedAuditQueryActionMax = 160;
+
+export const listOnboardingProtectedAuditQueryObjectTypeMax = 120;
+
+export const listOnboardingProtectedAuditQueryObjectIdMax = 200;
+
+export const listOnboardingProtectedAuditQueryActorIdMax = 200;
+
+
+export const listOnboardingProtectedAuditQueryLimitDefault = 100;
+export const listOnboardingProtectedAuditQueryLimitMax = 500;
+
+
+export const ListOnboardingProtectedAuditQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "action": zod.coerce.string().max(listOnboardingProtectedAuditQueryActionMax).optional(),
+  "objectType": zod.coerce.string().max(listOnboardingProtectedAuditQueryObjectTypeMax).optional(),
+  "objectId": zod.coerce.string().max(listOnboardingProtectedAuditQueryObjectIdMax).optional(),
+  "actorId": zod.coerce.string().max(listOnboardingProtectedAuditQueryActorIdMax).optional(),
+  "outcome": zod.enum(['attempted', 'success', 'denied', 'failure']).optional(),
+  "cursor": zod.coerce.number().min(1).optional(),
+  "limit": zod.coerce.number().min(1).max(listOnboardingProtectedAuditQueryLimitMax).default(listOnboardingProtectedAuditQueryLimitDefault)
+})
+
+
+export const listOnboardingProtectedAuditResponseIntegrityCheckedEntriesMin = 0;
+
+
+export const ListOnboardingProtectedAuditResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.number().min(1),
+  "sequence": zod.number().min(1),
+  "occurredAt": zod.coerce.date(),
+  "actorId": zod.string().nullable(),
+  "actorKind": zod.enum(['authenticated', 'system', 'historical']),
+  "actorAuthority": zod.string(),
+  "action": zod.string(),
+  "outcome": zod.enum(['attempted', 'success', 'denied', 'failure']),
+  "objectType": zod.string(),
+  "objectId": zod.string().nullable(),
+  "caseReference": zod.string().nullable().describe('Pseudonymous surviving reference'),
+  "reviewedRevision": zod.number().nullable(),
+  "source": zod.string(),
+  "correlationId": zod.string().nullable(),
+  "payload": zod.record(zod.string(), zod.unknown()).describe('Allow-listed safe metadata only'),
+  "correctionOfId": zod.number().nullable(),
+  "previousHash": zod.string(),
+  "entryHash": zod.string()
+})),
+  "nextCursor": zod.string().nullable(),
+  "integrity": zod.object({
+  "status": zod.enum(['empty', 'verified', 'broken']),
+  "checkedEntries": zod.number().min(listOnboardingProtectedAuditResponseIntegrityCheckedEntriesMin),
+  "firstBrokenSequence": zod.number().nullable(),
+  "headMatches": zod.boolean(),
+  "externalAnchoring": zod.object({
+  "requiredForLaunch": zod.boolean(),
+  "configured": zod.boolean(),
+  "regulatedProductionLaunchBlocked": zod.boolean().describe('DBA-resistant regulated production launch is blocked until independently operated anchoring\/WORM exists; this does not block development API use.'),
+  "limitation": zod.string()
+})
+})
+})
+
+
+/**
+ * Owner/admin only. Export contains no audit payload values or raw candidate/document data.
+ * @summary Export minimized protected audit evidence as CSV
+ */
+export const exportOnboardingProtectedAuditQueryActionMax = 160;
+
+export const exportOnboardingProtectedAuditQueryObjectTypeMax = 120;
+
+export const exportOnboardingProtectedAuditQueryObjectIdMax = 200;
+
+export const exportOnboardingProtectedAuditQueryActorIdMax = 200;
+
+
+export const ExportOnboardingProtectedAuditQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional(),
+  "action": zod.coerce.string().max(exportOnboardingProtectedAuditQueryActionMax).optional(),
+  "objectType": zod.coerce.string().max(exportOnboardingProtectedAuditQueryObjectTypeMax).optional(),
+  "objectId": zod.coerce.string().max(exportOnboardingProtectedAuditQueryObjectIdMax).optional(),
+  "actorId": zod.coerce.string().max(exportOnboardingProtectedAuditQueryActorIdMax).optional(),
+  "outcome": zod.enum(['attempted', 'success', 'denied', 'failure']).optional(),
+  "cursor": zod.coerce.number().min(1).optional().describe('Continue from the `next_cursor` CSV footer.')
+})
+
+export const ExportOnboardingProtectedAuditResponse = zod.unknown()
+
+
+/**
+ * @summary Verify the tenant audit hash chain and head
+ */
+export const getOnboardingProtectedAuditIntegrityResponseCheckedEntriesMin = 0;
+
+
+export const GetOnboardingProtectedAuditIntegrityResponse = zod.object({
+  "status": zod.enum(['empty', 'verified', 'broken']),
+  "checkedEntries": zod.number().min(getOnboardingProtectedAuditIntegrityResponseCheckedEntriesMin),
+  "firstBrokenSequence": zod.number().nullable(),
+  "headMatches": zod.boolean(),
+  "externalAnchoring": zod.object({
+  "requiredForLaunch": zod.boolean(),
+  "configured": zod.boolean(),
+  "regulatedProductionLaunchBlocked": zod.boolean().describe('DBA-resistant regulated production launch is blocked until independently operated anchoring\/WORM exists; this does not block development API use.'),
+  "limitation": zod.string()
+})
+})
+
+
+/**
+ * @summary Retrieve retained approval snapshots without requiring a live approval record
+ */
+
+
+export const GetOnboardingProtectedAuditApprovalHistoryParams = zod.object({
+  "approvalId": zod.coerce.number().min(1)
+})
+
+
+export const GetOnboardingProtectedAuditApprovalHistoryResponseItem = zod.object({
+  "id": zod.number(),
+  "organizationId": zod.string(),
+  "approvalId": zod.number(),
+  "caseId": zod.number(),
+  "version": zod.number().min(1),
+  "eventType": zod.enum(['decision', 'reopened']),
+  "status": zod.string(),
+  "validationState": zod.string().nullish(),
+  "decidedBy": zod.string().nullable(),
+  "comment": zod.string().nullable(),
+  "decidedAt": zod.coerce.date().nullable(),
+  "reason": zod.string().nullable(),
+  "snapshot": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+})
+export const GetOnboardingProtectedAuditApprovalHistoryResponse = zod.array(GetOnboardingProtectedAuditApprovalHistoryResponseItem)
+
+
+/**
+ * @summary Get reviewed audit retention and legal-hold state
+ */
+export const GetOnboardingProtectedAuditLifecycleResponse = zod.object({
+  "retentionStatement": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewedAt": zod.coerce.date().nullable(),
+  "legalHold": zod.object({
+  "active": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "setBy": zod.string().nullable(),
+  "setAt": zod.coerce.date().nullable(),
+  "releasedBy": zod.string().nullable(),
+  "releasedAt": zod.coerce.date().nullable()
+}),
+  "automaticPurge": zod.boolean(),
+  "retentionDeadline": zod.null(),
+  "historicalCoverage": zod.string()
+})
+
+
+/**
+ * @summary Record owner/admin-reviewed audit retention statement
+ */
+export const reviewOnboardingProtectedAuditRetentionBodyRetentionStatementMax = 2000;
+
+
+export const ReviewOnboardingProtectedAuditRetentionBody = zod.object({
+  "retentionStatement": zod.string().min(1).max(reviewOnboardingProtectedAuditRetentionBodyRetentionStatementMax)
+})
+
+export const ReviewOnboardingProtectedAuditRetentionResponse = zod.object({
+  "retentionStatement": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewedAt": zod.coerce.date().nullable(),
+  "legalHold": zod.object({
+  "active": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "setBy": zod.string().nullable(),
+  "setAt": zod.coerce.date().nullable(),
+  "releasedBy": zod.string().nullable(),
+  "releasedAt": zod.coerce.date().nullable()
+}),
+  "automaticPurge": zod.boolean(),
+  "retentionDeadline": zod.null(),
+  "historicalCoverage": zod.string()
+})
+
+
+/**
+ * @summary Set or release a legal hold with a reviewed reason
+ */
+export const setOnboardingProtectedAuditLegalHoldBodyReasonMax = 2000;
+
+
+export const SetOnboardingProtectedAuditLegalHoldBody = zod.object({
+  "action": zod.enum(['set', 'release']),
+  "reason": zod.string().min(1).max(setOnboardingProtectedAuditLegalHoldBodyReasonMax)
+})
+
+export const SetOnboardingProtectedAuditLegalHoldResponse = zod.object({
+  "retentionStatement": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewedAt": zod.coerce.date().nullable(),
+  "legalHold": zod.object({
+  "active": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "setBy": zod.string().nullable(),
+  "setAt": zod.coerce.date().nullable(),
+  "releasedBy": zod.string().nullable(),
+  "releasedAt": zod.coerce.date().nullable()
+}),
+  "automaticPurge": zod.boolean(),
+  "retentionDeadline": zod.null(),
+  "historicalCoverage": zod.string()
+})
+
+
+/**
+ * @summary Append a linked audit correction without editing existing evidence
+ */
+
+export const createOnboardingProtectedAuditCorrectionBodyReasonMax = 2000;
+
+
+export const CreateOnboardingProtectedAuditCorrectionBody = zod.object({
+  "entryId": zod.number().min(1),
+  "reason": zod.string().min(1).max(createOnboardingProtectedAuditCorrectionBodyReasonMax)
+})
+
+
+export const CreateOnboardingProtectedAuditCorrectionResponse = zod.object({
+  "id": zod.number().min(1),
+  "sequence": zod.number().min(1),
+  "occurredAt": zod.coerce.date(),
+  "actorId": zod.string().nullable(),
+  "actorKind": zod.enum(['authenticated', 'system', 'historical']),
+  "actorAuthority": zod.string(),
+  "action": zod.string(),
+  "outcome": zod.enum(['attempted', 'success', 'denied', 'failure']),
+  "objectType": zod.string(),
+  "objectId": zod.string().nullable(),
+  "caseReference": zod.string().nullable().describe('Pseudonymous surviving reference'),
+  "reviewedRevision": zod.number().nullable(),
+  "source": zod.string(),
+  "correlationId": zod.string().nullable(),
+  "payload": zod.record(zod.string(), zod.unknown()).describe('Allow-listed safe metadata only'),
+  "correctionOfId": zod.number().nullable(),
+  "previousHash": zod.string(),
+  "entryHash": zod.string()
+})
 

@@ -104,6 +104,7 @@ import { GUARDRAILS, GUARDRAIL_CATEGORIES, getGuardrail, recordGuardrailEvent } 
 import { runSecurityDrill } from "../lib/onboarding/security-drill";
 import { onbGuardrailEvents } from "@workspace/db/schema";
 import { twilioSignatureValid } from "../lib/onboarding/twilio-signature";
+import { appendProtectedAudit } from "../lib/onboarding/protected-audit";
 import { listDocuments } from "../lib/onboarding/documents";
 import { runScenarioFileMaintenance } from "../lib/scenario-file-lifecycle";
 import { getArchivedStints } from "../lib/onboarding/records-agent";
@@ -2074,6 +2075,46 @@ async function recordRejectedTwilioWebhook(
   });
 }
 
+async function recordAcceptedTwilioWebhook(input: {
+  organizationId: string;
+  action: string;
+  caseId?: number | null;
+  objectType: string;
+  objectId?: string | number | null;
+  outcome?: "success" | "failure";
+  correctionOfId?: number | null;
+}): Promise<void> {
+  // Signature validation establishes the provider authority. Provider request
+  // fields (phone, body, CallSid, MessageSid, tokens) are deliberately not
+  // copied into audit metadata or object identifiers.
+  await appendProtectedAudit({
+    organizationId: input.organizationId,
+    actorKind: "system",
+    actorAuthority: "twilio:signed-webhook",
+    action: input.action,
+    outcome: input.outcome ?? "success",
+    objectType: input.objectType,
+    objectId: input.objectId == null ? null : String(input.objectId),
+    caseReference: input.caseId == null ? null : `case:${input.caseId}`,
+    source: "twilio-webhook",
+    correctionOfId: input.correctionOfId ?? null,
+  });
+}
+
+async function recordTwilioWebhookAttempt(input: Omit<Parameters<typeof recordAcceptedTwilioWebhook>[0], "outcome" | "correctionOfId">) {
+  return appendProtectedAudit({
+    organizationId: input.organizationId,
+    actorKind: "system",
+    actorAuthority: "twilio:signed-webhook",
+    action: `${input.action}.attempted`,
+    outcome: "attempted",
+    objectType: input.objectType,
+    objectId: input.objectId == null ? null : String(input.objectId),
+    caseReference: input.caseId == null ? null : `case:${input.caseId}`,
+    source: "twilio-webhook",
+  });
+}
+
 const digitsOnly = (s: string) => s.replace(/\D/g, "");
 
 router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
@@ -2113,6 +2154,13 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
     );
     if (matches.length === 1) {
       const match = matches[0];
+      const auditAttempt = await recordTwilioWebhookAttempt({
+        organizationId: match.organizationId,
+        action: "onboarding.twilio.whatsapp-inbound",
+        caseId: match.id,
+        objectType: "case",
+        objectId: match.id,
+      });
       await recordInbound({
         caseId: match.id,
         organizationId: match.organizationId,
@@ -2121,6 +2169,14 @@ router.post("/onboarding/webhooks/twilio/whatsapp", async (req, res, next) => {
         subject: null,
         body: text.slice(0, 4000),
         externalMessageId: messageSid,
+      });
+      await recordAcceptedTwilioWebhook({
+        organizationId: match.organizationId,
+        action: "onboarding.twilio.whatsapp-inbound.accepted",
+        caseId: match.id,
+        objectType: "case",
+        objectId: match.id,
+        correctionOfId: auditAttempt.id,
       });
     }
     respondEmpty();
@@ -2180,6 +2236,21 @@ router.post("/onboarding/webhooks/twilio/voice-answer", async (req, res, next) =
       return;
     }
     const greeting = session.turns[0]?.text ?? "Hello from the onboarding team.";
+    if (session.organizationId) {
+      const auditAttempt = await recordTwilioWebhookAttempt({
+        organizationId: session.organizationId,
+        action: "onboarding.twilio.voice-answer",
+        caseId: session.caseId,
+        objectType: "voice-session",
+      });
+      await recordAcceptedTwilioWebhook({
+        organizationId: session.organizationId,
+        action: "onboarding.twilio.voice-answer.accepted",
+        caseId: session.caseId,
+        objectType: "voice-session",
+        correctionOfId: auditAttempt.id,
+      });
+    }
     res.type("text/xml").send(gatherTwiml(greeting, session.token));
   } catch (err) {
     next(err);
@@ -2204,9 +2275,26 @@ router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => 
       res.type("text/xml").send(gatherTwiml("Sorry, I didn't catch that — could you say it again?", session.token));
       return;
     }
+    const auditAttempt = session.organizationId
+      ? await recordTwilioWebhookAttempt({
+          organizationId: session.organizationId,
+          action: "onboarding.twilio.voice-turn",
+          caseId: session.caseId,
+          objectType: "voice-session",
+        })
+      : null;
     const { say, done } = session.runId
       ? await demoVoiceTurn(session, speech)
       : await voiceTurn(session, speech);
+    if (session.organizationId) {
+      await recordAcceptedTwilioWebhook({
+        organizationId: session.organizationId,
+        action: "onboarding.twilio.voice-turn.accepted",
+        caseId: session.caseId,
+        objectType: "voice-session",
+        correctionOfId: auditAttempt?.id,
+      });
+    }
     if (done) {
       // For a demo call the provider's signed status callback is the source
       // of truth for completion.  An accepted/connected call is not silently
@@ -2233,6 +2321,14 @@ router.post("/onboarding/webhooks/twilio/voice-status", async (req, res, next) =
     const callStatus = String(req.body?.CallStatus ?? "").trim().toLowerCase();
     const terminalStatuses = new Set(["completed", "busy", "failed", "no-answer", "canceled"]);
     if (session && !session.finalized && callStatus) {
+      const auditAttempt = session.organizationId
+        ? await recordTwilioWebhookAttempt({
+            organizationId: session.organizationId,
+            action: "onboarding.twilio.voice-status",
+            caseId: session.caseId,
+            objectType: "voice-session",
+          })
+        : null;
       await db.update(onbVoiceSessions).set({
         providerStatus: callStatus,
       }).where(and(
@@ -2247,6 +2343,15 @@ router.post("/onboarding/webhooks/twilio/voice-status", async (req, res, next) =
         // queued/ringing/in-progress/accepted are provider observations, not
         // delivery or completion. Persist them while leaving the session
         // live for the terminal signed callback.
+      }
+      if (session.organizationId) {
+        await recordAcceptedTwilioWebhook({
+          organizationId: session.organizationId,
+          action: "onboarding.twilio.voice-status.accepted",
+          caseId: session.caseId,
+          objectType: "voice-session",
+          correctionOfId: auditAttempt?.id,
+        });
       }
     }
     res.status(204).end();
@@ -2312,6 +2417,12 @@ router.post(
         ));
       if (candidates.length === 1) {
         const candidate = candidates[0];
+        const auditAttempt = await recordTwilioWebhookAttempt({
+          organizationId: candidate.organizationId,
+          action: "onboarding.twilio.whatsapp-status",
+          objectType: "communication",
+          objectId: candidate.id,
+        });
         await db
           .update(onbCommunications)
           .set({ status: finalStatus, failureReason })
@@ -2319,6 +2430,14 @@ router.post(
             eq(onbCommunications.id, candidate.id),
             organizationWhere(onbCommunications, candidate.organizationId),
           ));
+        await recordAcceptedTwilioWebhook({
+          organizationId: candidate.organizationId,
+          action: "onboarding.twilio.whatsapp-status.accepted",
+          objectType: "communication",
+          objectId: candidate.id,
+          outcome: finalStatus === "delivered" ? "success" : "failure",
+          correctionOfId: auditAttempt.id,
+        });
       }
       res.status(204).end();
     } catch (err) {
@@ -2422,6 +2541,9 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       decision: body.decision,
       decidedBy,
       comment: body.comment ?? null,
+      auditActorId: req.authUserId!,
+      auditActorAuthority: `tenant-membership:${req.organizationRole}`,
+      auditCorrelationId: req.header("x-request-id") ?? req.header("x-correlation-id") ?? null,
     });
     if (result.outcome === "not-found") {
       res.status(404).json({ message: "Approval not found" });

@@ -11,6 +11,7 @@
 import { db } from "@workspace/db";
 import { onbCases, onbGuardrailEvents } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
+import { appendProtectedAuditInTransaction } from "./protected-audit";
 
 export type GuardrailCategory =
   | "identity"
@@ -259,15 +260,18 @@ export function getGuardrail(key: string): Guardrail | undefined {
 const MAX_EVENTS_PER_KEY_PER_MINUTE = 20;
 const eventWindows = new Map<string, { start: number; count: number }>();
 
-function withinAuditBudget(key: string): boolean {
+function withinAuditBudget(key: string): { persistEvent: boolean; suppressedCount: number } {
   const now = Date.now();
   const w = eventWindows.get(key);
   if (!w || now - w.start > 60_000) {
     eventWindows.set(key, { start: now, count: 1 });
-    return true;
+    return { persistEvent: true, suppressedCount: 0 };
   }
   w.count += 1;
-  return w.count <= MAX_EVENTS_PER_KEY_PER_MINUTE;
+  return {
+    persistEvent: w.count <= MAX_EVENTS_PER_KEY_PER_MINUTE,
+    suppressedCount: Math.max(0, w.count - MAX_EVENTS_PER_KEY_PER_MINUTE),
+  };
 }
 
 export async function recordGuardrailEvent(opts: {
@@ -277,31 +281,65 @@ export async function recordGuardrailEvent(opts: {
   action: "blocked" | "sanitized" | "rate-limited" | "escalated" | "rejected";
   detail: string;
 }): Promise<void> {
-  if (!withinAuditBudget(opts.key)) return;
   try {
     if (opts.caseId == null && !opts.organizationId) {
       throw new Error("organizationId is required for a guardrail event without a case");
     }
-    const [caseRow] = opts.caseId == null
-      ? []
-      : await db
-          .select({ organizationId: onbCases.organizationId })
-          .from(onbCases)
-          .where(and(
-            eq(onbCases.id, opts.caseId),
-            opts.organizationId
-              ? eq(onbCases.organizationId, opts.organizationId)
-              : undefined,
-          ));
-    if (opts.caseId != null && !caseRow) {
-      throw new Error(`case ${opts.caseId} not found`);
-    }
-    await db.insert(onbGuardrailEvents).values({
-      organizationId: opts.organizationId ?? caseRow!.organizationId,
-      caseId: opts.caseId ?? null,
-      guardrailKey: opts.key,
-      action: opts.action,
-      detail: opts.detail.slice(0, 600),
+    await db.transaction(async (tx) => {
+      const [caseRow] = opts.caseId == null
+        ? []
+        : await tx
+            .select({ organizationId: onbCases.organizationId })
+            .from(onbCases)
+            .where(and(
+              eq(onbCases.id, opts.caseId),
+              opts.organizationId
+                ? eq(onbCases.organizationId, opts.organizationId)
+                : undefined,
+            ));
+      if (opts.caseId != null && !caseRow) {
+        throw new Error(`case ${opts.caseId} not found`);
+      }
+      const organizationId = opts.organizationId ?? caseRow!.organizationId;
+      const budget = withinAuditBudget(`${organizationId}:${opts.key}`);
+      if (!budget.persistEvent) {
+        // The UI activity feed is throttled, but protected evidence never
+        // drops an enforcement attempt. Detail remains excluded.
+        await appendProtectedAuditInTransaction(tx, {
+          organizationId,
+          actorKind: "system",
+          actorAuthority: "guardrail-enforcement",
+          action: "onboarding.guardrail.suppressed-attempt",
+          outcome: "denied",
+          objectType: "guardrail",
+          objectId: opts.key,
+          caseReference: opts.caseId == null ? null : `case:${opts.caseId}`,
+          source: "guardrail",
+          payload: { guardrailAction: opts.action, suppressedCount: budget.suppressedCount },
+        });
+        return;
+      }
+      await tx.insert(onbGuardrailEvents).values({
+        organizationId,
+        caseId: opts.caseId ?? null,
+        guardrailKey: opts.key,
+        action: opts.action,
+        detail: opts.detail.slice(0, 600),
+      });
+      // Guardrail violations include denied webhook and autonomous attempts
+      // that bypass the authenticated router. Keep only control identifiers.
+      await appendProtectedAuditInTransaction(tx, {
+        organizationId,
+        actorKind: "system",
+        actorAuthority: "guardrail-enforcement",
+        action: "onboarding.guardrail.intervened",
+        outcome: opts.action === "escalated" ? "success" : "denied",
+        objectType: "guardrail",
+        objectId: opts.key,
+        caseReference: opts.caseId == null ? null : `case:${opts.caseId}`,
+        source: "guardrail",
+        payload: { guardrailAction: opts.action },
+      });
     });
   } catch (err) {
     console.error(`[guardrails] failed to record activation of ${opts.key}:`, err);

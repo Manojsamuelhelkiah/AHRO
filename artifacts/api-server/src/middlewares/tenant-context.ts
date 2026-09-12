@@ -5,6 +5,7 @@ import {
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
+import { appendProtectedAudit } from "../lib/onboarding/protected-audit";
 
 export const ORGANIZATION_HEADER = "x-organization-id";
 
@@ -81,6 +82,7 @@ export function createTenantContextMiddleware(
         header || undefined,
       );
       if (membership === "ambiguous") {
+        await appendTenantSelectionDenial(req, Boolean(header), "selection-required");
         res.status(409).json({
           message: "Select an organization before accessing tenant data",
           code: "ORGANIZATION_SELECTION_REQUIRED",
@@ -88,6 +90,7 @@ export function createTenantContextMiddleware(
         return;
       }
       if (!membership) {
+        await appendTenantSelectionDenial(req, Boolean(header), "membership-denied");
         res.status(header ? 403 : 409).json({
           message: header
             ? "You are not a member of the requested organization"
@@ -107,3 +110,33 @@ export function createTenantContextMiddleware(
 }
 
 export const requireTenantContext = createTenantContextMiddleware();
+
+/**
+ * A requested tenant identifier is untrusted and must not become audit data.
+ * Record only that a verified principal was denied tenant selection, under the
+ * explicit platform audit scope, before returning the denial.
+ */
+async function appendTenantSelectionDenial(
+  req: Request,
+  requestedOrganizationSupplied: boolean,
+  reason: "selection-required" | "membership-denied",
+): Promise<void> {
+  try {
+    await appendProtectedAudit({
+      organizationId: "platform-audit",
+      actorId: req.authUserId ?? null,
+      actorKind: req.authUserId ? "authenticated" : "system",
+      actorAuthority: "tenant-selection:denied",
+      action: "tenant-context.access-denied",
+      outcome: "denied",
+      objectType: "tenant-membership",
+      source: "http",
+      correlationId: req.header("x-request-id") ?? req.header("x-correlation-id"),
+      payload: { requestedOrganizationSupplied, reason },
+    });
+  } catch (error) {
+    // Selection was denied; never grant access because the accountability
+    // writer is unavailable. The outer middleware turns this into a 500.
+    throw error;
+  }
+}

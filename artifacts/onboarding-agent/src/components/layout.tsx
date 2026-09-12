@@ -30,6 +30,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     items: [
       { path: '/systems', label: 'Systems', icon: Server },
       { path: '/demo-controller', label: 'Demo Center', icon: Presentation },
+      { path: '/audit', label: 'Audit Trail', icon: Shield },
       { path: '/settings', label: 'Settings', icon: Settings },
       { path: '/client-setup', label: 'Client Setup', icon: Compass },
     ],

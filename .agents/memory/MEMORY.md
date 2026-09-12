@@ -50,3 +50,4 @@
 - [Provider test isolation](provider-test-isolation.md) — in-process delivery stubs cannot protect DB fixtures from the running API's background workers.
 - [Outbound payload stability](outbound-payload-stability.md) — persist message content and reply references before effect binding; retries must not regenerate them.
 - [Workforce runtime boundaries](workforce-runtime-boundaries.md) — opt-in snapshot semantics, real persisted fixtures, and checkpoint fencing independent of task-state presence.
+- [Protected audit boundaries](protected-audit-boundaries.md) — local hash chains are not DBA-proof; preserve historical coverage and require real independent anchoring for stronger claims.

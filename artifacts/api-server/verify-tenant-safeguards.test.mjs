@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   expectedForeignKeys,
   findTenantSafeguardFailures,
+  organizationOrphanQuery,
+  organizationParentValidatedTenantTables,
   STARTUP_FAILURE_REASONS,
   tenantTables,
   verifyTenantSafeguards,
@@ -35,6 +37,35 @@ function passingSnapshot() {
 
 test("accepts safeguards by actual mappings without relying on constraint names", () => {
   assert.deepEqual(findTenantSafeguardFailures(passingSnapshot()), []);
+});
+
+test("retained evidence is exempt only from parent existence checks, not tenant-column checks", () => {
+  // Platform audit denials use a platform scope and historical approval/audit
+  // evidence deliberately survives live organization deletion. None may be
+  // counted as an ordinary organization orphan.
+  for (const retained of [
+    "onb_approval_history",
+    "onb_audit_entries",
+    "onb_audit_heads",
+    "onb_audit_lifecycles",
+  ]) {
+    assert.ok(tenantTables.includes(retained));
+    assert.ok(!organizationParentValidatedTenantTables.includes(retained));
+    assert.doesNotMatch(organizationOrphanQuery, new RegExp(`"${retained}"`));
+  }
+  assert.ok(organizationParentValidatedTenantTables.includes("onb_cases"));
+  assert.match(organizationOrphanQuery, /"onb_cases"/);
+  assert.deepEqual(findTenantSafeguardFailures(passingSnapshot()), []);
+});
+
+test("an orphan in an ordinary organization-owned table still fails verification", () => {
+  const snapshot = passingSnapshot();
+  snapshot.organizationOrphanCount = 1;
+  assert.ok(
+    findTenantSafeguardFailures(snapshot).includes(
+      "organization orphans found: expected 0, found 1",
+    ),
+  );
 });
 
 test("clearly names every failed tenant safeguard", () => {

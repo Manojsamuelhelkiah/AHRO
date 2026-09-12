@@ -10,7 +10,9 @@ import { onbApprovals, onbCases } from "./onboarding";
  */
 export const onbApprovalHistory = pgTable("onb_approval_history", {
   id: serial("id").primaryKey(),
-  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  // No cascading business-record relation: decisions remain as historical
+  // evidence if the live case or approval is removed.
+  organizationId: text("organization_id").notNull(),
   approvalId: integer("approval_id").notNull(),
   caseId: integer("case_id").notNull(),
   /** The cycle represented by this snapshot (the old cycle for a reopen). */
@@ -32,16 +34,6 @@ export const onbApprovalHistory = pgTable("onb_approval_history", {
     .on(t.organizationId, t.approvalId, t.version, t.eventType),
   check("onb_approval_history_version_check", sql`${t.version} > 0`),
   check("onb_approval_history_event_type_check", sql`${t.eventType} in ('decision', 'reopened')`),
-  foreignKey({
-    columns: [t.organizationId, t.caseId],
-    foreignColumns: [onbCases.organizationId, onbCases.id],
-    name: "onb_approval_history_organization_case_fk",
-  }).onDelete("cascade"),
-  foreignKey({
-    columns: [t.organizationId, t.approvalId],
-    foreignColumns: [onbApprovals.organizationId, onbApprovals.id],
-    name: "onb_approval_history_organization_approval_fk",
-  }).onDelete("cascade"),
 ]);
 
 /**

@@ -3538,6 +3538,146 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/audit:
+    get:
+      operationId: listOnboardingProtectedAudit
+      tags: [onboarding, audit]
+      summary: Search minimized tenant-scoped protected audit evidence
+      description: Owner/admin only. Existing legacy events are not retroactively certified by this endpoint.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: action, in: query, schema: { type: string, maxLength: 160 } }
+        - { name: objectType, in: query, schema: { type: string, maxLength: 120 } }
+        - { name: objectId, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: actorId, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: outcome, in: query, schema: { type: string, enum: [attempted, success, denied, failure] } }
+        - { name: cursor, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: Redacted audit entries and current chain verification result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbProtectedAuditPage" }
+        "403": { description: Organization owner or admin required }
+  /onboarding/audit/export:
+    get:
+      operationId: exportOnboardingProtectedAudit
+      tags: [onboarding, audit]
+      summary: Export minimized protected audit evidence as CSV
+      description: Owner/admin only. Export contains no audit payload values or raw candidate/document data.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: action, in: query, schema: { type: string, maxLength: 160 } }
+        - { name: objectType, in: query, schema: { type: string, maxLength: 120 } }
+        - { name: objectId, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: actorId, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: outcome, in: query, schema: { type: string, enum: [attempted, success, denied, failure] } }
+        - { name: cursor, in: query, schema: { type: integer, minimum: 1 }, description: Continue from the `next_cursor` CSV footer. }
+      responses:
+        "200":
+          description: CSV export page (maximum 500 rows) with integrity and next_cursor footer; callers continue with cursor when export_truncated=true
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+        "403": { description: Organization owner or admin required }
+  /onboarding/audit/integrity:
+    get:
+      operationId: getOnboardingProtectedAuditIntegrity
+      tags: [onboarding, audit]
+      summary: Verify the tenant audit hash chain and head
+      responses:
+        "200":
+          description: Integrity result and explicit external anchoring limitation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbProtectedAuditIntegrity" }
+        "403": { description: Organization owner or admin required }
+  /onboarding/audit/approval-history/{approvalId}:
+    get:
+      operationId: getOnboardingProtectedAuditApprovalHistory
+      tags: [onboarding, audit]
+      summary: Retrieve retained approval snapshots without requiring a live approval record
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Retained immutable approval history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OnbApprovalHistory" }
+        "400": { description: Invalid approval identifier }
+        "403": { description: Organization owner or admin required }
+  /onboarding/audit/lifecycle:
+    get:
+      operationId: getOnboardingProtectedAuditLifecycle
+      tags: [onboarding, audit]
+      summary: Get reviewed audit retention and legal-hold state
+      responses:
+        "200":
+          description: Lifecycle state. This service never supplies a purge deadline.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbProtectedAuditLifecycle" }
+        "403": { description: Organization owner or admin required }
+  /onboarding/audit/lifecycle/retention:
+    put:
+      operationId: reviewOnboardingProtectedAuditRetention
+      tags: [onboarding, audit]
+      summary: Record owner/admin-reviewed audit retention statement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnbProtectedAuditRetentionInput" }
+      responses:
+        "200":
+          description: Updated lifecycle state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbProtectedAuditLifecycle" }
+        "403": { description: Organization owner or admin required }
+  /onboarding/audit/lifecycle/legal-hold:
+    post:
+      operationId: setOnboardingProtectedAuditLegalHold
+      tags: [onboarding, audit]
+      summary: Set or release a legal hold with a reviewed reason
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnbProtectedAuditLegalHoldInput" }
+      responses:
+        "200":
+          description: Updated lifecycle state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbProtectedAuditLifecycle" }
+        "403": { description: Organization owner or admin required }
+  /onboarding/audit/corrections:
+    post:
+      operationId: createOnboardingProtectedAuditCorrection
+      tags: [onboarding, audit]
+      summary: Append a linked audit correction without editing existing evidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnbProtectedAuditCorrectionInput" }
+      responses:
+        "201":
+          description: Newly appended linked correction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnbProtectedAuditEntry" }
+        "403": { description: Organization owner or admin required }
 components:
   parameters:
     OnbChecklistProfileId:
@@ -3554,6 +3694,99 @@ components:
         type: integer
         minimum: 1
   schemas:
+    OnbProtectedAuditEntry:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        sequence: { type: integer, minimum: 1 }
+        occurredAt: { type: string, format: date-time }
+        actorId: { type: ["string", "null"] }
+        actorKind: { type: string, enum: [authenticated, system, historical] }
+        actorAuthority: { type: string }
+        action: { type: string }
+        outcome: { type: string, enum: [attempted, success, denied, failure] }
+        objectType: { type: string }
+        objectId: { type: ["string", "null"] }
+        caseReference: { type: ["string", "null"], description: Pseudonymous surviving reference, not a case relation }
+        reviewedRevision: { type: ["integer", "null"] }
+        source: { type: string }
+        correlationId: { type: ["string", "null"] }
+        payload: { type: object, additionalProperties: true, description: Allow-listed safe metadata only }
+        correctionOfId: { type: ["integer", "null"] }
+        previousHash: { type: string }
+        entryHash: { type: string }
+      required: [id, sequence, occurredAt, actorId, actorKind, actorAuthority, action, outcome, objectType, objectId, caseReference, reviewedRevision, source, correlationId, payload, correctionOfId, previousHash, entryHash]
+    OnbProtectedAuditIntegrity:
+      type: object
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [empty, verified, broken] }
+        checkedEntries: { type: integer, minimum: 0 }
+        firstBrokenSequence: { type: ["integer", "null"] }
+        headMatches: { type: boolean }
+        externalAnchoring:
+          type: object
+          additionalProperties: false
+          properties:
+            requiredForLaunch: { type: boolean, const: true }
+            configured: { type: boolean }
+            regulatedProductionLaunchBlocked: { type: boolean, const: true, description: DBA-resistant regulated production launch is blocked until independently operated anchoring/WORM exists; this does not block development API use. }
+            limitation: { type: string }
+          required: [requiredForLaunch, configured, regulatedProductionLaunchBlocked, limitation]
+      required: [status, checkedEntries, firstBrokenSequence, headMatches, externalAnchoring]
+    OnbProtectedAuditPage:
+      type: object
+      additionalProperties: false
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/OnbProtectedAuditEntry" }
+        nextCursor: { type: ["string", "null"] }
+        integrity: { $ref: "#/components/schemas/OnbProtectedAuditIntegrity" }
+      required: [entries, nextCursor, integrity]
+    OnbProtectedAuditLifecycle:
+      type: object
+      additionalProperties: false
+      properties:
+        retentionStatement: { type: ["string", "null"] }
+        reviewedBy: { type: ["string", "null"] }
+        reviewedAt: { type: ["string", "null"], format: date-time }
+        legalHold:
+          type: object
+          additionalProperties: false
+          properties:
+            active: { type: boolean }
+            reason: { type: ["string", "null"] }
+            setBy: { type: ["string", "null"] }
+            setAt: { type: ["string", "null"], format: date-time }
+            releasedBy: { type: ["string", "null"] }
+            releasedAt: { type: ["string", "null"], format: date-time }
+          required: [active, reason, setBy, setAt, releasedBy, releasedAt]
+        automaticPurge: { type: boolean, const: false }
+        retentionDeadline: { type: "null" }
+        historicalCoverage: { type: string }
+      required: [retentionStatement, reviewedBy, reviewedAt, legalHold, automaticPurge, retentionDeadline, historicalCoverage]
+    OnbProtectedAuditRetentionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        retentionStatement: { type: string, minLength: 1, maxLength: 2000 }
+      required: [retentionStatement]
+    OnbProtectedAuditLegalHoldInput:
+      type: object
+      additionalProperties: false
+      properties:
+        action: { type: string, enum: [set, release] }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+      required: [action, reason]
+    OnbProtectedAuditCorrectionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        entryId: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+      required: [entryId, reason]
     EaAssessmentStatus:
       type: string
       enum: [active, archived]

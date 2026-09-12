@@ -31,6 +31,7 @@ import {
   resolveOrganizationBootstrap,
   type OrganizationBootstrapResponse,
 } from './lib/organization-bootstrap';
+import { AuditPage } from './pages/audit';
 
 const queryClient = new QueryClient();
 
@@ -291,6 +292,9 @@ function Router() {
       </Route>
       <Route path="/recommendations">
         <Protected><RecommendationsPage /></Protected>
+      </Route>
+      <Route path="/audit">
+        <Protected><AuditPage /></Protected>
       </Route>
       <Route path="/demo-controller">
         <Protected><DemoControllerIndexPage /></Protected>

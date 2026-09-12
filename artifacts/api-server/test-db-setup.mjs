@@ -54,6 +54,10 @@ const reviewedAutomaticPolicyExceptionHashes = new Set([
   // Document-validation repair is conditional because supported recovery
   // schemas may intentionally omit the candidate portal tables.
   "3f174d90efe5762cfe258e2522ca08c9e7de42410d1dcf12671c61fa0dd8d1e0",
+  // Reviewed protected-audit preservation migration: drops only cascading
+  // references and installs append-only evidence protections. The exact hash
+  // binds automatic reconciliation to the approved bytes.
+  "e8bb7eafea75bae8995c5104f174e8a9d58a316d50310d231e128749e094144d",
 ]);
 const compatibleHistoricalMigrationHashes = new Map([
   [
@@ -1543,7 +1547,7 @@ export async function applyReviewedMigration(options = {}) {
       const existing = applied.get(predecessor.tag);
       if (
         !existing ||
-        existing.hash !== predecessor.hash ||
+        !migrationHashMatches(predecessor, existing.hash) ||
         Number(existing.created_at) !== predecessor.createdAt
       ) {
         throw new Error(

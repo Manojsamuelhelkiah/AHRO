@@ -38,7 +38,9 @@ export const tenantSafeguards = [
   { table: "onb_readiness_sla_attestations", phaseB: false },
   { table: "onb_readiness_sla_ledger", phaseB: false },
   { table: "onb_readiness_sla_outbox", phaseB: false },
-  { table: "onb_approval_history", phaseB: false },
+  // Historical decisions deliberately outlive the live case/approval/org
+  // relationships; append-only DB triggers protect the retained snapshot.
+  { table: "onb_approval_history", phaseB: false, requiresOrganizationForeignKey: false },
   { table: "onb_approval_notifications", phaseB: false },
   { table: "onb_action_center_actions", phaseB: false },
   { table: "demo_controller_setup_requests", phaseB: false },
@@ -48,21 +50,38 @@ export const tenantSafeguards = [
   { table: "onb_policy_recommendations", phaseB: false },
   { table: "onb_intake_batches", phaseB: false },
   { table: "onb_intake_batch_people", phaseB: false },
+  // Protected evidence has no business-record FK so deletion cannot cascade
+  // accountability history. Tenant isolation is enforced in every query.
+  { table: "onb_audit_entries", phaseB: false, requiresOrganizationForeignKey: false },
+  { table: "onb_audit_heads", phaseB: false, requiresOrganizationForeignKey: false },
+  { table: "onb_audit_lifecycles", phaseB: false, requiresOrganizationForeignKey: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
+
+// Having an organization_id is an isolation requirement for every tenant
+// table. Parent-row existence is a different requirement: retained,
+// append-only evidence intentionally survives deletion of its live tenant.
+export const organizationParentValidatedTenantTables = tenantSafeguards
+  .filter(({ requiresOrganizationForeignKey = true }) => requiresOrganizationForeignKey)
+  .map(({ table }) => table);
 
 export const phaseBTenantTables = tenantSafeguards
   .filter(({ phaseB }) => phaseB)
   .map(({ table }) => table);
 
 export const expectedForeignKeys = [
-  ...tenantTables.map((table) => ({
-    table,
-    columns: ["organization_id"],
-    referencedTable: "organizations",
-    referencedColumns: ["id"],
-  })),
+  ...tenantSafeguards
+    .filter(
+      ({ requiresOrganizationForeignKey = true }) =>
+        requiresOrganizationForeignKey,
+    )
+    .map(({ table }) => ({
+      table,
+      columns: ["organization_id"],
+      referencedTable: "organizations",
+      referencedColumns: ["id"],
+    })),
   {
     table: "onb_watch_emails",
     columns: ["organization_id", "case_id"],
@@ -81,7 +100,6 @@ export const expectedForeignKeys = [
     "onb_readiness_sla_attestations",
     "onb_readiness_sla_ledger",
     "onb_readiness_sla_outbox",
-    "onb_approval_history",
     "onb_approval_notifications",
   ].map((table) => ({
     table,
@@ -89,7 +107,7 @@ export const expectedForeignKeys = [
     referencedTable: "onb_cases",
     referencedColumns: ["organization_id", "id"],
   })),
-  ...["onb_approval_history", "onb_approval_notifications"].map((table) => ({
+  ...["onb_approval_notifications"].map((table) => ({
     table,
     columns: ["organization_id", "approval_id"],
     referencedTable: "onb_approvals",

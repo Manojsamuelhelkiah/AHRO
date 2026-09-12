@@ -372,6 +372,13 @@
       "when": 1789026000009,
       "tag": "0046_batch_intake_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1789026000010,
+      "tag": "0045_protected_onboarding_audit",
+      "breakpoints": true
     }
   ]
 }

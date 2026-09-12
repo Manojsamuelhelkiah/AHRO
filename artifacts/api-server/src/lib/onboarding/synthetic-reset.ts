@@ -11,6 +11,7 @@ import {
   onbEffectJournal,
   onbEvents,
   onbReadinessSlaOutbox,
+  onbAuditLifecycles,
   onbSystemChecks,
   onbVoiceSessions,
   onbSettings,
@@ -30,6 +31,7 @@ import {
   SYNTHETIC_OFFLINE_MARKER,
   SYNTHETIC_OFFLINE_WARNING,
 } from "./synthetic-offline";
+import { appendProtectedAuditInTransaction } from "./protected-audit";
 
 function defaultWorkstreams() {
   return [
@@ -979,6 +981,17 @@ export async function executeSyntheticReset(input: {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtext(${`synthetic-reset:${input.organizationId}`}))`,
     );
+    const [auditLifecycle] = await tx.select({
+      legalHoldActive: onbAuditLifecycles.legalHoldActive,
+    }).from(onbAuditLifecycles).where(
+      eq(onbAuditLifecycles.organizationId, input.organizationId),
+    ).for("update");
+    // A legal hold applies to the case, its snapshots, documents and evidence;
+    // synthetic-reset is the only production case deletion boundary and must
+    // not bypass that preservation obligation.
+    if (auditLifecycle?.legalHoldActive) {
+      return { kind: "conflict" as const, inspection: await loadInspection(input.organizationId, manifest, tx, true) };
+    }
     const inspection = await loadInspection(input.organizationId, manifest, tx, true);
     if (inspection.receipt || inspection.revision !== input.expectedRevision || inspection.blockers.length) {
       return { kind: "conflict" as const, inspection };
@@ -1023,6 +1036,22 @@ export async function executeSyntheticReset(input: {
       ).returning({ id: onbCases.id });
       if (deleted.length !== oldIds.length) {
         throw new Error("Synthetic reset case deletion was fenced by a concurrent writer.");
+      }
+      for (const deletedCase of deleted) {
+        await appendProtectedAuditInTransaction(tx, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          actorKind: "authenticated",
+          actorAuthority: "tenant-membership:owner-or-admin",
+          action: "onboarding.case.deleted",
+          outcome: "success",
+          objectType: "case",
+          objectId: String(deletedCase.id),
+          caseReference: `case:${deletedCase.id}`,
+          source: "synthetic-reset",
+          correlationId: input.expectedRevision,
+          payload: { syntheticReset: true },
+        });
       }
     }
     const createdCaseIds = await createFreshCases(tx, input.organizationId, logisticsDefault, now);

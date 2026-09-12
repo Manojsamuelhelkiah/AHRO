@@ -7,6 +7,7 @@ import {
   onbCandidateLinks,
   onbCandidateSessions,
   onbCases,
+  onbAuditLifecycles,
   onbSettings,
 } from "@workspace/db/schema";
 import {
@@ -14,6 +15,7 @@ import {
   DEFAULT_CANDIDATE_LINK_RETENTION_DAYS,
   getCandidateLinkRetentionDays,
 } from "./settings";
+import { appendProtectedAudit, appendProtectedAuditInTransaction } from "./protected-audit";
 export { validateLogistics } from "./logistics-validation";
 
 export const CANDIDATE_COOKIE = "onb_candidate_session";
@@ -123,11 +125,45 @@ export async function exchangeToken(token: string) {
   if (!caseRow) return undefined;
   const secret = newSecret();
   const sessionExpiry = new Date(Math.min(link.expiresAt.getTime(), Date.now() + 30 * 60_000));
-  await db.insert(onbCandidateSessions).values({
-    idHash: hashSecret(secret), organizationId: link.organizationId,
-    caseId: link.caseId, linkId: link.id, expiresAt: sessionExpiry,
+  // The raw candidate token is never passed to audit code. Once the token is
+  // verified and tenant attribution is safe, persist a durable pre-attempt.
+  const attempt = await appendProtectedAudit({
+    organizationId: link.organizationId,
+    actorKind: "system",
+    actorAuthority: "candidate-token:validated",
+    action: "onboarding.candidate-session.exchange.attempted",
+    outcome: "attempted",
+    objectType: "candidate-link",
+    objectId: String(link.id),
+    caseReference: `case:${link.caseId}`,
+    source: "candidate-public",
+  });
+  await db.transaction(async (tx) => {
+    await tx.insert(onbCandidateSessions).values({
+      idHash: hashSecret(secret), organizationId: link.organizationId,
+      caseId: link.caseId, linkId: link.id, expiresAt: sessionExpiry,
+    });
+    await appendProtectedAuditInTransaction(tx, {
+      organizationId: link.organizationId,
+      actorKind: "system",
+      actorAuthority: "candidate-token:validated",
+      action: "onboarding.candidate-session.exchange.outcome",
+      outcome: "success",
+      objectType: "candidate-link",
+      objectId: String(link.id),
+      caseReference: `case:${link.caseId}`,
+      source: "candidate-public",
+      correctionOfId: attempt.id,
+    });
   });
   return { secret, expiresAt: sessionExpiry };
+}
+
+async function auditLegalHoldActive(organizationId: string): Promise<boolean> {
+  const [lifecycle] = await db.select({ active: onbAuditLifecycles.legalHoldActive })
+    .from(onbAuditLifecycles)
+    .where(eq(onbAuditLifecycles.organizationId, organizationId));
+  return lifecycle?.active === true;
 }
 
 export async function cleanupCandidateAccess(input: {
@@ -140,9 +176,18 @@ export async function cleanupCandidateAccess(input: {
     1,
     Math.min(input.limit ?? CANDIDATE_ACCESS_CLEANUP_BATCH_SIZE, CANDIDATE_ACCESS_CLEANUP_BATCH_SIZE),
   );
+  // Revocation remains allowed, but physical deletion of candidate sessions or
+  // links is privacy-destructive and must pause while evidence is held.
+  if (input.organizationId && await auditLegalHoldActive(input.organizationId)) {
+    return { expiredSessions: 0, retainedLinksDeleted: 0 };
+  }
   const tenantSessionFilter = input.organizationId
     ? eq(onbCandidateSessions.organizationId, input.organizationId)
-    : undefined;
+    : sql`not exists (
+      select 1 from ${onbAuditLifecycles}
+      where ${onbAuditLifecycles.organizationId} = ${onbCandidateSessions.organizationId}
+        and ${onbAuditLifecycles.legalHoldActive} = true
+    )`;
   const expiredSessionIds = db
     .select({ idHash: onbCandidateSessions.idHash })
     .from(onbCandidateSessions)
@@ -161,7 +206,11 @@ export async function cleanupCandidateAccess(input: {
     : undefined;
   const tenantLinkFilter = input.organizationId
     ? eq(onbCandidateLinks.organizationId, input.organizationId)
-    : undefined;
+    : sql`not exists (
+      select 1 from ${onbAuditLifecycles}
+      where ${onbAuditLifecycles.organizationId} = ${onbCandidateLinks.organizationId}
+        and ${onbAuditLifecycles.legalHoldActive} = true
+    )`;
   const retainedLongEnough = retentionDays === undefined
     ? or(
         and(

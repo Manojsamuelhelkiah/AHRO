@@ -2,10 +2,15 @@ import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import {
   expectedForeignKeys,
+  organizationParentValidatedTenantTables,
   tenantTables,
 } from "./tenant-safeguards-manifest.mjs";
 
-export { expectedForeignKeys, tenantTables };
+export {
+  expectedForeignKeys,
+  organizationParentValidatedTenantTables,
+  tenantTables,
+};
 
 export const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
@@ -189,10 +194,10 @@ export function findTenantSafeguardFailures({
   return failures;
 }
 
-const organizationOrphanQuery = `
+export const organizationOrphanQuery = `
   SELECT count(*)::integer AS orphan_count
   FROM (
-    ${tenantTables
+    ${organizationParentValidatedTenantTables
       .map(
         (table) => `
           SELECT child.organization_id

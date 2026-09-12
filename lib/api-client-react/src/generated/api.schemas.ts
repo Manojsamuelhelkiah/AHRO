@@ -5,6 +5,160 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type OnbProtectedAuditEntryActorKind = typeof OnbProtectedAuditEntryActorKind[keyof typeof OnbProtectedAuditEntryActorKind];
+
+
+export const OnbProtectedAuditEntryActorKind = {
+  authenticated: 'authenticated',
+  system: 'system',
+  historical: 'historical',
+} as const;
+
+export type OnbProtectedAuditEntryOutcome = typeof OnbProtectedAuditEntryOutcome[keyof typeof OnbProtectedAuditEntryOutcome];
+
+
+export const OnbProtectedAuditEntryOutcome = {
+  attempted: 'attempted',
+  success: 'success',
+  denied: 'denied',
+  failure: 'failure',
+} as const;
+
+/**
+ * Allow-listed safe metadata only
+ */
+export type OnbProtectedAuditEntryPayload = { [key: string]: unknown };
+
+export interface OnbProtectedAuditEntry {
+  /** @minimum 1 */
+  id: number;
+  /** @minimum 1 */
+  sequence: number;
+  occurredAt: string;
+  /** @nullable */
+  actorId: string | null;
+  actorKind: OnbProtectedAuditEntryActorKind;
+  actorAuthority: string;
+  action: string;
+  outcome: OnbProtectedAuditEntryOutcome;
+  objectType: string;
+  /** @nullable */
+  objectId: string | null;
+  /**
+     * Pseudonymous surviving reference
+     * @nullable
+     */
+  caseReference: string | null;
+  /** @nullable */
+  reviewedRevision: number | null;
+  source: string;
+  /** @nullable */
+  correlationId: string | null;
+  /** Allow-listed safe metadata only */
+  payload: OnbProtectedAuditEntryPayload;
+  /** @nullable */
+  correctionOfId: number | null;
+  previousHash: string;
+  entryHash: string;
+}
+
+export type OnbProtectedAuditIntegrityStatus = typeof OnbProtectedAuditIntegrityStatus[keyof typeof OnbProtectedAuditIntegrityStatus];
+
+
+export const OnbProtectedAuditIntegrityStatus = {
+  empty: 'empty',
+  verified: 'verified',
+  broken: 'broken',
+} as const;
+
+export type OnbProtectedAuditIntegrityExternalAnchoring = {
+  requiredForLaunch: true;
+  configured: boolean;
+  /** DBA-resistant regulated production launch is blocked until independently operated anchoring/WORM exists; this does not block development API use. */
+  regulatedProductionLaunchBlocked: true;
+  limitation: string;
+};
+
+export interface OnbProtectedAuditIntegrity {
+  status: OnbProtectedAuditIntegrityStatus;
+  /** @minimum 0 */
+  checkedEntries: number;
+  /** @nullable */
+  firstBrokenSequence: number | null;
+  headMatches: boolean;
+  externalAnchoring: OnbProtectedAuditIntegrityExternalAnchoring;
+}
+
+export interface OnbProtectedAuditPage {
+  entries: OnbProtectedAuditEntry[];
+  /** @nullable */
+  nextCursor: string | null;
+  integrity: OnbProtectedAuditIntegrity;
+}
+
+export type OnbProtectedAuditLifecycleLegalHold = {
+  active: boolean;
+  /** @nullable */
+  reason: string | null;
+  /** @nullable */
+  setBy: string | null;
+  /** @nullable */
+  setAt: string | null;
+  /** @nullable */
+  releasedBy: string | null;
+  /** @nullable */
+  releasedAt: string | null;
+};
+
+export interface OnbProtectedAuditLifecycle {
+  /** @nullable */
+  retentionStatement: string | null;
+  /** @nullable */
+  reviewedBy: string | null;
+  /** @nullable */
+  reviewedAt: string | null;
+  legalHold: OnbProtectedAuditLifecycleLegalHold;
+  automaticPurge: false;
+  /** @nullable */
+  retentionDeadline: null;
+  historicalCoverage: string;
+}
+
+export interface OnbProtectedAuditRetentionInput {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  retentionStatement: string;
+}
+
+export type OnbProtectedAuditLegalHoldInputAction = typeof OnbProtectedAuditLegalHoldInputAction[keyof typeof OnbProtectedAuditLegalHoldInputAction];
+
+
+export const OnbProtectedAuditLegalHoldInputAction = {
+  set: 'set',
+  release: 'release',
+} as const;
+
+export interface OnbProtectedAuditLegalHoldInput {
+  action: OnbProtectedAuditLegalHoldInputAction;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reason: string;
+}
+
+export interface OnbProtectedAuditCorrectionInput {
+  /** @minimum 1 */
+  entryId: number;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reason: string;
+}
+
 export type EaAssessmentStatus = typeof EaAssessmentStatus[keyof typeof EaAssessmentStatus];
 
 
@@ -6039,3 +6193,80 @@ export const GetOnboardingOutcomeKpisDomain = {
   All_domains: 'All domains',
 } as const;
 
+export type ListOnboardingProtectedAuditParams = {
+from?: string;
+to?: string;
+/**
+ * @maxLength 160
+ */
+action?: string;
+/**
+ * @maxLength 120
+ */
+objectType?: string;
+/**
+ * @maxLength 200
+ */
+objectId?: string;
+/**
+ * @maxLength 200
+ */
+actorId?: string;
+outcome?: ListOnboardingProtectedAuditOutcome;
+/**
+ * @minimum 1
+ */
+cursor?: number;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+};
+
+export type ListOnboardingProtectedAuditOutcome = typeof ListOnboardingProtectedAuditOutcome[keyof typeof ListOnboardingProtectedAuditOutcome];
+
+
+export const ListOnboardingProtectedAuditOutcome = {
+  attempted: 'attempted',
+  success: 'success',
+  denied: 'denied',
+  failure: 'failure',
+} as const;
+
+export type ExportOnboardingProtectedAuditParams = {
+from?: string;
+to?: string;
+/**
+ * @maxLength 160
+ */
+action?: string;
+/**
+ * @maxLength 120
+ */
+objectType?: string;
+/**
+ * @maxLength 200
+ */
+objectId?: string;
+/**
+ * @maxLength 200
+ */
+actorId?: string;
+outcome?: ExportOnboardingProtectedAuditOutcome;
+/**
+ * Continue from the `next_cursor` CSV footer.
+ * @minimum 1
+ */
+cursor?: number;
+};
+
+export type ExportOnboardingProtectedAuditOutcome = typeof ExportOnboardingProtectedAuditOutcome[keyof typeof ExportOnboardingProtectedAuditOutcome];
+
+
+export const ExportOnboardingProtectedAuditOutcome = {
+  attempted: 'attempted',
+  success: 'success',
+  denied: 'denied',
+  failure: 'failure',
+} as const;
