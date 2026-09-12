@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   db,
   organizationMembershipsTable,
@@ -37,8 +37,12 @@ export const lookupMembership: MembershipLookup = async (
     ? and(
         eq(organizationMembershipsTable.clerkUserId, clerkUserId),
         eq(organizationMembershipsTable.organizationId, requestedOrganizationId),
+          isNull(organizationMembershipsTable.revokedAt),
       )
-    : eq(organizationMembershipsTable.clerkUserId, clerkUserId);
+      : and(
+          eq(organizationMembershipsTable.clerkUserId, clerkUserId),
+          isNull(organizationMembershipsTable.revokedAt),
+        );
   const memberships = await db
     .select({
       organizationId: organizationMembershipsTable.organizationId,

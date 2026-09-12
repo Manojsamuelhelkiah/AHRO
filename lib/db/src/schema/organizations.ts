@@ -32,6 +32,11 @@ export const organizationMembershipsTable = pgTable(
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     clerkUserId: text("clerk_user_id").notNull(),
     role: text("role").$type<"owner" | "admin" | "member">().notNull().default("member"),
+    /**
+     * Revocation is a tombstone rather than a delete so an old membership can
+     * never be resurrected by a join-code retry.
+     */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

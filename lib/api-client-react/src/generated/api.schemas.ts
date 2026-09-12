@@ -5,6 +5,57 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type OrganizationMemberRole = typeof OrganizationMemberRole[keyof typeof OrganizationMemberRole];
+
+
+export const OrganizationMemberRole = {
+  owner: 'owner',
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export interface OrganizationMember {
+  clerkUserId: string;
+  role: OrganizationMemberRole;
+  createdAt: string;
+  revokedAt?: string | null;
+}
+
+export type OrganizationMemberRoleChangeExpectedRole = typeof OrganizationMemberRoleChangeExpectedRole[keyof typeof OrganizationMemberRoleChangeExpectedRole];
+
+
+export const OrganizationMemberRoleChangeExpectedRole = {
+  owner: 'owner',
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export type OrganizationMemberRoleChangeRole = typeof OrganizationMemberRoleChangeRole[keyof typeof OrganizationMemberRoleChangeRole];
+
+
+export const OrganizationMemberRoleChangeRole = {
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export interface OrganizationMemberRoleChange {
+  expectedRole: OrganizationMemberRoleChangeExpectedRole;
+  role: OrganizationMemberRoleChangeRole;
+}
+
+export type OrganizationMemberRemovalExpectedRole = typeof OrganizationMemberRemovalExpectedRole[keyof typeof OrganizationMemberRemovalExpectedRole];
+
+
+export const OrganizationMemberRemovalExpectedRole = {
+  owner: 'owner',
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export interface OrganizationMemberRemoval {
+  expectedRole: OrganizationMemberRemovalExpectedRole;
+}
+
 export type OnbProtectedAuditEntryActorKind = typeof OnbProtectedAuditEntryActorKind[keyof typeof OnbProtectedAuditEntryActorKind];
 
 

@@ -20,8 +20,8 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, Button, Badge, Label, cn, PageHeader, IconTile, LoadingBlock } from '@/components/ui-shared';
-import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck, Link } from 'lucide-react';
-import { useLocation } from 'wouter';
+import { Mail, Check, X, AlertTriangle, Trash2, Users, Plus, Rocket, Phone, PhoneCall, Play, ArrowUp, ArrowDown, MapPin, ShieldCheck, Building2 } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
 import { getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
@@ -30,6 +30,7 @@ import { ReadinessSlaSettingsCard } from './settings-readiness-sla';
 import { SyntheticResetCard } from './settings-synthetic-reset';
 import { ActionCenterIdentitiesSettings } from './action-center-settings';
 import { JobProfilesAndAuthorities } from './settings-job-profiles';
+import { OrganizationMembersSettings } from './settings-organization-members';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+\d{8,15}$/;
@@ -836,6 +837,32 @@ export function SettingsPage() {
       <SyntheticResetCard />
       <ReadinessSlaSettingsCard />
       <AuthorityGovernanceCard />
+      <OrganizationMembersSettings />
+      <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">
+          <div className="flex items-center gap-3">
+            <IconTile icon={Building2} className="border-transparent bg-[var(--surface-soft)] text-[var(--text-secondary)]" />
+            <div>
+              <h3 className="m-0 text-[var(--text-xs)] font-semibold uppercase tracking-[0.05em] text-[var(--text-primary)]">Organizations</h3>
+              <p className="mt-1 text-[var(--text-xs)] text-[var(--text-muted)]">
+                Create another workspace or join one with an owner-provided code. Your current workspace remains available.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 p-[var(--space-lg)]">
+          <Link href="/client-setup?organizationAction=create">
+            <Button variant="secondary" className="gap-2">
+              <Plus className="h-4 w-4" /> Create organization
+            </Button>
+          </Link>
+          <Link href="/client-setup?organizationAction=join">
+            <Button variant="secondary" className="gap-2">
+              <Users className="h-4 w-4" /> Join organization
+            </Button>
+          </Link>
+        </div>
+      </div>
       <ActionCenterIdentitiesSettings />
       <ChecklistSettingsCard />
 

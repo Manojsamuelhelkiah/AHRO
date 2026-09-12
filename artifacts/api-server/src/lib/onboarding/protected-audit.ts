@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { and, asc, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   onbAuditEntries,
@@ -286,6 +286,7 @@ export async function verifiedAuditAuthority(
     .where(and(
       eq(organizationMembershipsTable.organizationId, organizationId),
       eq(organizationMembershipsTable.clerkUserId, actorId),
+      isNull(organizationMembershipsTable.revokedAt),
     ));
   return membership?.role ?? null;
 }

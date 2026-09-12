@@ -11,7 +11,7 @@ import {
   type Request,
   type Response,
 } from "express";
-import { and, desc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   db,
   DEMO_ORGANIZATION_ID,
@@ -261,6 +261,7 @@ async function loadDemoControllerSetupStatus(userId: string) {
       and(
         eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
         eq(organizationMembershipsTable.clerkUserId, userId),
+        isNull(organizationMembershipsTable.revokedAt),
       ),
     )
     .limit(1);
@@ -274,6 +275,7 @@ async function loadDemoControllerSetupStatus(userId: string) {
       and(
         eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
         inArray(organizationMembershipsTable.role, ["owner", "admin"]),
+        isNull(organizationMembershipsTable.revokedAt),
       ),
     )
     .limit(1);
@@ -373,6 +375,9 @@ router.post(
       requireDemoMember(req);
       const userId = req.authUserId!;
       const row = await setupDatabase.transaction(async (tx) => {
+        // Share the organization membership lifecycle fence before taking the
+        // row lock. A role promotion/removal must serialize with this setup.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
         const [organization] = await tx
           .select({ id: organizationsTable.id })
           .from(organizationsTable)
@@ -396,6 +401,7 @@ router.post(
                 DEMO_ORGANIZATION_ID,
               ),
               eq(organizationMembershipsTable.clerkUserId, userId),
+              isNull(organizationMembershipsTable.revokedAt),
             ),
           )
           .for("update");
@@ -414,6 +420,7 @@ router.post(
                 DEMO_ORGANIZATION_ID,
               ),
               inArray(organizationMembershipsTable.role, ["owner", "admin"]),
+              isNull(organizationMembershipsTable.revokedAt),
             ),
           )
           .limit(1);
@@ -513,6 +520,9 @@ router.post(
       const configured = configuredApprovalValue();
       const userId = req.authUserId!;
       await setupDatabase.transaction(async (tx) => {
+        // Use the same tenant fence as organization membership removal so a
+        // revoked member cannot be promoted after the removal commits.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
         const [organization] = await tx
           .select({ id: organizationsTable.id })
           .from(organizationsTable)
@@ -534,6 +544,7 @@ router.post(
                 DEMO_ORGANIZATION_ID,
               ),
               eq(organizationMembershipsTable.clerkUserId, userId),
+              isNull(organizationMembershipsTable.revokedAt),
             ),
           )
           .for("update");
@@ -602,6 +613,7 @@ router.post(
                 DEMO_ORGANIZATION_ID,
               ),
               inArray(organizationMembershipsTable.role, ["owner", "admin"]),
+              isNull(organizationMembershipsTable.revokedAt),
             ),
           )
           .limit(1);
@@ -642,6 +654,7 @@ router.post(
               ),
               eq(organizationMembershipsTable.clerkUserId, userId),
               eq(organizationMembershipsTable.role, "member"),
+              isNull(organizationMembershipsTable.revokedAt),
             ),
           )
           .returning({ id: organizationMembershipsTable.id });

@@ -1495,22 +1495,30 @@ router.put("/onboarding/policy-authorities/:userId/:authorityRole", async (req, 
       res.status(400).json({ message: "Authority scope must exactly match the current case site, or use __organization__ only for a confirmed non-site office/remote context." });
       return;
     }
-    const [member] = await db.select({ id: organizationMembershipsTable.id })
-      .from(organizationMembershipsTable).where(and(
-        eq(organizationMembershipsTable.organizationId, organizationId),
-        eq(organizationMembershipsTable.clerkUserId, userId),
-      )).limit(1);
-    if (!member) {
+    const assigned = await db.transaction(async (tx) => {
+      // Pair legacy policy-authority grants with membership revocation and
+      // specialist authority grants on the same tenant fence.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      const [member] = await tx.select({ id: organizationMembershipsTable.id })
+        .from(organizationMembershipsTable).where(and(
+          eq(organizationMembershipsTable.organizationId, organizationId),
+          eq(organizationMembershipsTable.clerkUserId, userId),
+          isNull(organizationMembershipsTable.revokedAt),
+        )).limit(1);
+      if (!member) return false;
+      await tx.insert(onbPolicyAuthorities).values({
+        organizationId, userId, authorityRole, caseId, itemId, site,
+        assignedBy: req.authUserId!,
+      }).onConflictDoUpdate({
+        target: [onbPolicyAuthorities.organizationId, onbPolicyAuthorities.userId, onbPolicyAuthorities.authorityRole, onbPolicyAuthorities.caseId, onbPolicyAuthorities.itemId, onbPolicyAuthorities.site],
+        set: { revokedAt: null, assignedBy: req.authUserId! },
+      });
+      return true;
+    });
+    if (!assigned) {
       res.status(404).json({ message: "Authority must be assigned to an existing member of this organization." });
       return;
     }
-    await db.insert(onbPolicyAuthorities).values({
-      organizationId, userId, authorityRole, caseId, itemId, site,
-      assignedBy: req.authUserId!,
-    }).onConflictDoUpdate({
-      target: [onbPolicyAuthorities.organizationId, onbPolicyAuthorities.userId, onbPolicyAuthorities.authorityRole, onbPolicyAuthorities.caseId, onbPolicyAuthorities.itemId, onbPolicyAuthorities.site],
-      set: { revokedAt: null, assignedBy: req.authUserId! },
-    });
     res.status(204).end();
   } catch (err) {
     next(err);
@@ -1550,7 +1558,10 @@ router.get("/onboarding/policy-authority-members", async (req, res, next) => {
       userId: organizationMembershipsTable.clerkUserId,
       role: organizationMembershipsTable.role,
     }).from(organizationMembershipsTable).where(
-      eq(organizationMembershipsTable.organizationId, getOrganizationId(req)),
+      and(
+        eq(organizationMembershipsTable.organizationId, getOrganizationId(req)),
+        isNull(organizationMembershipsTable.revokedAt),
+      ),
     ).orderBy(organizationMembershipsTable.clerkUserId);
     res.json(members);
   } catch (err) { next(err); }
@@ -2970,6 +2981,7 @@ router.post("/onboarding/authority/assignments", async (req, res, next) => {
       const [member] = await tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
         eq(organizationMembershipsTable.organizationId, organizationId),
         eq(organizationMembershipsTable.clerkUserId, body.personUserId),
+        isNull(organizationMembershipsTable.revokedAt),
       ));
       if (!member) throw new Error("Authority subject is not a member of this organization.");
       if (body.caseId !== null) {
@@ -3763,7 +3775,10 @@ router.post("/onboarding/policy-recommendations/:id/decision", async (req, res, 
       if (assignedUserIds.size) {
         const currentMembers = await tx.select({ userId: organizationMembershipsTable.clerkUserId })
           .from(organizationMembershipsTable)
-          .where(eq(organizationMembershipsTable.organizationId, organizationId));
+          .where(and(
+            eq(organizationMembershipsTable.organizationId, organizationId),
+            isNull(organizationMembershipsTable.revokedAt),
+          ));
         const memberIds = new Set(currentMembers.map((member) => member.userId));
         const unknown = [...assignedUserIds].find((userId) => !memberIds.has(userId));
         if (unknown) throw Object.assign(new Error(`Assigned specialist ${unknown} is not a current tenant member.`), { name: "RecommendationInvalid" });

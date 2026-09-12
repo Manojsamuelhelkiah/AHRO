@@ -410,6 +410,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /organizations/members:
+    get:
+      operationId: listOrganizationMembers
+      tags: [organizations]
+      summary: List active members in the selected organization
+      description: Owner and admin members may read the active membership list. Revoked memberships are intentionally omitted.
+      responses:
+        "200":
+          description: Active organization members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrganizationMember"
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin membership required
+  /organizations/members/{userId}:
+    patch:
+      operationId: changeOrganizationMemberRole
+      tags: [organizations]
+      summary: Change an active member's role
+      description: Owner-only role mutation protected by an expected-role compare-and-set precondition.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationMemberRoleChange"
+      responses:
+        "200":
+          description: Updated membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMember"
+        "400": { description: Invalid role mutation body }
+        "403": { description: Owner membership required }
+        "404": { description: Active target membership not found }
+        "409": { description: Expected-role conflict or protected owner }
+    delete:
+      operationId: removeOrganizationMember
+      tags: [organizations]
+      summary: Revoke an active organization membership
+      description: Owner-only removal. The membership row is retained as a revocation tombstone and all tenant-scoped specialist authority grants are revoked atomically.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationMemberRemoval"
+      responses:
+        "200":
+          description: Revoked membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMember"
+        "400": { description: Invalid removal body }
+        "403": { description: Owner membership required }
+        "404": { description: Active target membership not found }
+        "409": { description: Expected-role conflict or protected owner }
   /onboarding/demo-controller:
     get:
       operationId: getOnboardingDemoController
@@ -4153,6 +4227,28 @@ components:
         type: integer
         minimum: 1
   schemas:
+    OrganizationMember:
+      type: object
+      additionalProperties: false
+      properties:
+        clerkUserId: { type: string }
+        role: { type: string, enum: [owner, admin, member] }
+        createdAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+      required: [clerkUserId, role, createdAt]
+    OrganizationMemberRoleChange:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRole: { type: string, enum: [owner, admin, member] }
+        role: { type: string, enum: [admin, member] }
+      required: [expectedRole, role]
+    OrganizationMemberRemoval:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRole: { type: string, enum: [owner, admin, member] }
+      required: [expectedRole]
     OnbProtectedAuditEntry:
       type: object
       additionalProperties: false

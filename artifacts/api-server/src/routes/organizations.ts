@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   db,
   DEMO_ORGANIZATION_ID,
@@ -8,10 +8,19 @@ import {
   organizationsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/require-auth";
-import { ORGANIZATION_HEADER } from "../middlewares/tenant-context";
+import {
+  createTenantContextMiddleware,
+  lookupMembership,
+  ORGANIZATION_HEADER,
+} from "../middlewares/tenant-context";
 import demoControllerSetupRouter, {
   requireSameOriginDemoSetup,
 } from "./organizations-demo-controller-setup";
+import {
+  changeOrganizationMemberRole,
+  listOrganizationMembers,
+  removeOrganizationMember,
+} from "../lib/organization-memberships";
 
 const router: IRouter = Router();
 
@@ -21,6 +30,7 @@ const router: IRouter = Router();
 router.use("/organizations/demo-controller-setup", requireSameOriginDemoSetup);
 router.use("/organizations", requireAuth);
 router.use(demoControllerSetupRouter);
+const requireTenantContext = createTenantContextMiddleware(lookupMembership);
 
 function hashJoinCode(value: string): string {
   return createHash("sha256").update(value.trim().toUpperCase()).digest("hex");
@@ -76,7 +86,10 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
         organizationsTable,
         eq(organizationsTable.id, organizationMembershipsTable.organizationId),
       )
-      .where(eq(organizationMembershipsTable.clerkUserId, userId))
+       .where(and(
+         eq(organizationMembershipsTable.clerkUserId, userId),
+         isNull(organizationMembershipsTable.revokedAt),
+       ))
       .orderBy(organizationMembershipsTable.createdAt);
     const activeOrganizationId = requested
       ? (memberships.find(({ organizationId }) => organizationId === requested)
@@ -161,6 +174,23 @@ router.post("/organizations/join", async (req, res, next): Promise<void> => {
       res.status(404).json({ message: "Organization join code was not found" });
       return;
     }
+    const [existingMembership] = await db
+      .select({
+        role: organizationMembershipsTable.role,
+        revokedAt: organizationMembershipsTable.revokedAt,
+      })
+      .from(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, organization.id),
+        eq(organizationMembershipsTable.clerkUserId, req.authUserId!),
+      ));
+    if (existingMembership?.revokedAt) {
+      res.status(403).json({
+        message: "This membership was revoked and cannot be restored with a join code.",
+        code: "ORGANIZATION_MEMBERSHIP_REVOKED",
+      });
+      return;
+    }
     await db
       .insert(organizationMembershipsTable)
       .values({
@@ -181,12 +211,114 @@ router.post("/organizations/join", async (req, res, next): Promise<void> => {
         and(
           eq(organizationMembershipsTable.organizationId, organization.id),
           eq(organizationMembershipsTable.clerkUserId, req.authUserId!),
+          isNull(organizationMembershipsTable.revokedAt),
         ),
       );
-    res.json({ organization, role: membership!.role });
+    if (!membership) {
+      res.status(409).json({
+        message: "Membership changed before the join completed.",
+        code: "ORGANIZATION_MEMBERSHIP_CONFLICT",
+      });
+      return;
+    }
+    res.json({ organization, role: membership.role });
   } catch (error) {
     next(error);
   }
 });
+
+/**
+ * Member administration deliberately sits behind the regular tenant context:
+ * a selector is not authority and a revoked account must fail closed before
+ * any member data is read.
+ */
+router.get(
+  "/organizations/members",
+  requireTenantContext,
+  async (req, res, next): Promise<void> => {
+    try {
+      const result = await listOrganizationMembers(
+        req.organizationId!,
+        req.authUserId!,
+      );
+      if (result.kind !== "ok") {
+        res.status(result.status).json({ message: result.message, code: result.code });
+        return;
+      }
+      res.json(result.members);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.patch(
+  "/organizations/members/:userId",
+  requireTenantContext,
+  async (req, res, next): Promise<void> => {
+    try {
+      const targetUserId = String(req.params.userId ?? "").trim();
+      const expectedRole = typeof req.body?.expectedRole === "string"
+        ? req.body.expectedRole
+        : "";
+      const role = typeof req.body?.role === "string" ? req.body.role : "";
+      if (!targetUserId || !["member", "admin"].includes(role) ||
+          !["owner", "admin", "member"].includes(expectedRole)) {
+        res.status(400).json({
+          message: "A target role and expected current role are required.",
+          code: "INVALID_ORGANIZATION_MEMBERSHIP_MUTATION",
+        });
+        return;
+      }
+      const result = await changeOrganizationMemberRole({
+        organizationId: req.organizationId!,
+        actorUserId: req.authUserId!,
+        targetUserId,
+        expectedRole: expectedRole as "owner" | "admin" | "member",
+        role: role as "admin" | "member",
+      });
+      if (result.kind !== "ok") {
+        res.status(result.status).json({ message: result.message, code: result.code });
+        return;
+      }
+      res.json(result.member);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.delete(
+  "/organizations/members/:userId",
+  requireTenantContext,
+  async (req, res, next): Promise<void> => {
+    try {
+      const targetUserId = String(req.params.userId ?? "").trim();
+      const expectedRole = typeof req.body?.expectedRole === "string"
+        ? req.body.expectedRole
+        : "";
+      if (!targetUserId || !["owner", "admin", "member"].includes(expectedRole)) {
+        res.status(400).json({
+          message: "The expected current role is required.",
+          code: "INVALID_ORGANIZATION_MEMBERSHIP_MUTATION",
+        });
+        return;
+      }
+      const result = await removeOrganizationMember({
+        organizationId: req.organizationId!,
+        actorUserId: req.authUserId!,
+        targetUserId,
+        expectedRole: expectedRole as "owner" | "admin" | "member",
+      });
+      if (result.kind !== "ok") {
+        res.status(result.status).json({ message: result.message, code: result.code });
+        return;
+      }
+      res.json(result.member);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 export default router;

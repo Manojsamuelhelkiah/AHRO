@@ -7,6 +7,10 @@
  */
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import {
+  lockActiveBootstrapMembership,
+  lockGovernanceMutation,
+} from "./approve-authority-governance-guards.mjs";
 
 function option(name) {
   const index = process.argv.indexOf(name);
@@ -33,13 +37,13 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const client = await pool.connect();
 try {
   await client.query("BEGIN");
+  // Keep privileged grants in the same order as membership lifecycle
+  // mutations and apply the full provider-dispatch guard.
+  await lockGovernanceMutation(client, organizationId);
+
   const member = bootstrapAdmin
-    ? await client.query(
-      `SELECT 1 FROM organization_memberships WHERE organization_id = $1 AND clerk_user_id = $2`,
-      [organizationId, bootstrapAdmin],
-    )
+    ? await lockActiveBootstrapMembership(client, organizationId, bootstrapAdmin)
     : { rowCount: 1 };
-  if (!member.rowCount) throw new Error("Bootstrap authority administrator must be an existing tenant member.");
 
   const governance = await client.query(
     `INSERT INTO onb_authority_governance
@@ -63,7 +67,9 @@ try {
           AND a.scopes @> '["authority-administration"]'::jsonb
           AND a.valid_from <= now() AND (a.valid_until IS NULL OR a.valid_until > now())
           AND EXISTS (SELECT 1 FROM organization_memberships m
-                      WHERE m.organization_id = a.organization_id AND m.clerk_user_id = a.person_user_id)`,
+                       WHERE m.organization_id = a.organization_id
+                         AND m.clerk_user_id = a.person_user_id
+                         AND m.revoked_at IS NULL)`,
       [organizationId, bootstrapAdmin],
     );
     if (!existing.rowCount) {

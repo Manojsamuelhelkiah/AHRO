@@ -190,6 +190,7 @@ export async function verifyDecisionAuthorityInTransaction(
       .where(and(
         eq(organizationMembershipsTable.organizationId, input.organizationId),
         eq(organizationMembershipsTable.clerkUserId, decisionUserId),
+        isNull(organizationMembershipsTable.revokedAt),
       ));
     if (!membership) return { allowed: false, reason: "current_tenant_membership_required" };
   }
@@ -244,6 +245,7 @@ export async function decisionAuthorityStillCurrent(
     .where(and(
       eq(organizationMembershipsTable.organizationId, approval.organizationId),
       eq(organizationMembershipsTable.clerkUserId, assignment.personUserId),
+        isNull(organizationMembershipsTable.revokedAt),
     ));
   if (!membership) return false;
   const [c] = await tx.select({
@@ -431,6 +433,7 @@ export async function hasCurrentAuthorityScope(
     tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
       eq(organizationMembershipsTable.organizationId, input.organizationId),
       eq(organizationMembershipsTable.clerkUserId, input.actorUserId),
+    isNull(organizationMembershipsTable.revokedAt),
     )),
   ]);
   if (governance[0]?.status !== "governance-approved" || !membership[0]) return false;
@@ -525,6 +528,7 @@ export async function verifyCurrentCompoundAuthorities(input: {
         .where(and(
           eq(organizationMembershipsTable.organizationId, input.proposal.tenantId),
           eq(organizationMembershipsTable.clerkUserId, assignment.personUserId),
+          isNull(organizationMembershipsTable.revokedAt),
         ));
       if (!membership) return { allowed: false, reason: "current_tenant_membership_required" } as const;
       if (

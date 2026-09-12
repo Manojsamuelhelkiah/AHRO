@@ -1366,6 +1366,7 @@ export async function initializeWorkforceStepTasks(input: {
         .where(and(
           eq(organizationMembershipsTable.organizationId, input.organizationId),
           eq(organizationMembershipsTable.clerkUserId, task.assignedTo),
+          isNull(organizationMembershipsTable.revokedAt),
         )).limit(1);
       if (!member) {
         throw new OperationalRequestConflictError(
@@ -1503,6 +1504,7 @@ export async function applyOperationalRequestAction(input: {
         .where(and(
           eq(organizationMembershipsTable.organizationId, input.organizationId),
           eq(organizationMembershipsTable.clerkUserId, input.actorUserId),
+          isNull(organizationMembershipsTable.revokedAt),
         )).limit(1);
       if (!membership) {
         throw new OperationalRequestAuthorizationError("The signed-in user is not a member of this organization.");

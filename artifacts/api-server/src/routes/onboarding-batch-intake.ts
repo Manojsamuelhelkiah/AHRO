@@ -309,6 +309,7 @@ router.get("/onboarding/policy-authorities", async (req, res, next) => {
     }).from(onbPolicyAuthorities).innerJoin(organizationMembershipsTable, and(
       eq(onbPolicyAuthorities.organizationId, organizationMembershipsTable.organizationId),
       eq(onbPolicyAuthorities.userId, organizationMembershipsTable.clerkUserId),
+      isNull(organizationMembershipsTable.revokedAt),
     )).where(and(
       eq(onbPolicyAuthorities.organizationId, organizationId),
       isNull(onbPolicyAuthorities.revokedAt),

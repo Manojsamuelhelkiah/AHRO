@@ -113,6 +113,7 @@ async function createIsolatedSchema(): Promise<void> {
       clerk_user_id text NOT NULL,
       role text NOT NULL DEFAULT 'member',
       created_at timestamptz NOT NULL DEFAULT now(),
+      revoked_at timestamptz,
       UNIQUE (organization_id, clerk_user_id)
     );
     CREATE TABLE demo_controller_setup_requests (
@@ -566,4 +567,17 @@ test("concurrent completion has one winner, records the grant, and unlocks Demo 
   assert.equal(otherMemberBody.eligible, false);
   assert.equal(otherMemberBody.request, null);
   assert.match(otherMemberBody.reason, /already completed for Demo Organization/i);
+
+  await testDb
+    .update(organizationMembershipsTable)
+    .set({ revokedAt: new Date() })
+    .where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, userB),
+    ));
+  const revokedMember = await call("/organizations/demo-controller-setup", {
+    userId: userB,
+    organizationId: DEMO_ORGANIZATION_ID,
+  });
+  assert.equal(revokedMember.status, 403);
 });

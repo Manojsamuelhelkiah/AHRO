@@ -157,6 +157,9 @@ import type {
   OnbWatchEmailSimulateResult,
   OnbWorkforceContextCorrectionInput,
   OnboardingBgvNotificationsEnvelope,
+  OrganizationMember,
+  OrganizationMemberRemoval,
+  OrganizationMemberRoleChange,
   ParseActualsLogBody,
   PricingRateRegister,
   PricingRateSetInput,
@@ -1588,6 +1591,230 @@ export const useCompleteDemoControllerSetup = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getCompleteDemoControllerSetupMutationOptions(options));
+    }
+
+export const getListOrganizationMembersUrl = () => {
+
+
+
+
+  return `/api/organizations/members`
+}
+
+/**
+ * Owner and admin members may read the active membership list. Revoked memberships are intentionally omitted.
+ * @summary List active members in the selected organization
+ */
+export const listOrganizationMembers = async ( options?: RequestInit): Promise<OrganizationMember[]> => {
+
+  return customFetch<OrganizationMember[]>(getListOrganizationMembersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOrganizationMembersQueryKey = () => {
+    return [
+    `/api/organizations/members`
+    ] as const;
+    }
+
+
+export const getListOrganizationMembersQueryOptions = <TData = Awaited<ReturnType<typeof listOrganizationMembers>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOrganizationMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOrganizationMembersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOrganizationMembers>>> = ({ signal }) => listOrganizationMembers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOrganizationMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOrganizationMembersQueryResult = NonNullable<Awaited<ReturnType<typeof listOrganizationMembers>>>
+export type ListOrganizationMembersQueryError = ErrorType<void>
+
+
+/**
+ * @summary List active members in the selected organization
+ */
+
+export function useListOrganizationMembers<TData = Awaited<ReturnType<typeof listOrganizationMembers>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOrganizationMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOrganizationMembersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getChangeOrganizationMemberRoleUrl = (userId: string,) => {
+
+
+
+
+  return `/api/organizations/members/${userId}`
+}
+
+/**
+ * Owner-only role mutation protected by an expected-role compare-and-set precondition.
+ * @summary Change an active member's role
+ */
+export const changeOrganizationMemberRole = async (userId: string,
+    organizationMemberRoleChange: OrganizationMemberRoleChange, options?: RequestInit): Promise<OrganizationMember> => {
+
+  return customFetch<OrganizationMember>(getChangeOrganizationMemberRoleUrl(userId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(organizationMemberRoleChange)
+  }
+);}
+
+
+
+
+
+export const getChangeOrganizationMemberRoleMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeOrganizationMemberRole>>, TError,{userId: string;data: BodyType<OrganizationMemberRoleChange>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeOrganizationMemberRole>>, TError,{userId: string;data: BodyType<OrganizationMemberRoleChange>}, TContext> => {
+
+const mutationKey = ['changeOrganizationMemberRole'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeOrganizationMemberRole>>, {userId: string;data: BodyType<OrganizationMemberRoleChange>}> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  changeOrganizationMemberRole(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeOrganizationMemberRoleMutationResult = NonNullable<Awaited<ReturnType<typeof changeOrganizationMemberRole>>>
+    export type ChangeOrganizationMemberRoleMutationBody = BodyType<OrganizationMemberRoleChange>
+    export type ChangeOrganizationMemberRoleMutationError = ErrorType<void>
+
+    /**
+ * @summary Change an active member's role
+ */
+export const useChangeOrganizationMemberRole = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeOrganizationMemberRole>>, TError,{userId: string;data: BodyType<OrganizationMemberRoleChange>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeOrganizationMemberRole>>,
+        TError,
+        {userId: string;data: BodyType<OrganizationMemberRoleChange>},
+        TContext
+      > => {
+      return useMutation(getChangeOrganizationMemberRoleMutationOptions(options));
+    }
+
+export const getRemoveOrganizationMemberUrl = (userId: string,) => {
+
+
+
+
+  return `/api/organizations/members/${userId}`
+}
+
+/**
+ * Owner-only removal. The membership row is retained as a revocation tombstone and all tenant-scoped specialist authority grants are revoked atomically.
+ * @summary Revoke an active organization membership
+ */
+export const removeOrganizationMember = async (userId: string,
+    organizationMemberRemoval: OrganizationMemberRemoval, options?: RequestInit): Promise<OrganizationMember> => {
+
+  return customFetch<OrganizationMember>(getRemoveOrganizationMemberUrl(userId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(organizationMemberRemoval)
+  }
+);}
+
+
+
+
+
+export const getRemoveOrganizationMemberMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeOrganizationMember>>, TError,{userId: string;data: BodyType<OrganizationMemberRemoval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeOrganizationMember>>, TError,{userId: string;data: BodyType<OrganizationMemberRemoval>}, TContext> => {
+
+const mutationKey = ['removeOrganizationMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeOrganizationMember>>, {userId: string;data: BodyType<OrganizationMemberRemoval>}> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  removeOrganizationMember(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveOrganizationMemberMutationResult = NonNullable<Awaited<ReturnType<typeof removeOrganizationMember>>>
+    export type RemoveOrganizationMemberMutationBody = BodyType<OrganizationMemberRemoval>
+    export type RemoveOrganizationMemberMutationError = ErrorType<void>
+
+    /**
+ * @summary Revoke an active organization membership
+ */
+export const useRemoveOrganizationMember = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeOrganizationMember>>, TError,{userId: string;data: BodyType<OrganizationMemberRemoval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeOrganizationMember>>,
+        TError,
+        {userId: string;data: BodyType<OrganizationMemberRemoval>},
+        TContext
+      > => {
+      return useMutation(getRemoveOrganizationMemberMutationOptions(options));
     }
 
 export const getGetOnboardingDemoControllerUrl = () => {

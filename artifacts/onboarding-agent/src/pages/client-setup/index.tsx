@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useUser } from '@clerk/react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useSearch } from 'wouter';
 import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, resolveInitialDraft } from './schema';
 import {
   canNavigateOrCommit,
@@ -9,6 +10,11 @@ import {
   planScenarioHydration,
   type ClientSetupDraftSession,
 } from './client-setup-persistence';
+import {
+  organizationActionFromSearch,
+  organizationSetupNavigation,
+  organizationSetupNavigationNeedsReload,
+} from './organization-setup-navigation';
 import { StepScope, StepLandscape, StepProcess, StepReview } from './wizard-steps';
 import { Button, PageHeader } from '@/components/ui-shared';
 import {
@@ -299,6 +305,9 @@ export function ClientSetupPage() {
   const { isLoaded: userLoaded, user } = useUser();
   const [organization, setOrganization] = useState<OrganizationSummary | null>();
   const [loadError, setLoadError] = useState<string | null>(null);
+  const search = useSearch();
+  const organizationAction = organizationActionFromSearch(search);
+  const mountedOrganizationIdRef = useRef(getPinnedOrganizationIdForPage());
 
   useEffect(() => {
     let active = true;
@@ -308,12 +317,23 @@ export function ClientSetupPage() {
         const selected = data.memberships.find(
           (membership) => membership.organizationId === data.activeOrganizationId,
         ) ?? data.memberships[0];
+        const mountedOrganizationId = mountedOrganizationIdRef.current;
+        if (selected && mountedOrganizationId && selected.organizationId !== mountedOrganizationId) {
+          // This realm may still contain forms and queries for the old
+          // workspace.  Do not silently move it to the fallback membership;
+          // the next explicit setup action will use a full document
+          // navigation before entering that workspace.
+          setOrganization(null);
+          return;
+        }
         if (selected) {
-          localStorage.setItem('activeOrganizationId', selected.organizationId);
-          pinOrganizationIdForPage(selected.organizationId);
+          if (!mountedOrganizationId) {
+            localStorage.setItem('activeOrganizationId', selected.organizationId);
+            pinOrganizationIdForPage(selected.organizationId);
+            mountedOrganizationIdRef.current = selected.organizationId;
+          }
           setOrganization(selected);
         } else {
-          pinOrganizationIdForPage(null);
           setOrganization(null);
         }
       })
@@ -341,8 +361,14 @@ export function ClientSetupPage() {
   if (organization === undefined || !userLoaded) {
     return <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Loading organization…</div>;
   }
-  if (organization === null) {
-    return <OrganizationSetup onReady={setOrganization} />;
+  if (organization === null || organizationAction) {
+    return (
+      <OrganizationSetup
+        key={organizationAction ?? 'create'}
+        initialMode={organizationAction ?? 'create'}
+        onReady={navigateIntoOrganization}
+      />
+    );
   }
   if (!user || !draftSession) {
     return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">Could not establish a private draft scope for this workspace.</div>;
@@ -355,13 +381,53 @@ export function ClientSetupPage() {
   );
 }
 
+function navigateIntoOrganization(nextOrganization: OrganizationSummary): void {
+  let previousOrganizationId: string | null = null;
+  try {
+    previousOrganizationId = window.localStorage.getItem('activeOrganizationId');
+    window.localStorage.setItem('activeOrganizationId', nextOrganization.organizationId);
+    const nextUrl = organizationSetupNavigation(
+      window.location.pathname,
+      window.location.search,
+      window.location.hash,
+    );
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (organizationSetupNavigationNeedsReload(currentUrl, nextUrl)) {
+      // location.assign() is not a reliable realm reset when the setup page
+      // already has its canonical URL (for example, first-org setup with no
+      // organizationAction query).  The explicit reload is what causes the
+      // API client's page-pinned scope to be initialized from the new selector.
+      window.location.reload();
+    } else {
+      window.location.assign(nextUrl);
+    }
+  } catch (caught) {
+    // A navigation failure must not leave a mounted old-tenant page paired
+    // with a persisted new-tenant selector.
+    try {
+      if (previousOrganizationId) {
+        window.localStorage.setItem('activeOrganizationId', previousOrganizationId);
+      } else {
+        window.localStorage.removeItem('activeOrganizationId');
+      }
+    } catch {
+      // The original navigation/storage error is the actionable message.
+    }
+    throw caught instanceof Error
+      ? caught
+      : new Error('Could not enter the new workspace');
+  }
+}
+
 function OrganizationSetup({
   onReady,
+  initialMode = 'create',
 }: {
   onReady: (organization: OrganizationSummary) => void;
+  initialMode?: 'create' | 'join';
 }) {
   const pendingOrganization = loadPendingOrganization();
-  const [mode, setMode] = useState<'create' | 'join'>('create');
+  const [mode, setMode] = useState<'create' | 'join'>(initialMode);
   const [name, setName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [createdOrganization, setCreatedOrganization] = useState<OrganizationSummary | null>(
@@ -410,8 +476,6 @@ function OrganizationSetup({
         setCreatedJoinCode(result.joinCode);
         return;
       }
-      localStorage.setItem('activeOrganizationId', organization.organizationId);
-      pinOrganizationIdForPage(organization.organizationId);
       onReady(organization);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Organization setup failed');
@@ -432,14 +496,17 @@ function OrganizationSetup({
 
   const continueWithOrganization = () => {
     if (!createdOrganization) return;
-    localStorage.setItem('activeOrganizationId', createdOrganization.organizationId);
-    pinOrganizationIdForPage(createdOrganization.organizationId);
+    try {
+      onReady(createdOrganization);
+    } catch {
+      setError('Could not enter the new workspace. Your join code is still available on this page.');
+      return;
+    }
     try {
       sessionStorage.removeItem(PENDING_ORGANIZATION_KEY);
     } catch {
       // Continuing does not depend on session storage being available.
     }
-    onReady(createdOrganization);
   };
 
   return (

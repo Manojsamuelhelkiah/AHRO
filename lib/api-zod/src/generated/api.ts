@@ -591,6 +591,68 @@ export const CompleteDemoControllerSetupResponse = zod.object({
 
 
 /**
+ * Owner and admin members may read the active membership list. Revoked memberships are intentionally omitted.
+ * @summary List active members in the selected organization
+ */
+export const ListOrganizationMembersResponseItem = zod.object({
+  "clerkUserId": zod.string(),
+  "role": zod.enum(['owner', 'admin', 'member']),
+  "createdAt": zod.coerce.date(),
+  "revokedAt": zod.coerce.date().nullish()
+})
+export const ListOrganizationMembersResponse = zod.array(ListOrganizationMembersResponseItem)
+
+
+/**
+ * Owner-only role mutation protected by an expected-role compare-and-set precondition.
+ * @summary Change an active member's role
+ */
+export const changeOrganizationMemberRolePathUserIdMax = 200;
+
+
+
+export const ChangeOrganizationMemberRoleParams = zod.object({
+  "userId": zod.coerce.string().min(1).max(changeOrganizationMemberRolePathUserIdMax)
+})
+
+export const ChangeOrganizationMemberRoleBody = zod.object({
+  "expectedRole": zod.enum(['owner', 'admin', 'member']),
+  "role": zod.enum(['admin', 'member'])
+})
+
+export const ChangeOrganizationMemberRoleResponse = zod.object({
+  "clerkUserId": zod.string(),
+  "role": zod.enum(['owner', 'admin', 'member']),
+  "createdAt": zod.coerce.date(),
+  "revokedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * Owner-only removal. The membership row is retained as a revocation tombstone and all tenant-scoped specialist authority grants are revoked atomically.
+ * @summary Revoke an active organization membership
+ */
+export const removeOrganizationMemberPathUserIdMax = 200;
+
+
+
+export const RemoveOrganizationMemberParams = zod.object({
+  "userId": zod.coerce.string().min(1).max(removeOrganizationMemberPathUserIdMax)
+})
+
+export const RemoveOrganizationMemberBody = zod.object({
+  "expectedRole": zod.enum(['owner', 'admin', 'member'])
+})
+
+export const RemoveOrganizationMemberResponse = zod.object({
+  "clerkUserId": zod.string(),
+  "role": zod.enum(['owner', 'admin', 'member']),
+  "createdAt": zod.coerce.date(),
+  "revokedAt": zod.coerce.date().nullish()
+})
+
+
+/**
  * Returns the capability boundary for the selected tenant. Every authenticated Demo Organization member may create or mutate synthetic demo runs, including demo overrides. Authentication, tenant isolation, and approved-volunteer communication safeguards still apply.
  * @summary Get demo-controller capabilities and available scenarios
  */

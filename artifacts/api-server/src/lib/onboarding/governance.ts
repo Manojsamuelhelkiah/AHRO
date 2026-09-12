@@ -639,6 +639,7 @@ export async function assignGovernanceAuthority(
     .from(organizationMembershipsTable).where(and(
       eq(organizationMembershipsTable.organizationId, organizationId),
       eq(organizationMembershipsTable.clerkUserId, assigneeUserId),
+      isNull(organizationMembershipsTable.revokedAt),
     )).limit(1);
   if (!member) throw new GovernanceValidationError("Assignee must be an active member of this organization.");
   const [assignment] = await tx.insert(onbGovernanceAuthorityAssignments).values({
@@ -677,6 +678,7 @@ export async function requestGovernanceAuthority(
     .from(organizationMembershipsTable).where(and(
       eq(organizationMembershipsTable.organizationId, organizationId),
       eq(organizationMembershipsTable.clerkUserId, assigneeUserId),
+      isNull(organizationMembershipsTable.revokedAt),
     )).limit(1);
   if (!member) throw new GovernanceValidationError("Assignee must be an active member of this organization.");
   const [assignment] = await tx.insert(onbGovernanceAuthorityAssignments).values({

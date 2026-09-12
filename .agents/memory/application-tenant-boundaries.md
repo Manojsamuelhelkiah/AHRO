@@ -3,6 +3,18 @@ name: Application tenant boundaries
 description: Durable rules for client organization isolation with Replit-managed Clerk.
 ---
 
+The user selected shared-database, logically isolated client organizations rather than dedicated tenant databases on 2026-09-12.
+
+**Why:** Extend the established application-owned tenancy instead of introducing a competing tenant model or unrequested infrastructure migration.
+
+**How to apply:** Preserve shared storage with explicit server-enforced organization boundaries; dedicated databases or cross-client learning require a separate decision.
+
+Membership removal must revoke access without allowing a shared join code or later reinstatement to revive old specialist grants.
+
+**Why:** Deleting only a membership would let an account rejoin while its prior authority still exists. Revocation must also serialize with operator grants and in-flight governed dispatch.
+
+**How to apply:** Preserve revocation history, enforce active membership on authority-bearing paths, and require fresh verified specialist grants after any future reinstatement.
+
 Replit-managed Clerk authenticates people but does not provide Clerk Organizations. Client tenancy must therefore be application-owned: users select an organization, and the server accepts that selection only after verifying a persisted membership. Organization scope is cumulative with any narrower owner boundary that predates tenancy: owner-private scenarios and uploads remain owner-private inside their organization. A retained migration workspace is not necessarily disposable even if its identifier looks temporary: interval-created scenarios may rely on tenant-local configuration there, so preserve valid stored selections and provide an explicit membership switcher instead of redirecting automatically. Browser requests must use the workspace pinned to that mounted page during bootstrap; never reread an origin-wide selector at dispatch, because another tab can change shared storage while an old tenant form remains open. Case-less operational and security-audit events still need an explicit organization; tenant feeds must scope these rows directly rather than inner-joining through an optional parent. Rejected public webhooks whose tenant cannot be safely inferred belong to an explicit platform-audit organization, never an inferred client.
 
 **Why:** User-level authentication alone does not isolate cases, estimates, custom configuration, uploads, or external effects. Defaults such as a shared demo tenant hide missing ownership and can silently cross tenant boundaries. A tenant migration once broadened owner-private scenarios and uploads because organization checks replaced, rather than supplemented, owner checks. A later recovery pass treated all migration workspaces as historical and redirected users to demo, separating newer scenarios from their custom intents, flow overrides, and rates. A workspace switcher then exposed a cross-tab dispatch flaw: changing shared storage in one app silently retargeted an unsaved form in another tab to a different tenant. The same migration work also hid null-case outage events by joining through cases and dropped forged-webhook evidence because its audit writer incorrectly required a case.
