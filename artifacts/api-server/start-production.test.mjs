@@ -302,6 +302,41 @@ test("a stalled alert reset cannot delay a verified API startup", async () => {
   assert.ok(Date.now() - startedAt < 250);
 });
 
+test("a late verifier completion never starts the API after its injected deadline", async () => {
+  let started = false;
+  let alerts = 0;
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    startProduction({
+      validateBackupAlertReadiness: backupReady,
+      verificationDeadlineMs: 15,
+      verify: () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ schema: "public", failures: [] }), 100);
+        }),
+      alertBlockedPublish: async () => {
+        alerts += 1;
+      },
+      startApi: async () => {
+        started = true;
+      },
+    }),
+    (error) => {
+      assert.equal(
+        error.reasonCategory,
+        STARTUP_FAILURE_REASONS.VERIFICATION_TIMEOUT,
+      );
+      assert.match(error.message, /timed out after 15ms/);
+      return true;
+    },
+  );
+
+  assert.equal(started, false);
+  assert.equal(alerts, 1);
+  assert.ok(Date.now() - startedAt < 250);
+});
+
 test("the production CLI exits after an alert timeout even with an active handle", () => {
   const script = `
     import { runProductionCli, startProduction } from ${JSON.stringify(

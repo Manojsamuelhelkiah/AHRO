@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import {
+  DEFAULT_VERIFICATION_DEADLINE_MS,
   STARTUP_FAILURE_REASONS,
   verifyTenantSafeguards,
 } from "./verify-tenant-safeguards.mjs";
@@ -16,6 +17,15 @@ function startupBlockedError(reasonCategory, message, options) {
 }
 
 const DEFAULT_ALERT_TIMEOUT_MS = 5_000;
+
+function verificationTimeoutError(timeoutMs) {
+  const error = new Error(
+    `tenant safeguard verification timed out after ${timeoutMs}ms; production is not trusted`,
+  );
+  error.code = "TENANT_SAFEGUARD_TIMEOUT";
+  error.reasonCategory = STARTUP_FAILURE_REASONS.VERIFICATION_TIMEOUT;
+  return error;
+}
 
 async function defaultAlertBlockedPublish() {
   const { alertBlockedPublish } = await import("./publish-safeguard-alert.mjs");
@@ -45,12 +55,41 @@ async function runAlertWorkWithDeadline(operation, timeoutMs, label) {
   }
 }
 
+async function runVerificationWithDeadline(
+  verify,
+  verificationDeadlineMs,
+) {
+  if (verificationDeadlineMs <= 0) {
+    throw verificationTimeoutError(verificationDeadlineMs);
+  }
+  let timer;
+  let verification;
+  try {
+    verification = Promise.resolve().then(() =>
+      verify({ verificationDeadlineMs }),
+    );
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(verificationTimeoutError(verificationDeadlineMs)),
+        verificationDeadlineMs,
+      );
+    });
+    return await Promise.race([verification, deadline]);
+  } finally {
+    clearTimeout(timer);
+    // A verifier can own a database operation that settles after the startup
+    // decision. Observe that late settlement but never start the API from it.
+    verification?.catch(() => {});
+  }
+}
+
 export async function startProduction({
   validateBackupAlertReadiness = blockedPublishBackupBlockingCategories,
   verify = verifyTenantSafeguards,
   alertBlockedPublish = defaultAlertBlockedPublish,
   clearBlockedPublishAlert = defaultClearBlockedPublishAlert,
   alertTimeoutMs = DEFAULT_ALERT_TIMEOUT_MS,
+  verificationDeadlineMs = DEFAULT_VERIFICATION_DEADLINE_MS,
   startApi = () => import("./dist/index.mjs"),
 } = {}) {
   const blockingBackupSettings = validateBackupAlertReadiness();
@@ -69,7 +108,10 @@ export async function startProduction({
   );
   let result;
   try {
-    result = await verify();
+    result = await runVerificationWithDeadline(
+      verify,
+      verificationDeadlineMs,
+    );
   } catch (error) {
     await runAlertWorkWithDeadline(
       alertBlockedPublish,
@@ -80,7 +122,8 @@ export async function startProduction({
     });
     if (
       error?.reasonCategory === STARTUP_FAILURE_REASONS.CONNECTION_TIMEOUT ||
-      error?.reasonCategory === STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT
+      error?.reasonCategory === STARTUP_FAILURE_REASONS.STATEMENT_TIMEOUT ||
+      error?.reasonCategory === STARTUP_FAILURE_REASONS.VERIFICATION_TIMEOUT
     ) {
       throw startupBlockedError(
         error.reasonCategory,

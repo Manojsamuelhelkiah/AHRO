@@ -9,6 +9,8 @@ import {
   organizationParentValidatedTenantTables,
   STARTUP_FAILURE_REASONS,
   tenantTables,
+  DEFAULT_VERIFICATION_DEADLINE_MS,
+  findTenantMetadataFailures,
   verifyTenantSafeguards,
 } from "./verify-tenant-safeguards.mjs";
 
@@ -37,6 +39,22 @@ function passingSnapshot() {
 
 test("accepts safeguards by actual mappings without relying on constraint names", () => {
   assert.deepEqual(findTenantSafeguardFailures(passingSnapshot()), []);
+});
+
+test("uses a bounded total verification deadline and reports missing metadata explicitly", () => {
+  assert.equal(DEFAULT_VERIFICATION_DEADLINE_MS, 40_000);
+  const failures = findTenantMetadataFailures({
+    tables: [{ table_name: "organizations" }],
+    columns: [],
+    foreignKeys: [],
+  });
+
+  assert.ok(failures.some((failure) => failure === "tenant table missing: scenarios"));
+  assert.ok(
+    failures.some(
+      (failure) => failure === "foreign key missing: onb_cases(organization_id) -> organizations(id)",
+    ),
+  );
 });
 
 test("retained evidence is exempt only from parent existence checks, not tenant-column checks", () => {
@@ -386,4 +404,114 @@ test("fails a stalled statement within the configured deadline and discards its 
   );
 
   assert.equal(releasedWithError, true);
+});
+
+test("stops before orphan queries when tenant metadata is missing", async () => {
+  const queries = [];
+  const stages = [];
+  const client = {
+    async query(config) {
+      queries.push(config.text);
+      if (config.text === "BEGIN TRANSACTION READ ONLY") return { rows: [] };
+      if (config.text === "SELECT set_config('statement_timeout', $1, true)") {
+        return { rows: [] };
+      }
+      if (config.text === "SELECT current_schema() AS schema_name") {
+        return { rows: [{ schema_name: "public" }] };
+      }
+      if (config.text.includes("FROM information_schema.tables")) {
+        return { rows: [] };
+      }
+      if (config.text.includes("FROM information_schema.columns")) {
+        return { rows: [] };
+      }
+      if (config.text.includes("FROM pg_constraint")) {
+        return { rows: [] };
+      }
+      if (config.text === "COMMIT") return { rows: [] };
+      throw new Error(`unexpected query: ${config.text}`);
+    },
+    release() {},
+  };
+
+  const result = await verifyTenantSafeguards({
+    connectionString: "postgres://unused",
+    pool: { connect: async () => client },
+    stageLogger: (event) => stages.push(event),
+  });
+
+  assert.ok(result.failures.some((failure) => failure === "tenant table missing: scenarios"));
+  assert.ok(!queries.includes(organizationOrphanQuery));
+  assert.equal(
+    queries.some((query) => query.includes("FROM onb_watch_emails watch")),
+    false,
+  );
+  assert.ok(stages.some(({ stage, phase }) => stage === "tenant-tables" && phase === "begin"));
+  assert.ok(stages.some(({ stage, phase }) => stage === "tenant-tables" && phase === "end"));
+  for (const event of stages) {
+    assert.deepEqual(Object.keys(event).sort(), ["elapsedMs", "event", "phase", "stage"]);
+    assert.equal(event.event, "tenant_safeguard_stage");
+    assert.equal(typeof event.elapsedMs, "number");
+  }
+});
+
+test("runs every data check after healthy tenant metadata", async () => {
+  const queries = [];
+  const client = {
+    async query(config) {
+      queries.push(config.text);
+      if (config.text === "BEGIN TRANSACTION READ ONLY") return { rows: [] };
+      if (config.text === "SELECT set_config('statement_timeout', $1, true)") {
+        return { rows: [] };
+      }
+      if (config.text === "SELECT current_schema() AS schema_name") {
+        return { rows: [{ schema_name: "public" }] };
+      }
+      if (config.text.includes("FROM information_schema.tables")) {
+        return { rows: tenantTables.map((table_name) => ({ table_name })) };
+      }
+      if (config.text.includes("FROM information_schema.columns")) {
+        return {
+          rows: tenantTables.map((table_name) => ({
+            table_name,
+            column_default: null,
+          })),
+        };
+      }
+      if (config.text.includes("FROM pg_constraint")) {
+        return {
+          rows: expectedForeignKeys.map((foreignKey) => ({
+            table_name: foreignKey.table,
+            column_names: foreignKey.columns,
+            referenced_table_name: foreignKey.referencedTable,
+            referenced_column_names: foreignKey.referencedColumns,
+          })),
+        };
+      }
+      if (config.text.includes("FROM organizations WHERE id = 'demo'")) {
+        return { rows: [{ row_count: 1 }] };
+      }
+      if (config.text === organizationOrphanQuery) {
+        return { rows: [{ orphan_count: 0 }] };
+      }
+      if (config.text.includes("FROM onb_watch_emails watch")) {
+        return {
+          rows: [{ case_orphan_count: 0, check_orphan_count: 0 }],
+        };
+      }
+      if (config.text === "COMMIT") return { rows: [] };
+      throw new Error(`unexpected query: ${config.text}`);
+    },
+    release() {},
+  };
+
+  const result = await verifyTenantSafeguards({
+    connectionString: "postgres://unused",
+    pool: { connect: async () => client },
+    stageLogger: () => {},
+  });
+
+  assert.deepEqual(result.failures, []);
+  assert.ok(queries.includes(organizationOrphanQuery));
+  assert.ok(queries.some((query) => query.includes("FROM onb_watch_emails watch")));
 });

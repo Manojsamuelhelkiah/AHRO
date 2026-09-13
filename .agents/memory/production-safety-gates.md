@@ -41,3 +41,9 @@ connection details.
 **How to apply:** Keep categories coarse and credential-safe, include them in the
 operator-facing startup line, and unit-test both the category property and clear
 fail-closed wording for every supported reason.
+
+Bound the entire verification phase, including cleanup, below the platform's startup window; per-query timeouts alone are insufficient. Emit credential-free stage timing and stop on missing schema before querying dependent tables.
+
+**Why:** A publish built successfully but was killed after roughly one minute while verification was silent. Sequential query budgets could exceed that window, and production lacked newly merged transfer tables.
+
+**How to apply:** Preserve the no-serving-before-verification rule, discard timed-out clients, prevent late completion from starting the API, and confirm the current development-to-production schema diff before retrying Publish.
