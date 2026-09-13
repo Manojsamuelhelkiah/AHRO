@@ -29,6 +29,11 @@ import {
   onbOutcomeEvidenceAuthorityReceipts,
   onbEmployeeRecords,
   onbEvents,
+  onbFrontlineEvidence,
+  onbFrontlineFulfillments,
+  onbFrontlineKpiInputs,
+  onbFrontlinePolicyExceptions,
+  onbFrontlineReleaseState,
   onbGovernanceAuthorityAssignments,
   onbGuardrailEvents,
   onbIntakeBatchPeople,
@@ -1463,6 +1468,12 @@ async function newestCaseDerivedSourceAtInTransaction(
     newest(onbActionCenterActions, onbActionCenterActions.updatedAt, and(eq(onbActionCenterActions.organizationId, organizationId), eq(onbActionCenterActions.caseId, caseId))),
     newest(onbPolicyEvidence, onbPolicyEvidence.createdAt, and(eq(onbPolicyEvidence.organizationId, organizationId), eq(onbPolicyEvidence.caseId, caseId))),
     newest(onbPolicyAuthorities, onbPolicyAuthorities.createdAt, and(eq(onbPolicyAuthorities.organizationId, organizationId), eq(onbPolicyAuthorities.caseId, caseId))),
+    newest(onbFrontlineEvidence, onbFrontlineEvidence.createdAt, and(eq(onbFrontlineEvidence.organizationId, organizationId), eq(onbFrontlineEvidence.caseId, caseId))),
+    newest(onbFrontlineFulfillments, onbFrontlineFulfillments.createdAt, and(eq(onbFrontlineFulfillments.organizationId, organizationId), eq(onbFrontlineFulfillments.caseId, caseId))),
+    newest(onbFrontlineKpiInputs, onbFrontlineKpiInputs.createdAt, and(eq(onbFrontlineKpiInputs.organizationId, organizationId), eq(onbFrontlineKpiInputs.caseId, caseId))),
+    newest(onbFrontlinePolicyExceptions, onbFrontlinePolicyExceptions.createdAt, and(eq(onbFrontlinePolicyExceptions.organizationId, organizationId), eq(onbFrontlinePolicyExceptions.caseId, caseId))),
+    newest(onbFrontlinePolicyExceptions, onbFrontlinePolicyExceptions.revokedAt, and(eq(onbFrontlinePolicyExceptions.organizationId, organizationId), eq(onbFrontlinePolicyExceptions.caseId, caseId))),
+    newest(onbFrontlineReleaseState, onbFrontlineReleaseState.updatedAt, and(eq(onbFrontlineReleaseState.organizationId, organizationId), eq(onbFrontlineReleaseState.caseId, caseId))),
     // Early-tenure tasks, actual-join anchors, acknowledgements and probation
     // records are opaque case-derived evidence. Include every mutable source
     // in the retention watermark so they cannot outlive an unnoticed later
@@ -1674,6 +1685,14 @@ async function processCaseDerivedEnvelopeDeletionJob(
     await tx.update(onbPolicyAuthorities).set({
       userId: sql`'minimized-' || ${onbPolicyAuthorities.userId}`, site: "[minimized]", assignedBy: "[minimized]",
     }).where(and(eq(onbPolicyAuthorities.organizationId, job.organizationId), eq(onbPolicyAuthorities.caseId, job.caseId)));
+    // Frontline issue, authority, medical/payroll/statutory and KPI references
+    // are private source evidence; they are deleted rather than retained as a
+    // misleading minimised receipt.
+    await tx.delete(onbFrontlineFulfillments).where(and(eq(onbFrontlineFulfillments.organizationId, job.organizationId), eq(onbFrontlineFulfillments.caseId, job.caseId)));
+    await tx.delete(onbFrontlinePolicyExceptions).where(and(eq(onbFrontlinePolicyExceptions.organizationId, job.organizationId), eq(onbFrontlinePolicyExceptions.caseId, job.caseId)));
+    await tx.delete(onbFrontlineEvidence).where(and(eq(onbFrontlineEvidence.organizationId, job.organizationId), eq(onbFrontlineEvidence.caseId, job.caseId)));
+    await tx.delete(onbFrontlineKpiInputs).where(and(eq(onbFrontlineKpiInputs.organizationId, job.organizationId), eq(onbFrontlineKpiInputs.caseId, job.caseId)));
+    await tx.delete(onbFrontlineReleaseState).where(and(eq(onbFrontlineReleaseState.organizationId, job.organizationId), eq(onbFrontlineReleaseState.caseId, job.caseId)));
     await tx.update(onbEarlyTenureCaseSnapshots).set({
       plannedJoiningDate: "[minimized]", actualJoinedAt: null,
       policy: {

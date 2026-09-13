@@ -19,6 +19,7 @@ import onboardingCaseExplainabilityRouter from "./onboarding-case-explainability
 import onboardingEarlyTenureRouter from "./onboarding-early-tenure";
 import onboardingStandardOperationsRouter from "./onboarding-standard-operations";
 import onboardingStandardProvidersRouter from "./onboarding-standard-providers";
+import onboardingFrontlineOperationsRouter from "./onboarding-frontline-operations";
 import pricingRateSetsRouter from "./pricing-rate-sets";
 import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
@@ -86,6 +87,7 @@ router.use(privacyLifecycleRouter);
 router.use(onboardingDemoControllerRouter);
 router.use(onboardingSlaRouter);
 router.use(onboardingStandardOperationsRouter);
+router.use(onboardingFrontlineOperationsRouter);
 router.use(onboardingContactRouter);
 router.use(onboardingCaseExplainabilityRouter);
 router.use(onboardingEarlyTenureRouter);

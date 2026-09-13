@@ -5,6 +5,7 @@ import {
   onbStandardIntakeEvents,
   onbCommunications,
   onbEvents,
+  onbFrontlineReleaseState,
   onbSystemChecks,
   type OnbReadinessItemRow,
   type OnbRecordsEvidenceItem,
@@ -38,6 +39,7 @@ import {
   EXECUTION_AUTHORIZATION_RULES,
   executionAuthorityScopes,
 } from "./decision-authority";
+import { evaluateFrontlineFloorReadinessInTransaction } from "./frontline-operations";
 import { randomUUID } from "node:crypto";
 import {
   LEGACY_CHECKLIST,
@@ -1340,6 +1342,25 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
       !medicalSafetyApproval ||
       !(await decisionAuthorityStillCurrent(tx, medicalSafetyApproval))
     )) return false;
+    const frontlineGate = await evaluateFrontlineFloorReadinessInTransaction(tx, c);
+    const [frontlineReleaseState] = frontlineGate.applicable
+      ? await tx.select().from(onbFrontlineReleaseState).where(and(
+        eq(onbFrontlineReleaseState.organizationId, c.organizationId),
+        eq(onbFrontlineReleaseState.caseId, caseId),
+      )).for("update")
+      : [undefined];
+    if (frontlineGate.applicable && (
+      frontlineReleaseState?.status !== "released" || frontlineGate.blockers.length > 0
+    )) {
+      await reopenApprovalInTransaction(tx, {
+        organizationId: c.organizationId, caseId,
+        idempotencyKey: `gateway-c:${caseId}:human-queue`,
+        reason: "Automatically reopened because the dedicated frontline floor release state is absent/stale or live evidence is blocked: " +
+          frontlineGate.blockers.join(" "),
+        actor: "day1-readiness-gate",
+      });
+      return false;
+    }
     const malwareBlockers = documentationGateConfigured(c)
       ? await latestRequiredUploadMalwareBlockers(tx, c.organizationId, caseId)
       : [];

@@ -59,3 +59,4 @@
 - [HR policy grounding](hr-policy-grounding.md) — approved extracts stay separate from case evidence; full source context and live authorization matter at each disclosure boundary.
 - [Sensitive record boundaries](sensitive-record-boundaries.md) — opaque content defaults confidential; policy changes, holds, deletion, and external disclosure share a fence.
 - [Early-tenure evidence](early-tenure-evidence-boundaries.md) — historical authority receipts, actual-start revision fencing, and member-addressed reminders without unverified email binding.
+- [Frontline release boundaries](frontline-release-boundaries.md) — recorded release and fresh independent evidence both govern completion; operational history must not expose private references.

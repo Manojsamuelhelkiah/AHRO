@@ -331,7 +331,7 @@ function DemoVolunteersCard() {
                       </p>
                     )}
                     <PersonaBrief persona={(data?.personas ?? []).find((p) => p.key === v.persona)} volunteerName={v.name} />
-                  
+
                   </div>
                 );
               })}
@@ -807,9 +807,9 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <PageHeader 
-        title="Settings" 
-        subtitle="Application-level configuration for the control tower." 
+      <PageHeader
+        title="Settings"
+        subtitle="Application-level configuration for the control tower."
       />
 
       <div className="flex flex-col gap-4">
@@ -885,9 +885,9 @@ export function SettingsPage() {
               </div>
             </div>
             {!isLoading && (
-              <span style={{ 
-                backgroundColor: settings?.effective ? 'var(--status-green-bg)' : 'var(--status-gray-bg)', 
-                color: settings?.effective ? 'var(--status-green-fg)' : 'var(--status-gray-fg)', 
+              <span style={{
+                backgroundColor: settings?.effective ? 'var(--status-green-bg)' : 'var(--status-gray-bg)',
+                color: settings?.effective ? 'var(--status-green-fg)' : 'var(--status-gray-fg)',
                 fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
               }}>
                 {settings?.effective ? 'Active' : 'Not set'}
@@ -997,9 +997,9 @@ export function SettingsPage() {
               </div>
             </div>
             {!isLoading && (
-              <span style={{ 
-                backgroundColor: settings?.autoEscalationCalls ? 'var(--status-green-bg)' : 'var(--status-gray-bg)', 
-                color: settings?.autoEscalationCalls ? 'var(--status-green-fg)' : 'var(--status-gray-fg)', 
+              <span style={{
+                backgroundColor: settings?.autoEscalationCalls ? 'var(--status-green-bg)' : 'var(--status-gray-bg)',
+                color: settings?.autoEscalationCalls ? 'var(--status-green-fg)' : 'var(--status-gray-fg)',
                 fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap'
               }}>
                 {settings?.autoEscalationCalls ? 'ON' : 'OFF'}
@@ -1241,9 +1241,9 @@ function CandidateAccessCleanupCard({ settings, isLoading }: {
 
 const AUTHORITY_SCOPE_OPTIONS = [
   'hr-compliance-approve', 'legal-approve', 'occupational-health-approve',
-  'payroll-approve', 'fraud-control-approve', 'manager-approve',
+  'site-fulfillment-approve', 'payroll-approve', 'fraud-control-approve', 'manager-approve',
   'application-owner-approve', 'security-approve', 'it-security-approve',
-  'authority-administration',
+  'authority-administration', 'safety-approve'
 ];
 
 type AuthorityState = {
@@ -1395,7 +1395,7 @@ function AuthorityGovernanceCard() {
                 <input className={inputCls} value={draft.personUserId} onChange={(event) => setDraft({ ...draft, personUserId: event.target.value })} placeholder="Authenticated person user ID" />
                 <input className={inputCls} value={draft.governanceDecisionRef} onChange={(event) => setDraft({ ...draft, governanceDecisionRef: event.target.value })} placeholder="Approved governance decision reference" />
                 <select className={inputCls} value={draft.authorityRole} onChange={(event) => setDraft({ ...draft, authorityRole: event.target.value })}>
-                  {['hr-compliance', 'legal', 'occupational-health', 'payroll', 'fraud-control', 'manager', 'application-owner', 'security', 'it-security', 'governance'].map((role) => <option key={role}>{role}</option>)}
+                  {['hr-compliance', 'legal', 'occupational-health', 'safety', 'site-operations', 'payroll', 'fraud-control', 'manager', 'application-owner', 'security', 'it-security', 'governance'].map((role) => <option key={role}>{role}</option>)}
                 </select>
                 <select className={inputCls} value={draft.scope} onChange={(event) => setDraft({ ...draft, scope: event.target.value })}>
                   {AUTHORITY_SCOPE_OPTIONS.map((scope) => <option key={scope}>{scope}</option>)}

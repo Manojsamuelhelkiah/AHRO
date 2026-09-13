@@ -32,6 +32,7 @@ import { CaseHeader, CaseHealthStrip, CaseTabs } from './detail/components';
 import { GatewaysStrip } from './detail/gateways-strip';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
+import { FrontlineTab } from './detail/frontline-tab';
 import { DocumentsTab } from './detail/documents-tab';
 import { ExplainabilityTab } from './detail/explainability-tab';
 import { PortalControls } from './detail/portal-controls';
@@ -236,6 +237,7 @@ export function CaseDetailPage() {
 
         {activeTab === 'Early tenure' && <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />}
         {activeTab === 'Tasks' && <TasksTab c={c} />}
+        {activeTab === 'Frontline' && <FrontlineTab caseId={caseId} />}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
         {activeTab === 'Activity' && <ActivityTab events={events || []} />}
         {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} />}

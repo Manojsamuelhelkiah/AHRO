@@ -9,6 +9,12 @@ const migrationTable = "__api_test_schema_migrations";
 const statementBreakpoint = "--> statement-breakpoint";
 const advisoryLockKey = 1_514_151;
 const reviewedAutomaticPolicyExceptionHashes = new Set([
+  // Frontline age/skill constraints are an additive integrity hardening for
+  // columns introduced by the prior additive migration.
+  "565c5f5453b94d6d00630bb31620a3a039d4003b79a8485bcb9b982602f9ea58",
+  // Frontline acknowledgement fields must be all-or-none; this adds the
+  // constraint after the additive field migration.
+  "000faada54c27cec8b51fe4bccd501b8a6f1b907efb11de3b80d1be1909570df",
   // Reviewed forward repair: scan cursors are disposable checkpoints and must
   // not retain tenants through a foreign key after tenant cleanup.
   "f4bb75c7a3a39c6cf4b88ab1520c219cb4e4d20acad3cc6cfc03037cc1e05af2",

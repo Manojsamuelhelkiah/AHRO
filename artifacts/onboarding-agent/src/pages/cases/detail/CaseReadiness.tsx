@@ -395,9 +395,14 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
         <span className="text-[var(--border-strong)]">|</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[var(--status-amber)]"></span>{reviewCount} human review</span>
       </div>
-      <button type="button" data-testid="button-view-case-tasks" onClick={() => setTab('Tasks')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold mt-4 text-left hover:underline">
-        View tasks →
-      </button>
+      <div className="flex gap-4 mt-4">
+        <button type="button" data-testid="button-view-case-tasks" onClick={() => setTab('Tasks')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold text-left hover:underline">
+          View tasks →
+        </button>
+        <button type="button" data-testid="button-view-frontline" onClick={() => setTab('Frontline')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold text-left hover:underline">
+          View frontline fulfillment →
+        </button>
+      </div>
 
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
         <DialogContent>

@@ -185,13 +185,13 @@ export function TargetedChecklistProfiles() {
             )}
 
             {editingProfile && (
-              <ProfileEditor 
-                profile={editingProfile} 
-                onClose={() => setEditingProfile(null)} 
-                defaultChecklist={settings?.day1Checklist || []} 
+              <ProfileEditor
+                profile={editingProfile}
+                onClose={() => setEditingProfile(null)}
+                defaultChecklist={settings?.day1Checklist || []}
               />
             )}
-            
+
              {!editingProfile && (profiles?.length === 0) && (
               <p className="text-[var(--text-sm)] text-[var(--text-muted)]">No targeted profiles configured.</p>
             )}
@@ -223,7 +223,7 @@ export function TargetedChecklistProfiles() {
 
 function ProfileRow({ profile, onEdit, onDuplicate, onDisable }: any) {
   const [previewOpen, setPreviewOpen] = useState(false);
-  
+
   return (
     <div className={cn("p-4 rounded-[var(--radius-md)] border flex flex-col gap-3 transition-colors", profile.enabled ? "bg-[var(--surface)] border-[var(--border)] shadow-sm" : "bg-[var(--surface-alt)] border-[var(--border)] opacity-70")}>
       <div className="flex items-center justify-between gap-4">
@@ -247,7 +247,7 @@ function ProfileRow({ profile, onEdit, onDuplicate, onDisable }: any) {
           )}
         </div>
       </div>
-      
+
       <div className="flex justify-start">
         <button onClick={() => setPreviewOpen(!previewOpen)} className="text-[11px] text-[var(--primary)] font-semibold hover:underline">
           {previewOpen ? 'Hide effective checklist' : 'Preview effective checklist'}
@@ -284,7 +284,7 @@ function ProfileEditor({ profile, onClose, defaultChecklist }: any) {
   const queryClient = useQueryClient();
   const create = useCreateOnboardingChecklistProfile();
   const update = useUpdateOnboardingChecklistProfile();
-  
+
   const [draft, setDraft] = useState<Partial<OnbChecklistProfile>>(profile);
   const [error, setError] = useState<string | null>(null);
   const [sampleContext, setSampleContext] = useState<PreviewContext>(emptyPreviewContext);
@@ -309,11 +309,28 @@ function ProfileEditor({ profile, onClose, defaultChecklist }: any) {
     : { operator: 'all' as const, rules: [] };
   const setMatch = (next: { operator: 'all' | 'any'; rules: Array<{ field: string; values: string[] }> }) =>
     setDraft({ ...draft, processPolicy: { ...(draft.processPolicy ?? {}), match: next } });
-  const updateProcessField = (field: string, value: string) => {
+  const updateProcessField = (field: string, value: any) => {
     const policy = { ...(draft.processPolicy ?? {}) } as Record<string, any>;
-    const [group, key] = field.split('.');
-    if (key) policy[group] = { ...(policy[group] ?? {}), [key]: value || undefined };
-    else policy[group] = value || undefined;
+    const keys = field.split('.');
+
+    // Auto-set frontline schemaVersion when any frontline field is edited
+    if (keys[0] === 'frontline' && keys[1] !== 'schemaVersion') {
+      policy.frontline = policy.frontline ?? {};
+      policy.frontline.schemaVersion = 'frontline-operations/v1';
+      policy.frontline.age = policy.frontline.age ?? { minimumYears: 18 };
+      policy.frontline.fulfillment = policy.frontline.fulfillment ?? { requiredItems: ['badge', 'ppe'] };
+      policy.frontline.statutory = policy.frontline.statutory ?? { requirements: [] };
+      policy.frontline.exceptions = policy.frontline.exceptions ?? { permitted: [], policyReference: 'N/A', reviewReference: 'N/A' };
+    }
+
+    let target = policy;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!target[keys[i]]) target[keys[i]] = {};
+      target = target[keys[i]];
+    }
+    const lastKey = keys[keys.length - 1];
+    if (value === undefined || value === '') delete target[lastKey];
+    else target[lastKey] = value;
     setDraft({ ...draft, processPolicy: policy });
   };
   const learningSteps = Array.isArray((draft.processPolicy as any)?.learning?.steps)
@@ -405,7 +422,7 @@ function ProfileEditor({ profile, onClose, defaultChecklist }: any) {
       ...(draft.overrides ?? []).map((item) => item.order ?? -1),
     );
     setDraft({
-      ...draft, 
+      ...draft,
       overrides: [...(draft.overrides || []), {
         id: `custom-${crypto.randomUUID()}`,
         label: 'New Checklist Item',
@@ -524,6 +541,31 @@ function ProfileEditor({ profile, onClose, defaultChecklist }: any) {
            <div><Label>Payroll executor</Label><select className={cn(inputCls, 'mt-1')} value={(draft.processPolicy as any)?.executors?.payroll ?? ''} onChange={(event) => updateProcessField('executors.payroll', event.target.value)}><option value="">Not applicable</option><option value="existing-workflow">Existing workflow</option><option value="human-task">Human task</option></select></div>
            <div><Label>Unsupported work handler</Label><select className={cn(inputCls, 'mt-1')} value={(draft.processPolicy as any)?.executors?.unsupported ?? 'human-task'} onChange={(event) => updateProcessField('executors.unsupported', event.target.value)}><option value="human-task">Human task</option><option value="existing-workflow">Existing workflow only</option></select></div>
          </div>
+         <div className="mt-4 border-t border-[var(--border)] pt-4">
+           <h4 className="font-bold text-[var(--text-sm)] mb-2">Frontline / Site Operations</h4>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div><Label>Required Fulfillment</Label><input className={cn(inputCls, 'mt-1')} value={((draft.processPolicy as any)?.frontline?.fulfillment?.requiredItems ?? []).join(', ')} onChange={(event) => updateProcessField('frontline.fulfillment.requiredItems', event.target.value.split(',').map((v) => v.trim()).filter(Boolean))} placeholder="badge, ppe, uniform, tool, locker" /></div>
+             <div><Label>Exception Types</Label><input className={cn(inputCls, 'mt-1')} value={((draft.processPolicy as any)?.frontline?.exceptions?.permitted ?? []).join(', ')} onChange={(event) => updateProcessField('frontline.exceptions.permitted', event.target.value.split(',').map((v) => v.trim()).filter(Boolean))} placeholder="substitution, deferment" /></div>
+             <div><Label>Exception Policy Ref</Label><input className={cn(inputCls, 'mt-1')} value={(draft.processPolicy as any)?.frontline?.exceptions?.policyReference ?? ''} onChange={(event) => updateProcessField('frontline.exceptions.policyReference', event.target.value)} placeholder="e.g. EHS-04" /></div>
+             <div><Label>Exception Review Ref</Label><input className={cn(inputCls, 'mt-1')} value={(draft.processPolicy as any)?.frontline?.exceptions?.reviewReference ?? ''} onChange={(event) => updateProcessField('frontline.exceptions.reviewReference', event.target.value)} placeholder="e.g. Mandatory site supervisor review" /></div>
+             <div><Label>Minimum Age (Years)</Label><input type="number" className={cn(inputCls, 'mt-1')} value={(draft.processPolicy as any)?.frontline?.age?.minimumYears ?? ''} onChange={(event) => updateProcessField('frontline.age.minimumYears', event.target.value ? parseInt(event.target.value, 10) : undefined)} placeholder="e.g. 18" /></div>
+           </div>
+           <div className="mt-3">
+              <Label>Statutory Requirements</Label>
+              <div className="space-y-2 mt-1">
+                {((draft.processPolicy as any)?.frontline?.statutory?.requirements ?? []).map((req: any, index: number) => (
+                  <div key={index} className="flex gap-2 items-start">
+                    <input className={cn(inputCls, 'w-1/4')} value={req.key ?? ''} onChange={(e) => { const newReqs = [...((draft.processPolicy as any)?.frontline?.statutory?.requirements ?? [])]; newReqs[index] = { ...req, key: e.target.value }; updateProcessField('frontline.statutory.requirements', newReqs); }} placeholder="Requirement Key" />
+                    <input className={cn(inputCls, 'w-1/4')} value={req.jurisdiction ?? ''} onChange={(e) => { const newReqs = [...((draft.processPolicy as any)?.frontline?.statutory?.requirements ?? [])]; newReqs[index] = { ...req, jurisdiction: e.target.value }; updateProcessField('frontline.statutory.requirements', newReqs); }} placeholder="Jurisdiction" />
+                    <input className={cn(inputCls, 'w-1/4')} value={req.policyReference ?? ''} onChange={(e) => { const newReqs = [...((draft.processPolicy as any)?.frontline?.statutory?.requirements ?? [])]; newReqs[index] = { ...req, policyReference: e.target.value }; updateProcessField('frontline.statutory.requirements', newReqs); }} placeholder="Policy Ref" />
+                    <input className={cn(inputCls, 'w-1/4')} value={req.reviewReference ?? ''} onChange={(e) => { const newReqs = [...((draft.processPolicy as any)?.frontline?.statutory?.requirements ?? [])]; newReqs[index] = { ...req, reviewReference: e.target.value }; updateProcessField('frontline.statutory.requirements', newReqs); }} placeholder="Review Ref" />
+                    <Button type="button" variant="ghost" size="icon" onClick={() => { const newReqs = [...((draft.processPolicy as any)?.frontline?.statutory?.requirements ?? [])]; newReqs.splice(index, 1); updateProcessField('frontline.statutory.requirements', newReqs); }}><X className="w-4 h-4 text-red-500" /></Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={() => { const newReqs = [...((draft.processPolicy as any)?.frontline?.statutory?.requirements ?? []), { key: '', jurisdiction: '', policyReference: '', reviewReference: '' }]; updateProcessField('frontline.statutory.requirements', newReqs); }}>Add Requirement</Button>
+              </div>
+           </div>
+         </div>
        </div>
 
         <div className="mb-6 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -557,7 +599,7 @@ function ProfileEditor({ profile, onClose, defaultChecklist }: any) {
           {previewSelection.data && <div className="mt-3 rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-xs"><strong>{previewSelection.data.selection.profileName}</strong> · profile {previewSelection.data.selection.profileId} v{previewSelection.data.selection.profileVersion}<p className="mt-1">{previewSelection.data.selection.explanation}</p><p className="mt-1 text-[var(--text-muted)]">Selected by server priority; enabled equal-priority overlaps are rejected at publish time. {previewSelection.data.selection.items.length} effective checklist items and declared process policy are shown by this actual resolver.</p></div>}
           {previewSelection.error && <p className="mt-2 text-xs text-[var(--status-red)]">{mutationMessage(previewSelection.error, 'Preview could not resolve this sample context.')}</p>}
         </div>
-        
+
         <div className="space-y-3">
           {(draft.overrides || []).length === 0 && (
             <div className="p-4 border border-[var(--border)] border-dashed rounded-[var(--radius-md)] bg-[var(--surface)] text-center text-[var(--text-sm)] text-[var(--text-muted)]">

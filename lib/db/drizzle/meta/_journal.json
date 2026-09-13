@@ -694,6 +694,41 @@
       "when": 1789194000014,
       "tag": "0076_early_tenure_checkin_owners",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1789194000015,
+      "tag": "0077_frontline_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1789194000016,
+      "tag": "0078_frontline_age_skill_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1789194000017,
+      "tag": "0079_frontline_age_skill_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1789194000018,
+      "tag": "0080_frontline_fulfillment_accountability",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1789194000019,
+      "tag": "0081_frontline_fulfillment_ack_constraint",
+      "breakpoints": true
     }
   ]
 }

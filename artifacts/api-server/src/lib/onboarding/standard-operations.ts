@@ -7,6 +7,7 @@ import {
   onbStandardIntakeEvents,
   onbReadinessSlaAttestations,
   onbReadinessSlaCaseState,
+  onbFrontlineReleaseState,
   onbSettings,
   onbSystemChecks,
 } from "@workspace/db";
@@ -36,6 +37,7 @@ import {
 import type { OnboardingDbTransaction } from "./settings";
 import { assertGovernanceMutationAllowed } from "./governance-dispatch";
 import { scheduledPreboardingDueAt } from "./standard-intake";
+import { evaluateFrontlineFloorReadinessInTransaction } from "./frontline-operations";
 import {
   acquireCaseDispatchMutationLock,
   hasActiveCaseDispatchMarker,
@@ -97,6 +99,10 @@ export type StandardOperationsFacts = {
   approvedRehireReusePolicy: boolean;
   approvedConditionalJoinPolicy: boolean;
   manualHolds: readonly StandardOperationExceptionType[];
+  /** Site/floor work is deliberately released only by the dedicated live
+   * frontline boundary; this standard access projection is never a bypass. */
+  frontlineFloorBoundaryRequired?: boolean;
+  frontlineFloorLiveEligible?: boolean;
 };
 
 export type StandardOperationsView = {
@@ -338,6 +344,8 @@ export function evaluateStandardOperations(input: {
     ...(automaticHolds.has("delayed-bgv") ? ["delayed-bgv"] : []),
   ];
   const releaseBlockers = [
+    ...(input.facts.frontlineFloorBoundaryRequired && !input.facts.frontlineFloorLiveEligible
+      ? ["Frontline/site floor release is evaluated only by the dedicated live frontline boundary."] : []),
     ...(input.facts.bgvApplicable && !input.facts.bgvClear
       ? ["Applicable BGV clearance has not been received from a trusted source."] : []),
     ...(!input.facts.hrisActive
@@ -452,7 +460,7 @@ export async function getStandardOperationsViewInTransaction(
   const caseRow = loadedCase;
   if (!caseRow) throw new StandardOperationsNotFoundError();
 
-  const [stored, bgvChecks, hrisAttestations, payrollState, records] =
+  const [stored, bgvChecks, hrisAttestations, payrollState, records, frontlineState] =
     await Promise.all([
       tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
         eq(onbSettings.organizationId, organizationId),
@@ -479,6 +487,10 @@ export async function getStandardOperationsViewInTransaction(
           eq(onbEmployeeRecords.rehireEligible, true),
         ))
         : Promise.resolve([]),
+      tx.select().from(onbFrontlineReleaseState).where(and(
+        eq(onbFrontlineReleaseState.organizationId, organizationId),
+        eq(onbFrontlineReleaseState.caseId, caseId),
+      )),
     ]);
   const approval = await resolveCurrentCaseExecutionAuthorityEvidence(tx, {
       organizationId,
@@ -491,6 +503,15 @@ export async function getStandardOperationsViewInTransaction(
   });
   const snapshot = caseRow.processPolicySnapshot ?? {};
   const state = parseState(stored[0]?.value ?? null);
+  const frontlineRequired =
+    caseRow.workforceContext.workEnvironment === "site" ||
+    caseRow.workforceContext.workEnvironment === "field" ||
+    caseRow.workforceContext.workEnvironment === "mixed" ||
+    caseRow.workforceContext.siteExposure === true ||
+    caseRow.workforceContext.safetyCritical === true;
+  const liveFrontline = frontlineRequired
+    ? await evaluateFrontlineFloorReadinessInTransaction(tx, caseRow)
+    : { applicable: false, blockers: [] };
   return evaluateStandardOperations({
     caseId,
     startDate: caseRow.joiningDate,
@@ -516,6 +537,9 @@ export async function getStandardOperationsViewInTransaction(
       manualHolds: state.exceptions
         .filter((entry) => entry.state === "active")
         .map((entry) => entry.type),
+      frontlineFloorBoundaryRequired: frontlineRequired,
+      frontlineFloorLiveEligible:
+        frontlineState[0]?.status === "released" && liveFrontline.applicable && liveFrontline.blockers.length === 0,
     },
   });
 }

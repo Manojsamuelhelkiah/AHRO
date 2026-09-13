@@ -53,6 +53,7 @@ import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readine
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import type { OnboardingDbTransaction } from "./settings";
 import { recoverWorkforceConnectorContinuations } from "./operational-requests";
+import { runFrontlineReleaseHeartbeat } from "./frontline-operations";
 import { ConnectorDispatchRejectedError } from "./connector-adapters";
 import {
   recordBgvBlockedEpisode,
@@ -1390,6 +1391,9 @@ async function tickOnce(): Promise<void> {
   await recoverDueStandardIntakeReviews();
   await recoverReleasedStandardIntakeOrchestrations();
   await recoverApprovedDay1ReadinessGates();
+  await runFrontlineReleaseHeartbeat().catch((error) => {
+    logger.error({ component: "frontline-release-heartbeat", error: String(error).slice(0, 300) }, "frontline release heartbeat failed");
+  });
   await recoverOverdueSystemApprovalQueues();
 
   // Self-heal: preboarding cases that somehow have no checks yet.
