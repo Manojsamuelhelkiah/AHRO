@@ -9,6 +9,7 @@ import {
   onbSystemChecks,
   onbDocuments,
   onbStandardIntakeEvents,
+  onbTransferDataGovernance,
   type OnbReadinessItemRow,
 } from "@workspace/db/schema";
 import { and, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
@@ -54,6 +55,7 @@ import { isSyntheticOfflineCase } from "./synthetic-offline";
 import type { OnboardingDbTransaction } from "./settings";
 import { recoverWorkforceConnectorContinuations } from "./operational-requests";
 import { runFrontlineReleaseHeartbeat } from "./frontline-operations";
+import { purgeExpiredTransferRetention } from "./workforce-transfer-retention";
 import { ConnectorDispatchRejectedError } from "./connector-adapters";
 import {
   recordBgvBlockedEpisode,
@@ -1351,6 +1353,14 @@ async function tickOnce(): Promise<void> {
     .selectDistinct({ organizationId: onbCases.organizationId })
     .from(onbCases);
   await Promise.all(organizations.map(({ organizationId }) => ensureConnectorsSeeded(organizationId)));
+  // Transfer imports include restricted source workforce data outside a case;
+  // include their tenant stores in the same durable heartbeat retention sweep.
+  const transferOrganizations = await db.selectDistinct({ organizationId: onbTransferDataGovernance.organizationId }).from(onbTransferDataGovernance);
+  await Promise.all(transferOrganizations.map(({ organizationId }) =>
+    purgeExpiredTransferRetention(organizationId).catch((error) => {
+      logger.error({ component: "transfer-retention", organizationId, error: String(error).slice(0, 300) }, "workforce-transfer retention sweep failed");
+    }),
+  ));
   await sweepExpiredNonIdempotentEffects();
   // Document evidence is validated asynchronously from the shared heartbeat.
   // Failures are isolated so an unavailable object/provider never stops BGV monitoring.

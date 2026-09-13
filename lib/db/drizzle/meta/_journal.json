@@ -729,6 +729,55 @@
       "when": 1789194000019,
       "tag": "0081_frontline_fulfillment_ack_constraint",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1789194000020,
+      "tag": "0082_workforce_transfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1789194000021,
+      "tag": "0083_workforce_transfer_safety_fences",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1789194000022,
+      "tag": "0084_workforce_transfer_lifecycle_custody",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1789194000023,
+      "tag": "0085_workforce_transfer_kpi_cohorts",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1789194000024,
+      "tag": "0086_workforce_transfer_action_supersession",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1789194000025,
+      "tag": "0087_workforce_transfer_lifecycle_record_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1789194000026,
+      "tag": "0088_workforce_transfer_action_facts",
+      "breakpoints": true
     }
   ]
 }

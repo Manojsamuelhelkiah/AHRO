@@ -16,6 +16,9 @@ import { DashboardPage } from './pages/dashboard';
 import { CasesPage } from './pages/cases/index';
 import { CaseDetailPage } from './pages/cases/detail';
 import { ApprovalsPage } from './pages/approvals';
+import { WorkforceTransfersListPage } from './pages/workforce-transfers/index';
+import { WorkforceTransfersCreatePage } from './pages/workforce-transfers/new';
+import { WorkforceTransfersDetailPage } from './pages/workforce-transfers/detail';
 import { SystemsPage } from './pages/systems';
 import { AgentsPage } from './pages/agents';
 import { AnalyticsPage } from './pages/analytics';
@@ -278,6 +281,15 @@ function Router() {
       </Route>
       <Route path="/approvals">
         <Protected><ApprovalsPage /></Protected>
+      </Route>
+      <Route path="/workforce-transfers">
+        <Protected><WorkforceTransfersListPage /></Protected>
+      </Route>
+      <Route path="/workforce-transfers/new">
+        <Protected><WorkforceTransfersCreatePage /></Protected>
+      </Route>
+      <Route path="/workforce-transfers/:id">
+        <Protected><WorkforceTransfersDetailPage /></Protected>
       </Route>
       <Route path="/agents">
         <Protected><AgentsPage /></Protected>

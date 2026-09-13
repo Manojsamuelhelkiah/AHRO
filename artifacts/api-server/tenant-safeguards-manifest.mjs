@@ -111,6 +111,26 @@ export const tenantSafeguards = [
   { table: "onb_early_tenure_survey_responses", phaseB: false },
   { table: "onb_employment_outcome_evidence", phaseB: false },
   { table: "onb_outcome_evidence_authority_receipts", phaseB: false },
+  // Workforce-transfer records include opaque source-worker payloads and
+  // custody/reconciliation evidence. Every representation is tenant-owned
+  // from creation and is verified independently at startup.
+  { table: "onb_transfer_programs", phaseB: false },
+  { table: "onb_transfer_pathways", phaseB: false },
+  { table: "onb_transfer_data_governance", phaseB: false },
+  { table: "onb_transfer_populations", phaseB: false },
+  { table: "onb_transfer_import_previews", phaseB: false },
+  { table: "onb_transfer_imports", phaseB: false },
+  { table: "onb_transfer_workers", phaseB: false },
+  { table: "onb_transfer_consultation_milestones", phaseB: false },
+  { table: "onb_transfer_objections", phaseB: false },
+  { table: "onb_transfer_integration_actions", phaseB: false },
+  { table: "onb_transfer_operational_supersessions", phaseB: false },
+  { table: "onb_transfer_cutover_plans", phaseB: false },
+  { table: "onb_transfer_cutover_reconciliations", phaseB: false },
+  { table: "onb_transfer_cutover_signoffs", phaseB: false },
+  { table: "onb_transfer_reconciliation_repairs", phaseB: false },
+  { table: "onb_transfer_kpi_evidence", phaseB: false },
+  { table: "onb_transfer_kpi_definitions", phaseB: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
@@ -259,4 +279,63 @@ export const expectedForeignKeys = [
     referencedTable: "onb_early_tenure_assignments",
     referencedColumns: ["organization_id", "id"],
   },
+  ...[
+    "onb_transfer_pathways",
+    "onb_transfer_data_governance",
+    "onb_transfer_populations",
+    "onb_transfer_consultation_milestones",
+    "onb_transfer_integration_actions",
+    "onb_transfer_operational_supersessions",
+    "onb_transfer_cutover_plans",
+    "onb_transfer_kpi_evidence",
+    "onb_transfer_kpi_definitions",
+  ].map((table) => ({
+    table,
+    columns: ["organization_id", "program_id"],
+    referencedTable: "onb_transfer_programs",
+    referencedColumns: ["organization_id", "id"],
+  })),
+  ...[
+    "onb_transfer_import_previews",
+    "onb_transfer_imports",
+    "onb_transfer_workers",
+  ].map((table) => ({
+    table,
+    columns: ["organization_id", "population_id"],
+    referencedTable: "onb_transfer_populations",
+    referencedColumns: ["organization_id", "id"],
+  })),
+  {
+    table: "onb_transfer_imports",
+    columns: ["organization_id", "preview_id"],
+    referencedTable: "onb_transfer_import_previews",
+    referencedColumns: ["organization_id", "id"],
+  },
+  {
+    table: "onb_transfer_workers",
+    columns: ["organization_id", "import_id"],
+    referencedTable: "onb_transfer_imports",
+    referencedColumns: ["organization_id", "id"],
+  },
+  ...[
+    "onb_transfer_objections",
+    "onb_transfer_cutover_reconciliations",
+    "onb_transfer_reconciliation_repairs",
+    "onb_transfer_kpi_evidence",
+  ].map((table) => ({
+    table,
+    columns: ["organization_id", "worker_id"],
+    referencedTable: "onb_transfer_workers",
+    referencedColumns: ["organization_id", "id"],
+  })),
+  ...[
+    "onb_transfer_cutover_reconciliations",
+    "onb_transfer_cutover_signoffs",
+    "onb_transfer_reconciliation_repairs",
+  ].map((table) => ({
+    table,
+    columns: ["organization_id", "plan_id"],
+    referencedTable: "onb_transfer_cutover_plans",
+    referencedColumns: ["organization_id", "id"],
+  })),
 ];

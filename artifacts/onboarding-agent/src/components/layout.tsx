@@ -5,7 +5,7 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
-import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen } from 'lucide-react';
+import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen, Waypoints } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
   {
@@ -13,6 +13,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     items: [
       { path: '/', label: 'Control Tower', icon: TowerControl },
       { path: '/cases', label: 'Cases', icon: Users },
+      { path: '/workforce-transfers', label: 'Workforce Transfers', icon: Waypoints },
       { path: '/approvals', label: 'Action Center', icon: CheckSquare },
     ],
   },
@@ -47,6 +48,7 @@ function getPageName(path: string) {
   const item = NAV_ITEMS.find(n => path.startsWith(n.path) && n.path !== '/');
   if (item) return item.label;
   if (path.startsWith('/cases/')) return 'Case Details';
+  if (path.startsWith('/workforce-transfers/')) return 'Workforce Transfers';
   return 'Page';
 }
 

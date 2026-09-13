@@ -85,6 +85,48 @@ test("covers every tenant-owned sensitive lifecycle and upload reservation table
   ));
 });
 
+test("covers all workforce-transfer representations and their composite custody links", () => {
+  const transferTables = [
+    "onb_transfer_programs",
+    "onb_transfer_pathways",
+    "onb_transfer_data_governance",
+    "onb_transfer_populations",
+    "onb_transfer_import_previews",
+    "onb_transfer_imports",
+    "onb_transfer_workers",
+    "onb_transfer_consultation_milestones",
+    "onb_transfer_objections",
+    "onb_transfer_integration_actions",
+    "onb_transfer_operational_supersessions",
+    "onb_transfer_cutover_plans",
+    "onb_transfer_cutover_reconciliations",
+    "onb_transfer_cutover_signoffs",
+    "onb_transfer_reconciliation_repairs",
+    "onb_transfer_kpi_evidence",
+    "onb_transfer_kpi_definitions",
+  ];
+  assert.equal(transferTables.length, 17);
+  for (const table of transferTables) {
+    assert.ok(tenantTables.includes(table), `${table} is missing from tenant safeguards`);
+    assert.ok(organizationParentValidatedTenantTables.includes(table), `${table} must have an organization parent FK`);
+  }
+  assert.ok(expectedForeignKeys.some((fk) =>
+    fk.table === "onb_transfer_workers" &&
+    fk.columns.join(",") === "organization_id,import_id" &&
+    fk.referencedTable === "onb_transfer_imports",
+  ));
+  assert.ok(expectedForeignKeys.some((fk) =>
+    fk.table === "onb_transfer_cutover_reconciliations" &&
+    fk.columns.join(",") === "organization_id,plan_id" &&
+    fk.referencedTable === "onb_transfer_cutover_plans",
+  ));
+  assert.ok(expectedForeignKeys.some((fk) =>
+    fk.table === "onb_transfer_operational_supersessions" &&
+    fk.columns.join(",") === "organization_id,program_id" &&
+    fk.referencedTable === "onb_transfer_programs",
+  ));
+});
+
 test("an orphan in an ordinary organization-owned table still fails verification", () => {
   const snapshot = passingSnapshot();
   snapshot.organizationOrphanCount = 1;

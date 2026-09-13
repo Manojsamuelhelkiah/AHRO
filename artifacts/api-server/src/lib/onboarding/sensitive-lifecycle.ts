@@ -565,11 +565,20 @@ async function eligibleUploadsForPolicyInTransaction(tx: any, input: {
     ...matchingRelational.filter((record) => !held(record.caseId, null)).map((record) => `${record.recordKind}:${record.recordId}`),
     ...eligibleEnvelopeKeys,
   ].sort();
+  // Workforce transfers retain opaque source payload and copied reconciliation
+  // evidence outside a case. Keep their complete 16-table inventory in the
+  // same shortening confirmation instead of allowing a class policy change to
+  // make an already-expired transfer disappear without review.
+  const { transferRetentionInventoryInTransaction } = await import("./workforce-transfer-retention");
+  const transferInventory = await transferRetentionInventoryInTransaction(tx, input);
+  eligibleRecordKeys.push(...transferInventory.eligibleRecordKeys);
+  eligibleRecordKeys.sort();
   return {
     eligibleUploadIds: uploadIds,
     eligibleRecordKeys,
     heldRecordCount: eligibleOpaqueUploads.filter((upload: any) => held(upload.caseId, upload.objectPath)).length +
-      matchingRelational.filter((record) => held(record.caseId, null)).length + heldEnvelopeCount,
+      matchingRelational.filter((record) => held(record.caseId, null)).length + heldEnvelopeCount +
+      transferInventory.heldRecordCount,
   };
 }
 
@@ -2008,6 +2017,13 @@ async function processDeletionJob(jobId: number, owner: string, now: Date): Prom
       await blockJob(job.id, envelope.message);
       return "blocked";
     }
+    if (job.recordKind === "transfer-program") {
+      const { processTransferRetentionDeletionJob } = await import("./workforce-transfer-retention");
+      const transfer = await processTransferRetentionDeletionJob(job, now);
+      if (transfer.state === "complete") return "completed";
+      await blockJob(job.id, transfer.message);
+      return "blocked";
+    }
     if (job.recordKind !== "candidate-upload") {
       const relational = await processRelationalDeletionJob(job, now);
       if (relational === "completed") return relational;
@@ -2192,6 +2208,10 @@ export async function runSensitiveLifecycleDeletionWorker(options: {
   const scheduled = await scheduleExpiredCandidateUploads(now, limit * 4);
   const scheduledRelational = await scheduleExpiredRelationalRecords(now, limit * 4);
   const scheduledCaseDerived = await scheduleExpiredCaseDerivedEnvelopes(now, limit * 4);
+  const { scheduleExpiredTransferRetention } = await import("./workforce-transfer-retention");
+  const scheduledTransfers = await scheduleExpiredTransferRetention({
+    now, limit: limit * 4, organizationId: options.organizationId,
+  });
   const jobs = await db.select({ id: onbSensitiveLifecycleDeletionJobs.id }).from(onbSensitiveLifecycleDeletionJobs)
     .where(and(
       eq(onbSensitiveLifecycleDeletionJobs.status, "queued"),
@@ -2209,7 +2229,7 @@ export async function runSensitiveLifecycleDeletionWorker(options: {
     if (result === "blocked") blocked += 1;
   }
   return {
-    scheduled: scheduled + scheduledRelational + scheduledCaseDerived,
+    scheduled: scheduled + scheduledRelational + scheduledCaseDerived + scheduledTransfers,
     completed,
     blocked,
     pendingReservations: pendingRecovery,

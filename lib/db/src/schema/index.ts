@@ -22,3 +22,4 @@ export * from "./onboarding-standard-providers";
 export * from "./early-tenure";
 export * from "./outcome-reporting";
 export * from "./frontline-operations";
+export * from "./workforce-transfer";

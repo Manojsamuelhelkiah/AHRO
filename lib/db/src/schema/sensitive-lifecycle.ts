@@ -127,13 +127,15 @@ export const onbSensitiveLifecycleDeletionJobs = pgTable("onb_sensitive_lifecycl
    */
   uploadId: integer("upload_id"),
   recordKind: text("record_kind").$type<
-    "candidate-upload" | "communication" | "voice-session" | "candidate-link" | "candidate-session"
+    "candidate-upload" | "communication" | "voice-session" | "candidate-link" | "candidate-session" | "transfer-program"
   >().notNull().default("candidate-upload"),
   recordId: text("record_id").notNull(),
   policyId: integer("policy_id").notNull(),
   policyRevision: integer("policy_revision").notNull(),
   /** Immutable all-class policy id/revision set reviewed when an opaque envelope was queued. */
   policyRevisions: jsonb("policy_revisions").$type<Record<string, { id: number; revision: number }>>().notNull().default({}),
+  /** Immutable all-jurisdiction transfer retention and policy revision evidence. */
+  transferRetentionSnapshot: jsonb("transfer_retention_snapshot").$type<Record<string, unknown>>().notNull().default({}),
   status: text("status").$type<"queued" | "processing" | "completed" | "blocked" | "failed">().notNull().default("queued"),
   attempts: integer("attempts").notNull().default(0),
   claimOwner: text("claim_owner"),

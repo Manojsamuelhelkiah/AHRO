@@ -60,3 +60,4 @@
 - [Sensitive record boundaries](sensitive-record-boundaries.md) — opaque content defaults confidential; policy changes, holds, deletion, and external disclosure share a fence.
 - [Early-tenure evidence](early-tenure-evidence-boundaries.md) — historical authority receipts, actual-start revision fencing, and member-addressed reminders without unverified email binding.
 - [Frontline release boundaries](frontline-release-boundaries.md) — recorded release and fresh independent evidence both govern completion; operational history must not expose private references.
+- [Workforce transfer boundaries](workforce-transfer-boundaries.md) — country-specific approval, source-attested human execution, hold-aware retention, and evidence-generation cutover sign-offs.

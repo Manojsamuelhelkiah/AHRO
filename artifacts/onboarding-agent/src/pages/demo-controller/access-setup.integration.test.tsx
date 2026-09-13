@@ -110,7 +110,7 @@ function buttonWithText(label: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
-describe("Demo Controller access setup", () => {
+describe("Demo Controller access setup", { concurrency: false }, () => {
   it("completes the member setup request from the normal Demo page", async () => {
     const dom = new Window({ url: "http://localhost/demo-controller" });
     const originalGlobalDescriptors = new Map<
@@ -393,4 +393,110 @@ describe("Demo Controller access setup", () => {
       }
     }
   });
+it("preserves workforce-transfer enum values in rendered controls and submitted payloads", async () => {
+  const dom = new Window({ url: "http://localhost/workforce-transfers/program-1" });
+  const names = ["window", "document", "navigator", "location", "self", "HTMLElement", "HTMLSelectElement", "HTMLInputElement", "HTMLFormElement", "Event", "Node", "Text", "MutationObserver"];
+  const original = new Map<string, PropertyDescriptor | undefined>();
+  for (const name of names) {
+    original.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+    const value = (dom as unknown as Record<string, unknown>)[name];
+    Object.defineProperty(globalThis, name, { configurable: true, writable: true, value: typeof value === "function" ? (value as Function).bind(dom) : value });
+  }
+  original.set("IS_REACT_ACT_ENVIRONMENT", Object.getOwnPropertyDescriptor(globalThis, "IS_REACT_ACT_ENVIRONMENT"));
+  Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, writable: true, value: true });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const fetchMock = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), dom.location.href);
+    if ((init?.method ?? "GET") === "GET" && url.pathname.endsWith("/populations/pop-1/reconciliation")) {
+      return response({ populationId: "pop-1", expectedHeadcount: 1, importedHeadcount: 1, migrationCounts: {}, workers: [{ id: "worker-1", migrationStatus: "pending", objectionStatus: "pending", version: 3 }] });
+    }
+    requests.push({ path: url.pathname, body: JSON.parse(String(init?.body ?? "{}")) });
+    return response({ version: 2, actionId: "action-1", planId: "plan-1" });
+  };
+  globalThis.fetch = fetchMock;
+  (dom as unknown as Record<string, unknown>).fetch = fetchMock;
+  const program = {
+    id: "program-1", version: 1, name: "Transfer", sourceLegalEntity: "Source", destinationLegalEntity: "Destination", countries: ["GB"], proposedBasis: "automatic-transfer" as const, legalDay1: "2025-01-01", owners: { hrIntegration: "hr", legal: "legal", payroll: "payroll", it: "it" }, status: "draft", createdAt: "2024-01-01T00:00:00.000Z",
+    populations: [{ id: "pop-1", country: "GB", expectedHeadcount: 1, importedHeadcount: 1, status: "ready", version: 1 }], pathways: [], consultation: [], integrationActions: [],
+    cutoverPlans: [{ id: "plan-1", version: 4, workerCount: 1, status: "draft" as const, readinessGeneration: 1, createdAt: "2024-01-01T00:00:00.000Z", decisionAt: null, contingencyRecorded: false, signoffs: [], workerReconciliation: [] }],
+  };
+  const findSelect = (optionValue: string) => {
+    const select = Array.from(document.querySelectorAll("select")).find((candidate) => Array.from(candidate.options).some((option) => option.value === optionValue));
+    assert.ok(select, `Expected select with ${optionValue}`);
+    return select!;
+  };
+  const inputIn = (form: HTMLFormElement, label: string) => {
+    const input = Array.from(form.querySelectorAll("input")).find((candidate) => candidate.parentElement?.textContent?.includes(label));
+    assert.ok(input, `Expected ${label} input`);
+    return input!;
+  };
+  const setValue = async (element: HTMLInputElement | HTMLSelectElement, value: string) => {
+    await act(async () => {
+      element.value = value;
+      if (element instanceof HTMLInputElement) element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      await tick();
+    });
+  };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const { OperationsSection } = await import("../workforce-transfers/operations");
+  const { CutoverSection } = await import("../workforce-transfers/cutover");
+  const root = createRoot(document.body);
+  try {
+    await act(async () => { root.render(<QueryClientProvider client={client}><OperationsSection program={program} /><CutoverSection program={program} /></QueryClientProvider>); await tick(); });
+    await waitFor(() => document.querySelector('option[value="worker-1"]') !== null, "the live worker choice");
+    for (const value of ["contingency-parallel-run", "in-progress", "first-pay", "unknown-effect-manual-repair"]) {
+      assert.ok(document.querySelector(`option[value="${value}"]`), `Expected raw enum option ${value}`);
+    }
+
+    const milestoneStatus = findSelect("communicated");
+    const milestoneForm = milestoneStatus.closest("form")!;
+    await setValue(inputIn(milestoneForm, "Milestone"), "notice");
+    await setValue(inputIn(milestoneForm, "Due date"), "2025-01-02");
+    await setValue(inputIn(milestoneForm, "Evidence reference"), "milestone-evidence");
+    await act(async () => { milestoneForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await tick(); });
+    const milestoneRequest = requests.find((request) => request.path.endsWith("/consultation-milestones"));
+    assert.equal(milestoneRequest?.body.status, "planned");
+    assert.equal("completedAt" in (milestoneRequest?.body ?? {}), false, "planned milestone must omit completedAt");
+
+    const actionKind = findSelect("contingency-parallel-run");
+    await setValue(actionKind, "contingency-parallel-run");
+    assert.equal(actionKind.value, "contingency-parallel-run");
+    const actionForm = actionKind.closest("form")!;
+    await setValue(findSelect("in-progress"), "completed");
+    await setValue(inputIn(actionForm, "Owner user ID"), "owner-1");
+    await setValue(inputIn(actionForm, "Due date"), "2025-01-02");
+    await setValue(inputIn(actionForm, "Actual completion date"), "2025-01-03");
+    await setValue(inputIn(actionForm, "Evidence reference"), "parallel-run-evidence");
+    await act(async () => { actionForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await tick(); });
+    const actionRequest = requests.find((request) => request.path.endsWith("/integration-actions"));
+    assert.equal(actionRequest?.body.kind, "contingency-parallel-run");
+    assert.equal(actionRequest?.body.status, "completed");
+    assert.equal("completedAt" in (actionRequest?.body ?? {}), true, "completed action payload must include completedAt");
+
+    const stream = findSelect("first-pay");
+    const reconciliationForm = stream.closest("form")!;
+    await setValue(stream, "first-pay");
+    const reconciliationStatus = findSelect("unknown-effect-manual-repair");
+    await setValue(reconciliationStatus, "unknown-effect-manual-repair");
+    const reconciliationWorker = Array.from(reconciliationForm.querySelectorAll("select")).find((candidate) => Array.from(candidate.options).some((option) => option.value === "worker-1"));
+    assert.ok(reconciliationWorker, "Expected the reconciliation worker choice");
+    await setValue(reconciliationWorker!, "worker-1");
+    await setValue(inputIn(reconciliationForm, "Evidence reference"), "reconciliation-evidence");
+    await act(async () => { reconciliationForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await tick(); });
+    const reconciliationRequest = requests.find((request) => request.path.endsWith("/workers/worker-1/reconciliation"));
+    assert.equal(reconciliationRequest?.body.stream, "first-pay");
+    assert.equal(reconciliationRequest?.body.status, "unknown-effect-manual-repair");
+  } finally {
+    await act(async () => { root.unmount(); });
+    client.clear(); globalThis.fetch = originalFetch; dom.close();
+    for (const name of names) {
+      const descriptor = original.get(name);
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor); else delete (globalThis as Record<string, unknown>)[name];
+    }
+    const actDescriptor = original.get("IS_REACT_ACT_ENVIRONMENT");
+    if (actDescriptor) Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", actDescriptor); else delete (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT;
+  }
+});
 });
