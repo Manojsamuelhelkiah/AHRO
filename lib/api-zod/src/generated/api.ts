@@ -10252,6 +10252,35 @@ export const CreateOnboardingChecklistProfileResponse = zod.object({
 
 
 /**
+ * @summary Summarize tenant case adoption from immutable checklist profile snapshots
+ */
+
+export const getOnboardingChecklistProfileUsageResponseRecentCaseCountMin = 0;
+
+export const getOnboardingChecklistProfileUsageResponseDefaultFallbackCountMin = 0;
+
+export const getOnboardingChecklistProfileUsageResponseDefaultFallbackRateMin = 0;
+export const getOnboardingChecklistProfileUsageResponseDefaultFallbackRateMax = 1;
+
+export const getOnboardingChecklistProfileUsageResponseProfilesItemRecentMatchedCaseCountMin = 0;
+
+
+
+export const GetOnboardingChecklistProfileUsageResponse = zod.object({
+  "windowDays": zod.number().min(1),
+  "windowStartedAt": zod.coerce.date(),
+  "recentCaseCount": zod.number().min(getOnboardingChecklistProfileUsageResponseRecentCaseCountMin),
+  "defaultFallbackCount": zod.number().min(getOnboardingChecklistProfileUsageResponseDefaultFallbackCountMin),
+  "defaultFallbackRate": zod.number().min(getOnboardingChecklistProfileUsageResponseDefaultFallbackRateMin).max(getOnboardingChecklistProfileUsageResponseDefaultFallbackRateMax),
+  "profiles": zod.array(zod.object({
+  "profileId": zod.string(),
+  "recentMatchedCaseCount": zod.number().min(getOnboardingChecklistProfileUsageResponseProfilesItemRecentMatchedCaseCountMin),
+  "lastUsedAt": zod.coerce.date().nullable()
+}))
+})
+
+
+/**
  * HR-only, tenant-scoped proposal generation. The endpoint uses the approved OpenAI integration with strict JSON output, validates the result against the tenant's current additive checklist baseline, and never saves, publishes, or applies the proposal.
  * @summary Draft a validated disabled checklist profile from plain-language HR description
  */
@@ -15388,9 +15417,9 @@ export const GetOnboardingOutcomeKpisResponse = zod.object({
   "unit": zod.enum(['days', 'percent', 'score']),
   "value": zod.number().nullable(),
   "status": zod.enum(['met', 'missed', 'insufficient-data', 'not-collected']),
-  "sampleSize": zod.number().nullable(),
-  "eligibleCount": zod.number().nullable(),
-  "unknownCount": zod.number().nullable(),
+  "sampleSize": zod.number().nullable().describe('Null for privacy-suppressed sensitive outcome metrics'),
+  "eligibleCount": zod.number().nullable().describe('Null for privacy-suppressed sensitive outcome metrics'),
+  "unknownCount": zod.number().nullable().describe('Null for privacy-suppressed sensitive outcome metrics'),
   "note": zod.string()
 }))
 })

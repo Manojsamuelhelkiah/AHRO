@@ -2644,6 +2644,18 @@ paths:
           description: Invalid or ambiguous enabled profile
         "409":
           description: Enabled rule is ambiguous with an existing profile at the same priority
+  /onboarding/checklist-profiles/usage:
+    get:
+      operationId: getOnboardingChecklistProfileUsage
+      tags: [onboarding]
+      summary: Summarize tenant case adoption from immutable checklist profile snapshots
+      responses:
+        "200":
+          description: Recent profile adoption and organization-default fallback usage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbChecklistProfileUsageSummary"
   /onboarding/checklist-profiles/draft-from-description:
     post:
       operationId: draftOnboardingChecklistProfile
@@ -8200,6 +8212,28 @@ components:
                 $ref: "#/components/schemas/OnbChecklistTemplateItem"
             createdAt: { type: string }
           required: [profileId, version, effectiveChecklist, createdAt]
+    OnbChecklistProfileUsage:
+      type: object
+      additionalProperties: false
+      properties:
+        profileId: { type: string }
+        recentMatchedCaseCount: { type: integer, minimum: 0 }
+        lastUsedAt: { type: ["string", "null"], format: date-time }
+      required: [profileId, recentMatchedCaseCount, lastUsedAt]
+    OnbChecklistProfileUsageSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        windowDays: { type: integer, minimum: 1 }
+        windowStartedAt: { type: string, format: date-time }
+        recentCaseCount: { type: integer, minimum: 0 }
+        defaultFallbackCount: { type: integer, minimum: 0 }
+        defaultFallbackRate: { type: number, minimum: 0, maximum: 1 }
+        profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbChecklistProfileUsage"
+      required: [windowDays, windowStartedAt, recentCaseCount, defaultFallbackCount, defaultFallbackRate, profiles]
     OnbChecklistProfileDraftInput:
       type: object
       additionalProperties: false

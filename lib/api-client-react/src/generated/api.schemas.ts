@@ -2605,6 +2605,30 @@ export type OnbChecklistProfile = OnbChecklistProfileInput & {
   createdAt: string;
 };
 
+export interface OnbChecklistProfileUsage {
+  profileId: string;
+  /** @minimum 0 */
+  recentMatchedCaseCount: number;
+  /** @nullable */
+  lastUsedAt: string | null;
+}
+
+export interface OnbChecklistProfileUsageSummary {
+  /** @minimum 1 */
+  windowDays: number;
+  windowStartedAt: string;
+  /** @minimum 0 */
+  recentCaseCount: number;
+  /** @minimum 0 */
+  defaultFallbackCount: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  defaultFallbackRate: number;
+  profiles: OnbChecklistProfileUsage[];
+}
+
 export interface OnbChecklistProfileDraftInput {
   /**
      * Plain-language HR description of the desired targeted checklist profile. Do not include case or candidate details.
@@ -4619,11 +4643,20 @@ export interface OnbOutcomeKpi {
   /** @nullable */
   value: number | null;
   status: OnbOutcomeKpiStatus;
-  /** @nullable */
+  /**
+     * Null for privacy-suppressed sensitive outcome metrics
+     * @nullable
+     */
   sampleSize: number | null;
-  /** @nullable */
+  /**
+     * Null for privacy-suppressed sensitive outcome metrics
+     * @nullable
+     */
   eligibleCount: number | null;
-  /** @nullable */
+  /**
+     * Null for privacy-suppressed sensitive outcome metrics
+     * @nullable
+     */
   unknownCount: number | null;
   note: string;
 }

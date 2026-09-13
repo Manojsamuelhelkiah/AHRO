@@ -6,6 +6,7 @@ import {
   getExternalAuditAnchorReviewerAmbiguousDeliveries,
   reconcileExternalAuditAnchorReviewerAlert,
 } from "../lib/onboarding/external-audit-anchor-alerts";
+import { summarizeChecklistProfileUsage } from "../lib/onboarding/checklist-profile-usage";
 import { ensureReadinessSlaEnrollment } from "../lib/onboarding/readiness-sla-policy";
 import {
   governanceSnapshotForNewCase,
@@ -4171,6 +4172,19 @@ router.get("/onboarding/checklist-profiles", async (req, res, next) => {
     const organizationId = getOrganizationId(req);
     const profiles = await listCurrentChecklistProfiles(organizationId);
     res.json(await Promise.all(profiles.map((profile) => serializeChecklistProfile(organizationId, profile))));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/checklist-profiles/usage", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    const rows = await db.select({
+      checklistProfileId: onbCases.checklistProfileId,
+      createdAt: onbCases.createdAt,
+    }).from(onbCases).where(organizationWhere(onbCases, organizationId));
+    res.json(summarizeChecklistProfileUsage(rows, new Date(), 90));
   } catch (err) {
     next(err);
   }

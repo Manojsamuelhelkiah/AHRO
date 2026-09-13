@@ -8,6 +8,7 @@ import {
   useDuplicateOnboardingChecklistProfile,
   getListOnboardingChecklistProfilesQueryKey,
   useGetOnboardingSettings,
+  useGetOnboardingChecklistProfileUsage,
   type OnbChecklistProfile,
   type OnbChecklistProfileInput,
   type OnbChecklistItemOverride,
@@ -16,7 +17,8 @@ import {
 import { customFetch } from '@workspace/api-client-react';
 import * as ApiClient from '@workspace/api-client-react';
 import { Button, cn, IconTile, LoadingBlock, Label, Badge } from '@/components/ui-shared';
-import { Layers, Plus, Edit2, Copy, PowerOff, X, Check, AlertTriangle, Bot } from 'lucide-react';
+import { Layers, Plus, Edit2, Copy, PowerOff, X, Check, AlertTriangle, Bot, ExternalLink } from 'lucide-react';
+import { Link } from 'wouter';
 import { RecommendationsPage } from './recommendations';
 import { listPolicyAuthorityMembers, listWorkforceStarterTemplates } from '@/lib/workforce-policy-api';
 import { ChecklistProfileDrafter } from '@/components/checklist-profile-drafter';
@@ -80,6 +82,7 @@ export function TargetedChecklistProfiles() {
   const queryClient = useQueryClient();
   const { data: profiles, isLoading, isError, error: profilesError } = useListOnboardingChecklistProfiles();
   const { data: settings, isError: settingsError, error: settingsLoadError } = useGetOnboardingSettings();
+  const usage = useGetOnboardingChecklistProfileUsage();
   const { data: starterTemplates, isLoading: startersLoading } = useQuery({ queryKey: ['onboarding', 'workforce-policy-templates'], queryFn: listWorkforceStarterTemplates });
   const disableProfile = useDisableOnboardingChecklistProfile();
   const duplicateProfile = useDuplicateOnboardingChecklistProfile();
@@ -184,6 +187,29 @@ export function TargetedChecklistProfiles() {
               </div>
             )}
 
+             {!editingProfile && usage.isLoading && (
+               <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-xs text-[var(--text-muted)]">
+                 Loading profile adoption…
+               </div>
+             )}
+
+             {!editingProfile && usage.isError && (
+               <div role="alert" className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-xs text-[var(--status-red-fg)]">
+                 <span>Profile adoption could not be loaded. Usage counts are unavailable.</span>
+                 <Button type="button" size="sm" variant="outline" onClick={() => usage.refetch()}>Retry</Button>
+               </div>
+             )}
+
+             {!editingProfile && usage.data && (
+               <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                 <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-secondary)]">Profile adoption · last {usage.data.windowDays} days</p>
+                 <p className="mt-1 text-xs text-[var(--text-muted)]">
+                   {usage.data.defaultFallbackCount} of {usage.data.recentCaseCount} cases ({Math.round(usage.data.defaultFallbackRate * 100)}%) used the organization default because no targeted profile matched.
+                 </p>
+                 {usage.data.defaultFallbackCount > 0 && <Link href="/cases?checklistProfileId=default" className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--primary)] hover:underline">Open fallback cases <ExternalLink className="h-3 w-3" /></Link>}
+               </div>
+             )}
+
             {editingProfile && (
               <ProfileEditor
                 profile={editingProfile}
@@ -202,13 +228,13 @@ export function TargetedChecklistProfiles() {
                  {studioTab === 'steps' && <p className="rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-xs text-[var(--text-muted)]">Open a profile to configure executable intake, ownership, payroll, induction, and unsupported-work handling fields. These fields are snapshotted with each case.</p>}
                  {studioTab === 'preview' && <p className="rounded border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-3 text-xs text-[var(--status-amber-fg)]">Preview shows the effective checklist that future matching cases receive. Publishing selects the version for future intake; existing cases remain immutable until an explicit audited replacement.</p>}
                 {activeProfiles.map(p => (
-                  <ProfileRow key={p.profileId} profile={p} onEdit={() => setEditingProfile(p)} onDuplicate={() => handleDuplicate(p.profileId)} onDisable={() => disableProfile.mutate({ profileId: p.profileId }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListOnboardingChecklistProfilesQueryKey() }) })} />
+                  <ProfileRow key={p.profileId} profile={p} usage={usage.data ? usage.data.profiles.find(row => row.profileId === p.profileId) ?? null : undefined} windowDays={usage.data?.windowDays} onEdit={() => setEditingProfile(p)} onDuplicate={() => handleDuplicate(p.profileId)} onDisable={() => disableProfile.mutate({ profileId: p.profileId }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListOnboardingChecklistProfilesQueryKey() }) })} />
                 ))}
                 {inactiveProfiles.length > 0 && (
                   <>
                     <h4 className="text-[var(--text-xs)] font-bold text-[var(--text-muted)] uppercase tracking-wider mt-6 mb-2">Disabled Profiles</h4>
                     {inactiveProfiles.map(p => (
-                      <ProfileRow key={p.profileId} profile={p} onEdit={() => setEditingProfile(p)} onDuplicate={() => handleDuplicate(p.profileId)} />
+                       <ProfileRow key={p.profileId} profile={p} usage={usage.data ? usage.data.profiles.find(row => row.profileId === p.profileId) ?? null : undefined} windowDays={usage.data?.windowDays} onEdit={() => setEditingProfile(p)} onDuplicate={() => handleDuplicate(p.profileId)} />
                     ))}
                   </>
                 )}
@@ -221,7 +247,7 @@ export function TargetedChecklistProfiles() {
   );
 }
 
-function ProfileRow({ profile, onEdit, onDuplicate, onDisable }: any) {
+function ProfileRow({ profile, usage, windowDays, onEdit, onDuplicate, onDisable }: any) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   return (
@@ -238,6 +264,15 @@ function ProfileRow({ profile, onEdit, onDuplicate, onDisable }: any) {
             {Object.values(profile.criteria || {}).filter(Boolean).length === 0 && <span>No criteria (matches all)</span>}
           </div>
           <p className="text-[10px] text-[var(--text-muted)] mt-1">{profile.overrides?.length || 0} overrides applied.</p>
+          {usage === undefined ? (
+            <p className="mt-2 text-[11px] text-[var(--text-muted)]">Usage unavailable</p>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-muted)]">
+              <span><b className="text-[var(--text-primary)]">{usage?.recentMatchedCaseCount ?? 0}</b> matched cases in {windowDays} days</span>
+              <span>Last used: <b className="text-[var(--text-secondary)]">{usage?.lastUsedAt ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(usage.lastUsedAt)) : 'Never'}</b></span>
+              {(usage?.recentMatchedCaseCount ?? 0) > 0 && <Link href={`/cases?checklistProfileId=${encodeURIComponent(profile.profileId)}`} className="inline-flex items-center gap-1 font-semibold text-[var(--primary)] hover:underline">Open cases <ExternalLink className="h-3 w-3" /></Link>}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button aria-label={`Edit ${profile.name}`} variant="ghost" size="sm" onClick={onEdit} className="text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--primary-light)]"><Edit2 className="w-4 h-4" /></Button>

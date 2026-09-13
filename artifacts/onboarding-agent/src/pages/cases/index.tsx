@@ -6,7 +6,7 @@ import {
   runOnboardingScenario,
 } from '@workspace/api-client-react';
 import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
-import { Link, useLocation } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
 import { format } from 'date-fns';
 import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, FlaskConical, Check, AlertTriangle, Clock, Presentation, ShieldCheck } from 'lucide-react';
@@ -249,6 +249,8 @@ function intakeClassification(context: { workEnvironment?: string; siteExposure?
 }
 
 export function CasesPage() {
+  const search = useSearch();
+  const checklistProfileId = new URLSearchParams(search).get('checklistProfileId');
   const { data: cases, isLoading, isError, refetch } = useListOnboardingCases({
     query: {
       queryKey: getListOnboardingCasesQueryKey(),
@@ -293,6 +295,7 @@ export function CasesPage() {
 
   const filtered = useMemo(() => {
     let rows = cases ?? [];
+    if (checklistProfileId) rows = rows.filter((c) => c.checklistProfileId === checklistProfileId);
     if (typeFilter !== 'All Cases') rows = rows.filter((c) => caseTypeOf(c) === typeFilter);
     if (filters.status) rows = rows.filter((c) => statusOf(c) === filters.status);
     if (filters.agent) rows = rows.filter((c) => ownerOf(c).kind === filters.agent);
@@ -311,7 +314,7 @@ export function CasesPage() {
       );
     }
     return rows;
-  }, [cases, typeFilter, filters, query]);
+  }, [cases, checklistProfileId, typeFilter, filters, query]);
 
   const counts = useMemo(() => {
     const rows = cases ?? [];
@@ -327,10 +330,15 @@ export function CasesPage() {
   }, [cases]);
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
-  const anyFilterActive = activeFilterCount > 0 || query.trim() !== '' || typeFilter !== 'All Cases';
+  const anyFilterActive = activeFilterCount > 0 || query.trim() !== '' || typeFilter !== 'All Cases' || Boolean(checklistProfileId);
   const context = PAGE_CONTEXT[typeFilter];
 
-  const clearAll = () => { setFilters(EMPTY_FILTERS); setQuery(''); setTypeFilter('All Cases'); };
+  const clearAll = () => {
+    setFilters(EMPTY_FILTERS);
+    setQuery('');
+    setTypeFilter('All Cases');
+    if (checklistProfileId) setLocation('/cases');
+  };
 
   const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
   const existingSyntheticKeys = new Set((cases ?? []).map((c) => c.scenarioKey).filter(Boolean));
@@ -469,6 +477,13 @@ export function CasesPage() {
             )}
           </div>
         </div>
+
+        {checklistProfileId && (
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--primary-light)] px-[var(--space-lg)] py-2 text-xs text-[var(--primary)]">
+            <span>Showing cases whose saved checklist snapshot used <b>{checklistProfileId === 'default' ? 'the organization default' : checklistProfileId}</b>.</span>
+            <Link href="/cases" className="shrink-0 font-semibold hover:underline">Clear profile filter</Link>
+          </div>
+        )}
 
         {/* case-type tabs */}
         <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex items-center gap-1 overflow-x-auto">

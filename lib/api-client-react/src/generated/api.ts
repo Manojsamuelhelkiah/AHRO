@@ -140,6 +140,7 @@ import type {
   OnbChecklistProfileDraftResponse,
   OnbChecklistProfileInput,
   OnbChecklistProfileUpdate,
+  OnbChecklistProfileUsageSummary,
   OnbChecklistRecalculationInput,
   OnbCommunication,
   OnbConnector,
@@ -9328,6 +9329,83 @@ export const useCreateOnboardingChecklistProfile = <TError = ErrorType<void>,
       > => {
       return useMutation(getCreateOnboardingChecklistProfileMutationOptions(options));
     }
+
+export const getGetOnboardingChecklistProfileUsageUrl = () => {
+
+
+
+
+  return `/api/onboarding/checklist-profiles/usage`
+}
+
+/**
+ * @summary Summarize tenant case adoption from immutable checklist profile snapshots
+ */
+export const getOnboardingChecklistProfileUsage = async ( options?: RequestInit): Promise<OnbChecklistProfileUsageSummary> => {
+
+  return customFetch<OnbChecklistProfileUsageSummary>(getGetOnboardingChecklistProfileUsageUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingChecklistProfileUsageQueryKey = () => {
+    return [
+    `/api/onboarding/checklist-profiles/usage`
+    ] as const;
+    }
+
+
+export const getGetOnboardingChecklistProfileUsageQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingChecklistProfileUsage>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingChecklistProfileUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingChecklistProfileUsageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingChecklistProfileUsage>>> = ({ signal }) => getOnboardingChecklistProfileUsage({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingChecklistProfileUsage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingChecklistProfileUsageQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingChecklistProfileUsage>>>
+export type GetOnboardingChecklistProfileUsageQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Summarize tenant case adoption from immutable checklist profile snapshots
+ */
+
+export function useGetOnboardingChecklistProfileUsage<TData = Awaited<ReturnType<typeof getOnboardingChecklistProfileUsage>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingChecklistProfileUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingChecklistProfileUsageQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getDraftOnboardingChecklistProfileUrl = () => {
 
