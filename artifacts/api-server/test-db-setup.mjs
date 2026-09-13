@@ -8,7 +8,31 @@ const journalUrl = new URL("meta/_journal.json", migrationsUrl);
 const migrationTable = "__api_test_schema_migrations";
 const statementBreakpoint = "--> statement-breakpoint";
 const advisoryLockKey = 1_514_151;
+const pgcryptoReplayMigration = {
+  tag: "0084_workforce_transfer_lifecycle_custody",
+  // Keep this bridge bound to the reviewed SQL bytes.  It only affects the
+  // disposable expected-schema replay below; live migration application still
+  // executes the checked-in statement unchanged.
+  hash: "078aec2d9f6153ea7e3af2b1265ea1a8a4472abe239ae3e06e0c1bbb496b5e90",
+};
 const reviewedAutomaticPolicyExceptionHashes = new Set([
+  // Reviewed transfer definition revisioning: atomically replace the old PK
+  // with its revision-qualified key, preserving rows and tenant isolation.
+  "c3b2d494f0ee35b47bdbc6a1a1220d406594bf14a93ac20da5d711630f19a8d4",
+  // Reviewed deterministic source fingerprint backfills and custody triggers.
+  // No source payloads or service dates are rewritten or deleted.
+  "078aec2d9f6153ea7e3af2b1265ea1a8a4472abe239ae3e06e0c1bbb496b5e90",
+  // Additive cohort/source-reference fields and lookup index.
+  "1b7a6c08c88f544a5e46a57fbd3b55599ace2a36bcefea7059840379048ed6d7",
+  // Transactional action-kind expansion retains all previous kinds.
+  "fa166fbbbada5ea6e2f69c1226a86fca43571a7583752dc24b355a6f52a2d627",
+  // Lifecycle kind expansion retains all previous kinds.
+  "517906e78513bd10a04586d76eb46142c3b57293f66e4c5875f317b62cc51862",
+  // Evidence requirements for newly introduced transfer actions. Development
+  // had no transfer tables at review. Existing completed/harmonisation rows
+  // lacking evidence must fail constraint validation and roll back; never
+  // fabricate historical approval or completion evidence to force adoption.
+  "d5e4fe987720218f41f85d7ab2408031da8e342a522ddcd7100e50845c22497d",
   // Frontline age/skill constraints are an additive integrity hardening for
   // columns introduced by the prior additive migration.
   "565c5f5453b94d6d00630bb31620a3a039d4003b79a8485bcb9b982602f9ea58",
@@ -775,6 +799,50 @@ function rewriteExpectedSchema(statement, schema) {
   );
 }
 
+function isPgcryptoReplayMigration(migration) {
+  return (
+    migration.tag === pgcryptoReplayMigration.tag &&
+    migration.hash === pgcryptoReplayMigration.hash
+  );
+}
+
+async function findInstalledExtensionSchema(client, extensionName) {
+  const result = await client.query(
+    `
+      SELECT namespace_record.nspname AS schema_name
+      FROM pg_extension extension_record
+      JOIN pg_namespace namespace_record
+        ON namespace_record.oid = extension_record.extnamespace
+      WHERE extension_record.extname = $1
+    `,
+    [extensionName],
+  );
+  return result.rows[0]?.schema_name;
+}
+
+function rewriteExpectedSchemaExtensionCalls(
+  migration,
+  statement,
+  extensionSchemas,
+) {
+  if (!isPgcryptoReplayMigration(migration)) return statement;
+  const pgcryptoSchema = extensionSchemas.pgcrypto;
+  if (!pgcryptoSchema) {
+    throw new Error(
+      `Database test setup cannot replay ${migration.tag}: pgcrypto is not installed`,
+    );
+  }
+  const qualifiedDigest = `${quoteIdentifier(pgcryptoSchema)}.${quoteIdentifier("digest")}`;
+  // The extension is database-scoped and may already be installed in the
+  // actual schema.  The expected schema must remain isolated so missing tables
+  // cannot resolve through the live schema; qualify only this reviewed
+  // migration's extension calls instead of broadening search_path.
+  return statement.replace(
+    /(^|[^\w$."])digest\s*\(/g,
+    (_match, prefix) => `${prefix}${qualifiedDigest}(`,
+  );
+}
+
 export async function loadCheckedInMigrations(options = {}) {
   const [journalSource, directoryEntries] = await Promise.all([
     readFile(journalUrl, "utf8"),
@@ -1411,6 +1479,13 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
   const originalSearchPath = await client.query(
     "SELECT current_setting('search_path') AS search_path",
   );
+  const extensionSchemas = {};
+  if (migrations.some(isPgcryptoReplayMigration)) {
+    extensionSchemas.pgcrypto = await findInstalledExtensionSchema(
+      client,
+      "pgcrypto",
+    );
+  }
   let verifiedExpected;
   const actualHasOrganizations = Boolean(
     (await client.query("SELECT to_regclass($1) AS relation", [
@@ -1500,6 +1575,11 @@ async function verifyCheckedInSchema(client, migrations, actualSchema) {
     for (const migration of migrations) {
       for (const statement of migration.statements) {
         let expectedStatement = rewritePublicSchema(statement, expectedSchema);
+        expectedStatement = rewriteExpectedSchemaExtensionCalls(
+          migration,
+          expectedStatement,
+          extensionSchemas,
+        );
         if (
           !actualHasTenantCommunications &&
           migration.tag === "0031_onboarding_communication_idempotency" &&

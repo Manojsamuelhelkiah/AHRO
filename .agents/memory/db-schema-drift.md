@@ -17,6 +17,12 @@ Development schema changes must be represented by immutable, journaled SQL migra
 
 Receipt reconstruction must create standalone unique indexes before foreign keys that reference those indexed columns.
 
+Keep expected-schema replay isolated even when migrations call database-wide extension functions.
+
+**Why:** An extension can already exist outside the disposable replay schema; `CREATE EXTENSION IF NOT EXISTS` then does not make its functions resolvable there. Adding the live schema to the replay search path could hide missing tables.
+
+**How to apply:** Resolve the installed extension namespace and qualify only reviewed, exact-hash-bound extension calls during replay. Preserve original live migration bytes. Test with the extension already installed outside the scratch schema.
+
 When parallel merges collide on a migration journal index, repair the index without casually changing the migration tag, timestamp, or SQL.
 
 **Why:** Ledger identity includes the recorded timestamp and SQL hash; making timestamps look sequential can invalidate an already-applied migration even when its SQL is unchanged.

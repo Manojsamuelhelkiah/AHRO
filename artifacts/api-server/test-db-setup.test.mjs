@@ -406,6 +406,157 @@ test("tenant Phase B restores fail-closed defaults and all deferred foreign keys
 const hasDb = Boolean(process.env.DATABASE_URL);
 
 test(
+  "replays the pgcrypto custody migration with an isolated expected schema",
+  { skip: !hasDb },
+  async () => {
+    const adminPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const schema = `api_test_pgcrypto_${process.pid}`;
+    const existingExtension = await adminPool.query(
+      `
+        SELECT namespace_record.nspname AS schema_name
+        FROM pg_extension extension_record
+        JOIN pg_namespace namespace_record
+          ON namespace_record.oid = extension_record.extnamespace
+        WHERE extension_record.extname = 'pgcrypto'
+      `,
+    );
+    const extensionSchema = existingExtension.rows[0]?.schema_name;
+    const quoteSearchPathIdentifier = (identifier) =>
+      `"${identifier.replaceAll('"', '""')}"`;
+    const schemaConnection = () => {
+      const url = new URL(process.env.DATABASE_URL);
+      url.searchParams.set(
+        "options",
+        `-csearch_path=${quoteSearchPathIdentifier(schema)}`,
+      );
+      return url.toString();
+    };
+
+    try {
+      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      if (extensionSchema) {
+        await adminPool.query(
+          `
+            CREATE FUNCTION ${quoteSearchPathIdentifier(schema)}."digest"(text, text)
+            RETURNS bytea
+            LANGUAGE sql
+            IMMUTABLE
+            STRICT
+            AS $fixture$
+              SELECT ${quoteSearchPathIdentifier(extensionSchema)}."digest"($1, $2)
+            $fixture$
+          `,
+        );
+      }
+
+      const allMigrations = await loadCheckedInMigrations();
+      const pgcryptoMigration = allMigrations.find(
+        ({ tag }) => tag === "0084_workforce_transfer_lifecycle_custody",
+      );
+      assert.ok(pgcryptoMigration);
+      const fixtureStatements = [
+        `
+          CREATE TABLE "onb_transfer_data_governance" (
+            "lawful_basis_reference" text,
+            "retention_reference" text,
+            "retention_until" timestamp with time zone,
+            "authority_assignment_id" text,
+            "authority_assignment_revision" integer
+          )
+        `,
+        `
+          CREATE TABLE "onb_transfer_workers" (
+            "organization_id" text NOT NULL,
+            "id" integer NOT NULL,
+            "source_payload" jsonb,
+            "original_hire_date" date,
+            "continuous_service_date" date
+          )
+        `,
+        `
+          CREATE TABLE "onb_transfer_cutover_reconciliations" (
+            "organization_id" text NOT NULL,
+            "worker_id" integer NOT NULL
+          )
+        `,
+        `
+          CREATE TABLE "onb_sensitive_lifecycle_deletion_jobs" (
+            "id" integer
+          )
+        `,
+      ];
+      const fixtureMigrationSql = fixtureStatements.join(";\n");
+      const fixtureMigration = {
+        tag: "0000_pgcrypto_replay_fixture",
+        hash: createHash("sha256").update(fixtureMigrationSql).digest("hex"),
+        createdAt: 0,
+        statements: fixtureStatements,
+      };
+      const migrations = [fixtureMigration, pgcryptoMigration];
+
+      await prepareDatabaseBackedTests({
+        connectionString: schemaConnection(),
+        migrations,
+      });
+
+      const extension = await adminPool.query(
+        `
+          SELECT namespace_record.nspname AS schema_name
+          FROM pg_extension extension_record
+          JOIN pg_namespace namespace_record
+            ON namespace_record.oid = extension_record.extnamespace
+          WHERE extension_record.extname = 'pgcrypto'
+        `,
+      );
+      assert.equal(extension.rowCount, 1);
+
+      const custodyColumns = await adminPool.query(
+        `
+          SELECT table_name, column_name
+          FROM information_schema.columns
+          WHERE table_schema = $1
+            AND (
+              (table_name = 'onb_transfer_workers' AND column_name = 'source_fingerprint')
+              OR (
+                table_name = 'onb_transfer_cutover_reconciliations'
+                AND column_name = 'source_fingerprint'
+              )
+            )
+          ORDER BY table_name, column_name
+        `,
+        [schema],
+      );
+      assert.deepEqual(
+        custodyColumns.rows,
+        [
+          {
+            table_name: "onb_transfer_cutover_reconciliations",
+            column_name: "source_fingerprint",
+          },
+          {
+            table_name: "onb_transfer_workers",
+            column_name: "source_fingerprint",
+          },
+        ],
+      );
+
+      const ledgerReceipt = await adminPool.query(
+        `
+          SELECT tag
+          FROM "${schema}".__api_test_schema_migrations
+          WHERE tag = '0084_workforce_transfer_lifecycle_custody'
+        `,
+      );
+      assert.equal(ledgerReceipt.rowCount, 1);
+    } finally {
+      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.end();
+    }
+  },
+);
+
+test(
   "prepares fresh and interrupted schemas, repeats safely, and rejects drift",
   { skip: !hasDb },
   async () => {
