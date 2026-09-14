@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import test from "node:test";
 import {
@@ -13,6 +14,9 @@ import {
   DEFAULT_VERIFICATION_DEADLINE_MS,
   findTenantMetadataFailures,
   verifyTenantSafeguards,
+  TRANSFER_CUSTODY_FUNCTION_DEFINITIONS,
+  TRANSFER_CUSTODY_TRIGGER_DEFINITIONS,
+  TRANSFER_CUSTODY_PGCRYPTO_PROBE_SHA256,
 } from "./verify-tenant-safeguards.mjs";
 
 function passingSnapshot() {
@@ -40,6 +44,64 @@ function passingSnapshot() {
   };
 }
 
+function passingTransferCustodySnapshot() {
+  return {
+    functions: TRANSFER_CUSTODY_FUNCTION_DEFINITIONS.map((definition) => ({
+      function_schema: "public",
+      function_name: definition.name,
+      argument_count: 0,
+      identity_arguments: "",
+      return_type: "trigger",
+      language_name: "plpgsql",
+      function_body: definition.body,
+      function_config: null,
+      is_security_definer: false,
+    })),
+    triggers: TRANSFER_CUSTODY_TRIGGER_DEFINITIONS.map((definition) => ({
+      trigger_name: definition.name,
+      relation_name: definition.relation,
+      relation_schema: "public",
+      function_name: definition.functionName,
+      function_schema: "public",
+      function_argument_count: 0,
+      function_identity_arguments: "",
+      trigger_type: definition.type,
+      enabled: "O",
+      when_is_null: true,
+      trigger_columns: [],
+      is_internal: false,
+    })),
+    pgcrypto: [
+      {
+        extname: "pgcrypto",
+        extension_schema: "public",
+        digest_function_found: true,
+        digest_function_oid: 12345,
+        digest_function_schema: "public",
+        digest_argument_count: 2,
+        digest_identity_arguments: "text, text",
+        digest_return_type: "bytea",
+        digest_dependency_type: "e",
+      },
+    ],
+    digestProbe: {
+      sha256_hex: TRANSFER_CUSTODY_PGCRYPTO_PROBE_SHA256,
+    },
+    resolution: {
+      search_path: '"$user", public',
+      session_replication_role: "origin",
+      resolved_digest_oid: 12345,
+      resolved_digest_schema: "public",
+      resolved_digest_name: "digest",
+      resolved_digest_identity_arguments: "text, text",
+      resolved_worker_oid: 23456,
+      resolved_worker_schema: "public",
+      resolved_worker_name: "onb_transfer_workers",
+      resolved_worker_kind: "r",
+    },
+  };
+}
+
 test("accepts safeguards by actual mappings without relying on constraint names", () => {
   assert.deepEqual(findTenantSafeguardFailures(passingSnapshot()), []);
 });
@@ -64,6 +126,87 @@ test("namespace evidence fails closed but NOT VALID historical constraints remai
   snapshot.foreignKeys[0].table_schema = "public";
   delete snapshot.foreignKeys[0].referenced_table_schema;
   assert.equal(findTenantSafeguardFailures(snapshot).length, 1);
+});
+
+test("requires the exact migration 0084 custody catalog", async () => {
+  const passing = passingTransferCustodySnapshot();
+  const { findTransferCustodyReadinessFailures } = await import(
+    "./transfer-custody-readiness.mjs"
+  );
+  assert.deepEqual(
+    findTransferCustodyReadinessFailures({
+      schema: "public",
+      ...passing,
+    }),
+    [],
+  );
+  const localSession = structuredClone(passing);
+  localSession.resolution.session_replication_role = "local";
+  assert.ok(
+    !findTransferCustodyReadinessFailures({
+      schema: "public",
+      ...localSession,
+    }).some((failure) => failure.includes("session_replication_role")),
+  );
+
+  const malformed = structuredClone(passing);
+  malformed.functions[0].function_body += " ";
+  malformed.functions[1].is_security_definer = true;
+  malformed.triggers[1].trigger_type = 19;
+  malformed.triggers[0].trigger_columns = [1];
+  malformed.triggers[2].when_is_null = false;
+  malformed.pgcrypto[0].digest_dependency_type = null;
+  malformed.digestProbe.sha256_hex = "not-sha256";
+  malformed.resolution.session_replication_role = "replica";
+  malformed.resolution.resolved_digest_oid = 99999;
+  malformed.resolution.resolved_worker_schema = "shadow";
+  const failures = findTransferCustodyReadinessFailures({
+    schema: "public",
+    ...malformed,
+  });
+  assert.ok(failures.some((failure) => failure.includes("body differs")));
+  assert.ok(failures.some((failure) => failure.includes("SECURITY DEFINER")));
+  assert.ok(failures.some((failure) => failure.includes("timing or events")));
+  assert.ok(failures.some((failure) => failure.includes("WHEN predicate")));
+  assert.ok(failures.some((failure) => failure.includes("column list")));
+  assert.ok(failures.some((failure) => failure.includes("not a member")));
+  assert.ok(
+    failures.some((failure) => failure.includes("session_replication_role")),
+  );
+  assert.ok(
+    failures.some((failure) =>
+      failure.includes("does not resolve to the pgcrypto overload"),
+    ),
+  );
+  assert.ok(
+    failures.some((failure) =>
+      failure.includes("does not resolve to the target schema"),
+    ),
+  );
+  // A non-member digest must not be accepted merely because a probe value was
+  // supplied by a test double.
+  assert.ok(failures.some((failure) => failure.includes("digest(text, text)")));
+});
+
+test("the custody function body manifest is byte-for-byte migration 0084", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../lib/db/drizzle/0084_workforce_transfer_lifecycle_custody.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  for (const definition of TRANSFER_CUSTODY_FUNCTION_DEFINITIONS) {
+    const escapedName = definition.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = migration.match(
+      new RegExp(
+        `CREATE OR REPLACE FUNCTION "${escapedName}"\\(\\)\\s+` +
+          "RETURNS trigger\\s+LANGUAGE plpgsql\\s+AS \\$\\$([\\s\\S]*?)\\$\\$;",
+      ),
+    );
+    assert.ok(match, `${definition.name} is absent from migration 0084`);
+    assert.equal(match[1], definition.body, `${definition.name} body drifted`);
+  }
 });
 
 test("uses a bounded total verification deadline and reports missing metadata explicitly", () => {
@@ -487,6 +630,13 @@ for (const { schema, foreignParent } of [
 ]) {
 test(`verifier binds metadata and data to ${schema} (foreign parent: ${foreignParent})`, async () => {
   const queries = [];
+  const custody = passingTransferCustodySnapshot();
+  for (const fn of custody.functions) fn.function_schema = schema;
+  for (const trigger of custody.triggers) {
+    trigger.relation_schema = schema;
+    trigger.function_schema = schema;
+  }
+  custody.resolution.resolved_worker_schema = schema;
   const qualified = (table) => `"${schema.replaceAll('"', '""')}"."${table}"`;
   const client = {
     async query(config) {
@@ -528,6 +678,21 @@ test(`verifier binds metadata and data to ${schema} (foreign parent: ${foreignPa
           })),
         };
       }
+      if (config.text.includes("FROM pg_proc procedure_record")) {
+        return { rows: custody.functions };
+      }
+      if (config.text.includes("FROM pg_trigger trigger_record")) {
+        return { rows: custody.triggers };
+      }
+      if (config.text.includes("FROM pg_extension extension_record")) {
+        return { rows: passingTransferCustodySnapshot().pgcrypto };
+      }
+      if (config.text.includes("session_replication_role")) {
+        return { rows: [custody.resolution] };
+      }
+      if (config.text.includes("AS sha256_hex")) {
+        return { rows: [passingTransferCustodySnapshot().digestProbe] };
+      }
       if (config.text.includes(`FROM ${qualified("organizations")} WHERE id = 'demo'`)) {
         return { rows: [{ row_count: 1 }] };
       }
@@ -566,7 +731,15 @@ test(`verifier binds metadata and data to ${schema} (foreign parent: ${foreignPa
     assert.deepEqual(result.failures, []);
     assert.ok(queries.includes(buildOrganizationOrphanQuery(schema)));
     assert.ok(queries.some((query) => query.includes(`FROM ${qualified("onb_watch_emails")} watch`)));
+    assert.ok(queries.some((query) => query.includes("session_replication_role")));
+    assert.ok(queries.some((query) => query.includes("to_regprocedure('digest")));
+    assert.ok(queries.some((query) => query.includes("to_regclass('onb_transfer_workers")));
   }
   assert.equal(queries.at(-1), "COMMIT");
+  assert.ok(
+    queries.every(
+      (query) => !/\b(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|TRUNCATE)\b/i.test(query),
+    ),
+  );
 });
 }

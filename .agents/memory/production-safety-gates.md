@@ -47,3 +47,15 @@ Bound the entire verification phase, including cleanup, below the platform's sta
 **Why:** A publish built successfully but was killed after roughly one minute while verification was silent. Sequential query budgets could exceed that window, and production lacked newly merged transfer tables.
 
 **How to apply:** Preserve the no-serving-before-verification rule, discard timed-out clients, prevent late completion from starting the API, and confirm the current development-to-production schema diff before retrying Publish.
+
+Treat procedural custody objects as a separate Publish readiness requirement;
+table/column parity and migration ledgers do not prove triggers or extension
+functions exist in production.
+
+**Why:** Production catalog inspection found transfer custody functions,
+triggers, and pgcrypto absent despite structural schema changes being proposed.
+No post-Publish procedural installation was verified.
+
+**How to apply:** Verify live catalogs read-only before serving, including
+definitions and actual name resolution. If Publish omits them, keep the release
+blocked and use operator/platform administration, never startup/build DDL.

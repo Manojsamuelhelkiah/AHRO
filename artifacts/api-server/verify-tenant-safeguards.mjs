@@ -5,12 +5,24 @@ import {
   organizationParentValidatedTenantTables,
   tenantTables,
 } from "./tenant-safeguards-manifest.mjs";
+import {
+  findTransferCustodyReadinessFailures,
+  transferCustodyDigestProbeQuery,
+  transferCustodyFunctionsQuery,
+  transferCustodyPgcryptoQuery,
+  transferCustodyResolutionQuery,
+  transferCustodyTriggersQuery,
+  TRANSFER_CUSTODY_FUNCTION_NAMES,
+  TRANSFER_CUSTODY_PGCRYPTO_PROBE_INPUT,
+  TRANSFER_CUSTODY_TRIGGER_NAMES,
+} from "./transfer-custody-readiness.mjs";
 
 export {
   expectedForeignKeys,
   organizationParentValidatedTenantTables,
   tenantTables,
 };
+export * from "./transfer-custody-readiness.mjs";
 
 export const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
@@ -344,6 +356,7 @@ export function findTenantSafeguardFailures({
   organizationOrphanCount,
   watchCaseOrphanCount,
   watchCheckOrphanCount,
+  transferCustodyReadinessFailures = [],
 }) {
   const failures = findTenantMetadataFailures({ schema, tables, columns, foreignKeys });
   if (demoOrganizationCount !== 1) {
@@ -365,6 +378,9 @@ export function findTenantSafeguardFailures({
     failures.push(
       `watch-check orphans found: expected 0, found ${watchCheckOrphanCount}`,
     );
+  }
+  if (Array.isArray(transferCustodyReadinessFailures)) {
+    failures.push(...transferCustodyReadinessFailures);
   }
 
   return failures;
@@ -612,6 +628,113 @@ export async function verifyTenantSafeguards(options = {}) {
       );
       transactionOpen = false;
       return { schema, failures: metadataFailures };
+    }
+
+    async function runReadinessCatalogQuery(stage, text, values) {
+      try {
+        return {
+          result: await runStage(
+            stage,
+            () =>
+              queryWithTimeout(
+                client,
+                text,
+                values,
+                statementTimeoutMs,
+                deadlineAt,
+              ),
+            stageLogger,
+            verificationStartedAt,
+          ),
+          failed: false,
+        };
+      } catch (error) {
+        // Catalog absence/malformed objects are represented as safeguard
+        // failures.  Deadline and database statement failures remain hard
+        // verification failures so startup preserves its timeout reason.
+        if (error?.reasonCategory) throw error;
+        return { result: { rows: [] }, failed: true };
+      }
+    }
+
+    const transferFunctionsCatalog = await runReadinessCatalogQuery(
+      "transfer-custody-functions",
+      transferCustodyFunctionsQuery,
+      [schema, TRANSFER_CUSTODY_FUNCTION_NAMES],
+    );
+    const transferTriggersCatalog = await runReadinessCatalogQuery(
+      "transfer-custody-triggers",
+      transferCustodyTriggersQuery,
+      [schema, TRANSFER_CUSTODY_TRIGGER_NAMES],
+    );
+    const transferPgcryptoCatalog = await runReadinessCatalogQuery(
+      "transfer-custody-pgcrypto",
+      transferCustodyPgcryptoQuery,
+      undefined,
+    );
+
+    const pgcryptoRow = transferPgcryptoCatalog.result.rows.find(
+      (row) => row?.extname === "pgcrypto",
+    );
+    let transferResolution = { rows: [] };
+    let resolutionQueryFailed = false;
+    if (
+      !transferPgcryptoCatalog.failed &&
+      pgcryptoRow?.digest_function_found === true
+    ) {
+      const transferResolutionResult = await runReadinessCatalogQuery(
+        "transfer-custody-resolution",
+        transferCustodyResolutionQuery,
+        [schema, pgcryptoRow.digest_function_oid ?? null],
+      );
+      transferResolution = transferResolutionResult.result;
+      resolutionQueryFailed = transferResolutionResult.failed;
+    }
+
+    let digestProbe = { rows: [] };
+    let digestProbeFailed = false;
+    if (
+      !transferPgcryptoCatalog.failed &&
+      pgcryptoRow?.digest_function_found === true
+    ) {
+      const digestProbeResult = await runReadinessCatalogQuery(
+        "transfer-custody-digest",
+        transferCustodyDigestProbeQuery(),
+        [TRANSFER_CUSTODY_PGCRYPTO_PROBE_INPUT],
+      );
+      digestProbe = digestProbeResult.result;
+      digestProbeFailed = digestProbeResult.failed;
+    }
+
+    const transferCustodyFailures = findTransferCustodyReadinessFailures({
+      schema,
+      functions: transferFunctionsCatalog.result.rows,
+      triggers: transferTriggersCatalog.result.rows,
+      pgcrypto: transferPgcryptoCatalog.result.rows,
+      digestProbe: digestProbe.rows[0],
+      functionQueryFailed: transferFunctionsCatalog.failed,
+      triggerQueryFailed: transferTriggersCatalog.failed,
+      pgcryptoQueryFailed: transferPgcryptoCatalog.failed,
+      resolution: transferResolution.rows[0],
+      resolutionQueryFailed,
+      digestProbeFailed,
+    });
+    if (transferCustodyFailures.length > 0) {
+      await runStage(
+        "commit",
+        () =>
+          queryWithTimeout(
+            client,
+            "COMMIT",
+            undefined,
+            statementTimeoutMs,
+            deadlineAt,
+          ),
+        stageLogger,
+        verificationStartedAt,
+      );
+      transactionOpen = false;
+      return { schema, failures: transferCustodyFailures };
     }
 
     const demoOrganization = await runStage(
