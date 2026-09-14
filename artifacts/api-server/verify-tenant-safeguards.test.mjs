@@ -4,6 +4,7 @@ import { createServer } from "node:net";
 import test from "node:test";
 import {
   expectedForeignKeys,
+  buildOrganizationOrphanQuery,
   findTenantSafeguardFailures,
   organizationOrphanQuery,
   organizationParentValidatedTenantTables,
@@ -26,6 +27,8 @@ function passingSnapshot() {
           ? "a_constraint_name_that_postgresql_shortened_because_it_was_far_too_long"
           : `constraint_${index}`,
       table_name: foreignKey.table,
+      table_schema: "public",
+      referenced_table_schema: "public",
       column_names: foreignKey.columns,
       referenced_table_name: foreignKey.referencedTable,
       referenced_column_names: foreignKey.referencedColumns,
@@ -39,6 +42,28 @@ function passingSnapshot() {
 
 test("accepts safeguards by actual mappings without relying on constraint names", () => {
   assert.deepEqual(findTenantSafeguardFailures(passingSnapshot()), []);
+});
+
+test("rejects same-named parents in another schema for simple and composite foreign keys", () => {
+  for (const columns of [1, 2]) {
+    const snapshot = passingSnapshot();
+    const lookalike = snapshot.foreignKeys.find((fk) => fk.column_names.length === columns);
+    lookalike.referenced_table_schema = "lookalike";
+    assert.deepEqual(findTenantSafeguardFailures(snapshot), [
+      `foreign key missing: ${lookalike.table_name}(${lookalike.column_names.join(", ")}) -> ${lookalike.referenced_table_name}(${lookalike.referenced_column_names.join(", ")})`,
+    ]);
+  }
+});
+
+test("namespace evidence fails closed but NOT VALID historical constraints remain accepted", () => {
+  const snapshot = passingSnapshot();
+  for (const fk of snapshot.foreignKeys) fk.convalidated = false;
+  assert.deepEqual(findTenantSafeguardFailures(snapshot), []);
+  snapshot.foreignKeys[0].table_schema = "lookalike";
+  assert.equal(findTenantSafeguardFailures(snapshot).length, 1);
+  snapshot.foreignKeys[0].table_schema = "public";
+  delete snapshot.foreignKeys[0].referenced_table_schema;
+  assert.equal(findTenantSafeguardFailures(snapshot).length, 1);
 });
 
 test("uses a bounded total verification deadline and reports missing metadata explicitly", () => {
@@ -443,7 +468,7 @@ test("stops before orphan queries when tenant metadata is missing", async () => 
   assert.ok(result.failures.some((failure) => failure === "tenant table missing: scenarios"));
   assert.ok(!queries.includes(organizationOrphanQuery));
   assert.equal(
-    queries.some((query) => query.includes("FROM onb_watch_emails watch")),
+    queries.some((query) => query.includes('"onb_watch_emails" watch')),
     false,
   );
   assert.ok(stages.some(({ stage, phase }) => stage === "tenant-tables" && phase === "begin"));
@@ -455,8 +480,14 @@ test("stops before orphan queries when tenant metadata is missing", async () => 
   }
 });
 
-test("runs every data check after healthy tenant metadata", async () => {
+for (const { schema, foreignParent } of [
+  { schema: "public", foreignParent: false },
+  { schema: 'tenant "quoted"', foreignParent: false },
+  { schema: "public", foreignParent: true },
+]) {
+test(`verifier binds metadata and data to ${schema} (foreign parent: ${foreignParent})`, async () => {
   const queries = [];
+  const qualified = (table) => `"${schema.replaceAll('"', '""')}"."${table}"`;
   const client = {
     async query(config) {
       queries.push(config.text);
@@ -465,7 +496,7 @@ test("runs every data check after healthy tenant metadata", async () => {
         return { rows: [] };
       }
       if (config.text === "SELECT current_schema() AS schema_name") {
-        return { rows: [{ schema_name: "public" }] };
+        return { rows: [{ schema_name: schema }] };
       }
       if (config.text.includes("FROM information_schema.tables")) {
         return { rows: tenantTables.map((table_name) => ({ table_name })) };
@@ -479,8 +510,17 @@ test("runs every data check after healthy tenant metadata", async () => {
         };
       }
       if (config.text.includes("FROM pg_constraint")) {
+        assert.deepEqual(config.values, [schema]);
+        assert.match(config.text, /referenced_namespace\.oid = referenced_relation\.relnamespace/);
+        assert.match(config.text, /referenced_namespace\.nspname = \$1/);
+        // Historical NOT VALID constraints enforce new writes and must still
+        // be considered; namespace hardening must not filter them out.
+        assert.doesNotMatch(config.text, /convalidated/);
         return {
-          rows: expectedForeignKeys.map((foreignKey) => ({
+          rows: expectedForeignKeys.map((foreignKey, index) => ({
+            table_schema: schema,
+            referenced_table_schema: foreignParent && index === 0 ? "lookalike" : schema,
+            convalidated: false,
             table_name: foreignKey.table,
             column_names: foreignKey.columns,
             referenced_table_name: foreignKey.referencedTable,
@@ -488,13 +528,19 @@ test("runs every data check after healthy tenant metadata", async () => {
           })),
         };
       }
-      if (config.text.includes("FROM organizations WHERE id = 'demo'")) {
+      if (config.text.includes(`FROM ${qualified("organizations")} WHERE id = 'demo'`)) {
         return { rows: [{ row_count: 1 }] };
       }
-      if (config.text === organizationOrphanQuery) {
+      if (config.text === buildOrganizationOrphanQuery(schema)) {
+        for (const table of organizationParentValidatedTenantTables) {
+          assert.ok(config.text.includes(`FROM ${qualified(table)} child`));
+        }
+        assert.ok(config.text.includes(`LEFT JOIN ${qualified("organizations")} parent`));
         return { rows: [{ orphan_count: 0 }] };
       }
-      if (config.text.includes("FROM onb_watch_emails watch")) {
+      if (config.text.includes(`FROM ${qualified("onb_watch_emails")} watch`)) {
+        assert.ok(config.text.includes(`LEFT JOIN ${qualified("onb_cases")} parent_case`));
+        assert.ok(config.text.includes(`LEFT JOIN ${qualified("onb_system_checks")} parent_check`));
         return {
           rows: [{ case_orphan_count: 0, check_orphan_count: 0 }],
         };
@@ -511,7 +557,16 @@ test("runs every data check after healthy tenant metadata", async () => {
     stageLogger: () => {},
   });
 
-  assert.deepEqual(result.failures, []);
-  assert.ok(queries.includes(organizationOrphanQuery));
-  assert.ok(queries.some((query) => query.includes("FROM onb_watch_emails watch")));
+  assert.equal(result.schema, schema);
+  if (foreignParent) {
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0], /^foreign key missing:/);
+    assert.ok(!queries.some((query) => /row_count|orphan_count/.test(query)));
+  } else {
+    assert.deepEqual(result.failures, []);
+    assert.ok(queries.includes(buildOrganizationOrphanQuery(schema)));
+    assert.ok(queries.some((query) => query.includes(`FROM ${qualified("onb_watch_emails")} watch`)));
+  }
+  assert.equal(queries.at(-1), "COMMIT");
 });
+}

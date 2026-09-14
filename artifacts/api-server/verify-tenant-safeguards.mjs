@@ -275,6 +275,7 @@ function foreignKeyLabel(foreignKey) {
 }
 
 export function findTenantMetadataFailures({
+  schema = "public",
   tables,
   columns,
   foreignKeys,
@@ -319,6 +320,8 @@ export function findTenantMetadataFailures({
   for (const expected of expectedForeignKeys) {
     const found = (Array.isArray(foreignKeys) ? foreignKeys : []).some(
       (actual) =>
+        actual.table_schema === schema &&
+        actual.referenced_table_schema === schema &&
         actual.table_name === expected.table &&
         sameColumns(actual.column_names, expected.columns) &&
         actual.referenced_table_name === expected.referencedTable &&
@@ -333,6 +336,7 @@ export function findTenantMetadataFailures({
 }
 
 export function findTenantSafeguardFailures({
+  schema = "public",
   tables,
   columns,
   foreignKeys,
@@ -341,7 +345,7 @@ export function findTenantSafeguardFailures({
   watchCaseOrphanCount,
   watchCheckOrphanCount,
 }) {
-  const failures = findTenantMetadataFailures({ tables, columns, foreignKeys });
+  const failures = findTenantMetadataFailures({ schema, tables, columns, foreignKeys });
   if (demoOrganizationCount !== 1) {
     failures.push(
       `demo organization missing: expected 1 organizations row with id demo, found ${demoOrganizationCount}`,
@@ -366,21 +370,30 @@ export function findTenantSafeguardFailures({
   return failures;
 }
 
-export const organizationOrphanQuery = `
+function qualifiedRelation(schema, table) {
+  const quote = (identifier) => `"${identifier.replaceAll('"', '""')}"`;
+  return `${quote(schema)}.${quote(table)}`;
+}
+
+export function buildOrganizationOrphanQuery(schema) {
+  return `
   SELECT count(*)::integer AS orphan_count
   FROM (
     ${organizationParentValidatedTenantTables
       .map(
         (table) => `
           SELECT child.organization_id
-          FROM "${table}" child
-          LEFT JOIN organizations parent ON parent.id = child.organization_id
+          FROM ${qualifiedRelation(schema, table)} child
+          LEFT JOIN ${qualifiedRelation(schema, "organizations")} parent ON parent.id = child.organization_id
           WHERE parent.id IS NULL
         `,
       )
       .join(" UNION ALL ")}
   ) organization_orphans
 `;
+}
+
+export const organizationOrphanQuery = buildOrganizationOrphanQuery("public");
 
 export async function verifyTenantSafeguards(options = {}) {
   const connectionString = options.connectionString ?? process.env.DATABASE_URL;
@@ -537,6 +550,8 @@ export async function verifyTenantSafeguards(options = {}) {
           client,
           `
             SELECT
+              namespace_record.nspname AS table_schema,
+              referenced_namespace.nspname AS referenced_table_schema,
               relation.relname AS table_name,
               referenced_relation.relname AS referenced_table_name,
               ARRAY(
@@ -561,7 +576,10 @@ export async function verifyTenantSafeguards(options = {}) {
               ON namespace_record.oid = relation.relnamespace
             JOIN pg_class referenced_relation
               ON referenced_relation.oid = constraint_record.confrelid
+            JOIN pg_namespace referenced_namespace
+              ON referenced_namespace.oid = referenced_relation.relnamespace
             WHERE namespace_record.nspname = $1
+              AND referenced_namespace.nspname = $1
               AND constraint_record.contype = 'f'
           `,
           [schema],
@@ -573,6 +591,7 @@ export async function verifyTenantSafeguards(options = {}) {
     );
 
     const metadataFailures = findTenantMetadataFailures({
+      schema,
       tables: tables.rows,
       columns: columns.rows,
       foreignKeys: foreignKeys.rows,
@@ -600,7 +619,7 @@ export async function verifyTenantSafeguards(options = {}) {
       () =>
         queryWithTimeout(
           client,
-          "SELECT count(*)::integer AS row_count FROM organizations WHERE id = 'demo'",
+          `SELECT count(*)::integer AS row_count FROM ${qualifiedRelation(schema, "organizations")} WHERE id = 'demo'`,
           undefined,
           statementTimeoutMs,
           deadlineAt,
@@ -614,7 +633,7 @@ export async function verifyTenantSafeguards(options = {}) {
       () =>
         queryWithTimeout(
           client,
-          organizationOrphanQuery,
+          buildOrganizationOrphanQuery(schema),
           undefined,
           statementTimeoutMs,
           deadlineAt,
@@ -636,11 +655,11 @@ export async function verifyTenantSafeguards(options = {}) {
             count(*) FILTER (
               WHERE watch.check_id IS NOT NULL AND parent_check.id IS NULL
             )::integer AS check_orphan_count
-          FROM onb_watch_emails watch
-          LEFT JOIN onb_cases parent_case
+          FROM ${qualifiedRelation(schema, "onb_watch_emails")} watch
+          LEFT JOIN ${qualifiedRelation(schema, "onb_cases")} parent_case
             ON parent_case.organization_id = watch.organization_id
            AND parent_case.id = watch.case_id
-          LEFT JOIN onb_system_checks parent_check
+          LEFT JOIN ${qualifiedRelation(schema, "onb_system_checks")} parent_check
             ON parent_check.organization_id = watch.organization_id
            AND parent_check.id = watch.check_id
         `,
@@ -653,6 +672,7 @@ export async function verifyTenantSafeguards(options = {}) {
     );
 
     const failures = findTenantSafeguardFailures({
+      schema,
       tables: tables.rows,
       columns: columns.rows,
       foreignKeys: foreignKeys.rows,
