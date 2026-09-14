@@ -1,12 +1,14 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   onbCandidateLinks,
   onbCases,
   onbCommunications,
+  onbSettings,
 } from "@workspace/db/schema";
 import { sendOutbound } from "./channels";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
+import { isAuthoritativelyUatRunOwnedCase, UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
 import { initializeCaseLogistics } from "./case-logistics";
 import { hashSecret, newSecret } from "./candidate-portal";
 import { withCaseDispatchGuard } from "./dispatch-guard";
@@ -43,6 +45,8 @@ export async function issueCandidatePortalLink(input: {
   sendEmail: boolean;
   authorizeEmail?: boolean;
   idempotencyKey?: string;
+  /** Server-owned UAT effect identity. It is never caller-provided from UI. */
+  uatIntent?: { runId: string; requestId: string; hash: string; authorityActor: string };
 }) {
   // A returned URL is a bearer credential to the candidate’s identity,
   // logistics, and document-upload surface. Do not infer this authority from
@@ -50,7 +54,7 @@ export async function issueCandidatePortalLink(input: {
   return withSensitiveLifecycleFence(input.organizationId, () => withSensitiveAuthorityFence({
     organizationId: input.organizationId,
     caseId: input.caseId,
-    actorUserId: input.issuedBy,
+    actorUserId: input.uatIntent?.authorityActor ?? input.issuedBy,
     classification: "identity",
     additionalClassifications: ["medical", "payroll", "bgv"],
     mutate: () => withCaseDispatchGuard(
@@ -70,6 +74,7 @@ async function issueCandidatePortalLinkUnsafe(input: {
   sendEmail: boolean;
   authorizeEmail?: boolean;
   idempotencyKey?: string;
+  uatIntent?: { runId: string; requestId: string; hash: string; authorityActor: string };
 }) {
   const expiresInHours = input.expiresInHours ?? 168;
   if (!Number.isInteger(expiresInHours) || expiresInHours < 1 || expiresInHours > 720) {
@@ -81,7 +86,17 @@ async function issueCandidatePortalLinkUnsafe(input: {
     eq(onbCases.organizationId, input.organizationId),
   ));
   if (!c) return null;
-  if (isSyntheticOfflineCase(c)) return null;
+  // UAT run-owned cases remain completely dispatch-offline, but an explicit
+  // no-email link is allowed so the real candidate upload/quarantine path can
+  // be exercised. Demo/reset cases remain portal-ineligible.
+  if (isSyntheticOfflineCase(c) && !isUatRunIsolatedCase(c)) return null;
+  if (isUatRunIsolatedCase(c) &&
+    !await isAuthoritativelyUatRunOwnedCase(c)) {
+    throw new Error("The UAT-isolated case has no durable same-organization run ownership.");
+  }
+  if (isUatRunIsolatedCase(c) && input.sendEmail) {
+    throw new Error("UAT-isolated candidate portal links may not be emailed.");
+  }
   if (
     (c.hireType === "external-fte" || c.hireType === "contractor" || c.hireType === "rehire") &&
     !c.offerAcceptanceComplete
@@ -94,6 +109,7 @@ async function issueCandidatePortalLinkUnsafe(input: {
   const governance = await evaluateProviderGovernanceGate(
     c,
     PROVIDER_GOVERNANCE_WORKFLOW.portal,
+     { allowIsolatedLocalOperation: isUatRunIsolatedCase(c) ? "candidate-portal-credential" : undefined },
   );
   if (!governance.allowed) {
     throw new Error(governance.reason!);
@@ -124,7 +140,13 @@ async function issueCandidatePortalLinkUnsafe(input: {
   // Link issuance is an explicit, full-authority action. It is the safe
   // legacy backfill point for a case that predates persisted Day-1 logistics;
   // reads intentionally do not create this opaque record.
-  const logistics = await initializeCaseLogistics(input.organizationId, input.caseId);
+  // A UAT no-email portal exists solely to exercise the isolated candidate
+  // upload/quarantine path. It must not opportunistically create Day-1
+  // logistics (a separate case-derived sensitive collection write) just
+  // because a bearer credential is issued.
+  const logistics = isUatRunIsolatedCase(c) && !input.sendEmail
+    ? null
+    : await initializeCaseLogistics(input.organizationId, input.caseId);
   const token = newSecret();
   const expiresAt = new Date(Date.now() + expiresInHours * 3600_000);
   const linkDispatch = await dispatchWithProviderGovernance({
@@ -132,17 +154,30 @@ async function issueCandidatePortalLinkUnsafe(input: {
     workflow: PROVIDER_GOVERNANCE_WORKFLOW.portal,
     operation: `candidate-portal-link:${input.caseId}:${input.idempotencyKey ?? "manual"}`,
     providerId: "internal-candidate-portal",
+     allowIsolatedLocalOperation: isUatRunIsolatedCase(c) ? "candidate-portal-credential" : undefined,
     // Re-evaluate under the organization dispatch fence immediately before
     // persisting a new bearer credential. The separate email path is guarded
     // again by channels.ts before Gmail I/O.
     dispatch: async () => {
-      const [link] = await db.insert(onbCandidateLinks).values({
-        organizationId: input.organizationId,
-        caseId: input.caseId,
-        tokenHash: hashSecret(token),
-        expiresAt,
-        issuedBy: input.issuedBy,
-      }).returning();
+      const link = input.uatIntent
+        ? await db.transaction(async (tx) => {
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`onboarding-uat:${input.organizationId}:${input.uatIntent!.runId}`}))`);
+          const [stored] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+            eq(onbSettings.organizationId, input.organizationId),
+            eq(onbSettings.key, `${UAT_RUN_SETTING_PREFIX}${input.uatIntent!.runId}`),
+          )).for("update");
+          const run = stored ? JSON.parse(stored.value) as { status?: string; actions?: Record<string, string> } : null;
+          if (!run || run.status !== "active" || run.actions?.[input.uatIntent!.requestId] !== `pending:${input.uatIntent!.hash}`) {
+            throw new Error("UAT portal intent was retired before credential persistence.");
+          }
+          const [created] = await tx.insert(onbCandidateLinks).values({
+            organizationId: input.organizationId, caseId: input.caseId, tokenHash: hashSecret(token), expiresAt, issuedBy: input.issuedBy,
+          }).returning();
+          return created;
+        })
+        : (await db.insert(onbCandidateLinks).values({
+          organizationId: input.organizationId, caseId: input.caseId, tokenHash: hashSecret(token), expiresAt, issuedBy: input.issuedBy,
+        }).returning())[0];
       if (!link) throw new Error("Candidate portal link was not persisted.");
       return link;
     },

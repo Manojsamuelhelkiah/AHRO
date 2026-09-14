@@ -34,6 +34,8 @@ import {
   OPAQUE_CANDIDATE_UPLOAD_DATA_CLASSES,
   saveReservedCandidateUpload,
 } from "../lib/onboarding/candidate-upload-reservations";
+import { isUatRunIsolatedCase } from "../lib/onboarding/synthetic-offline";
+import { isAuthoritativelyUatRunOwnedCase } from "../lib/onboarding/uat-isolation";
 
 const router: IRouter = Router();
 const invalid = (res: any) => res.status(401).json({ message: "This portal link is invalid or has expired" });
@@ -158,6 +160,12 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
       eq(onbCases.id, ctx.caseId),
     ));
     if (!policyCase) return invalid(res);
+    if (isUatRunIsolatedCase(policyCase) &&
+      !await isAuthoritativelyUatRunOwnedCase(policyCase)) {
+      return res.status(409).json({
+        message: "This isolated UAT case is missing its durable run ownership.",
+      });
+    }
     const portalAllowed = candidatePortalIntakeAllowed({
       processPolicySnapshot: policyCase.processPolicySnapshot,
       hiringMode: (policyCase.workforceContext as { hiringMode?: unknown } | null)?.hiringMode as string | undefined,
@@ -168,6 +176,7 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
     const governance = await evaluateProviderGovernanceGate(
       policyCase,
       PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+       { allowIsolatedLocalOperation: isUatRunIsolatedCase(policyCase) ? "candidate-private-upload" : undefined },
     );
     if (!governance.allowed) {
       return res.status(409).json({
@@ -220,6 +229,7 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
     const finalGovernance = await evaluateProviderGovernanceGate(
       policyCase,
       PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+      { allowIsolatedLocalOperation: isUatRunIsolatedCase(policyCase) ? "candidate-private-upload" : undefined },
     );
     if (!finalGovernance.allowed) {
       return res.status(409).json({
@@ -287,6 +297,9 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
             providerId: "replit-object-storage",
             dataClass,
             minimalTypedPayload: false,
+            // The only isolated dispatch exception is the UAT case's private
+            // object-storage write. All vendor/worker effects remain fenced.
+             allowIsolatedLocalOperation: isUatRunIsolatedCase(policyCase) ? "candidate-private-upload" : undefined,
             dispatch: () => storedFile.save(bytes, { resumable: false, contentType: actualType }),
             disposition: () => "sent",
           });
@@ -309,6 +322,7 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
           const currentGovernance = await evaluateProviderGovernanceGate(
             currentCase,
             PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing,
+               { allowIsolatedLocalOperation: isUatRunIsolatedCase(currentCase) ? "candidate-private-upload" : undefined },
           );
           if (!currentGovernance.allowed) {
             throw new CandidateUploadUnavailableError(

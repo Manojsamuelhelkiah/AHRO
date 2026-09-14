@@ -64,6 +64,7 @@ import { getPrivateFile } from "../objectStorage";
 import { logger } from "../logger";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
 import { makeSharedTick } from "./shared-tick";
+import { hasUatScenarioKey } from "./uat-isolation";
 
 export const SENSITIVE_DATA_CLASSES = [
   "candidate-document",
@@ -1546,6 +1547,15 @@ async function processCaseDerivedEnvelopeDeletionJob(
       eq(onbCases.organizationId, job.organizationId), eq(onbCases.id, job.caseId),
     )).for("update");
     if (!caseRow) return { state: "complete" as const };
+    // This persistent reserved key is intentionally retained rather than
+    // inferred from notes. A UAT run owns its case/upload inventory and its
+    // cleanup revokes credentials without deleting or minimising the case.
+    if (hasUatScenarioKey(caseRow)) {
+      return {
+        state: "blocked" as const,
+        message: "UAT run-owned cases are retained for isolated cleanup; generic privacy minimisation cannot erase their ownership fence.",
+      };
+    }
     const jurisdiction = jurisdictionForWorkforceContext(caseRow.workforceContext);
     if (!jurisdiction) {
       // Eight class-fenced jobs may be queued for one opaque envelope. Once

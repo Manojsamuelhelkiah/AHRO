@@ -1,6 +1,9 @@
 import FlowSlide from '../../components/FlowSlide';
+import { Slide08 } from '../../components/BusinessDeck';
 
-export default function FlowPayslip() {
+export default Slide08;
+
+export function LegacyFlowPayslip() {
   return (
     <FlowSlide
       kicker="Lifecycle Flow 1 · High Volume"

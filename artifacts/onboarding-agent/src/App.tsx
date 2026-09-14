@@ -39,6 +39,8 @@ import { HrPolicyLibraryIndexPage } from './pages/hr-policy-library';
 import { HrPolicyLibraryDetailPage } from './pages/hr-policy-library/detail';
 import { AuditPage } from './pages/audit';
 import { PolicyReviewPage } from './pages/policy-review';
+import { UatTestCenterPage } from './pages/uat-test-center';
+import { LearningGuidePage } from './pages/learning-guide';
 
 const queryClient = new QueryClient();
 
@@ -329,6 +331,12 @@ function Router() {
       </Route>
       <Route path="/demo-controller/:id">
         <Protected><DemoControllerDetailPage /></Protected>
+      </Route>
+      <Route path="/uat-test-center">
+        <Protected><UatTestCenterPage /></Protected>
+      </Route>
+      <Route path="/learning-guide">
+        <Protected><LearningGuidePage /></Protected>
       </Route>
       <Route path="/client-setup">
         <>

@@ -15,6 +15,7 @@ import {
   validateDay1LogisticsDefault,
   type Day1Logistics,
 } from "./logistics-defaults";
+import { UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
 
 /**
  * App-level settings persisted in the onb_settings key/value table so
@@ -602,6 +603,9 @@ export async function getSetting(organizationId: string, key: string): Promise<s
 
 /** Upsert a setting; pass null to clear it (fall back to env defaults). */
 export async function setSetting(organizationId: string, key: string, value: string | null): Promise<void> {
+  if (key.startsWith(UAT_RUN_SETTING_PREFIX)) {
+    throw new Error("UAT run ownership is server-managed and cannot be changed or deleted through settings.");
+  }
   if (value === null) {
     await db.delete(onbSettings).where(and(
       eq(onbSettings.organizationId, organizationId),

@@ -1,0 +1,1125 @@
+{
+  "catalogVersion": "2026.09.15",
+  "baseline": "BRD Employee Onboarding (AHRO), Draft for Review, 13-Aug-2026; conflicting version labels retained",
+  "generatedBy": "scripts/generate-uat-learning-deliverables.mjs",
+  "coverageRule": "Reference coverage is a scenario mapping, not an executed assertion, passing result, or live/provider approval.",
+  "executionAssertionStatus": "not-executed: execution evidence belongs in a Test Center run, not this static inventory.",
+  "denominators": {
+    "featureCoverage": {
+      "denominator": 44,
+      "referenceMapped": 44,
+      "withGuide": 44,
+      "withScenario": 44,
+      "executedAssertions": 0,
+      "blocked": 2,
+      "manual": 36
+    },
+    "requirementCoverage": {
+      "denominator": 81,
+      "referenceMapped": 81,
+      "withScenario": 81,
+      "executedAssertions": 0,
+      "unavailableOrPolicyDependent": 28,
+      "providerSandboxBlocked": 13
+    }
+  },
+  "features": [
+    {
+      "id": "PFC-001",
+      "name": "Control Tower dashboard, gateway and workload visibility",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/"
+      ],
+      "roles": [
+        "organization member"
+      ],
+      "guideTopic": "navigation",
+      "scenarioIds": [
+        "UAT-CASE-02"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Live cards are observed data; empty/loading/error state must be recorded.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-002",
+      "name": "Case search, filters and operational list",
+      "source": "product capability",
+      "entryPoints": [
+        "/cases"
+      ],
+      "roles": [
+        "organization member"
+      ],
+      "guideTopic": "lifecycle",
+      "scenarioIds": [
+        "UAT-CASE-02"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Search results are organization-scoped.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-003",
+      "name": "Individual onboarding intake",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/cases/new"
+      ],
+      "roles": [
+        "HR coordinator"
+      ],
+      "guideTopic": "lifecycle",
+      "scenarioIds": [
+        "UAT-STD-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Record form validation and duplicate protection.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-004",
+      "name": "Batch and campus/frontline intake",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/cases",
+        "/cases batch intake"
+      ],
+      "roles": [
+        "TA intake",
+        "HR coordinator"
+      ],
+      "guideTopic": "variants",
+      "scenarioIds": [
+        "UAT-FLT-01",
+        "UAT-BATCH-02"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Batch support does not make individual exceptions disappear.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-005",
+      "name": "Case overview, lifecycle and stage state",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/cases/:id"
+      ],
+      "roles": [
+        "HR coordinator",
+        "hiring manager"
+      ],
+      "guideTopic": "lifecycle",
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-CASE-02"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Status labels require supporting workstream evidence.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-006",
+      "name": "Case tasks, checklists and Gateway A/B/C",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/cases/:id"
+      ],
+      "roles": [
+        "HR coordinator",
+        "HR reviewer"
+      ],
+      "guideTopic": "lifecycle",
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-CONFIG-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Mandatory gate behavior is observed; reopening is auditable.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-007",
+      "name": "Case documents, privacy and validation",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/cases/:id"
+      ],
+      "roles": [
+        "candidate",
+        "HR reviewer"
+      ],
+      "guideTopic": "candidate",
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-DOC-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Local validation never proves authenticity or clearance.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-008",
+      "name": "Candidate portal and upload journey",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/candidate"
+      ],
+      "roles": [
+        "candidate"
+      ],
+      "guideTopic": "candidate",
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-DOC-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Candidate access is separate from control-tower membership.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-009",
+      "name": "Document scanner availability and quarantine boundary",
+      "source": "product capability",
+      "entryPoints": [
+        "/cases/:id",
+        "/systems"
+      ],
+      "roles": [
+        "HR reviewer",
+        "system operator"
+      ],
+      "guideTopic": "candidate",
+      "scenarioIds": [
+        "UAT-DOC-01"
+      ],
+      "verification": "implemented-simulated",
+      "availabilityNote": "Unavailable scanner remains unavailable; injected result is simulated.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-010",
+      "name": "Case communications and monitored-email status",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/cases/:id",
+        "/systems"
+      ],
+      "roles": [
+        "HR coordinator",
+        "QA coordinator"
+      ],
+      "guideTopic": "communications",
+      "scenarioIds": [
+        "UAT-EMAIL-01"
+      ],
+      "verification": "blocked",
+      "availabilityNote": "Real email requires existing approved-mailbox controls.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-011",
+      "name": "Case explanations, activity and audit evidence",
+      "source": "product capability",
+      "entryPoints": [
+        "/cases/:id"
+      ],
+      "roles": [
+        "HR coordinator",
+        "HR reviewer"
+      ],
+      "guideTopic": "lifecycle",
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-CASE-02"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Explanations aid review and do not supersede audit.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-012",
+      "name": "Action Center work items and human handoffs",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/approvals"
+      ],
+      "roles": [
+        "HR coordinator",
+        "HR reviewer"
+      ],
+      "guideTopic": "handoffs",
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-SEC-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Assignment does not grant specialist decision authority.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-013",
+      "name": "Workforce transfer program lifecycle",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/workforce-transfers"
+      ],
+      "roles": [
+        "transfer operator"
+      ],
+      "guideTopic": "transfers",
+      "scenarioIds": [
+        "UAT-XFR-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Transfer basis remains legally governed.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-014",
+      "name": "Transfer population import and reconciliation",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/workforce-transfers/:id"
+      ],
+      "roles": [
+        "transfer operator"
+      ],
+      "guideTopic": "transfers",
+      "scenarioIds": [
+        "UAT-XFR-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "CSV mapping/versions are implemented; legal migration approval is not implied.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-015",
+      "name": "Transfer governance, authority and objections",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/workforce-transfers/:id"
+      ],
+      "roles": [
+        "verified specialist",
+        "transfer operator"
+      ],
+      "guideTopic": "transfers",
+      "scenarioIds": [
+        "UAT-XFR-01",
+        "UAT-SEC-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Role membership is distinct from verified specialist authority.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-016",
+      "name": "Transfer cutover and contingency actions",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/workforce-transfers/:id"
+      ],
+      "roles": [
+        "payroll reviewer",
+        "transfer operator"
+      ],
+      "guideTopic": "transfers",
+      "scenarioIds": [
+        "UAT-XFR-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "A Go decision needs observed completed evidence.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-017",
+      "name": "Transfer operations, KPIs and post-transfer tracking",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/workforce-transfers/:id"
+      ],
+      "roles": [
+        "transfer operator",
+        "analytics reviewer"
+      ],
+      "guideTopic": "transfers",
+      "scenarioIds": [
+        "UAT-XFR-01",
+        "UAT-ANL-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Metrics are not legal or payroll certification.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-018",
+      "name": "AI Agents operational view",
+      "source": "product capability",
+      "entryPoints": [
+        "/agents"
+      ],
+      "roles": [
+        "organization member"
+      ],
+      "guideTopic": "ai",
+      "scenarioIds": [
+        "UAT-AI-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Agent status and outputs remain reviewable.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-019",
+      "name": "Workflow drafting and recommendations",
+      "source": "product capability",
+      "entryPoints": [
+        "/recommendations"
+      ],
+      "roles": [
+        "HR coordinator",
+        "owner/admin"
+      ],
+      "guideTopic": "ai",
+      "scenarioIds": [
+        "UAT-AI-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Drafts are advisory and use normal approval boundaries.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-020",
+      "name": "Cited HR Policy Assistant",
+      "source": "product capability",
+      "entryPoints": [
+        "/policy-assistant"
+      ],
+      "roles": [
+        "organization member"
+      ],
+      "guideTopic": "policy",
+      "scenarioIds": [
+        "UAT-POLICY-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Citations/limitations must be observed for the query.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-021",
+      "name": "Policy library, versions and expiry reminders",
+      "source": "product capability",
+      "entryPoints": [
+        "/hr-policy-library"
+      ],
+      "roles": [
+        "owner/admin",
+        "verified specialist"
+      ],
+      "guideTopic": "policy",
+      "scenarioIds": [
+        "UAT-POLICY-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Publication/expiry actions are governed.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-022",
+      "name": "Policy review and decision governance",
+      "source": "product capability",
+      "entryPoints": [
+        "/policy-review"
+      ],
+      "roles": [
+        "verified specialist",
+        "owner/admin"
+      ],
+      "guideTopic": "policy",
+      "scenarioIds": [
+        "UAT-POLICY-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Pending/rejected/stale authority cannot publish.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-023",
+      "name": "Guardrails and restricted action handling",
+      "source": "product capability",
+      "entryPoints": [
+        "/guardrails"
+      ],
+      "roles": [
+        "owner/admin",
+        "HR coordinator"
+      ],
+      "guideTopic": "ai",
+      "scenarioIds": [
+        "UAT-AI-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "A guardrail result is not a policy approval.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-024",
+      "name": "Systems, provider configuration and monitoring",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/systems"
+      ],
+      "roles": [
+        "system operator",
+        "owner/admin"
+      ],
+      "guideTopic": "systems",
+      "scenarioIds": [
+        "UAT-OPS-01",
+        "UAT-DOC-01"
+      ],
+      "verification": "blocked",
+      "availabilityNote": "Configured status must be observed; no vendor sandbox is claimed.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-025",
+      "name": "Analytics and operational outcome KPIs",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/analytics"
+      ],
+      "roles": [
+        "analytics reviewer"
+      ],
+      "guideTopic": "analytics",
+      "scenarioIds": [
+        "UAT-ANL-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Synthetic runs are excluded from historical KPI claims.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-026",
+      "name": "Bottleneck simulation and operational recommendations",
+      "source": "product capability",
+      "entryPoints": [
+        "/analytics",
+        "/recommendations"
+      ],
+      "roles": [
+        "analytics reviewer"
+      ],
+      "guideTopic": "analytics",
+      "scenarioIds": [
+        "UAT-ANL-01"
+      ],
+      "verification": "implemented-simulated",
+      "availabilityNote": "Simulation inputs/assumptions are not observed facts.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-027",
+      "name": "Client setup and organization process configuration",
+      "source": "product capability",
+      "entryPoints": [
+        "/client-setup"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "administration",
+      "scenarioIds": [
+        "UAT-SETTINGS-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Configuration scope requires authorized observation.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-028",
+      "name": "Process-file management",
+      "source": "product capability",
+      "entryPoints": [
+        "/client-setup"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "administration",
+      "scenarioIds": [
+        "UAT-SETTINGS-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Files are governed inputs, not executable instructions.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-029",
+      "name": "Organization membership and roles",
+      "source": "product capability",
+      "entryPoints": [
+        "/settings"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "administration",
+      "scenarioIds": [
+        "UAT-SEC-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Membership changes do not imply specialist authority.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-030",
+      "name": "Audit Trail browse and export",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/audit"
+      ],
+      "roles": [
+        "auditor",
+        "owner/admin"
+      ],
+      "guideTopic": "audit",
+      "scenarioIds": [
+        "UAT-ARCH-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Audit evidence requires an authorized observed fixture.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-031",
+      "name": "Archive, retention and hold-aware actions",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/audit",
+        "/settings"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "audit",
+      "scenarioIds": [
+        "UAT-ARCH-01",
+        "UAT-SEC-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Only actually offered actions are tested; no destructive reset.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-032",
+      "name": "Verified specialist authority controls",
+      "source": "product capability",
+      "entryPoints": [
+        "/settings",
+        "/policy-review",
+        "/workforce-transfers"
+      ],
+      "roles": [
+        "verified specialist",
+        "owner/admin"
+      ],
+      "guideTopic": "handoffs",
+      "scenarioIds": [
+        "UAT-XFR-01",
+        "UAT-POLICY-01",
+        "UAT-SEC-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Authority is tenant-specific and must be independently evidenced.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-033",
+      "name": "Default checklist configuration and snapshots",
+      "source": "product capability",
+      "entryPoints": [
+        "/settings"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "administration",
+      "scenarioIds": [
+        "UAT-CONFIG-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "New cases receive a saved snapshot; existing cases do not silently rewrite.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-034",
+      "name": "Targeted checklist profiles and job profiles",
+      "source": "product capability",
+      "entryPoints": [
+        "/settings"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "administration",
+      "scenarioIds": [
+        "UAT-CONFIG-01",
+        "UAT-SETTINGS-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Matching and precedence require observed configuration.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-035",
+      "name": "Readiness/SLA, early-tenure and privacy settings",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/settings"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "administration",
+      "scenarioIds": [
+        "UAT-SETTINGS-01",
+        "UAT-FLT-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Legal/policy defaults cannot be invented.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-036",
+      "name": "Early-tenure Day-1/30/60/90/probation tracking",
+      "source": "BRD + product capability",
+      "entryPoints": [
+        "/settings",
+        "/cases/:id"
+      ],
+      "roles": [
+        "HRBP",
+        "hiring manager"
+      ],
+      "guideTopic": "variants",
+      "scenarioIds": [
+        "UAT-SETTINGS-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Enabled schedule and human completion must be observed.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-037",
+      "name": "Synthetic reset configuration",
+      "source": "product capability",
+      "entryPoints": [
+        "/settings"
+      ],
+      "roles": [
+        "owner/admin"
+      ],
+      "guideTopic": "administration",
+      "scenarioIds": [
+        "UAT-DEMO-01",
+        "UAT-SETTINGS-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Scope/confirmation are reviewed; no live data reset.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-038",
+      "name": "Demo Center synthetic workflows",
+      "source": "product capability",
+      "entryPoints": [
+        "/demo-controller"
+      ],
+      "roles": [
+        "Demo Organization member"
+      ],
+      "guideTopic": "demo",
+      "scenarioIds": [
+        "UAT-DEMO-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Presentation override is not workflow evidence.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-039",
+      "name": "Demo communication/action identity controls",
+      "source": "product capability",
+      "entryPoints": [
+        "/demo-controller"
+      ],
+      "roles": [
+        "Demo Organization member"
+      ],
+      "guideTopic": "demo",
+      "scenarioIds": [
+        "UAT-DEMO-01",
+        "UAT-EMAIL-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Default communications are simulated.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-040",
+      "name": "UAT catalog selection and role instructions",
+      "source": "product capability",
+      "entryPoints": [
+        "/uat-test-center"
+      ],
+      "roles": [
+        "organization member"
+      ],
+      "guideTopic": "test-center",
+      "scenarioIds": [
+        "UAT-UAT-01"
+      ],
+      "verification": "implemented-simulated",
+      "availabilityNote": "Run creation is isolated and non-authoritative.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-041",
+      "name": "UAT fixture download and synthetic-document manifest",
+      "source": "product capability",
+      "entryPoints": [
+        "/uat-test-center"
+      ],
+      "roles": [
+        "organization member"
+      ],
+      "guideTopic": "test-center",
+      "scenarioIds": [
+        "UAT-UAT-01",
+        "UAT-DOC-01"
+      ],
+      "verification": "implemented-simulated",
+      "availabilityNote": "Fixtures are harmless and visibly fictional.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-042",
+      "name": "UAT execution, pause/resume and observed evidence",
+      "source": "product capability",
+      "entryPoints": [
+        "/uat-test-center"
+      ],
+      "roles": [
+        "test coordinator"
+      ],
+      "guideTopic": "test-center",
+      "scenarioIds": [
+        "UAT-UAT-01"
+      ],
+      "verification": "implemented-simulated",
+      "availabilityNote": "Recorded human evidence does not fabricate backend evidence.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-043",
+      "name": "UAT run clock, normalized exchanges and evidence export",
+      "source": "product capability",
+      "entryPoints": [
+        "/uat-test-center"
+      ],
+      "roles": [
+        "test coordinator",
+        "system operator"
+      ],
+      "guideTopic": "test-center",
+      "scenarioIds": [
+        "UAT-UAT-01",
+        "UAT-OPS-01"
+      ],
+      "verification": "implemented-simulated",
+      "availabilityNote": "Clock/exchanges never dispatch providers or change live deadlines.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    },
+    {
+      "id": "PFC-044",
+      "name": "Learning Guide search, navigation and portable download",
+      "source": "product capability",
+      "entryPoints": [
+        "/learning-guide"
+      ],
+      "roles": [
+        "organization member"
+      ],
+      "guideTopic": "navigation",
+      "scenarioIds": [
+        "UAT-UAT-01"
+      ],
+      "verification": "manual",
+      "availabilityNote": "Guide export content/version should be observed.",
+      "referenceCoverage": "mapped",
+      "executionAssertion": "not-executed"
+    }
+  ],
+  "guideSections": [
+    {
+      "id": "navigation",
+      "title": "Start here: roles, navigation and evidence",
+      "featureIds": [
+        "PFC-001",
+        "PFC-002",
+        "PFC-044"
+      ],
+      "scenarioIds": [
+        "UAT-CASE-02",
+        "UAT-UAT-01"
+      ]
+    },
+    {
+      "id": "lifecycle",
+      "title": "Standard and lateral lifecycle: Gateway A/B/C",
+      "featureIds": [
+        "PFC-003",
+        "PFC-005",
+        "PFC-006",
+        "PFC-007",
+        "PFC-011"
+      ],
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-CASE-02"
+      ]
+    },
+    {
+      "id": "candidate",
+      "title": "Candidate portal, documents and confidentiality",
+      "featureIds": [
+        "PFC-007",
+        "PFC-008",
+        "PFC-009"
+      ],
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-DOC-01"
+      ]
+    },
+    {
+      "id": "communications",
+      "title": "Communications, monitoring and recovery",
+      "featureIds": [
+        "PFC-010",
+        "PFC-039"
+      ],
+      "scenarioIds": [
+        "UAT-EMAIL-01",
+        "UAT-OPS-01"
+      ]
+    },
+    {
+      "id": "handoffs",
+      "title": "Work items, approvals and human ownership",
+      "featureIds": [
+        "PFC-012",
+        "PFC-032"
+      ],
+      "scenarioIds": [
+        "UAT-STD-01",
+        "UAT-SEC-01"
+      ]
+    },
+    {
+      "id": "variants",
+      "title": "Case variants and early tenure",
+      "featureIds": [
+        "PFC-004",
+        "PFC-034",
+        "PFC-035",
+        "PFC-036"
+      ],
+      "scenarioIds": [
+        "UAT-BATCH-02",
+        "UAT-SETTINGS-01"
+      ]
+    },
+    {
+      "id": "frontline",
+      "title": "Frontline / blue-collar safety pathway",
+      "featureIds": [
+        "PFC-004",
+        "PFC-006",
+        "PFC-035"
+      ],
+      "scenarioIds": [
+        "UAT-FLT-01",
+        "UAT-DOC-01"
+      ]
+    },
+    {
+      "id": "transfers",
+      "title": "M&A / TUPE / transfer pathway",
+      "featureIds": [
+        "PFC-013",
+        "PFC-014",
+        "PFC-015",
+        "PFC-016",
+        "PFC-017"
+      ],
+      "scenarioIds": [
+        "UAT-XFR-01"
+      ]
+    },
+    {
+      "id": "systems",
+      "title": "Systems, provider evidence and readiness",
+      "featureIds": [
+        "PFC-024",
+        "PFC-025",
+        "PFC-026"
+      ],
+      "scenarioIds": [
+        "UAT-OPS-01",
+        "UAT-STD-01"
+      ]
+    },
+    {
+      "id": "ai",
+      "title": "AI agents, workflow drafting and guardrails",
+      "featureIds": [
+        "PFC-018",
+        "PFC-019",
+        "PFC-023"
+      ],
+      "scenarioIds": [
+        "UAT-AI-01"
+      ]
+    },
+    {
+      "id": "policy",
+      "title": "Cited policy, library, review and expiry",
+      "featureIds": [
+        "PFC-020",
+        "PFC-021",
+        "PFC-022",
+        "PFC-032"
+      ],
+      "scenarioIds": [
+        "UAT-POLICY-01"
+      ]
+    },
+    {
+      "id": "analytics",
+      "title": "Analytics, bottlenecks and outcomes",
+      "featureIds": [
+        "PFC-025",
+        "PFC-026"
+      ],
+      "scenarioIds": [
+        "UAT-ANL-01"
+      ]
+    },
+    {
+      "id": "administration",
+      "title": "Client setup, profiles, SLA, privacy and membership",
+      "featureIds": [
+        "PFC-027",
+        "PFC-028",
+        "PFC-029",
+        "PFC-033",
+        "PFC-034",
+        "PFC-035"
+      ],
+      "scenarioIds": [
+        "UAT-CONFIG-01",
+        "UAT-SETTINGS-01",
+        "UAT-SEC-01"
+      ]
+    },
+    {
+      "id": "audit",
+      "title": "Audit, archive, export and recovery",
+      "featureIds": [
+        "PFC-030",
+        "PFC-031",
+        "PFC-032"
+      ],
+      "scenarioIds": [
+        "UAT-ARCH-01",
+        "UAT-SEC-01"
+      ]
+    },
+    {
+      "id": "demo",
+      "title": "Demo Center and synthetic boundaries",
+      "featureIds": [
+        "PFC-037",
+        "PFC-038",
+        "PFC-039"
+      ],
+      "scenarioIds": [
+        "UAT-DEMO-01"
+      ]
+    },
+    {
+      "id": "test-center",
+      "title": "UAT Test Center: run, evidence and safe cleanup",
+      "featureIds": [
+        "PFC-040",
+        "PFC-041",
+        "PFC-042",
+        "PFC-043"
+      ],
+      "scenarioIds": [
+        "UAT-UAT-01",
+        "UAT-OPS-01",
+        "UAT-SEC-01"
+      ]
+    }
+  ]
+}

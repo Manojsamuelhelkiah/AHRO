@@ -1,6 +1,9 @@
 import FlowSlide from '../../components/FlowSlide';
+import { Slide11 } from '../../components/BusinessDeck';
 
-export default function FlowMobility() {
+export default Slide11;
+
+export function LegacyFlowMobility() {
   return (
     <FlowSlide
       kicker="Lifecycle Flow 4 · Frontier"

@@ -3,7 +3,8 @@ import {
   useListOnboardingCases,
   useCreateOnboardingCase,
   getListOnboardingCasesQueryKey,
-  runOnboardingScenario,
+  customFetch,
+  getPinnedOrganizationIdForPage,
 } from '@workspace/api-client-react';
 import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation, useSearch } from 'wouter';
@@ -14,6 +15,14 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { BatchIntakeForm } from './batch-intake';
 import { StandardIntakeForm } from './standard-intake';
 import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
+import {
+  CASE_TYPES,
+  caseTitleOf as presentedCaseTitleOf,
+  caseTypeOf as presentedCaseTypeOf,
+  isDemoCoverageCase,
+  originalCoverageScenarioKey,
+  type CaseTypeFilter,
+} from './case-presentation';
 
 type OnbCase = ApiOnbCase;
 
@@ -21,62 +30,14 @@ type OnbCase = ApiOnbCase;
 /* Existing records are onboarding cases; map them into the neutral HRO case
    shape so additional case types can be introduced incrementally. */
 
-const CASE_TYPES = [
-  'All Cases',
-  'Onboarding',
-  'Employee Changes',
-  'Payroll',
-  'Benefits',
-  'Leave',
-  'Compliance',
-  'Offboarding',
-  'HR Helpdesk',
-  'IT Access',
-  'Learning',
-  'Mobility',
-  'Documents',
-] as const;
-type CaseTypeFilter = (typeof CASE_TYPES)[number];
-
 type HroStatus = 'New' | 'In Progress' | 'Waiting' | 'Human Review' | 'Blocked' | 'Completed';
 
 export function caseTypeOf(c: OnbCase): Exclude<CaseTypeFilter, 'All Cases'> {
-  const scenarioTypes: Record<string, Exclude<CaseTypeFilter, 'All Cases'>> = {
-    'payroll-bank-change': 'Payroll',
-    'benefits-life-event': 'Benefits',
-    'leave-parental': 'Leave',
-    'compliance-work-authorization': 'Compliance',
-    'offboarding-voluntary': 'Offboarding',
-    'helpdesk-employment-letter': 'HR Helpdesk',
-    'it-privileged-access': 'IT Access',
-    'learning-mandatory-certification': 'Learning',
-    'mobility-country-transfer': 'Mobility',
-    'documents-policy-acknowledgement': 'Documents',
-  };
-  if (c.scenarioKey && scenarioTypes[c.scenarioKey]) return scenarioTypes[c.scenarioKey];
-  return c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding';
+  return presentedCaseTypeOf(c);
 }
 
 export function caseTitleOf(c: OnbCase): string {
-  const scenarioTitles: Record<string, string> = {
-    'payroll-bank-change': 'Payroll Bank Change',
-    'benefits-life-event': 'Benefits Life Event',
-    'leave-parental': 'Parental Leave Request',
-    'compliance-work-authorization': 'Work Authorization Renewal',
-    'offboarding-voluntary': 'Voluntary Offboarding',
-    'helpdesk-employment-letter': 'Employment Letter Request',
-    'it-privileged-access': 'Privileged Access Request',
-    'learning-mandatory-certification': 'Mandatory Certification',
-    'mobility-country-transfer': 'Cross-border Transfer',
-    'documents-policy-acknowledgement': 'Policy Acknowledgement',
-  };
-  if (c.scenarioKey && scenarioTitles[c.scenarioKey]) return scenarioTitles[c.scenarioKey];
-  switch (c.hireType) {
-    case 'contractor': return 'Contractor Onboarding';
-    case 'rehire': return 'Rehire Onboarding';
-    case 'internal-transfer': return 'Employee Transfer';
-    default: return 'New Hire Onboarding';
-  }
+  return presentedCaseTitleOf(c);
 }
 
 function caseIdOf(c: OnbCase): string {
@@ -131,6 +92,8 @@ const PAGE_CONTEXT: Record<CaseTypeFilter, { title: string; subtitle: string }> 
 };
 
 const SYNTHETIC_SCENARIO_KEYS = [
+  'standard-fte',
+  'internal-transfer',
   'payroll-bank-change',
   'benefits-life-event',
   'leave-parental',
@@ -271,6 +234,7 @@ export function CasesPage() {
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
   const filtersRef = useRef<HTMLDivElement>(null);
+  const isDevelopmentDemo = getPinnedOrganizationIdForPage() === 'demo';
 
   useEffect(() => {
     if (!showFilters) return;
@@ -328,6 +292,13 @@ export function CasesPage() {
       completed: by('Completed'),
     };
   }, [cases]);
+  const caseTypeCounts = useMemo(() => {
+    const rows = cases ?? [];
+    return Object.fromEntries(CASE_TYPES.map((type) => [
+      type,
+      type === 'All Cases' ? rows.length : rows.filter((c) => caseTypeOf(c) === type).length,
+    ])) as Record<CaseTypeFilter, number>;
+  }, [cases]);
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const anyFilterActive = activeFilterCount > 0 || query.trim() !== '' || typeFilter !== 'All Cases' || Boolean(checklistProfileId);
@@ -341,15 +312,29 @@ export function CasesPage() {
   };
 
   const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
-  const existingSyntheticKeys = new Set((cases ?? []).map((c) => c.scenarioKey).filter(Boolean));
+  const existingSyntheticKeys = new Set(
+    (cases ?? [])
+      .filter(isDemoCoverageCase)
+      .map((c) => originalCoverageScenarioKey(c.scenarioKey))
+      .filter((key): key is string => Boolean(key)),
+  );
   const missingSyntheticKeys = SYNTHETIC_SCENARIO_KEYS.filter((key) => !existingSyntheticKeys.has(key));
 
   const seedSyntheticCoverage = async () => {
-    if (missingSyntheticKeys.length === 0) return;
+    if (!isDevelopmentDemo || missingSyntheticKeys.length === 0) return;
     setIsSeeding(true);
     setSeedError(null);
     try {
-      for (const key of missingSyntheticKeys) await runOnboardingScenario(key);
+      await customFetch<{
+        createdCaseIds: number[];
+        existingCaseIds: number[];
+        scenarioKeys: string[];
+        offline: boolean;
+      }>('/api/onboarding/demo/full-coverage', {
+        method: 'POST',
+        body: JSON.stringify({}),
+        responseType: 'json',
+      });
       await refetch();
     } catch (error: any) {
       setSeedError(error?.response?.data?.message || error?.message || 'The synthetic coverage set could not be created.');
@@ -365,12 +350,16 @@ export function CasesPage() {
           <Button
             variant="outline"
             onClick={seedSyntheticCoverage}
-            disabled={isLoading || isSeeding || missingSyntheticKeys.length === 0}
+            disabled={!isDevelopmentDemo || isLoading || isSeeding || missingSyntheticKeys.length === 0}
             className="gap-2"
-            title={missingSyntheticKeys.length === 0 ? 'Synthetic coverage is already present' : `Create ${missingSyntheticKeys.length} missing lifecycle cases`}
+            title={!isDevelopmentDemo
+              ? 'Sample coverage is restricted to the Development Demo organization; this workspace will not be seeded.'
+              : missingSyntheticKeys.length === 0
+                ? 'Offline demo coverage is already present'
+                : `Create ${missingSyntheticKeys.length} missing offline Demo cases`}
           >
             <FlaskConical className="h-4 w-4" />
-            {isSeeding ? 'Adding test cases…' : missingSyntheticKeys.length === 0 ? 'Test set ready' : `Add test set (${missingSyntheticKeys.length})`}
+            {isSeeding ? 'Adding Demo samples…' : !isDevelopmentDemo ? 'Demo samples only' : missingSyntheticKeys.length === 0 ? 'Demo set ready' : `Add Demo set (${missingSyntheticKeys.length})`}
           </Button>
           <Link href="/demo-controller" className="inline-flex items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-soft)] h-9 px-4 py-2 gap-2">
             <Presentation className="h-4 w-4" /> Demo Center
@@ -421,7 +410,7 @@ export function CasesPage() {
                 <div className="space-y-1">
                   <Label>Case Type</Label>
                   <select className={selectStyle} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as CaseTypeFilter)}>
-                    {CASE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    {CASE_TYPES.map((t) => <option key={t} value={t}>{t} ({caseTypeCounts[t]})</option>)}
                   </select>
                 </div>
                  <div className="space-y-1"><Label>Workforce classification</Label><select className={selectStyle} value={filters.workforce} onChange={(e) => setFilters({ ...filters, workforce: e.target.value as AdvancedFilters['workforce'] })}><option value="">Any classification</option><option value="white-collar">White-collar</option><option value="blue-collar-frontline">Frontline / site</option><option value="mixed">Mixed</option><option value="needs-review">Needs review</option><option value="unclassified">Unclassified</option></select></div>
@@ -505,7 +494,7 @@ export function CasesPage() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {t}
+                {t} <span aria-label={`${caseTypeCounts[t]} cases`} style={{ marginLeft: '4px', fontWeight: 700 }}>{caseTypeCounts[t]}</span>
               </button>
             );
           })}
@@ -581,7 +570,11 @@ export function CasesPage() {
                     {(cases?.length ?? 0) === 0 ? (
                       <>
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No HR operations cases yet</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>Cases created across the employee lifecycle will appear here.</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>
+                          {isDevelopmentDemo
+                            ? 'Add the offline Demo set to view one safe sample for every employee-lifecycle family.'
+                            : 'Cases created in this organization will appear here. Demo samples are never added to customer workspaces.'}
+                        </div>
                       </>
                     ) : (
                       <>

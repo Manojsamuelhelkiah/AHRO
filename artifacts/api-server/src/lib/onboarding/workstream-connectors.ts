@@ -71,6 +71,7 @@ export type WorkstreamConnectorCase = Pick<
   workerName?: string;
   workerPhone?: string | null;
   notes?: string | null;
+  scenarioKey?: string | null;
   checklistSnapshot?: OnbChecklistTemplateItem[];
   readiness?: OnbReadinessItemRow[];
   orchestrationStatus?: string;
@@ -576,6 +577,7 @@ export async function dispatchCaseConnectorMutation(input: {
         workerEmail: input.c.workerEmail,
         workerPhone: input.c.workerPhone ?? null,
         notes: input.c.notes ?? null,
+        scenarioKey: input.c.scenarioKey,
       }),
       verifyCurrentAuthority: (tx) =>
         input.dependencies?.verifyCurrentAuthority?.({
@@ -703,6 +705,7 @@ export async function dispatchWorkstreamConnectorMutations(
     workerEmail: c.workerEmail,
     workerPhone: c.workerPhone ?? null,
     notes: c.notes ?? null,
+    scenarioKey: c.scenarioKey,
   });
   if (syntheticOffline) return { releaseHeld: false, heldConnectors: [] };
   // This is also called by watchdog recovery, so it must independently retain

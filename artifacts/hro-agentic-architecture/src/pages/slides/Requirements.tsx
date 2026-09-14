@@ -45,7 +45,11 @@ const cols: { title: string; color: string; items: [string, string][] }[] = [
   },
 ];
 
-export default function Requirements() {
+import { Slide17 } from '../../components/BusinessDeck';
+
+export default Slide17;
+
+export function LegacyRequirements() {
   return (
     <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1526] via-[#0c1a30] to-[#0a1526]" />

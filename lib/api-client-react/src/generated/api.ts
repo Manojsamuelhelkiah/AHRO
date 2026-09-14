@@ -146,6 +146,7 @@ import type {
   OnbConnector,
   OnbConnectorUpdate,
   OnbDashboard,
+  OnbDemoFullCoverageResponse,
   OnbDocument,
   OnbDocumentEvidence,
   OnbDocumentRecoveryResult,
@@ -185,6 +186,12 @@ import type {
   OnbWatchEmailSimulateResult,
   OnbWorkforceContextCorrectionInput,
   OnboardingBgvNotificationsEnvelope,
+  OnboardingLearningCatalog,
+  OnboardingUatCatalog,
+  OnboardingUatEvidenceReport,
+  OnboardingUatRun,
+  OnboardingUatRunAction,
+  OnboardingUatRunInput,
   OrganizationAuditArchiveDrillInput,
   OrganizationAuditArchiveDrillResponse,
   OrganizationAuditArchiveInput,
@@ -4116,6 +4123,535 @@ export function useDownloadOnboardingDemoRunDocuments<TData = Awaited<ReturnType
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getDownloadOnboardingDemoRunDocumentsQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingUatCatalogUrl = () => {
+
+
+
+
+  return `/api/onboarding/uat`
+}
+
+/**
+ * @summary Get the non-authoritative UAT catalog and tenant-owned run summaries
+ */
+export const getOnboardingUatCatalog = async ( options?: RequestInit): Promise<OnboardingUatCatalog> => {
+
+  return customFetch<OnboardingUatCatalog>(getGetOnboardingUatCatalogUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingUatCatalogQueryKey = () => {
+    return [
+    `/api/onboarding/uat`
+    ] as const;
+    }
+
+
+export const getGetOnboardingUatCatalogQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingUatCatalog>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingUatCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingUatCatalogQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingUatCatalog>>> = ({ signal }) => getOnboardingUatCatalog({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingUatCatalog>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingUatCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingUatCatalog>>>
+export type GetOnboardingUatCatalogQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the non-authoritative UAT catalog and tenant-owned run summaries
+ */
+
+export function useGetOnboardingUatCatalog<TData = Awaited<ReturnType<typeof getOnboardingUatCatalog>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingUatCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingUatCatalogQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOnboardingLearningCatalogUrl = () => {
+
+
+
+
+  return `/api/onboarding/learning-catalog`
+}
+
+/**
+ * @summary Get the canonical learning, feature, and requirements traceability catalog
+ */
+export const getOnboardingLearningCatalog = async ( options?: RequestInit): Promise<OnboardingLearningCatalog> => {
+
+  return customFetch<OnboardingLearningCatalog>(getGetOnboardingLearningCatalogUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingLearningCatalogQueryKey = () => {
+    return [
+    `/api/onboarding/learning-catalog`
+    ] as const;
+    }
+
+
+export const getGetOnboardingLearningCatalogQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingLearningCatalog>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingLearningCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingLearningCatalogQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingLearningCatalog>>> = ({ signal }) => getOnboardingLearningCatalog({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingLearningCatalog>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingLearningCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingLearningCatalog>>>
+export type GetOnboardingLearningCatalogQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the canonical learning, feature, and requirements traceability catalog
+ */
+
+export function useGetOnboardingLearningCatalog<TData = Awaited<ReturnType<typeof getOnboardingLearningCatalog>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingLearningCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingLearningCatalogQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateOnboardingUatRunUrl = () => {
+
+
+
+
+  return `/api/onboarding/uat/runs`
+}
+
+/**
+ * @summary Create a tenant-scoped synthetic UAT run
+ */
+export const createOnboardingUatRun = async (onboardingUatRunInput: OnboardingUatRunInput, options?: RequestInit): Promise<OnboardingUatRun> => {
+
+  return customFetch<OnboardingUatRun>(getCreateOnboardingUatRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onboardingUatRunInput)
+  }
+);}
+
+
+
+
+
+export const getCreateOnboardingUatRunMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingUatRun>>, TError,{data: BodyType<OnboardingUatRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createOnboardingUatRun>>, TError,{data: BodyType<OnboardingUatRunInput>}, TContext> => {
+
+const mutationKey = ['createOnboardingUatRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createOnboardingUatRun>>, {data: BodyType<OnboardingUatRunInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createOnboardingUatRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateOnboardingUatRunMutationResult = NonNullable<Awaited<ReturnType<typeof createOnboardingUatRun>>>
+    export type CreateOnboardingUatRunMutationBody = BodyType<OnboardingUatRunInput>
+    export type CreateOnboardingUatRunMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a tenant-scoped synthetic UAT run
+ */
+export const useCreateOnboardingUatRun = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingUatRun>>, TError,{data: BodyType<OnboardingUatRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createOnboardingUatRun>>,
+        TError,
+        {data: BodyType<OnboardingUatRunInput>},
+        TContext
+      > => {
+      return useMutation(getCreateOnboardingUatRunMutationOptions(options));
+    }
+
+export const getGetOnboardingUatRunUrl = (runId: string,) => {
+
+
+
+
+  return `/api/onboarding/uat/runs/${runId}`
+}
+
+/**
+ * @summary Get a tenant-owned UAT run
+ */
+export const getOnboardingUatRun = async (runId: string, options?: RequestInit): Promise<OnboardingUatRun> => {
+
+  return customFetch<OnboardingUatRun>(getGetOnboardingUatRunUrl(runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingUatRunQueryKey = (runId: string,) => {
+    return [
+    `/api/onboarding/uat/runs/${runId}`
+    ] as const;
+    }
+
+
+export const getGetOnboardingUatRunQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingUatRun>>, TError = ErrorType<void>>(runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingUatRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingUatRunQueryKey(runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingUatRun>>> = ({ signal }) => getOnboardingUatRun(runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingUatRun>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingUatRunQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingUatRun>>>
+export type GetOnboardingUatRunQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a tenant-owned UAT run
+ */
+
+export function useGetOnboardingUatRun<TData = Awaited<ReturnType<typeof getOnboardingUatRun>>, TError = ErrorType<void>>(
+ runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingUatRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingUatRunQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApplyOnboardingUatRunActionUrl = (runId: string,) => {
+
+
+
+
+  return `/api/onboarding/uat/runs/${runId}/actions`
+}
+
+/**
+ * Simulation remains non-authoritative. The only live-email action delegates to an existing Demo Organization run with its already pinned approved volunteer, explicit confirmation, and existing monitoring; it never accepts a recipient address.
+ * @summary Record a guided action, run-scoped exchange, or scoped clock advance
+ */
+export const applyOnboardingUatRunAction = async (runId: string,
+    onboardingUatRunAction: OnboardingUatRunAction, options?: RequestInit): Promise<OnboardingUatRun> => {
+
+  return customFetch<OnboardingUatRun>(getApplyOnboardingUatRunActionUrl(runId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(onboardingUatRunAction)
+  }
+);}
+
+
+
+
+
+export const getApplyOnboardingUatRunActionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingUatRunAction>>, TError,{runId: string;data: BodyType<OnboardingUatRunAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingUatRunAction>>, TError,{runId: string;data: BodyType<OnboardingUatRunAction>}, TContext> => {
+
+const mutationKey = ['applyOnboardingUatRunAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyOnboardingUatRunAction>>, {runId: string;data: BodyType<OnboardingUatRunAction>}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  applyOnboardingUatRunAction(runId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyOnboardingUatRunActionMutationResult = NonNullable<Awaited<ReturnType<typeof applyOnboardingUatRunAction>>>
+    export type ApplyOnboardingUatRunActionMutationBody = BodyType<OnboardingUatRunAction>
+    export type ApplyOnboardingUatRunActionMutationError = ErrorType<void>
+
+    /**
+ * @summary Record a guided action, run-scoped exchange, or scoped clock advance
+ */
+export const useApplyOnboardingUatRunAction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyOnboardingUatRunAction>>, TError,{runId: string;data: BodyType<OnboardingUatRunAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyOnboardingUatRunAction>>,
+        TError,
+        {runId: string;data: BodyType<OnboardingUatRunAction>},
+        TContext
+      > => {
+      return useMutation(getApplyOnboardingUatRunActionMutationOptions(options));
+    }
+
+export const getDownloadOnboardingUatFixturePackUrl = (runId: string,) => {
+
+
+
+
+  return `/api/onboarding/uat/runs/${runId}/fixture-pack`
+}
+
+/**
+ * @summary Download a harmless synthetic fixture manifest
+ */
+export const downloadOnboardingUatFixturePack = async (runId: string, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getDownloadOnboardingUatFixturePackUrl(runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadOnboardingUatFixturePackQueryKey = (runId: string,) => {
+    return [
+    `/api/onboarding/uat/runs/${runId}/fixture-pack`
+    ] as const;
+    }
+
+
+export const getDownloadOnboardingUatFixturePackQueryOptions = <TData = Awaited<ReturnType<typeof downloadOnboardingUatFixturePack>>, TError = ErrorType<unknown>>(runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingUatFixturePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadOnboardingUatFixturePackQueryKey(runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadOnboardingUatFixturePack>>> = ({ signal }) => downloadOnboardingUatFixturePack(runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingUatFixturePack>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadOnboardingUatFixturePackQueryResult = NonNullable<Awaited<ReturnType<typeof downloadOnboardingUatFixturePack>>>
+export type DownloadOnboardingUatFixturePackQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Download a harmless synthetic fixture manifest
+ */
+
+export function useDownloadOnboardingUatFixturePack<TData = Awaited<ReturnType<typeof downloadOnboardingUatFixturePack>>, TError = ErrorType<unknown>>(
+ runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingUatFixturePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadOnboardingUatFixturePackQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDownloadOnboardingUatEvidenceReportUrl = (runId: string,) => {
+
+
+
+
+  return `/api/onboarding/uat/runs/${runId}/evidence-report`
+}
+
+/**
+ * @summary Download a redacted UAT evidence report
+ */
+export const downloadOnboardingUatEvidenceReport = async (runId: string, options?: RequestInit): Promise<OnboardingUatEvidenceReport> => {
+
+  return customFetch<OnboardingUatEvidenceReport>(getDownloadOnboardingUatEvidenceReportUrl(runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadOnboardingUatEvidenceReportQueryKey = (runId: string,) => {
+    return [
+    `/api/onboarding/uat/runs/${runId}/evidence-report`
+    ] as const;
+    }
+
+
+export const getDownloadOnboardingUatEvidenceReportQueryOptions = <TData = Awaited<ReturnType<typeof downloadOnboardingUatEvidenceReport>>, TError = ErrorType<unknown>>(runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingUatEvidenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadOnboardingUatEvidenceReportQueryKey(runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadOnboardingUatEvidenceReport>>> = ({ signal }) => downloadOnboardingUatEvidenceReport(runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingUatEvidenceReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadOnboardingUatEvidenceReportQueryResult = NonNullable<Awaited<ReturnType<typeof downloadOnboardingUatEvidenceReport>>>
+export type DownloadOnboardingUatEvidenceReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Download a redacted UAT evidence report
+ */
+
+export function useDownloadOnboardingUatEvidenceReport<TData = Awaited<ReturnType<typeof downloadOnboardingUatEvidenceReport>>, TError = ErrorType<unknown>>(
+ runId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadOnboardingUatEvidenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadOnboardingUatEvidenceReportQueryOptions(runId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -8519,6 +9055,78 @@ export function useListOnboardingScenarios<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getSeedOnboardingDemoFullCoverageUrl = () => {
+
+
+
+
+  return `/api/onboarding/demo/full-coverage`
+}
+
+/**
+ * Development Demo organization only. This tenant-fenced, idempotent operation inserts only missing samples, never starts orchestration or provider dispatch, and cannot seed a customer organization.
+ * @summary Add any missing offline sample cases for every employee-lifecycle family
+ */
+export const seedOnboardingDemoFullCoverage = async ( options?: RequestInit): Promise<OnbDemoFullCoverageResponse> => {
+
+  return customFetch<OnbDemoFullCoverageResponse>(getSeedOnboardingDemoFullCoverageUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSeedOnboardingDemoFullCoverageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedOnboardingDemoFullCoverage>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof seedOnboardingDemoFullCoverage>>, TError,void, TContext> => {
+
+const mutationKey = ['seedOnboardingDemoFullCoverage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof seedOnboardingDemoFullCoverage>>, void> = () => {
+
+
+          return  seedOnboardingDemoFullCoverage(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SeedOnboardingDemoFullCoverageMutationResult = NonNullable<Awaited<ReturnType<typeof seedOnboardingDemoFullCoverage>>>
+
+    export type SeedOnboardingDemoFullCoverageMutationError = ErrorType<void>
+
+    /**
+ * @summary Add any missing offline sample cases for every employee-lifecycle family
+ */
+export const useSeedOnboardingDemoFullCoverage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedOnboardingDemoFullCoverage>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof seedOnboardingDemoFullCoverage>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSeedOnboardingDemoFullCoverageMutationOptions(options));
+    }
 
 export const getPreviewOnboardingSyntheticResetUrl = () => {
 

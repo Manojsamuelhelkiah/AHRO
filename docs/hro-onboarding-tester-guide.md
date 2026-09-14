@@ -671,3 +671,45 @@ After testing:
 ---
 
 **End of test guide**
+
+---
+
+## Product Learning Guide and UAT Test Center (version 2026.09.14)
+
+The in-app **Learning Guide** (`/learning-guide`) is the current role-based
+reference for the whole Control Tower. It links operations, cases and candidate
+portal; work items and handoffs; workforce transfers; AI and cited policy;
+analytics and recommendations; guardrails; policy review/library/reminders;
+systems; client setup; audit/archive; membership and verified specialist
+authority; checklist profiles; early-tenure, readiness/SLA and privacy;
+Demo Center; and the Test Center itself.
+
+The **UAT Test Center** (`/uat-test-center`) creates a versioned, tenant-scoped
+run with a fixture seed, baseline revision, scoped clock, step/evidence history,
+normalized provider-exchange history and redacted export. It supports
+UAT-STD-01 (standard), UAT-FLT-01 (frontline/bulk), UAT-XFR-01 (transfer),
+UAT-DOC-01 (document boundary), UAT-EMAIL-01 (communications), UAT-SEC-01
+(isolation/recovery), and UAT-OPS-01 (provider exchanges).
+
+### Evidence interpretation
+
+- **Passed** means only that the recorded step met its stated criterion in its
+  stated mode. **Failed**, **Blocked**, **Not run**, and **Not applicable**
+  retain their reason in the export.
+- Simulated exchanges and the scoped clock never call vendors, change
+  production time, worker leases, credentials, real-case deadlines, readiness
+  or historical KPIs.
+- Fixture packs contain only clearly labeled fictional harmless content.
+  Local file/type/integrity results do not prove malware safety, identity,
+  issuer authenticity, expiry or employment eligibility.
+- Real email is not authorized by a Test Center run. Where it is available,
+  use only the existing Demo Center approved-volunteer action and the actual
+  send/reply monitoring route with explicit confirmation. A delayed or
+  uncertain live attempt is not replaced automatically with a simulation.
+- Provider sandbox/vendor certification, legal transfer basis, human
+  specialist decisions, retention/hold outcomes and cross-tenant checks are
+  intentionally marked blocked or manual until independently observed.
+
+See `onboarding-product-feature-inventory.json` for the product-feature
+denominator and `onboarding-uat-traceability-matrix.csv` for BRD and
+cross-cutting coverage, evidence and open gaps.

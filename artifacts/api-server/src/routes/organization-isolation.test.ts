@@ -442,6 +442,69 @@ test("dashboard includes tenant-owned monitor events without a case", async () =
   );
 });
 
+test("dashboard/analytics and ordinary case mutations exclude a durably linked UAT case", async () => {
+  const [uatCase] = await db.insert(onbCases).values({
+    organizationId: orgA,
+    workerName: "UAT aggregate fence",
+    workerEmail: `uat-${suffix}@example.invalid`,
+    hireType: "external",
+    workerCategory: "full-time",
+    role: "Engineer",
+    department: "Engineering",
+    geography: "US",
+    legalEntity: "Example",
+    managerName: "Manager",
+    recruiterName: "Recruiter",
+    joiningDate: "2030-01-01",
+    workforceContext: { workCountry: "US" },
+    scenarioKey: "UAT-STD-01",
+    notes: null,
+  }).returning({ id: onbCases.id });
+  assert.ok(uatCase);
+  await db.insert(onbSettings).values({
+    organizationId: orgA,
+    key: `onboarding-uat.run.v1:${randomUUID()}`,
+    value: JSON.stringify({ runId: randomUUID(), linkedCaseIds: [uatCase.id] }),
+  });
+  const [uatEvent] = await db.insert(onbEvents).values({
+    organizationId: orgA,
+    caseId: uatCase.id,
+    agent: "UAT",
+    engine: "test",
+    title: "UAT event must not appear in dashboard",
+    detail: "UAT event must not appear in dashboard",
+  }).returning({ id: onbEvents.id });
+  const headers = {
+    "x-test-user": "test-user-a",
+    "x-organization-id": orgA,
+  };
+  const dashboardResponse = await fetch(`${baseUrl}/onboarding/dashboard`, { headers });
+  assert.equal(dashboardResponse.status, 200);
+  const dashboard = await dashboardResponse.json() as {
+    totalCases: number;
+    recentEvents: Array<{ id: number }>;
+  };
+  const nonUatCases = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    sql`${onbCases.id} <> ${uatCase.id}`,
+  ));
+  assert.equal(dashboard.totalCases, nonUatCases.length);
+  assert.equal(dashboard.recentEvents.some((event) => event.id === uatEvent!.id), false);
+  const analyticsResponse = await fetch(`${baseUrl}/onboarding/analytics`, { headers });
+  assert.equal(analyticsResponse.status, 200);
+  const analytics = await analyticsResponse.json() as { narrative: string | null };
+  assert.ok(
+    analytics.narrative?.startsWith(`${nonUatCases.length} onboarding cases are represented`),
+    "UAT cases are excluded from the aggregate narrative",
+  );
+  const mutation = await fetch(`${baseUrl}/onboarding/cases/${uatCase.id}/offer-acceptance`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(mutation.status, 409);
+});
+
 test("rejected Twilio webhooks persist an explicit platform audit event", async () => {
   const detail =
     "Webhook to /onboarding/webhooks/twilio/whatsapp failed Twilio signature validation — request discarded.";

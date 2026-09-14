@@ -1,3 +1,7 @@
+import { Slide03 } from '../../components/BusinessDeck';
+
+export default Slide03;
+
 const band = 'bg-[#12233f] border border-[#24406b] rounded-[0.5vw]';
 const cell = 'bg-[#0f2a47] border border-[#2f5c94] rounded-[0.5vw]';
 const rail = 'bg-[#16273f] border border-[#2a4568] rounded-[0.5vw]';
@@ -18,7 +22,7 @@ function Arrow() {
   );
 }
 
-export default function FunctionalView() {
+export function LegacyFunctionalView() {
   return (
     <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1526] via-[#0c1a30] to-[#0a1526]" />

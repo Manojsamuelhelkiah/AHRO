@@ -16,6 +16,7 @@ import {
   SENSITIVE_DATA_CLASSES,
   type SensitiveDataClass,
 } from "./sensitive-lifecycle";
+import { getUatCaseIsolation } from "./uat-isolation";
 
 /**
  * Canonical provider-boundary scopes. These are server-owned constants: a
@@ -51,7 +52,7 @@ export type ProviderGovernanceCase = Pick<
   | "workforceContext"
   | "workforceContextVersion"
   | "processPolicySnapshot"
->;
+> & { scenarioKey?: string | null };
 
 export type ProviderGovernanceGate = {
   allowed: boolean;
@@ -81,7 +82,11 @@ const SENSITIVE_CLASS_BY_WORKFLOW: Readonly<Record<ProviderGovernanceWorkflow, S
 export async function evaluateProviderGovernanceGate(
   caseRow: ProviderGovernanceCase,
   workflow: ProviderGovernanceWorkflow,
-  options: { allowIsolatedProviderDispatch?: boolean } = {},
+  options: {
+    allowIsolatedLocalOperation?: "candidate-private-upload" | "candidate-portal-credential";
+    /** Existing Demo-only provider exception; never use for UAT. */
+    allowIsolatedProviderDispatch?: boolean;
+  } = {},
 ): Promise<ProviderGovernanceGate> {
   const gate = await evaluateStoredCaseGovernanceGate({
     caseRow,
@@ -89,7 +94,9 @@ export async function evaluateProviderGovernanceGate(
     // escape hatch may hide an unmapped real-provider workflow.
     workflow,
   });
-  if (gate.execution === "isolated-simulation" && !options.allowIsolatedProviderDispatch) {
+  if (gate.execution === "isolated-simulation" &&
+    !options.allowIsolatedLocalOperation &&
+    !options.allowIsolatedProviderDispatch) {
     return {
       allowed: false,
       workflow,
@@ -130,8 +137,13 @@ export async function dispatchWithProviderGovernance<T>(input: {
    * are not evidence that a payload is minimal.
    */
   minimalTypedPayload?: boolean;
-  /** Only narrowly authorized communication/voice demo paths may opt in. */
+   /** Only narrowly authorized communication/voice Demo paths may opt in. */
   allowIsolatedProviderDispatch?: boolean;
+   /**
+    * Local non-provider operations available to a durably linked UAT case.
+    * This is deliberately an enum rather than a caller-controlled boolean.
+    */
+   allowIsolatedLocalOperation?: "candidate-private-upload" | "candidate-portal-credential";
   dispatch: () => Promise<T>;
   disposition: (value: T) => GovernanceDispatchResult<T>["disposition"];
 }): Promise<ProviderGovernanceDispatch<T>> {
@@ -151,13 +163,6 @@ export async function dispatchWithProviderGovernance<T>(input: {
     // this final current-state evaluation cannot race a subsequent provider
     // request. Do not put this evaluator in beforeDispatch: it seeds/reads
     // through the global DB handle and would deadlock on the org advisory lock.
-    if (externalProviderDispatchDenied()) {
-      deniedReason = "External provider dispatch is denied by the active execution safety policy.";
-      return {
-        value: PROVIDER_GOVERNANCE_DENIED,
-        disposition: "definitive-not-sent",
-      };
-    }
     // This is intentionally inside the durable provider dispatch fence. A
     // route-level preflight cannot authorize a later external disclosure.
     return withSensitiveLifecycleFence(input.caseRow.organizationId, async () => {
@@ -196,10 +201,38 @@ export async function dispatchWithProviderGovernance<T>(input: {
         deniedReason = "The case has a pending workforce policy rebase or migration review hold; rebuild and explicitly release it before provider dispatch.";
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
+      const uatIsolation = await getUatCaseIsolation(currentCase);
+      const localUatOperation =
+        input.allowIsolatedLocalOperation === "candidate-private-upload" &&
+        input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing &&
+        input.providerId === "replit-object-storage" ||
+        input.allowIsolatedLocalOperation === "candidate-portal-credential" &&
+        input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.portal &&
+        input.providerId === "internal-candidate-portal";
+      if (uatIsolation.isolated && (
+        !uatIsolation.fencedByScenarioKey ||
+        !uatIsolation.linkedToRun ||
+        !localUatOperation
+      )) {
+        deniedReason = "UAT-isolated cases never dispatch external providers or ordinary effects.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
+      // This switch is an execution fence for external I/O, not a reason to
+      // reject the two explicitly enumerated, tenant/run-owned local UAT
+      // operations. `localUatOperation` above has already proved the case,
+      // workflow and internal storage/provider identity; it cannot authorize
+      // a network provider call.
+      if (externalProviderDispatchDenied() && !localUatOperation) {
+        deniedReason = "External provider dispatch is denied by the active execution safety policy.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
       const gate = await evaluateProviderGovernanceGate(
         currentCase,
         input.workflow,
-        { allowIsolatedProviderDispatch: input.allowIsolatedProviderDispatch },
+        {
+          allowIsolatedLocalOperation: input.allowIsolatedLocalOperation,
+          allowIsolatedProviderDispatch: input.allowIsolatedProviderDispatch,
+        },
       );
       if (!gate.allowed) {
         deniedReason = gate.reason ?? "Live provider dispatch is blocked by current governance review.";
@@ -212,7 +245,7 @@ export async function dispatchWithProviderGovernance<T>(input: {
       // final provider boundary.
       const lifecycleClasses: readonly SensitiveDataClass[] =
         input.minimalTypedPayload ? [channelClass] : SENSITIVE_DATA_CLASSES;
-      for (const dataClass of lifecycleClasses) {
+      for (const dataClass of localUatOperation ? [] : lifecycleClasses) {
         const lifecycle = await evaluateSensitiveLifecycleGate({
           organizationId: currentCase.organizationId,
           jurisdiction: jurisdictionForWorkforceContext(currentCase.workforceContext),

@@ -14,3 +14,15 @@ Test workers must also restrict claims to their own fixture tenants.
 **Why:** Separate test processes share the database but not their provider stubs. An unscoped worker can claim another test's deletion job and apply the wrong stubbed effects.
 
 **How to apply:** Scope test recovery and deletion claims explicitly, preserving normal production scheduling. Verify isolation with concurrent focused tests, not only serial passes.
+
+Interactive UAT isolation must survive privacy minimization and remain effective before bounded worker selection, not just before dispatch.
+
+**Why:** Notes are mutable and may be cleared by retention controls. Filtering synthetic work after a queue limit can also starve genuine work even when every external call is blocked.
+
+**How to apply:** Bind ownership durably outside minimizable case content, exclude isolated work in selection and atomic claim predicates, and retain a final provider-boundary check. Test both absence of synthetic side effects and continued processing of later genuine queue items.
+
+Permission-gated test tools need an authorized-success regression as well as a denial regression.
+
+**Why:** A deterministic receipt identity was once mistaken for the authenticated principal. Denial-only tests passed, incorrectly suggesting that a reviewer needed more permissions even though no reviewer could succeed.
+
+**How to apply:** Keep receipt/correlation identities separate from authority principals, and verify both outcomes with controlled test-only grants before attributing a blocked journey to user configuration.

@@ -74,6 +74,11 @@ import {
 import { isChecklistAdministrator, setCustomChecklistItemStatus, verifyChecklistEvidence } from "../lib/onboarding/checklist";
 import { getScenario, SCENARIOS, DEMO_EMAIL } from "../lib/onboarding/scenarios";
 import {
+  DEMO_FULL_COVERAGE_SCENARIO_KEYS,
+  isDemoFullCoverageScenarioKey,
+  seedDemoFullCoverage,
+} from "../lib/onboarding/demo-full-coverage";
+import {
   ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS,
   ensureConnectorsSeeded,
 } from "../lib/onboarding/connectors";
@@ -250,6 +255,7 @@ import {
   isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
+import { getUatCaseIsolation } from "../lib/onboarding/uat-isolation";
 import {
   acquireCaseDispatchMutationLock,
   hasActiveCaseDispatchMarker,
@@ -321,6 +327,40 @@ function requireOperationalMutationRole(
   });
   return false;
 }
+
+/**
+ * UAT cases have a deliberately tiny mutation surface: the separately mounted
+ * candidate portal may read and privately upload evidence, while ordinary
+ * control-tower routes must not alter their state, checkpoint, or ownership.
+ * This also catches a damaged case that has lost its scenario key but remains
+ * linked by the tenant-scoped UAT run ledger.
+ */
+router.use("/onboarding/cases/:caseId", async (req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    next();
+    return;
+  }
+  const caseId = Number(req.params.caseId);
+  if (!Number.isSafeInteger(caseId) || caseId < 1) {
+    next();
+    return;
+  }
+  try {
+    const isolation = await getUatCaseIsolation({
+      organizationId: getOrganizationId(req),
+      id: caseId,
+    });
+    if (isolation.isolated) {
+      res.status(409).json({
+        message: "UAT-isolated cases may only use their explicit no-email candidate portal upload/read journey.",
+      });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * One-click demo sign-in. The shared demo reviewer account uses an
@@ -504,6 +544,7 @@ async function serializeCase(
     primarySkill: row.primarySkill,
     skillCriticality: row.skillCriticality,
     scenarioKey: row.scenarioKey,
+    offlineSample: isDemoFullCoverageScenarioKey(row.scenarioKey),
     planSummary: redactSensitiveText(row.planSummary, sensitiveAccess) ?? null,
     checklistTemplateVersion: row.checklistTemplateVersion,
     checklistSnapshot: redactOperationalItems(row.checklistSnapshot, sensitiveAccess),
@@ -632,10 +673,11 @@ async function insertCaseAndStart(
 router.get("/onboarding/dashboard", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
-    const cases = await db
+    const cases = await excludeUatAggregateCases(await db
       .select()
       .from(onbCases)
-      .where(organizationWhere(onbCases, organizationId));
+      .where(organizationWhere(onbCases, organizationId)));
+    const aggregateCaseIds = new Set(cases.map((row) => row.id));
 
     const approvalRows = await db
       .select({ approval: onbApprovals })
@@ -644,13 +686,16 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
       .where(organizationWhere(onbCases, organizationId));
     const approvals = approvalRows
       .map(({ approval }) => approval)
-      .filter((approval) => approval.status === "pending");
-    const recent = await db
+      .filter((approval) =>
+        approval.status === "pending" && aggregateCaseIds.has(approval.caseId));
+    const recent = (await db
       .select()
       .from(onbEvents)
       .where(organizationWhere(onbEvents, organizationId))
       .orderBy(desc(onbEvents.createdAt), desc(onbEvents.id))
-      .limit(12);
+      .limit(60))
+      .filter((event) => event.caseId === null || aggregateCaseIds.has(event.caseId))
+      .slice(0, 12);
 
     const byStageMap = new Map<string, number>();
     for (const c of cases) {
@@ -747,6 +792,10 @@ router.post("/onboarding/synthetic-reset", async (req, res, next) => {
 
 router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
   try {
+    if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID) {
+      res.status(403).json({ message: "Demo scenarios can only be launched in the Development Demo organization." });
+      return;
+    }
     const scenario = getScenario(req.params.key);
     if (!scenario) {
       res.status(404).json({ message: `Unknown scenario "${req.params.key}"` });
@@ -781,6 +830,30 @@ router.post("/onboarding/scenarios/:key/run", async (req, res, next) => {
       createdByUserId: req.authUserId!,
     }, getOrganizationId(req));
     res.status(201).json(await serializeCaseForRequest(req, row));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * The cases list's one-click coverage control is intentionally a single,
+ * tenant-fenced transaction rather than a browser loop over scenario launches.
+ * It creates only missing, offline Demo samples and is safe to retry.
+ */
+router.post("/onboarding/demo/full-coverage", async (req, res, next) => {
+  try {
+    const organizationId = getOrganizationId(req);
+    if (organizationId !== DEMO_ORGANIZATION_ID) {
+      res.status(403).json({ message: "Full sample coverage is available only in the Development Demo organization; no customer cases were created." });
+      return;
+    }
+    if (!requireHrChecklistRole(req, res, "Organization owner or admin role required to add Development Demo samples.")) return;
+    const result = await seedDemoFullCoverage(organizationId, req.authUserId ?? null);
+    res.status(200).json({
+      ...result,
+      scenarioKeys: DEMO_FULL_COVERAGE_SCENARIO_KEYS,
+      offline: true,
+    });
   } catch (err) {
     next(err);
   }
@@ -934,6 +1007,7 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
       workerName: onbCases.workerName,
       workerEmail: onbCases.workerEmail,
       workerPhone: onbCases.workerPhone,
+      scenarioKey: onbCases.scenarioKey,
     }).from(onbCases).where(and(eq(onbCases.id, id), eq(onbCases.organizationId, organizationId)));
     if (before && isSyntheticOfflineCase(before)) {
       res.status(409).json({ message: SYNTHETIC_OFFLINE_WARNING });
@@ -4863,6 +4937,18 @@ router.post("/onboarding/webhooks/systems/:system", async (req, res, next) => {
 
 const SUPPRESSION_THRESHOLD = 3;
 
+/** Aggregate/reporting views must not learn from UAT cases or their events. */
+async function excludeUatAggregateCases<T extends {
+  id: number;
+  organizationId: string;
+  scenarioKey?: string | null;
+}>(rows: T[]): Promise<T[]> {
+  const isolated = await Promise.all(rows.map(async (row) =>
+    (await getUatCaseIsolation(row)).isolated,
+  ));
+  return rows.filter((_row, index) => !isolated[index]);
+}
+
 async function loadOutcomeKpis(req: Request) {
     const rawDomain =
       typeof req.query.domain === "string"
@@ -4902,10 +4988,10 @@ async function loadOutcomeKpis(req: Request) {
       ...(parsed.data.hireType ? [eq(onbCases.hireType, parsed.data.hireType)] : []),
     ];
     const cases = supportedDomain
-      ? (await db
+      ? (await excludeUatAggregateCases(await db
           .select()
           .from(onbCases)
-          .where(and(...caseFilters)))
+          .where(and(...caseFilters))))
           // Synthetic reset and demo-controller cases are deliberately not
           // evidence of a genuine onboarding outcome. Keep their simulated
           // activity visible on their own run timeline, never in KPI cohorts.
@@ -5108,17 +5194,20 @@ router.get("/onboarding/analytics/outcome-kpis/export", async (req, res, next) =
 router.get("/onboarding/analytics", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
-    const cases = await db
+    const cases = await excludeUatAggregateCases(await db
       .select()
       .from(onbCases)
-      .where(organizationWhere(onbCases, organizationId));
+      .where(organizationWhere(onbCases, organizationId)));
+    const aggregateCaseIds = new Set(cases.map((row) => row.id));
 
     const approvalRows = await db
       .select({ approval: onbApprovals })
       .from(onbApprovals)
       .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
       .where(organizationWhere(onbCases, organizationId));
-    const approvals = approvalRows.map(({ approval }) => approval);
+    const approvals = approvalRows
+      .map(({ approval }) => approval)
+      .filter((approval) => aggregateCaseIds.has(approval.caseId));
 
     const skillMap = new Map<string, { count: number; criticality: string }>();
     for (const c of cases) {

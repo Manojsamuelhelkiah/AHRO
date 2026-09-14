@@ -1,6 +1,9 @@
 import FlowSlide from '../../components/FlowSlide';
+import { Slide09 } from '../../components/BusinessDeck';
 
-export default function FlowPolicy() {
+export default Slide09;
+
+export function LegacyFlowPolicy() {
   return (
     <FlowSlide
       kicker="Lifecycle Flow 2 · Knowledge"

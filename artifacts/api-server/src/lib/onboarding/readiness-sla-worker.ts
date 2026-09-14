@@ -808,7 +808,8 @@ export async function runReadinessSlaTick(options: TickOptions = {}): Promise<Ti
   // revoked when fresh source evidence regresses. ensure... returns null for
   // historical completed cases without a snapshot, so they are never silently
   // enrolled by this sweep.
-  const cases = await db.select().from(onbCases);
+  const cases = (await db.select().from(onbCases))
+    .filter((caseRow) => !isSyntheticOfflineCase(caseRow));
   const result: TickResult = {
     cases: cases.length,
     enrolled: 0,

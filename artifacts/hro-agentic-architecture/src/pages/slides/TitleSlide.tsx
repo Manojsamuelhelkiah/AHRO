@@ -1,6 +1,10 @@
+import { Slide01 } from '../../components/BusinessDeck';
+
+export default Slide01;
+
 const base = import.meta.env.BASE_URL;
 
-export default function TitleSlide() {
+export function LegacyTitleSlide() {
   return (
     <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <img

@@ -3303,6 +3303,8 @@ export interface OnbCase {
      * @nullable
      */
   scenarioKey: string | null;
+  /** Server-derived marker for a provider-isolated offline Demo sample */
+  offlineSample: boolean;
   /**
      * LLM-generated onboarding plan narrative
      * @nullable
@@ -4521,6 +4523,13 @@ export interface OnbScenarioDef {
   /** Which worked example in the SME document this validates */
   specRef: string;
   expectedBehaviour: string;
+}
+
+export interface OnbDemoFullCoverageResponse {
+  scenarioKeys: string[];
+  createdCaseIds: number[];
+  existingCaseIds: number[];
+  offline: boolean;
 }
 
 export type OnbSyntheticResetRequestConfirmation = typeof OnbSyntheticResetRequestConfirmation[keyof typeof OnbSyntheticResetRequestConfirmation];
@@ -5957,6 +5966,446 @@ export interface DemoRunAction {
   mode?: DemoRunActionMode;
   /** @nullable */
   liveConfirmation?: DemoRunActionLiveConfirmation;
+}
+
+export type OnboardingUatScenarioMode = typeof OnboardingUatScenarioMode[keyof typeof OnboardingUatScenarioMode];
+
+
+export const OnboardingUatScenarioMode = {
+  simulated: 'simulated',
+  'manual-evidence': 'manual-evidence',
+  'provider-sandbox': 'provider-sandbox',
+  'real-email': 'real-email',
+} as const;
+
+export type OnboardingUatScenarioStatus = typeof OnboardingUatScenarioStatus[keyof typeof OnboardingUatScenarioStatus];
+
+
+export const OnboardingUatScenarioStatus = {
+  available: 'available',
+  blocked: 'blocked',
+  manual: 'manual',
+} as const;
+
+export interface OnboardingUatStep {
+  id: string;
+  /** @minimum 1 */
+  order: number;
+  actor: string;
+  action: string;
+  expected: string;
+  evidence: string;
+  wait: string;
+  negativePath?: string;
+  cleanup?: string;
+}
+
+export interface OnboardingUatScenario {
+  id: string;
+  title: string;
+  family: string;
+  description: string;
+  roles: string[];
+  mode: OnboardingUatScenarioMode;
+  status: OnboardingUatScenarioStatus;
+  /** @nullable */
+  blocker: string | null;
+  prerequisites?: string[];
+  fixturePack?: string;
+  featureIds?: string[];
+  requirementIds?: string[];
+  passCriteria?: string;
+  cleanup?: string;
+  steps: OnboardingUatStep[];
+}
+
+export type OnboardingUatRunSummaryStatus = typeof OnboardingUatRunSummaryStatus[keyof typeof OnboardingUatRunSummaryStatus];
+
+
+export const OnboardingUatRunSummaryStatus = {
+  active: 'active',
+  paused: 'paused',
+  completed: 'completed',
+  blocked: 'blocked',
+  cleaned: 'cleaned',
+} as const;
+
+export interface OnboardingUatRunSummary {
+  runId: string;
+  scenarioId: string;
+  status: OnboardingUatRunSummaryStatus;
+  /** @minimum 0 */
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OnboardingUatCatalog {
+  catalogVersion: string;
+  baselineRevision: string;
+  syntheticOnly: boolean;
+  scenarios: OnboardingUatScenario[];
+  runs: OnboardingUatRunSummary[];
+}
+
+export type OnboardingUatRunInputMode = typeof OnboardingUatRunInputMode[keyof typeof OnboardingUatRunInputMode];
+
+
+export const OnboardingUatRunInputMode = {
+  simulated: 'simulated',
+  'real-email': 'real-email',
+} as const;
+
+export interface OnboardingUatRunInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  scenarioId: string;
+  mode?: OnboardingUatRunInputMode;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  volunteerId?: string | null;
+  /** @nullable */
+  requestId?: string | null;
+}
+
+export type OnboardingUatEvidenceResult = typeof OnboardingUatEvidenceResult[keyof typeof OnboardingUatEvidenceResult];
+
+
+export const OnboardingUatEvidenceResult = {
+  passed: 'passed',
+  failed: 'failed',
+  blocked: 'blocked',
+  'not-run': 'not-run',
+  'not-applicable': 'not-applicable',
+} as const;
+
+export type OnboardingUatEvidenceProvenance = typeof OnboardingUatEvidenceProvenance[keyof typeof OnboardingUatEvidenceProvenance];
+
+
+export const OnboardingUatEvidenceProvenance = {
+  simulated: 'simulated',
+  'manual-evidence': 'manual-evidence',
+  'provider-sandbox': 'provider-sandbox',
+  'real-email': 'real-email',
+} as const;
+
+export interface OnboardingUatEvidence {
+  id: string;
+  at: string;
+  /** @nullable */
+  stepId: string | null;
+  result: OnboardingUatEvidenceResult;
+  provenance: OnboardingUatEvidenceProvenance;
+  note: string;
+}
+
+export type OnboardingUatExchangeSystem = typeof OnboardingUatExchangeSystem[keyof typeof OnboardingUatExchangeSystem];
+
+
+export const OnboardingUatExchangeSystem = {
+  hris: 'hris',
+  bgv: 'bgv',
+  itsm: 'itsm',
+  payroll: 'payroll',
+  benefits: 'benefits',
+  email: 'email',
+} as const;
+
+export type OnboardingUatExchangeOperation = typeof OnboardingUatExchangeOperation[keyof typeof OnboardingUatExchangeOperation];
+
+
+export const OnboardingUatExchangeOperation = {
+  request: 'request',
+  status: 'status',
+  poll: 'poll',
+  webhook: 'webhook',
+  'status-email': 'status-email',
+} as const;
+
+export interface OnboardingUatExchange {
+  id: string;
+  system: OnboardingUatExchangeSystem;
+  operation: OnboardingUatExchangeOperation;
+  state: string;
+  at: string;
+  note: string;
+}
+
+export type OnboardingUatPendingEventState = typeof OnboardingUatPendingEventState[keyof typeof OnboardingUatPendingEventState];
+
+
+export const OnboardingUatPendingEventState = {
+  pending: 'pending',
+  applied: 'applied',
+  'ignored-duplicate': 'ignored-duplicate',
+  blocked: 'blocked',
+} as const;
+
+export interface OnboardingUatPendingEvent {
+  id: string;
+  at: string;
+  dueAt: string;
+  kind: string;
+  state: OnboardingUatPendingEventState;
+  description: string;
+  note: string;
+}
+
+export interface OnboardingUatCandidatePortal {
+  caseId?: number;
+  linkId?: number;
+  expiresAt?: string;
+  launchUrl?: string;
+  canIssue?: boolean;
+  state?: string;
+  status?: string;
+  message?: string;
+  reason?: string;
+}
+
+export type OnboardingUatRun = OnboardingUatRunSummary & ({
+  fixtureVersion: string;
+  fixtureSeed: string;
+  baselineRevision: string;
+  mode: 'simulated' | 'real-email';
+  clock: {
+  now: string;
+  /** @minimum 0 */
+  offsetHours: number;
+};
+  linkedCaseIds: number[];
+  syntheticProfile: {
+  workerName: string;
+  workerEmail: string;
+  family: string;
+  variant: string;
+  hireType: string;
+  geography: string;
+  joiningDate: string;
+  fictional: boolean;
+  statement: string;
+};
+  scannerFacts: ({
+  fixtureId: string;
+  state: 'clean' | 'pending' | 'failed' | 'quarantined';
+  required: boolean;
+})[];
+  initialization: 'pending' | 'ready' | 'failed';
+  externalActionStatus?: {
+  kind: 'issue-candidate-portal' | 'dispatch-approved-demo-email';
+  state: 'prepared' | 'dispatched' | 'confirmed' | 'uncertain' | 'terminal-failure';
+  message: string;
+};
+  steps: OnboardingUatStep[];
+  evidence: OnboardingUatEvidence[];
+  exchanges: OnboardingUatExchange[];
+  pendingEvents: OnboardingUatPendingEvent[];
+  workflowEvaluation?: {
+  runId: string;
+  scenarioId: string;
+  family: 'standard' | 'frontline' | 'transfer' | 'shared';
+  providerMode: 'simulated';
+  decisions: ({
+  id: string;
+  label: string;
+  family: 'standard' | 'frontline' | 'transfer' | 'shared';
+  expected: 'eligible' | 'blocked' | 'manual';
+  observed: 'eligible' | 'blocked' | 'manual';
+  passed: boolean;
+  reasons: string[];
+  ruleRefs: string[];
+  provenance: string[];
+})[];
+  summary: {
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 0 */
+  passed: number;
+  /** @minimum 0 */
+  failed: number;
+  /** @minimum 0 */
+  manual: number;
+};
+};
+  cleanupNotice: string;
+  candidatePortal?: OnboardingUatCandidatePortal;
+});
+
+export type OnboardingUatRunActionKind = typeof OnboardingUatRunActionKind[keyof typeof OnboardingUatRunActionKind];
+
+
+export const OnboardingUatRunActionKind = {
+  'record-evidence': 'record-evidence',
+  exchange: 'exchange',
+  'advance-clock': 'advance-clock',
+  pause: 'pause',
+  resume: 'resume',
+  cleanup: 'cleanup',
+  'issue-candidate-portal': 'issue-candidate-portal',
+  'dispatch-approved-demo-email': 'dispatch-approved-demo-email',
+  'inject-harmless-scanner-fact': 'inject-harmless-scanner-fact',
+  'evaluate-workflow': 'evaluate-workflow',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnboardingUatRunActionResult = typeof OnboardingUatRunActionResult[keyof typeof OnboardingUatRunActionResult] | null;
+
+
+export const OnboardingUatRunActionResult = {
+  passed: 'passed',
+  failed: 'failed',
+  blocked: 'blocked',
+  'not-run': 'not-run',
+  'not-applicable': 'not-applicable',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnboardingUatRunActionSystem = typeof OnboardingUatRunActionSystem[keyof typeof OnboardingUatRunActionSystem] | null;
+
+
+export const OnboardingUatRunActionSystem = {
+  hris: 'hris',
+  bgv: 'bgv',
+  itsm: 'itsm',
+  payroll: 'payroll',
+  benefits: 'benefits',
+  email: 'email',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnboardingUatRunActionOperation = typeof OnboardingUatRunActionOperation[keyof typeof OnboardingUatRunActionOperation] | null;
+
+
+export const OnboardingUatRunActionOperation = {
+  request: 'request',
+  status: 'status',
+  poll: 'poll',
+  webhook: 'webhook',
+  'status-email': 'status-email',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnboardingUatRunActionRealEmailConfirmation = typeof OnboardingUatRunActionRealEmailConfirmation[keyof typeof OnboardingUatRunActionRealEmailConfirmation] | null;
+
+
+export const OnboardingUatRunActionRealEmailConfirmation = {
+  I_UNDERSTAND_APPROVED_QA_MAILBOX_ONLY: 'I_UNDERSTAND_APPROVED_QA_MAILBOX_ONLY',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnboardingUatRunActionFixtureId = typeof OnboardingUatRunActionFixtureId[keyof typeof OnboardingUatRunActionFixtureId] | null;
+
+
+export const OnboardingUatRunActionFixtureId = {
+  valid: 'valid',
+  'missing-information': 'missing-information',
+  expired: 'expired',
+  'inconsistent-name': 'inconsistent-name',
+  'unsupported-format': 'unsupported-format',
+  oversized: 'oversized',
+  corrupt: 'corrupt',
+  'changed-bytes': 'changed-bytes',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnboardingUatRunActionScannerState = typeof OnboardingUatRunActionScannerState[keyof typeof OnboardingUatRunActionScannerState] | null;
+
+
+export const OnboardingUatRunActionScannerState = {
+  clean: 'clean',
+  pending: 'pending',
+  failed: 'failed',
+  quarantined: 'quarantined',
+} as const;
+
+export interface OnboardingUatRunAction {
+  /** @minimum 0 */
+  expectedVersion: number;
+  requestId: string;
+  kind: OnboardingUatRunActionKind;
+  /** @nullable */
+  stepId?: string | null;
+  /** @nullable */
+  result?: OnboardingUatRunActionResult;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  note?: string | null;
+  /** @nullable */
+  system?: OnboardingUatRunActionSystem;
+  /** @nullable */
+  operation?: OnboardingUatRunActionOperation;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  state?: string | null;
+  /**
+     * @minimum 1
+     * @maximum 8760
+     * @nullable
+     */
+  hours?: number | null;
+  /** @nullable */
+  realEmailConfirmation?: OnboardingUatRunActionRealEmailConfirmation;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     * @nullable
+     */
+  eventKey?: string | null;
+  /** @nullable */
+  demoRunId?: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  demoExpectedVersion?: number | null;
+  /** @nullable */
+  fixtureId?: OnboardingUatRunActionFixtureId;
+  /** @nullable */
+  scannerState?: OnboardingUatRunActionScannerState;
+}
+
+export interface OnboardingUatEvidenceReport {
+  reportVersion: string;
+  statement: string;
+  run: OnboardingUatRun;
+}
+
+export type OnboardingLearningCatalogGuideSectionsItem = { [key: string]: unknown };
+
+export type OnboardingLearningCatalogFeaturesItem = { [key: string]: unknown };
+
+export type OnboardingLearningCatalogRequirementsItem = { [key: string]: unknown };
+
+export type OnboardingLearningCatalogDenominators = { [key: string]: unknown };
+
+export interface OnboardingLearningCatalog {
+  catalogVersion: string;
+  baselineRevision: string;
+  scenarios: OnboardingUatScenario[];
+  guideSections: OnboardingLearningCatalogGuideSectionsItem[];
+  features: OnboardingLearningCatalogFeaturesItem[];
+  requirements: OnboardingLearningCatalogRequirementsItem[];
+  denominators: OnboardingLearningCatalogDenominators;
 }
 
 export type OnbActionCenterCapabilitiesReminderMode = typeof OnbActionCenterCapabilitiesReminderMode[keyof typeof OnbActionCenterCapabilitiesReminderMode];

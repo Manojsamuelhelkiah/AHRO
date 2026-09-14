@@ -454,6 +454,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     workerEmail: string;
     workerPhone?: string | null;
     notes?: string | null;
+    scenarioKey?: string | null;
     joiningDate?: string;
     hireType: string;
     workerCategory: string;
@@ -470,6 +471,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
       workerEmail: input.caseRow.workerEmail,
       workerPhone: input.caseRow.workerPhone,
       notes: input.caseRow.notes ?? null,
+      scenarioKey: input.caseRow.scenarioKey,
     }),
   });
   // A missing historical snapshot is never permission to issue a new live

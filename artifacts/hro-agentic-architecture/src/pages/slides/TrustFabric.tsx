@@ -1,4 +1,8 @@
-export default function TrustFabric() {
+import { Slide07 } from '../../components/BusinessDeck';
+
+export default Slide07;
+
+export function LegacyTrustFabric() {
   return (
     <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1526] via-[#0c1a30] to-[#0a1526]" />

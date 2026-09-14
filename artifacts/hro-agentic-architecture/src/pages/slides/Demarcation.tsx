@@ -25,7 +25,11 @@ const LAYERS = [
   },
 ];
 
-export default function Demarcation() {
+import { Slide14 } from '../../components/BusinessDeck';
+
+export default Slide14;
+
+export function LegacyDemarcation() {
   return (
     <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1526] via-[#0c1a30] to-[#0a1526]" />

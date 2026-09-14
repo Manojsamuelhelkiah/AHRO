@@ -2,8 +2,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, onbCases, onbEffectJournal } from "@workspace/db";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
 import { demoControllerLiveCaseAllowed } from "./provider-policy";
+import { getUatCaseIsolation } from "./uat-isolation";
 
 type DispatchGuardContext = {
   caseId: number;
@@ -103,7 +104,8 @@ export async function withCaseDispatchGuard<T>(
         eq(onbCases.organizationId, inherited.organizationId),
       ));
     if (!caseRow) return undefined;
-    if (isSyntheticOfflineCase(caseRow) && !demoControllerLiveCaseAllowed(caseRow.organizationId, caseRow.id)) {
+    if ((await getUatCaseIsolation(caseRow)).isolated ||
+      (isSyntheticOfflineCase(caseRow) && !demoControllerLiveCaseAllowed(caseRow.organizationId, caseRow.id))) {
       return options.onOffline
         ? options.onOffline(caseRow)
         : undefined;
@@ -121,6 +123,16 @@ export async function withCaseDispatchGuard<T>(
     .from(onbCases)
     .where(eq(onbCases.id, caseId));
   if (!candidate) return undefined;
+  // Run ownership is an independent fence for a damaged/migrated case whose
+  // scenario key is unavailable. Do not create the guard/effect marker.
+  if ((await getUatCaseIsolation({ organizationId: candidate.organizationId, id: caseId })).isolated) {
+    const [caseRow] = await db.select().from(onbCases).where(and(
+      eq(onbCases.id, caseId),
+      eq(onbCases.organizationId, candidate.organizationId),
+    ));
+    if (!caseRow) return undefined;
+    return options.onOffline ? options.onOffline(caseRow) : undefined;
+  }
   const acquired = await db.transaction(async (tx) => {
     await acquireCaseDispatchMutationLock(tx, candidate.organizationId, caseId);
     const [caseRow] = await tx
@@ -132,7 +144,8 @@ export async function withCaseDispatchGuard<T>(
       ))
       .for("key share");
     if (!caseRow) return { kind: "missing" as const };
-    if (isSyntheticOfflineCase(caseRow) && !demoControllerLiveCaseAllowed(caseRow.organizationId, caseRow.id)) {
+    if (isUatRunIsolatedCase(caseRow) ||
+      (isSyntheticOfflineCase(caseRow) && !demoControllerLiveCaseAllowed(caseRow.organizationId, caseRow.id))) {
       return { kind: "offline" as const, caseRow };
     }
     await tx.insert(onbEffectJournal).values({

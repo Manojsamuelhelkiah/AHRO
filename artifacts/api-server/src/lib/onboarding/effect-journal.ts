@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { onbEffectJournal } from "@workspace/db/schema";
 import { and, eq, or, sql } from "drizzle-orm";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
+import { getUatCaseIsolation } from "./uat-isolation";
 
 export type EffectJournalIdentity = {
   logicalOperationKey: string;
@@ -26,6 +27,9 @@ export type EffectDispatchClaim =
 
 /** Create the single durable row for a logical remote operation. */
 export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
+  if ((await getUatCaseIsolation({ organizationId: input.organizationId, id: input.caseId })).isolated) {
+    throw new Error("UAT-isolated cases cannot create ordinary durable effect-journal entries.");
+  }
   return db.transaction(async (tx) => {
     const [created] = await tx
       .insert(onbEffectJournal)
@@ -84,6 +88,7 @@ export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
  * unrelated current workstream blockers.
  */
 export async function isConfirmedEffect(input: EffectJournalIdentity): Promise<boolean> {
+  if ((await getUatCaseIsolation({ organizationId: input.organizationId, id: input.caseId })).isolated) return false;
   const [entry] = await db
     .select()
     .from(onbEffectJournal)

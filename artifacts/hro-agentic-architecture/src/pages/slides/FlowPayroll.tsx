@@ -1,6 +1,9 @@
 import FlowSlide from '../../components/FlowSlide';
+import { Slide10 } from '../../components/BusinessDeck';
 
-export default function FlowPayroll() {
+export default Slide10;
+
+export function LegacyFlowPayroll() {
   return (
     <FlowSlide
       kicker="Lifecycle Flow 3 · Complex Case"

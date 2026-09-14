@@ -28,7 +28,7 @@ import { Link } from 'wouter';
 import { Presentation, AlertTriangle } from 'lucide-react';
 
 import { useUser } from '@clerk/react';
-import { CaseHeader, CaseHealthStrip, CaseTabs } from './detail/components';
+import { CaseHeader, CaseHealthStrip, CaseTabs, isOfflineDemoSample } from './detail/components';
 import { GatewaysStrip } from './detail/gateways-strip';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
@@ -174,6 +174,7 @@ export function CaseDetailPage() {
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
 
   const demoSession = caps?.available ? caps.existingSessions.find((s: any) => s.caseId === caseId) : undefined;
+  const offlineSample = isOfflineDemoSample(c);
 
   const restrictedFields: string[] = [];
   if (c.workerName === "Restricted candidate") {
@@ -208,17 +209,31 @@ export function CaseDetailPage() {
       )}
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
 
-      <GatewaysStrip
-        c={c}
-        standardIntakeEvidence={standardIntakeEvidence}
-        gateApproval={pendingApprovals.find((approval: any) =>
-          approval.ruleRef === 'Gate A — offer-acceptance package',
-        )}
-      />
-      <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} />
-      <PortalControls caseId={caseId} joiningDate={c.joiningDate} />
+      {offlineSample ? (
+        <div className="mb-6 rounded-lg border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4">
+          <h2 className="text-sm font-bold text-[var(--status-amber-fg)]">Service-case synopsis</h2>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--status-amber-fg)]">
+            {c.planSummary || 'This offline Demo sample has no live service execution.'}
+          </p>
+          <p className="mt-2 text-xs font-medium text-[var(--status-amber-fg)]">
+            Simulated/manual sample only. No onboarding gateway is completed, and no HRIS, payroll, benefits, IAM, LMS, mobility, document, or other provider connection is active.
+          </p>
+        </div>
+      ) : (
+        <>
+          <GatewaysStrip
+            c={c}
+            standardIntakeEvidence={standardIntakeEvidence}
+            gateApproval={pendingApprovals.find((approval: any) =>
+              approval.ruleRef === 'Gate A — offer-acceptance package',
+            )}
+          />
+          <PortalControls caseId={caseId} joiningDate={c.joiningDate} />
+        </>
+      )}
+      <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} offlineSample={offlineSample} />
 
-      <CaseTabs activeTab={activeTab} setTab={setActiveTab} />
+      <CaseTabs activeTab={activeTab} setTab={setActiveTab} offlineSample={offlineSample} />
 
       <div className="pt-2">
         {activeTab === 'Overview' && (
@@ -235,7 +250,7 @@ export function CaseDetailPage() {
           />
         )}
 
-        {activeTab === 'Early tenure' && <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />}
+        {activeTab === 'Early tenure' && !offlineSample && <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />}
         {activeTab === 'Tasks' && <TasksTab c={c} />}
         {activeTab === 'Frontline' && <FrontlineTab caseId={caseId} />}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Onboarding Guide and Test Center — Verification Summary</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;color:#172033;background:#f5f7fb;margin:0;padding:32px}main{max-width:900px;margin:auto;background:white;padding:36px;border-radius:12px}h1,h2{line-height:1.25}h1{font-size:30px}h2{margin-top:30px;font-size:21px}.notice{border-left:4px solid #b7791f;background:#fff8e7;padding:16px}li{margin:7px 0}code{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}@media(max-width:600px){body{padding:10px}main{padding:18px}h1{font-size:25px}}@media print{body{background:white;padding:0}main{padding:0}}</style></head>
+<body><main>
+<h1>Onboarding Guide and Test Center</h1>
+<p>Implementation and verification summary. This report does not certify live providers, professional authority, employment readiness, or complete end-to-end execution of every mapped feature.</p>
+<div class="notice"><strong>Verification limit:</strong> Browser portal attempts exposed an implementation bug: a receipt identifier was incorrectly used as the authority principal. This is fixed. Real database integration checks now prove that an authorized actor can issue a no-email portal, an unauthorized actor is denied, and cleanup revokes the link. Actual portal upload has not been reverified in the browser after this fix. No existing user's authority was granted or bypassed.</div>
+<h2>Delivered in the existing product</h2>
+<ul>
+<li>Searchable, role-filtered Learning Guide and interactive UAT Test Center, available from product navigation.</li>
+<li>Separate mappings for 44 product features and 81 BRD/product obligations, across 17 guided scenarios. Mapping coverage is not execution coverage.</li>
+<li>Persisted, tenant-scoped runs with fictional profiles, linked isolated cases, versioned actions, run-specific clocks, delayed/replayed simulated exchanges, and expected/observed evidence.</li>
+<li>Downloadable labeled PDF, PNG, text, and harmless negative document fixtures.</li>
+<li>Shared production rule evaluation and fixture-backed provider normalization, without writing live readiness, issuing professional approvals, or contacting real vendors.</li>
+<li>Pause/resume, direct run links, redacted evidence exports, and scoped cleanup that revokes access while retaining uploads, sessions, audit history, and holds.</li>
+<li>Explicitly gated delegation to the existing approved-volunteer Demo email flow. Real email was not sent during verification.</li>
+</ul>
+<h2>Browser observations</h2>
+<table><thead><tr><th>Journey</th><th>Observed outcome</th></tr></thead><tbody>
+<tr><td>Guide navigation, search, filters, downloads</td><td>Passed. Canonical guide and coverage exports downloaded.</td></tr>
+<tr><td>Standard run creation and reload</td><td>Passed. Fictional profile and direct run URL persisted.</td></tr>
+<tr><td>Document fixture downloads</td><td>Passed for PDF, PNG, and a harmless unsupported-format fixture.</td></tr>
+<tr><td>Run-owned scanner facts and workflow evaluation</td><td>Passed as an interactive mechanism. Structured matches, mismatches, provenance, and rule references remained distinct from manual notes and live clearance.</td></tr>
+<tr><td>Delayed exchange and virtual time</td><td>Passed. Pending responses applied after advancing only the run clock.</td></tr>
+<tr><td>Pause, resume, export, cleanup</td><td>Passed. Cleaned runs remained retired after reload; mutations were disabled. Export inspection found no portal bearer URLs or sensitive payload fields.</td></tr>
+<tr><td>Frontline evaluation</td><td>Executed. Actual frontline rule references were visible. Release stayed blocked pending policy review; mismatches were not hidden or converted to passes.</td></tr>
+<tr><td>Transfer scenario</td><td>Manual prerequisites remained visible. No live transfer was created or force-enabled. Transfer validator fixtures passed focused backend checks.</td></tr>
+<tr><td>Phone layout</td><td>Checked at 390px: guide and Test Center had no page-level horizontal overflow.</td></tr>
+<tr><td>Actual candidate portal upload</td><td>Earlier browser attempts stopped at the now-fixed principal-handling defect. Authorized issuance and link revocation subsequently passed database integration checks. No browser upload or real scanner result is claimed.</td></tr>
+</tbody></table>
+<h2>Focused automated checks</h2>
+<p>Passing checks covered API/frontend types; catalog consistency; guide/fixture exports; standard/frontline/transfer fixture collectors; evaluator rules; persisted run retry, cleanup, and isolation; malware queue starvation and no-provider-call safeguards; document validation; tenant-isolated reporting and ordinary mutation denial; and both authorized success and unauthorized rejection through the real portal issuance path. Cleanup is available in active, paused, blocked, and completed run states.</p>
+<p>These checks validate their stated boundaries. They do not replace actual browser upload verification or live-provider certification.</p>
+<h2>Portal verification conditions</h2>
+<p>The earlier inference that the demo reviewer necessarily needed an additional grant is withdrawn. Authority is now checked against the authenticated actor, independently of the receipt identity. Use an appropriately authorized reviewer, create a new run, issue its explicit no-email portal, upload a labeled fixture, inspect pending/quarantine evidence, and clean up that run. Previously cleaned runs must not be revived. UAT itself never grants sensitive-record permissions.</p>
+<h2>Safety and reporting boundaries</h2>
+<p>Test ownership is durably scoped outside mutable case notes. Worker selection and claims exclude isolated test records before bounded queue limits; final dispatch checks remain. Simulated scanner facts never change actual document quarantine or live readiness. Static feature/BRD mappings, manual observations, simulated assertions, and real-provider evidence are reported separately.</p>
+</main></body></html>

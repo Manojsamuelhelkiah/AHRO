@@ -5,6 +5,19 @@ import { Badge, Button, cn } from '@/components/ui-shared';
 import { useStartOnboardingVoiceCall, getListOnboardingCaseCommunicationsQueryKey, getListOnboardingCaseEventsQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ContactDialog } from './ContactDialog';
+import { casePresentationOf, isDemoCoverageCase } from '../case-presentation';
+
+export function isOfflineDemoSample(c: { scenarioKey?: string | null }) {
+  return isDemoCoverageCase(c);
+}
+
+function casePresentation(c: any) {
+  return casePresentationOf(c) ?? {
+    type: 'Onboarding',
+    title: c.hireType?.replace(/-/g, ' ') || 'Onboarding case',
+    owner: 'Onboarding Agent',
+  };
+}
 
 export function StatusBadgeText({ status }: { status: string }) {
   const s = status.toLowerCase();
@@ -50,6 +63,12 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
   };
 
   const statusText = c.orchestrationStatus === 'waiting-approval' ? 'HUMAN REVIEW' : c.orchestrationStatus.replace(/-/g, ' ');
+  const offlineSample = isOfflineDemoSample(c);
+  const presentation = offlineSample ? casePresentation(c) : {
+    type: c.hireType?.replace(/-/g, ' ') || 'Onboarding',
+    title: c.workerName,
+    owner: 'Onboarding Agent',
+  };
 
   return (
     <div className="sticky top-0 z-30 bg-[var(--surface)] pb-4 pt-4 px-6 md:px-8 -mx-6 md:-mx-8 border-b border-[var(--border)] shadow-[var(--shadow-sm)] mb-6">
@@ -57,13 +76,18 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
         <div className="min-w-0">
            <div className="flex items-center gap-3 mb-1">
              <span className="text-[var(--text-xs)] font-bold text-[var(--primary)] bg-[var(--primary-light-bg)] px-2 py-0.5 rounded-full">Case #{c.id}</span>
-             <h1 className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-none m-0">{c.workerName}</h1>
-             <Badge variant="outline" className="uppercase text-[10px] tracking-wider">{c.hireType.replace(/-/g, ' ')}</Badge>
+              <h1 className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-none m-0">{presentation.title}</h1>
+              <Badge variant="outline" className="uppercase text-[10px] tracking-wider">{presentation.type}</Badge>
            </div>
-           <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{c.role} • {c.geography} • Effective {format(new Date(c.joiningDate), 'MMM d, yyyy')}</p>
+            <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{offlineSample ? `For ${c.workerName} • ` : ''}{c.role} • {c.geography} • Effective {format(new Date(c.joiningDate), 'MMM d, yyyy')}</p>
+            {offlineSample && (
+              <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
+                Demo-only offline sample — manually seeded; no provider is connected, authorized, or contacted.
+              </p>
+            )}
            
            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[11px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">
-             <span className="flex items-center gap-1">Owner: <span className="text-[var(--text-primary)]">Onboarding Agent</span></span>
+              <span className="flex items-center gap-1">Owner: <span className="text-[var(--text-primary)]">{presentation.owner}</span></span>
              <span className="flex items-center gap-1">Priority: <span className={c.urgency === 'elevated' ? 'text-[var(--status-red)]' : 'text-[var(--text-primary)]'}>{c.urgency}</span></span>
              <span className="flex items-center gap-1">Stage: <span className="text-[var(--text-primary)]">{c.lifecycleStage.replace(/-/g, ' ')}</span></span>
              <span className="flex items-center gap-1">Status: <span className="text-[var(--text-primary)]">{statusText}</span></span>
@@ -112,7 +136,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
   );
 }
 
-export function CaseHealthStrip({ c, pendingApprovals }: { c: any, pendingApprovals: any[] }) {
+export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: { c: any, pendingApprovals: any[], offlineSample?: boolean }) {
   const total = c.workstreams?.length || 0;
   const ready = c.workstreams?.filter((w: any) => w.status === 'ready').length || 0;
   const progressPct = total > 0 ? Math.round((ready / total) * 100) : 0;
@@ -120,19 +144,20 @@ export function CaseHealthStrip({ c, pendingApprovals }: { c: any, pendingApprov
   // Health maps the full orchestrationStatus domain truthfully — never claim
   // active execution for idle/done cases.
   const orch = c.orchestrationStatus as string;
-  const state = pendingApprovals.length > 0 ? 'attention' : (orch === 'blocked' || orch === 'checklist-blocked') ? 'blocked' : orch === 'done' ? 'done' : orch === 'idle' ? 'idle' : 'healthy';
-  const healthTitle = state === 'attention' ? 'Attention required' : state === 'blocked' ? 'Blocked' : state === 'done' ? 'Complete' : state === 'idle' ? 'Idle' : 'Healthy';
-  const healthSub = state === 'attention' ? `${pendingApprovals.length} decision${pendingApprovals.length > 1 ? 's' : ''} require${pendingApprovals.length === 1 ? 's' : ''} review`
+  const state = offlineSample ? 'offline' : pendingApprovals.length > 0 ? 'attention' : (orch === 'blocked' || orch === 'checklist-blocked') ? 'blocked' : orch === 'done' ? 'done' : orch === 'idle' ? 'idle' : 'healthy';
+  const healthTitle = state === 'offline' ? 'Offline sample' : state === 'attention' ? 'Attention required' : state === 'blocked' ? 'Blocked' : state === 'done' ? 'Complete' : state === 'idle' ? 'Idle' : 'Healthy';
+  const healthSub = state === 'offline' ? 'Manual Demo data; execution is intentionally disabled.'
+    : state === 'attention' ? `${pendingApprovals.length} decision${pendingApprovals.length > 1 ? 's' : ''} require${pendingApprovals.length === 1 ? 's' : ''} review`
     : state === 'blocked' ? (orch === 'checklist-blocked' ? 'Waiting for mandatory checklist items' : 'Waiting for manual unblock')
     : state === 'done' ? 'Case processing complete'
     : state === 'idle' ? 'No execution in progress'
     : 'Automated execution active';
-  const healthColor = state === 'attention' ? 'var(--status-amber)' : state === 'blocked' ? 'var(--status-red)' : state === 'idle' ? 'var(--border-strong)' : 'var(--status-green)';
-  const healthFg = state === 'attention' ? 'var(--status-amber-fg)' : state === 'blocked' ? 'var(--status-red-fg)' : state === 'idle' ? 'var(--text-secondary)' : 'var(--status-green-fg)';
+  const healthColor = state === 'offline' ? 'var(--status-amber)' : state === 'attention' ? 'var(--status-amber)' : state === 'blocked' ? 'var(--status-red)' : state === 'idle' ? 'var(--border-strong)' : 'var(--status-green)';
+  const healthFg = state === 'offline' ? 'var(--status-amber-fg)' : state === 'attention' ? 'var(--status-amber-fg)' : state === 'blocked' ? 'var(--status-red-fg)' : state === 'idle' ? 'var(--text-secondary)' : 'var(--status-green-fg)';
 
   // Day-1 milestone only applies to onboarding-lifecycle cases with a future-relevant joining date.
   const onboardingStages = ['trigger-received', 'profile-validated', 'plan-generated', 'preboarding', 'day1-review', 'early-enablement'];
-  const isOnboarding = onboardingStages.includes(c.lifecycleStage) && !!c.joiningDate;
+  const isOnboarding = !offlineSample && onboardingStages.includes(c.lifecycleStage) && !!c.joiningDate;
   
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -166,8 +191,8 @@ export function CaseHealthStrip({ c, pendingApprovals }: { c: any, pendingApprov
   );
 }
 
-export function CaseTabs({ activeTab, setTab }: { activeTab: string, setTab: (t: string) => void }) {
-  const tabs = ['Overview', 'Early tenure', 'Tasks', 'Frontline', 'Documents', 'Activity', 'Communications', 'Audit', 'Ask AI'];
+export function CaseTabs({ activeTab, setTab, offlineSample = false }: { activeTab: string, setTab: (t: string) => void, offlineSample?: boolean }) {
+  const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Tasks', 'Frontline', 'Documents', 'Activity', 'Communications', 'Audit', 'Ask AI'];
   return (
     <div className="flex overflow-x-auto border-b border-[var(--border)] mb-6 hide-scrollbar -mx-6 md:mx-0 px-6 md:px-0">
       {tabs.map(t => (

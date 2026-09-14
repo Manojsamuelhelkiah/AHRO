@@ -3,168 +3,168 @@
     "id": "0b6f6a54-9f1c-4f6e-9a2e-1c3d5e7f9a01",
     "position": 1,
     "filepath": "src/pages/slides/TitleSlide.tsx",
-    "title": "Autonomous HRO: The Agentic Hire-to-Retire Platform",
-    "description": "Title slide introducing the AI-native HRO architecture on Azure and the Microsoft stack.",
+    "title": "HR Operations, Connected Around Accountable Cases",
+    "description": "Business-led control-tower architecture for governed HR operations, current as of 14 September 2026.",
     "speakerNotes": ""
   },
   {
     "id": "6b2d3a10-7f8c-4a0b-9ce3-7e9f1b3d5a67",
     "position": 2,
     "filepath": "src/pages/slides/ArchitectureDiagram.tsx",
-    "title": "Reference Architecture \u2014 One View",
-    "description": "Full layered architecture diagram: experience, gateway, intake, intent, orchestration, MCP services, case management, act, systems of record, and cross-cutting concerns.",
+    "title": "Approve a Governed HR Service Rollout",
+    "description": "Executive decision ask and boundary between approved control-plane rollout and unconnected provider execution.",
     "speakerNotes": ""
   },
   {
     "id": "7c3e4b21-8a9d-4b1c-adf4-8f0a2c4e6b78",
     "position": 3,
     "filepath": "src/pages/slides/FunctionalView.tsx",
-    "title": "Functional View \u2014 What Each Part Does",
-    "description": "Functional twin of the reference architecture: same numbered components described in business terms for a functional audience.",
+    "title": "HR Work Breaks at Handoffs",
+    "description": "Business pains from fragmented HR handoffs, unclear ownership and hidden control gaps.",
     "speakerNotes": ""
   },
   {
     "id": "1c7e8b65-2a3d-4b5c-8d9e-2f4a6c8e0b12",
     "position": 4,
     "filepath": "src/pages/slides/ExperienceIntake.tsx",
-    "title": "The Agentic Experience & Multimodal Intake",
-    "description": "AI personas across channels and multimodal ingestion of documents, voice, and video.",
+    "title": "Stakeholder Value",
+    "description": "Role-specific value for employees, HR operations, specialists, leaders and auditors.",
     "speakerNotes": ""
   },
   {
     "id": "2d8f9c76-3b4e-4c6d-9eaf-3a5b7d9f1c23",
     "position": 5,
     "filepath": "src/pages/slides/IntentRouting.tsx",
-    "title": "Intent Classification, Routing & Multi-Loop Conversations",
-    "description": "HRO intent catalog, prioritization and routing, A2A multi-agent loops with human-in-the-loop.",
+    "title": "Hire-to-Retire Service Portfolio",
+    "description": "Target portfolio and staged distinction between case control and provider execution.",
     "speakerNotes": ""
   },
   {
     "id": "3e9a0d87-4c5f-4d7e-8fb0-4b6c8e0a2d34",
     "position": 6,
     "filepath": "src/pages/slides/BrainAndHands.tsx",
-    "title": "Services, Reasoning & Action",
-    "description": "MCP tool servers, policy RAG, fast and deep reasoning, and connectors into systems of record.",
+    "title": "Current Product Surface",
+    "description": "Implemented Control Tower views across operations, configuration, governance, reporting and assurance.",
     "speakerNotes": ""
   },
   {
     "id": "4f0b1e98-5d6a-4e8f-9ac1-5c7d9f1b3e45",
     "position": 7,
     "filepath": "src/pages/slides/TrustFabric.tsx",
-    "title": "Trust Fabric: Security, Guardrails & Observability",
-    "description": "Entra ID agent identities, content safety guardrails, and end-to-end observability.",
+    "title": "The Shared Case Operating Model",
+    "description": "Case-led coordination and intended unification across HR services.",
     "speakerNotes": ""
   },
   {
     "id": "8d4f5c32-9bae-4c2d-be05-9a1b3d5f7c89",
     "position": 8,
     "filepath": "src/pages/slides/FlowPayslip.tsx",
-    "title": "Lifecycle Flow 1: Payslip Copy & Leave Balance",
-    "description": "As-is vs to-be for high-volume repetitive requests handled by a deterministic tool path.",
+    "title": "Orchestration and Provider Execution Boundary",
+    "description": "Implemented case orchestration contrasted with unconnected payroll, benefits and other provider execution.",
     "speakerNotes": ""
   },
   {
     "id": "9e5a6d43-acbf-4d3e-af16-ab2c4e6a8d90",
     "position": 9,
     "filepath": "src/pages/slides/FlowPolicy.tsx",
-    "title": "Lifecycle Flow 2: Policy Question",
-    "description": "As-is vs to-be for policy questions answered from the country-aware HR policy library with citations.",
+    "title": "Workforce Runtime and Action Center",
+    "description": "Accountable human work, specialist routing and visible operational ownership.",
     "speakerNotes": ""
   },
   {
     "id": "af6b7e54-bdca-4e4f-b027-bc3d5f7b9ea1",
     "position": 10,
     "filepath": "src/pages/slides/FlowPayroll.tsx",
-    "title": "Lifecycle Flow 3: Payroll Discrepancy Dispute",
-    "description": "As-is vs to-be for a complex multi-agent case with human-in-the-loop approval and gated write-back.",
+    "title": "Onboarding and Early Tenure",
+    "description": "Evidence-backed gateways, candidate portal, early-tenure plans, alerts and recovery.",
     "speakerNotes": ""
   },
   {
     "id": "ba7c8f65-cedb-4f5a-c138-cd4e6a8cafb2",
     "position": 11,
     "filepath": "src/pages/slides/FlowMobility.tsx",
-    "title": "Lifecycle Flow 4: Cross-Border Relocation",
-    "description": "As-is vs to-be for a frontier case beyond traditional automation: deep reasoning, multi-agent coordination, human gates.",
+    "title": "Workforce Variants and Hard Controls",
+    "description": "Frontline, transfer and complex-move controls with retained human specialist decisions.",
     "speakerNotes": ""
   },
   {
     "id": "cb8d9a76-dfec-4a6b-a249-de5f7b9db0c3",
     "position": 12,
     "filepath": "src/pages/slides/MultiTenant.tsx",
-    "title": "From Solution to Product \u2014 Multi-Tenant by Design",
-    "description": "Multi-tenant product architecture: shared control plane, isolated tenant planes per client, shared foundation, and isolation tiers.",
+    "title": "Policy, AI and Governance",
+    "description": "Cited guidance, guarded AI drafts and specialist authority controls.",
     "speakerNotes": ""
   },
   {
     "id": "dc9eab87-eafd-4b7c-b35a-ef6a8cae0dd4",
     "position": 13,
     "filepath": "src/pages/slides/ProductConsiderations.tsx",
-    "title": "Running It as a Product \u2014 What Else Must Be True",
-    "description": "Productization checklist: isolation, compliance and residency, commercial model, operations at scale, customization vs core, go-to-market.",
+    "title": "Privacy, Audit and Recovery",
+    "description": "Sensitive-data controls, auditability, retention-aware handling and recovery.",
     "speakerNotes": ""
   },
   {
     "id": "f5d0c9fc-d624-4d91-a47b-0abe9a173201",
     "position": 14,
     "filepath": "src/pages/slides/Demarcation.tsx",
-    "title": "Core vs Configurable vs Custom \u2014 Product Demarcation",
-    "description": "Three-layer demarcation of the offering: core platform amortized across clients, configurable per-tenant dials, and custom per-client engineering \u2014 mirrored by badges in the cost-benefit explorer.",
+    "title": "Management Measurement",
+    "description": "Operational KPIs, quality and privacy-aware reporting.",
     "speakerNotes": ""
   },
   {
     "id": "edaf0c98-fb0e-4c8d-a46b-fa7b9dbf1ee5",
     "position": 15,
     "filepath": "src/pages/slides/IsolationTiers.tsx",
-    "title": "Choosing an Isolation Tier \u2014 Cost vs Control",
-    "description": "Comparison of pooled, siloed-database, and fully dedicated deployment tiers across sharing, security, compliance, cost, speed, and typical client.",
+    "title": "Baseline-Dependent Value Calculation",
+    "description": "Value calculation framework with no invented ROI, payback or customer outcomes.",
     "speakerNotes": ""
   },
   {
     "id": "fe1b0da9-ac1f-4d9e-b57c-ab8cae0a2ff6",
     "position": 16,
     "filepath": "src/pages/slides/DeliveryModel.tsx",
-    "title": "SaaS or On-Prem? \u2014 Operated as SaaS in Every Tier",
-    "description": "Delivery-model position: why the platform is operated as SaaS, how dedicated in-your-cloud answers on-prem demands, and the split data-plane hybrid.",
+    "title": "Phased Adoption",
+    "description": "Prepare, configure, pilot and expand with earned scope.",
     "speakerNotes": ""
   },
   {
     "id": "0f2c1eba-bd2a-4eaf-c68d-bc9dbf1b3aa7",
     "position": 17,
     "filepath": "src/pages/slides/Requirements.tsx",
-    "title": "Hardware, Software & Infrastructure Requirements",
-    "description": "Hardware and capacity, software stack, infrastructure and network, and client-side prerequisites for running the product.",
+    "title": "Go-Live Preconditions",
+    "description": "Business, control, technical and evidence readiness requirements.",
     "speakerNotes": ""
   },
   {
     "id": "1a3d2fcb-ce3b-4fba-d79e-cdaec02c4bb8",
     "position": 18,
     "filepath": "src/pages/slides/Pricing.tsx",
-    "title": "Pricing Models & Options",
-    "description": "Three pricing models (PEPM, per resolved case, platform + usage), tier multipliers and add-ons, and commercial guardrails.",
+    "title": "Mapped Coverage and Verified Evidence",
+    "description": "Learning Guide and Test Center distinction between reference mapping, observed evidence, manual and blocked scope.",
     "speakerNotes": ""
   },
   {
     "id": "2b4e30dc-df4c-40cb-e8af-debfd13d5cc9",
     "position": 19,
     "filepath": "src/pages/slides/Timeline.tsx",
-    "title": "Implementation Plan \u2014 ~26 Weeks to Full Rollout",
-    "description": "Gantt-style implementation timeline: discover, foundation, build, assure, launch phases with milestones and go/no-go gates.",
+    "title": "Target Service Control-Plane Architecture",
+    "description": "Appendix architecture showing case and control plane between HR demand and execution.",
     "speakerNotes": ""
   },
   {
     "id": "3c5f41ed-ea5d-41dc-a9b0-efc0e24e6dd0",
     "position": 20,
     "filepath": "src/pages/slides/LegalDocs.tsx",
-    "title": "Legal & Product Documentation \u2014 Post-Release",
-    "description": "Legal and product documents by lifecycle stage: contract & onboard, live operations, change & update, incident & exit.",
+    "title": "Implemented Control Plane and Pending Execution",
+    "description": "Appendix boundary between implemented product capabilities and future provider connections.",
     "speakerNotes": ""
   },
   {
     "id": "5a1c2f09-6e7b-4f9a-8bd2-6d8e0a2c4f56",
     "position": 21,
     "filepath": "src/pages/slides/InsightImpact.tsx",
-    "title": "Insight & Impact: Reporting, Dashboards & the Road Ahead",
-    "description": "Fabric and Power BI reporting, autonomy metrics, open standards, and the call to action.",
+    "title": "Feature Coverage by View",
+    "description": "Appendix map of current feature areas to application views, not a verification claim.",
     "speakerNotes": ""
   }
 ]

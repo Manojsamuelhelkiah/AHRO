@@ -49,7 +49,11 @@ const groups: { title: string; items: [string, string][] }[] = [
   },
 ];
 
-export default function ProductConsiderations() {
+import { Slide13 } from '../../components/BusinessDeck';
+
+export default Slide13;
+
+export function LegacyProductConsiderations() {
   return (
     <div className="w-screen h-screen overflow-hidden relative bg-bg">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1526] via-[#0c1a30] to-[#0a1526]" />

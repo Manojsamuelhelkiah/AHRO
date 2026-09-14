@@ -52,6 +52,7 @@ import { documentationGateReady } from "./document-validation-policy";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readiness-sla-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { ordinaryCaseSql } from "./uat-isolation";
 import type { OnboardingDbTransaction } from "./settings";
 import { recoverWorkforceConnectorContinuations } from "./operational-requests";
 import { runFrontlineReleaseHeartbeat } from "./frontline-operations";
@@ -969,6 +970,7 @@ export async function recoverUntrackedCaseSystems(
         sql`${onbCases.lifecycleStage} in ('preboarding', 'day1-review')
             and coalesce(${onbCases.orchestrationStatus}, '') <> 'checklist-blocked'
             and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id} and sc.organization_id = ${onbCases.organizationId})`,
+        ordinaryCaseSql(onbCases.organizationId, onbCases.id),
         onlyCaseId === undefined ? undefined : eq(onbCases.id, onlyCaseId),
       ),
     );
@@ -999,6 +1001,9 @@ export async function recoverUntrackedCaseSystems(
           where sc.case_id = ${onbCases.id}
             and sc.organization_id = ${onbCases.organizationId}
         )`,
+        // Repeat the UAT exclusion in the claim itself so a durable UAT run
+        // written after selection cannot increment orchestration tokens.
+        ordinaryCaseSql(onbCases.organizationId, onbCases.id),
         or(
           sql`${onbCases.orchestrationClaimOwner} is null`,
           sql`${onbCases.orchestrationClaimUntil} <= now()`,

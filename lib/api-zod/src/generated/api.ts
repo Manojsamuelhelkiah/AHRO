@@ -2155,6 +2155,697 @@ export const DownloadOnboardingDemoRunDocumentsResponse = zod.string()
 
 
 /**
+ * @summary Get the non-authoritative UAT catalog and tenant-owned run summaries
+ */
+
+export const getOnboardingUatCatalogResponseRunsItemVersionMin = 0;
+
+
+
+export const GetOnboardingUatCatalogResponse = zod.object({
+  "catalogVersion": zod.string(),
+  "baselineRevision": zod.string(),
+  "syntheticOnly": zod.boolean(),
+  "scenarios": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "family": zod.string(),
+  "description": zod.string(),
+  "roles": zod.array(zod.string()),
+  "mode": zod.enum(['simulated', 'manual-evidence', 'provider-sandbox', 'real-email']),
+  "status": zod.enum(['available', 'blocked', 'manual']),
+  "blocker": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()).optional(),
+  "fixturePack": zod.string().optional(),
+  "featureIds": zod.array(zod.string()).optional(),
+  "requirementIds": zod.array(zod.string()).optional(),
+  "passCriteria": zod.string().optional(),
+  "cleanup": zod.string().optional(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "order": zod.number().min(1),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "expected": zod.string(),
+  "evidence": zod.string(),
+  "wait": zod.string(),
+  "negativePath": zod.string().optional(),
+  "cleanup": zod.string().optional()
+}))
+})),
+  "runs": zod.array(zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'completed', 'blocked', 'cleaned']),
+  "version": zod.number().min(getOnboardingUatCatalogResponseRunsItemVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get the canonical learning, feature, and requirements traceability catalog
+ */
+
+
+
+export const GetOnboardingLearningCatalogResponse = zod.object({
+  "catalogVersion": zod.string(),
+  "baselineRevision": zod.string(),
+  "scenarios": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "family": zod.string(),
+  "description": zod.string(),
+  "roles": zod.array(zod.string()),
+  "mode": zod.enum(['simulated', 'manual-evidence', 'provider-sandbox', 'real-email']),
+  "status": zod.enum(['available', 'blocked', 'manual']),
+  "blocker": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()).optional(),
+  "fixturePack": zod.string().optional(),
+  "featureIds": zod.array(zod.string()).optional(),
+  "requirementIds": zod.array(zod.string()).optional(),
+  "passCriteria": zod.string().optional(),
+  "cleanup": zod.string().optional(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "order": zod.number().min(1),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "expected": zod.string(),
+  "evidence": zod.string(),
+  "wait": zod.string(),
+  "negativePath": zod.string().optional(),
+  "cleanup": zod.string().optional()
+}))
+})),
+  "guideSections": zod.array(zod.record(zod.string(), zod.unknown())),
+  "features": zod.array(zod.record(zod.string(), zod.unknown())),
+  "requirements": zod.array(zod.record(zod.string(), zod.unknown())),
+  "denominators": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
+ * @summary Create a tenant-scoped synthetic UAT run
+ */
+export const createOnboardingUatRunBodyScenarioIdMax = 80;
+
+export const createOnboardingUatRunBodyModeDefault = `simulated`;
+export const createOnboardingUatRunBodyVolunteerIdMax = 200;
+
+
+
+export const CreateOnboardingUatRunBody = zod.object({
+  "scenarioId": zod.string().min(1).max(createOnboardingUatRunBodyScenarioIdMax),
+  "mode": zod.enum(['simulated', 'real-email']).default(createOnboardingUatRunBodyModeDefault),
+  "volunteerId": zod.string().max(createOnboardingUatRunBodyVolunteerIdMax).nullish(),
+  "requestId": zod.string().uuid().nullish()
+})
+
+export const createOnboardingUatRunResponseOneVersionMin = 0;
+
+export const createOnboardingUatRunResponseTwoClockOffsetHoursMin = 0;
+
+
+export const createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryTotalMin = 0;
+
+export const createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryPassedMin = 0;
+
+export const createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryFailedMin = 0;
+
+export const createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryManualMin = 0;
+
+
+
+export const CreateOnboardingUatRunResponse = zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'completed', 'blocked', 'cleaned']),
+  "version": zod.number().min(createOnboardingUatRunResponseOneVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "fixtureVersion": zod.string(),
+  "fixtureSeed": zod.string(),
+  "baselineRevision": zod.string(),
+  "mode": zod.enum(['simulated', 'real-email']),
+  "clock": zod.object({
+  "now": zod.coerce.date(),
+  "offsetHours": zod.number().min(createOnboardingUatRunResponseTwoClockOffsetHoursMin)
+}),
+  "linkedCaseIds": zod.array(zod.number()),
+  "syntheticProfile": zod.object({
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "family": zod.string(),
+  "variant": zod.string(),
+  "hireType": zod.string(),
+  "geography": zod.string(),
+  "joiningDate": zod.coerce.date(),
+  "fictional": zod.boolean(),
+  "statement": zod.string()
+}),
+  "scannerFacts": zod.array(zod.object({
+  "fixtureId": zod.string(),
+  "state": zod.enum(['clean', 'pending', 'failed', 'quarantined']),
+  "required": zod.boolean()
+})),
+  "initialization": zod.enum(['pending', 'ready', 'failed']),
+  "externalActionStatus": zod.object({
+  "kind": zod.enum(['issue-candidate-portal', 'dispatch-approved-demo-email']),
+  "state": zod.enum(['prepared', 'dispatched', 'confirmed', 'uncertain', 'terminal-failure']),
+  "message": zod.string()
+}).optional(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "order": zod.number().min(1),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "expected": zod.string(),
+  "evidence": zod.string(),
+  "wait": zod.string(),
+  "negativePath": zod.string().optional(),
+  "cleanup": zod.string().optional()
+})),
+  "evidence": zod.array(zod.object({
+  "id": zod.string(),
+  "at": zod.coerce.date(),
+  "stepId": zod.string().nullable(),
+  "result": zod.enum(['passed', 'failed', 'blocked', 'not-run', 'not-applicable']),
+  "provenance": zod.enum(['simulated', 'manual-evidence', 'provider-sandbox', 'real-email']),
+  "note": zod.string()
+})),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "system": zod.enum(['hris', 'bgv', 'itsm', 'payroll', 'benefits', 'email']),
+  "operation": zod.enum(['request', 'status', 'poll', 'webhook', 'status-email']),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "note": zod.string()
+})),
+  "pendingEvents": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "at": zod.coerce.date(),
+  "dueAt": zod.coerce.date(),
+  "kind": zod.string(),
+  "state": zod.enum(['pending', 'applied', 'ignored-duplicate', 'blocked']),
+  "description": zod.string(),
+  "note": zod.string()
+})),
+  "workflowEvaluation": zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "providerMode": zod.enum(['simulated']),
+  "decisions": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "expected": zod.enum(['eligible', 'blocked', 'manual']),
+  "observed": zod.enum(['eligible', 'blocked', 'manual']),
+  "passed": zod.boolean(),
+  "reasons": zod.array(zod.string()),
+  "ruleRefs": zod.array(zod.string()),
+  "provenance": zod.array(zod.string())
+})),
+  "summary": zod.object({
+  "total": zod.number().min(createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryTotalMin),
+  "passed": zod.number().min(createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryPassedMin),
+  "failed": zod.number().min(createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryFailedMin),
+  "manual": zod.number().min(createOnboardingUatRunResponseTwoWorkflowEvaluationSummaryManualMin)
+})
+}).optional(),
+  "cleanupNotice": zod.string(),
+  "candidatePortal": zod.object({
+  "caseId": zod.number().optional(),
+  "linkId": zod.number().optional(),
+  "expiresAt": zod.coerce.date().optional(),
+  "launchUrl": zod.string().url().optional(),
+  "canIssue": zod.boolean().optional(),
+  "state": zod.string().optional(),
+  "status": zod.string().optional(),
+  "message": zod.string().optional(),
+  "reason": zod.string().optional()
+}).optional()
+}))
+
+
+/**
+ * @summary Get a tenant-owned UAT run
+ */
+export const GetOnboardingUatRunParams = zod.object({
+  "runId": zod.coerce.string().uuid()
+})
+
+export const getOnboardingUatRunResponseOneVersionMin = 0;
+
+export const getOnboardingUatRunResponseTwoClockOffsetHoursMin = 0;
+
+
+export const getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryTotalMin = 0;
+
+export const getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryPassedMin = 0;
+
+export const getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryFailedMin = 0;
+
+export const getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryManualMin = 0;
+
+
+
+export const GetOnboardingUatRunResponse = zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'completed', 'blocked', 'cleaned']),
+  "version": zod.number().min(getOnboardingUatRunResponseOneVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "fixtureVersion": zod.string(),
+  "fixtureSeed": zod.string(),
+  "baselineRevision": zod.string(),
+  "mode": zod.enum(['simulated', 'real-email']),
+  "clock": zod.object({
+  "now": zod.coerce.date(),
+  "offsetHours": zod.number().min(getOnboardingUatRunResponseTwoClockOffsetHoursMin)
+}),
+  "linkedCaseIds": zod.array(zod.number()),
+  "syntheticProfile": zod.object({
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "family": zod.string(),
+  "variant": zod.string(),
+  "hireType": zod.string(),
+  "geography": zod.string(),
+  "joiningDate": zod.coerce.date(),
+  "fictional": zod.boolean(),
+  "statement": zod.string()
+}),
+  "scannerFacts": zod.array(zod.object({
+  "fixtureId": zod.string(),
+  "state": zod.enum(['clean', 'pending', 'failed', 'quarantined']),
+  "required": zod.boolean()
+})),
+  "initialization": zod.enum(['pending', 'ready', 'failed']),
+  "externalActionStatus": zod.object({
+  "kind": zod.enum(['issue-candidate-portal', 'dispatch-approved-demo-email']),
+  "state": zod.enum(['prepared', 'dispatched', 'confirmed', 'uncertain', 'terminal-failure']),
+  "message": zod.string()
+}).optional(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "order": zod.number().min(1),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "expected": zod.string(),
+  "evidence": zod.string(),
+  "wait": zod.string(),
+  "negativePath": zod.string().optional(),
+  "cleanup": zod.string().optional()
+})),
+  "evidence": zod.array(zod.object({
+  "id": zod.string(),
+  "at": zod.coerce.date(),
+  "stepId": zod.string().nullable(),
+  "result": zod.enum(['passed', 'failed', 'blocked', 'not-run', 'not-applicable']),
+  "provenance": zod.enum(['simulated', 'manual-evidence', 'provider-sandbox', 'real-email']),
+  "note": zod.string()
+})),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "system": zod.enum(['hris', 'bgv', 'itsm', 'payroll', 'benefits', 'email']),
+  "operation": zod.enum(['request', 'status', 'poll', 'webhook', 'status-email']),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "note": zod.string()
+})),
+  "pendingEvents": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "at": zod.coerce.date(),
+  "dueAt": zod.coerce.date(),
+  "kind": zod.string(),
+  "state": zod.enum(['pending', 'applied', 'ignored-duplicate', 'blocked']),
+  "description": zod.string(),
+  "note": zod.string()
+})),
+  "workflowEvaluation": zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "providerMode": zod.enum(['simulated']),
+  "decisions": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "expected": zod.enum(['eligible', 'blocked', 'manual']),
+  "observed": zod.enum(['eligible', 'blocked', 'manual']),
+  "passed": zod.boolean(),
+  "reasons": zod.array(zod.string()),
+  "ruleRefs": zod.array(zod.string()),
+  "provenance": zod.array(zod.string())
+})),
+  "summary": zod.object({
+  "total": zod.number().min(getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryTotalMin),
+  "passed": zod.number().min(getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryPassedMin),
+  "failed": zod.number().min(getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryFailedMin),
+  "manual": zod.number().min(getOnboardingUatRunResponseTwoWorkflowEvaluationSummaryManualMin)
+})
+}).optional(),
+  "cleanupNotice": zod.string(),
+  "candidatePortal": zod.object({
+  "caseId": zod.number().optional(),
+  "linkId": zod.number().optional(),
+  "expiresAt": zod.coerce.date().optional(),
+  "launchUrl": zod.string().url().optional(),
+  "canIssue": zod.boolean().optional(),
+  "state": zod.string().optional(),
+  "status": zod.string().optional(),
+  "message": zod.string().optional(),
+  "reason": zod.string().optional()
+}).optional()
+}))
+
+
+/**
+ * Simulation remains non-authoritative. The only live-email action delegates to an existing Demo Organization run with its already pinned approved volunteer, explicit confirmation, and existing monitoring; it never accepts a recipient address.
+ * @summary Record a guided action, run-scoped exchange, or scoped clock advance
+ */
+export const ApplyOnboardingUatRunActionParams = zod.object({
+  "runId": zod.coerce.string().uuid()
+})
+
+export const applyOnboardingUatRunActionBodyExpectedVersionMin = 0;
+
+export const applyOnboardingUatRunActionBodyNoteMax = 1000;
+
+export const applyOnboardingUatRunActionBodyStateMax = 80;
+
+export const applyOnboardingUatRunActionBodyHoursMax = 8760;
+
+export const applyOnboardingUatRunActionBodyEventKeyMax = 200;
+
+export const applyOnboardingUatRunActionBodyDemoExpectedVersionMin = 0;
+
+
+
+export const ApplyOnboardingUatRunActionBody = zod.object({
+  "expectedVersion": zod.number().min(applyOnboardingUatRunActionBodyExpectedVersionMin),
+  "requestId": zod.string().uuid(),
+  "kind": zod.enum(['record-evidence', 'exchange', 'advance-clock', 'pause', 'resume', 'cleanup', 'issue-candidate-portal', 'dispatch-approved-demo-email', 'inject-harmless-scanner-fact', 'evaluate-workflow']),
+  "stepId": zod.string().nullish(),
+  "result": zod.union([zod.literal('passed'),zod.literal('failed'),zod.literal('blocked'),zod.literal('not-run'),zod.literal('not-applicable'),zod.literal(null)]).nullish(),
+  "note": zod.string().max(applyOnboardingUatRunActionBodyNoteMax).nullish(),
+  "system": zod.union([zod.literal('hris'),zod.literal('bgv'),zod.literal('itsm'),zod.literal('payroll'),zod.literal('benefits'),zod.literal('email'),zod.literal(null)]).nullish(),
+  "operation": zod.union([zod.literal('request'),zod.literal('status'),zod.literal('poll'),zod.literal('webhook'),zod.literal('status-email'),zod.literal(null)]).nullish(),
+  "state": zod.string().max(applyOnboardingUatRunActionBodyStateMax).nullish(),
+  "hours": zod.number().min(1).max(applyOnboardingUatRunActionBodyHoursMax).nullish(),
+  "realEmailConfirmation": zod.union([zod.literal('I_UNDERSTAND_APPROVED_QA_MAILBOX_ONLY'),zod.literal(null)]).nullish(),
+  "eventKey": zod.string().min(1).max(applyOnboardingUatRunActionBodyEventKeyMax).nullish(),
+  "demoRunId": zod.string().uuid().nullish(),
+  "demoExpectedVersion": zod.number().min(applyOnboardingUatRunActionBodyDemoExpectedVersionMin).nullish(),
+  "fixtureId": zod.union([zod.literal('valid'),zod.literal('missing-information'),zod.literal('expired'),zod.literal('inconsistent-name'),zod.literal('unsupported-format'),zod.literal('oversized'),zod.literal('corrupt'),zod.literal('changed-bytes'),zod.literal(null)]).nullish(),
+  "scannerState": zod.union([zod.literal('clean'),zod.literal('pending'),zod.literal('failed'),zod.literal('quarantined'),zod.literal(null)]).nullish()
+})
+
+export const applyOnboardingUatRunActionResponseOneVersionMin = 0;
+
+export const applyOnboardingUatRunActionResponseTwoClockOffsetHoursMin = 0;
+
+
+export const applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryTotalMin = 0;
+
+export const applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryPassedMin = 0;
+
+export const applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryFailedMin = 0;
+
+export const applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryManualMin = 0;
+
+
+
+export const ApplyOnboardingUatRunActionResponse = zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'completed', 'blocked', 'cleaned']),
+  "version": zod.number().min(applyOnboardingUatRunActionResponseOneVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "fixtureVersion": zod.string(),
+  "fixtureSeed": zod.string(),
+  "baselineRevision": zod.string(),
+  "mode": zod.enum(['simulated', 'real-email']),
+  "clock": zod.object({
+  "now": zod.coerce.date(),
+  "offsetHours": zod.number().min(applyOnboardingUatRunActionResponseTwoClockOffsetHoursMin)
+}),
+  "linkedCaseIds": zod.array(zod.number()),
+  "syntheticProfile": zod.object({
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "family": zod.string(),
+  "variant": zod.string(),
+  "hireType": zod.string(),
+  "geography": zod.string(),
+  "joiningDate": zod.coerce.date(),
+  "fictional": zod.boolean(),
+  "statement": zod.string()
+}),
+  "scannerFacts": zod.array(zod.object({
+  "fixtureId": zod.string(),
+  "state": zod.enum(['clean', 'pending', 'failed', 'quarantined']),
+  "required": zod.boolean()
+})),
+  "initialization": zod.enum(['pending', 'ready', 'failed']),
+  "externalActionStatus": zod.object({
+  "kind": zod.enum(['issue-candidate-portal', 'dispatch-approved-demo-email']),
+  "state": zod.enum(['prepared', 'dispatched', 'confirmed', 'uncertain', 'terminal-failure']),
+  "message": zod.string()
+}).optional(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "order": zod.number().min(1),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "expected": zod.string(),
+  "evidence": zod.string(),
+  "wait": zod.string(),
+  "negativePath": zod.string().optional(),
+  "cleanup": zod.string().optional()
+})),
+  "evidence": zod.array(zod.object({
+  "id": zod.string(),
+  "at": zod.coerce.date(),
+  "stepId": zod.string().nullable(),
+  "result": zod.enum(['passed', 'failed', 'blocked', 'not-run', 'not-applicable']),
+  "provenance": zod.enum(['simulated', 'manual-evidence', 'provider-sandbox', 'real-email']),
+  "note": zod.string()
+})),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "system": zod.enum(['hris', 'bgv', 'itsm', 'payroll', 'benefits', 'email']),
+  "operation": zod.enum(['request', 'status', 'poll', 'webhook', 'status-email']),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "note": zod.string()
+})),
+  "pendingEvents": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "at": zod.coerce.date(),
+  "dueAt": zod.coerce.date(),
+  "kind": zod.string(),
+  "state": zod.enum(['pending', 'applied', 'ignored-duplicate', 'blocked']),
+  "description": zod.string(),
+  "note": zod.string()
+})),
+  "workflowEvaluation": zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "providerMode": zod.enum(['simulated']),
+  "decisions": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "expected": zod.enum(['eligible', 'blocked', 'manual']),
+  "observed": zod.enum(['eligible', 'blocked', 'manual']),
+  "passed": zod.boolean(),
+  "reasons": zod.array(zod.string()),
+  "ruleRefs": zod.array(zod.string()),
+  "provenance": zod.array(zod.string())
+})),
+  "summary": zod.object({
+  "total": zod.number().min(applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryTotalMin),
+  "passed": zod.number().min(applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryPassedMin),
+  "failed": zod.number().min(applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryFailedMin),
+  "manual": zod.number().min(applyOnboardingUatRunActionResponseTwoWorkflowEvaluationSummaryManualMin)
+})
+}).optional(),
+  "cleanupNotice": zod.string(),
+  "candidatePortal": zod.object({
+  "caseId": zod.number().optional(),
+  "linkId": zod.number().optional(),
+  "expiresAt": zod.coerce.date().optional(),
+  "launchUrl": zod.string().url().optional(),
+  "canIssue": zod.boolean().optional(),
+  "state": zod.string().optional(),
+  "status": zod.string().optional(),
+  "message": zod.string().optional(),
+  "reason": zod.string().optional()
+}).optional()
+}))
+
+
+/**
+ * @summary Download a harmless synthetic fixture manifest
+ */
+export const DownloadOnboardingUatFixturePackParams = zod.object({
+  "runId": zod.coerce.string().uuid()
+})
+
+export const DownloadOnboardingUatFixturePackResponse = zod.string()
+
+
+/**
+ * @summary Download a redacted UAT evidence report
+ */
+export const DownloadOnboardingUatEvidenceReportParams = zod.object({
+  "runId": zod.coerce.string().uuid()
+})
+
+export const downloadOnboardingUatEvidenceReportResponseRunOneVersionMin = 0;
+
+export const downloadOnboardingUatEvidenceReportResponseRunTwoClockOffsetHoursMin = 0;
+
+
+export const downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryTotalMin = 0;
+
+export const downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryPassedMin = 0;
+
+export const downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryFailedMin = 0;
+
+export const downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryManualMin = 0;
+
+
+
+export const DownloadOnboardingUatEvidenceReportResponse = zod.object({
+  "reportVersion": zod.string(),
+  "statement": zod.string(),
+  "run": zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'completed', 'blocked', 'cleaned']),
+  "version": zod.number().min(downloadOnboardingUatEvidenceReportResponseRunOneVersionMin),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "fixtureVersion": zod.string(),
+  "fixtureSeed": zod.string(),
+  "baselineRevision": zod.string(),
+  "mode": zod.enum(['simulated', 'real-email']),
+  "clock": zod.object({
+  "now": zod.coerce.date(),
+  "offsetHours": zod.number().min(downloadOnboardingUatEvidenceReportResponseRunTwoClockOffsetHoursMin)
+}),
+  "linkedCaseIds": zod.array(zod.number()),
+  "syntheticProfile": zod.object({
+  "workerName": zod.string(),
+  "workerEmail": zod.string(),
+  "family": zod.string(),
+  "variant": zod.string(),
+  "hireType": zod.string(),
+  "geography": zod.string(),
+  "joiningDate": zod.coerce.date(),
+  "fictional": zod.boolean(),
+  "statement": zod.string()
+}),
+  "scannerFacts": zod.array(zod.object({
+  "fixtureId": zod.string(),
+  "state": zod.enum(['clean', 'pending', 'failed', 'quarantined']),
+  "required": zod.boolean()
+})),
+  "initialization": zod.enum(['pending', 'ready', 'failed']),
+  "externalActionStatus": zod.object({
+  "kind": zod.enum(['issue-candidate-portal', 'dispatch-approved-demo-email']),
+  "state": zod.enum(['prepared', 'dispatched', 'confirmed', 'uncertain', 'terminal-failure']),
+  "message": zod.string()
+}).optional(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "order": zod.number().min(1),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "expected": zod.string(),
+  "evidence": zod.string(),
+  "wait": zod.string(),
+  "negativePath": zod.string().optional(),
+  "cleanup": zod.string().optional()
+})),
+  "evidence": zod.array(zod.object({
+  "id": zod.string(),
+  "at": zod.coerce.date(),
+  "stepId": zod.string().nullable(),
+  "result": zod.enum(['passed', 'failed', 'blocked', 'not-run', 'not-applicable']),
+  "provenance": zod.enum(['simulated', 'manual-evidence', 'provider-sandbox', 'real-email']),
+  "note": zod.string()
+})),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "system": zod.enum(['hris', 'bgv', 'itsm', 'payroll', 'benefits', 'email']),
+  "operation": zod.enum(['request', 'status', 'poll', 'webhook', 'status-email']),
+  "state": zod.string(),
+  "at": zod.coerce.date(),
+  "note": zod.string()
+})),
+  "pendingEvents": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "at": zod.coerce.date(),
+  "dueAt": zod.coerce.date(),
+  "kind": zod.string(),
+  "state": zod.enum(['pending', 'applied', 'ignored-duplicate', 'blocked']),
+  "description": zod.string(),
+  "note": zod.string()
+})),
+  "workflowEvaluation": zod.object({
+  "runId": zod.string().uuid(),
+  "scenarioId": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "providerMode": zod.enum(['simulated']),
+  "decisions": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "family": zod.enum(['standard', 'frontline', 'transfer', 'shared']),
+  "expected": zod.enum(['eligible', 'blocked', 'manual']),
+  "observed": zod.enum(['eligible', 'blocked', 'manual']),
+  "passed": zod.boolean(),
+  "reasons": zod.array(zod.string()),
+  "ruleRefs": zod.array(zod.string()),
+  "provenance": zod.array(zod.string())
+})),
+  "summary": zod.object({
+  "total": zod.number().min(downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryTotalMin),
+  "passed": zod.number().min(downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryPassedMin),
+  "failed": zod.number().min(downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryFailedMin),
+  "manual": zod.number().min(downloadOnboardingUatEvidenceReportResponseRunTwoWorkflowEvaluationSummaryManualMin)
+})
+}).optional(),
+  "cleanupNotice": zod.string(),
+  "candidatePortal": zod.object({
+  "caseId": zod.number().optional(),
+  "linkId": zod.number().optional(),
+  "expiresAt": zod.coerce.date().optional(),
+  "launchUrl": zod.string().url().optional(),
+  "canIssue": zod.boolean().optional(),
+  "state": zod.string().optional(),
+  "status": zod.string().optional(),
+  "message": zod.string().optional(),
+  "reason": zod.string().optional()
+}).optional()
+}))
+})
+
+
+/**
  * @summary Derive the reusable solution baseline from the current corpus
  */
 export const getEnterpriseArchitectureBaselineResponseViewpointsMin = 8;
@@ -8400,6 +9091,18 @@ export const ListOnboardingScenariosResponse = zod.array(ListOnboardingScenarios
 
 
 /**
+ * Development Demo organization only. This tenant-fenced, idempotent operation inserts only missing samples, never starts orchestration or provider dispatch, and cannot seed a customer organization.
+ * @summary Add any missing offline sample cases for every employee-lifecycle family
+ */
+export const SeedOnboardingDemoFullCoverageResponse = zod.object({
+  "scenarioKeys": zod.array(zod.string()),
+  "createdCaseIds": zod.array(zod.number()),
+  "existingCaseIds": zod.array(zod.number()),
+  "offline": zod.boolean()
+})
+
+
+/**
  * Owner/admin only. Reads the explicit legacy manifest for the current organization and never mutates another workspace. A ready preview is required before the exact confirmation POST.
  * @summary Preview the one-off, current-organization synthetic-case reset
  */
@@ -8591,6 +9294,7 @@ export const RunOnboardingScenarioResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -8811,6 +9515,7 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -9124,6 +9829,7 @@ export const CreateOnboardingCaseResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -9348,6 +10054,7 @@ export const GetOnboardingCaseResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -9650,6 +10357,7 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -9891,6 +10599,7 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -12815,6 +13524,7 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -13075,6 +13785,7 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -13392,6 +14103,7 @@ export const CorrectOnboardingWorkforceContextResponse = zod.object({
   "primarySkill": zod.string().nullable(),
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
+  "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({

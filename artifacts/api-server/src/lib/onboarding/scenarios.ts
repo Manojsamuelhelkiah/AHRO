@@ -23,8 +23,8 @@ export type ScenarioDef = {
   };
 };
 
-/** Default demo recipient — real messages go to this inbox / phone. */
-export const DEMO_EMAIL = "Helkiah@gmail.com";
+/** Deliberately non-routable demo identity; scenario launches never authorize delivery. */
+export const DEMO_EMAIL = "onboarding-demo@hro.invalid";
 
 export const SCENARIOS: ScenarioDef[] = [
   {

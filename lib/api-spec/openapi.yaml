@@ -28,6 +28,8 @@ tags:
     description: Isolated, synthetic onboarding demonstrations with explicit simulated or approved live communications
   - name: demoControllerSetup
     description: One-time, operator-approved Demo Controller bootstrap for a member-only Demo Organization
+  - name: onboardingUat
+    description: Tenant-scoped, non-authoritative onboarding acceptance runs and evidence
   - name: governance
     description: Tenant-scoped revisioned decision, requirement coverage, and verified specialist authority register
   - name: hrPolicyLibrary
@@ -1058,6 +1060,114 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/uat:
+    get:
+      operationId: getOnboardingUatCatalog
+      tags: [onboardingUat]
+      summary: Get the non-authoritative UAT catalog and tenant-owned run summaries
+      responses:
+        "200":
+          description: UAT catalog and runs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingUatCatalog" }
+        "403": { description: Authenticated organization membership required }
+  /onboarding/learning-catalog:
+    get:
+      operationId: getOnboardingLearningCatalog
+      tags: [onboardingUat]
+      summary: Get the canonical learning, feature, and requirements traceability catalog
+      responses:
+        "200":
+          description: Canonical catalog without tenant-private run evidence
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingLearningCatalog" }
+  /onboarding/uat/runs:
+    post:
+      operationId: createOnboardingUatRun
+      tags: [onboardingUat]
+      summary: Create a tenant-scoped synthetic UAT run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingUatRunInput" }
+      responses:
+        "201":
+          description: Created synthetic UAT run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingUatRun" }
+        "400": { description: Invalid scenario or unsafe real-email request }
+  /onboarding/uat/runs/{runId}:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getOnboardingUatRun
+      tags: [onboardingUat]
+      summary: Get a tenant-owned UAT run
+      responses:
+        "200":
+          description: UAT run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingUatRun" }
+        "404": { description: Run not found in current organization }
+  /onboarding/uat/runs/{runId}/actions:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: applyOnboardingUatRunAction
+      tags: [onboardingUat]
+      summary: Record a guided action, run-scoped exchange, or scoped clock advance
+      description: Simulation remains non-authoritative. The only live-email action delegates to an existing Demo Organization run with its already pinned approved volunteer, explicit confirmation, and existing monitoring; it never accepts a recipient address.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingUatRunAction" }
+      responses:
+        "200":
+          description: Updated UAT run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingUatRun" }
+        "409": { description: Stale run version or conflicting idempotency request }
+  /onboarding/uat/runs/{runId}/fixture-pack:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: downloadOnboardingUatFixturePack
+      tags: [onboardingUat]
+      summary: Download a harmless synthetic fixture manifest
+      responses:
+        "200":
+          description: Plain text, upload-ready fixture instructions
+          content: { text/plain: { schema: { type: string } } }
+  /onboarding/uat/runs/{runId}/evidence-report:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: downloadOnboardingUatEvidenceReport
+      tags: [onboardingUat]
+      summary: Download a redacted UAT evidence report
+      responses:
+        "200":
+          description: Redacted JSON evidence report
+          content: { application/json: { schema: { $ref: "#/components/schemas/OnboardingUatEvidenceReport" } } }
   /enterprise-architecture/baseline:
     get:
       operationId: getEnterpriseArchitectureBaseline
@@ -2355,6 +2465,24 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/OnbScenarioDef"
+  /onboarding/demo/full-coverage:
+    post:
+      operationId: seedOnboardingDemoFullCoverage
+      tags: [onboarding]
+      summary: Add any missing offline sample cases for every employee-lifecycle family
+      description: >
+        Development Demo organization only. This tenant-fenced, idempotent
+        operation inserts only missing samples, never starts orchestration or
+        provider dispatch, and cannot seed a customer organization.
+      responses:
+        "200":
+          description: Full coverage sample inventory after the idempotent seed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnbDemoFullCoverageResponse"
+        "403":
+          description: Development Demo organization owner/admin required
   /onboarding/synthetic-reset:
     get:
       operationId: previewOnboardingSyntheticReset
@@ -8710,6 +8838,9 @@ components:
         scenarioKey:
           type: ["string", "null"]
           description: Demo scenario this case came from, if any
+        offlineSample:
+          type: boolean
+          description: Server-derived marker for a provider-isolated offline Demo sample
         planSummary:
           type: ["string", "null"]
           description: LLM-generated onboarding plan narrative
@@ -8793,6 +8924,7 @@ components:
         - primarySkill
         - skillCriticality
         - scenarioKey
+        - offlineSample
         - planSummary
         - checklistTemplateVersion
         - checklistSnapshot
@@ -10006,6 +10138,21 @@ components:
         expectedBehaviour:
           type: string
       required: [key, title, description, specRef, expectedBehaviour]
+    OnbDemoFullCoverageResponse:
+      type: object
+      properties:
+        scenarioKeys:
+          type: array
+          items: { type: string }
+        createdCaseIds:
+          type: array
+          items: { type: integer }
+        existingCaseIds:
+          type: array
+          items: { type: integer }
+        offline:
+          type: boolean
+      required: [scenarioKeys, createdCaseIds, existingCaseIds, offline]
     OnbSyntheticResetRequest:
       type: object
       properties:
@@ -11154,6 +11301,246 @@ components:
           type: ["string", "null"]
           enum: [I_UNDERSTAND_LIVE_DEMO, null]
       required: [expectedVersion, requestId, kind]
+    OnboardingUatScenario:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        title: { type: string }
+        family: { type: string }
+        description: { type: string }
+        roles: { type: array, items: { type: string } }
+        mode: { type: string, enum: [simulated, manual-evidence, provider-sandbox, real-email] }
+        status: { type: string, enum: [available, blocked, manual] }
+        blocker: { type: ["string", "null"] }
+        prerequisites: { type: array, items: { type: string } }
+        fixturePack: { type: string }
+        featureIds: { type: array, items: { type: string } }
+        requirementIds: { type: array, items: { type: string } }
+        passCriteria: { type: string }
+        cleanup: { type: string }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/OnboardingUatStep" }
+      required: [id, title, family, description, roles, mode, status, blocker, steps]
+    OnboardingUatStep:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        order: { type: integer, minimum: 1 }
+        actor: { type: string }
+        action: { type: string }
+        expected: { type: string }
+        evidence: { type: string }
+        wait: { type: string }
+        negativePath: { type: string }
+        cleanup: { type: string }
+      required: [id, order, actor, action, expected, evidence, wait]
+    OnboardingUatRunSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        runId: { type: string, format: uuid }
+        scenarioId: { type: string }
+        status: { type: string, enum: [active, paused, completed, blocked, cleaned] }
+        version: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [runId, scenarioId, status, version, createdAt, updatedAt]
+    OnboardingUatCatalog:
+      type: object
+      additionalProperties: false
+      properties:
+        catalogVersion: { type: string }
+        baselineRevision: { type: string }
+        syntheticOnly: { type: boolean }
+        scenarios: { type: array, items: { $ref: "#/components/schemas/OnboardingUatScenario" } }
+        runs: { type: array, items: { $ref: "#/components/schemas/OnboardingUatRunSummary" } }
+      required: [catalogVersion, baselineRevision, syntheticOnly, scenarios, runs]
+    OnboardingUatRunInput:
+      type: object
+      additionalProperties: false
+      properties:
+        scenarioId: { type: string, minLength: 1, maxLength: 80 }
+        mode: { type: string, enum: [simulated, real-email], default: simulated }
+        volunteerId: { type: ["string", "null"], maxLength: 200 }
+        requestId: { type: ["string", "null"], format: uuid }
+      required: [scenarioId]
+    OnboardingUatEvidence:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        stepId: { type: ["string", "null"] }
+        result: { type: string, enum: [passed, failed, blocked, not-run, not-applicable] }
+        provenance: { type: string, enum: [simulated, manual-evidence, provider-sandbox, real-email] }
+        note: { type: string }
+      required: [id, at, stepId, result, provenance, note]
+    OnboardingUatExchange:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        system: { type: string, enum: [hris, bgv, itsm, payroll, benefits, email] }
+        operation: { type: string, enum: [request, status, poll, webhook, status-email] }
+        state: { type: string }
+        at: { type: string, format: date-time }
+        note: { type: string }
+      required: [id, system, operation, state, at, note]
+    OnboardingUatPendingEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        at: { type: string, format: date-time }
+        dueAt: { type: string, format: date-time }
+        kind: { type: string }
+        state: { type: string, enum: [pending, applied, ignored-duplicate, blocked] }
+        description: { type: string }
+        note: { type: string }
+      required: [id, at, dueAt, kind, state, description, note]
+    OnboardingUatCandidatePortal:
+      type: object
+      additionalProperties: false
+      properties:
+        caseId: { type: integer }
+        linkId: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        launchUrl: { type: string, format: uri }
+        canIssue: { type: boolean }
+        state: { type: string }
+        status: { type: string }
+        message: { type: string }
+        reason: { type: string }
+    OnboardingUatRun:
+      allOf:
+        - $ref: "#/components/schemas/OnboardingUatRunSummary"
+        - type: object
+          additionalProperties: false
+          properties:
+            fixtureVersion: { type: string }
+            fixtureSeed: { type: string }
+            baselineRevision: { type: string }
+            mode: { type: string, enum: [simulated, real-email] }
+            clock: { type: object, additionalProperties: false, properties: { now: { type: string, format: date-time }, offsetHours: { type: integer, minimum: 0 } }, required: [now, offsetHours] }
+            linkedCaseIds: { type: array, items: { type: integer } }
+            syntheticProfile:
+              type: object
+              additionalProperties: false
+              properties:
+                workerName: { type: string }
+                workerEmail: { type: string }
+                family: { type: string }
+                variant: { type: string }
+                hireType: { type: string }
+                geography: { type: string }
+                joiningDate: { type: string, format: date }
+                fictional: { type: boolean }
+                statement: { type: string }
+              required: [workerName, workerEmail, family, variant, hireType, geography, joiningDate, fictional, statement]
+            scannerFacts:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  fixtureId: { type: string }
+                  state: { type: string, enum: [clean, pending, failed, quarantined] }
+                  required: { type: boolean }
+                required: [fixtureId, state, required]
+            initialization: { type: string, enum: [pending, ready, failed] }
+            externalActionStatus:
+              type: object
+              additionalProperties: false
+              properties:
+                kind: { type: string, enum: [issue-candidate-portal, dispatch-approved-demo-email] }
+                state: { type: string, enum: [prepared, dispatched, confirmed, uncertain, terminal-failure] }
+                message: { type: string }
+              required: [kind, state, message]
+            steps: { type: array, items: { $ref: "#/components/schemas/OnboardingUatStep" } }
+            evidence: { type: array, items: { $ref: "#/components/schemas/OnboardingUatEvidence" } }
+            exchanges: { type: array, items: { $ref: "#/components/schemas/OnboardingUatExchange" } }
+            pendingEvents: { type: array, items: { $ref: "#/components/schemas/OnboardingUatPendingEvent" } }
+            workflowEvaluation:
+              type: object
+              additionalProperties: false
+              properties:
+                runId: { type: string, format: uuid }
+                scenarioId: { type: string }
+                family: { type: string, enum: [standard, frontline, transfer, shared] }
+                providerMode: { type: string, enum: [simulated] }
+                decisions:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      id: { type: string }
+                      label: { type: string }
+                      family: { type: string, enum: [standard, frontline, transfer, shared] }
+                      expected: { type: string, enum: [eligible, blocked, manual] }
+                      observed: { type: string, enum: [eligible, blocked, manual] }
+                      passed: { type: boolean }
+                      reasons: { type: array, items: { type: string } }
+                      ruleRefs: { type: array, items: { type: string } }
+                      provenance: { type: array, items: { type: string } }
+                    required: [id, label, family, expected, observed, passed, reasons, ruleRefs, provenance]
+                summary:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    total: { type: integer, minimum: 0 }
+                    passed: { type: integer, minimum: 0 }
+                    failed: { type: integer, minimum: 0 }
+                    manual: { type: integer, minimum: 0 }
+                  required: [total, passed, failed, manual]
+              required: [runId, scenarioId, family, providerMode, decisions, summary]
+            cleanupNotice: { type: string }
+            candidatePortal: { $ref: "#/components/schemas/OnboardingUatCandidatePortal" }
+          required: [fixtureVersion, fixtureSeed, baselineRevision, mode, clock, linkedCaseIds, syntheticProfile, scannerFacts, initialization, steps, evidence, exchanges, pendingEvents, cleanupNotice]
+    OnboardingUatRunAction:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        requestId: { type: string, format: uuid }
+        kind: { type: string, enum: [record-evidence, exchange, advance-clock, pause, resume, cleanup, issue-candidate-portal, dispatch-approved-demo-email, inject-harmless-scanner-fact, evaluate-workflow] }
+        stepId: { type: ["string", "null"] }
+        result: { type: ["string", "null"], enum: [passed, failed, blocked, not-run, not-applicable, null] }
+        note: { type: ["string", "null"], maxLength: 1000 }
+        system: { type: ["string", "null"], enum: [hris, bgv, itsm, payroll, benefits, email, null] }
+        operation: { type: ["string", "null"], enum: [request, status, poll, webhook, status-email, null] }
+        state: { type: ["string", "null"], maxLength: 80 }
+        hours: { type: ["integer", "null"], minimum: 1, maximum: 8760 }
+        realEmailConfirmation: { type: ["string", "null"], enum: [I_UNDERSTAND_APPROVED_QA_MAILBOX_ONLY, null] }
+        eventKey: { type: ["string", "null"], minLength: 1, maxLength: 200 }
+        demoRunId: { type: ["string", "null"], format: uuid }
+        demoExpectedVersion: { type: ["integer", "null"], minimum: 0 }
+        fixtureId: { type: ["string", "null"], enum: [valid, missing-information, expired, inconsistent-name, unsupported-format, oversized, corrupt, changed-bytes, null] }
+        scannerState: { type: ["string", "null"], enum: [clean, pending, failed, quarantined, null] }
+      required: [expectedVersion, requestId, kind]
+    OnboardingUatEvidenceReport:
+      type: object
+      additionalProperties: false
+      properties:
+        reportVersion: { type: string }
+        statement: { type: string }
+        run: { $ref: "#/components/schemas/OnboardingUatRun" }
+      required: [reportVersion, statement, run]
+    OnboardingLearningCatalog:
+      type: object
+      additionalProperties: false
+      properties:
+        catalogVersion: { type: string }
+        baselineRevision: { type: string }
+        scenarios: { type: array, items: { $ref: "#/components/schemas/OnboardingUatScenario" } }
+        guideSections: { type: array, items: { type: object, additionalProperties: true } }
+        features: { type: array, items: { type: object, additionalProperties: true } }
+        requirements: { type: array, items: { type: object, additionalProperties: true } }
+        denominators: { type: object, additionalProperties: true }
+      required: [catalogVersion, baselineRevision, scenarios, guideSections, features, requirements, denominators]
     OnbActionCenter:
       type: object
       additionalProperties: false

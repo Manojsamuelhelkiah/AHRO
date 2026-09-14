@@ -17,6 +17,7 @@
     "authority:governance:approve": "node ./approve-authority-governance.mjs",
     "db:verify:tenant-safeguards": "node ./verify-tenant-safeguards.mjs",
     "seed:volunteers": "node ./run-seed.mjs",
+    "seed:demo-full-coverage": "SEED_SCRIPT=src/scripts/seed-demo-full-coverage.ts node ./run-seed.mjs",
     "probe:malware-scanner": "pnpm exec esbuild src/scripts/malware-scanner-probe.ts --bundle --platform=node --format=esm --target=node20 --log-level=error --outfile=.malware-scanner-probe.mjs && (node .malware-scanner-probe.mjs; status=$?; rm -f .malware-scanner-probe.mjs; exit $status)"
   },
   "dependencies": {

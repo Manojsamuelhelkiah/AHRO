@@ -37,6 +37,7 @@ import {
   sensitiveDataClassForDocument,
   withCaseDerivedLifecycleWrite,
 } from "./sensitive-lifecycle";
+import { getUatCaseIsolation, ordinaryCaseSql } from "./uat-isolation";
 
 export type ValidationReason = { code: string; message: string; evidence?: string };
 
@@ -124,6 +125,9 @@ function structureReason(type: string, bytes: Buffer): ValidationReason | null {
 }
 
 async function validateUpload(upload: typeof onbCandidateUploads.$inferSelect, owner: string, provider?: AuthoritativeDocumentProvider): Promise<void> {
+  // Test-run verdicts are run-scoped evidence. A global validator must not
+  // read UAT bytes or turn its configured provider into a test side effect.
+  if ((await getUatCaseIsolation({ organizationId: upload.organizationId, id: upload.caseId })).isolated) return;
   if (!malwareUploadIsClean(upload)) return;
   const reasons: ValidationReason[] = [];
   let bytes: Buffer;
@@ -273,15 +277,32 @@ export async function runDocumentValidationTick(provider?: AuthoritativeDocument
   const uploads = await db.select().from(onbCandidateUploads).where(and(cleanGate, or(
     eq(onbCandidateUploads.validationState, "queued"),
     and(eq(onbCandidateUploads.validationState, "processing"), or(isNull(onbCandidateUploads.validationClaimUntil), lt(onbCandidateUploads.validationClaimUntil, now))),
-  ))).limit(25);
+  ), ordinaryCaseSql(onbCandidateUploads.organizationId, onbCandidateUploads.caseId))).limit(25);
   for (const upload of uploads) {
+    if ((await getUatCaseIsolation({ organizationId: upload.organizationId, id: upload.caseId })).isolated) continue;
     // This claim changes only lease/status/timestamps and never copies an
     // opaque payload. validateUpload owns the subsequent reason/note/event
     // persistence behind withCaseDerivedLifecycleWrite.
     const [claimed] = await db.update(onbCandidateUploads).set({
       validationState: "processing", validationClaimOwner: owner, validationClaimUntil: new Date(Date.now() + 120_000),
       validationStartedAt: new Date(), validationAttempts: sql`${onbCandidateUploads.validationAttempts} + 1`,
-    }).where(and(cleanGate, eq(onbCandidateUploads.id, upload.id), or(eq(onbCandidateUploads.validationState, "queued"), and(eq(onbCandidateUploads.validationState, "processing"), or(isNull(onbCandidateUploads.validationClaimUntil), lt(onbCandidateUploads.validationClaimUntil, now)))))).returning();
+    }).where(and(
+      cleanGate,
+      eq(onbCandidateUploads.id, upload.id),
+      // A run ledger can be persisted between bounded selection and claim.
+      // Do not churn a UAT validation lease in that race.
+      ordinaryCaseSql(onbCandidateUploads.organizationId, onbCandidateUploads.caseId),
+      or(
+        eq(onbCandidateUploads.validationState, "queued"),
+        and(
+          eq(onbCandidateUploads.validationState, "processing"),
+          or(
+            isNull(onbCandidateUploads.validationClaimUntil),
+            lt(onbCandidateUploads.validationClaimUntil, now),
+          ),
+        ),
+      ),
+    )).returning();
     if (claimed) await validateUpload(claimed, owner, provider);
   }
 }
@@ -486,9 +507,18 @@ export async function sendDocumentReminder(input: {
 export async function runDocumentReminderTick(): Promise<void> {
   const due = await db.select({ doc: onbDocuments, c: onbCases }).from(onbDocuments)
     .innerJoin(onbCases, eq(onbCases.id, onbDocuments.caseId))
-    .where(and(eq(onbDocuments.required, true), inArray(onbDocuments.status, ["pending", "received"]), lt(onbDocuments.updatedAt, new Date(Date.now() - 24 * 3600_000)), or(isNull(onbDocuments.reminderNextAt), lt(onbDocuments.reminderNextAt, new Date())))).limit(25);
+    .where(and(
+      eq(onbDocuments.required, true),
+      inArray(onbDocuments.status, ["pending", "received"]),
+      lt(onbDocuments.updatedAt, new Date(Date.now() - 24 * 3600_000)),
+      or(isNull(onbDocuments.reminderNextAt), lt(onbDocuments.reminderNextAt, new Date())),
+      ordinaryCaseSql(onbCases.organizationId, onbCases.id),
+    )).limit(25);
   for (const { doc, c } of due) {
     if (c.organizationId === DEMO_ORGANIZATION_ID) continue;
+    // Keep the durable lookup as the final fence before reminder eligibility
+    // checks and any candidate communication.
+    if ((await getUatCaseIsolation(c)).isolated) continue;
     if (doc.status === "received") {
       const [latestUpload] = await db.select({ validationState: onbCandidateUploads.validationState })
         .from(onbCandidateUploads)
