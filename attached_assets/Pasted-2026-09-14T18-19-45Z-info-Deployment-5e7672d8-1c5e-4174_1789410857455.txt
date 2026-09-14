@@ -1,0 +1,201 @@
+2026-09-14T18:19:45Z info: Deployment: 5e7672d8-1c5e-4174-a274-0d2181c94aa9
+2026-09-14T18:19:45Z info: Build: 8ba96434-9031-4cdd-ae19-2f8115ecd785
+2026-09-14T18:19:50Z info: Running Security Scan
+2026-09-14T18:19:56Z info: Installing packages
+--> pnpm install
+
+--> pnpm install
+
+Scope: all 13 workspace projects
+
+Scope: all 13 workspace projects
+
+
+   ╭─────────────────────────────────────────╮
+   │                                         │
+   │   Update available! 10.26.1 → 12.4.1.   │
+   │   Changelog: https://pnpm.io/v/12.4.1   │
+   │    To update, run: pnpm add -g pnpm     │
+   │                                         │
+   ╰─────────────────────────────────────────╯
+
+
+
+   ╭─────────────────────────────────────────╮
+   │                                         │
+   │   Update available! 10.26.1 → 12.4.1.   │
+   │   Changelog: https://pnpm.io/v/12.4.1   │
+   │    To update, run: pnpm add -g pnpm     │
+   │                                         │
+   ╰─────────────────────────────────────────╯
+
+
+Lockfile is up to date, resolution step is skipped
+
+Lockfile is up to date, resolution step is skipped
+
+Already up to date
+
+Already up to date
+
+. preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+
+. preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+
+. preinstall: Done
+
+. preinstall: Done
+
+╭ Warning ─────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│   Ignored build scripts: @clerk/shared@3.47.8.                               │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+│   to run scripts.                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+╭ Warning ─────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│   Ignored build scripts: @clerk/shared@3.47.8.                               │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+│   to run scripts.                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+Done in 2.4s using pnpm v10.26.1
+
+Done in 2.4s using pnpm v10.26.1
+
+2026-09-14T18:20:01Z info: Starting Build
+
+> @workspace/api-server@0.0.0 build /home/runner/workspace/artifacts/api-server
+> node ./build.mjs
+
+
+
+  dist/index.mjs                       9.4mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.1kb
+  dist/pino-pretty.mjs               114.4kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                  18.5mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.6kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+
+⚡ Done in 571ms
+
+
+> @workspace/cost-explorer@0.0.0 build /home/runner/workspace/artifacts/cost-explorer
+> vite build --config vite.config.ts
+
+
+vite v7.3.6 building client environment for production...
+
+transforming...
+
+2026-09-14T18:20:05Z info: Security Scan Complete
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/collapsible.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/dropdown-menu.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/progress.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+✓ 3290 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+dist/public/index.html                     1.61 kB │ gzip:   0.58 kB
+
+dist/public/assets/index-DHww1rlb.css    145.41 kB │ gzip:  23.09 kB
+dist/public/assets/index-yMTis8Ss.js   1,771.53 kB │ gzip: 477.05 kB
+✓ built in 5.79s
+
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+
+> @workspace/hro-agentic-architecture@0.0.0 build /home/runner/workspace/artifacts/hro-agentic-architecture
+> vite build --config vite.config.ts
+
+
+vite v7.3.6 building client environment for production...
+
+transforming...
+
+✓ 76 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+dist/public/index.html                   1.71 kB │ gzip:   0.65 kB
+
+dist/public/assets/index-BHI6R-0S.css   22.12 kB │ gzip:   5.18 kB
+dist/public/assets/index-wGWrzyA5.js   362.36 kB │ gzip: 101.61 kB
+✓ built in 972ms
+
+
+> @workspace/onboarding-agent@0.0.0 build /home/runner/workspace/artifacts/onboarding-agent
+> vite build --config vite.config.ts
+
+
+vite v7.3.6 building client environment for production...
+
+transforming...
+
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/progress.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+✓ 2922 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+dist/public/index.html                     1.41 kB │ gzip:   0.55 kB
+dist/public/assets/index-BHlBktsP.css    146.13 kB │ gzip:  24.09 kB
+
+dist/public/assets/index-DhH7bmzV.js   2,153.69 kB │ gzip: 546.31 kB
+✓ built in 6.24s
+
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Removed all cached metadata files
+
+Removed 42818 files
+
+Removed 717 packages
+
+2026-09-14T18:20:26Z info: Pushing pid1 binary layer...
+2026-09-14T18:20:31Z info: Pushing Repl layer...
+2026-09-14T18:20:31Z info: Pushing hosting layer...
+2026-09-14T18:20:33Z info: Created hosting layer
+2026-09-14T18:20:38Z info: Created pid1 binary layer
+2026-09-14T18:22:26Z info: Created Repl layer
+2026-09-14T18:22:26Z info: Pushing Repl (cache) layer...
+2026-09-14T18:22:29Z info: Created Repl (cache) layer
+2026-09-14T18:22:36Z info: Pushed image manifest
+2026-09-14T18:22:36Z info: Skipping container streaming artifacts (SOCI/ZTOC) for non-reserved-VM deployment
+2026-09-14T18:22:43Z info: Creating Autoscale service
