@@ -233,14 +233,14 @@ content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.d
 id = "eeDtvpH6MVhF6iprIFObC"
 uri = "file://deliverables/onboarding-control-tower-learning-guide.html"
 type = "text"
-title = "Full-product Onboarding User Guide"
-description = "Portable, searchable-in-browser and printable guide covering current product features, roles, scenarios, and safety boundaries."
+title = "Onboarding Control Tower — User Guide"
+description = "Open or download the full-product user guide, including feature walkthroughs and UAT instructions."
 logical_id = "ee5f88f8-c9d6-4a5f-abf5-2abbb292ca75"
-content_hash = "sha256:8d6753549821c7b3bb239ad0278cce32c8c1414d98cd8c44768a32ffd6b68d52"
-size = 94645
-mtime_ms = 1789400032362
-storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/ee5f88f8-c9d6-4a5f-abf5-2abbb292ca75/840a09c3-08eb-4f74-a8d6-d3e6deb0f797"
-storage_version_token = "1789402481180665"
+content_hash = "sha256:81dd81457808e72d102c18ff34faa14acaa8c423ca9c122e55da70cc4917b3b8"
+size = 133316
+mtime_ms = 1789405512204
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/ee5f88f8-c9d6-4a5f-abf5-2abbb292ca75/a5d38558-2047-47f1-8526-25290c22751b"
+storage_version_token = "1789405676292434"
 content_type = "text/html"
 
 [[outputs]]
