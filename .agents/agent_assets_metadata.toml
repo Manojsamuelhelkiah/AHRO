@@ -247,14 +247,14 @@ content_type = "text/html"
 id = "CZyEONEVQj07JJGMhLiWN"
 uri = "file://deliverables/onboarding-uat-traceability-matrix.csv"
 type = "table"
-title = "Feature and BRD Test Coverage Matrix"
-description = "Separate mappings for 44 product features and 81 obligations, with explicit manual and provider-dependent gaps."
+title = "Tester Coverage Matrix — CSV"
+description = "Requirement-to-scenario mapping for planning and tracking UAT coverage. Open in Excel; mapped coverage is not a test-pass record."
 logical_id = "cb615009-cac3-431f-bf99-852da836c0e5"
 content_hash = "sha256:9fffeec70d8003690873073881bcc0a7a158fa48f961ee0ba0f4f74ae37a88db"
 size = 32131
 mtime_ms = 1789400032362
-storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/cb615009-cac3-431f-bf99-852da836c0e5/f09588a6-8929-40df-ab5f-41c6d2467cc6"
-storage_version_token = "1789402482500547"
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/cb615009-cac3-431f-bf99-852da836c0e5/ea873982-fa77-44ba-92be-1e2cdd8f70f6"
+storage_version_token = "1789406045853969"
 content_type = "text/csv"
 
 [[outputs]]
