@@ -270,3 +270,17 @@ mtime_ms = 1789402447926
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/5926f703-1bc6-41c2-bdd7-bc6024643e9e/ca8151df-709e-49a3-986b-d2c560c61ea1"
 storage_version_token = "1789402483804588"
 content_type = "text/html"
+
+[[outputs]]
+id = "NDaq20S5BMWI_K1NxhErT"
+uri = "file://deliverables/onboarding-control-tower-learning-guide.docx"
+type = "word_document"
+title = "User Guide — Word (.docx)"
+description = "Editable Word version of the complete product learning guide, including UAT instructions and coverage tables."
+logical_id = "6969e355-47b8-444b-91f8-133bda84f5c4"
+content_hash = "sha256:3b8454f2803ee84fbe43e2693d0a93d12b6dcfb7de698b1e292e30a8ce6d2ebc"
+size = 66485
+mtime_ms = 1789405781012
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/6969e355-47b8-444b-91f8-133bda84f5c4/c19900a2-09b0-4f09-8541-ba4b6d91f964"
+storage_version_token = "1789405790498347"
+content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
