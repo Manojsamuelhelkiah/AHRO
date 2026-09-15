@@ -288,6 +288,19 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     assert.equal(caseRow?.workforceContext?.workCountry, "US");
   });
 
+  test("returns a useful validation error when no country can be resolved", async () => {
+    const body = intake(`Synthetic missing jurisdiction ${suffix}`);
+    body.geography = "South region";
+    delete (body as Partial<typeof body>).workforceContext;
+    const response = await request(administrator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    assert.equal(response.status, 400);
+    const responseBody = await response.json() as { message: string };
+    assert.match(responseBody.message, /Work Country is required/);
+  });
+
   test("keeps the Demo Reviewer denied with no case or authority side effect", async () => {
     const response = await request(reviewer, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
       method: "POST",

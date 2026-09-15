@@ -1036,12 +1036,11 @@ router.post("/onboarding/cases", async (req, res, next) => {
       return;
     }
     const syntheticDemoCase = demoProfile === "administrator";
-    const syntheticWorkCountry = syntheticDemoCase
-      ? body.workforceContext?.workCountry ?? normalizedDemoWorkCountry(body.geography)
-      : undefined;
-    if (syntheticDemoCase && !syntheticWorkCountry) {
+    const workCountry =
+      body.workforceContext?.workCountry ?? normalizedDemoWorkCountry(body.geography);
+    if (!workCountry) {
       res.status(400).json({
-        message: "Work Country is required for a synthetic Demo case. Enter a supported country name or ISO code.",
+        message: "Work Country is required to apply the correct lifecycle policy. Enter a country name or ISO code in Work context for policy routing.",
       });
       return;
     }
@@ -1053,9 +1052,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       hireType: body.hireType,
       workerCategory: body.workerCategory,
       workerBand: body.workerBand ?? null,
-      workforceContext: syntheticDemoCase
-        ? { ...(body.workforceContext ?? {}), workCountry: syntheticWorkCountry! }
-        : body.workforceContext ?? {},
+      workforceContext: { ...(body.workforceContext ?? {}), workCountry },
       jobProfileId: body.jobProfileId ?? null,
       role: body.role,
       department: body.department,

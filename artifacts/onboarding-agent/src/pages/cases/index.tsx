@@ -919,7 +919,10 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                <div className="space-y-1"><Label>Role Family</Label><Input name="roleFamily" placeholder="e.g. Operations" /></div>
                <div className="space-y-1"><Label>Work Environment</Label><select name="workEnvironment" defaultValue="" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] text-[var(--text-sm)]"><option value="">Unknown / needs review</option><option value="office">Office</option><option value="remote">Remote</option><option value="site">Site</option><option value="field">Field</option><option value="mixed">Mixed</option></select></div>
-               <div className="space-y-1"><Label>Work Country</Label><Input name="workCountry" placeholder="e.g. India" /></div>
+                <div className="space-y-1">
+                  <RequiredFieldLabel htmlFor="workCountry">Work Country</RequiredFieldLabel>
+                  <Input id="workCountry" name="workCountry" placeholder="e.g. India" required />
+                </div>
                <div className="space-y-1"><Label>Site</Label><Input name="site" placeholder="Site or facility" /></div>
                <div className="space-y-1"><Label>Pay Basis</Label><Input name="payBasis" placeholder="Salary or wage" /></div>
                <div className="space-y-1"><Label>Hiring Mode</Label><select name="hiringMode" defaultValue="individual" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] text-[var(--text-sm)]"><option value="individual">Individual</option><option value="batch">Batch</option><option value="seasonal">Seasonal</option></select></div>
