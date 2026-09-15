@@ -44,8 +44,24 @@ import {
   sensitiveClassForDocument,
   type SensitiveAccess,
 } from "../lib/onboarding/sensitive-access";
+import { registeredDemoProfile } from "../lib/demo-principal";
 
 const router: IRouter = Router();
+
+router.use("/onboarding/action-center/actions", async (req, res, next) => {
+  try {
+    if (await registeredDemoProfile(req.authUserId!)) {
+      res.status(403).json({
+        message: "Shared demo accounts cannot mutate Action Center records.",
+        code: "DEMO_ACCOUNT_PRIVILEGE_CEILING",
+      });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * Action Center is a derived surface, not an entitlement shortcut.  Its
@@ -225,6 +241,13 @@ function clientError(error: unknown, res: Response): boolean {
 
 router.get("/onboarding/action-center", async (req, res, next) => {
   try {
+    if (await registeredDemoProfile(req.authUserId!)) {
+      res.status(403).json({
+        message: "Action Center is unavailable to shared public demo accounts.",
+        code: "DEMO_ACCOUNT_PRIVILEGE_CEILING",
+      });
+      return;
+    }
     const parsed = GetOnboardingActionCenterQueryParams.safeParse(req.query);
     if (!parsed.success) {
       res.status(400).json({ message: parsed.error.message });

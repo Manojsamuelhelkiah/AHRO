@@ -26,3 +26,9 @@ An uncertain live attempt and a subsequent simulated fallback are separate actio
 **Why:** reusing a consumed request identifier for a changed fallback payload can trap the presenter in conflicts; replacing the original outcome would also hide whether real contact occurred.
 
 **How to apply:** keep the original identifier only for an identical retry, retain the live attempt's history, and give the explicit simulated fallback its own identity.
+
+Public shared demo identities need a server-owned registry and a non-bypassable privilege ceiling: effective tenant role stays member, tenant scope stays Demo Organization, and specialist access is valid only for the dedicated administrator on currently marked synthetic cases.
+
+**Why:** Email-allowlisted one-click tickets make each shared principal publicly usable. Any retained membership, normal authority grant, body-supplied case ID, or provider-bound approval can otherwise turn that convenience into access to ordinary cases or governance controls.
+
+**How to apply:** enforce the ceiling in tenant resolution, organization administration, every authority resolver (including final provider checks), and routes whose case ID is outside the URL. Revoke legacy non-synthetic grants at login. Keep the reviewer without specialist authority; do not loosen blocked surfaces until their projections and writes are synthetic-only end to end.

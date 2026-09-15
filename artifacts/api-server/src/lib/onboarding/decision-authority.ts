@@ -7,12 +7,23 @@ import {
   onbAuthorityAudit,
   onbAuthorityGovernance,
   onbCases,
+  onbSettings,
   organizationMembershipsTable,
+  DEMO_ORGANIZATION_ID,
   type OnbAuthorityRole,
   type OnbAuthorityScope,
 } from "@workspace/db/schema";
 import type { OnboardingDbTransaction } from "./settings";
 import type { ApprovalDecision, ApprovalProposal } from "./compound-action-contract";
+import {
+  demoPrincipalSettingKey,
+  parseRegisteredDemoProfile,
+} from "../demo-principal";
+import {
+  isSyntheticOfflineCase,
+  isSyntheticDemoAuthority,
+  SYNTHETIC_DEMO_AUTHORITY_SOURCE,
+} from "./synthetic-offline";
 
 export const AUTHORITY_SCOPES: readonly OnbAuthorityScope[] = [
   "hr-compliance-approve",
@@ -64,6 +75,17 @@ export const ROLE_SCOPE_MATRIX: Readonly<Record<OnbAuthorityRole, readonly OnbAu
 
 export function roleMayExerciseScope(role: OnbAuthorityRole, scope: OnbAuthorityScope): boolean {
   return ROLE_SCOPE_MATRIX[role].includes(scope);
+}
+
+async function demoProfileInTransaction(
+  tx: OnboardingDbTransaction,
+  userId: string,
+) {
+  const [row] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+    eq(onbSettings.key, demoPrincipalSettingKey(userId)),
+  )).limit(1);
+  return parseRegisteredDemoProfile(row?.value);
 }
 
 export type DecisionAuthorityResult =
@@ -142,14 +164,17 @@ export async function verifyDecisionAuthorityInTransaction(
   const [governance] = await tx.select().from(onbAuthorityGovernance).where(
     eq(onbAuthorityGovernance.organizationId, input.organizationId),
   );
-  if (governance?.status !== "governance-approved") {
-    return { allowed: false, reason: "production_governance_approval_required" };
-  }
   const [c] = await tx.select().from(onbCases).where(and(
     eq(onbCases.organizationId, input.organizationId),
     eq(onbCases.id, input.approval.caseId),
   ));
   if (!c) return { allowed: false, reason: "case_tenant_mismatch" };
+  const syntheticDemoCase =
+    input.organizationId === DEMO_ORGANIZATION_ID &&
+    isSyntheticOfflineCase(c);
+  if (governance?.status !== "governance-approved" && !syntheticDemoCase) {
+    return { allowed: false, reason: "production_governance_approval_required" };
+  }
   // Approval rows created by older paths may omit requester provenance. The
   // immutable case creator is the only safe fallback; neither display/contact
   // fields nor a null principal can satisfy separation of duties.
@@ -216,6 +241,31 @@ export async function verifyDecisionAuthorityInTransaction(
     ),
   );
   if (!assignment) return { allowed: false, reason: "no_current_verified_scoped_assignment" };
+  const demoProfile = await demoProfileInTransaction(tx, assignment.personUserId);
+  if (demoProfile === "reviewer") {
+    return { allowed: false, reason: "shared_demo_reviewer_has_no_specialist_authority" };
+  }
+  if (
+    demoProfile === "administrator" &&
+    !isSyntheticDemoAuthority({
+      organizationId: input.organizationId,
+      caseRow: c,
+      source: assignment.source,
+    })
+  ) {
+    return { allowed: false, reason: "synthetic_demo_scope_required" };
+  }
+  if (assignment.source === SYNTHETIC_DEMO_AUTHORITY_SOURCE) {
+    if (!isSyntheticDemoAuthority({
+      organizationId: input.organizationId,
+      caseRow: c,
+      source: assignment.source,
+    })) {
+      return { allowed: false, reason: "synthetic_demo_scope_required" };
+    }
+  } else if (governance?.status !== "governance-approved") {
+    return { allowed: false, reason: "production_governance_approval_required" };
+  }
   return {
     allowed: true,
     authorityId: assignment.id,
@@ -258,6 +308,8 @@ export async function decisionAuthorityStillCurrent(
     id: onbCases.id,
     geography: onbCases.geography,
     legalEntity: onbCases.legalEntity,
+    notes: onbCases.notes,
+    scenarioKey: onbCases.scenarioKey,
   }).from(onbCases).where(and(
     eq(onbCases.organizationId, approval.organizationId),
     eq(onbCases.id, approval.caseId),
@@ -265,10 +317,26 @@ export async function decisionAuthorityStillCurrent(
   if (!c || (assignment.caseId !== null && assignment.caseId !== c.id) ||
       (assignment.siteScope && assignment.siteScope !== c.geography) ||
       (assignment.jurisdictionScope && assignment.jurisdictionScope !== c.legalEntity)) return false;
+  const demoProfile = await demoProfileInTransaction(tx, assignment.personUserId);
+  if (demoProfile === "reviewer") return false;
+  if (
+    demoProfile === "administrator" &&
+    !isSyntheticDemoAuthority({
+      organizationId: approval.organizationId,
+      caseRow: c,
+      source: assignment.source,
+    })
+  ) return false;
   const [governance] = await tx.select().from(onbAuthorityGovernance).where(
     eq(onbAuthorityGovernance.organizationId, approval.organizationId),
   );
-  return governance?.status === "governance-approved";
+  return assignment.source === SYNTHETIC_DEMO_AUTHORITY_SOURCE
+    ? isSyntheticDemoAuthority({
+        organizationId: approval.organizationId,
+        caseRow: c,
+        source: assignment.source,
+      })
+    : governance?.status === "governance-approved";
 }
 
 const OFFER_ACCEPTANCE_GATE_RULE = "Gate A — offer-acceptance package";
@@ -406,10 +474,20 @@ export async function canAdministerAuthority(
   organizationId: string,
   actorUserId: string,
 ): Promise<boolean> {
+  if (await demoProfileInTransaction(tx, actorUserId)) return false;
   const [governance] = await tx.select().from(onbAuthorityGovernance).where(
     eq(onbAuthorityGovernance.organizationId, organizationId),
   );
   if (governance?.status !== "governance-approved") return false;
+  const [membership] = await tx.select({ id: organizationMembershipsTable.id })
+    .from(organizationMembershipsTable)
+    .where(and(
+      eq(organizationMembershipsTable.organizationId, organizationId),
+      eq(organizationMembershipsTable.clerkUserId, actorUserId),
+      isNull(organizationMembershipsTable.revokedAt),
+    ))
+    .limit(1);
+  if (!membership) return false;
   const now = new Date();
   const rows = await tx.select().from(onbAuthorityAssignments).where(and(
     eq(onbAuthorityAssignments.organizationId, organizationId),
@@ -442,9 +520,12 @@ export async function hasCurrentAuthorityScope(
     isNull(organizationMembershipsTable.revokedAt),
     )),
   ]);
-  if (governance[0]?.status !== "governance-approved" || !membership[0]) return false;
+  if (!membership[0]) return false;
   const c = input.caseId === undefined ? undefined : (await tx.select({
-    geography: onbCases.geography, legalEntity: onbCases.legalEntity,
+    geography: onbCases.geography,
+    legalEntity: onbCases.legalEntity,
+    notes: onbCases.notes,
+    scenarioKey: onbCases.scenarioKey,
   }).from(onbCases).where(and(
     eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId),
   )))[0];
@@ -457,12 +538,33 @@ export async function hasCurrentAuthorityScope(
     lte(onbAuthorityAssignments.validFrom, now),
     or(isNull(onbAuthorityAssignments.validUntil), gt(onbAuthorityAssignments.validUntil, now)),
   ));
+  const demoProfile = await demoProfileInTransaction(tx, input.actorUserId);
+  if (demoProfile === "reviewer") return false;
+  const syntheticDemoCase =
+    input.organizationId === DEMO_ORGANIZATION_ID &&
+    c !== undefined &&
+    isSyntheticOfflineCase(c);
   return assignments.some((assignment) =>
     assignment.scopes.includes(input.scope) &&
     roleMayExerciseScope(assignment.authorityRole, input.scope) &&
     (input.caseId === undefined || assignment.caseId === null || assignment.caseId === input.caseId) &&
     (!c || !assignment.siteScope || assignment.siteScope === c.geography) &&
-    (!c || !assignment.jurisdictionScope || assignment.jurisdictionScope === c.legalEntity),
+    (!c || !assignment.jurisdictionScope || assignment.jurisdictionScope === c.legalEntity) &&
+    (
+      demoProfile === "administrator"
+        ? syntheticDemoCase && isSyntheticDemoAuthority({
+            organizationId: input.organizationId,
+            caseRow: c!,
+            source: assignment.source,
+          })
+        : assignment.source === SYNTHETIC_DEMO_AUTHORITY_SOURCE
+        ? syntheticDemoCase && isSyntheticDemoAuthority({
+        organizationId: input.organizationId,
+        caseRow: c!,
+        source: assignment.source,
+          })
+        : governance[0]?.status === "governance-approved"
+    ),
   );
 }
 
@@ -502,6 +604,8 @@ export async function verifyCurrentCompoundAuthorities(input: {
     const [c] = await tx.select({
       geography: onbCases.geography,
       legalEntity: onbCases.legalEntity,
+      notes: onbCases.notes,
+      scenarioKey: onbCases.scenarioKey,
     }).from(onbCases).where(and(
       eq(onbCases.organizationId, input.proposal.tenantId),
       eq(onbCases.id, caseId),
@@ -528,6 +632,21 @@ export async function verifyCurrentCompoundAuthorities(input: {
           (assignment.siteScope && assignment.siteScope !== c.geography) ||
           (assignment.jurisdictionScope && assignment.jurisdictionScope !== c.legalEntity)) {
         return { allowed: false, reason: "no_current_verified_scoped_assignment" } as const;
+      }
+      const demoProfile = await demoProfileInTransaction(tx, assignment.personUserId);
+      if (demoProfile === "reviewer") {
+        return { allowed: false, reason: "shared_demo_reviewer_has_no_specialist_authority" } as const;
+      }
+      if (
+        (demoProfile === "administrator" ||
+          assignment.source === SYNTHETIC_DEMO_AUTHORITY_SOURCE) &&
+        !isSyntheticDemoAuthority({
+          organizationId: input.proposal.tenantId,
+          caseRow: c,
+          source: assignment.source,
+        })
+      ) {
+        return { allowed: false, reason: "synthetic_demo_scope_required" } as const;
       }
       const [membership] = await tx.select({ id: organizationMembershipsTable.id })
         .from(organizationMembershipsTable)

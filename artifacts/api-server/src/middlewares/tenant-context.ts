@@ -2,10 +2,12 @@ import type { NextFunction, Request, Response } from "express";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   db,
+  DEMO_ORGANIZATION_ID,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
 import { appendProtectedAudit } from "../lib/onboarding/protected-audit";
+import { registeredDemoProfile } from "../lib/demo-principal";
 
 export const ORGANIZATION_HEADER = "x-organization-id";
 
@@ -33,10 +35,17 @@ export const lookupMembership: MembershipLookup = async (
   clerkUserId,
   requestedOrganizationId,
 ) => {
-  const where = requestedOrganizationId
+  const demoProfile = await registeredDemoProfile(clerkUserId);
+  if (demoProfile && requestedOrganizationId && requestedOrganizationId !== DEMO_ORGANIZATION_ID) {
+    return null;
+  }
+  const effectiveOrganizationId = demoProfile
+    ? DEMO_ORGANIZATION_ID
+    : requestedOrganizationId;
+  const where = effectiveOrganizationId
     ? and(
         eq(organizationMembershipsTable.clerkUserId, clerkUserId),
-        eq(organizationMembershipsTable.organizationId, requestedOrganizationId),
+        eq(organizationMembershipsTable.organizationId, effectiveOrganizationId),
           isNull(organizationMembershipsTable.revokedAt),
       )
       : and(
@@ -56,11 +65,14 @@ export const lookupMembership: MembershipLookup = async (
     )
     .where(where)
     .orderBy(organizationMembershipsTable.createdAt)
-    .limit(requestedOrganizationId ? 1 : 2);
-  if (!requestedOrganizationId && memberships.length !== 1) {
+    .limit(effectiveOrganizationId ? 1 : 2);
+  if (!effectiveOrganizationId && memberships.length !== 1) {
     return memberships.length > 1 ? "ambiguous" : null;
   }
-  return memberships[0] ?? null;
+  const membership = memberships[0];
+  return membership
+    ? { ...membership, role: demoProfile ? "member" : membership.role }
+    : null;
 };
 
 /**

@@ -34,6 +34,7 @@ import {
   parseExternalAuditArchiveConfig,
   saveExternalAuditArchiveConfig,
 } from "../lib/onboarding/settings";
+import { registeredDemoProfile } from "../lib/demo-principal";
 
 const router: IRouter = Router();
 
@@ -42,6 +43,36 @@ const router: IRouter = Router();
 // endpoint or any other organization route middleware can process it.
 router.use("/organizations/demo-controller-setup", requireSameOriginDemoSetup);
 router.use("/organizations", requireAuth);
+router.use("/organizations", async (req, res, next): Promise<void> => {
+  try {
+    const profile = await registeredDemoProfile(req.authUserId!);
+    const requested = req.header(ORGANIZATION_HEADER)?.trim();
+    if (profile && requested && requested !== DEMO_ORGANIZATION_ID) {
+      res.status(403).json({
+        message: "Shared demo accounts are restricted to Demo Organization.",
+        code: "DEMO_ACCOUNT_SCOPE_REQUIRED",
+      });
+      return;
+    }
+    const isDemoJoin =
+      req.method === "POST" &&
+      req.originalUrl.split("?")[0]?.endsWith("/organizations/join");
+    if (
+      profile &&
+      !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+      !isDemoJoin
+    ) {
+      res.status(403).json({
+        message: "Shared demo accounts cannot administer organization settings or membership.",
+        code: "DEMO_ACCOUNT_PRIVILEGE_CEILING",
+      });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 router.use(demoControllerSetupRouter);
 const requireTenantContext = createTenantContextMiddleware(lookupMembership);
 
@@ -87,7 +118,8 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
   try {
     const userId = req.authUserId!;
     const requested = req.header(ORGANIZATION_HEADER)?.trim() || undefined;
-    const memberships = await db
+    const profile = await registeredDemoProfile(userId);
+    const allMemberships = await db
       .select({
         organizationId: organizationMembershipsTable.organizationId,
         name: organizationsTable.name,
@@ -104,6 +136,11 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
          isNull(organizationMembershipsTable.revokedAt),
        ))
       .orderBy(organizationMembershipsTable.createdAt);
+    const memberships = profile
+      ? allMemberships
+          .filter(({ organizationId }) => organizationId === DEMO_ORGANIZATION_ID)
+          .map((membership) => ({ ...membership, role: "member" as const }))
+      : allMemberships;
     const activeOrganizationId = requested
       ? (memberships.find(({ organizationId }) => organizationId === requested)
           ?.organizationId ?? null)
@@ -286,6 +323,13 @@ router.post(
 );
 
 router.post("/organizations", async (req, res, next): Promise<void> => {
+  if (await registeredDemoProfile(req.authUserId!)) {
+    res.status(403).json({
+      message: "Shared demo accounts cannot create organizations.",
+      code: "DEMO_ACCOUNT_SCOPE_REQUIRED",
+    });
+    return;
+  }
   const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
   if (name.length < 2 || name.length > 100) {
     res
@@ -360,6 +404,13 @@ router.post("/organizations/join", async (req, res, next): Promise<void> => {
     return;
   }
   try {
+    if (await registeredDemoProfile(req.authUserId!) && !demo) {
+      res.status(403).json({
+        message: "Shared demo accounts may only join Demo Organization.",
+        code: "DEMO_ACCOUNT_SCOPE_REQUIRED",
+      });
+      return;
+    }
     if (demo) await ensureDemoOrganization();
     const [organization] = await db
       .select({

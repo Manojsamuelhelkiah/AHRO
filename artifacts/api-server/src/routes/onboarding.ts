@@ -271,9 +271,19 @@ import {
   BgvNotificationValidationError,
 } from "../lib/onboarding/bgv-notifications";
 import {
+  DEMO_ADMIN_LOGIN_EMAIL,
   DEMO_LOGIN_EMAIL,
   SHARED_DEMO_REVIEWER_METADATA_KEY,
+  SYNTHETIC_DEMO_ADMIN_METADATA_KEY,
 } from "../lib/demo-reviewer";
+import { ensureSyntheticDemoAdminAccess } from "../lib/onboarding/demo-admin-access";
+import {
+  enforceDemoPrincipalMembershipCeiling,
+  quarantineLegacyDemoPrincipalAuthority,
+  registerDemoPrincipal,
+  registeredDemoProfile,
+} from "../lib/demo-principal";
+import { ensureDemoOrganization } from "./organizations";
 import {
   NO_SENSITIVE_ACCESS,
   redactCaseWorkforceContext,
@@ -338,6 +348,15 @@ function requireOperationalMutationRole(
   return false;
 }
 
+async function demoPrincipalVisibleCases<T extends {
+  notes: string | null;
+  scenarioKey: string | null;
+}>(req: Request, rows: T[]): Promise<T[]> {
+  return await registeredDemoProfile(req.authUserId!)
+    ? rows.filter(isSyntheticOfflineCase)
+    : rows;
+}
+
 /**
  * UAT cases have a deliberately tiny mutation surface: the separately mounted
  * candidate portal may read and privately upload evidence, while ordinary
@@ -346,11 +365,28 @@ function requireOperationalMutationRole(
  * linked by the tenant-scoped UAT run ledger.
  */
 router.use("/onboarding/cases/:caseId", async (req, res, next) => {
+  const profile = await registeredDemoProfile(req.authUserId!);
+  const caseId = Number(req.params.caseId);
+  if (profile && Number.isSafeInteger(caseId) && caseId > 0) {
+    const [caseRow] = await db.select({
+      notes: onbCases.notes,
+      scenarioKey: onbCases.scenarioKey,
+    }).from(onbCases).where(and(
+      eq(onbCases.organizationId, getOrganizationId(req)),
+      eq(onbCases.id, caseId),
+    )).limit(1);
+    if (!caseRow || !isSyntheticOfflineCase(caseRow)) {
+      res.status(403).json({
+        message: "Shared demo accounts may only access server-marked synthetic cases.",
+        code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
+      });
+      return;
+    }
+  }
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
     next();
     return;
   }
-  const caseId = Number(req.params.caseId);
   if (!Number.isSafeInteger(caseId) || caseId < 1) {
     next();
     return;
@@ -388,33 +424,57 @@ const DEMO_LOGIN_PASSWORD = "OnboardOS-Demo-2026!";
  * account must be self-healing — otherwise a fresh publish has no demo user.
  * Handles the create/create race by re-fetching on a creation conflict.
  */
-async function markDemoReviewer(user: Awaited<ReturnType<typeof clerkClient.users.getUser>>) {
+type DemoAccount = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  metadataKey: string;
+};
+
+const DEMO_ACCOUNTS: readonly DemoAccount[] = [
+  {
+    email: DEMO_LOGIN_EMAIL,
+    firstName: "Demo",
+    lastName: "Reviewer",
+    metadataKey: SHARED_DEMO_REVIEWER_METADATA_KEY,
+  },
+  {
+    email: DEMO_ADMIN_LOGIN_EMAIL,
+    firstName: "Demo",
+    lastName: "Administrator",
+    metadataKey: SYNTHETIC_DEMO_ADMIN_METADATA_KEY,
+  },
+];
+
+async function markDemoAccount(
+  user: Awaited<ReturnType<typeof clerkClient.users.getUser>>,
+  account: DemoAccount,
+) {
   return clerkClient.users.updateUser(user.id, {
     privateMetadata: {
-      ...user.privateMetadata,
-      [SHARED_DEMO_REVIEWER_METADATA_KEY]: true,
+      [account.metadataKey]: true,
     },
   });
 }
 
-async function ensureDemoUser() {
-  const found = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
-  if (found.data[0]) return markDemoReviewer(found.data[0]);
+async function ensureDemoUser(account: DemoAccount) {
+  const found = await clerkClient.users.getUserList({ emailAddress: [account.email] });
+  if (found.data[0]) return markDemoAccount(found.data[0], account);
   try {
     return await clerkClient.users.createUser({
-      emailAddress: [DEMO_LOGIN_EMAIL],
+      emailAddress: [account.email],
       password: DEMO_LOGIN_PASSWORD,
-      firstName: "Demo",
-      lastName: "Reviewer",
+      firstName: account.firstName,
+      lastName: account.lastName,
       skipPasswordChecks: true,
       privateMetadata: {
-        [SHARED_DEMO_REVIEWER_METADATA_KEY]: true,
+        [account.metadataKey]: true,
       },
     });
   } catch (err) {
     // Another request may have created it concurrently — re-fetch before failing.
-    const refetched = await clerkClient.users.getUserList({ emailAddress: [DEMO_LOGIN_EMAIL] });
-    if (refetched.data[0]) return markDemoReviewer(refetched.data[0]);
+    const refetched = await clerkClient.users.getUserList({ emailAddress: [account.email] });
+    if (refetched.data[0]) return markDemoAccount(refetched.data[0], account);
     throw err;
   }
 }
@@ -422,11 +482,24 @@ async function ensureDemoUser() {
 router.post("/onboarding/demo-login", async (req, res, next) => {
   try {
     const requested = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-    if (requested !== DEMO_LOGIN_EMAIL) {
-      res.status(403).json({ error: "Demo login is only available for the demo reviewer account" });
+    const account = DEMO_ACCOUNTS.find((candidate) => candidate.email === requested);
+    if (!account) {
+      res.status(403).json({ error: "Demo login is only available for approved demo accounts" });
       return;
     }
-    const demoUser = await ensureDemoUser();
+    const demoUser = await ensureDemoUser(account);
+    await ensureDemoOrganization();
+    const profile =
+      account.email === DEMO_ADMIN_LOGIN_EMAIL ? "administrator" : "reviewer";
+    await registerDemoPrincipal(
+      demoUser.id,
+      profile,
+    );
+    await enforceDemoPrincipalMembershipCeiling(demoUser.id);
+    await quarantineLegacyDemoPrincipalAuthority(demoUser.id, profile);
+    if (account.email === DEMO_ADMIN_LOGIN_EMAIL) {
+      await ensureSyntheticDemoAdminAccess(demoUser.id);
+    }
     const token = await clerkClient.signInTokens.createSignInToken({
       userId: demoUser.id,
       expiresInSeconds: 120,
@@ -683,10 +756,10 @@ async function insertCaseAndStart(
 router.get("/onboarding/dashboard", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
-    const cases = await excludeUatAggregateCases(await db
+    const cases = await demoPrincipalVisibleCases(req, await excludeUatAggregateCases(await db
       .select()
       .from(onbCases)
-      .where(organizationWhere(onbCases, organizationId)));
+      .where(organizationWhere(onbCases, organizationId))));
     const aggregateCaseIds = new Set(cases.map((row) => row.id));
 
     const approvalRows = await db
@@ -873,11 +946,11 @@ router.post("/onboarding/demo/full-coverage", async (req, res, next) => {
 
 router.get("/onboarding/cases", async (req, res, next) => {
   try {
-    const rows = await db
+    const rows = await demoPrincipalVisibleCases(req, await db
       .select()
       .from(onbCases)
       .where(organizationWhere(onbCases, getOrganizationId(req)))
-      .orderBy(desc(onbCases.id));
+      .orderBy(desc(onbCases.id)));
     res.json(await Promise.all(rows.map((row) => serializeCaseForRequest(req, row))));
   } catch (err) {
     next(err);
@@ -886,6 +959,13 @@ router.get("/onboarding/cases", async (req, res, next) => {
 
 router.post("/onboarding/cases", async (req, res, next) => {
   try {
+    if (await registeredDemoProfile(req.authUserId!)) {
+      res.status(403).json({
+        message: "Shared demo accounts cannot create ordinary cases. Use Demo Center synthetic samples.",
+        code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
+      });
+      return;
+    }
     const body = CreateOnboardingCaseBody.parse(req.body);
     // Intake does not have a specialist-owned medical/accommodation record
     // path. Do not turn the general case note/context fields into an
@@ -3590,6 +3670,13 @@ router.post("/onboarding/authority/assignments", async (req, res, next) => {
       return;
     }
     const organizationId = getOrganizationId(req);
+    if (await registeredDemoProfile(body.personUserId)) {
+      res.status(403).json({
+        message: "Shared demo accounts cannot receive governance-managed authority assignments.",
+        code: "DEMO_ACCOUNT_PRIVILEGE_CEILING",
+      });
+      return;
+    }
     if (body.personUserId === req.authUserId) {
       res.status(403).json({ message: "Self-grant of specialist authority is prohibited." });
       return;
@@ -3763,14 +3850,21 @@ router.get("/onboarding/approvals", async (req, res, next) => {
       .select({
         approval: onbApprovals,
         workerName: onbCases.workerName,
+        notes: onbCases.notes,
+        scenarioKey: onbCases.scenarioKey,
       })
       .from(onbApprovals)
       .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
       .where(organizationWhere(onbCases, getOrganizationId(req)))
       .orderBy(desc(onbApprovals.createdAt), desc(onbApprovals.id));
+    const demoProfile = await registeredDemoProfile(req.authUserId!);
+    const visibleRows = demoProfile
+      ? rows.filter(({ notes, scenarioKey }) =>
+          isSyntheticOfflineCase({ notes, scenarioKey }))
+      : rows;
     const filtered = wantAll
-      ? rows
-      : rows.filter((row) => row.approval.status === "pending");
+      ? visibleRows
+      : visibleRows.filter((row) => row.approval.status === "pending");
     res.json(await Promise.all(filtered.map(async ({ approval: a, workerName }) => {
       const sensitiveAccess = await resolveSensitiveAccess({
         organizationId: getOrganizationId(req),
@@ -5248,10 +5342,10 @@ router.get("/onboarding/analytics/outcome-kpis/export", async (req, res, next) =
 router.get("/onboarding/analytics", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
-    const cases = await excludeUatAggregateCases(await db
+    const cases = await demoPrincipalVisibleCases(req, await excludeUatAggregateCases(await db
       .select()
       .from(onbCases)
-      .where(organizationWhere(onbCases, organizationId)));
+      .where(organizationWhere(onbCases, organizationId))));
     const aggregateCaseIds = new Set(cases.map((row) => row.id));
 
     const approvalRows = await db

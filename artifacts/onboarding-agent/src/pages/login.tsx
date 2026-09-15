@@ -6,7 +6,9 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 /** Demo account shared with reviewers — real Clerk credentials under the hood. */
 const DEMO_EMAIL = 'demo.reviewer@example.com';
+const DEMO_ADMIN_EMAIL = 'demo.admin@example.com';
 const DEMO_PASSWORD = 'OnboardOS-Demo-2026!';
+const DEMO_EMAILS = new Set([DEMO_EMAIL, DEMO_ADMIN_EMAIL]);
 
 const CAPABILITIES = [
   {
@@ -48,7 +50,7 @@ export function LoginPage() {
     try {
       // Demo accounts use a generic one-time ticket to bypass Clerk 2FA.
       // This is a controlled feature for demos only.
-      if (email.trim().toLowerCase() === DEMO_EMAIL) {
+      if (DEMO_EMAILS.has(email.trim().toLowerCase())) {
         // The demo account's @example.com inbox can't receive Clerk's
         // device-verification code, so the server issues a one-time
         // sign-in ticket for it instead.
@@ -176,6 +178,48 @@ export function LoginPage() {
               <h1 className="text-[28px] font-bold text-[var(--text-primary)]">Welcome back</h1>
               <p className="text-[var(--text-sm)] text-[var(--text-secondary)]">Sign in to your control tower</p>
             </div>
+             <div className="space-y-2" aria-label="Demo access profiles">
+               <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                 Choose a demo profile
+               </p>
+               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                 <button
+                   type="button"
+                   onClick={() => {
+                     setEmail(DEMO_EMAIL);
+                     setPassword(DEMO_PASSWORD);
+                   }}
+                   className={`rounded-[var(--radius-md)] border p-3 text-left transition-colors ${
+                     email.trim().toLowerCase() === DEMO_EMAIL
+                       ? 'border-[var(--primary)] bg-[var(--primary-light)]'
+                       : 'border-[var(--border)] hover:border-[var(--primary)]'
+                   }`}
+                 >
+                   <span className="block text-sm font-semibold text-[var(--text-primary)]">Demo Reviewer</span>
+                   <span className="mt-1 block text-xs text-[var(--text-secondary)]">Low-access review</span>
+                 </button>
+                 <button
+                   type="button"
+                   onClick={() => {
+                     setEmail(DEMO_ADMIN_EMAIL);
+                     setPassword(DEMO_PASSWORD);
+                   }}
+                   className={`rounded-[var(--radius-md)] border p-3 text-left transition-colors ${
+                     email.trim().toLowerCase() === DEMO_ADMIN_EMAIL
+                       ? 'border-[var(--primary)] bg-[var(--primary-light)]'
+                       : 'border-[var(--border)] hover:border-[var(--primary)]'
+                   }`}
+                 >
+                   <span className="block text-sm font-semibold text-[var(--text-primary)]">Demo Administrator</span>
+                   <span className="mt-1 block text-xs text-[var(--text-secondary)]">Full synthetic-case demo</span>
+                 </button>
+               </div>
+               {email.trim().toLowerCase() === DEMO_ADMIN_EMAIL && (
+                 <p className="rounded border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] px-3 py-2 text-xs text-[var(--status-amber-fg)]">
+                   Full access applies only to server-marked synthetic cases in Demo Organization. Real outreach and real client records remain protected.
+                 </p>
+               )}
+             </div>
             <div className="space-y-1.5">
               <label htmlFor="login-email" className="text-[var(--text-sm)] font-medium text-[var(--text-primary)]">Email</label>
               <input
