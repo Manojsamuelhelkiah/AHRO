@@ -60,3 +60,15 @@ No post-Publish procedural installation was verified.
 **How to apply:** Verify live catalogs read-only before serving, including
 definitions and actual name resolution. If Publish omits them, keep the release
 blocked and use operator/platform administration, never startup/build DDL.
+
+Temporarily starting the bundled API directly was confirmed to let Autoscale
+publish while these objects remained absent. Treat that as proof that the
+startup gate was blocking promotion, not as resolution of the trust failure.
+
+**Why:** The direct-start workaround produced a successful public deployment,
+but a production catalog recheck still showed all required procedural objects
+missing.
+
+**How to apply:** Prioritize production database reconciliation, keep the
+workaround explicitly temporary, and restore guarded startup immediately after
+the live catalog passes verification.
