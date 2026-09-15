@@ -1,7 +1,16 @@
-import React, { useState } from 'react';
-import { ShieldCheck, ShieldAlert, Plus, Trash2, Edit2, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ShieldCheck, ShieldAlert, Plus, Edit2, CheckCircle2, AlertTriangle, RefreshCw, Copy, Save, RotateCw } from 'lucide-react';
 import { Card, CardContent, Button, Badge, Label, cn } from '@/components/ui-shared';
-import { useGetLifecyclePolicies, useUpdateLifecyclePolicy, useListLifecycleDeletionJobs, useRetryDeletionJob, type RetentionPolicy } from '../hooks/use-privacy-api';
+import {
+  useGetLifecyclePolicies,
+  useUpdateLifecyclePolicy,
+  useListLifecycleDeletionJobs,
+  useRetryDeletionJob,
+  useGetStarterLifecyclePolicy,
+  useUpdateStarterLifecyclePolicy,
+  type RetentionPolicy,
+  type StarterPolicyProposal,
+} from '../hooks/use-privacy-api';
 
 const SENSITIVE_DATA_CLASSES = [
   "candidate-document",
@@ -18,13 +27,15 @@ export function PrivacyAdministrationCard() {
   const { data, isLoading, error } = useGetLifecyclePolicies();
   const [editingPolicy, setEditingPolicy] = useState<RetentionPolicy | null>(null);
 
-  if (isLoading) return <div className="text-sm text-[var(--text-muted)] animate-pulse">Loading privacy policies...</div>;
-  if (error) return <div className="text-sm text-[var(--status-red-fg)] flex items-center gap-2"><ShieldAlert className="w-4 h-4" /> {(error as any).message}</div>;
-
   const policies = data?.policies || [];
 
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] shadow-[var(--shadow-sm)] p-6 space-y-6">
+      <StarterPolicyPanel onCopy={(proposal) => setEditingPolicy({
+        ...proposal,
+        expectedRevision: 0,
+      })} />
+      <div className="border-t border-[var(--border)] pt-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-[var(--text-normal)] flex items-center gap-2">
@@ -51,8 +62,15 @@ export function PrivacyAdministrationCard() {
         </Button>
       </div>
 
+      {isLoading && <div className="text-sm text-[var(--text-muted)] animate-pulse">Loading approved privacy policies...</div>}
+      {error && (
+        <div className="text-sm text-[var(--status-red-fg)] flex items-center gap-2" role="alert">
+          <ShieldAlert className="w-4 h-4" /> Approved policies are restricted: {(error as any).message}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4">
-        {policies.length === 0 && !editingPolicy && (
+        {!isLoading && !error && policies.length === 0 && !editingPolicy && (
           <div className="p-8 text-center text-sm text-[var(--text-muted)] bg-[var(--surface-alt)] border border-[var(--border)] rounded-[var(--radius-md)]">
             No retention policies defined.
           </div>
@@ -122,7 +140,156 @@ export function PrivacyAdministrationCard() {
         ))}
       </div>
       <DeletionJobsSection />
+      </div>
     </div>
+  );
+}
+
+function StarterPolicyPanel({ onCopy }: { onCopy: (proposal: RetentionPolicy) => void }) {
+  const [countryInput, setCountryInput] = useState('IN');
+  const [selectedCountry, setSelectedCountry] = useState('IN');
+  const { data, isLoading, error, refetch } = useGetStarterLifecyclePolicy(selectedCountry);
+  const updateStarter = useUpdateStarterLifecyclePolicy();
+  const [draft, setDraft] = useState<StarterPolicyProposal[]>([]);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const starter = data?.starterPolicy;
+    if (!starter) return;
+    setCountryInput(starter.country);
+    setSelectedCountry(starter.country);
+    setDraft(starter.proposals);
+    setMessage('');
+  }, [data]);
+
+  const loadCountry = () => {
+    setMessage('');
+    setSelectedCountry(countryInput.trim());
+  };
+
+  const updateProposal = (index: number, patch: Partial<StarterPolicyProposal>) => {
+    setDraft((current) => current.map((proposal, proposalIndex) =>
+      proposalIndex === index ? { ...proposal, ...patch } : proposal,
+    ));
+  };
+
+  const save = () => {
+    if (!data?.starterPolicy) return;
+    setMessage('');
+    updateStarter.mutate({
+      country: data.starterPolicy.country,
+      expectedVersion: data.starterPolicy.version,
+      proposals: draft,
+    }, {
+      onSuccess: (response: any) => {
+        const starter = response?.starterPolicy;
+        if (starter) {
+          setCountryInput(starter.country);
+          setSelectedCountry(starter.country);
+          setDraft(starter.proposals);
+        }
+        setMessage('Starter proposals saved. They remain inactive until reviewed and adopted through the approved-policy workflow.');
+      },
+      onError: (saveError: any) => setMessage(saveError?.message || 'Starter proposals could not be saved.'),
+    });
+  };
+
+  return (
+    <section className="space-y-4" aria-labelledby="starter-policy-heading">
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="starter-policy-heading" className="text-xl font-semibold text-[var(--text-normal)] flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-[var(--status-amber-fg)]" />
+              Starter lifecycle policy
+            </h2>
+            <Badge variant="outline" className="border-[var(--status-amber-fg)] text-[var(--status-amber-fg)]">Inactive · Review required</Badge>
+          </div>
+          <p className="text-sm text-[var(--text-muted)] mt-1 max-w-3xl">
+            Review-only proposals for every sensitive data class. These values are never used by runtime gates,
+            do not represent legal approval, and are not copied into approved policies automatically.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <Label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1 block">Country or ISO code</Label>
+            <input
+              value={countryInput}
+              onChange={(event) => setCountryInput(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') loadCountry(); }}
+              className="w-44 h-9 rounded-md border border-[var(--border)] bg-[var(--bg-input)] px-3 text-sm"
+              placeholder="India or IN"
+              aria-label="Starter policy country"
+            />
+          </div>
+          <Button variant="outline" onClick={loadCountry} disabled={isLoading}>
+            <RotateCw className="w-4 h-4 mr-2" /> Load
+          </Button>
+          <Button onClick={save} disabled={updateStarter.isPending || isLoading || !data?.starterPolicy || draft.length === 0}>
+            <Save className="w-4 h-4 mr-2" /> {updateStarter.isPending ? 'Saving...' : 'Save proposals'}
+          </Button>
+        </div>
+      </div>
+
+      {isLoading && <div className="text-sm text-[var(--text-muted)] animate-pulse">Loading review-only starter proposals...</div>}
+      {error && (
+        <div className="p-3 bg-[var(--status-red-bg)] text-[var(--status-red-fg)] text-sm rounded-md border border-[var(--status-red-fg)]">
+          {(error as any).message}
+        </div>
+      )}
+      {message && <div className="p-3 bg-[var(--status-green-bg)] text-[var(--status-green-fg)] text-sm rounded-md">{message}</div>}
+      {data?.starterPolicy && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
+          <span>Country: <strong className="text-[var(--text-normal)]">{data.starterPolicy.country}</strong> · Draft version {data.starterPolicy.version}</span>
+          <Button variant="ghost" size="sm" onClick={() => void refetch()} disabled={isLoading}>
+            <RefreshCw className="w-3.5 h-3.5 mr-2" /> Reload
+          </Button>
+        </div>
+      )}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {draft.map((proposal, index) => (
+          <Card key={proposal.dataClass} className="border-[var(--status-amber-fg)]/40">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="outline" className="border-[var(--primary)] text-[var(--primary-dark)]">{proposal.dataClass}</Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onCopy({
+                    ...proposal,
+                    permittedProviders: [],
+                    providerSharingApproved: false,
+                  })}
+                >
+                  <Copy className="w-3.5 h-3.5 mr-2" /> Copy to approved editor
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="text-xs text-[var(--text-muted)]">
+                  Purpose
+                  <input value={proposal.purpose} onChange={(event) => updateProposal(index, { purpose: event.target.value })} className="mt-1 w-full h-9 rounded-md border border-[var(--border)] bg-[var(--bg-input)] px-2 text-sm text-[var(--text-normal)]" />
+                </label>
+                <label className="text-xs text-[var(--text-muted)]">
+                  Lawful basis
+                  <input value={proposal.lawfulBasis} onChange={(event) => updateProposal(index, { lawfulBasis: event.target.value })} className="mt-1 w-full h-9 rounded-md border border-[var(--border)] bg-[var(--bg-input)] px-2 text-sm text-[var(--text-normal)]" />
+                </label>
+                <label className="text-xs text-[var(--text-muted)]">
+                  Retention days
+                  <input type="number" min="0" value={proposal.retentionDays} onChange={(event) => updateProposal(index, { retentionDays: Number(event.target.value) })} className="mt-1 w-full h-9 rounded-md border border-[var(--border)] bg-[var(--bg-input)] px-2 text-sm text-[var(--text-normal)]" />
+                </label>
+                <label className="text-xs text-[var(--text-muted)]">
+                  Policy reference
+                  <input value={proposal.policyReference} onChange={(event) => updateProposal(index, { policyReference: event.target.value })} className="mt-1 w-full h-9 rounded-md border border-[var(--border)] bg-[var(--bg-input)] px-2 text-sm text-[var(--text-normal)]" />
+                </label>
+              </div>
+              <div className="text-[11px] text-[var(--text-muted)] border-t border-[var(--border)] pt-2">
+                Provider sharing: <strong>Not approved</strong> · Providers: none · {proposal.approvalReference}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
   );
 }
 

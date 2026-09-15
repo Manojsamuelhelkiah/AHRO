@@ -14,6 +14,10 @@ import {
   SensitiveLifecycleValidationError,
   setSensitiveLifecycleHold,
 } from "../lib/onboarding/sensitive-lifecycle";
+import {
+  getStarterSensitiveLifecyclePolicy,
+  saveStarterSensitiveLifecyclePolicy,
+} from "../lib/onboarding/starter-lifecycle-policy";
 
 const router: IRouter = Router();
 
@@ -42,6 +46,37 @@ router.get("/privacy/lifecycle/policies", async (req, res, next) => {
     res.json({ policies: await listSensitiveLifecyclePolicies({
       organizationId: getOrganizationId(req), actorUserId: req.authUserId!,
     }) });
+  } catch (error) {
+    if (clientError(error, res)) return;
+    next(error);
+  }
+});
+
+router.get("/privacy/lifecycle/starter-policy", async (req, res, next) => {
+  try {
+    const queryCountry = Array.isArray(req.query.country) ? req.query.country[0] : req.query.country;
+    res.json({
+      starterPolicy: await getStarterSensitiveLifecyclePolicy({
+        organizationId: getOrganizationId(req),
+        actorUserId: req.authUserId!,
+        country: queryCountry,
+      }),
+    });
+  } catch (error) {
+    if (clientError(error, res)) return;
+    next(error);
+  }
+});
+
+router.put("/privacy/lifecycle/starter-policy", async (req, res, next) => {
+  try {
+    res.json({
+      starterPolicy: await saveStarterSensitiveLifecyclePolicy({
+        organizationId: getOrganizationId(req),
+        actorUserId: req.authUserId!,
+        policy: body(req.body),
+      }),
+    });
   } catch (error) {
     if (clientError(error, res)) return;
     next(error);

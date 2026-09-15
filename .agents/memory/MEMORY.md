@@ -61,3 +61,4 @@
 - [Early-tenure evidence](early-tenure-evidence-boundaries.md) — historical authority receipts, actual-start revision fencing, and member-addressed reminders without unverified email binding.
 - [Frontline release boundaries](frontline-release-boundaries.md) — recorded release and fresh independent evidence both govern completion; operational history must not expose private references.
 - [Workforce transfer boundaries](workforce-transfer-boundaries.md) — country-specific approval, source-attested human execution, hold-aware retention, and evidence-generation cutover sign-offs.
+- [Starter lifecycle policies](starter-lifecycle-policies.md) — defaults are editable review proposals only; runtime gates read separately approved revisions.

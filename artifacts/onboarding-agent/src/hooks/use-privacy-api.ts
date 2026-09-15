@@ -23,6 +23,26 @@ export type PrivacySettings = {
   policies: RetentionPolicy[];
 };
 
+export type StarterPolicyProposal = {
+  dataClass: string;
+  jurisdiction: string;
+  purpose: string;
+  lawfulBasis: string;
+  retentionDays: number;
+  providerSharingApproved: false;
+  permittedProviders: [];
+  policyReference: string;
+  approvalReference: string;
+};
+
+export type StarterPolicy = {
+  inactive: true;
+  reviewRequired: true;
+  country: string;
+  version: number;
+  proposals: StarterPolicyProposal[];
+};
+
 export type RetentionShorteningPreview = {
   confirmationId: number;
   expiresAt: string;
@@ -83,6 +103,37 @@ export function useUpdateLifecyclePolicy() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lifecyclePolicies', orgId] });
+    },
+  });
+}
+
+export function useGetStarterLifecyclePolicy(country?: string) {
+  const { userId } = useAuth();
+  const orgId = getPinnedOrganizationIdForPage();
+  const query = country?.trim() ? `?country=${encodeURIComponent(country.trim())}` : '';
+  return useQuery<{ starterPolicy: StarterPolicy }>({
+    queryKey: ['starterLifecyclePolicy', orgId, userId, country?.trim() || ''],
+    queryFn: () => customFetch(`${API_BASE}/lifecycle/starter-policy${query}`),
+    enabled: !!orgId && !!userId,
+  });
+}
+
+export function useUpdateStarterLifecyclePolicy() {
+  const qc = useQueryClient();
+  const orgId = getPinnedOrganizationIdForPage();
+  return useMutation({
+    mutationFn: (policy: {
+      country: string;
+      expectedVersion: number;
+      proposals: StarterPolicyProposal[];
+    }) =>
+      customFetch(`${API_BASE}/lifecycle/starter-policy`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(policy),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['starterLifecyclePolicy', orgId] });
     },
   });
 }
