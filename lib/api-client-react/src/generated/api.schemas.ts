@@ -5200,6 +5200,172 @@ export interface UpdateOnbSettings {
   candidateLinkRetentionDays?: UpdateOnbSettingsCandidateLinkRetentionDays;
 }
 
+export interface SimulateNextOnboardingCaseExchangeInput {
+  /**
+     * Version returned by the preceding simulation state response
+     * @minimum 0
+     */
+  expectedVersion: number;
+  /**
+     * Client retry key; a retry with the same key replays the sampled exchange
+     * @minLength 1
+     * @maxLength 200
+     */
+  requestId: string;
+}
+
+export type OnboardingCaseSimulationExchangeStage = typeof OnboardingCaseSimulationExchangeStage[keyof typeof OnboardingCaseSimulationExchangeStage];
+
+
+export const OnboardingCaseSimulationExchangeStage = {
+  offer: 'offer',
+  documents: 'documents',
+  bgv: 'bgv',
+  payroll: 'payroll',
+  access: 'access',
+  readiness: 'readiness',
+  'final-review': 'final-review',
+} as const;
+
+export type OnboardingCaseSimulationExchangeStageBefore = typeof OnboardingCaseSimulationExchangeStageBefore[keyof typeof OnboardingCaseSimulationExchangeStageBefore];
+
+
+export const OnboardingCaseSimulationExchangeStageBefore = {
+  offer: 'offer',
+  documents: 'documents',
+  bgv: 'bgv',
+  payroll: 'payroll',
+  access: 'access',
+  readiness: 'readiness',
+  'final-review': 'final-review',
+} as const;
+
+export type OnboardingCaseSimulationExchangeStageAfter = typeof OnboardingCaseSimulationExchangeStageAfter[keyof typeof OnboardingCaseSimulationExchangeStageAfter];
+
+
+export const OnboardingCaseSimulationExchangeStageAfter = {
+  offer: 'offer',
+  documents: 'documents',
+  bgv: 'bgv',
+  payroll: 'payroll',
+  access: 'access',
+  readiness: 'readiness',
+  'final-review': 'final-review',
+  complete: 'complete',
+} as const;
+
+export type OnboardingCaseSimulationExchangeOutcome = typeof OnboardingCaseSimulationExchangeOutcome[keyof typeof OnboardingCaseSimulationExchangeOutcome];
+
+
+export const OnboardingCaseSimulationExchangeOutcome = {
+  success: 'success',
+  'missing-info': 'missing-info',
+  pending: 'pending',
+  exception: 'exception',
+} as const;
+
+export type OnboardingCaseSimulationExchangeTransition = typeof OnboardingCaseSimulationExchangeTransition[keyof typeof OnboardingCaseSimulationExchangeTransition];
+
+
+export const OnboardingCaseSimulationExchangeTransition = {
+  advanced: 'advanced',
+  'follow-up': 'follow-up',
+  pending: 'pending',
+  review: 'review',
+  completed: 'completed',
+} as const;
+
+export type OnboardingCaseSimulationExchangeNextAction = typeof OnboardingCaseSimulationExchangeNextAction[keyof typeof OnboardingCaseSimulationExchangeNextAction];
+
+
+export const OnboardingCaseSimulationExchangeNextAction = {
+  'advance-stage': 'advance-stage',
+  'follow-up-missing-info': 'follow-up-missing-info',
+  'poll-status': 'poll-status',
+  'simulated-human-review': 'simulated-human-review',
+  complete: 'complete',
+} as const;
+
+export interface OnboardingCaseSimulationExchange {
+  /** @minimum 1 */
+  sequence: number;
+  stage: OnboardingCaseSimulationExchangeStage;
+  stageBefore: OnboardingCaseSimulationExchangeStageBefore;
+  stageAfter: OnboardingCaseSimulationExchangeStageAfter;
+  outcome: OnboardingCaseSimulationExchangeOutcome;
+  transition: OnboardingCaseSimulationExchangeTransition;
+  followUp: boolean;
+  reviewRequired: boolean;
+  /** Explicitly simulated request shown to the case panel */
+  requestText: string;
+  /** Non-real simulated responder label */
+  responderLabel: string;
+  /** Explicitly simulated response text */
+  responseText: string;
+  /** Why the simulated outcome did or did not advance the stage */
+  decisionExplanation: string;
+  nextAction: OnboardingCaseSimulationExchangeNextAction;
+  recordedAt: string;
+}
+
+export type OnboardingCaseSimulationStateStage = typeof OnboardingCaseSimulationStateStage[keyof typeof OnboardingCaseSimulationStateStage];
+
+
+export const OnboardingCaseSimulationStateStage = {
+  offer: 'offer',
+  documents: 'documents',
+  bgv: 'bgv',
+  payroll: 'payroll',
+  access: 'access',
+  readiness: 'readiness',
+  'final-review': 'final-review',
+  complete: 'complete',
+} as const;
+
+export type OnboardingCaseSimulationStateStatus = typeof OnboardingCaseSimulationStateStatus[keyof typeof OnboardingCaseSimulationStateStatus];
+
+
+export const OnboardingCaseSimulationStateStatus = {
+  ready: 'ready',
+  active: 'active',
+  'follow-up': 'follow-up',
+  pending: 'pending',
+  review: 'review',
+  completed: 'completed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OnboardingCaseSimulationStateLastOutcome = typeof OnboardingCaseSimulationStateLastOutcome[keyof typeof OnboardingCaseSimulationStateLastOutcome] | null;
+
+
+export const OnboardingCaseSimulationStateLastOutcome = {
+  success: 'success',
+  'missing-info': 'missing-info',
+  pending: 'pending',
+  exception: 'exception',
+} as const;
+
+export interface OnboardingCaseSimulationState {
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 0 */
+  version: number;
+  stage: OnboardingCaseSimulationStateStage;
+  status: OnboardingCaseSimulationStateStatus;
+  /** @maxItems 64 */
+  exchanges: OnboardingCaseSimulationExchange[];
+  /** @nullable */
+  lastOutcome: OnboardingCaseSimulationStateLastOutcome;
+  /** The operation exchange created by this request; null on GET */
+  operationExchange: OnboardingCaseSimulationExchange | null;
+  /** True when requestId replayed its original exchange after later writes */
+  replayed: boolean;
+  simulated: true;
+  authoritative: false;
+}
+
 export type OnbReadinessSlaStreamKey = typeof OnbReadinessSlaStreamKey[keyof typeof OnbReadinessSlaStreamKey];
 
 

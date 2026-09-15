@@ -49,7 +49,7 @@ const policyRevision = 1_000_000 + Number.parseInt(
 const fixtureWorkerName = `Synthetic Route Worker ${suffix}`;
 let server: Server | undefined;
 let baseUrl = "";
-let createdCaseId: number | undefined;
+const createdCaseIds: number[] = [];
 
 function intake(workerName = fixtureWorkerName) {
   return {
@@ -171,12 +171,12 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     if (server) await new Promise<void>((resolve, reject) =>
       server!.close((error) => error ? reject(error) : resolve()),
     );
-    if (createdCaseId !== undefined) {
+    if (createdCaseIds.length > 0) {
       await db.delete(onbAuthorityAssignments).where(and(
-        eq(onbAuthorityAssignments.caseId, createdCaseId),
+        inArray(onbAuthorityAssignments.caseId, createdCaseIds),
         eq(onbAuthorityAssignments.personUserId, administrator),
       ));
-      await db.delete(onbCases).where(eq(onbCases.id, createdCaseId));
+      await db.delete(onbCases).where(inArray(onbCases.id, createdCaseIds));
     }
     await db.delete(onbSensitiveLifecyclePolicies).where(and(
       eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
@@ -215,7 +215,7 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
       scenarioKey: string | null;
       offlineSample: boolean;
     };
-    createdCaseId = created.id;
+    createdCaseIds.push(created.id);
     assert.equal(created.scenarioKey, null);
     assert.equal(created.offlineSample, true);
 
@@ -267,6 +267,25 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     // Case-local logistics is a persisted planning record, not an outreach or
     // provider effect. Its existence is permitted by normal case creation.
     assert.equal(logistics.length, 1);
+  });
+
+  test("uses an explicit country geography for synthetic lifecycle jurisdiction", async () => {
+    const body = intake(`Synthetic geography fallback ${suffix}`);
+    body.geography = "USA";
+    delete (body as Partial<typeof body>).workforceContext;
+    const response = await request(administrator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    const responseBody = await response.text();
+    assert.equal(response.status, 201, responseBody);
+    const created = JSON.parse(responseBody) as { id: number; offlineSample: boolean };
+    createdCaseIds.push(created.id);
+    assert.equal(created.offlineSample, true);
+    const [caseRow] = await db.select({ workforceContext: onbCases.workforceContext })
+      .from(onbCases)
+      .where(eq(onbCases.id, created.id));
+    assert.equal(caseRow?.workforceContext?.workCountry, "US");
   });
 
   test("keeps the Demo Reviewer denied with no case or authority side effect", async () => {

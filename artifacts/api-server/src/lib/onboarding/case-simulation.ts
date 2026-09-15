@@ -1,0 +1,627 @@
+import { createHash, randomInt } from "node:crypto";
+import { and, eq, isNull, like, sql } from "drizzle-orm";
+import { db } from "@workspace/db";
+import {
+  DEMO_ORGANIZATION_ID,
+  onbCases,
+  onbCommunications,
+  onbEvents,
+  onbSettings,
+  organizationMembershipsTable,
+} from "@workspace/db/schema";
+import { demoPrincipalSettingKey } from "../demo-principal";
+import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
+import { UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
+
+export const CASE_SIMULATION_SETTING_PREFIX = "onboarding:case-simulation:";
+export const CASE_SIMULATION_MAX_EXCHANGES = 64;
+
+export const SIMULATION_STAGES = [
+  "offer",
+  "documents",
+  "bgv",
+  "payroll",
+  "access",
+  "readiness",
+  "final-review",
+] as const;
+export type SimulationStage = (typeof SIMULATION_STAGES)[number];
+export type SimulationOutcome = "success" | "missing-info" | "pending" | "exception";
+export type SimulationStatus = "ready" | "active" | "follow-up" | "pending" | "review" | "completed";
+
+export type SimulationExchange = {
+  sequence: number;
+  /** Kept as a compact stage label for existing consumers. */
+  stage: SimulationStage;
+  stageBefore: SimulationStage;
+  stageAfter: SimulationStage | "complete";
+  outcome: SimulationOutcome;
+  transition: "advanced" | "follow-up" | "pending" | "review" | "completed";
+  followUp: boolean;
+  reviewRequired: boolean;
+  requestText: string;
+  responderLabel: string;
+  responseText: string;
+  decisionExplanation: string;
+  nextAction: "advance-stage" | "follow-up-missing-info" | "poll-status" | "simulated-human-review" | "complete";
+  recordedAt: string;
+};
+
+export type CaseSimulationState = {
+  caseId: number;
+  version: number;
+  stage: SimulationStage | "complete";
+  status: SimulationStatus;
+  exchanges: SimulationExchange[];
+  lastOutcome: SimulationOutcome | null;
+  operationExchange: SimulationExchange | null;
+  replayed: boolean;
+  simulated: true;
+  authoritative: false;
+};
+
+type StoredSimulationState = CaseSimulationState & {
+  requests: Record<string, { fingerprint: string; exchange: SimulationExchange }>;
+};
+
+type SimulationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export type SimulationOutcomeSelector = (input: {
+  caseId: number;
+  stage: SimulationStage;
+  sequence: number;
+  state: CaseSimulationState;
+}) => SimulationOutcome;
+
+let outcomeSelectorForTests: SimulationOutcomeSelector | undefined;
+
+/**
+ * Focused tests can choose every branch without making production randomness
+ * part of the API contract. The selector is process-local and never persisted.
+ */
+export function setSimulationOutcomeSelectorForTests(
+  selector: SimulationOutcomeSelector | undefined,
+): void {
+  outcomeSelectorForTests = selector;
+}
+
+export class CaseSimulationDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CaseSimulationDeniedError";
+  }
+}
+
+export class CaseSimulationNotFoundError extends Error {
+  constructor() {
+    super("Synthetic onboarding case was not found.");
+    this.name = "CaseSimulationNotFoundError";
+  }
+}
+
+export class CaseSimulationConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CaseSimulationConflictError";
+  }
+}
+
+function settingKey(caseId: number): string {
+  return `${CASE_SIMULATION_SETTING_PREFIX}${caseId}`;
+}
+
+function advisoryLockKey(organizationId: string, caseId: number): string {
+  return `onboarding-case-simulation:${organizationId}:${caseId}`;
+}
+
+function fingerprint(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function initialState(caseId: number): StoredSimulationState {
+  return {
+    caseId,
+    version: 0,
+    stage: "offer",
+    status: "ready",
+    exchanges: [],
+    lastOutcome: null,
+    operationExchange: null,
+    replayed: false,
+    simulated: true,
+    authoritative: false,
+    requests: {},
+  };
+}
+
+function parseState(raw: string | null, caseId: number): StoredSimulationState {
+  if (raw === null) return initialState(caseId);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new CaseSimulationConflictError("Simulation state is malformed; no mutation was applied.");
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    (parsed as { caseId?: unknown }).caseId !== caseId ||
+    !Number.isInteger((parsed as { version?: unknown }).version) ||
+    (parsed as { version: number }).version < 0 ||
+    !Array.isArray((parsed as { exchanges?: unknown }).exchanges) ||
+    typeof (parsed as { requests?: unknown }).requests !== "object" ||
+    Array.isArray((parsed as { requests?: unknown }).requests)
+  ) {
+    throw new CaseSimulationConflictError("Simulation state is malformed; no mutation was applied.");
+  }
+  const state = parsed as Partial<StoredSimulationState>;
+  if (state.exchanges!.length > CASE_SIMULATION_MAX_EXCHANGES) {
+    throw new CaseSimulationConflictError("Simulation state exceeds its bounded exchange limit.");
+  }
+  return {
+    caseId,
+    version: state.version!,
+    stage: state.stage!,
+    status: state.status!,
+    exchanges: state.exchanges!,
+    lastOutcome: state.lastOutcome ?? null,
+    operationExchange: null,
+    replayed: false,
+    simulated: true,
+    authoritative: false,
+    requests: (state.requests ?? {}) as StoredSimulationState["requests"],
+  };
+}
+
+function publicState(
+  state: StoredSimulationState,
+  operationExchange: SimulationExchange | null = null,
+  replayed = false,
+): CaseSimulationState {
+  const { requests: _requests, ...publicValue } = state;
+  return { ...publicValue, operationExchange, replayed };
+}
+
+function randomOutcome(): SimulationOutcome {
+  const roll = randomInt(100);
+  if (roll < 60) return "success";
+  if (roll < 80) return "missing-info";
+  if (roll < 95) return "pending";
+  return "exception";
+}
+
+function chooseOutcome(
+  caseId: number,
+  state: StoredSimulationState,
+): SimulationOutcome {
+  const stage = state.stage === "complete" ? "final-review" : state.stage;
+  const selected = outcomeSelectorForTests?.({
+    caseId,
+    stage,
+    sequence: state.exchanges.length + 1,
+    state: publicState(state),
+  }) ?? randomOutcome();
+  if (!["success", "missing-info", "pending", "exception"].includes(selected)) {
+    throw new CaseSimulationConflictError("Simulation outcome selector returned an invalid outcome.");
+  }
+  return selected;
+}
+
+async function authorizeCase(
+  tx: SimulationTransaction,
+  organizationId: string,
+  actor: string,
+  caseId: number,
+): Promise<typeof onbCases.$inferSelect> {
+  if (organizationId !== DEMO_ORGANIZATION_ID) {
+    throw new CaseSimulationDeniedError("Case simulation is restricted to the Demo Organization.");
+  }
+  const [profile] = await tx.select({ value: onbSettings.value })
+    .from(onbSettings)
+    .where(and(
+      eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+      eq(onbSettings.key, demoPrincipalSettingKey(actor)),
+    ))
+    .limit(1);
+  if (profile?.value !== "administrator") {
+    throw new CaseSimulationDeniedError("A registered Demo Administrator profile is required.");
+  }
+  const [membership] = await tx.select({ id: organizationMembershipsTable.id })
+    .from(organizationMembershipsTable)
+    .where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, actor),
+      isNull(organizationMembershipsTable.revokedAt),
+    ))
+    .limit(1);
+  if (!membership) {
+    throw new CaseSimulationDeniedError("An active Demo Organization membership is required.");
+  }
+  const [caseRow] = await tx.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
+    eq(onbCases.id, caseId),
+  )).limit(1);
+  if (!caseRow) throw new CaseSimulationNotFoundError();
+  if (!isSyntheticOfflineCase(caseRow)) {
+    throw new CaseSimulationDeniedError("Only server-marked synthetic cases may be simulated.");
+  }
+  const uatRunRows = await tx.select({ value: onbSettings.value })
+    .from(onbSettings)
+    .where(and(
+      eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+      like(onbSettings.key, `${UAT_RUN_SETTING_PREFIX}%`),
+    ));
+  const linkedToUatRun = uatRunRows.some((row) => {
+    try {
+      const value = JSON.parse(row.value) as {
+        runId?: unknown;
+        linkedCaseIds?: unknown;
+      };
+      return typeof value.runId === "string" &&
+        Array.isArray(value.linkedCaseIds) &&
+        value.linkedCaseIds.includes(caseId);
+    } catch {
+      return false;
+    }
+  });
+  if (isUatRunIsolatedCase(caseRow) || linkedToUatRun) {
+    throw new CaseSimulationConflictError(
+      "UAT-isolated cases may not use the per-case response simulation.",
+    );
+  }
+  return caseRow;
+}
+
+async function readStoredState(
+  tx: SimulationTransaction,
+  organizationId: string,
+  caseId: number,
+): Promise<StoredSimulationState> {
+  const [stored] = await tx.select({ value: onbSettings.value })
+    .from(onbSettings)
+    .where(and(
+      eq(onbSettings.organizationId, organizationId),
+      eq(onbSettings.key, settingKey(caseId)),
+    ))
+    .limit(1);
+  return parseState(stored?.value ?? null, caseId);
+}
+
+async function saveState(
+  tx: SimulationTransaction,
+  organizationId: string,
+  state: StoredSimulationState,
+): Promise<void> {
+  await tx.insert(onbSettings).values({
+    organizationId,
+    key: settingKey(state.caseId),
+    value: JSON.stringify(state),
+  }).onConflictDoUpdate({
+    target: [onbSettings.organizationId, onbSettings.key],
+    set: { value: JSON.stringify(state), updatedAt: sql`now()` },
+  });
+}
+
+function nextStage(stage: SimulationStage): SimulationStage | "complete" {
+  const index = SIMULATION_STAGES.indexOf(stage);
+  return index === SIMULATION_STAGES.length - 1 ? "complete" : SIMULATION_STAGES[index + 1]!;
+}
+
+function transitionFor(
+  stage: SimulationStage,
+  outcome: SimulationOutcome,
+  status: SimulationStatus,
+): Pick<SimulationExchange, "transition" | "followUp" | "reviewRequired"> & {
+  stage: SimulationStage | "complete";
+  status: SimulationStatus;
+} {
+  if (outcome === "success") {
+    if (
+      stage === "final-review" &&
+      (status === "follow-up" || status === "pending")
+    ) {
+      return {
+        stage,
+        status: "active",
+        transition: "review",
+        followUp: false,
+        reviewRequired: true,
+      };
+    }
+    const stageAfterSuccess = nextStage(stage);
+    return {
+      stage: stageAfterSuccess,
+      status: stageAfterSuccess === "complete" ? "completed" : "active",
+      transition: stageAfterSuccess === "complete" ? "completed" : "advanced",
+      followUp: false,
+      reviewRequired: stageAfterSuccess === "complete",
+    };
+  }
+  if (outcome === "missing-info") {
+    return { stage, status: "follow-up", transition: "follow-up", followUp: true, reviewRequired: false };
+  }
+  if (outcome === "pending") {
+    return { stage, status: "pending", transition: "pending", followUp: false, reviewRequired: false };
+  }
+  return { stage, status: "review", transition: "review", followUp: false, reviewRequired: true };
+}
+
+function stageLabel(stage: SimulationStage): string {
+  const labels: Record<SimulationStage, string> = {
+    offer: "offer package",
+    documents: "document collection",
+    bgv: "background verification",
+    payroll: "payroll setup",
+    access: "access provisioning",
+    readiness: "day-one readiness",
+    "final-review": "final simulated HR review",
+  };
+  return labels[stage];
+}
+
+type SimulationInteraction = {
+  requestText: string;
+  responderLabel: string;
+};
+
+function interactionFor(
+  stage: SimulationStage,
+  status: SimulationStatus,
+): SimulationInteraction {
+  const label = stageLabel(stage);
+  if (status === "follow-up") {
+    return {
+      requestText: `[SIMULATED] Follow up for missing information needed to complete ${label}.`,
+      responderLabel: `Simulated ${label} follow-up coordinator`,
+    };
+  }
+  if (status === "pending") {
+    return {
+      requestText: `[SIMULATED] Poll the ${label} status and record the latest synthetic response.`,
+      responderLabel: `Simulated ${label} status responder`,
+    };
+  }
+  if (status === "review") {
+    return {
+      requestText: `[SIMULATED] Human-review exchange: ask HR to decide the synthetic ${label} exception.`,
+      responderLabel: "Simulated HR reviewer",
+    };
+  }
+  if (stage === "final-review") {
+    return {
+      requestText: "[SIMULATED] Human-review exchange: ask the simulated HR reviewer to decide final Day-one readiness.",
+      responderLabel: "Simulated HR reviewer",
+    };
+  }
+  return {
+    requestText: `[SIMULATED] Request the next synthetic ${label} response.`,
+    responderLabel: `Simulated ${label} responder`,
+  };
+}
+
+function responseFor(
+  stage: SimulationStage,
+  status: SimulationStatus,
+  outcome: SimulationOutcome,
+): Pick<SimulationExchange, "responseText" | "decisionExplanation" | "nextAction"> {
+  const label = stageLabel(stage);
+  if (status === "review") {
+    if (outcome === "success") {
+      return {
+        responseText: `[SIMULATED] Human-review decision: the simulated HR reviewer resolves the ${label} exception.`,
+        decisionExplanation: `[SIMULATED] The explicit simulated HR decision approved resolution; only ${label} advances and no authoritative readiness changed.`,
+        nextAction: "advance-stage",
+      };
+    }
+    if (outcome === "missing-info") {
+      return {
+        responseText: `[SIMULATED] Human-review decision: the simulated HR reviewer requests more information for ${label}.`,
+        decisionExplanation: `[SIMULATED] The explicit simulated HR decision created a missing-information follow-up; ${label} remains open.`,
+        nextAction: "follow-up-missing-info",
+      };
+    }
+    if (outcome === "pending") {
+      return {
+        responseText: `[SIMULATED] Human-review decision: the simulated HR reviewer defers the ${label} exception while its synthetic status is checked.`,
+        decisionExplanation: `[SIMULATED] The explicit simulated HR decision deferred resolution; the next click polls ${label} and is not another human-review task.`,
+        nextAction: "poll-status",
+      };
+    }
+    return {
+      responseText: `[SIMULATED] Human-review decision: the simulated HR reviewer keeps the ${label} exception open.`,
+      decisionExplanation: `[SIMULATED] The explicit simulated HR decision did not resolve the exception; another simulated human-review exchange is required.`,
+      nextAction: "simulated-human-review",
+    };
+  }
+  if (
+    stage === "final-review" &&
+    (status === "follow-up" || status === "pending") &&
+    outcome === "success"
+  ) {
+    return {
+      responseText: `[SIMULATED] The ${status === "pending" ? "status check" : "follow-up"} resolved the final simulated HR review inputs.`,
+      decisionExplanation: "[SIMULATED] Final-review inputs are resolved, but an explicit simulated HR reviewer decision is still required before completion.",
+      nextAction: "simulated-human-review",
+    };
+  }
+  if (
+    stage === "final-review" &&
+    (status === "ready" || status === "active") &&
+    outcome === "success"
+  ) {
+    return {
+      responseText: "[SIMULATED] Human-review decision: the simulated HR reviewer approves final Day-one readiness.",
+      decisionExplanation: "[SIMULATED] The explicit simulated HR decision completed final review; the simulation may now complete and no authoritative readiness changed.",
+      nextAction: "complete",
+    };
+  }
+  if (outcome === "success") {
+    const context = status === "follow-up"
+      ? `The simulated ${label} follow-up supplied the missing information`
+      : status === "pending"
+        ? `The simulated ${label} status check returned a resolved result`
+        : `The simulated ${label} response completed`;
+    return {
+      responseText: `[SIMULATED] ${context}.`,
+      decisionExplanation: `[SIMULATED] Resolution was recorded for ${label}; only the simulation stage advances and no authoritative readiness changed.`,
+      nextAction: "advance-stage",
+    };
+  }
+  if (outcome === "missing-info") {
+    return {
+      responseText: `[SIMULATED] The ${label} response is missing required information; no completion is claimed.`,
+      decisionExplanation: `[SIMULATED] ${label} remains open until the missing information is supplied in a follow-up exchange.`,
+      nextAction: "follow-up-missing-info",
+    };
+  }
+  if (outcome === "pending") {
+    return {
+      responseText: `[SIMULATED] The ${label} response is delayed and remains pending; this is not human review and does not require one.`,
+      decisionExplanation: `[SIMULATED] The delay is a status-only result. The next click polls ${label} again rather than creating a human-review task.`,
+      nextAction: "poll-status",
+    };
+  }
+  return {
+    responseText: `[SIMULATED] The ${label} response returned an exception; the synthetic case is held for simulated HR review.`,
+    decisionExplanation: `[SIMULATED] This exception requires an explicit simulated human-review exchange before ${label} can resolve.`,
+    nextAction: "simulated-human-review",
+  };
+}
+
+/**
+ * Reads only this simulation's durable setting. It intentionally does not
+ * inspect readiness, documents, connectors, or any other authoritative state.
+ */
+export async function getCaseSimulation(input: {
+  organizationId: string;
+  actor: string;
+  caseId: number;
+}): Promise<CaseSimulationState> {
+  return db.transaction(async (tx) => {
+    await authorizeCase(tx, input.organizationId, input.actor, input.caseId);
+    return publicState(await readStoredState(tx, input.organizationId, input.caseId));
+  });
+}
+
+export async function simulateNextCaseExchange(input: {
+  organizationId: string;
+  actor: string;
+  caseId: number;
+  expectedVersion: number;
+  requestId: string;
+}): Promise<CaseSimulationState> {
+  if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
+    throw new CaseSimulationConflictError("expectedVersion must be a non-negative integer.");
+  }
+  if (input.requestId.length < 1 || input.requestId.length > 200) {
+    throw new CaseSimulationConflictError("requestId must contain 1-200 characters.");
+  }
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${advisoryLockKey(input.organizationId, input.caseId)}))`,
+    );
+    await authorizeCase(tx, input.organizationId, input.actor, input.caseId);
+    const state = await readStoredState(tx, input.organizationId, input.caseId);
+    const requestFingerprint = fingerprint({
+      caseId: input.caseId,
+      expectedVersion: input.expectedVersion,
+      requestId: input.requestId,
+    });
+    const previous = state.requests[input.requestId];
+    if (previous) {
+      if (previous.fingerprint !== requestFingerprint) {
+        throw new CaseSimulationConflictError(
+          `requestId "${input.requestId}" was already used for a different simulation request.`,
+        );
+      }
+      return publicState(state, previous.exchange, true);
+    }
+    if (state.version !== input.expectedVersion) {
+      throw new CaseSimulationConflictError(
+        `Simulation changed since it was loaded (current version ${state.version}).`,
+      );
+    }
+    if (state.stage === "complete" || state.status === "completed") {
+      throw new CaseSimulationConflictError("The simulation has already completed.");
+    }
+    if (state.exchanges.length >= CASE_SIMULATION_MAX_EXCHANGES) {
+      throw new CaseSimulationConflictError("The simulation exchange limit has been reached.");
+    }
+    const stage = state.stage as SimulationStage;
+    const outcome = chooseOutcome(input.caseId, state);
+    const transition = transitionFor(stage, outcome, state.status);
+    const interaction = interactionFor(stage, state.status);
+    const response = responseFor(stage, state.status, outcome);
+    const nextAction = transition.stage === "complete"
+      ? "complete"
+      : response.nextAction;
+    const exchange: SimulationExchange = {
+      sequence: state.exchanges.length + 1,
+      stage,
+      stageBefore: stage,
+      stageAfter: transition.stage,
+      outcome,
+      transition: transition.transition,
+      followUp: transition.followUp,
+      reviewRequired: transition.reviewRequired,
+      requestText: interaction.requestText,
+      responderLabel: interaction.responderLabel,
+      responseText: response.responseText,
+      decisionExplanation: response.decisionExplanation,
+      nextAction,
+      recordedAt: new Date().toISOString(),
+    };
+    state.exchanges.push(exchange);
+    state.version += 1;
+    state.stage = transition.stage;
+    state.status = transition.status;
+    state.lastOutcome = outcome;
+    state.operationExchange = exchange;
+    state.replayed = false;
+    state.requests[input.requestId] = { fingerprint: requestFingerprint, exchange };
+
+    const eventKey = `case-simulation:${input.caseId}:${input.requestId}:event`;
+    await tx.insert(onbEvents).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      agent: "response-driven-simulation",
+      engine: "case-simulation",
+      hitlPattern: transition.reviewRequired ? "review-before-authority" : null,
+      ruleRef: "case-simulation:v1",
+      title: `[SIMULATED] ${stageLabel(stage)} — ${outcome}`,
+      detail: `${exchange.responseText} ${exchange.decisionExplanation}`,
+      idempotencyKey: eventKey,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
+    await tx.insert(onbCommunications).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      channel: "simulation",
+      direction: "outbound",
+      audience: "admin",
+      toAddress: "simulation-only",
+      subject: `[SIMULATED] ${stageLabel(stage)} — ${outcome}`,
+      body: [
+        "This is an internal simulation record only.",
+        "No email was sent, no real recipient was used, no provider was called, and no authoritative readiness was changed.",
+        `Simulation stage: ${stageLabel(stage)}`,
+        `Request: ${exchange.requestText}`,
+        `Responder: ${exchange.responderLabel}`,
+        `Outcome: ${outcome}`,
+        `Response: ${exchange.responseText}`,
+        `Decision: ${exchange.decisionExplanation}`,
+        `Next action: ${exchange.nextAction}`,
+        `Transition: ${transition.transition}`,
+      ].join("\n"),
+      status: "logged-only",
+      sensitive: false,
+      sensitiveDataClass: "unclassified-legacy",
+      idempotencyKey: `case-simulation:${input.caseId}:${input.requestId}:communication`,
+    }).onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
+    });
+    await saveState(tx, input.organizationId, state);
+    return publicState(state, exchange, false);
+  });
+}

@@ -186,6 +186,7 @@ import type {
   OnbWatchEmailSimulateResult,
   OnbWorkforceContextCorrectionInput,
   OnboardingBgvNotificationsEnvelope,
+  OnboardingCaseSimulationState,
   OnboardingLearningCatalog,
   OnboardingUatCatalog,
   OnboardingUatEvidenceReport,
@@ -243,6 +244,7 @@ import type {
   SensitivityRequest,
   SensitivityResult,
   SetSensitiveLifecycleHoldBody,
+  SimulateNextOnboardingCaseExchangeInput,
   StandardIntakeBatchInput,
   StandardIntakeCommitResponse,
   StandardIntakeEvidence,
@@ -16192,6 +16194,157 @@ export const useUpdateOnboardingSettings = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getUpdateOnboardingSettingsMutationOptions(options));
+    }
+
+export const getGetOnboardingCaseSimulationUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/simulation`
+}
+
+/**
+ * Returns a non-authoritative, per-case simulation timeline. The simulation is available only to a registered Demo Administrator for an active Demo Organization membership and a server-marked synthetic case. UAT-isolated cases are denied. It never reads or mutates provider state or real readiness.
+ * @summary Get the isolated response-driven simulation state for a synthetic case
+ */
+export const getOnboardingCaseSimulation = async (caseId: number, options?: RequestInit): Promise<OnboardingCaseSimulationState> => {
+
+  return customFetch<OnboardingCaseSimulationState>(getGetOnboardingCaseSimulationUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingCaseSimulationQueryKey = (caseId: number,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/simulation`
+    ] as const;
+    }
+
+
+export const getGetOnboardingCaseSimulationQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingCaseSimulation>>, TError = ErrorType<ErrorMessage>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseSimulation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingCaseSimulationQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingCaseSimulation>>> = ({ signal }) => getOnboardingCaseSimulation(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseSimulation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingCaseSimulationQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingCaseSimulation>>>
+export type GetOnboardingCaseSimulationQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get the isolated response-driven simulation state for a synthetic case
+ */
+
+export function useGetOnboardingCaseSimulation<TData = Awaited<ReturnType<typeof getOnboardingCaseSimulation>>, TError = ErrorType<ErrorMessage>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingCaseSimulation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingCaseSimulationQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSimulateNextOnboardingCaseExchangeUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/simulation/simulate-next`
+}
+
+/**
+ * Advances exactly one simulated exchange through offer, documents, BGV, payroll, access, readiness, and final simulated HR review. The sampled outcome is server-owned; requestId retries replay the original sampled result. expectedVersion prevents stale writes. No real recipient, readiness mutation, provider call, or outbound delivery is performed.
+ * @summary Persist one bounded randomized simulation exchange
+ */
+export const simulateNextOnboardingCaseExchange = async (caseId: number,
+    simulateNextOnboardingCaseExchangeInput: SimulateNextOnboardingCaseExchangeInput, options?: RequestInit): Promise<OnboardingCaseSimulationState> => {
+
+  return customFetch<OnboardingCaseSimulationState>(getSimulateNextOnboardingCaseExchangeUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(simulateNextOnboardingCaseExchangeInput)
+  }
+);}
+
+
+
+
+
+export const getSimulateNextOnboardingCaseExchangeMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simulateNextOnboardingCaseExchange>>, TError,{caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof simulateNextOnboardingCaseExchange>>, TError,{caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}, TContext> => {
+
+const mutationKey = ['simulateNextOnboardingCaseExchange'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof simulateNextOnboardingCaseExchange>>, {caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  simulateNextOnboardingCaseExchange(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SimulateNextOnboardingCaseExchangeMutationResult = NonNullable<Awaited<ReturnType<typeof simulateNextOnboardingCaseExchange>>>
+    export type SimulateNextOnboardingCaseExchangeMutationBody = BodyType<SimulateNextOnboardingCaseExchangeInput>
+    export type SimulateNextOnboardingCaseExchangeMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Persist one bounded randomized simulation exchange
+ */
+export const useSimulateNextOnboardingCaseExchange = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simulateNextOnboardingCaseExchange>>, TError,{caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof simulateNextOnboardingCaseExchange>>,
+        TError,
+        {caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>},
+        TContext
+      > => {
+      return useMutation(getSimulateNextOnboardingCaseExchangeMutationOptions(options));
     }
 
 export const getGetOnboardingReadinessSlaPolicyUrl = () => {

@@ -9,6 +9,7 @@ import workbookRouter from "./workbook";
 import sensitivityRouter from "./sensitivity";
 import slideDeckRouter from "./slide-deck";
 import onboardingRouter from "./onboarding";
+import onboardingCaseSimulationRouter from "./onboarding-case-simulation";
 import onboardingChecklistProfileDraftRouter from "./onboarding-checklist-profile-draft";
 import onboardingBatchIntakeRouter from "./onboarding-batch-intake";
 import onboardingStandardIntakeRouter from "./onboarding-standard-intake";
@@ -77,6 +78,7 @@ router.use(slideDeckRouter);
 // Keep the draft route ahead of the monolithic profile :profileId route.  The
 // latter is intentionally retained for the existing editor endpoints.
 router.use(onboardingChecklistProfileDraftRouter);
+router.use(onboardingCaseSimulationRouter);
 router.use(onboardingRouter);
 router.use(onboardingAuditRouter);
 router.use(onboardingBatchIntakeRouter);

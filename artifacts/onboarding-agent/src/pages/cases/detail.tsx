@@ -38,6 +38,7 @@ import { ExplainabilityTab } from './detail/explainability-tab';
 import { PortalControls } from './detail/portal-controls';
 import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
+import { SimulationPanel } from './detail/simulation-panel';
 
 export function CaseDetailPage() {
   const { id } = useParams();
@@ -210,15 +211,18 @@ export function CaseDetailPage() {
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
 
       {offlineSample ? (
-        <div className="mb-6 rounded-lg border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4">
-          <h2 className="text-sm font-bold text-[var(--status-amber-fg)]">Service-case synopsis</h2>
-          <p className="mt-1 text-sm leading-relaxed text-[var(--status-amber-fg)]">
-            {c.planSummary || 'This offline Demo sample has no live service execution.'}
-          </p>
-          <p className="mt-2 text-xs font-medium text-[var(--status-amber-fg)]">
-            Simulated/manual sample only. No onboarding gateway is completed, and no HRIS, payroll, benefits, IAM, LMS, mobility, document, or other provider connection is active.
-          </p>
-        </div>
+        <>
+          <div className="mb-6 rounded-lg border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4 shadow-sm">
+            <h2 className="text-sm font-bold text-[var(--status-amber-fg)]">Service-case synopsis</h2>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--status-amber-fg)]">
+              {c.planSummary || 'This offline Demo sample has no live service execution.'}
+            </p>
+            <p className="mt-2 text-xs font-medium text-[var(--status-amber-fg)]">
+              Simulated/manual sample only. No onboarding gateway is completed, and no HRIS, payroll, benefits, IAM, LMS, mobility, document, or other provider connection is active.
+            </p>
+          </div>
+          <SimulationPanel caseId={caseId} />
+        </>
       ) : (
         <>
           <GatewaysStrip

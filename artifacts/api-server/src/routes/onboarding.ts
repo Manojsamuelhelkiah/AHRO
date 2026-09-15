@@ -78,6 +78,7 @@ import {
   isDemoFullCoverageScenarioKey,
   seedDemoFullCoverage,
 } from "../lib/onboarding/demo-full-coverage";
+import { normalizedDemoWorkCountry } from "../lib/onboarding/demo-controller";
 import {
   ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS,
   ensureConnectorsSeeded,
@@ -1035,6 +1036,15 @@ router.post("/onboarding/cases", async (req, res, next) => {
       return;
     }
     const syntheticDemoCase = demoProfile === "administrator";
+    const syntheticWorkCountry = syntheticDemoCase
+      ? body.workforceContext?.workCountry ?? normalizedDemoWorkCountry(body.geography)
+      : undefined;
+    if (syntheticDemoCase && !syntheticWorkCountry) {
+      res.status(400).json({
+        message: "Work Country is required for a synthetic Demo case. Enter a supported country name or ISO code.",
+      });
+      return;
+    }
     const row = await insertCaseAndStart({
       workerName: body.workerName,
       workerEmail,
@@ -1043,7 +1053,9 @@ router.post("/onboarding/cases", async (req, res, next) => {
       hireType: body.hireType,
       workerCategory: body.workerCategory,
       workerBand: body.workerBand ?? null,
-      workforceContext: body.workforceContext ?? {},
+      workforceContext: syntheticDemoCase
+        ? { ...(body.workforceContext ?? {}), workCountry: syntheticWorkCountry! }
+        : body.workforceContext ?? {},
       jobProfileId: body.jobProfileId ?? null,
       role: body.role,
       department: body.department,

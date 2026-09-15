@@ -14,3 +14,9 @@ Internal/external agent identity is separate from whether execution is simulated
 **Why:** The user requires realistic, inspectable agent attribution rather than a generic “AI Agent” label that cannot be traced to anything in the product.
 
 **How to apply:** Use the same identity source for operational requests and the catalog, preserve the human initiator separately, and record agent identity with new history entries. Never backfill a claimed historical executor when the old record did not capture one; an email recipient is not an external AI agent.
+
+Response-driven demos randomize a bounded, typed response rather than skipping to the next successful step. Missing information creates a follow-up, delays remain pending, exceptions require an explicitly simulated human decision, and final completion requires a simulated HR review.
+
+**Why:** A fixed “next step” walkthrough misrepresents orchestration and hides the exception paths the demo is meant to explain.
+
+**How to apply:** Persist the sampled response before transition, replay it idempotently, and keep the resulting demo state separate from real readiness, approvals, evidence, provider receipts, and outcome metrics.

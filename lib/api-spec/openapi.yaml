@@ -5154,6 +5154,93 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{caseId}/simulation:
+    get:
+      operationId: getOnboardingCaseSimulation
+      tags: [onboarding]
+      summary: Get the isolated response-driven simulation state for a synthetic case
+      description: >
+        Returns a non-authoritative, per-case simulation timeline. The simulation
+        is available only to a registered Demo Administrator for an active Demo
+        Organization membership and a server-marked synthetic case. UAT-isolated
+        cases are denied. It never reads or mutates provider state or real
+        readiness.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Simulation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingCaseSimulationState"
+        "403":
+          description: Demo Administrator, membership, or synthetic-case boundary denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: Case not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "409":
+          description: UAT-isolated case denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+  /onboarding/cases/{caseId}/simulation/simulate-next:
+    post:
+      operationId: simulateNextOnboardingCaseExchange
+      tags: [onboarding]
+      summary: Persist one bounded randomized simulation exchange
+      description: >
+        Advances exactly one simulated exchange through offer, documents, BGV,
+        payroll, access, readiness, and final simulated HR review. The sampled
+        outcome is server-owned; requestId retries replay the original sampled
+        result. expectedVersion prevents stale writes. No real recipient,
+        readiness mutation, provider call, or outbound delivery is performed.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulateNextOnboardingCaseExchangeInput"
+      responses:
+        "200":
+          description: Updated simulation state and the persisted exchange
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingCaseSimulationState"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: Demo Administrator, membership, or synthetic-case boundary denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: Case not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "409":
+          description: Stale version, reused requestId, completed simulation, or UAT-isolated case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
   /onboarding/readiness-sla/policy:
     get:
       operationId: getOnboardingReadinessSlaPolicy
@@ -10772,6 +10859,104 @@ components:
           type: integer
           enum: [30, 90, 180, 365]
           description: Approved candidate-link metadata retention period. Omit to leave unchanged.
+    SimulateNextOnboardingCaseExchangeInput:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+          description: Version returned by the preceding simulation state response
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Client retry key; a retry with the same key replays the sampled exchange
+      required: [expectedVersion, requestId]
+    OnboardingCaseSimulationExchange:
+      type: object
+      additionalProperties: false
+      properties:
+        sequence: { type: integer, minimum: 1 }
+        stage:
+          type: string
+          enum: [offer, documents, bgv, payroll, access, readiness, final-review]
+        stageBefore:
+          type: string
+          enum: [offer, documents, bgv, payroll, access, readiness, final-review]
+        stageAfter:
+          type: string
+          enum: [offer, documents, bgv, payroll, access, readiness, final-review, complete]
+        outcome:
+          type: string
+          enum: [success, missing-info, pending, exception]
+        transition:
+          type: string
+          enum: [advanced, follow-up, pending, review, completed]
+        followUp: { type: boolean }
+        reviewRequired: { type: boolean }
+        requestText:
+          type: string
+          description: Explicitly simulated request shown to the case panel
+        responderLabel:
+          type: string
+          description: Non-real simulated responder label
+        responseText:
+          type: string
+          description: Explicitly simulated response text
+        decisionExplanation:
+          type: string
+          description: Why the simulated outcome did or did not advance the stage
+        nextAction:
+          type: string
+          enum: [advance-stage, follow-up-missing-info, poll-status, simulated-human-review, complete]
+        recordedAt: { type: string, format: date-time }
+      required:
+        - sequence
+        - stage
+        - stageBefore
+        - stageAfter
+        - outcome
+        - transition
+        - followUp
+        - reviewRequired
+        - requestText
+        - responderLabel
+        - responseText
+        - decisionExplanation
+        - nextAction
+        - recordedAt
+    OnboardingCaseSimulationState:
+      type: object
+      additionalProperties: false
+      properties:
+        caseId: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 0 }
+        stage:
+          type: string
+          enum: [offer, documents, bgv, payroll, access, readiness, final-review, complete]
+        status:
+          type: string
+          enum: [ready, active, follow-up, pending, review, completed]
+        exchanges:
+          type: array
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/OnboardingCaseSimulationExchange"
+        lastOutcome:
+          type: [string, "null"]
+          enum: [success, missing-info, pending, exception, null]
+        operationExchange:
+          oneOf:
+            - $ref: "#/components/schemas/OnboardingCaseSimulationExchange"
+            - type: "null"
+          description: The operation exchange created by this request; null on GET
+        replayed:
+          type: boolean
+          description: True when requestId replayed its original exchange after later writes
+        simulated: { type: boolean, const: true }
+        authoritative: { type: boolean, const: false }
+      required: [caseId, version, stage, status, exchanges, lastOutcome, operationExchange, replayed, simulated, authoritative]
     OnbDay1Logistics:
       type: object
       properties:
