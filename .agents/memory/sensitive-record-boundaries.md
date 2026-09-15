@@ -2,6 +2,12 @@
 name: Sensitive record boundaries
 description: Fail-closed classification and shared lifecycle fencing for onboarding confidentiality.
 ---
+Redacted read models must not authorize full replacement of sensitive aggregates. General correction routes must check the stored record under the mutation lock, not just the client payload.
+
+**Why:** A caller without sensitive-record authority receives a context with hidden fields omitted; saving that visible context can silently erase restricted legacy data even when client validation passes.
+
+**How to apply:** Reject full-context corrections for callers whose read model is redacted, or explicitly preserve all server-owned hidden fields, not just medical fields. Check optimistic concurrency first; use category-neutral errors so denied writes do not reveal hidden medical presence. Test benign submissions from redacted views and verify hidden data remains unchanged.
+
 Treat opaque narratives as mixed-class confidential content. Keywords may justify restriction but cannot justify disclosure; a transport or document label does not classify arbitrary accompanying text.
 
 **Why:** Recognizable medical wording does not rule out payroll or BGV material in the same message. Findings can also omit expected keywords entirely.

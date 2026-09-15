@@ -239,6 +239,185 @@ test("create refuses an asserted Gate A; dedicated confirmation owns its evidenc
   assert.equal(checked.status, 400);
 });
 
+test("general intake permits an ordinary case but rejects notes and accessibility needs, including corrections", async () => {
+  const permitted = await call("/onboarding/cases", orgA, {
+    method: "POST",
+    body: JSON.stringify(intake("Ordinary Intake Regression", false)),
+  });
+  const permittedBody = await permitted.text();
+  assert.equal(permitted.status, 201, permittedBody);
+  const permittedCase = JSON.parse(permittedBody) as { id: number; updatedAt: string };
+  caseIds.push(permittedCase.id);
+
+  const notes = await call("/onboarding/cases", orgA, {
+    method: "POST",
+    body: JSON.stringify({
+      ...intake("Notes Intake Regression", false),
+      notes: "Nonblank ordinary recruiter note.",
+    }),
+  });
+  assert.equal(notes.status, 409);
+  const notesBody = await notes.json() as { message: string };
+  assert.match(notesBody.message, /general case intake cannot save/i);
+  assert.match(notesBody.message, /no specialist handoff is available here/i);
+
+  const accessibility = await call("/onboarding/cases", orgA, {
+    method: "POST",
+    body: JSON.stringify({
+      ...intake("Accessibility Intake Regression", false),
+      workforceContext: { workCountry: "US", accessibilityNeeds: "Step-free access." },
+    }),
+  });
+  assert.equal(accessibility.status, 409);
+  const accessibilityBody = await accessibility.json() as { message: string };
+  assert.match(accessibilityBody.message, /general case intake cannot save/i);
+  assert.match(accessibilityBody.message, /no specialist handoff is available here/i);
+
+  const [correctionCase] = await db.insert(onbCases).values({
+    ...intake("Accessibility Correction Regression", false),
+    organizationId: orgA,
+    lifecycleStage: "preboarding",
+    orchestrationStatus: "idle",
+  }).returning({ id: onbCases.id, updatedAt: onbCases.updatedAt });
+  assert.ok(correctionCase);
+  caseIds.push(correctionCase.id);
+  const correction = await call(`/onboarding/cases/${correctionCase.id}/workforce-context`, orgA, {
+    method: "PUT",
+    body: JSON.stringify({
+      expectedUpdatedAt: correctionCase.updatedAt.toISOString(),
+      reason: "Accessibility correction regression.",
+      workforceContext: { workCountry: "US", accessibilityNeeds: "Step-free access." },
+    }),
+  });
+  assert.equal(correction.status, 409);
+  const correctionBody = await correction.json() as { message: string };
+  assert.match(correctionBody.message, /workforce-context correction cannot be saved/i);
+  assert.match(correctionBody.message, /no specialist handoff is available here/i);
+  assert.doesNotMatch(correctionBody.message, /accessibility|medical/i);
+});
+
+test("workforce-context correction cannot replace a legacy stored accessibility need from a redacted view", async () => {
+  const [legacyCase] = await db.insert(onbCases).values({
+    ...intake("Legacy Stored Accessibility Regression", false),
+    organizationId: orgA,
+    workforceContext: { workCountry: "US", accessibilityNeeds: "Legacy accommodation detail." },
+    lifecycleStage: "preboarding",
+    orchestrationStatus: "idle",
+  }).returning({
+    id: onbCases.id,
+    workforceContext: onbCases.workforceContext,
+    updatedAt: onbCases.updatedAt,
+  });
+  assert.ok(legacyCase);
+  caseIds.push(legacyCase.id);
+  const before = {
+    workforceContext: legacyCase.workforceContext,
+    updatedAt: legacyCase.updatedAt.toISOString(),
+  };
+
+  const correction = await call(`/onboarding/cases/${legacyCase.id}/workforce-context`, orgA, {
+    method: "PUT",
+    body: JSON.stringify({
+      expectedUpdatedAt: before.updatedAt,
+      reason: "Benign context replacement regression.",
+      workforceContext: {
+        workCountry: "US",
+        workEnvironment: "office",
+        siteExposure: false,
+        safetyCritical: false,
+      },
+    }),
+  });
+  assert.equal(correction.status, 409);
+  const correctionBody = await correction.json() as { message: string };
+  assert.match(correctionBody.message, /no specialist handoff is available here/i);
+  assert.match(correctionBody.message, /no changes were made/i);
+  assert.doesNotMatch(correctionBody.message, /accessibility|medical/i);
+
+  const [after] = await db.select({
+    workforceContext: onbCases.workforceContext,
+    updatedAt: onbCases.updatedAt,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, legacyCase.id),
+  ));
+  assert.ok(after);
+  assert.deepEqual(after.workforceContext, before.workforceContext);
+  assert.equal(after.updatedAt.toISOString(), before.updatedAt);
+});
+
+test("redacted callers cannot replace hidden workforce context, and stale versions keep the normal conflict", async () => {
+  const storedContext = {
+    workCountry: "US",
+    workEnvironment: "office" as const,
+    hazards: ["warehouse traffic"],
+    languagePreference: "en",
+    siteExposure: true,
+    safetyCritical: false,
+  };
+  const [legacyCase] = await db.insert(onbCases).values({
+    ...intake("Hidden Workforce Context Regression", false),
+    organizationId: orgA,
+    workforceContext: storedContext,
+    lifecycleStage: "preboarding",
+    orchestrationStatus: "idle",
+  }).returning({
+    id: onbCases.id,
+    workforceContext: onbCases.workforceContext,
+    updatedAt: onbCases.updatedAt,
+  });
+  assert.ok(legacyCase);
+  caseIds.push(legacyCase.id);
+  const before = {
+    workforceContext: legacyCase.workforceContext,
+    updatedAt: legacyCase.updatedAt,
+  };
+  const benignContext = {
+    workEnvironment: "remote" as const,
+    siteExposure: false,
+    safetyCritical: false,
+  };
+
+  const rejected = await call(`/onboarding/cases/${legacyCase.id}/workforce-context`, orgA, {
+    method: "PUT",
+    body: JSON.stringify({
+      expectedUpdatedAt: before.updatedAt.toISOString(),
+      reason: "Benign hidden-context replacement regression.",
+      workforceContext: benignContext,
+    }),
+  });
+  assert.equal(rejected.status, 409);
+  const rejectedBody = await rejected.json() as { message: string };
+  assert.match(rejectedBody.message, /workforce-context correction cannot be saved/i);
+  assert.match(rejectedBody.message, /no specialist handoff is available here/i);
+  assert.match(rejectedBody.message, /no changes were made/i);
+  assert.doesNotMatch(rejectedBody.message, /accessibility|medical|hazard|language|country/i);
+
+  const [afterRejected] = await db.select({
+    workforceContext: onbCases.workforceContext,
+    updatedAt: onbCases.updatedAt,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, orgA),
+    eq(onbCases.id, legacyCase.id),
+  ));
+  assert.ok(afterRejected);
+  assert.equal(JSON.stringify(afterRejected.workforceContext), JSON.stringify(before.workforceContext));
+  assert.equal(afterRejected.updatedAt.toISOString(), before.updatedAt.toISOString());
+
+  const stale = await call(`/onboarding/cases/${legacyCase.id}/workforce-context`, orgA, {
+    method: "PUT",
+    body: JSON.stringify({
+      expectedUpdatedAt: new Date(before.updatedAt.getTime() - 1).toISOString(),
+      reason: "Stale hidden-context replacement regression.",
+      workforceContext: { ...benignContext, accessibilityNeeds: "Must not affect stale conflict." },
+    }),
+  });
+  assert.equal(stale.status, 409);
+  const staleBody = await stale.json() as { message: string };
+  assert.match(staleBody.message, /changed since it was loaded/i);
+  assert.doesNotMatch(staleBody.message, /accessibility|medical|handoff/i);
+});
+
 test("batch intake rejects missing lifecycle policies before any case write", async () => {
   const response = await callWithinIntakeTimeout("/onboarding/batch-intake", orgB, {
     method: "POST",

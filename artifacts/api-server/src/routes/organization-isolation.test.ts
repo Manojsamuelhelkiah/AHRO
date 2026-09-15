@@ -13,6 +13,8 @@ import {
   onbCaseLogistics,
   onbCases,
   onbAuditEntries,
+  onbAuthorityAssignments,
+  onbAuthorityGovernance,
   onbCommunications,
   onbChecklistProfiles,
   onbConnectors,
@@ -77,6 +79,79 @@ const orgB = `isolation-b-${suffix}`;
 let server: Server;
 let baseUrl: string;
 
+async function grantOpaqueNarrativeAuthority(caseId: number) {
+  await db.insert(onbAuthorityGovernance).values({
+    organizationId: orgA,
+    status: "governance-approved",
+    approvedByUserId: "test-governance",
+    approvedAt: new Date(),
+    governanceSource: "route-test",
+    revision: 1,
+  }).onConflictDoNothing();
+  await db.insert(onbAuthorityAssignments).values([
+    {
+      id: `isolation-opaque-identity-${caseId}-${suffix}`,
+      organizationId: orgA,
+      personUserId: "test-user-a",
+      authorityRole: "hr-compliance",
+      scopes: ["hr-compliance-approve"],
+      caseId,
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: new Date(Date.now() + 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "test-governance",
+      source: "route-test",
+      governanceDecisionRef: "route-test",
+    },
+    {
+      id: `isolation-opaque-medical-${caseId}-${suffix}`,
+      organizationId: orgA,
+      personUserId: "test-user-a",
+      authorityRole: "occupational-health",
+      scopes: ["occupational-health-approve"],
+      caseId,
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: new Date(Date.now() + 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "test-governance",
+      source: "route-test",
+      governanceDecisionRef: "route-test",
+    },
+    {
+      id: `isolation-opaque-payroll-${caseId}-${suffix}`,
+      organizationId: orgA,
+      personUserId: "test-user-a",
+      authorityRole: "payroll",
+      scopes: ["payroll-approve"],
+      caseId,
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: new Date(Date.now() + 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "test-governance",
+      source: "route-test",
+      governanceDecisionRef: "route-test",
+    },
+    {
+      id: `isolation-opaque-bgv-${caseId}-${suffix}`,
+      organizationId: orgA,
+      personUserId: "test-user-a",
+      authorityRole: "hr-compliance",
+      scopes: ["hr-compliance-approve"],
+      caseId,
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: new Date(Date.now() + 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "test-governance",
+      source: "route-test",
+      governanceDecisionRef: "route-test",
+    },
+  ]);
+}
+
 before(async () => {
   await db.insert(organizationsTable).values([
     {
@@ -106,7 +181,6 @@ before(async () => {
       role: "owner",
     },
   ]);
-
   for (const organizationId of [orgA, orgB]) {
     await db.insert(scenariosTable).values({
       ...organizationValues(organizationId),
@@ -794,6 +868,7 @@ test("checklist replacement route rejects stale snapshots, active claims, and pa
     readiness: readinessFromChecklist(LEGACY_CHECKLIST),
     workforceContext: { workCountry: "US" },
   }).returning({ id: onbCases.id });
+  await grantOpaqueNarrativeAuthority(policyCase.id);
 
   const replace = (body: Record<string, unknown>) =>
     fetch(`${baseUrl}/onboarding/cases/${policyCase.id}/checklist-profile`, {
@@ -1078,6 +1153,7 @@ test("policy mutations fence durable dispatch markers and a winning correction b
     },
     workforceContextVersion: 1,
   }).returning();
+  await grantOpaqueNarrativeAuthority(policyCase.id);
   const replace = () => fetch(
     `${baseUrl}/onboarding/cases/${policyCase.id}/checklist-profile`,
     {
@@ -1238,6 +1314,7 @@ test("corrected new and batch-held cases rebase before explicit release", async 
     orchestrationStatus: "idle",
     lifecycleStage: "trigger-received",
   }).returning();
+  await grantOpaqueNarrativeAuthority(manual.id);
   assert.equal((await correct(manual.id, manual.updatedAt.toISOString())).status, 200);
   const [manualCorrected] = await db.select().from(onbCases).where(and(
     eq(onbCases.organizationId, orgA),
@@ -1292,6 +1369,7 @@ test("corrected new and batch-held cases rebase before explicit release", async 
   };
   const batchId = created.batchId;
   const batchCaseId = created.results[0]!.caseId;
+  await grantOpaqueNarrativeAuthority(batchCaseId);
   const [batchCase] = await db.select().from(onbCases).where(and(
     eq(onbCases.organizationId, orgA),
     eq(onbCases.id, batchCaseId),

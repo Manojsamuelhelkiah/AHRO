@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import type { OnbAuthorityScope } from "@workspace/db/schema";
 import { hasCurrentAuthorityScope } from "./decision-authority";
 
+type SensitiveAuthorityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /**
  * Sensitive-record access is deliberately independent from an organization
  * membership role.  A tenant owner, admin, member, and demo persona can enter
@@ -126,18 +128,30 @@ export async function resolveSensitiveAccess(input: {
   if (!input.actorUserId || !Number.isSafeInteger(input.caseId) || input.caseId < 1) {
     return NO_SENSITIVE_ACCESS;
   }
-  return db.transaction(async (tx) => {
-    const result = { ...NO_SENSITIVE_ACCESS };
-    for (const classification of Object.keys(SENSITIVE_SCOPE_BY_CLASS) as SensitiveRecordClass[]) {
-      result[classification] = await hasCurrentAuthorityScope(tx, {
-        organizationId: input.organizationId,
-        actorUserId: input.actorUserId!,
-        scope: SENSITIVE_SCOPE_BY_CLASS[classification],
-        caseId: input.caseId,
-      });
-    }
-    return result;
-  });
+  return db.transaction((tx) => resolveSensitiveAccessInTransaction(tx, input));
+}
+
+export async function resolveSensitiveAccessInTransaction(
+  tx: SensitiveAuthorityTransaction,
+  input: {
+    organizationId: string;
+    caseId: number;
+    actorUserId?: string | null;
+  },
+): Promise<SensitiveAccess> {
+  if (!input.actorUserId || !Number.isSafeInteger(input.caseId) || input.caseId < 1) {
+    return NO_SENSITIVE_ACCESS;
+  }
+  const result = { ...NO_SENSITIVE_ACCESS };
+  for (const classification of Object.keys(SENSITIVE_SCOPE_BY_CLASS) as SensitiveRecordClass[]) {
+    result[classification] = await hasCurrentAuthorityScope(tx, {
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      scope: SENSITIVE_SCOPE_BY_CLASS[classification],
+      caseId: input.caseId,
+    });
+  }
+  return result;
 }
 
 /**
@@ -152,10 +166,16 @@ export async function withSensitiveAuthorityFence<T>(input: {
   actorUserId: string;
   classification: SensitiveRecordClass;
   additionalClassifications?: readonly SensitiveRecordClass[];
-  mutate: () => Promise<T>;
+  /** Runs under the tenant authority fence before live authority is checked. */
+  beforeAuthorize?: (tx: SensitiveAuthorityTransaction) => Promise<void>;
+  /** Optional same-transaction mutation for callers that need a precondition
+   * check before the authority decision. */
+  mutateInTransaction?: (tx: SensitiveAuthorityTransaction) => Promise<T>;
+  mutate?: () => Promise<T>;
 }): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${input.organizationId}))`);
+    await input.beforeAuthorize?.(tx);
     for (const classification of [input.classification, ...(input.additionalClassifications ?? [])]) {
       if (!(await hasCurrentAuthorityScope(tx, {
         organizationId: input.organizationId,
@@ -166,6 +186,8 @@ export async function withSensitiveAuthorityFence<T>(input: {
         throw new SensitiveAuthorityRequiredError();
       }
     }
+    if (input.mutateInTransaction) return input.mutateInTransaction(tx);
+    if (!input.mutate) throw new Error("Sensitive authority mutation callback is required.");
     return input.mutate();
   });
 }

@@ -280,6 +280,7 @@ import {
   redactOperationalItems,
   redactSensitiveText,
   resolveSensitiveAccess,
+  resolveSensitiveAccessInTransaction,
   SensitiveAuthorityRequiredError,
   withSensitiveAuthorityFence,
   restrictedDocumentView,
@@ -291,6 +292,15 @@ import {
 
 const router: IRouter = Router();
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
+const RESTRICTED_WORKFORCE_CONTEXT_MESSAGE =
+  "This workforce-context correction cannot be saved here. No specialist handoff is available here; no changes were made.";
+
+class WorkforceContextCorrectionPreconditionError extends Error {
+  constructor(readonly kind: "not-found" | "conflict") {
+    super(kind);
+    this.name = "WorkforceContextCorrectionPreconditionError";
+  }
+}
 
 type SensitiveLifecycleGateMutation = "checklist-profile-replacement" | "evidence-decision";
 let afterSensitiveLifecycleGateHookForTests:
@@ -883,7 +893,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
     if ((body.notes && body.notes.trim()) ||
       JSON.stringify(body.workforceContext ?? {}).toLowerCase().includes("accessibilityneeds")) {
       res.status(409).json({
-        message: "Accessibility/medical details and free-form candidate notes cannot be collected in general case intake. Hand off to the authorized specialist workflow.",
+        message: "General case intake cannot save accessibility/medical details or free-form candidate notes. No specialist handoff is available here.",
       });
       return;
     }
@@ -1498,90 +1508,134 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
       res.status(400).json({ message: "A workforce context, current updatedAt value, and 3–500 character correction reason are required." });
       return;
     }
-    if (JSON.stringify(body.workforceContext).toLowerCase().includes("accessibilityneeds")) {
-      res.status(409).json({
-        message: "Accessibility or medical details cannot be collected through general workforce-context corrections. Hand off to the authorized specialist workflow.",
-      });
-      return;
-    }
     const organizationId = getOrganizationId(req);
     const reviewer = await resolveReviewerName(req.authUserId!);
-    const outcome = await withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
-      await acquireCaseDispatchMutationLock(tx, organizationId, id);
-      const [current] = await tx.select().from(onbCases).where(and(
-        eq(onbCases.id, id), organizationWhere(onbCases, organizationId),
-      )).for("update");
-      if (!current) return { kind: "not-found" as const };
-      if (current.updatedAt.toISOString() !== expectedUpdatedAt) return { kind: "conflict" as const };
-      if (current.lifecycleStage === "complete") {
-        return { kind: "terminal" as const };
-      }
-      if (await hasActiveCaseDispatchMarker(tx, organizationId, id)) {
-        return { kind: "active-dispatch" as const };
-      }
-      if (current.orchestrationStatus === "running" || current.orchestrationClaimOwner !== null) {
-        return { kind: "active-claim" as const };
-      }
-      const workforceContext = normalizedWorkforceContext(body.workforceContext as typeof current.workforceContext);
-      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+    let current: typeof onbCases.$inferSelect | undefined;
+    let outcome;
+    try {
+      outcome = await withSensitiveLifecycleFence(organizationId, () => withSensitiveAuthorityFence({
         organizationId,
-        jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+        caseId: id,
+        actorUserId: req.authUserId!,
+        classification: "identity",
+        additionalClassifications: ["medical", "payroll", "bgv"],
+        beforeAuthorize: async (tx) => {
+          await acquireCaseDispatchMutationLock(tx, organizationId, id);
+          const [row] = await tx.select().from(onbCases).where(and(
+            eq(onbCases.id, id), organizationWhere(onbCases, organizationId),
+          )).for("update");
+          if (!row) throw new WorkforceContextCorrectionPreconditionError("not-found");
+          // Check the version before inspecting protected context or authority.
+          // A stale caller always receives the ordinary conflict response.
+          if (row.updatedAt.toISOString() !== expectedUpdatedAt) {
+            throw new WorkforceContextCorrectionPreconditionError("conflict");
+          }
+          current = row;
+          const sensitiveAccess = await resolveSensitiveAccessInTransaction(tx, {
+            organizationId,
+            caseId: id,
+            actorUserId: req.authUserId,
+          });
+          // This is the same all-class predicate used by the case serializer
+          // before exposing opaque workforce context.
+          if (!hasOpaqueNarrativeAccess(sensitiveAccess)) {
+            throw new SensitiveAuthorityRequiredError();
+          }
+        },
+        mutateInTransaction: async (tx) => {
+          const caseRow = current!;
+          // Accessibility needs remain prohibited even for an authorized
+          // caller. Keep the response generic so it reveals no hidden class.
+          if (JSON.stringify(body.workforceContext).toLowerCase().includes("accessibilityneeds") ||
+            JSON.stringify(caseRow.workforceContext).toLowerCase().includes("accessibilityneeds")) {
+            return { kind: "restricted-context" as const };
+          }
+          if (caseRow.lifecycleStage === "complete") {
+            return { kind: "terminal" as const };
+          }
+          if (await hasActiveCaseDispatchMarker(tx, organizationId, id)) {
+            return { kind: "active-dispatch" as const };
+          }
+          if (caseRow.orchestrationStatus === "running" || caseRow.orchestrationClaimOwner !== null) {
+            return { kind: "active-claim" as const };
+          }
+          const workforceContext = normalizedWorkforceContext(body.workforceContext as typeof caseRow.workforceContext);
+          const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+            organizationId,
+            jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+          });
+          if (!lifecycle.allowed) return { kind: "lifecycle-blocked" as const, message: lifecycle.reason };
+          const derived = classifyWorkforceContext(workforceContext);
+          const workforceClassification = derived && {
+            ...derived,
+            source: "authorized-correction" as const,
+            correction: { label: derived.label, by: reviewer, reason, at: new Date().toISOString() },
+          };
+          // A corrected context invalidates authority to continue with the old
+          // execution snapshot. Require an explicit, fenced rebase before any
+          // more connector effects; this is intentionally stricter than merely
+          // changing the display classification.
+          const reviewGate = {
+            id: "policy-rebase-required",
+            label: "Human policy rebase required after workforce context correction",
+            order: caseRow.checklistSnapshot.length,
+            enabled: true,
+            mandatory: true,
+            evidenceRequired: true,
+            enforcementStage: "before-workstreams" as const,
+            responsibleRole: "hr",
+            completionAuthority: "designated-human" as const,
+            executor: "human-task" as const,
+          };
+          const nextSnapshot = caseRow.checklistSnapshot.some((item) => item.id === reviewGate.id)
+            ? caseRow.checklistSnapshot : [...caseRow.checklistSnapshot, reviewGate];
+          const readiness = invalidateEvidenceReadinessForContextChange(
+            nextSnapshot,
+            mergeChecklistReadiness(nextSnapshot, caseRow.readiness, caseRow.checklistSnapshot),
+          );
+          const [row] = await tx.update(onbCases).set({
+            workforceContext, workforceClassification, workforceContextVersion: caseRow.workforceContextVersion + 1, checklistSnapshot: nextSnapshot, readiness,
+            // Context correction blocks further work but does not rewrite the
+            // checkpoint reached by the original execution. Replacing it with a
+            // pre-workstream checkpoint would allow a later rebase to erase the
+            // already-crossed boundary.
+            // Batch cases remain explicitly held. The rebase-required item still
+            // blocks their release, but correction itself never converts cohort
+            // review into ordinary checklist/orchestration progression.
+            orchestrationStatus: caseRow.orchestrationStatus === "batch-intake-pending-review"
+              ? "batch-intake-pending-review"
+              : "checklist-blocked",
+            orchestrationCheckpoint: caseRow.orchestrationCheckpoint,
+            updatedAt: new Date(),
+          })
+            .where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId))).returning();
+          await tx.insert(onbEvents).values({
+            organizationId, caseId: id, agent: "human", engine: "human", hitlPattern: "human-update",
+            ruleRef: "Workforce context correction",
+            title: "Authorized workforce context correction recorded",
+            detail: `${reviewer} corrected captured job context. Policy snapshot was not changed; deliberate rebase is required. Reason: ${reason}`,
+          });
+          return { kind: "updated" as const, row };
+        },
+      }));
+    } catch (error) {
+      if (error instanceof WorkforceContextCorrectionPreconditionError) {
+        if (error.kind === "not-found") return void res.status(404).json({ message: "Case not found." });
+        return void res.status(409).json({ message: "Case changed since it was loaded. Refresh before correcting context." });
+      }
+      if (error instanceof SensitiveAuthorityRequiredError) {
+        return void res.status(409).json({ message: RESTRICTED_WORKFORCE_CONTEXT_MESSAGE });
+      }
+      throw error;
+    }
+    if (!outcome) {
+      return void res.status(409).json({ message: RESTRICTED_WORKFORCE_CONTEXT_MESSAGE });
+    }
+    if (outcome.kind === "restricted-context") {
+      return void res.status(409).json({
+        message: RESTRICTED_WORKFORCE_CONTEXT_MESSAGE,
       });
-      if (!lifecycle.allowed) return { kind: "lifecycle-blocked" as const, message: lifecycle.reason };
-      const derived = classifyWorkforceContext(workforceContext);
-      const workforceClassification = derived && {
-        ...derived,
-        source: "authorized-correction" as const,
-        correction: { label: derived.label, by: reviewer, reason, at: new Date().toISOString() },
-      };
-      // A corrected context invalidates authority to continue with the old
-      // execution snapshot. Require an explicit, fenced rebase before any
-      // more connector effects; this is intentionally stricter than merely
-      // changing the display classification.
-      const reviewGate = {
-        id: "policy-rebase-required",
-        label: "Human policy rebase required after workforce context correction",
-        order: current.checklistSnapshot.length,
-        enabled: true,
-        mandatory: true,
-        evidenceRequired: true,
-        enforcementStage: "before-workstreams" as const,
-        responsibleRole: "hr",
-        completionAuthority: "designated-human" as const,
-        executor: "human-task" as const,
-      };
-      const nextSnapshot = current.checklistSnapshot.some((item) => item.id === reviewGate.id)
-        ? current.checklistSnapshot : [...current.checklistSnapshot, reviewGate];
-      const readiness = invalidateEvidenceReadinessForContextChange(
-        nextSnapshot,
-        mergeChecklistReadiness(nextSnapshot, current.readiness, current.checklistSnapshot),
-      );
-      const [row] = await tx.update(onbCases).set({
-        workforceContext, workforceClassification, workforceContextVersion: current.workforceContextVersion + 1, checklistSnapshot: nextSnapshot, readiness,
-        // Context correction blocks further work but does not rewrite the
-        // checkpoint reached by the original execution. Replacing it with a
-        // pre-workstream checkpoint would allow a later rebase to erase the
-        // already-crossed boundary.
-        // Batch cases remain explicitly held. The rebase-required item still
-        // blocks their release, but correction itself never converts cohort
-        // review into ordinary checklist/orchestration progression.
-        orchestrationStatus: current.orchestrationStatus === "batch-intake-pending-review"
-          ? "batch-intake-pending-review"
-          : "checklist-blocked",
-        orchestrationCheckpoint: current.orchestrationCheckpoint,
-        updatedAt: new Date(),
-      })
-        .where(and(eq(onbCases.id, id), organizationWhere(onbCases, organizationId))).returning();
-      await tx.insert(onbEvents).values({
-        organizationId, caseId: id, agent: "human", engine: "human", hitlPattern: "human-update",
-        ruleRef: "Workforce context correction",
-        title: "Authorized workforce context correction recorded",
-        detail: `${reviewer} corrected captured job context. Policy snapshot was not changed; deliberate rebase is required. Reason: ${reason}`,
-      });
-      return { kind: "updated" as const, row };
-    }));
-    if (outcome.kind === "not-found") return void res.status(404).json({ message: "Case not found." });
-    if (outcome.kind === "conflict") return void res.status(409).json({ message: "Case changed since it was loaded. Refresh before correcting context." });
+    }
     if (outcome.kind === "terminal") return void res.status(409).json({ message: "Completed cases are immutable; workforce context cannot be corrected after completion." });
     if (outcome.kind === "active-dispatch") return void res.status(409).json({ message: "This case has an active provider dispatch marker. Reconcile the dispatch before correcting workforce context." });
     if (outcome.kind === "active-claim") return void res.status(409).json({ message: "This case has an active orchestration claim. Wait for it to pause before correcting workforce context." });

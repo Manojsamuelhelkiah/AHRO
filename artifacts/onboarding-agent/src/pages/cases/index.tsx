@@ -740,7 +740,6 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
       recruiterName: fd.get('recruiterName') as string,
       joiningDate: fd.get('joiningDate') as string,
       urgency: fd.get('urgency') as string,
-      notes: fd.get('notes') as string || undefined,
        jobProfileId: fd.get('jobProfileId') as string || undefined,
       workforceContext: {
         roleFamily: fd.get('roleFamily') as string || undefined,
@@ -756,7 +755,6 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
         assistedIntake: parseWorkforceTriState(fd.get('assistedIntake')),
         siteExposure: parseWorkforceTriState(fd.get('siteExposure')),
         safetyCritical: parseWorkforceTriState(fd.get('safetyCritical')),
-        accessibilityNeeds: fd.get('accessibilityNeeds') as string || undefined,
         languagePreference: fd.get('languagePreference') as string || undefined,
       },
     };
@@ -789,6 +787,9 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
           hazards: values.get('hazards') as string,
         }));
       }} className="p-[var(--space-lg)] space-y-4">
+        <p className="rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-sm">
+          General intake cannot save free-form candidate or recruiter notes, including ordinary non-sensitive notes, or accessibility and medical details. Do not enter these in other fields. No specialist handoff is available from this form.
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <Label>Worker Name</Label>
@@ -875,10 +876,6 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
               <option value="critical">Critical</option>
             </select>
           </div>
-          <div className="col-span-2 space-y-1">
-            <Label>Notes</Label>
-            <Input name="notes" placeholder="Free text recruiter notes..." />
-          </div>
            <div className="col-span-2 md:col-span-3 space-y-3 mt-2 pt-3 border-t border-[var(--border)]">
              <div>
                <Label className="font-semibold">Work context for policy routing</Label>
@@ -900,7 +897,6 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
                <label className="flex items-center gap-2">Site exposure <select name="siteExposure" defaultValue="" className="h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>
                <label className="flex items-center gap-2">Safety-critical duties <select name="safetyCritical" defaultValue="" className="h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>
                <label className="flex items-center gap-2">Assisted intake requested <select name="assistedIntake" defaultValue="" className="h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-               <label className="flex items-center gap-2">Accessibility needs <Input name="accessibilityNeeds" className="h-7 w-40" /></label>
                <label className="flex items-center gap-2">Language preference <Input name="languagePreference" className="h-7 w-32" /></label>
              </div>
               <div className={cn('rounded border p-3 text-xs', classificationPreview.label === 'needs-review' ? 'border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]' : 'border-[var(--status-green)]/30 bg-[var(--status-green-bg)] text-[var(--status-green-fg)]')}>

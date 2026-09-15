@@ -164,6 +164,10 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
   };
   const submitContextCorrection = () => {
     if (contextReason.trim().length < 3) return;
+    if (JSON.stringify(contextDraft).toLowerCase().includes('accessibilityneeds')) {
+      setError('This context contains restricted accessibility information and cannot be saved through this form. Nothing has been removed or submitted. No specialist handoff is available here.');
+      return;
+    }
     setError(null);
     correctContext.mutate({
       id: c.id,
@@ -363,6 +367,9 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
             <DialogDescription>Correct explicit job facts only. Saving records an audit event but does not silently alter this case’s active policy snapshot.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            <p className="rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-sm">Accessibility and medical details cannot be saved through general context corrections. Do not include them in other fields or the correction reason. No specialist handoff is available from this form.</p>
+            {JSON.stringify(contextDraft).toLowerCase().includes('accessibilityneeds') && <p role="alert" className="text-sm text-[var(--status-red)]">This existing context contains restricted accessibility information. Saving is blocked; it will not be silently removed.</p>}
+            {error && <p role="alert" className="text-sm text-[var(--status-red)]">{error}</p>}
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Work environment</Label><select className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-sm" value={contextDraft.workEnvironment ?? ''} onChange={(event) => setContextDraft({ ...contextDraft, workEnvironment: (event.target.value || undefined) as any })}><option value="">Unknown</option><option value="office">Office</option><option value="remote">Remote</option><option value="site">Site</option><option value="field">Field</option><option value="mixed">Mixed</option></select></div>
               <div><Label>Site / facility</Label><input className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-sm" value={contextDraft.site ?? ''} onChange={(event) => setContextDraft({ ...contextDraft, site: event.target.value || undefined })} /></div>
@@ -376,7 +383,6 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
               <div><Label>Employment arrangement</Label><input className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-sm" value={contextDraft.employmentArrangement ?? ''} onChange={(event) => setContextDraft({ ...contextDraft, employmentArrangement: event.target.value || undefined })} /></div>
               <div><Label>Required licenses</Label><input className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-sm" value={(contextDraft.requiredLicenses ?? []).join(', ')} onChange={(event) => setContextDraft({ ...contextDraft, requiredLicenses: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} /></div>
               <div><Label>Hazards / conditions</Label><input className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-sm" value={(contextDraft.hazards ?? []).join(', ')} onChange={(event) => setContextDraft({ ...contextDraft, hazards: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} /></div>
-              <div><Label>Accessibility needs</Label><input className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-sm" value={contextDraft.accessibilityNeeds ?? ''} onChange={(event) => setContextDraft({ ...contextDraft, accessibilityNeeds: event.target.value || undefined })} /></div>
               <div><Label>Language preference</Label><input className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-sm" value={contextDraft.languagePreference ?? ''} onChange={(event) => setContextDraft({ ...contextDraft, languagePreference: event.target.value || undefined })} /></div>
             </div>
             <div className="grid grid-cols-1 gap-2 text-xs text-[var(--text-secondary)] md:grid-cols-3">
