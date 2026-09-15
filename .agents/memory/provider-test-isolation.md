@@ -5,6 +5,18 @@ description: Prevent background workers from contacting recipients through devel
 
 In-process provider stubs do not protect database fixtures from the separately running API's background workers.
 
+Full-stack browser regressions must isolate all database state, not just case delivery state.
+
+**Why:** Offline synthetic mutations can still enqueue protected audit checkpoints. A shared-schema worker could deliver those after the test ends, despite a request-local provider-deny fence.
+
+**How to apply:** Initialize a disposable migrated schema before importing application database modules, verify relation resolution, and drop only the owned schema on teardown. Keep test authentication loopback-only and unavailable to production builds.
+
+Isolated migration replay must exclude `public` from `search_path`, even as an extension fallback.
+
+**Why:** An unqualified `DROP INDEX IF EXISTS` can resolve a same-named public index when it does not yet exist in the disposable schema, silently damaging the shared schema while the isolated test passes.
+
+**How to apply:** Use only the owned schema in the search path. Provide narrowly scoped extension wrappers when necessary rather than adding shared application schemas as fallbacks.
+
 **Why:** A browser fixture previously acquired a “sent” approval-escalation record outside the action being tested. Authorized document fixtures can likewise be picked up by the reminder worker even when the test process stubs delivery.
 
 **How to apply:** Pause the development API during DB-backed provider tests, clean up owned fixtures, then restart it. Browser tests must use fixtures with no live contact authorization, overdue system checks, or automatic approval triggers. Never assume a completed lifecycle alone excludes a fixture from every worker.

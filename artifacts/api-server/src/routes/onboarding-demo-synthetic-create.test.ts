@@ -18,10 +18,12 @@ import {
   onbReadinessSlaLedger,
   onbReadinessSlaOutbox,
   onbReadinessSlaSnapshots,
+  onbSensitiveLifecyclePolicies,
   onbSettings,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
+import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
 import {
   SYNTHETIC_DEMO_AUTHORITY_SOURCE,
   SYNTHETIC_OFFLINE_MARKER,
@@ -40,6 +42,10 @@ const suffix = `${process.pid}-${randomUUID()}`;
 const administrator = `synthetic-create-admin-${suffix}`;
 const reviewer = `synthetic-create-reviewer-${suffix}`;
 const foreignOrganizationId = `synthetic-create-foreign-${suffix}`;
+const policyRevision = 1_000_000 + Number.parseInt(
+  randomUUID().replaceAll("-", "").slice(0, 6),
+  16,
+);
 const fixtureWorkerName = `Synthetic Route Worker ${suffix}`;
 let server: Server | undefined;
 let baseUrl = "";
@@ -123,6 +129,27 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
         value: "reviewer",
       },
     ]);
+    // The production route uses the normal sensitive-lifecycle gate for
+    // synthetic cases too. These short-lived, test-owned approvals establish
+    // that the synthetic path does not bypass that protection.
+    await db.insert(onbSensitiveLifecyclePolicies).values(
+      SENSITIVE_DATA_CLASSES.map((dataClass) => ({
+        organizationId: DEMO_ORGANIZATION_ID,
+        dataClass,
+        jurisdiction: "US",
+        revision: policyRevision,
+        purpose: "Synthetic route test lifecycle policy",
+        lawfulBasis: "Synthetic route test lifecycle basis",
+        retentionDays: 1,
+        providerSharingApproved: false,
+        permittedProviders: [],
+        policyReference: `synthetic-route-test:${suffix}:${dataClass}`,
+        approvalReference: `synthetic-route-test:${suffix}:${dataClass}`,
+        approvedByUserId: administrator,
+        approvedAuthorityAssignmentId: 1,
+        isCurrent: true,
+      })),
+    );
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
@@ -150,6 +177,10 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
       ));
       await db.delete(onbCases).where(inArray(onbCases.id, createdCaseIds));
     }
+    await db.delete(onbSensitiveLifecyclePolicies).where(and(
+      eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
+      eq(onbSensitiveLifecyclePolicies.revision, policyRevision),
+    ));
     await db.delete(onbSettings).where(and(
       eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
       inArray(onbSettings.key, [

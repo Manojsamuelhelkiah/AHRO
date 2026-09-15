@@ -9,6 +9,36 @@ import { viteRuntime } from '../../scripts/vite-runtime';
 
 export default defineConfig(async ({ command }): Promise<UserConfig> => {
   const { port, basePath } = viteRuntime(command, '/');
+  const browserRegressionRequested =
+    process.env.VITE_E2E_TEST_AUTH === 'true';
+  const browserRegression =
+    browserRegressionRequested &&
+    command === 'serve' &&
+    process.env.NODE_ENV === 'test' &&
+    process.env.ONBOARDING_E2E_TEST === 'true';
+  if (browserRegressionRequested && !browserRegression) {
+    throw new Error(
+      'VITE_E2E_TEST_AUTH requires a Vite dev server with NODE_ENV=test and ONBOARDING_E2E_TEST=true',
+    );
+  }
+  const e2eApiOrigin = process.env.E2E_API_ORIGIN || 'http://127.0.0.1:4178';
+  if (browserRegression) {
+    const apiUrl = new URL(e2eApiOrigin);
+    if (
+      apiUrl.protocol !== 'http:' ||
+      !['127.0.0.1', 'localhost', '[::1]'].includes(apiUrl.hostname)
+    ) {
+      throw new Error(
+        'Browser regression API proxy must target an HTTP loopback origin',
+      );
+    }
+  }
+  const e2eAuthAdapter = path.resolve(
+    import.meta.dirname,
+    'src',
+    'test-support',
+    'clerk-auth-adapter.tsx',
+  );
   return {
   base: basePath,
   plugins: [
@@ -30,15 +60,27 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
       : []),
   ],
   resolve: {
-    alias: {
-      '@': path.resolve(import.meta.dirname, 'src'),
-      '@assets': path.resolve(
-        import.meta.dirname,
-        '..',
-        '..',
-        'attached_assets',
-      ),
-    },
+    alias: [
+      ...(browserRegression
+        ? [
+            {
+              find: '@clerk/react/internal',
+              replacement: e2eAuthAdapter,
+            },
+            { find: '@clerk/react', replacement: e2eAuthAdapter },
+          ]
+        : []),
+      { find: '@', replacement: path.resolve(import.meta.dirname, 'src') },
+      {
+        find: '@assets',
+        replacement: path.resolve(
+          import.meta.dirname,
+          '..',
+          '..',
+          'attached_assets',
+        ),
+      },
+    ],
     dedupe: ['react', 'react-dom'],
   },
   root: path.resolve(import.meta.dirname),
@@ -49,16 +91,26 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
   server: {
     port,
     strictPort: true,
-    host: '0.0.0.0',
-    allowedHosts: true,
+    host: browserRegression ? '127.0.0.1' : '0.0.0.0',
+    allowedHosts: browserRegression ? ['127.0.0.1', 'localhost'] : true,
+    ...(browserRegression
+      ? {
+          proxy: {
+            '/api': {
+              target: e2eApiOrigin,
+              changeOrigin: true,
+            },
+          },
+        }
+      : {}),
     fs: {
       strict: true,
     },
   },
   preview: {
     port,
-    host: '0.0.0.0',
-    allowedHosts: true,
+    host: browserRegression ? '127.0.0.1' : '0.0.0.0',
+    allowedHosts: browserRegression ? ['127.0.0.1', 'localhost'] : true,
   },
   };
 });

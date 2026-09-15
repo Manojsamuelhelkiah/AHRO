@@ -39,8 +39,8 @@ Control Tower intake for a public Demo Administrator is an offline synthetic cre
 
 **How to apply:** keep creation and case-scoped access atomic and prohibit automatic outreach or orchestration for this intake path. Explain the distinction in the form and delivery summary.
 
-Offline synthetic Demo Administrator intake may be created without tenant lifecycle-policy records, but only because that branch cannot collect candidate-provided sensitive material or start communications, providers, readiness, SLA, or orchestration effects.
+Offline synthetic Demo Administrator intake still requires tenant lifecycle-policy records because it accepts candidate-provided identity/contact material, even though that branch cannot start communications, providers, readiness, SLA, or orchestration effects.
 
-**Why:** Public Demo Organization has no verified legal/privacy policy authority; inventing policy approvals would be misleading, while applying the live-case gate made the fenced simulation unusable.
+**Why:** The synthetic marker fences operational effects but does not make retained PII non-sensitive. The recorded work jurisdiction must therefore have the same approved lifecycle coverage as an ordinary case; the isolated browser fixture supplies that policy coverage without weakening the production gate.
 
-**How to apply:** Keep the exception server-owned and limited to the registered Demo Administrator plus Demo Organization plus the offline synthetic marker. Ordinary cases and every live or sensitive write still require the normal lifecycle gate.
+**How to apply:** Keep the offline path server-owned and limited to the registered Demo Administrator plus Demo Organization plus the offline synthetic marker. Require the normal lifecycle gate for both offline and ordinary cases, while continuing to prohibit automatic outreach or orchestration for the offline path.

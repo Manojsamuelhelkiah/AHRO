@@ -721,17 +721,15 @@ async function insertCaseAndStart(
       workforceContext,
       values,
     );
-    // This exception is confined to the server-marked, offline synthetic demo
-    // branch. It stores no candidate-provided sensitive material and cannot
-    // start orchestration, provider work, communications, or readiness/SLA
-    // effects. Ordinary cases still require an approved lifecycle policy.
-    if (!options?.syntheticOffline) {
-      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
-        organizationId,
-        jurisdiction: jurisdictionForWorkforceContext(workforceContext),
-      });
-      if (!lifecycle.allowed) throw new SensitiveLifecycleConflictError(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
-    }
+    // Case creation retains candidate-provided identity/contact fields, so the
+    // case-derived sensitive lifecycle gate applies to synthetic offline cases
+    // as well as ordinary cases. The offline marker only fences orchestration,
+    // provider work, communications, and readiness/SLA effects.
+    const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+      organizationId,
+      jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+    });
+    if (!lifecycle.allowed) throw new SensitiveLifecycleConflictError(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
     const { profile, classification } = workforcePolicy;
     const [inserted] = await tx
       .insert(onbCases)
