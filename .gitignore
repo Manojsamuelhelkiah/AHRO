@@ -49,3 +49,5 @@ Thumbs.db
 .local/
 dist-test/
 dist-workforce-check/
+test-results/
+playwright-report/
