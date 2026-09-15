@@ -53,7 +53,8 @@ table/column parity and migration ledgers do not prove triggers or extension
 functions exist in production.
 
 **Why:** Production catalog inspection found transfer custody functions,
-triggers, and pgcrypto absent despite structural schema changes being proposed.
+triggers, and pgcrypto absent even when Publish reported an empty schema diff.
+An empty structural diff is not evidence that procedural objects were promoted.
 No post-Publish procedural installation was verified.
 
 **How to apply:** Verify live catalogs read-only before serving, including
