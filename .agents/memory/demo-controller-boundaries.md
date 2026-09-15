@@ -38,3 +38,9 @@ Control Tower intake for a public Demo Administrator is an offline synthetic cre
 **Why:** Allowing the familiar Create Case form must not silently contact addresses supplied by a public shared identity. Approved-volunteer live demonstrations have a separate explicit authorization flow.
 
 **How to apply:** keep creation and case-scoped access atomic and prohibit automatic outreach or orchestration for this intake path. Explain the distinction in the form and delivery summary.
+
+Offline synthetic Demo Administrator intake may be created without tenant lifecycle-policy records, but only because that branch cannot collect candidate-provided sensitive material or start communications, providers, readiness, SLA, or orchestration effects.
+
+**Why:** Public Demo Organization has no verified legal/privacy policy authority; inventing policy approvals would be misleading, while applying the live-case gate made the fenced simulation unusable.
+
+**How to apply:** Keep the exception server-owned and limited to the registered Demo Administrator plus Demo Organization plus the offline synthetic marker. Ordinary cases and every live or sensitive write still require the normal lifecycle gate.

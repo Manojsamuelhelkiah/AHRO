@@ -175,6 +175,7 @@ import {
   evaluateCaseDerivedLifecycleGateInTransaction,
   evaluateSensitiveLifecycleGate,
   jurisdictionForWorkforceContext,
+  SensitiveLifecycleConflictError,
   SensitiveLifecyclePermissionError,
   verifiedSensitiveAuthorityInTransaction,
   withSensitiveLifecycleFence,
@@ -720,11 +721,17 @@ async function insertCaseAndStart(
       workforceContext,
       values,
     );
-    const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
-      organizationId,
-      jurisdiction: jurisdictionForWorkforceContext(workforceContext),
-    });
-    if (!lifecycle.allowed) throw new Error(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
+    // This exception is confined to the server-marked, offline synthetic demo
+    // branch. It stores no candidate-provided sensitive material and cannot
+    // start orchestration, provider work, communications, or readiness/SLA
+    // effects. Ordinary cases still require an approved lifecycle policy.
+    if (!options?.syntheticOffline) {
+      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+      });
+      if (!lifecycle.allowed) throw new SensitiveLifecycleConflictError(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
+    }
     const { profile, classification } = workforcePolicy;
     const [inserted] = await tx
       .insert(onbCases)
@@ -1036,8 +1043,12 @@ router.post("/onboarding/cases", async (req, res, next) => {
       return;
     }
     const syntheticDemoCase = demoProfile === "administrator";
+    const providedWorkCountry = body.workforceContext?.workCountry;
     const workCountry =
-      body.workforceContext?.workCountry ?? normalizedDemoWorkCountry(body.geography);
+      normalizedDemoWorkCountry(providedWorkCountry) ??
+      (jurisdictionForWorkforceContext({ workCountry: providedWorkCountry })
+        ? providedWorkCountry!.trim().toUpperCase()
+        : normalizedDemoWorkCountry(body.geography));
     if (!workCountry) {
       res.status(400).json({
         message: "Work Country is required to apply the correct lifecycle policy. Enter a country name or ISO code in Work context for policy routing.",
@@ -1104,6 +1115,13 @@ router.post("/onboarding/cases", async (req, res, next) => {
       res.status(403).json({
         message: "A current registered Demo Administrator profile and Demo Organization membership are required.",
         code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
+      });
+      return;
+    }
+    if (err instanceof SensitiveLifecycleConflictError) {
+      res.status(409).json({
+        message: err.message.replace(/^SENSITIVE_LIFECYCLE_BLOCKED:/, ""),
+        code: "SENSITIVE_LIFECYCLE_BLOCKED",
       });
       return;
     }
