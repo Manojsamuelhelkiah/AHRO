@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
   useListOnboardingCases,
   useCreateOnboardingCase,
+  useGetCurrentOrganization,
   getListOnboardingCasesQueryKey,
   customFetch,
   getPinnedOrganizationIdForPage,
@@ -733,6 +734,8 @@ function RequiredFieldLabel({
 export function NewCaseForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const createCase = useCreateOnboardingCase();
+  const currentOrganization = useGetCurrentOrganization();
+  const [, setLocation] = useLocation();
   const jobProfiles = useQuery({ queryKey: ['onboarding', 'job-profiles'], queryFn: listJobProfiles });
   const [channelPref, setChannelPref] = useState('both');
   const [phone, setPhone] = useState('');
@@ -783,9 +786,10 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
     
     setSubmitError(null);
     createCase.mutate({ data }, {
-      onSuccess: () => {
+      onSuccess: (created) => {
         queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
         onClose();
+        setLocation(`/cases/${created.id}`);
       },
       onError: (error: any) => {
         const serverMessage = error?.response?.data?.message || error?.message;
@@ -796,7 +800,7 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
 
   return (
     <Card className="mb-6 shadow-md">
-      <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex justify-between items-center">
+      <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>New Case</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
       </div>
@@ -816,7 +820,12 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
         <p className="rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-sm">
           General intake cannot save free-form candidate or recruiter notes, including ordinary non-sensitive notes, or accessibility and medical details. Do not enter these in other fields. No specialist handoff is available from this form.
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {currentOrganization.data?.demoProfile === 'administrator' && (
+          <p className="rounded border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950" role="status">
+            Your server-authorized Demo Administrator profile will create an offline synthetic case in Demo Organization. No emails, messages, provider actions, portal links, SLA enrollment, or orchestration will run.
+          </p>
+        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
           <div className="space-y-1">
             <RequiredFieldLabel htmlFor="workerName">Worker Name</RequiredFieldLabel>
             <Input id="workerName" name="workerName" required />
@@ -902,12 +911,12 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
               <option value="critical">Critical</option>
             </select>
           </div>
-           <div className="col-span-2 md:col-span-3 space-y-3 mt-2 pt-3 border-t border-[var(--border)]">
+           <div className="col-span-1 space-y-3 mt-2 pt-3 border-t border-[var(--border)] sm:col-span-2 md:col-span-3">
              <div>
                <Label className="font-semibold">Work context for policy routing</Label>
                <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>Classifies the job from explicit work conditions only. Leave unknown facts blank; they will be shown as needs review rather than inferred.</p>
              </div>
-             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                <div className="space-y-1"><Label>Role Family</Label><Input name="roleFamily" placeholder="e.g. Operations" /></div>
                <div className="space-y-1"><Label>Work Environment</Label><select name="workEnvironment" defaultValue="" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] text-[var(--text-sm)]"><option value="">Unknown / needs review</option><option value="office">Office</option><option value="remote">Remote</option><option value="site">Site</option><option value="field">Field</option><option value="mixed">Mixed</option></select></div>
                <div className="space-y-1"><Label>Work Country</Label><Input name="workCountry" placeholder="e.g. India" /></div>
@@ -917,7 +926,7 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
                <div className="space-y-1"><Label>Batch ID</Label><Input name="batchId" placeholder="Optional batch" /></div>
                <div className="space-y-1"><Label>Shift Pattern</Label><Input name="shiftPattern" placeholder="e.g. Rotating" /></div>
                <div className="space-y-1"><Label>Required Licenses</Label><Input name="requiredLicenses" placeholder="Comma-separated" /></div>
-               <div className="col-span-2 md:col-span-3 space-y-1"><Label>Hazards / site conditions</Label><Input name="hazards" placeholder="Comma-separated; e.g. forklift traffic, heights" /></div>
+                <div className="col-span-1 space-y-1 sm:col-span-2 md:col-span-3"><Label>Hazards / site conditions</Label><Input name="hazards" placeholder="Comma-separated; e.g. forklift traffic, heights" /></div>
              </div>
              <div className="flex flex-wrap gap-x-5 gap-y-2 text-[var(--text-xs)] text-[var(--text-secondary)]">
                <label className="flex items-center gap-2">Site exposure <select name="siteExposure" defaultValue="" className="h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>
@@ -940,14 +949,14 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
              <p className="text-[10px] text-[var(--text-muted)]">The selected version is snapshotted; person-specific context below may add known facts.</p>
            </div>
         </div>
-        <div className="flex items-center justify-end gap-4 pt-4 mt-2" style={{ borderTop: '1px solid var(--border)' }}>
+         <div className="flex flex-col-reverse gap-3 pt-4 mt-2 sm:flex-row sm:items-center sm:justify-end sm:gap-4" style={{ borderTop: '1px solid var(--border)' }}>
           {submitError && (
             <p className="text-[12px] font-medium m-0" style={{ color: 'var(--status-red)' }} role="alert">
               {submitError}
             </p>
           )}
           <Button type="submit" disabled={createCase.isPending}>
-            {createCase.isPending ? 'Creating...' : 'Create Case'}
+            {createCase.isPending ? 'Creating...' : currentOrganization.data?.demoProfile === 'administrator' ? 'Create Offline Synthetic Case' : 'Create Case'}
           </Button>
         </div>
       </form>

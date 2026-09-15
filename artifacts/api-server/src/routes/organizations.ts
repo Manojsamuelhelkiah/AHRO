@@ -152,6 +152,9 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
       needsSetup: memberships.length === 0,
       activeOrganizationId,
       memberships,
+      // This is a server-authenticated display capability only. All mutation
+      // endpoints independently verify the profile and membership.
+      demoProfile: profile,
     });
   } catch (error) {
     next(error);

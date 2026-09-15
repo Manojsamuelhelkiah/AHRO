@@ -27,10 +27,23 @@ export interface OrganizationMembership {
   role: OrganizationMembershipRole;
 }
 
+/**
+ * @nullable
+ */
+export type OrganizationCurrentResponseDemoProfile = typeof OrganizationCurrentResponseDemoProfile[keyof typeof OrganizationCurrentResponseDemoProfile] | null;
+
+
+export const OrganizationCurrentResponseDemoProfile = {
+  reviewer: 'reviewer',
+  administrator: 'administrator',
+} as const;
+
 export interface OrganizationCurrentResponse {
   needsSetup: boolean;
   /** @nullable */
   activeOrganizationId: string | null;
+  /** @nullable */
+  demoProfile: OrganizationCurrentResponseDemoProfile;
   memberships: OrganizationMembership[];
 }
 

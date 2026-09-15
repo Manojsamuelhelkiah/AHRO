@@ -116,6 +116,7 @@ import {
   CANDIDATE_LINK_RETENTION_DAYS_KEY,
   NONWAIVABLE_SAFETY_POLICY_KEY,
   mandatoryChecklistReady,
+  type OnboardingDbTransaction,
 } from "../lib/onboarding/settings";
 import { logisticsForCase, validateDay1LogisticsDefault } from "../lib/onboarding/logistics-defaults";
 import {
@@ -253,6 +254,7 @@ import {
 } from "../lib/onboarding/operational-requests";
 import {
   isSyntheticOfflineCase,
+  SYNTHETIC_OFFLINE_MARKER,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
 import { getUatCaseIsolation } from "../lib/onboarding/uat-isolation";
@@ -276,7 +278,11 @@ import {
   SHARED_DEMO_REVIEWER_METADATA_KEY,
   SYNTHETIC_DEMO_ADMIN_METADATA_KEY,
 } from "../lib/demo-reviewer";
-import { ensureSyntheticDemoAdminAccess } from "../lib/onboarding/demo-admin-access";
+import {
+  ensureSyntheticDemoAdminAccess,
+  grantSyntheticDemoAuthorityForCase,
+  SyntheticDemoCaseAuthorityDeniedError,
+} from "../lib/onboarding/demo-admin-access";
 import {
   enforceDemoPrincipalMembershipCeiling,
   quarantineLegacyDemoPrincipalAuthority,
@@ -627,7 +633,9 @@ async function serializeCase(
     primarySkill: row.primarySkill,
     skillCriticality: row.skillCriticality,
     scenarioKey: row.scenarioKey,
-    offlineSample: isDemoFullCoverageScenarioKey(row.scenarioKey),
+    // This server-derived output flag keeps every marker-backed offline case
+    // out of interactive provider/contact controls in the client.
+    offlineSample: isSyntheticOfflineCase(row),
     planSummary: redactSensitiveText(row.planSummary, sensitiveAccess) ?? null,
     checklistTemplateVersion: row.checklistTemplateVersion,
     checklistSnapshot: redactOperationalItems(row.checklistSnapshot, sensitiveAccess),
@@ -680,6 +688,11 @@ async function serializeEventForRequest(req: Request, row: typeof onbEvents.$inf
 async function insertCaseAndStart(
   values: Omit<typeof onbCases.$inferInsert, "organizationId">,
   organizationId: string,
+  options?: {
+    startOrchestration?: boolean;
+    syntheticOffline?: boolean;
+    onInserted?: (tx: OnboardingDbTransaction, row: typeof onbCases.$inferSelect) => Promise<void>;
+  },
 ) {
   const logisticsDefault = await getDay1LogisticsDefault(organizationId);
   // Snapshot before the insert only. Existing cases are intentionally never
@@ -737,7 +750,8 @@ async function insertCaseAndStart(
         jobProfileVersion: jobProfile?.version ?? null,
         readiness: readinessFromChecklist(workforcePolicy.effectiveItems),
         workstreams: defaultWorkstreams(),
-        orchestrationStatus: "idle",
+        orchestrationStatus: options?.syntheticOffline ? "blocked" : "idle",
+        orchestrationCheckpoint: options?.syntheticOffline ? "synthetic-offline" : null,
       })
       .returning();
     await tx.insert(onbCaseLogistics).values({
@@ -745,9 +759,10 @@ async function insertCaseAndStart(
       caseId: inserted.id,
       ...logisticsForCase(logisticsDefault, inserted.joiningDate),
     });
+    await options?.onInserted?.(tx, inserted);
     return inserted;
   }));
-  startOrchestration(row.id);
+  if (options?.startOrchestration !== false) startOrchestration(row.id);
   return row;
 }
 
@@ -959,9 +974,18 @@ router.get("/onboarding/cases", async (req, res, next) => {
 
 router.post("/onboarding/cases", async (req, res, next) => {
   try {
-    if (await registeredDemoProfile(req.authUserId!)) {
+    const organizationId = getOrganizationId(req);
+    const demoProfile = await registeredDemoProfile(req.authUserId!);
+    if (demoProfile === "reviewer") {
       res.status(403).json({
         message: "Shared demo accounts cannot create ordinary cases. Use Demo Center synthetic samples.",
+        code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
+      });
+      return;
+    }
+    if (demoProfile === "administrator" && organizationId !== DEMO_ORGANIZATION_ID) {
+      res.status(403).json({
+        message: "Synthetic Demo cases may be created only in the Demo Organization.",
         code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
       });
       return;
@@ -1001,7 +1025,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
         and(
           sql`lower(${onbCases.workerName}) = ${body.workerName.toLowerCase()}`,
           sql`${onbCases.lifecycleStage} not in ('complete')`,
-          organizationWhere(onbCases, getOrganizationId(req)),
+          organizationWhere(onbCases, organizationId),
         ),
       );
     if (dupes.length > 0) {
@@ -1010,6 +1034,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       });
       return;
     }
+    const syntheticDemoCase = demoProfile === "administrator";
     const row = await insertCaseAndStart({
       workerName: body.workerName,
       workerEmail,
@@ -1029,21 +1054,34 @@ router.post("/onboarding/cases", async (req, res, next) => {
       joiningDate: body.joiningDate,
       primarySkill: body.primarySkill ?? null,
       skillCriticality: body.skillCriticality ?? null,
-      notes: body.notes ?? null,
+      // This marker and notice are generated on the server, never accepted
+      // from the request body. They durably fence this branch from live work.
+      notes: syntheticDemoCase
+        ? `${SYNTHETIC_OFFLINE_MARKER}\n${SYNTHETIC_OFFLINE_WARNING}`
+        : body.notes ?? null,
       scenarioKey: null,
-      candidateEmailAuthorizedAt: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? new Date() : null,
-      candidateEmailAuthorizedBy: shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? req.authUserId! : null,
+      candidateEmailAuthorizedAt: syntheticDemoCase
+        ? null
+        : shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? new Date() : null,
+      candidateEmailAuthorizedBy: syntheticDemoCase
+        ? null
+        : shouldAuthorizeCandidateEmail(workerEmail, channelPreference) ? req.authUserId! : null,
       offerAcceptanceComplete: body.offerAcceptanceComplete,
       offerAcceptanceCompletedAt: body.offerAcceptanceComplete ? new Date() : null,
       offerAcceptanceCompletedBy: body.offerAcceptanceComplete ? await resolveReviewerName(req.authUserId!) : null,
       createdByUserId: req.authUserId!,
-    }, getOrganizationId(req));
-    await ensureReadinessSlaEnrollment(getOrganizationId(req), row.id);
+    }, organizationId, syntheticDemoCase ? {
+      startOrchestration: false,
+      syntheticOffline: true,
+      onInserted: (tx, inserted) =>
+        grantSyntheticDemoAuthorityForCase(tx, req.authUserId!, inserted),
+    } : undefined);
+    if (!syntheticDemoCase) await ensureReadinessSlaEnrollment(organizationId, row.id);
     // Gate A owns the first candidate contact only on new/rehire pathways.
     // Unrelated onboarding pathways retain their established portal behavior.
-    if (row.candidateEmailAuthorizedAt && (row.offerAcceptanceComplete || !offerAcceptanceRequired(row))) {
+    if (!syntheticDemoCase && row.candidateEmailAuthorizedAt && (row.offerAcceptanceComplete || !offerAcceptanceRequired(row))) {
       await issueCandidatePortalLink({
-        organizationId: getOrganizationId(req),
+        organizationId,
         caseId: row.id,
         issuedBy: req.authUserId!,
         publicBase: portalPublicBase(req),
@@ -1053,6 +1091,13 @@ router.post("/onboarding/cases", async (req, res, next) => {
     }
     res.status(201).json(await serializeCaseForRequest(req, row));
   } catch (err) {
+    if (err instanceof SyntheticDemoCaseAuthorityDeniedError) {
+      res.status(403).json({
+        message: "A current registered Demo Administrator profile and Demo Organization membership are required.",
+        code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
+      });
+      return;
+    }
     next(err);
   }
 });

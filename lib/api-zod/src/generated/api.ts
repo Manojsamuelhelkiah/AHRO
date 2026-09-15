@@ -1390,6 +1390,7 @@ export const ReconcileGovernanceDispatchResponse = zod.unknown()
 export const GetCurrentOrganizationResponse = zod.object({
   "needsSetup": zod.boolean(),
   "activeOrganizationId": zod.string().nullable(),
+  "demoProfile": zod.union([zod.literal('reviewer'),zod.literal('administrator'),zod.literal(null)]).nullable(),
   "memberships": zod.array(zod.object({
   "organizationId": zod.string(),
   "name": zod.string(),
@@ -9622,7 +9623,7 @@ export const ListOnboardingCasesResponse = zod.array(ListOnboardingCasesResponse
 
 
 /**
- * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
+ * @summary Create an onboarding case from a manual trigger (registered Demo Administrators receive an offline synthetic case)
  */
 
 export const createOnboardingCaseBodyOfferAcceptanceCompleteDefault = false;

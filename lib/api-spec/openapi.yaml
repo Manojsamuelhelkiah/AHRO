@@ -2574,7 +2574,7 @@ paths:
     post:
       operationId: createOnboardingCase
       tags: [onboarding]
-      summary: Create an onboarding case from a manual trigger (intake form) and start orchestration
+      summary: Create an onboarding case from a manual trigger (registered Demo Administrators receive an offline synthetic case)
       requestBody:
         required: true
         content:
@@ -5680,10 +5680,11 @@ components:
       properties:
         needsSetup: { type: boolean }
         activeOrganizationId: { type: [string, "null"] }
+        demoProfile: { type: [string, "null"], enum: [reviewer, administrator, null] }
         memberships:
           type: array
           items: { $ref: "#/components/schemas/OrganizationMembership" }
-      required: [needsSetup, activeOrganizationId, memberships]
+      required: [needsSetup, activeOrganizationId, demoProfile, memberships]
     OrganizationCreateInput:
       type: object
       additionalProperties: false

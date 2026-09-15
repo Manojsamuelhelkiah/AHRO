@@ -32,3 +32,9 @@ Public shared demo identities need a server-owned registry and a non-bypassable 
 **Why:** Email-allowlisted one-click tickets make each shared principal publicly usable. Any retained membership, normal authority grant, body-supplied case ID, or provider-bound approval can otherwise turn that convenience into access to ordinary cases or governance controls.
 
 **How to apply:** enforce the ceiling in tenant resolution, organization administration, every authority resolver (including final provider checks), and routes whose case ID is outside the URL. Revoke legacy non-synthetic grants at login. Keep the reviewer without specialist authority; do not loosen blocked surfaces until their projections and writes are synthetic-only end to end.
+
+Control Tower intake for a public Demo Administrator is an offline synthetic creation path, not implicit authorization for a live-email demo.
+
+**Why:** Allowing the familiar Create Case form must not silently contact addresses supplied by a public shared identity. Approved-volunteer live demonstrations have a separate explicit authorization flow.
+
+**How to apply:** keep creation and case-scoped access atomic and prohibit automatic outreach or orchestration for this intake path. Explain the distinction in the form and delivery summary.

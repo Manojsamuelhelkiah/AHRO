@@ -9435,7 +9435,7 @@ export const getCreateOnboardingCaseUrl = () => {
 }
 
 /**
- * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
+ * @summary Create an onboarding case from a manual trigger (registered Demo Administrators receive an offline synthetic case)
  */
 export const createOnboardingCase = async (onbCaseIntake: OnbCaseIntake, options?: RequestInit): Promise<OnbCase> => {
 
@@ -9484,7 +9484,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateOnboardingCaseMutationError = ErrorType<ErrorMessage>
 
     /**
- * @summary Create an onboarding case from a manual trigger (intake form) and start orchestration
+ * @summary Create an onboarding case from a manual trigger (registered Demo Administrators receive an offline synthetic case)
  */
 export const useCreateOnboardingCase = <TError = ErrorType<ErrorMessage>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingCase>>, TError,{data: BodyType<OnbCaseIntake>}, TContext>, request?: SecondParameter<typeof customFetch>}

@@ -7,8 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ContactDialog } from './ContactDialog';
 import { casePresentationOf, isDemoCoverageCase } from '../case-presentation';
 
-export function isOfflineDemoSample(c: { scenarioKey?: string | null }) {
-  return isDemoCoverageCase(c);
+export function isOfflineDemoSample(c: { scenarioKey?: string | null; offlineSample?: boolean }) {
+  return c.offlineSample === true || isDemoCoverageCase(c);
 }
 
 function casePresentation(c: any) {
@@ -82,7 +82,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
             <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{offlineSample ? `For ${c.workerName} • ` : ''}{c.role} • {c.geography} • Effective {format(new Date(c.joiningDate), 'MMM d, yyyy')}</p>
             {offlineSample && (
               <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
-                Demo-only offline sample — manually seeded; no provider is connected, authorized, or contacted.
+                Demo-only offline synthetic sample — no provider is connected, authorized, or contacted.
               </p>
             )}
            

@@ -4,9 +4,15 @@ import {
   DEMO_ORGANIZATION_ID,
   onbAuthorityAssignments,
   onbCases,
+  onbSettings,
   organizationMembershipsTable,
   type OnbAuthorityRole,
 } from "@workspace/db/schema";
+import {
+  demoPrincipalSettingKey,
+  parseRegisteredDemoProfile,
+} from "../demo-principal";
+import type { OnboardingDbTransaction } from "./settings";
 import { AUTHORITY_ROLES, ROLE_SCOPE_MATRIX } from "./decision-authority";
 import { seedDemoFullCoverage } from "./demo-full-coverage";
 import {
@@ -35,6 +41,65 @@ export function syntheticDemoAuthorityRows(
         governanceDecisionRef: `synthetic-demo-only:${caseRow.id}`,
       })),
     );
+}
+
+/**
+ * Transaction-only grant for a just-created offline demo case. Rechecking the
+ * registered profile and active membership in the same transaction as the
+ * case insert prevents a stale request from obtaining authority after either
+ * control has been withdrawn.
+ */
+export class SyntheticDemoCaseAuthorityDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SyntheticDemoCaseAuthorityDeniedError";
+  }
+}
+
+export async function grantSyntheticDemoAuthorityForCase(
+  tx: OnboardingDbTransaction,
+  userId: string,
+  caseRow: { id: number; organizationId: string; notes: string | null; scenarioKey: string | null },
+): Promise<void> {
+  if (caseRow.organizationId !== DEMO_ORGANIZATION_ID || !isSyntheticOfflineCase(caseRow)) {
+    throw new SyntheticDemoCaseAuthorityDeniedError(
+      "Synthetic Demo authority can be granted only for a server-marked Demo Organization case.",
+    );
+  }
+
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
+  const [[membership], [profile]] = await Promise.all([
+    tx.select({ id: organizationMembershipsTable.id })
+      .from(organizationMembershipsTable)
+      .where(and(
+        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+        eq(organizationMembershipsTable.clerkUserId, userId),
+        isNull(organizationMembershipsTable.revokedAt),
+      ))
+      .limit(1),
+    tx.select({ value: onbSettings.value })
+      .from(onbSettings)
+      .where(and(
+        eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+        eq(onbSettings.key, demoPrincipalSettingKey(userId)),
+      ))
+      .limit(1),
+  ]);
+  if (!membership || parseRegisteredDemoProfile(profile?.value) !== "administrator") {
+    throw new SyntheticDemoCaseAuthorityDeniedError(
+      "A current registered Demo Administrator profile and Demo Organization membership are required.",
+    );
+  }
+
+  const grants = syntheticDemoAuthorityRows(userId, [caseRow]);
+  if (!grants.length) {
+    throw new SyntheticDemoCaseAuthorityDeniedError(
+      "The new case is not eligible for synthetic Demo authority.",
+    );
+  }
+  await tx.insert(onbAuthorityAssignments).values(grants).onConflictDoNothing({
+    target: onbAuthorityAssignments.id,
+  });
 }
 
 /**
