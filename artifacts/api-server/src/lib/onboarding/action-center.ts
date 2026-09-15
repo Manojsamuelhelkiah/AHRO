@@ -22,6 +22,7 @@ import { isChecklistAdministrator } from "./checklist";
 import { sensitiveClassForDocument, withSensitiveAuthorityFence } from "./sensitive-access";
 
 export type ActionCenterScope = "active" | "completed" | "all";
+export type ActionCenterAccess = "standard" | "synthetic-demo-simulation";
 export type ActionCenterWorkforceFilter = "white-collar" | "blue-collar-frontline" | "mixed" | "needs-review" | "unclassified";
 export type ActionCenterCallOutcome =
   | "reached"
@@ -78,7 +79,21 @@ export function assertActionCenterMutationAuthorized(
   organizationId: string,
   organizationRole: string | undefined,
   mode?: "live" | "simulation",
+  access: ActionCenterAccess = "standard",
 ): void {
+  if (access === "synthetic-demo-simulation") {
+    if (organizationId !== DEMO_ORGANIZATION_ID) {
+      throw new ActionCenterPermissionError(
+        "Synthetic Action Center simulation is available only in Demo Organization.",
+      );
+    }
+    if (mode === "live") {
+      throw new ActionCenterPermissionError(
+        "Demo Action Center access supports simulation only; live provider effects are blocked.",
+      );
+    }
+    return;
+  }
   if (organizationId === DEMO_ORGANIZATION_ID && mode === "live") {
     throw new ActionCenterPermissionError(
       "Demo live contact is only available through an authorized Demo Controller run.",
@@ -140,8 +155,14 @@ async function loadReminderEffect(
   return effect ?? null;
 }
 
-function caseSummary(row: typeof onbCases.$inferSelect) {
+function caseSummary(
+  row: typeof onbCases.$inferSelect,
+  access: ActionCenterAccess = "standard",
+) {
   const pausedOffline = isSyntheticOfflineCase(row);
+  const canAct = access === "synthetic-demo-simulation"
+    ? pausedOffline
+    : !pausedOffline;
   return {
     workerName: row.workerName,
     workerEmail: row.workerEmail,
@@ -153,7 +174,7 @@ function caseSummary(row: typeof onbCases.$inferSelect) {
     lifecycleStage: row.lifecycleStage,
     urgency: row.urgency,
     pausedOffline,
-    canAct: !pausedOffline,
+    canAct,
     aiCallHref: `${caseHref(row.id)}?tab=communications`,
   };
 }
@@ -218,6 +239,7 @@ async function reserveAction(input: {
   verified?: boolean;
   expectedVersion?: number;
   targetActionId?: number;
+  access?: ActionCenterAccess;
 }): Promise<{ row: ActionRow; idempotent: boolean; actionVersion: number }> {
   const requestFingerprint = fingerprint(input.body);
   return db.transaction(async (tx) => {
@@ -227,7 +249,18 @@ async function reserveAction(input: {
       .where(and(eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId)))
       .for("update");
     if (!ownedCase) throw new ActionCenterNotFoundError("Case not found.");
-    if (isSyntheticOfflineCase(ownedCase)) throw new ActionCenterOfflineError();
+    if (input.access === "synthetic-demo-simulation") {
+      if (
+        input.organizationId !== DEMO_ORGANIZATION_ID ||
+        !isSyntheticOfflineCase(ownedCase)
+      ) {
+        throw new ActionCenterPermissionError(
+          "Demo Action Center simulations are limited to current server-marked synthetic cases.",
+        );
+      }
+    } else if (isSyntheticOfflineCase(ownedCase)) {
+      throw new ActionCenterOfflineError();
+    }
 
     const [existing] = await tx
       .select()
@@ -323,8 +356,14 @@ export async function recordManualCallOutcome(input: {
   notes?: string | null;
   persona?: string | null;
   selfReported: true;
+  access?: ActionCenterAccess;
 }) {
-  assertActionCenterMutationAuthorized(input.organizationId, input.organizationRole);
+  assertActionCenterMutationAuthorized(
+    input.organizationId,
+    input.organizationRole,
+    undefined,
+    input.access,
+  );
   if (input.persona && input.organizationId !== DEMO_ORGANIZATION_ID) {
     throw new ActionCenterPermissionError(
       "Named call personas are available only in Demo Organization simulations.",
@@ -364,8 +403,14 @@ export async function recordWorkItem(input: {
   reason?: string | null;
   expectedVersion: number;
   targetActionId?: number;
+  access?: ActionCenterAccess;
 }) {
-  assertActionCenterMutationAuthorized(input.organizationId, input.organizationRole);
+  assertActionCenterMutationAuthorized(
+    input.organizationId,
+    input.organizationRole,
+    undefined,
+    input.access,
+  );
   const result = await reserveAction({
     ...input,
     body: {
@@ -700,6 +745,7 @@ export async function getActionCenter(
   scope: ActionCenterScope = "active",
   limit = 100,
   filters: { workforce?: ActionCenterWorkforceFilter; safetyCritical?: boolean; siteExposure?: boolean } = {},
+  access: ActionCenterAccess = "standard",
 ) {
   const [cases, approvalRows, documents, systemChecks, events, communications, actionRows, approvalHistory, uploads] =
     await Promise.all([
@@ -750,7 +796,14 @@ export async function getActionCenter(
         .where(eq(onbCandidateUploads.organizationId, organizationId))
         .orderBy(desc(onbCandidateUploads.id)),
     ]);
-  const filteredCaseIds = new Set(cases.filter((row) => {
+  const visibleCases = access === "synthetic-demo-simulation"
+    ? cases.filter((row) => isSyntheticOfflineCase(row))
+    : cases;
+  const canActOnCase = (row: typeof onbCases.$inferSelect): boolean =>
+    access === "synthetic-demo-simulation"
+      ? isSyntheticOfflineCase(row)
+      : !isSyntheticOfflineCase(row);
+  const filteredCaseIds = new Set(visibleCases.filter((row) => {
     if (filters.workforce) {
       const label = row.workforceClassification?.label ?? "unclassified";
       if (label !== filters.workforce) return false;
@@ -761,7 +814,7 @@ export async function getActionCenter(
     if (filters.siteExposure !== undefined && row.workforceContext.siteExposure !== filters.siteExposure) return false;
     return true;
   }).map((row) => row.id));
-  const caseById = new Map(cases.map((row) => [row.id, row]));
+  const caseById = new Map(visibleCases.map((row) => [row.id, row]));
   const latestSystemChecks = Array.from(new Map(
     systemChecks.map((row) => [`${row.c.id}:${row.check.system}`, row]),
   ).values());
@@ -798,7 +851,7 @@ export async function getActionCenter(
           validationState: latestUploadByDocument.get(doc.id)?.validationState,
         }) ? "correction" : "review")
         : "remind",
-       eligibleForReminder: !isSyntheticOfflineCase(c) && reminderEligible({
+       eligibleForReminder: access === "standard" && canActOnCase(c) && reminderEligible({
         required: doc.required,
         status: doc.status,
         updatedAt: doc.updatedAt,
@@ -808,9 +861,9 @@ export async function getActionCenter(
         status: doc.status,
         validationState: latestUploadByDocument.get(doc.id)?.validationState,
       })),
-      case: caseSummary(c),
+      case: caseSummary(c, access),
        caseHref: caseHref(c.id),
-       capabilities: { canRemind: !isSyntheticOfflineCase(c) },
+       capabilities: { canRemind: access === "standard" && canActOnCase(c) },
     }));
   const resolvedWorkItemIds = new Set(actionRows
     .filter((row) => row.kind === "resolve")
@@ -911,7 +964,7 @@ export async function getActionCenter(
        initiator: outboundIdentityLine(communication, "Requested by") ?? communication.retriedBy ?? "system",
       createdAt: communication.createdAt.toISOString(),
       caseHref: caseHref(communication.caseId),
-       capabilities: { canAct: !isSyntheticOfflineCase(c) },
+       capabilities: { canAct: canActOnCase(c) },
     })),
   ].slice(0, limit);
 
@@ -935,7 +988,7 @@ export async function getActionCenter(
         benefit: { type: "mandatory-checkpoint", checkpoint: "documentation-review", delta: null },
         evidence: { source: "onb_documents", documentId: doc.id, status: doc.status, reviewRequired: true },
         caseHref: caseHref(c.id),
-         capabilities: { canAct: !isSyntheticOfflineCase(c) },
+         capabilities: { canAct: canActOnCase(c) },
       });
       continue;
     }
@@ -951,7 +1004,7 @@ export async function getActionCenter(
       benefit: { type: "mandatory-checkpoint", checkpoint: "documentation", delta: null },
       evidence: { source: "onb_documents", documentId: doc.id, status: doc.status },
       caseHref: caseHref(c.id),
-       capabilities: { canAct: !isSyntheticOfflineCase(c) },
+       capabilities: { canAct: canActOnCase(c) },
     });
   }
    for (const { check, c } of latestSystemChecks) {
@@ -979,7 +1032,7 @@ export async function getActionCenter(
          status: check.status,
        },
       caseHref: caseHref(c.id),
-       capabilities: { canAct: !isSyntheticOfflineCase(c) },
+       capabilities: { canAct: canActOnCase(c) },
     });
   }
    for (const { approval, c } of activeApprovals) {
@@ -994,7 +1047,7 @@ export async function getActionCenter(
       benefit: { type: "mandatory-checkpoint", checkpoint: "human-review", delta: null },
       evidence: { source: "onb_approvals", approvalId: approval.id, version: approval.version },
       caseHref: caseHref(c.id),
-       capabilities: { canAct: !isSyntheticOfflineCase(c) },
+       capabilities: { canAct: canActOnCase(c) },
     });
   }
    for (const c of cases) {
@@ -1015,7 +1068,7 @@ export async function getActionCenter(
         benefit: { type: "mandatory-checkpoint", checkpoint: item.enforcementStage, delta: null },
         evidence: { source: item.evidenceRequired ? "onb_policy_evidence" : "onb_cases.checklist_snapshot", itemId: item.id, status: readiness?.status ?? "not-started" },
         caseHref: caseHref(c.id),
-         capabilities: { canAct: !isSyntheticOfflineCase(c) },
+          capabilities: { canAct: canActOnCase(c) },
       });
     }
   }
@@ -1081,36 +1134,43 @@ export async function getActionCenter(
       ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit)
     : [];
   const active = showActive;
-  const pausedOffline = cases.length > 0 && cases.every((row) => isSyntheticOfflineCase(row));
+   const pausedOffline = visibleCases.length > 0 && visibleCases.every((row) => isSyntheticOfflineCase(row));
   // The envelope-level capability is fail-closed for mixed tenants. Each
   // case/item carries its own capability so a capable UI can still act on
   // online rows without ever treating an offline row as actionable.
-  const allCasesOnline = cases.length > 0 && cases.every((row) => !isSyntheticOfflineCase(row));
+  const simulationCanAct =
+    access === "synthetic-demo-simulation" && visibleCases.length > 0;
+  const allCasesOnline =
+    visibleCases.length > 0 && visibleCases.every((row) => !isSyntheticOfflineCase(row));
   return {
     version: 1,
     generatedAt: new Date().toISOString(),
     pausedOffline,
     capabilities: {
-      canAct: allCasesOnline,
+      canAct: allCasesOnline || simulationCanAct,
       canSendReminder: allCasesOnline,
-      canRecordCallOutcome: allCasesOnline,
-      canAssign: allCasesOnline,
-      canEscalate: allCasesOnline,
-      canReassign: allCasesOnline,
-      canResolve: allCasesOnline,
+      canRecordCallOutcome: allCasesOnline || simulationCanAct,
+      canAssign: allCasesOnline || simulationCanAct,
+      canEscalate: allCasesOnline || simulationCanAct,
+      canReassign: allCasesOnline || simulationCanAct,
+      canResolve: allCasesOnline || simulationCanAct,
       reminderMode: "existing-runner" as const,
       aiCall: {
-        available: !externalProviderDispatchDenied(),
+        available: access === "standard" && !externalProviderDispatchDenied(),
         mode: "existing-control" as const,
         label: "Open guarded AI call controls",
         hrefTemplate: "/cases/{caseId}?tab=communications",
       },
     },
     counts: {
-      pendingApprovals: active ? activeApprovals.length : 0,
+      pendingApprovals: active
+        ? activeApprovals.filter(({ c }) => filteredCaseIds.has(c.id)).length
+        : 0,
       notifications: active ? notifications.length : 0,
       missingDocuments: active ? followups.length : 0,
-      openWorkItems: active ? openActions.length : 0,
+      openWorkItems: active
+        ? openActions.filter((row) => filteredCaseIds.has(row.caseId)).length
+        : 0,
       completed: completed.length,
       opportunities: active ? opportunities.length : 0,
     },
@@ -1125,13 +1185,13 @@ export async function getActionCenter(
       recommendation: approval.recommendation,
       rationale: approval.rationale,
       createdAt: approval.createdAt.toISOString(),
-      case: caseSummary(c),
+       case: caseSummary(c, access),
        actions: {
          approveHref: "/approvals",
          caseHref: caseHref(c.id),
-         canAct: !isSyntheticOfflineCase(c),
+         canAct: canActOnCase(c),
        },
-    })) : completedApprovals.slice(0, limit).map(({ approval, c }) => ({
+    })) : completedApprovals.filter(({ c }) => filteredCaseIds.has(c.id)).slice(0, limit).map(({ approval, c }) => ({
       id: approval.id,
       caseId: c.id,
       version: approval.version,
@@ -1142,11 +1202,11 @@ export async function getActionCenter(
       recommendation: approval.recommendation,
       rationale: approval.rationale,
       createdAt: approval.createdAt.toISOString(),
-      case: caseSummary(c),
+       case: caseSummary(c, access),
        actions: {
          approveHref: "/approvals",
          caseHref: caseHref(c.id),
-         canAct: !isSyntheticOfflineCase(c),
+         canAct: canActOnCase(c),
        },
     })),
      notifications: active ? notifications.slice(0, limit) : [],
@@ -1166,9 +1226,9 @@ export async function getActionCenter(
       updatedAt: current.updatedAt.toISOString(),
       actionVersion: actionVersionByCase.get(row.caseId) ?? 0,
       capabilities: {
-        canAct: !isSyntheticOfflineCase(caseById.get(row.caseId)!),
-        canReassign: !isSyntheticOfflineCase(caseById.get(row.caseId)!),
-        canResolve: !isSyntheticOfflineCase(caseById.get(row.caseId)!),
+         canAct: canActOnCase(caseById.get(row.caseId)!),
+         canReassign: canActOnCase(caseById.get(row.caseId)!),
+         canResolve: canActOnCase(caseById.get(row.caseId)!),
       },
       caseHref: caseHref(row.caseId),
       };

@@ -28,6 +28,7 @@ import {
   recordDocumentReminder,
   recordManualCallOutcome,
   recordWorkItem,
+  type ActionCenterAccess,
 } from "../lib/onboarding/action-center";
 import {
   canEditActionCenterIdentities,
@@ -48,11 +49,20 @@ import { registeredDemoProfile } from "../lib/demo-principal";
 
 const router: IRouter = Router();
 
+async function actionCenterAccess(
+  userId: string,
+): Promise<ActionCenterAccess | "denied"> {
+  const profile = await registeredDemoProfile(userId);
+  if (profile === "administrator") return "synthetic-demo-simulation";
+  if (profile === "reviewer") return "denied";
+  return "standard";
+}
+
 router.use("/onboarding/action-center/actions", async (req, res, next) => {
   try {
-    if (await registeredDemoProfile(req.authUserId!)) {
+    if (await actionCenterAccess(req.authUserId!) === "denied") {
       res.status(403).json({
-        message: "Shared demo accounts cannot mutate Action Center records.",
+        message: "The Demo Reviewer cannot mutate Action Center records.",
         code: "DEMO_ACCOUNT_PRIVILEGE_CEILING",
       });
       return;
@@ -73,6 +83,7 @@ async function sensitiveActionCenterProjection(
   organizationId: string,
   actorUserId: string | undefined,
   result: Awaited<ReturnType<typeof getActionCenter>>,
+  access: ActionCenterAccess = "standard",
 ) {
   const accessByCase = new Map<number, SensitiveAccess>();
   const accessFor = async (caseId: number) => {
@@ -190,7 +201,10 @@ async function sensitiveActionCenterProjection(
       delta: null,
     },
     evidence: { source: "restricted-operational-state" },
-    capabilities: { canAct: false },
+    capabilities: {
+      canAct: access === "synthetic-demo-simulation" &&
+        (item.capabilities as { canAct?: unknown } | undefined)?.canAct === true,
+    },
     caseHref: item.caseHref,
   }));
   return {
@@ -241,9 +255,10 @@ function clientError(error: unknown, res: Response): boolean {
 
 router.get("/onboarding/action-center", async (req, res, next) => {
   try {
-    if (await registeredDemoProfile(req.authUserId!)) {
+    const access = await actionCenterAccess(req.authUserId!);
+    if (access === "denied") {
       res.status(403).json({
-        message: "Action Center is unavailable to shared public demo accounts.",
+        message: "Action Center is unavailable to the read-only Demo Reviewer.",
         code: "DEMO_ACCOUNT_PRIVILEGE_CEILING",
       });
       return;
@@ -263,9 +278,10 @@ router.get("/onboarding/action-center", async (req, res, next) => {
         safetyCritical: parsed.data.safetyCritical,
         siteExposure: parsed.data.siteExposure,
       },
+      access,
     );
     res.json(GetOnboardingActionCenterResponse.parse(
-      await sensitiveActionCenterProjection(organizationId, req.authUserId, result),
+      await sensitiveActionCenterProjection(organizationId, req.authUserId, result, access),
     ));
   } catch (error) {
     if (clientError(error, res)) return;
@@ -308,7 +324,13 @@ router.put("/onboarding/action-center/identities", async (req, res, next) => {
 router.post("/onboarding/action-center/actions/manual-call-outcome", async (req, res, next) => {
   try {
     const body = RecordOnboardingActionCenterCallOutcomeBody.parse(req.body);
-    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole);
+    const access = await actionCenterAccess(req.authUserId!);
+    assertActionCenterMutationAuthorized(
+      getOrganizationId(req),
+      req.organizationRole,
+      undefined,
+      access === "denied" ? "standard" : access,
+    );
     const result = await recordManualCallOutcome({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -320,6 +342,7 @@ router.post("/onboarding/action-center/actions/manual-call-outcome", async (req,
       notes: body.notes ?? null,
       persona: body.persona ?? null,
       selfReported: true,
+      access: access === "denied" ? "standard" : access,
     });
     res.json(RecordOnboardingActionCenterCallOutcomeResponse.parse(result));
   } catch (error) {
@@ -332,6 +355,12 @@ router.post("/onboarding/action-center/actions/remind-document", async (req, res
   try {
     const body = RemindOnboardingActionCenterDocumentBody.parse(req.body);
     const organizationId = getOrganizationId(req);
+    const access = await actionCenterAccess(req.authUserId!);
+    if (access === "synthetic-demo-simulation") {
+      throw new ActionCenterPermissionError(
+        "Document reminders are not a supported public Demo simulation action.",
+      );
+    }
     assertActionCenterMutationAuthorized(organizationId, req.organizationRole, body.mode);
     const result = await recordDocumentReminder({
       organizationId,
@@ -353,7 +382,8 @@ router.post("/onboarding/action-center/actions/remind-document", async (req, res
 router.post("/onboarding/action-center/actions/assign", async (req, res, next) => {
   try {
     const body = AssignOnboardingActionCenterWorkBody.parse(req.body);
-    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole);
+    const access = await actionCenterAccess(req.authUserId!);
+    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -366,6 +396,7 @@ router.post("/onboarding/action-center/actions/assign", async (req, res, next) =
       assignee: body.assignee ?? null,
       reason: body.reason ?? null,
       expectedVersion: body.expectedVersion,
+      access: access === "denied" ? "standard" : access,
     });
     res.json(result);
   } catch (error) {
@@ -377,7 +408,8 @@ router.post("/onboarding/action-center/actions/assign", async (req, res, next) =
 router.post("/onboarding/action-center/actions/escalate", async (req, res, next) => {
   try {
     const body = EscalateOnboardingActionCenterWorkBody.parse(req.body);
-    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole);
+    const access = await actionCenterAccess(req.authUserId!);
+    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -390,6 +422,7 @@ router.post("/onboarding/action-center/actions/escalate", async (req, res, next)
       assignee: body.assignee ?? null,
       reason: body.reason ?? null,
       expectedVersion: body.expectedVersion,
+      access: access === "denied" ? "standard" : access,
     });
     res.json(result);
   } catch (error) {
@@ -401,7 +434,8 @@ router.post("/onboarding/action-center/actions/escalate", async (req, res, next)
 router.post("/onboarding/action-center/actions/reassign", async (req, res, next) => {
   try {
     const body = ReassignOnboardingActionCenterWorkBody.parse(req.body);
-    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole);
+    const access = await actionCenterAccess(req.authUserId!);
+    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -415,6 +449,7 @@ router.post("/onboarding/action-center/actions/reassign", async (req, res, next)
       reason: body.reason ?? null,
       expectedVersion: body.expectedVersion,
       targetActionId: body.workItemId,
+      access: access === "denied" ? "standard" : access,
     });
     res.json(ReassignOnboardingActionCenterWorkResponse.parse(result));
   } catch (error) {
@@ -426,7 +461,8 @@ router.post("/onboarding/action-center/actions/reassign", async (req, res, next)
 router.post("/onboarding/action-center/actions/resolve", async (req, res, next) => {
   try {
     const body = ResolveOnboardingActionCenterWorkBody.parse(req.body);
-    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole);
+    const access = await actionCenterAccess(req.authUserId!);
+    assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -438,6 +474,7 @@ router.post("/onboarding/action-center/actions/resolve", async (req, res, next) 
       reason: null,
       expectedVersion: body.expectedVersion,
       targetActionId: body.workItemId,
+      access: access === "denied" ? "standard" : access,
     });
     res.json(ResolveOnboardingActionCenterWorkResponse.parse(result));
   } catch (error) {

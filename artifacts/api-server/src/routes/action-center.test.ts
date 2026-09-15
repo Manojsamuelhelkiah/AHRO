@@ -56,7 +56,10 @@ import {
   getActionCenterIdentities,
   updateActionCenterIdentities,
 } from "../lib/onboarding/action-center-identities";
-import { SYNTHETIC_OFFLINE_MARKER } from "../lib/onboarding/synthetic-offline";
+import {
+  isSyntheticOfflineCase,
+  SYNTHETIC_OFFLINE_MARKER,
+} from "../lib/onboarding/synthetic-offline";
 import { setOnboardingConnectorProxyForTests } from "../lib/onboarding/channels";
 import {
   governanceSnapshotForNewCase,
@@ -64,6 +67,7 @@ import {
   type GovernanceCaseSnapshot,
 } from "../lib/onboarding/governance-runtime";
 import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
+import { demoPrincipalSettingKey } from "../lib/demo-principal";
 
 /**
  * This suite uses only test-owned organizations and cases.  The one Demo
@@ -83,6 +87,8 @@ const ownerA = `action-center-owner-a-${suffix}`;
 const memberA = `action-center-member-a-${suffix}`;
 const ownerB = `action-center-owner-b-${suffix}`;
 const demoMember = `action-center-demo-member-${suffix}`;
+const demoAdministrator = `action-center-demo-administrator-${suffix}`;
+const demoReviewer = `action-center-demo-reviewer-${suffix}`;
 const actorName = ownerA;
 
 let server: Server | undefined;
@@ -90,6 +96,7 @@ let baseUrl = "";
 const caseIds: number[] = [];
 const documentIds: number[] = [];
 let safetyCriticalCaseId: number;
+let syntheticDemoCaseId: number;
 const organizationIds = [orgA, orgB, orgC];
 let liveGovernanceSnapshot: GovernanceCaseSnapshot | undefined;
 
@@ -358,6 +365,20 @@ before(async () => {
     { organizationId: orgA, clerkUserId: memberA, role: "member" },
     { organizationId: orgB, clerkUserId: ownerB, role: "owner" },
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: demoMember, role: "member" },
+    { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: demoAdministrator, role: "member" },
+    { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: demoReviewer, role: "member" },
+  ]);
+  await db.insert(onbSettings).values([
+    {
+      organizationId: DEMO_ORGANIZATION_ID,
+      key: demoPrincipalSettingKey(demoAdministrator),
+      value: "administrator",
+    },
+    {
+      organizationId: DEMO_ORGANIZATION_ID,
+      key: demoPrincipalSettingKey(demoReviewer),
+      value: "reviewer",
+    },
   ]);
   await db.insert(onbAuthorityGovernance).values({
     organizationId: orgA,
@@ -498,6 +519,17 @@ before(async () => {
     key: `demo-${suffix}`,
     updatedAt: new Date(Date.now() - 2 * 86_400_000),
   });
+  syntheticDemoCaseId = await createCase(DEMO_ORGANIZATION_ID, {
+    name: `Action Center Synthetic Demo ${suffix}`,
+    email: `action-center-synthetic-demo-${suffix}@example.test`,
+    notes: SYNTHETIC_OFFLINE_MARKER,
+    candidateAuthorized: true,
+    workforceContext: { siteExposure: true, safetyCritical: true },
+  });
+  await createDocument(DEMO_ORGANIZATION_ID, syntheticDemoCaseId, {
+    key: `synthetic-demo-${suffix}`,
+    updatedAt: new Date(Date.now() - 2 * 86_400_000),
+  });
   // Add after the legacy [live, offline, demo] fixture order. Several
   // regression cases intentionally address those original caseIds by index.
   safetyCriticalCaseId = await createCase(orgA, {
@@ -604,7 +636,18 @@ after(async () => {
   );
   await db.delete(organizationMembershipsTable).where(and(
     eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
-    eq(organizationMembershipsTable.clerkUserId, demoMember),
+    inArray(organizationMembershipsTable.clerkUserId, [
+      demoMember,
+      demoAdministrator,
+      demoReviewer,
+    ]),
+  ));
+  await db.delete(onbSettings).where(and(
+    eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+    inArray(onbSettings.key, [
+      demoPrincipalSettingKey(demoAdministrator),
+      demoPrincipalSettingKey(demoReviewer),
+    ]),
   ));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, organizationIds));
 });
@@ -643,6 +686,134 @@ describe("Action Center focused regression suite", { concurrency: false }, () =>
   });
 
 describe("Action Center routing, tenant scope, and identity CAS", () => {
+  test("Demo Administrator sees and mutates only server-marked synthetic cases while Demo Reviewer remains blocked", async () => {
+    const projected = await request(
+      "/onboarding/action-center?scope=all&limit=200&safetyCritical=true",
+      {},
+      {
+      userId: demoAdministrator,
+      organizationId: DEMO_ORGANIZATION_ID,
+      },
+    );
+    assert.equal(projected.response.status, 200);
+    const snapshot = bodyRecord(projected.body);
+    assert.equal(bodyRecord(snapshot.capabilities).canAct, true);
+    assert.equal(bodyRecord(snapshot.capabilities).canRecordCallOutcome, true);
+    assert.equal(bodyRecord(bodyRecord(snapshot.capabilities).aiCall).available, false);
+    assert.equal(
+      Number(bodyRecord(snapshot.counts).openWorkItems),
+      (snapshot.workItems as JsonRecord[]).length,
+      "ordinary Demo work items must not affect the synthetic projection count",
+    );
+    const projectedCaseIds = new Set<number>();
+    for (const key of [
+      "approvals",
+      "notifications",
+      "documentFollowups",
+      "workItems",
+      "completed",
+      "opportunities",
+    ]) {
+      for (const item of snapshot[key] as JsonRecord[]) {
+        projectedCaseIds.add(Number(item.caseId));
+      }
+    }
+    const projectedCases = projectedCaseIds.size > 0
+      ? await db.select().from(onbCases).where(and(
+        eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
+        inArray(onbCases.id, [...projectedCaseIds]),
+      ))
+      : [];
+    assert.equal(projectedCases.length, projectedCaseIds.size);
+    assert.ok(projectedCases.every(isSyntheticOfflineCase));
+    assert.equal(
+      (snapshot.documentFollowups as JsonRecord[]).some((item) => item.caseId === caseIds[2]),
+      false,
+      "ordinary Demo cases must not appear in the administrator projection",
+    );
+    const actionableOpportunity = (snapshot.opportunities as JsonRecord[]).find(
+      (item) =>
+        item.caseId === syntheticDemoCaseId &&
+        bodyRecord(item.capabilities).canAct === true,
+    );
+    assert.ok(actionableOpportunity, "the synthetic projection must expose an actionable item");
+    const projectedActionVersion = Number(actionableOpportunity.actionVersion);
+
+    const call = await request("/onboarding/action-center/actions/manual-call-outcome", {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: `demo-admin-call-${suffix}`,
+        caseId: actionableOpportunity.caseId,
+        outcome: "no-answer",
+        selfReported: true,
+      }),
+    }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
+    assert.equal(call.response.status, 200);
+
+    const reminder = await request("/onboarding/action-center/actions/remind-document", {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: `demo-admin-reminder-${suffix}`,
+        caseId: syntheticDemoCaseId,
+        documentId: documentIds.find((id) => id > 0),
+        mode: "simulation",
+      }),
+    }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
+    assert.equal(reminder.response.status, 403);
+    assert.match(String(bodyRecord(reminder.body).message), /not a supported public Demo/i);
+
+    const assign = await request("/onboarding/action-center/actions/assign", {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: `demo-admin-assign-${suffix}`,
+        caseId: actionableOpportunity.caseId,
+        owner: "documentation",
+        expectedVersion: projectedActionVersion + 1,
+      }),
+    }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
+    assert.equal(assign.response.status, 200);
+
+    const ordinaryCaseAttempt = await request("/onboarding/action-center/actions/manual-call-outcome", {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: `demo-admin-ordinary-${suffix}`,
+        caseId: caseIds[2],
+        outcome: "reached",
+        selfReported: true,
+      }),
+    }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
+    assert.equal(ordinaryCaseAttempt.response.status, 403);
+    assert.match(String(bodyRecord(ordinaryCaseAttempt.body).message), /server-marked synthetic/i);
+
+    const liveAttempt = await request("/onboarding/action-center/actions/remind-document", {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: `demo-admin-live-${suffix}`,
+        caseId: syntheticDemoCaseId,
+        documentId: documentIds.find((id) => id > 0),
+        mode: "live",
+      }),
+    }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
+    assert.equal(liveAttempt.response.status, 403);
+    assert.match(String(bodyRecord(liveAttempt.body).message), /not a supported public Demo/i);
+
+    const reviewerRead = await request("/onboarding/action-center", {}, {
+      userId: demoReviewer,
+      organizationId: DEMO_ORGANIZATION_ID,
+    });
+    assert.equal(reviewerRead.response.status, 403);
+    const reviewerMutation = await request("/onboarding/action-center/actions/manual-call-outcome", {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: `demo-reviewer-call-${suffix}`,
+        caseId: syntheticDemoCaseId,
+        outcome: "no-answer",
+        selfReported: true,
+      }),
+    }, { userId: demoReviewer, organizationId: DEMO_ORGANIZATION_ID });
+    assert.equal(reviewerMutation.response.status, 403);
+  });
+
   test("requires auth, rejects forged organization context, and projects only tenant-owned rows", async () => {
     const unauthenticated = await request("/onboarding/action-center", {
       headers: { "x-test-user": "unauthenticated" },
