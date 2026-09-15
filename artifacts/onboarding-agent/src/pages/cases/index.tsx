@@ -708,6 +708,28 @@ function OwnerCell({ owner }: { owner: { name: string; kind: 'AI Agent' | 'Human
   );
 }
 
+function RequiredFieldLabel({
+  children,
+  htmlFor,
+  required = true,
+}: {
+  children: React.ReactNode;
+  htmlFor: string;
+  required?: boolean;
+}) {
+  return (
+    <Label htmlFor={htmlFor}>
+      {children}
+      {required && (
+        <>
+          <span className="ml-1 text-[var(--status-red)]" aria-hidden="true">*</span>
+          <span className="sr-only"> (required)</span>
+        </>
+      )}
+    </Label>
+  );
+}
+
 export function NewCaseForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const createCase = useCreateOnboardingCase();
@@ -787,21 +809,25 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
           hazards: values.get('hazards') as string,
         }));
       }} className="p-[var(--space-lg)] space-y-4">
+        <p className="text-xs text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--status-red)]" aria-hidden="true">*</span>{' '}
+          Required field
+        </p>
         <p className="rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-sm">
           General intake cannot save free-form candidate or recruiter notes, including ordinary non-sensitive notes, or accessibility and medical details. Do not enter these in other fields. No specialist handoff is available from this form.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="space-y-1">
-            <Label>Worker Name</Label>
-            <Input name="workerName" required />
+            <RequiredFieldLabel htmlFor="workerName">Worker Name</RequiredFieldLabel>
+            <Input id="workerName" name="workerName" required />
           </div>
           <div className="space-y-1">
-            <Label>Email</Label>
-            <Input name="workerEmail" type="email" required />
+            <RequiredFieldLabel htmlFor="workerEmail">Email</RequiredFieldLabel>
+            <Input id="workerEmail" name="workerEmail" type="email" required />
           </div>
           <div className="space-y-1">
-            <Label>Phone (E.164)</Label>
-            <Input name="workerPhone" placeholder="+1234567890" value={phone} onChange={(e) => setPhone(e.target.value)} required={channelPref === 'whatsapp'} />
+            <RequiredFieldLabel htmlFor="workerPhone" required={channelPref === 'whatsapp'}>Phone (E.164)</RequiredFieldLabel>
+            <Input id="workerPhone" name="workerPhone" placeholder="+1234567890" value={phone} onChange={(e) => setPhone(e.target.value)} required={channelPref === 'whatsapp'} />
             {needsPhone && (
               <p className="text-[11px] leading-snug" style={{ color: 'var(--status-amber)' }}>
                 {channelPref === 'whatsapp'
@@ -811,16 +837,16 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
             )}
           </div>
           <div className="space-y-1">
-            <Label>Contact Channel</Label>
-            <select name="channelPreference" value={channelPref} onChange={(e) => setChannelPref(e.target.value)} className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
+            <RequiredFieldLabel htmlFor="channelPreference">Contact Channel</RequiredFieldLabel>
+            <select id="channelPreference" name="channelPreference" value={channelPref} onChange={(e) => setChannelPref(e.target.value)} className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="email">Email only</option>
               <option value="whatsapp">WhatsApp only</option>
               <option value="both">Email + WhatsApp</option>
             </select>
           </div>
           <div className="space-y-1">
-            <Label>Hire Type</Label>
-            <select name="hireType" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
+            <RequiredFieldLabel htmlFor="hireType">Hire Type</RequiredFieldLabel>
+            <select id="hireType" name="hireType" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="external-fte">External FTE</option>
               <option value="contractor">Contractor</option>
               <option value="rehire">Rehire</option>
@@ -828,8 +854,8 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
             </select>
           </div>
           <div className="space-y-1">
-            <Label>Worker Category</Label>
-            <select name="workerCategory" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
+            <RequiredFieldLabel htmlFor="workerCategory">Worker Category</RequiredFieldLabel>
+            <select id="workerCategory" name="workerCategory" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="employee">Employee</option>
               <option value="contractor">Contractor</option>
               <option value="vendor">Vendor</option>
@@ -841,36 +867,36 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
             <Input name="workerBand" placeholder="e.g. L4, Executive" />
           </div>
           <div className="space-y-1">
-            <Label>Role</Label>
-            <Input name="role" required />
+            <RequiredFieldLabel htmlFor="role">Role</RequiredFieldLabel>
+            <Input id="role" name="role" required />
           </div>
           <div className="space-y-1">
-            <Label>Department</Label>
-            <Input name="department" required />
+            <RequiredFieldLabel htmlFor="department">Department</RequiredFieldLabel>
+            <Input id="department" name="department" required />
           </div>
           <div className="space-y-1">
-            <Label>Geography</Label>
-            <Input name="geography" required />
+            <RequiredFieldLabel htmlFor="geography">Geography</RequiredFieldLabel>
+            <Input id="geography" name="geography" required />
           </div>
           <div className="space-y-1">
-            <Label>Legal Entity</Label>
-            <Input name="legalEntity" required />
+            <RequiredFieldLabel htmlFor="legalEntity">Legal Entity</RequiredFieldLabel>
+            <Input id="legalEntity" name="legalEntity" required />
           </div>
           <div className="space-y-1">
-            <Label>Joining Date</Label>
-            <Input name="joiningDate" type="date" required />
+            <RequiredFieldLabel htmlFor="joiningDate">Joining Date</RequiredFieldLabel>
+            <Input id="joiningDate" name="joiningDate" type="date" required />
           </div>
           <div className="space-y-1">
-            <Label>Manager</Label>
-            <Input name="managerName" required />
+            <RequiredFieldLabel htmlFor="managerName">Manager</RequiredFieldLabel>
+            <Input id="managerName" name="managerName" required />
           </div>
           <div className="space-y-1">
-            <Label>Recruiter</Label>
-            <Input name="recruiterName" required />
+            <RequiredFieldLabel htmlFor="recruiterName">Recruiter</RequiredFieldLabel>
+            <Input id="recruiterName" name="recruiterName" required />
           </div>
           <div className="space-y-1">
-            <Label>Urgency</Label>
-            <select name="urgency" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]">
+            <RequiredFieldLabel htmlFor="urgency">Urgency</RequiredFieldLabel>
+            <select id="urgency" name="urgency" className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="normal">Normal</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>
