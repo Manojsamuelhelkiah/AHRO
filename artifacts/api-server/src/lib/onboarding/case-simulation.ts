@@ -1,4 +1,4 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { and, eq, isNull, like, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -49,6 +49,11 @@ export type SimulationExchange = {
 
 export type CaseSimulationState = {
   caseId: number;
+  /**
+   * Opaque identity of the current simulation run.  Versions are scoped to
+   * this value and must never be compared across a restart.
+   */
+  generationId: string;
   version: number;
   stage: SimulationStage | "complete";
   status: SimulationStatus;
@@ -61,8 +66,22 @@ export type CaseSimulationState = {
 };
 
 type StoredSimulationState = CaseSimulationState & {
-  requests: Record<string, { fingerprint: string; exchange: SimulationExchange }>;
+  requests: Record<string, StoredSimulationRequest>;
 };
+
+type StoredSimulationRequest =
+  | {
+      fingerprint: string;
+      kind: "advance";
+      generationId: string;
+      exchange: SimulationExchange;
+    }
+  | {
+      fingerprint: string;
+      kind: "restart";
+      generationId: string;
+      result: CaseSimulationState;
+    };
 
 type SimulationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -118,9 +137,17 @@ function fingerprint(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function initialGenerationId(caseId: number): string {
+  // A missing setting is a valid, not-yet-started simulation.  Deriving its
+  // first identity makes GET followed by a mutation safe without turning a
+  // read into a write.  Explicit restarts use random UUID identities.
+  return `initial-${fingerprint({ caseId, kind: "case-simulation" }).slice(0, 32)}`;
+}
+
 function initialState(caseId: number): StoredSimulationState {
   return {
     caseId,
+    generationId: initialGenerationId(caseId),
     version: 0,
     stage: "offer",
     status: "ready",
@@ -160,6 +187,9 @@ function parseState(raw: string | null, caseId: number): StoredSimulationState {
   }
   return {
     caseId,
+    generationId: typeof state.generationId === "string" && state.generationId.length > 0
+      ? state.generationId
+      : initialGenerationId(caseId),
     version: state.version!,
     stage: state.stage!,
     status: state.status!,
@@ -169,8 +199,54 @@ function parseState(raw: string | null, caseId: number): StoredSimulationState {
     replayed: false,
     simulated: true,
     authoritative: false,
-    requests: (state.requests ?? {}) as StoredSimulationState["requests"],
+    requests: normalizeRequests(state.requests, typeof state.generationId === "string" && state.generationId.length > 0
+      ? state.generationId
+      : initialGenerationId(caseId)),
   };
+}
+
+function normalizeRequests(
+  requests: unknown,
+  currentGenerationId: string,
+): StoredSimulationState["requests"] {
+  if (!requests || typeof requests !== "object" || Array.isArray(requests)) return {};
+  const normalized: StoredSimulationState["requests"] = {};
+  for (const [requestId, value] of Object.entries(requests)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const record = value as Partial<StoredSimulationRequest> & {
+      exchange?: SimulationExchange;
+      result?: CaseSimulationState;
+    };
+    if (typeof record.fingerprint !== "string") {
+      // Preserve no malformed request records.  The surrounding state remains
+      // readable, while a reused malformed key cannot bypass a new CAS check.
+      continue;
+    }
+    if (
+      record.kind === "restart" &&
+      typeof record.result === "object" &&
+      record.result !== null &&
+      typeof record.result.generationId === "string"
+    ) {
+      normalized[requestId] = {
+        fingerprint: record.fingerprint,
+        kind: "restart",
+        generationId: record.result.generationId,
+        result: record.result,
+      };
+      continue;
+    }
+    if (typeof record.exchange !== "object" || !record.exchange) continue;
+    normalized[requestId] = {
+      fingerprint: record.fingerprint,
+      kind: "advance",
+      generationId: typeof record.generationId === "string"
+        ? record.generationId
+        : currentGenerationId,
+      exchange: record.exchange,
+    };
+  }
+  return normalized;
 }
 
 function publicState(
@@ -508,12 +584,16 @@ export async function simulateNextCaseExchange(input: {
   actor: string;
   caseId: number;
   expectedVersion: number;
+  expectedGenerationId: string;
   requestId: string;
 }): Promise<CaseSimulationState> {
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
     throw new CaseSimulationConflictError("expectedVersion must be a non-negative integer.");
   }
-  if (input.requestId.length < 1 || input.requestId.length > 200) {
+  if (typeof input.expectedGenerationId !== "string" || input.expectedGenerationId.length < 1 || input.expectedGenerationId.length > 200) {
+    throw new CaseSimulationConflictError("expectedGenerationId must contain 1-200 characters.");
+  }
+  if (typeof input.requestId !== "string" || input.requestId.length < 1 || input.requestId.length > 200) {
     throw new CaseSimulationConflictError("requestId must contain 1-200 characters.");
   }
   return db.transaction(async (tx) => {
@@ -525,6 +605,7 @@ export async function simulateNextCaseExchange(input: {
     const requestFingerprint = fingerprint({
       caseId: input.caseId,
       expectedVersion: input.expectedVersion,
+      expectedGenerationId: input.expectedGenerationId,
       requestId: input.requestId,
     });
     const previous = state.requests[input.requestId];
@@ -534,7 +615,22 @@ export async function simulateNextCaseExchange(input: {
           `requestId "${input.requestId}" was already used for a different simulation request.`,
         );
       }
+      if (previous.kind !== "advance") {
+        throw new CaseSimulationConflictError(
+          `requestId "${input.requestId}" was already used for a restart request.`,
+        );
+      }
+      if (state.generationId !== input.expectedGenerationId) {
+        throw new CaseSimulationConflictError(
+          "Simulation generation changed since this request was created; refresh before retrying.",
+        );
+      }
       return publicState(state, previous.exchange, true);
+    }
+    if (state.generationId !== input.expectedGenerationId) {
+      throw new CaseSimulationConflictError(
+        "Simulation generation changed since it was loaded; refresh before advancing.",
+      );
     }
     if (state.version !== input.expectedVersion) {
       throw new CaseSimulationConflictError(
@@ -578,9 +674,14 @@ export async function simulateNextCaseExchange(input: {
     state.lastOutcome = outcome;
     state.operationExchange = exchange;
     state.replayed = false;
-    state.requests[input.requestId] = { fingerprint: requestFingerprint, exchange };
+    state.requests[input.requestId] = {
+      fingerprint: requestFingerprint,
+      kind: "advance",
+      generationId: state.generationId,
+      exchange,
+    };
 
-    const eventKey = `case-simulation:${input.caseId}:${input.requestId}:event`;
+    const eventKey = `case-simulation:${input.caseId}:${state.generationId}:${input.requestId}:event`;
     await tx.insert(onbEvents).values({
       organizationId: input.organizationId,
       caseId: input.caseId,
@@ -617,11 +718,142 @@ export async function simulateNextCaseExchange(input: {
       status: "logged-only",
       sensitive: false,
       sensitiveDataClass: "unclassified-legacy",
-      idempotencyKey: `case-simulation:${input.caseId}:${input.requestId}:communication`,
+       idempotencyKey: `case-simulation:${input.caseId}:${state.generationId}:${input.requestId}:communication`,
     }).onConflictDoNothing({
       target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
     });
     await saveState(tx, input.organizationId, state);
     return publicState(state, exchange, false);
+  });
+}
+
+/**
+ * Retires the current in-memory simulation progression and starts an
+ * independent generation.  The case, provider state, UAT state, and
+ * authoritative readiness are deliberately not read or written here.  The
+ * append-only event and communication rows are the audit history for the
+ * retired generation.
+ */
+export async function restartCaseSimulation(input: {
+  organizationId: string;
+  actor: string;
+  caseId: number;
+  expectedVersion: number;
+  expectedGenerationId: string;
+  requestId: string;
+}): Promise<CaseSimulationState> {
+  if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
+    throw new CaseSimulationConflictError("expectedVersion must be a non-negative integer.");
+  }
+  if (typeof input.expectedGenerationId !== "string" || input.expectedGenerationId.length < 1 || input.expectedGenerationId.length > 200) {
+    throw new CaseSimulationConflictError("expectedGenerationId must contain 1-200 characters.");
+  }
+  if (typeof input.requestId !== "string" || input.requestId.length < 1 || input.requestId.length > 200) {
+    throw new CaseSimulationConflictError("requestId must contain 1-200 characters.");
+  }
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${advisoryLockKey(input.organizationId, input.caseId)}))`,
+    );
+    await authorizeCase(tx, input.organizationId, input.actor, input.caseId);
+    const state = await readStoredState(tx, input.organizationId, input.caseId);
+    const requestFingerprint = fingerprint({
+      caseId: input.caseId,
+      expectedVersion: input.expectedVersion,
+      expectedGenerationId: input.expectedGenerationId,
+      requestId: input.requestId,
+    });
+    const previous = state.requests[input.requestId];
+    if (previous) {
+      if (previous.fingerprint !== requestFingerprint) {
+        throw new CaseSimulationConflictError(
+          `requestId "${input.requestId}" was already used for a different simulation request.`,
+        );
+      }
+      if (previous.kind !== "restart") {
+        throw new CaseSimulationConflictError(
+          `requestId "${input.requestId}" was already used for an advance request.`,
+        );
+      }
+      return { ...previous.result, replayed: true };
+    }
+    if (state.generationId !== input.expectedGenerationId) {
+      throw new CaseSimulationConflictError(
+        "Simulation generation changed since it was loaded; refresh before restarting.",
+      );
+    }
+    if (state.version !== input.expectedVersion) {
+      throw new CaseSimulationConflictError(
+        `Simulation changed since it was loaded (current version ${state.version}).`,
+      );
+    }
+
+    const retiredGenerationId = state.generationId;
+    const retiredVersion = state.version;
+    const retiredExchangeCount = state.exchanges.length;
+    const nextGenerationId = randomUUID();
+    state.generationId = nextGenerationId;
+    state.version = 0;
+    state.stage = "offer";
+    state.status = "ready";
+    state.exchanges = [];
+    state.lastOutcome = null;
+    state.operationExchange = null;
+    state.replayed = false;
+
+    const eventKey = `case-simulation:${input.caseId}:${retiredGenerationId}:${input.requestId}:restart:event`;
+    await tx.insert(onbEvents).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      agent: "response-driven-simulation",
+      engine: "case-simulation",
+      hitlPattern: null,
+      ruleRef: "case-simulation:restart:v1",
+      title: "[SIMULATED] Response-driven case simulation restarted",
+      detail: [
+        "This restart retired only the prior synthetic simulation generation.",
+        `Retired generation: ${retiredGenerationId}`,
+        `Retired version: ${retiredVersion}`,
+        `Retained simulated exchanges: ${retiredExchangeCount}`,
+        `New generation: ${nextGenerationId}`,
+        "No case, readiness, provider, recipient, or UAT state was changed.",
+      ].join(" "),
+      idempotencyKey: eventKey,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
+    await tx.insert(onbCommunications).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      channel: "simulation",
+      direction: "outbound",
+      audience: "admin",
+      toAddress: "simulation-only",
+      subject: "[SIMULATED] Response-driven case simulation restarted",
+      body: [
+        "This is an internal simulation record only.",
+        "No email was sent, no real recipient was used, no provider was called, and no authoritative readiness was changed.",
+        `Retired generation: ${retiredGenerationId}`,
+        `Retired version: ${retiredVersion}`,
+        `Retained simulated exchanges: ${retiredExchangeCount}`,
+        `New generation: ${nextGenerationId}`,
+      ].join("\n"),
+      status: "logged-only",
+      sensitive: false,
+      sensitiveDataClass: "unclassified-legacy",
+      idempotencyKey: `case-simulation:${input.caseId}:${retiredGenerationId}:${input.requestId}:restart:communication`,
+    }).onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
+    });
+
+    const result = publicState(state);
+    state.requests[input.requestId] = {
+      fingerprint: requestFingerprint,
+      kind: "restart",
+      generationId: nextGenerationId,
+      result,
+    };
+    await saveState(tx, input.organizationId, state);
+    return result;
   });
 }

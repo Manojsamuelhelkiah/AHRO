@@ -4,6 +4,7 @@ import {
   useGetOnboardingCaseSimulation,
   getGetOnboardingCaseSimulationQueryKey,
   useSimulateNextOnboardingCaseExchange,
+  useRestartOnboardingCaseSimulation,
   getListOnboardingCaseEventsQueryKey,
   getListOnboardingCaseCommunicationsQueryKey
 } from '@workspace/api-client-react';
@@ -12,18 +13,17 @@ import { cn } from '@/components/ui-shared';
 
 export function SimulationPanel({ caseId }: { caseId: number }) {
   const queryClient = useQueryClient();
-  const requestStorageKey = `onboarding-case-simulation-request:${caseId}`;
   const { data: simState, error, isLoading, refetch } = useGetOnboardingCaseSimulation(caseId, {
     query: {
       queryKey: getGetOnboardingCaseSimulationQueryKey(caseId),
       retry: false,
+      refetchInterval: 15000,
     }
   });
 
   const simulateMutation = useSimulateNextOnboardingCaseExchange();
-  const [requestId, setRequestId] = useState<string | null>(() =>
-    typeof window === 'undefined' ? null : window.sessionStorage.getItem(requestStorageKey)
-  );
+  const restartMutation = useRestartOnboardingCaseSimulation();
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   if (isLoading) {
     return (
@@ -51,18 +51,13 @@ export function SimulationPanel({ caseId }: { caseId: number }) {
   if (!simState) return null;
 
   const handleSimulate = () => {
-    let currentReqId = requestId;
-    if (!currentReqId) {
-      currentReqId = crypto.randomUUID();
-      setRequestId(currentReqId);
-      window.sessionStorage.setItem(requestStorageKey, currentReqId);
-    }
+    const requestStorageKey = `onboarding-case-simulation-advance-v2:${caseId}:${simState.generationId}`;
+    const data = pendingRequest(requestStorageKey, simState);
     simulateMutation.mutate({
       caseId,
-      data: { expectedVersion: simState.version, requestId: currentReqId }
+      data,
     }, {
       onSuccess: (newData) => {
-        setRequestId(null);
         window.sessionStorage.removeItem(requestStorageKey);
         simulateMutation.reset();
         queryClient.setQueryData(getGetOnboardingCaseSimulationQueryKey(caseId), newData);
@@ -72,13 +67,39 @@ export function SimulationPanel({ caseId }: { caseId: number }) {
       onError: (err: any) => {
         if ((err?.status ?? err?.response?.status) === 409) {
           void refetch().finally(() => simulateMutation.reset());
-          setRequestId(null);
           window.sessionStorage.removeItem(requestStorageKey);
         }
       }
     });
   };
 
+  const handleRestart = () => {
+    const key = `onboarding-case-simulation-restart-v2:${caseId}`;
+    const data = pendingRequest(key, simState);
+    restartMutation.mutate({
+      caseId,
+      data,
+    }, {
+      onSuccess: (newData) => {
+        window.sessionStorage.removeItem(key);
+        setConfirmRestart(false);
+        simulateMutation.reset();
+        restartMutation.reset();
+        queryClient.setQueryData(getGetOnboardingCaseSimulationQueryKey(caseId), newData);
+        void queryClient.invalidateQueries({ queryKey: getGetOnboardingCaseSimulationQueryKey(caseId) });
+        void queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEventsQueryKey(caseId) });
+        void queryClient.invalidateQueries({ queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId) });
+      },
+      onError: (err: any) => {
+        if ((err?.status ?? err?.response?.status) === 409) {
+          window.sessionStorage.removeItem(key);
+          setConfirmRestart(false);
+          void refetch();
+        }
+      },
+    });
+  };
+  const busy = simulateMutation.isPending || restartMutation.isPending;
   const isComplete = simState.status === 'completed';
 
   return (
@@ -95,6 +116,13 @@ export function SimulationPanel({ caseId }: { caseId: number }) {
           <p className="text-xs text-[var(--text-muted)] font-medium">Safely demonstrate interaction logic without contacting real people.</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => { restartMutation.reset(); setConfirmRestart(true); }}
+            disabled={busy || confirmRestart}
+            className="text-xs font-bold border border-[var(--border)] rounded-md px-3 py-1.5 disabled:opacity-50"
+          >
+            Restart simulation
+          </button>
           {isComplete && (
             <span className="text-xs font-semibold text-[var(--status-green-fg)] bg-[var(--status-green-bg)] px-2 py-1 rounded border border-[var(--status-green)] border-opacity-20 flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5" /> Simulation Complete
@@ -102,10 +130,10 @@ export function SimulationPanel({ caseId }: { caseId: number }) {
           )}
           <button
             onClick={handleSimulate}
-            disabled={simulateMutation.isPending || isComplete}
+            disabled={busy || confirmRestart || isComplete}
             className={cn(
               "flex items-center gap-1.5 text-white px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm",
-              simulateMutation.isPending || isComplete 
+              busy || confirmRestart || isComplete 
                 ? "bg-[var(--status-gray)] opacity-50 cursor-not-allowed" 
                 : "bg-[var(--primary)] hover:bg-[var(--primary-dark)] hover:shadow-md active:scale-95"
             )}
@@ -115,6 +143,29 @@ export function SimulationPanel({ caseId }: { caseId: number }) {
           </button>
         </div>
       </div>
+      {confirmRestart && (
+        <div role="alertdialog" aria-label="Restart simulation?" aria-describedby="restart-simulation-description" className="p-4 border-b border-[var(--border)] bg-[var(--surface-alt)] space-y-3">
+          <h4 className="font-bold text-sm">Restart simulation at offer?</h4>
+          <p id="restart-simulation-description" className="text-xs text-[var(--text-secondary)]">
+            This retires the current simulated progression and starts a new generation at offer.
+            Prior simulated exchanges remain in history, including Communications and the case timeline.
+            The underlying offline case is unchanged. No messages are sent and no live provider state is changed.
+          </p>
+          <div className="flex gap-3">
+            <button onClick={() => setConfirmRestart(false)} disabled={busy} className="text-xs font-semibold disabled:opacity-50">Cancel</button>
+            <button onClick={handleRestart} disabled={busy} className="text-xs font-bold bg-[var(--primary)] text-white rounded-md px-3 py-2 disabled:opacity-50">
+              {restartMutation.isPending ? 'Restarting...' : 'Confirm restart'}
+            </button>
+          </div>
+        </div>
+      )}
+      {restartMutation.isError && (
+        <div role="alert" className="px-4 py-3 text-xs text-[var(--status-red-fg)] bg-[var(--status-red-bg)]">
+          {((restartMutation.error as any)?.status ?? (restartMutation.error as any)?.response?.status) === 409
+            ? 'Simulation changed elsewhere. Review the refreshed state before restarting.'
+            : 'Simulation could not be restarted. Retry the confirmation or refresh the page.'}
+        </div>
+      )}
       
       {simulateMutation.isError && (
         <div className="px-4 py-2 bg-[var(--status-red-bg)] border-b border-[var(--status-red)] border-opacity-20 text-xs text-[var(--status-red-fg)] flex items-center justify-between">
@@ -125,7 +176,7 @@ export function SimulationPanel({ caseId }: { caseId: number }) {
               : 'Simulation failed to advance. Please retry.'}
           </span>
           {(((simulateMutation.error as any)?.status ?? (simulateMutation.error as any)?.response?.status) !== 409) && (
-            <button onClick={handleSimulate} className="underline font-bold hover:text-[var(--status-red)]">Retry Action</button>
+            <button onClick={handleSimulate} disabled={busy || confirmRestart} className="underline font-bold hover:text-[var(--status-red)] disabled:opacity-50">Retry Action</button>
           )}
         </div>
       )}
@@ -147,11 +198,27 @@ export function SimulationPanel({ caseId }: { caseId: number }) {
         )}
       </div>
       <div className="bg-[var(--surface-alt)] border-t border-[var(--border)] px-4 py-2 text-[10px] text-[var(--text-muted)] font-semibold flex justify-between">
-        <span>Version: {simState.version}</span>
+        <span>Generation: {simState.generationId} · Version: {simState.version}</span>
         <span>Stage: {simState.stage}</span>
       </div>
     </div>
   );
+}
+
+function pendingRequest(key: string, state: { version: number; generationId: string }) {
+  const saved = window.sessionStorage.getItem(key);
+  if (saved) {
+    try {
+      const value = JSON.parse(saved);
+      if (typeof value.requestId === 'string' && typeof value.expectedGenerationId === 'string'
+        && Number.isInteger(value.expectedVersion)) return value as {
+          requestId: string; expectedGenerationId: string; expectedVersion: number;
+        };
+    } catch { /* Replace an invalid local request, never simulation history. */ }
+  }
+  const data = { requestId: crypto.randomUUID(), expectedGenerationId: state.generationId, expectedVersion: state.version };
+  window.sessionStorage.setItem(key, JSON.stringify(data));
+  return data;
 }
 
 function ExchangeRecord({ exchange }: { exchange: any }) {

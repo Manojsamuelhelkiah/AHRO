@@ -5201,8 +5201,9 @@ paths:
         Advances exactly one simulated exchange through offer, documents, BGV,
         payroll, access, readiness, and final simulated HR review. The sampled
         outcome is server-owned; requestId retries replay the original sampled
-        result. expectedVersion prevents stale writes. No real recipient,
-        readiness mutation, provider call, or outbound delivery is performed.
+        result. expectedGenerationId and expectedVersion prevent stale writes.
+        No real recipient, readiness mutation, provider call, or outbound
+        delivery is performed.
       parameters:
         - name: caseId
           in: path
@@ -5237,7 +5238,59 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
         "409":
-          description: Stale version, reused requestId, completed simulation, or UAT-isolated case
+          description: Stale generation/version, reused requestId, completed simulation, or UAT-isolated case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+  /onboarding/cases/{caseId}/simulation/restart:
+    post:
+      operationId: restartOnboardingCaseSimulation
+      tags: [onboarding]
+      summary: Explicitly restart an eligible synthetic case simulation
+      description: >
+        Retires the current response-driven simulation generation and starts a
+        new generation at offer with version 0. The prior simulated exchanges
+        remain in the append-only Communications and case timeline audit
+        history. The operation is available only to the current registered Demo
+        Administrator for an eligible server-marked synthetic case outside UAT.
+        Generation and version preconditions fence stale requests, and requestId
+        retries replay the restart result. No case, provider, UAT, recipient, or
+        authoritative readiness state is changed.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestartOnboardingCaseSimulationBody"
+      responses:
+        "200":
+          description: New simulation generation at version 0
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingCaseSimulationState"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: Demo Administrator, membership, or synthetic-case boundary denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: Case not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "409":
+          description: Stale generation/version, reused requestId, or UAT-isolated case
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
@@ -10867,12 +10920,36 @@ components:
           type: integer
           minimum: 0
           description: Version returned by the preceding simulation state response
+        expectedGenerationId:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Opaque generation identity returned by the preceding simulation state response
         requestId:
           type: string
           minLength: 1
           maxLength: 200
           description: Client retry key; a retry with the same key replays the sampled exchange
-      required: [expectedVersion, requestId]
+      required: [expectedVersion, expectedGenerationId, requestId]
+    RestartOnboardingCaseSimulationBody:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+          description: Version returned by the preceding simulation state response
+        expectedGenerationId:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Opaque generation identity returned by the preceding simulation state response
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Client retry key; a retry with the same key replays the restart result
+      required: [expectedVersion, expectedGenerationId, requestId]
     OnboardingCaseSimulationExchange:
       type: object
       additionalProperties: false
@@ -10931,6 +11008,11 @@ components:
       additionalProperties: false
       properties:
         caseId: { type: integer, minimum: 1 }
+        generationId:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Opaque identity of the current simulation generation; versions are scoped to it
         version: { type: integer, minimum: 0 }
         stage:
           type: string
@@ -10956,7 +11038,7 @@ components:
           description: True when requestId replayed its original exchange after later writes
         simulated: { type: boolean, const: true }
         authoritative: { type: boolean, const: false }
-      required: [caseId, version, stage, status, exchanges, lastOutcome, operationExchange, replayed, simulated, authoritative]
+      required: [caseId, generationId, version, stage, status, exchanges, lastOutcome, operationExchange, replayed, simulated, authoritative]
     OnbDay1Logistics:
       type: object
       properties:

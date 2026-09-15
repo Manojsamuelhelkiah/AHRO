@@ -221,6 +221,7 @@ import type {
   RemovedOrganizationMember,
   ResolveIntentRouteInput,
   ResolvedIntentRoute,
+  RestartOnboardingCaseSimulationBody,
   RetryOnboardingEvidenceMalwareScan200,
   ReviewGovernanceDecisionBody,
   ReviseGovernanceDecisionBody,
@@ -16283,7 +16284,7 @@ export const getSimulateNextOnboardingCaseExchangeUrl = (caseId: number,) => {
 }
 
 /**
- * Advances exactly one simulated exchange through offer, documents, BGV, payroll, access, readiness, and final simulated HR review. The sampled outcome is server-owned; requestId retries replay the original sampled result. expectedVersion prevents stale writes. No real recipient, readiness mutation, provider call, or outbound delivery is performed.
+ * Advances exactly one simulated exchange through offer, documents, BGV, payroll, access, readiness, and final simulated HR review. The sampled outcome is server-owned; requestId retries replay the original sampled result. expectedGenerationId and expectedVersion prevent stale writes. No real recipient, readiness mutation, provider call, or outbound delivery is performed.
  * @summary Persist one bounded randomized simulation exchange
  */
 export const simulateNextOnboardingCaseExchange = async (caseId: number,
@@ -16345,6 +16346,79 @@ export const useSimulateNextOnboardingCaseExchange = <TError = ErrorType<ErrorMe
         TContext
       > => {
       return useMutation(getSimulateNextOnboardingCaseExchangeMutationOptions(options));
+    }
+
+export const getRestartOnboardingCaseSimulationUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/simulation/restart`
+}
+
+/**
+ * Retires the current response-driven simulation generation and starts a new generation at offer with version 0. The prior simulated exchanges remain in the append-only Communications and case timeline audit history. The operation is available only to the current registered Demo Administrator for an eligible server-marked synthetic case outside UAT. Generation and version preconditions fence stale requests, and requestId retries replay the restart result. No case, provider, UAT, recipient, or authoritative readiness state is changed.
+ * @summary Explicitly restart an eligible synthetic case simulation
+ */
+export const restartOnboardingCaseSimulation = async (caseId: number,
+    restartOnboardingCaseSimulationBody: RestartOnboardingCaseSimulationBody, options?: RequestInit): Promise<OnboardingCaseSimulationState> => {
+
+  return customFetch<OnboardingCaseSimulationState>(getRestartOnboardingCaseSimulationUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(restartOnboardingCaseSimulationBody)
+  }
+);}
+
+
+
+
+
+export const getRestartOnboardingCaseSimulationMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restartOnboardingCaseSimulation>>, TError,{caseId: number;data: BodyType<RestartOnboardingCaseSimulationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restartOnboardingCaseSimulation>>, TError,{caseId: number;data: BodyType<RestartOnboardingCaseSimulationBody>}, TContext> => {
+
+const mutationKey = ['restartOnboardingCaseSimulation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restartOnboardingCaseSimulation>>, {caseId: number;data: BodyType<RestartOnboardingCaseSimulationBody>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  restartOnboardingCaseSimulation(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestartOnboardingCaseSimulationMutationResult = NonNullable<Awaited<ReturnType<typeof restartOnboardingCaseSimulation>>>
+    export type RestartOnboardingCaseSimulationMutationBody = BodyType<RestartOnboardingCaseSimulationBody>
+    export type RestartOnboardingCaseSimulationMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Explicitly restart an eligible synthetic case simulation
+ */
+export const useRestartOnboardingCaseSimulation = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restartOnboardingCaseSimulation>>, TError,{caseId: number;data: BodyType<RestartOnboardingCaseSimulationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restartOnboardingCaseSimulation>>,
+        TError,
+        {caseId: number;data: BodyType<RestartOnboardingCaseSimulationBody>},
+        TContext
+      > => {
+      return useMutation(getRestartOnboardingCaseSimulationMutationOptions(options));
     }
 
 export const getGetOnboardingReadinessSlaPolicyUrl = () => {

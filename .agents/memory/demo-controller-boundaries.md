@@ -44,3 +44,9 @@ Offline synthetic Demo Administrator intake still requires tenant lifecycle-poli
 **Why:** The synthetic marker fences operational effects but does not make retained PII non-sensitive. The recorded work jurisdiction must therefore have the same approved lifecycle coverage as an ordinary case; the isolated browser fixture supplies that policy coverage without weakening the production gate.
 
 **How to apply:** Keep the offline path server-owned and limited to the registered Demo Administrator plus Demo Organization plus the offline synthetic marker. Require the normal lifecycle gate for both offline and ordinary cases, while continuing to prohibit automatic outreach or orchestration for the offline path.
+
+Restarting a synthetic simulation retires its progression, not its audit evidence. Versions are meaningful only within a generation.
+
+**Why:** Resetting a numeric version alone lets delayed requests from an earlier run match a new run and apply unintended exchanges. Deleting history would misrepresent prior simulated activity.
+
+**How to apply:** require the original generation and version on mutations, preserve the exact request identity and payload across uncertain retries, and retain previous simulated exchanges in append-only case history. A restart must never reset the underlying case or live-provider state.

@@ -16531,6 +16531,8 @@ export const GetOnboardingCaseSimulationParams = zod.object({
 })
 
 
+export const getOnboardingCaseSimulationResponseGenerationIdMax = 200;
+
 export const getOnboardingCaseSimulationResponseVersionMin = 0;
 
 
@@ -16541,6 +16543,7 @@ export const getOnboardingCaseSimulationResponseExchangesMax = 64;
 
 export const GetOnboardingCaseSimulationResponse = zod.object({
   "caseId": zod.number().min(1),
+  "generationId": zod.string().min(1).max(getOnboardingCaseSimulationResponseGenerationIdMax).describe('Opaque identity of the current simulation generation; versions are scoped to it'),
   "version": zod.number().min(getOnboardingCaseSimulationResponseVersionMin),
   "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
   "status": zod.enum(['ready', 'active', 'follow-up', 'pending', 'review', 'completed']),
@@ -16584,7 +16587,7 @@ export const GetOnboardingCaseSimulationResponse = zod.object({
 
 
 /**
- * Advances exactly one simulated exchange through offer, documents, BGV, payroll, access, readiness, and final simulated HR review. The sampled outcome is server-owned; requestId retries replay the original sampled result. expectedVersion prevents stale writes. No real recipient, readiness mutation, provider call, or outbound delivery is performed.
+ * Advances exactly one simulated exchange through offer, documents, BGV, payroll, access, readiness, and final simulated HR review. The sampled outcome is server-owned; requestId retries replay the original sampled result. expectedGenerationId and expectedVersion prevent stale writes. No real recipient, readiness mutation, provider call, or outbound delivery is performed.
  * @summary Persist one bounded randomized simulation exchange
  */
 
@@ -16596,15 +16599,20 @@ export const SimulateNextOnboardingCaseExchangeParams = zod.object({
 
 export const simulateNextOnboardingCaseExchangeBodyExpectedVersionMin = 0;
 
+export const simulateNextOnboardingCaseExchangeBodyExpectedGenerationIdMax = 200;
+
 export const simulateNextOnboardingCaseExchangeBodyRequestIdMax = 200;
 
 
 
 export const SimulateNextOnboardingCaseExchangeBody = zod.object({
   "expectedVersion": zod.number().min(simulateNextOnboardingCaseExchangeBodyExpectedVersionMin).describe('Version returned by the preceding simulation state response'),
+  "expectedGenerationId": zod.string().min(1).max(simulateNextOnboardingCaseExchangeBodyExpectedGenerationIdMax).describe('Opaque generation identity returned by the preceding simulation state response'),
   "requestId": zod.string().min(1).max(simulateNextOnboardingCaseExchangeBodyRequestIdMax).describe('Client retry key; a retry with the same key replays the sampled exchange')
 })
 
+
+export const simulateNextOnboardingCaseExchangeResponseGenerationIdMax = 200;
 
 export const simulateNextOnboardingCaseExchangeResponseVersionMin = 0;
 
@@ -16616,6 +16624,7 @@ export const simulateNextOnboardingCaseExchangeResponseExchangesMax = 64;
 
 export const SimulateNextOnboardingCaseExchangeResponse = zod.object({
   "caseId": zod.number().min(1),
+  "generationId": zod.string().min(1).max(simulateNextOnboardingCaseExchangeResponseGenerationIdMax).describe('Opaque identity of the current simulation generation; versions are scoped to it'),
   "version": zod.number().min(simulateNextOnboardingCaseExchangeResponseVersionMin),
   "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
   "status": zod.enum(['ready', 'active', 'follow-up', 'pending', 'review', 'completed']),
@@ -16635,6 +16644,87 @@ export const SimulateNextOnboardingCaseExchangeResponse = zod.object({
   "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
   "recordedAt": zod.coerce.date()
 })).max(simulateNextOnboardingCaseExchangeResponseExchangesMax),
+  "lastOutcome": zod.union([zod.literal('success'),zod.literal('missing-info'),zod.literal('pending'),zod.literal('exception'),zod.literal(null)]).nullable(),
+  "operationExchange": zod.union([zod.object({
+  "sequence": zod.number().min(1),
+  "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageBefore": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageAfter": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
+  "outcome": zod.enum(['success', 'missing-info', 'pending', 'exception']),
+  "transition": zod.enum(['advanced', 'follow-up', 'pending', 'review', 'completed']),
+  "followUp": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "requestText": zod.string().describe('Explicitly simulated request shown to the case panel'),
+  "responderLabel": zod.string().describe('Non-real simulated responder label'),
+  "responseText": zod.string().describe('Explicitly simulated response text'),
+  "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
+  "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
+  "recordedAt": zod.coerce.date()
+}),zod.null()]).describe('The operation exchange created by this request; null on GET'),
+  "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
+  "simulated": zod.boolean(),
+  "authoritative": zod.boolean()
+})
+
+
+/**
+ * Retires the current response-driven simulation generation and starts a new generation at offer with version 0. The prior simulated exchanges remain in the append-only Communications and case timeline audit history. The operation is available only to the current registered Demo Administrator for an eligible server-marked synthetic case outside UAT. Generation and version preconditions fence stale requests, and requestId retries replay the restart result. No case, provider, UAT, recipient, or authoritative readiness state is changed.
+ * @summary Explicitly restart an eligible synthetic case simulation
+ */
+
+
+
+export const RestartOnboardingCaseSimulationParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+export const restartOnboardingCaseSimulationBodyExpectedVersionMin = 0;
+
+export const restartOnboardingCaseSimulationBodyExpectedGenerationIdMax = 200;
+
+export const restartOnboardingCaseSimulationBodyRequestIdMax = 200;
+
+
+
+export const RestartOnboardingCaseSimulationBody = zod.object({
+  "expectedVersion": zod.number().min(restartOnboardingCaseSimulationBodyExpectedVersionMin).describe('Version returned by the preceding simulation state response'),
+  "expectedGenerationId": zod.string().min(1).max(restartOnboardingCaseSimulationBodyExpectedGenerationIdMax).describe('Opaque generation identity returned by the preceding simulation state response'),
+  "requestId": zod.string().min(1).max(restartOnboardingCaseSimulationBodyRequestIdMax).describe('Client retry key; a retry with the same key replays the restart result')
+})
+
+
+export const restartOnboardingCaseSimulationResponseGenerationIdMax = 200;
+
+export const restartOnboardingCaseSimulationResponseVersionMin = 0;
+
+
+export const restartOnboardingCaseSimulationResponseExchangesMax = 64;
+
+
+
+
+export const RestartOnboardingCaseSimulationResponse = zod.object({
+  "caseId": zod.number().min(1),
+  "generationId": zod.string().min(1).max(restartOnboardingCaseSimulationResponseGenerationIdMax).describe('Opaque identity of the current simulation generation; versions are scoped to it'),
+  "version": zod.number().min(restartOnboardingCaseSimulationResponseVersionMin),
+  "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
+  "status": zod.enum(['ready', 'active', 'follow-up', 'pending', 'review', 'completed']),
+  "exchanges": zod.array(zod.object({
+  "sequence": zod.number().min(1),
+  "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageBefore": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageAfter": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
+  "outcome": zod.enum(['success', 'missing-info', 'pending', 'exception']),
+  "transition": zod.enum(['advanced', 'follow-up', 'pending', 'review', 'completed']),
+  "followUp": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "requestText": zod.string().describe('Explicitly simulated request shown to the case panel'),
+  "responderLabel": zod.string().describe('Non-real simulated responder label'),
+  "responseText": zod.string().describe('Explicitly simulated response text'),
+  "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
+  "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
+  "recordedAt": zod.coerce.date()
+})).max(restartOnboardingCaseSimulationResponseExchangesMax),
   "lastOutcome": zod.union([zod.literal('success'),zod.literal('missing-info'),zod.literal('pending'),zod.literal('exception'),zod.literal(null)]).nullable(),
   "operationExchange": zod.union([zod.object({
   "sequence": zod.number().min(1),

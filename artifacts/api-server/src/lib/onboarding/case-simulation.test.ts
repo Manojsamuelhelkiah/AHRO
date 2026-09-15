@@ -16,6 +16,7 @@ import {
   CaseSimulationConflictError,
   CaseSimulationDeniedError,
   getCaseSimulation,
+  restartCaseSimulation,
   setSimulationOutcomeSelectorForTests,
   simulateNextCaseExchange,
   type SimulationOutcome,
@@ -32,6 +33,7 @@ async function next(
   caseId: number,
   requestId: string,
   expectedVersion: number,
+  expectedGenerationId?: string,
 ) {
   return simulateNextCaseExchange({
     organizationId: DEMO_ORGANIZATION_ID,
@@ -39,6 +41,13 @@ async function next(
     caseId,
     requestId,
     expectedVersion,
+    expectedGenerationId: expectedGenerationId ?? (
+      await getCaseSimulation({
+        organizationId: DEMO_ORGANIZATION_ID,
+        actor: administrator,
+        caseId,
+      })
+    ).generationId,
   });
 }
 
@@ -233,6 +242,77 @@ describe("response-driven case simulation", { skip: !hasDb }, () => {
     assert.equal(recovered.operationExchange?.responderLabel, "Simulated HR reviewer");
     assert.match(recovered.operationExchange?.responseText ?? "", /Human-review decision/);
     assert.match(recovered.operationExchange?.decisionExplanation ?? "", /explicit simulated HR decision/);
+  });
+
+  test("restarts into an independent generation and preserves the append-only audit history", async () => {
+    const caseId = await createCase();
+    setSimulationOutcomeSelectorForTests(() => "success");
+    const initial = await getCaseSimulation({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+    });
+    const advanced = await next(caseId, "restart-advance", initial.version, initial.generationId);
+    const beforeCase = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+    const beforeEvents = await db.select().from(onbEvents).where(eq(onbEvents.caseId, caseId));
+    const beforeCommunications = await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, caseId));
+    assert.equal((await getCaseSimulation({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+    })).generationId, advanced.generationId);
+
+    const restarted = await restartCaseSimulation({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+      expectedVersion: advanced.version,
+      expectedGenerationId: advanced.generationId,
+      requestId: "restart-once",
+    });
+    assert.notEqual(restarted.generationId, advanced.generationId);
+    assert.equal(restarted.version, 0);
+    assert.equal(restarted.stage, "offer");
+    assert.equal(restarted.status, "ready");
+    assert.deepEqual(restarted.exchanges, []);
+    assert.equal(restarted.operationExchange, null);
+    assert.equal(restarted.replayed, false);
+    assert.equal((await db.select().from(onbEvents).where(eq(onbEvents.caseId, caseId))).length, beforeEvents.length + 1);
+    assert.equal((await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, caseId))).length, beforeCommunications.length + 1);
+    assert.deepEqual(
+      (await db.select().from(onbCases).where(eq(onbCases.id, caseId)))[0],
+      beforeCase[0],
+    );
+
+    const replay = await restartCaseSimulation({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+      expectedVersion: advanced.version,
+      expectedGenerationId: advanced.generationId,
+      requestId: "restart-once",
+    });
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.generationId, restarted.generationId);
+    assert.equal(replay.version, 0);
+    assert.equal((await db.select().from(onbEvents).where(eq(onbEvents.caseId, caseId))).length, beforeEvents.length + 1);
+    assert.equal((await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, caseId))).length, beforeCommunications.length + 1);
+
+    await assert.rejects(
+      () => next(caseId, "stale-after-restart", advanced.version, advanced.generationId),
+      CaseSimulationConflictError,
+    );
+    await assert.rejects(
+      () => restartCaseSimulation({
+        organizationId: DEMO_ORGANIZATION_ID,
+        actor: administrator,
+        caseId,
+        expectedVersion: advanced.version,
+        expectedGenerationId: advanced.generationId,
+        requestId: "stale-restart",
+      }),
+      CaseSimulationConflictError,
+    );
   });
 
   test("denies reviewer and UAT-isolated cases", async () => {

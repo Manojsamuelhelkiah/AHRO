@@ -5207,7 +5207,33 @@ export interface SimulateNextOnboardingCaseExchangeInput {
      */
   expectedVersion: number;
   /**
+     * Opaque generation identity returned by the preceding simulation state response
+     * @minLength 1
+     * @maxLength 200
+     */
+  expectedGenerationId: string;
+  /**
      * Client retry key; a retry with the same key replays the sampled exchange
+     * @minLength 1
+     * @maxLength 200
+     */
+  requestId: string;
+}
+
+export interface RestartOnboardingCaseSimulationBody {
+  /**
+     * Version returned by the preceding simulation state response
+     * @minimum 0
+     */
+  expectedVersion: number;
+  /**
+     * Opaque generation identity returned by the preceding simulation state response
+     * @minLength 1
+     * @maxLength 200
+     */
+  expectedGenerationId: string;
+  /**
+     * Client retry key; a retry with the same key replays the restart result
      * @minLength 1
      * @maxLength 200
      */
@@ -5350,6 +5376,12 @@ export const OnboardingCaseSimulationStateLastOutcome = {
 export interface OnboardingCaseSimulationState {
   /** @minimum 1 */
   caseId: number;
+  /**
+     * Opaque identity of the current simulation generation; versions are scoped to it
+     * @minLength 1
+     * @maxLength 200
+     */
+  generationId: string;
   /** @minimum 0 */
   version: number;
   stage: OnboardingCaseSimulationStateStage;

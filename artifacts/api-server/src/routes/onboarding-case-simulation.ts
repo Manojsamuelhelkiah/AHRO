@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   GetOnboardingCaseSimulationParams,
+  RestartOnboardingCaseSimulationBody,
   SimulateNextOnboardingCaseExchangeBody,
 } from "@workspace/api-zod";
 import {
@@ -8,6 +9,7 @@ import {
   CaseSimulationDeniedError,
   CaseSimulationNotFoundError,
   getCaseSimulation,
+  restartCaseSimulation,
   simulateNextCaseExchange,
 } from "../lib/onboarding/case-simulation";
 import { getOrganizationId } from "../lib/organization-scope";
@@ -71,6 +73,7 @@ router.post("/onboarding/cases/:caseId/simulation/simulate-next", async (req, re
       actor: req.authUserId!,
       caseId,
       expectedVersion: parsed.data.expectedVersion,
+      expectedGenerationId: parsed.data.expectedGenerationId,
       requestId: parsed.data.requestId,
     });
     res.json(result);
@@ -80,6 +83,40 @@ router.post("/onboarding/cases/:caseId/simulation/simulate-next", async (req, re
       return;
     }
     res.status(statusFor(error)).json({ error: error instanceof Error ? error.message : "Unable to simulate next exchange." });
+  }
+});
+
+router.post("/onboarding/cases/:caseId/simulation/restart", async (req, res, next) => {
+  const caseId = parseCaseId(req.params.caseId);
+  if (caseId === null) {
+    res.status(400).json({ error: "caseId must be a positive integer." });
+    return;
+  }
+  const parsed = RestartOnboardingCaseSimulationBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!Number.isSafeInteger(parsed.data.expectedVersion) || parsed.data.expectedVersion < 0) {
+    res.status(400).json({ error: "expectedVersion must be a non-negative safe integer." });
+    return;
+  }
+  try {
+    const result = await restartCaseSimulation({
+      organizationId: getOrganizationId(req),
+      actor: req.authUserId!,
+      caseId,
+      expectedVersion: parsed.data.expectedVersion,
+      expectedGenerationId: parsed.data.expectedGenerationId,
+      requestId: parsed.data.requestId,
+    });
+    res.json(result);
+  } catch (error) {
+    if (statusFor(error) === 500) {
+      next(error);
+      return;
+    }
+    res.status(statusFor(error)).json({ error: error instanceof Error ? error.message : "Unable to restart simulation." });
   }
 });
 
