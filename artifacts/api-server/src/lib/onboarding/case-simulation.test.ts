@@ -16,8 +16,11 @@ import {
   CaseSimulationConflictError,
   CaseSimulationDeniedError,
   getCaseSimulation,
+  listSimulationEmailRoutes,
   recordSimulationEmailReply,
   restartCaseSimulation,
+  sendCurrentSimulationPrompt,
+  setSimulationEmailSenderForTests,
   setSimulationOutcomeSelectorForTests,
   simulateNextCaseExchange,
   interpretSimulationEmailReply,
@@ -104,6 +107,7 @@ describe("response-driven case simulation", { skip: !hasDb }, () => {
   });
 
   after(async () => {
+    setSimulationEmailSenderForTests(undefined);
     setSimulationOutcomeSelectorForTests(undefined);
     if (caseIds.length) {
       await db.delete(onbCases).where(inArray(onbCases.id, caseIds));
@@ -508,5 +512,76 @@ describe("response-driven case simulation", { skip: !hasDb }, () => {
       eq(onbCommunications.caseId, caseId),
       eq(onbCommunications.externalMessageId, "simulation-provider-reply-stale"),
     ))).length, 1);
+  });
+
+  test("persists a stale route when restart races an in-flight provider completion", async () => {
+    const caseId = await createCase();
+    const initial = await getCaseSimulation({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+    });
+    let providerStarted!: () => void;
+    const providerEntered = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    let releaseProvider!: () => void;
+    const providerRelease = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    setSimulationEmailSenderForTests(async () => {
+      providerStarted();
+      await providerRelease;
+      return { id: 1, status: "sent", failureReason: null };
+    });
+
+    const sendPromise = sendCurrentSimulationPrompt({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+      expectedVersion: initial.version,
+      expectedGenerationId: initial.generationId,
+      requestId: "raced-email",
+    });
+    await providerEntered;
+    const restarted = await restartCaseSimulation({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+      expectedVersion: initial.version + 1,
+      expectedGenerationId: initial.generationId,
+      requestId: "restart-during-email",
+    });
+    releaseProvider();
+    const completed = await sendPromise;
+
+    assert.equal(completed.emailDelivery?.status, "stale");
+    assert.equal(completed.emailDelivery?.freshness, "retired-generation");
+    assert.notEqual(restarted.generationId, initial.generationId);
+    const current = await getCaseSimulation({
+      organizationId: DEMO_ORGANIZATION_ID,
+      actor: administrator,
+      caseId,
+    });
+    assert.equal(current.generationId, restarted.generationId);
+    assert.equal(current.exchanges.length, 0);
+    assert.equal(current.emailDelivery?.status, "stale");
+    assert.equal(current.emailDelivery?.freshness, "retired-generation");
+    const [staleRoute] = (await listSimulationEmailRoutes()).filter((route) =>
+      route.caseId === caseId && route.requestId === "raced-email"
+    );
+    assert.ok(staleRoute);
+    assert.equal(staleRoute.status, "stale");
+    const delayedReply = await recordSimulationEmailReply({
+      caseId,
+      organizationId: DEMO_ORGANIZATION_ID,
+      fromAddress: "volunteer@example.com",
+      subject: `[DEMO SIMULATION][SIM-THREAD:${staleRoute.threadMarker}] Re: offer package`,
+      body: "I completed it.",
+      externalMessageId: "raced-provider-reply",
+      token: staleRoute.token,
+      threadMarker: staleRoute.threadMarker,
+    });
+    assert.equal(delayedReply, "stale");
   });
 });

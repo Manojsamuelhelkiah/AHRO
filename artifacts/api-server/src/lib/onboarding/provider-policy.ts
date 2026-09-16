@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-type ProviderPolicy = { denyExternalProviders: boolean };
+type ProviderPolicy = {
+  denyExternalProviders: boolean;
+  allowControlledDemoEmailTest?: boolean;
+};
 
 const providerPolicy = new AsyncLocalStorage<ProviderPolicy>();
 export type DemoControllerLiveContext = {
@@ -29,9 +32,26 @@ export function runWithProviderDeny<T>(operation: () => T): T {
   return providerPolicy.run({ denyExternalProviders: true }, operation);
 }
 
+/**
+ * Browser regression only: keep the provider-deny fence for every provider
+ * except the controlled Demo email path, whose connector is replaced with an
+ * in-process fake by the browser harness. This is intentionally not exported
+ * as a general live-provider escape hatch.
+ */
+export function runWithControlledDemoEmailTest<T>(operation: () => T): T {
+  if (process.env.ONBOARDING_E2E_TEST !== "true") {
+    throw new Error("Controlled Demo email test scope is available only in the browser regression harness.");
+  }
+  return providerPolicy.run({
+    denyExternalProviders: true,
+    allowControlledDemoEmailTest: true,
+  }, operation);
+}
+
 /** Checked immediately before an email, WhatsApp, or voice provider dispatch. */
 export function externalProviderDispatchDenied(): boolean {
-  return providerPolicy.getStore()?.denyExternalProviders === true;
+  const policy = providerPolicy.getStore();
+  return policy?.denyExternalProviders === true && policy.allowControlledDemoEmailTest !== true;
 }
 
 /**

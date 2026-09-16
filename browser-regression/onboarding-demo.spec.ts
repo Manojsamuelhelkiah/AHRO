@@ -82,6 +82,29 @@ async function createOfflineCase(page: Page) {
   };
 }
 
+async function createControlledDemoCase(page: Page) {
+  const capabilities = await page.evaluate(async () => {
+    const response = await fetch("/api/onboarding/demo-controller", { credentials: "include" });
+    if (!response.ok) throw new Error(`demo-controller failed: ${response.status}`);
+    return response.json();
+  });
+  const volunteer = capabilities.approvedVolunteers?.find((candidate: { approved?: boolean }) => candidate.approved);
+  expect(volunteer, "the browser fixture should provide an approved Demo volunteer").toBeTruthy();
+  const run = await page.evaluate(async (volunteerId) => {
+    const response = await fetch("/api/onboarding/demo-runs", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario: "standard-fte", volunteerId, mode: "hybrid" }),
+    });
+    if (!response.ok) throw new Error(`demo-runs failed: ${response.status}`);
+    return response.json();
+  }, volunteer.id);
+  await page.goto(`/cases/${run.caseId}`);
+  await expect(page.getByRole("heading", { name: "Response-Driven Simulation" })).toBeVisible();
+  return { caseId: run.caseId as number };
+}
+
 async function assertNoExternalRequests(page: Page, requests: string[]) {
   const staticFontRequests = requests.filter((url) => {
     const origin = new URL(url).origin;
@@ -181,4 +204,74 @@ test("Demo Administrator creates and durably simulates one offline case", async 
     }),
   ).toEqual([]);
   await reviewer.close();
+});
+
+test("controlled Demo email status survives reload and blocks duplicate sends", async ({ page }) => {
+  await signInDemo(page, ADMIN_EMAIL);
+  await page.evaluate(async () => {
+    const response = await fetch("/api/test/controlled-email/sent", { method: "POST" });
+    if (!response.ok) throw new Error(`unable to configure fake email provider: ${response.status}`);
+  });
+  await createControlledDemoCase(page);
+
+  await page.getByRole("button", { name: "Email current prompt", exact: true }).click();
+  await expect(page.getByRole("alertdialog", { name: "Send simulated prompt by email?" })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm real email send", exact: true }).click();
+  await expect(page.getByText(/Real email: sent to/)).toBeVisible();
+  await expect(page.getByText("Awaiting a monitored Gmail reply.", { exact: false })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText(/Real email: sent to/)).toBeVisible();
+  await expect(page.getByText("Awaiting a monitored Gmail reply.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Email current prompt", exact: true })).toBeDisabled();
+});
+
+test("ambiguous controlled Demo email remains blocked without a second provider dispatch", async ({ page }) => {
+  await signInDemo(page, ADMIN_EMAIL);
+  await page.evaluate(async () => {
+    const response = await fetch("/api/test/controlled-email/ambiguous", { method: "POST" });
+    if (!response.ok) throw new Error(`unable to configure fake email provider: ${response.status}`);
+  });
+  const fixture = await createControlledDemoCase(page);
+
+  await page.getByRole("button", { name: "Email current prompt", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm real email send", exact: true }).click();
+  await expect(page.getByText(/Real email: sending to/)).toBeVisible();
+  await expect(page.getByText("Delivery is uncertain; automatic resend is disabled.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Email current prompt", exact: true })).toBeDisabled();
+
+  const before = await page.evaluate(async () => {
+    const response = await fetch("/api/test/controlled-email", { credentials: "include" });
+    return response.json();
+  });
+  const state = await page.evaluate(async (caseId) => {
+    const response = await fetch(`/api/onboarding/cases/${caseId}/simulation`, { credentials: "include" });
+    if (!response.ok) throw new Error(`simulation read failed: ${response.status}`);
+    return response.json();
+  }, fixture.caseId);
+  const duplicateAttempt = await page.evaluate(async ({ caseId, expectedVersion, expectedGenerationId }) => {
+    const response = await fetch(`/api/onboarding/cases/${caseId}/simulation/send-email`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: `browser-duplicate-${Date.now()}`,
+        expectedVersion,
+        expectedGenerationId,
+      }),
+    });
+    return { status: response.status, body: await response.json() };
+  }, {
+    caseId: fixture.caseId,
+    expectedVersion: state.version,
+    expectedGenerationId: state.generationId,
+  });
+  expect(duplicateAttempt.status).toBe(409);
+  expect(duplicateAttempt.body.error).toMatch(/already awaiting a reply|no second email/i);
+
+  const after = await page.evaluate(async () => {
+    const response = await fetch("/api/test/controlled-email", { credentials: "include" });
+    return response.json();
+  });
+  expect(after.providerCalls).toBe(before.providerCalls);
 });

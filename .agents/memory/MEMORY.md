@@ -53,6 +53,7 @@
 - [Shared mailbox personas](shared-mailbox-personas.md) — intended stakeholder, delivery mailbox, and actual responder are separate; demo names never grant authority.
 - [Provider test isolation](provider-test-isolation.md) — in-process delivery stubs cannot protect DB fixtures from the running API's background workers.
 - [Outbound payload stability](outbound-payload-stability.md) — persist message content and reply references before effect binding; retries must not regenerate them.
+- [Controlled demo email browser harness](controlled-demo-email-harness.md) — fake provider tests stay behind the deny fence; opaque email fixtures must satisfy every final sensitive-class gate.
 - [Workforce runtime boundaries](workforce-runtime-boundaries.md) — opt-in snapshot semantics, real persisted fixtures, and checkpoint fencing independent of task-state presence.
 - [Protected audit boundaries](protected-audit-boundaries.md) — independent readiness needs generation-fenced checkpoints and provider-verified drill receipts; local flags are insufficient.
 - [Governance authority boundaries](governance-authority-boundaries.md) — tenant administration is not specialist authority; provisional planning and prospective revision adoption never authorize live effects.

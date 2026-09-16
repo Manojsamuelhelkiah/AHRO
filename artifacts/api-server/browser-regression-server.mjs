@@ -181,12 +181,15 @@ const {
   organizationsTable,
 } = dbPackage;
 let runWithProviderDeny;
+let runWithControlledDemoEmailTest;
 let SENSITIVE_DATA_CLASSES;
 let demoPrincipalSettingKey;
 let router;
 let errorHandler;
+let setOnboardingConnectorProxyForTests;
 try {
-  ({ runWithProviderDeny } = await import("./src/lib/onboarding/provider-policy.ts"));
+  ({ runWithProviderDeny, runWithControlledDemoEmailTest } = await import("./src/lib/onboarding/provider-policy.ts"));
+  ({ setOnboardingConnectorProxyForTests } = await import("./src/lib/onboarding/channels.ts"));
   ({ SENSITIVE_DATA_CLASSES } = await import("./src/lib/onboarding/sensitive-lifecycle.ts"));
   ({ demoPrincipalSettingKey } = await import("./src/lib/demo-principal.ts"));
   ({ default: router } = await import("./src/routes/index.ts"));
@@ -195,6 +198,38 @@ try {
   await abandonStartup();
   throw error;
 }
+
+let controlledEmailProviderMode = "sent";
+let controlledEmailProviderCalls = 0;
+let delayedControlledEmailRelease;
+
+setOnboardingConnectorProxyForTests(async (service, path, options) => {
+  if (service !== "google-mail") {
+    throw new Error(`Unexpected browser-regression provider: ${service}`);
+  }
+  if (path.endsWith("/profile")) {
+    return new Response(JSON.stringify({ emailAddress: "browser-regression@example.invalid" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (path.endsWith("/messages/send")) {
+    controlledEmailProviderCalls += 1;
+    if (controlledEmailProviderMode === "ambiguous") {
+      throw new Error("browser-regression simulated provider timeout");
+    }
+    if (controlledEmailProviderMode === "delayed") {
+      await new Promise((resolve) => {
+        delayedControlledEmailRelease = resolve;
+      });
+    }
+    return new Response(JSON.stringify({ id: `browser-regression-message-${controlledEmailProviderCalls}` }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  throw new Error(`Unexpected browser-regression Gmail path: ${path}`);
+});
 
 function cookieValue(req, name) {
   return req.cookies?.[name] || null;
@@ -231,6 +266,26 @@ async function ensureFixture() {
       key: demoPrincipalSettingKey(reviewer),
       value: "reviewer",
     },
+    {
+      organizationId: DEMO_ORGANIZATION_ID,
+      key: "demo_volunteers",
+      value: JSON.stringify([{
+        name: "Browser Regression Volunteer",
+        email: "browser-regression-volunteer@example.invalid",
+        phone: "",
+        channelPreference: "email",
+        persona: "standard-fte",
+        role: "Demo Engineer",
+        department: "Quality",
+        geography: "United States",
+        hireType: "external",
+        workerCategory: "full-time",
+        managerName: "Demo Manager",
+        recruiterName: "Demo Recruiter",
+        joiningDate: "2035-01-01",
+        notes: "Synthetic browser regression volunteer.",
+      }]),
+    },
   ]);
 
   const currentPolicies = await db
@@ -254,8 +309,13 @@ async function ensureFixture() {
       purpose: "Browser regression synthetic lifecycle policy",
       lawfulBasis: "Browser regression synthetic lifecycle basis",
       retentionDays: 1,
-      providerSharingApproved: false,
-      permittedProviders: [],
+      // The only provider exception in this harness is the in-process Gmail
+      // fake used by the controlled Demo email regression. The final
+      // communication fence evaluates every sensitive class for an opaque
+      // email payload, so the local fixture must authorize the same fake
+      // identifier for each class. No network provider is reachable here.
+      providerSharingApproved: true,
+      permittedProviders: ["gmail"],
       policyReference: `browser-regression:${suffix}:${dataClass}`,
       approvalReference: `browser-regression:${suffix}:${dataClass}`,
       approvedByUserId: administrator,
@@ -282,6 +342,7 @@ async function cleanupFixture() {
     inArray(onbSettings.key, [
       demoPrincipalSettingKey(administrator),
       demoPrincipalSettingKey(reviewer),
+      "demo_volunteers",
     ]),
   ));
   await db.delete(organizationMembershipsTable).where(and(
@@ -308,7 +369,26 @@ app.use(cookieParser());
 app.use(express.json());
 
 app.get("/api/test/ready", (_req, res) => {
-  res.json({ ready: true, providerBoundary: "deny-external-providers" });
+  res.json({ ready: true, providerBoundary: "deny-external-providers", controlledEmailTransport: "in-process-only" });
+});
+
+app.post("/api/test/controlled-email/:mode", (req, res) => {
+  const mode = String(req.params.mode);
+  if (!["sent", "ambiguous", "delayed"].includes(mode) && mode !== "release") {
+    res.status(400).json({ error: "Unsupported controlled email test mode." });
+    return;
+  }
+  if (mode === "release") {
+    delayedControlledEmailRelease?.();
+    delayedControlledEmailRelease = undefined;
+  } else {
+    controlledEmailProviderMode = mode;
+  }
+  res.json({ mode: controlledEmailProviderMode, providerCalls: controlledEmailProviderCalls });
+});
+
+app.get("/api/test/controlled-email", (_req, res) => {
+  res.json({ mode: controlledEmailProviderMode, providerCalls: controlledEmailProviderCalls });
 });
 
 app.post("/api/onboarding/demo-login", (req, res) => {
@@ -361,7 +441,9 @@ app.use((req, _res, next) => {
   const session = cookieValue(req, "browser_e2e_session");
   const userId = session ? sessions.get(session) : null;
   if (userId) req.authUserId = userId;
-  runWithProviderDeny(() => next());
+  const controlledEmailSend = req.method === "POST" &&
+    /^\/api\/onboarding\/cases\/\d+\/simulation\/send-email$/.test(req.path);
+  (controlledEmailSend ? runWithControlledDemoEmailTest : runWithProviderDeny)(() => next());
 });
 
 // The browser regression is allowed to inspect owned fixture state, but only

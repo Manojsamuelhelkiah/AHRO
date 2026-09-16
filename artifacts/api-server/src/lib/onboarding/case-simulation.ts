@@ -130,6 +130,12 @@ export type SimulationOutcomeSelector = (input: {
 }) => SimulationOutcome;
 
 let outcomeSelectorForTests: SimulationOutcomeSelector | undefined;
+type SimulationEmailSenderForTests = (input: {
+  caseId: number;
+  recipient: string;
+  dispatch: SimulationEmailDispatch;
+}) => Promise<{ id: number; status: string; failureReason: string | null }>;
+let emailSenderForTests: SimulationEmailSenderForTests | undefined;
 
 /**
  * Focused tests can choose every branch without making production randomness
@@ -139,6 +145,13 @@ export function setSimulationOutcomeSelectorForTests(
   selector: SimulationOutcomeSelector | undefined,
 ): void {
   outcomeSelectorForTests = selector;
+}
+
+/** Test-only transport seam for proving provider completion races. */
+export function setSimulationEmailSenderForTests(
+  sender: SimulationEmailSenderForTests | undefined,
+): void {
+  emailSenderForTests = sender;
 }
 
 export class CaseSimulationDeniedError extends Error {
@@ -971,12 +984,14 @@ export async function sendCurrentSimulationPrompt(input: {
   // Fail closed before writing a pending dispatch when setup is not ready.
   // The second identical lookup below is intentional: it is the immediate
   // provider-boundary revalidation required by the Demo Controller path.
-  await withApprovedDemoVolunteerEmail(
-    input.organizationId,
-    input.caseId,
-    input.requestId,
-    async () => undefined,
-  );
+  if (!emailSenderForTests) {
+    await withApprovedDemoVolunteerEmail(
+      input.organizationId,
+      input.caseId,
+      input.requestId,
+      async () => undefined,
+    );
+  }
   const readiness = await getDemoEmailReadiness();
   if (!readiness.configured) {
     const denied = new Error(`Controlled Demo email is unavailable: ${readiness.reason}`);
@@ -1056,28 +1071,38 @@ export async function sendCurrentSimulationPrompt(input: {
   let recipient = "";
   let providerAttempted = false;
   try {
-    delivery = await withApprovedDemoVolunteerEmail(
-      input.organizationId,
-      input.caseId,
-      input.requestId,
-      async (selected) => {
-        recipient = selected.email;
-        providerAttempted = true;
-        return sendOutbound({
-          caseId: input.caseId,
-          channel: "email",
-          toAddress: selected.email,
-          subject: prepared.dispatch.subject,
-          body: prepared.dispatch.body,
-          persistedBody: prepared.dispatch.body,
-          sensitive: true,
-          stableBody: true,
-          skipCandidateReplyReference: true,
-          audience: "demo-volunteer",
-          idempotencyKey: `case-simulation-email:${input.caseId}:${prepared.dispatch.generationId}:${input.requestId}`,
-        });
-      },
-    );
+    if (emailSenderForTests) {
+      recipient = "volunteer@example.com";
+      providerAttempted = true;
+      delivery = await emailSenderForTests({
+        caseId: input.caseId,
+        recipient,
+        dispatch: prepared.dispatch,
+      });
+    } else {
+      delivery = await withApprovedDemoVolunteerEmail(
+        input.organizationId,
+        input.caseId,
+        input.requestId,
+        async (selected) => {
+          recipient = selected.email;
+          providerAttempted = true;
+          return sendOutbound({
+            caseId: input.caseId,
+            channel: "email",
+            toAddress: selected.email,
+            subject: prepared.dispatch.subject,
+            body: prepared.dispatch.body,
+            persistedBody: prepared.dispatch.body,
+            sensitive: true,
+            stableBody: true,
+            skipCandidateReplyReference: true,
+            audience: "demo-volunteer",
+            idempotencyKey: `case-simulation-email:${input.caseId}:${prepared.dispatch.generationId}:${input.requestId}`,
+          });
+        },
+      );
+    }
   } catch (caught) {
     delivery = {
       status: providerAttempted ? "sending" : "failed",
