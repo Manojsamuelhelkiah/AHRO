@@ -186,6 +186,7 @@ import type {
   OnbWatchEmailSimulateResult,
   OnbWorkforceContextCorrectionInput,
   OnboardingBgvNotificationsEnvelope,
+  OnboardingCaseSimulationEmailResult,
   OnboardingCaseSimulationState,
   OnboardingLearningCatalog,
   OnboardingUatCatalog,
@@ -16419,6 +16420,79 @@ export const useRestartOnboardingCaseSimulation = <TError = ErrorType<ErrorMessa
         TContext
       > => {
       return useMutation(getRestartOnboardingCaseSimulationMutationOptions(options));
+    }
+
+export const getSendOnboardingCaseSimulationEmailUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/simulation/send-email`
+}
+
+/**
+ * Explicitly sends one current simulated prompt through the existing governed Gmail path to the revalidated approved Demo volunteer. The delivery is real email, but any reply can only produce a simulated outcome. No candidate or generic orchestration email is enabled.
+ * @summary Send the current synthetic employee prompt to the pinned Demo volunteer
+ */
+export const sendOnboardingCaseSimulationEmail = async (caseId: number,
+    simulateNextOnboardingCaseExchangeInput: SimulateNextOnboardingCaseExchangeInput, options?: RequestInit): Promise<OnboardingCaseSimulationEmailResult> => {
+
+  return customFetch<OnboardingCaseSimulationEmailResult>(getSendOnboardingCaseSimulationEmailUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(simulateNextOnboardingCaseExchangeInput)
+  }
+);}
+
+
+
+
+
+export const getSendOnboardingCaseSimulationEmailMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendOnboardingCaseSimulationEmail>>, TError,{caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendOnboardingCaseSimulationEmail>>, TError,{caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}, TContext> => {
+
+const mutationKey = ['sendOnboardingCaseSimulationEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendOnboardingCaseSimulationEmail>>, {caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  sendOnboardingCaseSimulationEmail(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendOnboardingCaseSimulationEmailMutationResult = NonNullable<Awaited<ReturnType<typeof sendOnboardingCaseSimulationEmail>>>
+    export type SendOnboardingCaseSimulationEmailMutationBody = BodyType<SimulateNextOnboardingCaseExchangeInput>
+    export type SendOnboardingCaseSimulationEmailMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Send the current synthetic employee prompt to the pinned Demo volunteer
+ */
+export const useSendOnboardingCaseSimulationEmail = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendOnboardingCaseSimulationEmail>>, TError,{caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendOnboardingCaseSimulationEmail>>,
+        TError,
+        {caseId: number;data: BodyType<SimulateNextOnboardingCaseExchangeInput>},
+        TContext
+      > => {
+      return useMutation(getSendOnboardingCaseSimulationEmailMutationOptions(options));
     }
 
 export const getGetOnboardingReadinessSlaPolicyUrl = () => {

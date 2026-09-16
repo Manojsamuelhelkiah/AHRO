@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { and, eq, isNull, like, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -12,6 +12,8 @@ import {
 import { demoPrincipalSettingKey } from "../demo-principal";
 import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
 import { UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
+import { getDemoEmailReadiness, sendOutbound } from "./channels";
+import { withApprovedDemoVolunteerEmail } from "./demo-controller";
 
 export const CASE_SIMULATION_SETTING_PREFIX = "onboarding:case-simulation:";
 export const CASE_SIMULATION_MAX_EXCHANGES = 64;
@@ -45,6 +47,9 @@ export type SimulationExchange = {
   decisionExplanation: string;
   nextAction: "advance-stage" | "follow-up-missing-info" | "poll-status" | "simulated-human-review" | "complete";
   recordedAt: string;
+  /** The transport may be real while the business result remains synthetic. */
+  deliveryProvenance?: "simulated" | "real-email";
+  businessOutcome?: "simulated";
 };
 
 export type CaseSimulationState = {
@@ -67,6 +72,20 @@ export type CaseSimulationState = {
 
 type StoredSimulationState = CaseSimulationState & {
   requests: Record<string, StoredSimulationRequest>;
+  emailDispatches: Record<string, SimulationEmailDispatch>;
+};
+
+export type SimulationEmailDispatch = {
+  requestId: string;
+  generationId: string;
+  version: number;
+  token: string;
+  threadMarker: string;
+  subject: string;
+  body: string;
+  recipient: string;
+  status: "prepared" | "sent" | "sending" | "failed" | "replied" | "stale";
+  providerMessageId: string | null;
 };
 
 type StoredSimulationRequest =
@@ -79,6 +98,12 @@ type StoredSimulationRequest =
   | {
       fingerprint: string;
       kind: "restart";
+      generationId: string;
+      result: CaseSimulationState;
+    }
+  | {
+      fingerprint: string;
+      kind: "email";
       generationId: string;
       result: CaseSimulationState;
     };
@@ -158,6 +183,7 @@ function initialState(caseId: number): StoredSimulationState {
     simulated: true,
     authoritative: false,
     requests: {},
+    emailDispatches: {},
   };
 }
 
@@ -202,7 +228,30 @@ function parseState(raw: string | null, caseId: number): StoredSimulationState {
     requests: normalizeRequests(state.requests, typeof state.generationId === "string" && state.generationId.length > 0
       ? state.generationId
       : initialGenerationId(caseId)),
+    emailDispatches: normalizeEmailDispatches((state as { emailDispatches?: unknown }).emailDispatches),
   };
+}
+
+function normalizeEmailDispatches(value: unknown): Record<string, SimulationEmailDispatch> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, SimulationEmailDispatch> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const candidate = raw as Partial<SimulationEmailDispatch>;
+    if (
+      typeof candidate.requestId !== "string" ||
+      typeof candidate.generationId !== "string" ||
+      typeof candidate.token !== "string" ||
+      typeof candidate.threadMarker !== "string" ||
+      typeof candidate.subject !== "string" ||
+      typeof candidate.body !== "string" ||
+      typeof candidate.recipient !== "string" ||
+      !["prepared", "sent", "sending", "failed", "replied", "stale"].includes(candidate.status ?? "") ||
+      (candidate.providerMessageId !== null && typeof candidate.providerMessageId !== "string")
+    ) continue;
+    result[key] = candidate as SimulationEmailDispatch;
+  }
+  return result;
 }
 
 function normalizeRequests(
@@ -254,7 +303,7 @@ function publicState(
   operationExchange: SimulationExchange | null = null,
   replayed = false,
 ): CaseSimulationState {
-  const { requests: _requests, ...publicValue } = state;
+  const { requests: _requests, emailDispatches: _emailDispatches, ...publicValue } = state;
   return { ...publicValue, operationExchange, replayed };
 }
 
@@ -640,6 +689,12 @@ export async function simulateNextCaseExchange(input: {
     if (state.stage === "complete" || state.status === "completed") {
       throw new CaseSimulationConflictError("The simulation has already completed.");
     }
+    if (Object.values(state.emailDispatches).some((entry) =>
+      entry.generationId === state.generationId &&
+      ["prepared", "sent", "sending"].includes(entry.status),
+    )) {
+      throw new CaseSimulationConflictError("A real-email simulation prompt is awaiting its monitored reply.");
+    }
     if (state.exchanges.length >= CASE_SIMULATION_MAX_EXCHANGES) {
       throw new CaseSimulationConflictError("The simulation exchange limit has been reached.");
     }
@@ -666,6 +721,8 @@ export async function simulateNextCaseExchange(input: {
       decisionExplanation: response.decisionExplanation,
       nextAction,
       recordedAt: new Date().toISOString(),
+      deliveryProvenance: "simulated",
+      businessOutcome: "simulated",
     };
     state.exchanges.push(exchange);
     state.version += 1;
@@ -724,6 +781,472 @@ export async function simulateNextCaseExchange(input: {
     });
     await saveState(tx, input.organizationId, state);
     return publicState(state, exchange, false);
+  });
+}
+
+export type SimulationEmailDelivery = {
+  transport: "real-email";
+  businessOutcome: "simulated-only";
+  recipient: string;
+  status: "prepared" | "sent" | "sending" | "failed" | "replied" | "stale";
+  reason: string | null;
+  freshness: "current-generation" | "retired-generation";
+};
+
+export type CaseSimulationEmailResult = CaseSimulationState & {
+  emailDelivery: SimulationEmailDelivery;
+};
+
+function maskSimulationEmail(value: string): string {
+  const [local, domain] = value.split("@");
+  return domain ? `${local.slice(0, 2)}***@${domain}` : "***";
+}
+
+function simulationEmailFingerprint(input: {
+  caseId: number;
+  expectedVersion: number;
+  expectedGenerationId: string;
+  requestId: string;
+}): string {
+  return fingerprint(input);
+}
+
+/**
+ * The reply adapter is deliberately local and narrower than the general
+ * response intelligence. Private email text must never be sent to an
+ * external LLM. We accept only short, whole-message, low-risk semantic
+ * variants; sensitive, adverse, conflicting, instruction-like, or ambiguous
+ * content remains a simulated human-review exception.
+ */
+export function interpretSimulationEmailReply(text: string): SimulationOutcome {
+  const normalized = text
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/\bi've\b/g, "i have")
+    .replace(/\bi'm\b/g, "i am")
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  if (
+    normalized.length === 0 ||
+    normalized.length > 240 ||
+    /(?:ssn|social security|passport|bank|routing|salary|payroll account|password|medical|health|diagnos|disabil|tax id|tax number|date of birth|dob|home address|credit card|account number)/i.test(normalized) ||
+    /(?:ignore (?:the )?(?:previous|above|prior)|system prompt|developer message|override|bypass|run (?:this|the)|execute|delete|transfer money|approve payment|change (?:the )?status|mark (?:this|it) complete|do not tell|keep this secret)/i.test(normalized)
+  ) {
+    return "exception";
+  }
+
+  // These are intentionally finite, whole-message patterns. Details,
+  // competing requests, and free-form explanations do not advance a case.
+  const success = /^(?:(?:yes|approved|approve|done|all set|looks good)|(?:(?:i\s+)?(?:have\s+)?(?:completed|submitted|confirmed|finished|provided|sent|uploaded|received)(?:\s+(?:it|this|that|the (?:form|document|documents|information|details|request)))?))(?:\s+and\s+(?:completed|submitted|confirmed|finished|sent|uploaded)\s+(?:it|this|that))?$/;
+  const pending = /^(?:(?:pending|later|not yet|checking|in progress|working on it)|(?:i\s+am\s+)?(?:still\s+waiting|waiting)(?:\s+(?:for|on)\s+(?:this|that|it|the (?:form|document|documents|information|reply|response)))?|(?:i\s+)?will\s+(?:do|complete|submit)\s+(?:it|this|that)?\s*later|(?:i\s+)?need\s+more\s+time(?:\s+to\s+(?:complete|submit|provide)\s+(?:it|this|that))?)$/;
+  const missing = /^(?:(?:missing|more info(?:rmation)?|(?:i\s+)?need more info(?:rmation)?|need clarification|clarification needed)|(?:i\s+)?need\s+(?:the\s+)?(?:form|document|documents|information|details|clarification)|(?:please\s+)?(?:re)?send\s+(?:the\s+)?(?:form|document|documents|information|details)|could\s+you\s+(?:please\s+)?(?:clarify|resend)\s+(?:the\s+)?(?:form|document|documents|information|details|what\s+is\s+needed))$/;
+  const matches = [success, pending, missing].filter((pattern) => pattern.test(normalized)).length;
+  if (matches !== 1) return "exception";
+  if (success.test(normalized)) return "success";
+  if (pending.test(normalized)) return "pending";
+  return "missing-info";
+}
+
+/** Remove HTML/control markup before untrusted email text enters the timeline. */
+export function sanitizeSimulationReply(text: string): string {
+  return text
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/&(?:nbsp|amp|lt|gt|quot|#39);/gi, (entity) => ({
+      "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'",
+    }[entity.toLowerCase()] ?? " "))
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 4000);
+}
+
+function simulationEmailBody(
+  caseId: number,
+  generationId: string,
+  prompt: string,
+  token: string,
+  threadMarker: string,
+): string {
+  return [
+    "[REAL EMAIL — CONTROLLED DEMO]",
+    "This is a real delivery of a synthetic employee prompt. It is not a candidate request and cannot change readiness, authority, provider evidence, or KPI history.",
+    "",
+    `[SIMULATED EMPLOYEE PROMPT] ${prompt}`,
+    "",
+    "Reply with exactly one of: yes, pending, missing, or another short response for simulated human review.",
+    "",
+    `[SIMULATION CASE:${caseId}] [SIMULATION GENERATION:${generationId}]`,
+    `[SIM-THREAD:${threadMarker}] [SIM-REPLY-TOKEN:${token}]`,
+  ].join("\n");
+}
+
+/**
+ * Prepare and explicitly dispatch the current simulation prompt. The durable
+ * state and exact outbound payload are written before entering the provider
+ * context. An ambiguous provider result remains `sending` and is never
+ * automatically retried.
+ */
+export async function sendCurrentSimulationPrompt(input: {
+  organizationId: string;
+  actor: string;
+  caseId: number;
+  expectedVersion: number;
+  expectedGenerationId: string;
+  requestId: string;
+}): Promise<CaseSimulationEmailResult> {
+  if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
+    throw new CaseSimulationConflictError("expectedVersion must be a non-negative integer.");
+  }
+  if (!input.requestId.trim()) throw new CaseSimulationConflictError("requestId is required.");
+  // Establish the same Demo Administrator, membership, synthetic-case, and
+  // UAT boundary before any volunteer/provider readiness lookup.
+  await getCaseSimulation({
+    organizationId: input.organizationId,
+    actor: input.actor,
+    caseId: input.caseId,
+  });
+  // Idempotent retries must return their prior result without revalidating a
+  // volunteer that may have been edited after the original dispatch.
+  const [priorSetting] = await db.select({ value: onbSettings.value })
+    .from(onbSettings)
+    .where(and(
+      eq(onbSettings.organizationId, input.organizationId),
+      eq(onbSettings.key, settingKey(input.caseId)),
+    ))
+    .limit(1);
+  if (priorSetting) {
+    const priorState = parseState(priorSetting.value, input.caseId);
+    const priorDispatch = priorState.emailDispatches[input.requestId];
+    if (priorDispatch) {
+      if (priorDispatch.generationId !== input.expectedGenerationId || priorDispatch.version !== input.expectedVersion) {
+        throw new CaseSimulationConflictError("This email request is bound to a different simulation version.");
+      }
+      return {
+        ...publicState(priorState),
+        emailDelivery: {
+          transport: "real-email",
+          businessOutcome: "simulated-only",
+          recipient: maskSimulationEmail(priorDispatch.recipient || "not available"),
+          status: priorDispatch.status,
+          reason: priorDispatch.status === "sending"
+            ? "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled."
+            : null,
+          freshness: priorDispatch.generationId === priorState.generationId ? "current-generation" : "retired-generation",
+        },
+      };
+    }
+  }
+  // Fail closed before writing a pending dispatch when setup is not ready.
+  // The second identical lookup below is intentional: it is the immediate
+  // provider-boundary revalidation required by the Demo Controller path.
+  await withApprovedDemoVolunteerEmail(
+    input.organizationId,
+    input.caseId,
+    input.requestId,
+    async () => undefined,
+  );
+  const readiness = await getDemoEmailReadiness();
+  if (!readiness.configured) {
+    const denied = new Error(`Controlled Demo email is unavailable: ${readiness.reason}`);
+    denied.name = "DemoLiveChannelDenied";
+    throw denied;
+  }
+  const prepared = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${advisoryLockKey(input.organizationId, input.caseId)}))`);
+    await authorizeCase(tx, input.organizationId, input.actor, input.caseId);
+    const state = await readStoredState(tx, input.organizationId, input.caseId);
+    const existing = state.emailDispatches[input.requestId];
+    if (existing) {
+      if (existing.generationId !== input.expectedGenerationId || existing.version !== input.expectedVersion) {
+        throw new CaseSimulationConflictError("This email request is bound to a different simulation version.");
+      }
+      return { state, dispatch: existing, replayed: true };
+    }
+    if (state.generationId !== input.expectedGenerationId || state.version !== input.expectedVersion) {
+      throw new CaseSimulationConflictError("Simulation changed since it was loaded; refresh before sending the prompt.");
+    }
+    if (state.stage === "complete" || state.status === "completed") {
+      throw new CaseSimulationConflictError("The completed simulation has no current employee prompt to email.");
+    }
+    const inFlight = Object.values(state.emailDispatches).find((entry) =>
+      entry.generationId === state.generationId &&
+      ["prepared", "sent", "sending"].includes(entry.status),
+    );
+    if (inFlight) {
+      throw new CaseSimulationConflictError("A simulation email is already awaiting a reply; no second email was sent.");
+    }
+    const stage = state.stage;
+    const interaction = interactionFor(stage, state.status);
+    const token = randomBytes(24).toString("hex");
+    const threadMarker = randomBytes(18).toString("hex");
+    const subject = `[DEMO SIMULATION][SIM-THREAD:${threadMarker}] ${stageLabel(stage)}`;
+    const body = simulationEmailBody(input.caseId, state.generationId, interaction.requestText, token, threadMarker);
+    const dispatch: SimulationEmailDispatch = {
+      requestId: input.requestId,
+      generationId: state.generationId,
+      version: state.version,
+      token,
+      threadMarker,
+      subject,
+      body,
+      recipient: "",
+      status: "prepared",
+      providerMessageId: null,
+    };
+    state.emailDispatches[input.requestId] = dispatch;
+    state.version += 1;
+    state.replayed = false;
+    await saveState(tx, input.organizationId, state);
+    return { state, dispatch, replayed: false };
+  });
+
+  if (prepared.replayed) {
+    return {
+      ...publicState(prepared.state),
+      emailDelivery: {
+        transport: "real-email",
+        businessOutcome: "simulated-only",
+        recipient: maskSimulationEmail(prepared.dispatch.recipient || "not available"),
+        status: prepared.dispatch.status,
+        reason: prepared.dispatch.status === "sending"
+          ? "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled."
+          : null,
+        freshness: prepared.dispatch.generationId === prepared.state.generationId ? "current-generation" : "retired-generation",
+      },
+    };
+  }
+
+  let delivery: { status: string; failureReason: string | null; id?: number } = {
+    status: "sending",
+    failureReason: "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled.",
+  };
+  let recipient = "";
+  try {
+    delivery = await withApprovedDemoVolunteerEmail(
+      input.organizationId,
+      input.caseId,
+      input.requestId,
+      async (selected) => {
+        recipient = selected.email;
+        return sendOutbound({
+          caseId: input.caseId,
+          channel: "email",
+          toAddress: selected.email,
+          subject: prepared.dispatch.subject,
+          body: prepared.dispatch.body,
+          persistedBody: prepared.dispatch.body,
+          sensitive: true,
+          stableBody: true,
+          skipCandidateReplyReference: true,
+          audience: "demo-volunteer",
+          idempotencyKey: `case-simulation-email:${input.caseId}:${prepared.dispatch.generationId}:${input.requestId}`,
+        });
+      },
+    );
+  } catch (caught) {
+    delivery = {
+      status: "failed",
+      failureReason: caught instanceof Error ? caught.message : "Live Demo Controller email was blocked.",
+    };
+  }
+
+  const final = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${advisoryLockKey(input.organizationId, input.caseId)}))`);
+    const state = await readStoredState(tx, input.organizationId, input.caseId);
+    const dispatch = state.emailDispatches[input.requestId] ?? prepared.dispatch;
+    if (dispatch.generationId !== state.generationId) {
+      dispatch.status = "stale";
+      dispatch.recipient = recipient || dispatch.recipient;
+      return { state, dispatch };
+    }
+    dispatch.recipient = recipient || dispatch.recipient;
+    dispatch.providerMessageId = null;
+    dispatch.status = delivery.status === "sent" || delivery.status === "delivered"
+      ? "sent"
+      : delivery.status === "sending"
+        ? "sending"
+        : "failed";
+    // The provider message id is persisted by sendOutbound on the durable
+    // communication row. Keep only the dispatch state here so tokens remain
+    // server-owned and never become a client-visible secret.
+    await saveState(tx, input.organizationId, state);
+    return { state, dispatch };
+  });
+  return {
+    ...publicState(final.state),
+    emailDelivery: {
+      transport: "real-email",
+      businessOutcome: "simulated-only",
+      recipient: maskSimulationEmail(final.dispatch.recipient || recipient || "not available"),
+      status: final.dispatch.status,
+      reason: delivery.failureReason,
+      freshness: final.dispatch.generationId === final.state.generationId ? "current-generation" : "retired-generation",
+    },
+  };
+}
+
+export type SimulationEmailRoute = SimulationEmailDispatch & {
+  caseId: number;
+  organizationId: string;
+};
+
+/** Poller-only view of server-owned simulation email correlation data. */
+export async function listSimulationEmailRoutes(): Promise<SimulationEmailRoute[]> {
+  const rows = await db.select({ organizationId: onbSettings.organizationId, value: onbSettings.value })
+    .from(onbSettings)
+    .where(like(onbSettings.key, `${CASE_SIMULATION_SETTING_PREFIX}%`));
+  const routes: SimulationEmailRoute[] = [];
+  const outboundRows = await db.select({
+    externalMessageId: onbCommunications.externalMessageId,
+    idempotencyKey: onbCommunications.idempotencyKey,
+  }).from(onbCommunications).where(eq(onbCommunications.audience, "demo-volunteer"));
+  const providerIds = new Map(
+    outboundRows
+      .filter((row) => row.externalMessageId && row.idempotencyKey)
+      .map((row) => [row.idempotencyKey!, row.externalMessageId!] as const),
+  );
+  for (const row of rows) {
+    try {
+      const parsed = JSON.parse(row.value) as Partial<StoredSimulationState>;
+      if (!Number.isSafeInteger(parsed.caseId) || !parsed.emailDispatches) continue;
+      for (const dispatch of Object.values(normalizeEmailDispatches(parsed.emailDispatches))) {
+        if (dispatch.status === "sent" || dispatch.status === "sending") {
+          const key = `case-simulation-email:${parsed.caseId}:${dispatch.generationId}:${dispatch.requestId}`;
+          routes.push({
+            ...dispatch,
+            providerMessageId: dispatch.providerMessageId ?? providerIds.get(key) ?? null,
+            caseId: parsed.caseId as number,
+            organizationId: row.organizationId,
+          });
+        }
+      }
+    } catch {
+      // A malformed setting cannot authorize inbound mail.
+    }
+  }
+  return routes;
+}
+
+/**
+ * Persist a real inbound reply and map it only to the synthetic simulation
+ * state machine. This function deliberately never invokes the ordinary
+ * candidate response engine.
+ */
+export async function recordSimulationEmailReply(input: {
+  caseId: number;
+  organizationId: string;
+  fromAddress: string;
+  subject: string;
+  body: string;
+  externalMessageId: string;
+  token: string;
+  threadMarker: string;
+}): Promise<"recorded" | "duplicate" | "stale" | "ignored"> {
+  const sanitized = sanitizeSimulationReply(input.body);
+  if (!sanitized) return "ignored";
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${advisoryLockKey(input.organizationId, input.caseId)}))`);
+    const state = await readStoredState(tx, input.organizationId, input.caseId);
+    const [existingCommunication] = await tx.select({ id: onbCommunications.id })
+      .from(onbCommunications)
+      .where(and(
+        eq(onbCommunications.organizationId, input.organizationId),
+        eq(onbCommunications.externalMessageId, input.externalMessageId),
+      ))
+      .limit(1);
+    if (existingCommunication) return "duplicate";
+    const route = Object.values(state.emailDispatches).find((candidate) =>
+      candidate.token === input.token &&
+      candidate.threadMarker === input.threadMarker &&
+      ["sent", "sending"].includes(candidate.status),
+    );
+    if (!route || route.recipient.trim().toLowerCase() !== input.fromAddress.trim().toLowerCase()) return "ignored";
+    const [communication] = await tx.insert(onbCommunications).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      channel: "email",
+      direction: "inbound",
+      audience: "demo-volunteer",
+      toAddress: maskSimulationEmail(input.fromAddress),
+      subject: input.subject,
+      body: sanitized,
+      status: "received",
+      sensitive: true,
+      sensitiveDataClass: "candidate-contact",
+      externalMessageId: input.externalMessageId,
+      idempotencyKey: `case-simulation-email-reply:${input.organizationId}:${input.externalMessageId}`,
+    }).onConflictDoNothing({
+      target: [onbCommunications.organizationId, onbCommunications.externalMessageId],
+    }).returning({ id: onbCommunications.id });
+    if (!communication) return "duplicate";
+    // The send preparation increments the simulation version exactly once.
+    // Any later simulation action makes this reply stale even if its token is
+    // valid, preventing a delayed email from mutating a newer prompt.
+    if (route.generationId !== state.generationId || state.version !== route.version + 1) {
+      route.status = "stale";
+      await tx.insert(onbEvents).values({
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+        agent: "response-driven-simulation",
+        engine: "case-simulation",
+        title: "[SIMULATED] Delayed real-email reply ignored",
+        detail: `A delayed reply for simulation generation ${route.generationId} / request ${route.requestId} was recorded and ignored; current simulation state was not changed.`,
+        idempotencyKey: `case-simulation-email-reply:${input.caseId}:${input.externalMessageId}:stale`,
+      }).onConflictDoNothing({
+        target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+      });
+      await saveState(tx, input.organizationId, state);
+      return "stale";
+    }
+    const stage = state.stage === "complete" ? "final-review" : state.stage;
+    const outcome = interpretSimulationEmailReply(sanitized);
+    const transition = transitionFor(stage, outcome, state.status);
+    const response = responseFor(stage, state.status, outcome);
+    const exchange: SimulationExchange = {
+      sequence: state.exchanges.length + 1,
+      stage,
+      stageBefore: stage,
+      stageAfter: transition.stage,
+      outcome,
+      transition: transition.transition,
+      followUp: transition.followUp,
+      reviewRequired: transition.reviewRequired,
+      requestText: `[REAL EMAIL SENT — SIMULATED PROMPT] ${route.body.split("\n").find((line) => line.includes("[SIMULATED EMPLOYEE PROMPT]")) ?? "Current simulated employee prompt"}`,
+      responderLabel: "Approved Demo volunteer (real email transport)",
+      responseText: `[REAL EMAIL RECEIVED — SIMULATED OUTCOME] ${sanitized.slice(0, 1000)}`,
+      decisionExplanation: `[SIMULATED ONLY] ${response.decisionExplanation} Real delivery/reply evidence does not change authoritative readiness or KPI history.`,
+      nextAction: response.nextAction,
+      recordedAt: new Date().toISOString(),
+      deliveryProvenance: "real-email",
+      businessOutcome: "simulated",
+    };
+    state.exchanges.push(exchange);
+    state.version += 1;
+    state.stage = transition.stage;
+    state.status = transition.status;
+    state.lastOutcome = outcome;
+    state.operationExchange = exchange;
+    route.status = "replied";
+    await tx.insert(onbEvents).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      agent: "response-driven-simulation",
+      engine: "case-simulation",
+      hitlPattern: transition.reviewRequired ? "review-before-authority" : null,
+      ruleRef: "case-simulation:real-email:v1",
+      title: `[SIMULATED] Real email reply — ${outcome}`,
+      detail: exchange.decisionExplanation,
+      idempotencyKey: `case-simulation-email-reply:${input.caseId}:${input.externalMessageId}:event`,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
+    await saveState(tx, input.organizationId, state);
+    return "recorded";
   });
 }
 

@@ -221,7 +221,12 @@ export function CaseDetailPage() {
               Simulated/manual sample only. No onboarding gateway is completed, and no HRIS, payroll, benefits, IAM, LMS, mobility, document, or other provider connection is active.
             </p>
           </div>
-          <SimulationPanel caseId={caseId} />
+          <SimulationPanel
+            caseId={caseId}
+            recipientEmail={demoSession?.selectedVolunteerId
+              ? (demoSession.selectedVolunteer?.email ?? null)
+              : null}
+          />
         </>
       ) : (
         <>

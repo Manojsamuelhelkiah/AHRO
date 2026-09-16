@@ -5312,6 +5312,21 @@ export const OnboardingCaseSimulationExchangeNextAction = {
   complete: 'complete',
 } as const;
 
+export type OnboardingCaseSimulationExchangeDeliveryProvenance = typeof OnboardingCaseSimulationExchangeDeliveryProvenance[keyof typeof OnboardingCaseSimulationExchangeDeliveryProvenance];
+
+
+export const OnboardingCaseSimulationExchangeDeliveryProvenance = {
+  simulated: 'simulated',
+  'real-email': 'real-email',
+} as const;
+
+export type OnboardingCaseSimulationExchangeBusinessOutcome = typeof OnboardingCaseSimulationExchangeBusinessOutcome[keyof typeof OnboardingCaseSimulationExchangeBusinessOutcome];
+
+
+export const OnboardingCaseSimulationExchangeBusinessOutcome = {
+  simulated: 'simulated',
+} as const;
+
 export interface OnboardingCaseSimulationExchange {
   /** @minimum 1 */
   sequence: number;
@@ -5332,6 +5347,8 @@ export interface OnboardingCaseSimulationExchange {
   decisionExplanation: string;
   nextAction: OnboardingCaseSimulationExchangeNextAction;
   recordedAt: string;
+  deliveryProvenance?: OnboardingCaseSimulationExchangeDeliveryProvenance;
+  businessOutcome?: OnboardingCaseSimulationExchangeBusinessOutcome;
 }
 
 export type OnboardingCaseSimulationStateStage = typeof OnboardingCaseSimulationStateStage[keyof typeof OnboardingCaseSimulationStateStage];
@@ -5397,6 +5414,18 @@ export interface OnboardingCaseSimulationState {
   simulated: true;
   authoritative: false;
 }
+
+export type OnboardingCaseSimulationEmailResult = OnboardingCaseSimulationState & ({
+  emailDelivery: {
+  transport: 'real-email';
+  businessOutcome: 'simulated-only';
+  recipient: string;
+  status: 'prepared' | 'sent' | 'sending' | 'failed' | 'replied' | 'stale';
+  /** @nullable */
+  reason: string | null;
+  freshness: 'current-generation' | 'retired-generation';
+};
+});
 
 export type OnbReadinessSlaStreamKey = typeof OnbReadinessSlaStreamKey[keyof typeof OnbReadinessSlaStreamKey];
 
@@ -5816,6 +5845,29 @@ export const DemoRunSummaryMode = {
   hybrid: 'hybrid',
 } as const;
 
+export type DemoRunSummarySelectedVolunteerChannelPreference = typeof DemoRunSummarySelectedVolunteerChannelPreference[keyof typeof DemoRunSummarySelectedVolunteerChannelPreference];
+
+
+export const DemoRunSummarySelectedVolunteerChannelPreference = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+  both: 'both',
+} as const;
+
+export type DemoRunSummarySelectedVolunteer = {
+  id: string;
+  name: string;
+  email: string;
+  /** @nullable */
+  phone: string | null;
+  channelPreference: DemoRunSummarySelectedVolunteerChannelPreference;
+  approved: boolean;
+  liveEmailAvailable: boolean;
+  liveCallAvailable: boolean;
+  /** @nullable */
+  capabilityReason: string | null;
+} | null;
+
 export interface DemoRunSummary {
   runId: string;
   /** @minimum 1 */
@@ -5830,6 +5882,7 @@ export interface DemoRunSummary {
   updatedAt: string;
   /** @nullable */
   selectedVolunteerId: string | null;
+  selectedVolunteer?: DemoRunSummarySelectedVolunteer;
 }
 
 export interface DemoControllerCapabilities {

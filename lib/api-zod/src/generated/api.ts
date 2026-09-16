@@ -1825,7 +1825,18 @@ export const GetOnboardingDemoControllerResponse = zod.object({
   "mode": zod.enum(['hybrid']),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "selectedVolunteerId": zod.string().nullable()
+  "selectedVolunteerId": zod.string().nullable(),
+  "selectedVolunteer": zod.union([zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullable(),
+  "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
+  "approved": zod.boolean(),
+  "liveEmailAvailable": zod.boolean(),
+  "liveCallAvailable": zod.boolean(),
+  "capabilityReason": zod.string().nullable()
+}),zod.null()]).optional()
 }))
 })
 
@@ -16561,7 +16572,9 @@ export const GetOnboardingCaseSimulationResponse = zod.object({
   "responseText": zod.string().describe('Explicitly simulated response text'),
   "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
   "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
-  "recordedAt": zod.coerce.date()
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
 })).max(getOnboardingCaseSimulationResponseExchangesMax),
   "lastOutcome": zod.union([zod.literal('success'),zod.literal('missing-info'),zod.literal('pending'),zod.literal('exception'),zod.literal(null)]).nullable(),
   "operationExchange": zod.union([zod.object({
@@ -16578,7 +16591,9 @@ export const GetOnboardingCaseSimulationResponse = zod.object({
   "responseText": zod.string().describe('Explicitly simulated response text'),
   "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
   "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
-  "recordedAt": zod.coerce.date()
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
 }),zod.null()]).describe('The operation exchange created by this request; null on GET'),
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
@@ -16642,7 +16657,9 @@ export const SimulateNextOnboardingCaseExchangeResponse = zod.object({
   "responseText": zod.string().describe('Explicitly simulated response text'),
   "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
   "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
-  "recordedAt": zod.coerce.date()
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
 })).max(simulateNextOnboardingCaseExchangeResponseExchangesMax),
   "lastOutcome": zod.union([zod.literal('success'),zod.literal('missing-info'),zod.literal('pending'),zod.literal('exception'),zod.literal(null)]).nullable(),
   "operationExchange": zod.union([zod.object({
@@ -16659,7 +16676,9 @@ export const SimulateNextOnboardingCaseExchangeResponse = zod.object({
   "responseText": zod.string().describe('Explicitly simulated response text'),
   "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
   "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
-  "recordedAt": zod.coerce.date()
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
 }),zod.null()]).describe('The operation exchange created by this request; null on GET'),
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
@@ -16723,7 +16742,9 @@ export const RestartOnboardingCaseSimulationResponse = zod.object({
   "responseText": zod.string().describe('Explicitly simulated response text'),
   "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
   "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
-  "recordedAt": zod.coerce.date()
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
 })).max(restartOnboardingCaseSimulationResponseExchangesMax),
   "lastOutcome": zod.union([zod.literal('success'),zod.literal('missing-info'),zod.literal('pending'),zod.literal('exception'),zod.literal(null)]).nullable(),
   "operationExchange": zod.union([zod.object({
@@ -16740,12 +16761,108 @@ export const RestartOnboardingCaseSimulationResponse = zod.object({
   "responseText": zod.string().describe('Explicitly simulated response text'),
   "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
   "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
-  "recordedAt": zod.coerce.date()
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
 }),zod.null()]).describe('The operation exchange created by this request; null on GET'),
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
   "authoritative": zod.boolean()
 })
+
+
+/**
+ * Explicitly sends one current simulated prompt through the existing governed Gmail path to the revalidated approved Demo volunteer. The delivery is real email, but any reply can only produce a simulated outcome. No candidate or generic orchestration email is enabled.
+ * @summary Send the current synthetic employee prompt to the pinned Demo volunteer
+ */
+
+
+
+export const SendOnboardingCaseSimulationEmailParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+export const sendOnboardingCaseSimulationEmailBodyExpectedVersionMin = 0;
+
+export const sendOnboardingCaseSimulationEmailBodyExpectedGenerationIdMax = 200;
+
+export const sendOnboardingCaseSimulationEmailBodyRequestIdMax = 200;
+
+
+
+export const SendOnboardingCaseSimulationEmailBody = zod.object({
+  "expectedVersion": zod.number().min(sendOnboardingCaseSimulationEmailBodyExpectedVersionMin).describe('Version returned by the preceding simulation state response'),
+  "expectedGenerationId": zod.string().min(1).max(sendOnboardingCaseSimulationEmailBodyExpectedGenerationIdMax).describe('Opaque generation identity returned by the preceding simulation state response'),
+  "requestId": zod.string().min(1).max(sendOnboardingCaseSimulationEmailBodyRequestIdMax).describe('Client retry key; a retry with the same key replays the sampled exchange')
+})
+
+
+export const sendOnboardingCaseSimulationEmailResponseOneGenerationIdMax = 200;
+
+export const sendOnboardingCaseSimulationEmailResponseOneVersionMin = 0;
+
+
+export const sendOnboardingCaseSimulationEmailResponseOneExchangesMax = 64;
+
+
+
+
+export const SendOnboardingCaseSimulationEmailResponse = zod.object({
+  "caseId": zod.number().min(1),
+  "generationId": zod.string().min(1).max(sendOnboardingCaseSimulationEmailResponseOneGenerationIdMax).describe('Opaque identity of the current simulation generation; versions are scoped to it'),
+  "version": zod.number().min(sendOnboardingCaseSimulationEmailResponseOneVersionMin),
+  "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
+  "status": zod.enum(['ready', 'active', 'follow-up', 'pending', 'review', 'completed']),
+  "exchanges": zod.array(zod.object({
+  "sequence": zod.number().min(1),
+  "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageBefore": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageAfter": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
+  "outcome": zod.enum(['success', 'missing-info', 'pending', 'exception']),
+  "transition": zod.enum(['advanced', 'follow-up', 'pending', 'review', 'completed']),
+  "followUp": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "requestText": zod.string().describe('Explicitly simulated request shown to the case panel'),
+  "responderLabel": zod.string().describe('Non-real simulated responder label'),
+  "responseText": zod.string().describe('Explicitly simulated response text'),
+  "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
+  "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
+})).max(sendOnboardingCaseSimulationEmailResponseOneExchangesMax),
+  "lastOutcome": zod.union([zod.literal('success'),zod.literal('missing-info'),zod.literal('pending'),zod.literal('exception'),zod.literal(null)]).nullable(),
+  "operationExchange": zod.union([zod.object({
+  "sequence": zod.number().min(1),
+  "stage": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageBefore": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review']),
+  "stageAfter": zod.enum(['offer', 'documents', 'bgv', 'payroll', 'access', 'readiness', 'final-review', 'complete']),
+  "outcome": zod.enum(['success', 'missing-info', 'pending', 'exception']),
+  "transition": zod.enum(['advanced', 'follow-up', 'pending', 'review', 'completed']),
+  "followUp": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "requestText": zod.string().describe('Explicitly simulated request shown to the case panel'),
+  "responderLabel": zod.string().describe('Non-real simulated responder label'),
+  "responseText": zod.string().describe('Explicitly simulated response text'),
+  "decisionExplanation": zod.string().describe('Why the simulated outcome did or did not advance the stage'),
+  "nextAction": zod.enum(['advance-stage', 'follow-up-missing-info', 'poll-status', 'simulated-human-review', 'complete']),
+  "recordedAt": zod.coerce.date(),
+  "deliveryProvenance": zod.enum(['simulated', 'real-email']).optional(),
+  "businessOutcome": zod.enum(['simulated']).optional()
+}),zod.null()]).describe('The operation exchange created by this request; null on GET'),
+  "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
+  "simulated": zod.boolean(),
+  "authoritative": zod.boolean()
+}).and(zod.object({
+  "emailDelivery": zod.object({
+  "transport": zod.enum(['real-email']),
+  "businessOutcome": zod.enum(['simulated-only']),
+  "recipient": zod.string(),
+  "status": zod.enum(['prepared', 'sent', 'sending', 'failed', 'replied', 'stale']),
+  "reason": zod.string().nullable(),
+  "freshness": zod.enum(['current-generation', 'retired-generation'])
+})
+}))
 
 
 /**

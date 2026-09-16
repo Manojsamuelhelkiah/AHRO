@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { candidateReplyReferences, classifyMonitor, createOutageTracker, planMonitorEventWrite, processMessageRefs, resolveUniqueEmailCase, resolveHrAlertAddress, composeMonitorAlertEmail, persistThenNotify, MONITOR_DOWN_TITLE, MONITOR_RECOVERED_TITLE, type MonitorTelemetry, type InboundMessage } from "./inbound-email";
+import type { SimulationEmailRoute } from "./case-simulation";
 
 const INTERVAL = 60_000;
 const T0 = Date.parse("2026-08-13T10:00:00Z");
@@ -378,5 +379,111 @@ describe("tenant-safe candidate resolution", () => {
       },
     );
     assert.deepEqual(recorded, []);
+  });
+});
+
+describe("controlled simulation email correlation", () => {
+  const route: SimulationEmailRoute = {
+    caseId: 77,
+    organizationId: "demo-org",
+    requestId: "simulation-request",
+    generationId: "generation-1",
+    version: 0,
+    token: "a".repeat(48),
+    threadMarker: "thread-1",
+    subject: "[DEMO SIMULATION][SIM-THREAD:thread-1] offer package",
+    body: "[SIMULATED EMPLOYEE PROMPT] Please confirm.\n[SIM-THREAD:thread-1] [SIM-REPLY-TOKEN:" + "a".repeat(48) + "]",
+    recipient: "volunteer@example.com",
+    status: "sent",
+    providerMessageId: "outbound-gmail-id",
+  };
+
+  function detail(
+    id: string,
+    overrides: { from?: string; token?: string; threadMarker?: string; subject?: string } = {},
+  ) {
+    const token = overrides.token ?? route.token;
+    const threadMarker = overrides.threadMarker ?? route.threadMarker;
+    return {
+      id,
+      payload: {
+        headers: [
+          { name: "From", value: `Volunteer <${overrides.from ?? route.recipient}>` },
+          { name: "Subject", value: overrides.subject ?? `[DEMO SIMULATION][SIM-THREAD:${threadMarker}] Re: offer package` },
+        ],
+        mimeType: "text/plain",
+        body: {
+          data: Buffer.from(
+            `I completed it.\n\n[SIM-THREAD:${threadMarker}] [SIM-REPLY-TOKEN:${token}]`,
+          ).toString("base64url"),
+        },
+      },
+    };
+  }
+
+  function run(
+    refs: Array<{ id: string }>,
+    details: Record<string, ReturnType<typeof detail>>,
+    opts: {
+      recorded?: Set<string>;
+      outboundProviderIds?: ReadonlySet<string>;
+    } = {},
+  ) {
+    const recorded = opts.recorded ?? new Set<string>();
+    const accepted: Array<Record<string, unknown>> = [];
+    return processMessageRefs(
+      refs,
+      new Map(),
+      new Map(),
+      {
+        fetchDetail: async (id) => ({ ok: true, json: async () => details[id] }),
+        alreadyRecorded: async (id) => recorded.has(id),
+        recordInbound: async () => false,
+        recordSimulationInbound: async (message) => {
+          accepted.push(message);
+          recorded.add(message.externalMessageId);
+          return "recorded";
+        },
+        outboundProviderIds: opts.outboundProviderIds,
+      },
+      new Map([[route.token, [route]]]),
+    ).then((failures) => ({ failures, accepted, recorded }));
+  }
+
+  test("accepts only the exact pinned sender with both token and thread markers", async () => {
+    const result = await run([{ id: "accepted" }], { accepted: detail("accepted") });
+    assert.equal(result.failures, 0);
+    assert.equal(result.accepted.length, 1);
+    assert.equal(result.accepted[0]?.caseId, route.caseId);
+    assert.equal(result.accepted[0]?.fromAddress, route.recipient);
+  });
+
+  test("ignores wrong sender, token, and thread marker", async () => {
+    const result = await run(
+      [{ id: "wrong-sender" }, { id: "wrong-token" }, { id: "wrong-thread" }],
+      {
+        "wrong-sender": detail("wrong-sender", { from: "spoof@example.com" }),
+        "wrong-token": detail("wrong-token", { token: "b".repeat(48) }),
+        "wrong-thread": detail("wrong-thread", { threadMarker: "thread-2" }),
+      },
+    );
+    assert.equal(result.accepted.length, 0);
+  });
+
+  test("skips an outbound provider message id echo", async () => {
+    const result = await run(
+      [{ id: route.providerMessageId! }],
+      { [route.providerMessageId!]: detail(route.providerMessageId!) },
+      { outboundProviderIds: new Set([route.providerMessageId!]) },
+    );
+    assert.equal(result.accepted.length, 0);
+  });
+
+  test("provider message id dedup makes duplicate delivery idempotent", async () => {
+    const recorded = new Set<string>();
+    const first = await run([{ id: "reply-1" }], { "reply-1": detail("reply-1") }, { recorded });
+    const second = await run([{ id: "reply-1" }], { "reply-1": detail("reply-1") }, { recorded });
+    assert.equal(first.accepted.length, 1);
+    assert.equal(second.accepted.length, 0);
   });
 });

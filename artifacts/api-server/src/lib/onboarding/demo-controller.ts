@@ -167,6 +167,56 @@ type DemoRun = {
   parentRunId?: string | null;
 };
 
+/**
+ * Enter the already-approved Demo Controller live-email exception for a
+ * synthetic case.  Simulation code uses this narrow seam instead of
+ * constructing a provider policy context itself.  The run and volunteer are
+ * looked up again immediately before the provider callback and on the
+ * provider-boundary revalidation callback.
+ */
+export async function withApprovedDemoVolunteerEmail<T>(
+  organizationId: string,
+  caseId: number,
+  requestId: string,
+  operation: (selected: ControllerVolunteer) => Promise<T>,
+): Promise<T> {
+  if (organizationId !== DEMO_ORGANIZATION_ID) {
+    throw error("DemoOrganizationOnly", "Demo Controller live email is restricted to Demo Organization.");
+  }
+  const runs = await listDemoRuns(organizationId);
+  const run = runs.find((candidate) =>
+    candidate.caseId === caseId &&
+    candidate.status !== "restarted" &&
+    candidate.selectedVolunteerId !== null,
+  );
+  if (!run) {
+    throw error("DemoVolunteerUnavailable", "The synthetic case has no active Demo Controller volunteer pin.");
+  }
+  const selected = await revalidateSelectedVolunteer(organizationId, run);
+  if (!selected.approved || !selected.liveEmailAvailable) {
+    throw error("DemoVolunteerUnavailable", selected.capabilityReason ?? "The pinned volunteer is not ready for live email.");
+  }
+  return runWithDemoControllerLive({
+    organizationId,
+    caseId,
+    channel: "email",
+    recipient: selected.email,
+    runId: run.runId,
+    requestId,
+    revalidate: async () => {
+      const latest = await loadRun(organizationId, run.runId);
+      if (!latest || latest.caseId !== caseId || latest.status === "restarted") return false;
+      try {
+        const current = await revalidateSelectedVolunteer(organizationId, latest);
+        return current.email.trim().toLowerCase() === selected.email.trim().toLowerCase() &&
+          current.approved && current.liveEmailAvailable;
+      } catch {
+        return false;
+      }
+    },
+  }, () => operation(selected));
+}
+
 function runKey(runId: string): string {
   return `${DEMO_RUN_KEY_PREFIX}${runId}`;
 }

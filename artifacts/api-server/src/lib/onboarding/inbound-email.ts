@@ -13,6 +13,12 @@ import {
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import {
+  listSimulationEmailRoutes,
+  recordSimulationEmailReply,
+  sanitizeSimulationReply,
+  type SimulationEmailRoute,
+} from "./case-simulation";
 
 /**
  * Gmail inbox polling — closes the loop on real email replies.
@@ -407,6 +413,11 @@ export function stripQuotedReply(text: string): string {
   return kept.join("\n").trim();
 }
 
+/** Plain-text normalization for untrusted Gmail bodies, including HTML-only mail. */
+export function sanitizeInboundText(text: string): string {
+  return sanitizeSimulationReply(stripQuotedReply(text));
+}
+
 export async function alreadyRecorded(
   externalMessageId: string,
   _organizationId?: string,
@@ -502,6 +513,17 @@ export type ProcessDeps = {
   fetchDetail: (id: string) => Promise<DetailFetchResult>;
   alreadyRecorded: (id: string, organizationId: string) => Promise<boolean>;
   recordInbound: (opts: InboundMessage) => Promise<boolean>;
+  recordSimulationInbound?: (opts: {
+    caseId: number;
+    organizationId: string;
+    fromAddress: string;
+    subject: string;
+    body: string;
+    externalMessageId: string;
+    token: string;
+    threadMarker: string;
+  }) => Promise<unknown>;
+  outboundProviderIds?: ReadonlySet<string>;
 };
 
 export type EmailCaseCandidate = {
@@ -511,6 +533,7 @@ export type EmailCaseCandidate = {
 };
 export type EmailCaseMatches = Map<string, EmailCaseCandidate[] | number>;
 export type ReplyReferenceMatches = Map<string, EmailCaseCandidate[]>;
+export type SimulationEmailMatches = Map<string, SimulationEmailRoute[]>;
 
 const CANDIDATE_REPLY_REF_RE = /\bCR-([a-f0-9]{32})\b/gi;
 const APPROVAL_REPLY_REF_RE = /\bAP-\d{1,9}\b/i;
@@ -539,6 +562,7 @@ export async function processMessageRefs(
   caseByEmail: EmailCaseMatches,
   caseByReplyReference: ReplyReferenceMatches,
   deps: ProcessDeps,
+  simulationByToken: SimulationEmailMatches = new Map(),
 ): Promise<number> {
   let detailFailures = 0;
   for (const ref of refs) {
@@ -551,6 +575,37 @@ export async function processMessageRefs(
 
     const fromAddress = extractAddress(header(msg, "From"));
     const raw = findPlainText(msg.payload) ?? "";
+    const subject = header(msg, "Subject") || "";
+    const simulationCandidates = [...new Set(
+      [...raw.matchAll(/\[SIM-REPLY-TOKEN:([a-f0-9]{40,64})\]/gi), ...subject.matchAll(/\[SIM-REPLY-TOKEN:([a-f0-9]{40,64})\]/gi)]
+        .map((match) => match[1]!.toLowerCase()),
+    )].flatMap((token) => simulationByToken.get(token) ?? []);
+    const simulationMatch = simulationCandidates.length === 1
+      ? simulationCandidates[0]
+      : undefined;
+    if (simulationMatch &&
+      simulationMatch.recipient.trim().toLowerCase() === fromAddress &&
+      raw.includes(`[SIM-THREAD:${simulationMatch.threadMarker}]`) &&
+      subject.includes(`[SIM-THREAD:${simulationMatch.threadMarker}]`) &&
+      deps.recordSimulationInbound) {
+      // Outbound Gmail messages can appear in the same shared inbox. Never
+      // route a provider id that belongs to our own dispatch.
+      if (simulationMatch.providerMessageId === ref.id || deps.outboundProviderIds?.has(ref.id)) continue;
+      if (await deps.alreadyRecorded(ref.id, simulationMatch.organizationId)) continue;
+      const body = sanitizeInboundText(raw);
+      if (!body) continue;
+      await deps.recordSimulationInbound({
+        caseId: simulationMatch.caseId,
+        organizationId: simulationMatch.organizationId,
+        fromAddress,
+        subject,
+        body: body.slice(0, 4000),
+        externalMessageId: msg.id,
+        token: simulationMatch.token,
+        threadMarker: simulationMatch.threadMarker,
+      });
+      continue;
+    }
     // Approval replies are owned exclusively by the approval poller. This
     // prevents an approver who is also another tenant's candidate from
     // copying approval mail onto that candidate's timeline.
@@ -590,8 +645,8 @@ export async function processMessageRefs(
         organizationId: candidate.organizationId,
       channel: "email",
       fromAddress,
-      subject: header(msg, "Subject") || null,
-      body: body.slice(0, 4000),
+      subject: subject || null,
+      body: sanitizeInboundText(body).slice(0, 4000),
       externalMessageId: msg.id,
     });
     if (recorded) {
@@ -609,7 +664,8 @@ async function pollOnce(): Promise<void> {
     .select({ id: onbCases.id, organizationId: onbCases.organizationId, workerEmail: onbCases.workerEmail })
     .from(onbCases)
     .where(sql`${onbCases.lifecycleStage} not in ('complete')`);
-  if (cases.length === 0) return;
+  const simulationRoutes = await listSimulationEmailRoutes();
+  if (cases.length === 0 && simulationRoutes.length === 0) return;
 
   const caseByEmail = new Map<string, EmailCaseCandidate[]>();
   for (const c of cases) {
@@ -647,7 +703,19 @@ async function pollOnce(): Promise<void> {
     }
   }
 
-  const fromClause = Array.from(caseByEmail.keys())
+  const simulationByToken: SimulationEmailMatches = new Map();
+  const simulationOutboundIds = new Set<string>();
+  for (const route of simulationRoutes) {
+    const matches = simulationByToken.get(route.token) ?? [];
+    matches.push(route);
+    simulationByToken.set(route.token, matches);
+    if (route.providerMessageId) simulationOutboundIds.add(route.providerMessageId);
+  }
+
+  const fromClause = [...new Set([
+    ...Array.from(caseByEmail.keys()),
+    ...simulationRoutes.map((route) => route.recipient.trim().toLowerCase()),
+  ])]
     .map((e) => `from:${e}`)
     .join(" OR ");
   const q = `in:inbox ${SEARCH_WINDOW} (${fromClause})`;
@@ -675,7 +743,9 @@ async function pollOnce(): Promise<void> {
       ),
     alreadyRecorded,
     recordInbound,
-  });
+    recordSimulationInbound: (message) => recordSimulationEmailReply(message),
+    outboundProviderIds: simulationOutboundIds,
+  }, simulationByToken);
   if (detailFailures > 0) {
     throw new Error(
       `Gmail message detail fetch failed for ${detailFailures} of ${refs.length} messages`,

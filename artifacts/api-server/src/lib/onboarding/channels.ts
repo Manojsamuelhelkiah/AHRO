@@ -509,7 +509,7 @@ async function recordGovernanceBlockedCommunication(input: {
   caseRow: Pick<typeof onbCases.$inferSelect, "organizationId">;
   caseId: number;
   channel: "email" | "whatsapp";
-  audience: "candidate" | "admin";
+  audience: "candidate" | "admin" | "demo-volunteer";
   toAddress: string;
   subject: string | null;
   body: string;
@@ -584,6 +584,8 @@ export async function sendOutbound(opts: {
   stableBody?: boolean;
   /** The caller has already added the case-bound reply reference. */
   skipCandidateReplyReference?: boolean;
+  /** Keeps explicitly approved Demo volunteer mail out of candidate KPIs. */
+  audience?: "candidate" | "demo-volunteer";
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   // The communication row freezes a sensitive body and recipient before the
   // effect journal/provider boundary. Hold the lifecycle fence across the
@@ -616,10 +618,12 @@ async function sendOutboundUnsafe(opts: {
   idempotencyKey?: string;
   stableBody?: boolean;
   skipCandidateReplyReference?: boolean;
+  audience?: "candidate" | "demo-volunteer";
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  const timelineAudience = opts.audience ?? "candidate";
   if (!isSyntheticOfflineCase(caseRow)) {
     const lifecycle = await withSensitiveLifecycleFence(caseRow.organizationId, () =>
       evaluateSensitiveLifecycleGate({
@@ -707,7 +711,7 @@ async function sendOutboundUnsafe(opts: {
       caseId: opts.caseId,
       channel: opts.channel,
       direction: "outbound",
-      audience: "candidate",
+      audience: timelineAudience,
       toAddress: opts.channel === "email" ? maskEmail(actualAddress) : maskPhone(actualAddress),
       subject: opts.subject ?? null,
       body: opts.persistedBody ?? opts.body,
@@ -733,7 +737,7 @@ async function sendOutboundUnsafe(opts: {
       caseRow,
       caseId: opts.caseId,
       channel: opts.channel,
-      audience: "candidate",
+      audience: timelineAudience,
       toAddress: actualAddress,
       subject: opts.subject ?? null,
       body: opts.persistedBody ?? opts.body,
@@ -764,7 +768,7 @@ async function sendOutboundUnsafe(opts: {
       caseId: opts.caseId,
       channel: opts.channel,
       direction: "outbound",
-      audience: "candidate",
+      audience: timelineAudience,
       toAddress: masked,
       subject: opts.subject ?? null,
       body: opts.persistedBody ?? body,
@@ -985,7 +989,7 @@ async function sendOutboundUnsafe(opts: {
       caseId: opts.caseId,
       channel: opts.channel,
       direction: "outbound",
-      audience: "candidate",
+      audience: timelineAudience,
       toAddress: masked,
       subject,
       body: opts.persistedBody ?? body,

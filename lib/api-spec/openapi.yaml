@@ -5294,6 +5294,54 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
+  /onboarding/cases/{caseId}/simulation/send-email:
+    post:
+      operationId: sendOnboardingCaseSimulationEmail
+      tags: [onboarding]
+      summary: Send the current synthetic employee prompt to the pinned Demo volunteer
+      description: >
+        Explicitly sends one current simulated prompt through the existing
+        governed Gmail path to the revalidated approved Demo volunteer. The
+        delivery is real email, but any reply can only produce a simulated
+        outcome. No candidate or generic orchestration email is enabled.
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulateNextOnboardingCaseExchangeInput"
+      responses:
+        "200":
+          description: Delivery status and unchanged/non-authoritative simulation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingCaseSimulationEmailResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: Demo Administrator, volunteer, membership, or provider boundary denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: Case not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "409":
+          description: Stale generation/version or a send is already awaiting reply
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
   /onboarding/readiness-sla/policy:
     get:
       operationId: getOnboardingReadinessSlaPolicy
@@ -10988,6 +11036,12 @@ components:
           type: string
           enum: [advance-stage, follow-up-missing-info, poll-status, simulated-human-review, complete]
         recordedAt: { type: string, format: date-time }
+        deliveryProvenance:
+          type: string
+          enum: [simulated, real-email]
+        businessOutcome:
+          type: string
+          enum: [simulated]
       required:
         - sequence
         - stage
@@ -11039,6 +11093,24 @@ components:
         simulated: { type: boolean, const: true }
         authoritative: { type: boolean, const: false }
       required: [caseId, generationId, version, stage, status, exchanges, lastOutcome, operationExchange, replayed, simulated, authoritative]
+    OnboardingCaseSimulationEmailResult:
+      allOf:
+        - $ref: "#/components/schemas/OnboardingCaseSimulationState"
+        - type: object
+          additionalProperties: false
+          properties:
+            emailDelivery:
+              type: object
+              additionalProperties: false
+              properties:
+                transport: { type: string, enum: [real-email] }
+                businessOutcome: { type: string, enum: [simulated-only] }
+                recipient: { type: string }
+                status: { type: string, enum: [prepared, sent, sending, failed, replied, stale] }
+                reason: { type: [string, "null"] }
+                freshness: { type: string, enum: [current-generation, retired-generation] }
+              required: [transport, businessOutcome, recipient, status, reason, freshness]
+          required: [emailDelivery]
     OnbDay1Logistics:
       type: object
       properties:
@@ -11429,6 +11501,22 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         selectedVolunteerId: { type: ["string", "null"] }
+        selectedVolunteer:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              properties:
+                id: { type: string }
+                name: { type: string }
+                email: { type: string }
+                phone: { type: ["string", "null"] }
+                channelPreference: { type: string, enum: [email, whatsapp, both] }
+                approved: { type: boolean }
+                liveEmailAvailable: { type: boolean }
+                liveCallAvailable: { type: boolean }
+                capabilityReason: { type: ["string", "null"] }
+              required: [id, name, email, phone, channelPreference, approved, liveEmailAvailable, liveCallAvailable, capabilityReason]
+            - type: "null"
       required: [runId, caseId, caseName, scenario, status, version, mode, createdAt, updatedAt, selectedVolunteerId]
     DemoWorkflowCheckpoint:
       type: object
