@@ -50,3 +50,9 @@ Restarting a synthetic simulation retires its progression, not its audit evidenc
 **Why:** Resetting a numeric version alone lets delayed requests from an earlier run match a new run and apply unintended exchanges. Deleting history would misrepresent prior simulated activity.
 
 **How to apply:** require the original generation and version on mutations, preserve the exact request identity and payload across uncertain retries, and retain previous simulated exchanges in append-only case history. A restart must never reset the underlying case or live-provider state.
+
+Controlled volunteer email status is part of the durable public simulation projection: mask the recipient, distinguish sent from unknown delivery, and never allow an unknown or already-sent attempt to be retried automatically.
+
+**Why:** A provider exception after dispatch can leave delivery ambiguous; hiding that state on reload invites duplicate contact and makes the presentation claim more certainty than the provider gave.
+
+**How to apply:** persist the dispatch outcome and expose only safe status/reason fields through simulation GET responses. If a restart races with dispatch, persist the retired/stale transition so a later reply is correlated as stale rather than lost or applied to the new generation.

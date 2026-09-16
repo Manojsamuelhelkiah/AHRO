@@ -5390,6 +5390,16 @@ export const OnboardingCaseSimulationStateLastOutcome = {
   exception: 'exception',
 } as const;
 
+export interface OnboardingCaseSimulationEmailDelivery {
+  transport: 'real-email';
+  businessOutcome: 'simulated-only';
+  recipient: string;
+  status: 'prepared' | 'sent' | 'sending' | 'failed' | 'replied' | 'stale';
+  /** @nullable */
+  reason: string | null;
+  freshness: 'current-generation' | 'retired-generation';
+}
+
 export interface OnboardingCaseSimulationState {
   /** @minimum 1 */
   caseId: number;
@@ -5413,18 +5423,12 @@ export interface OnboardingCaseSimulationState {
   replayed: boolean;
   simulated: true;
   authoritative: false;
+  /** Current controlled real-email delivery status; recipient is masked and correlation secrets are never returned */
+  emailDelivery: OnboardingCaseSimulationEmailDelivery | null;
 }
 
 export type OnboardingCaseSimulationEmailResult = OnboardingCaseSimulationState & ({
-  emailDelivery: {
-  transport: 'real-email';
-  businessOutcome: 'simulated-only';
-  recipient: string;
-  status: 'prepared' | 'sent' | 'sending' | 'failed' | 'replied' | 'stale';
-  /** @nullable */
-  reason: string | null;
-  freshness: 'current-generation' | 'retired-generation';
-};
+  emailDelivery: OnboardingCaseSimulationEmailDelivery;
 });
 
 export type OnbReadinessSlaStreamKey = typeof OnbReadinessSlaStreamKey[keyof typeof OnbReadinessSlaStreamKey];

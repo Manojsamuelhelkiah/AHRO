@@ -125,6 +125,9 @@ export function SimulationPanel({ caseId, recipientEmail }: { caseId: number; re
   };
   const busy = simulateMutation.isPending || restartMutation.isPending || emailMutation.isPending;
   const isComplete = simState.status === 'completed';
+  const emailDelivery = simState.emailDelivery;
+  const emailAwaitingReply = emailDelivery?.freshness === 'current-generation'
+    && ['prepared', 'sent', 'sending'].includes(emailDelivery.status);
 
   return (
     <div className="border border-[var(--border)] rounded-lg bg-[var(--surface)] shadow-sm mb-6 overflow-hidden flex flex-col">
@@ -147,14 +150,16 @@ export function SimulationPanel({ caseId, recipientEmail }: { caseId: number; re
           >
             Restart simulation
           </button>
-          <button
+            <button
             onClick={() => { emailMutation.reset(); setConfirmEmail(true); }}
-            disabled={busy || confirmRestart || !recipientEmail || isComplete}
+              disabled={busy || confirmRestart || !recipientEmail || isComplete || emailAwaitingReply}
             className={cn(
               "flex items-center gap-1.5 border border-[var(--primary)] text-[var(--primary-dark)] px-3 py-1.5 rounded-md text-xs font-bold transition-all",
-              busy || confirmRestart || !recipientEmail || isComplete ? "opacity-50 cursor-not-allowed" : "hover:bg-[var(--primary-light)]",
+              busy || confirmRestart || !recipientEmail || isComplete || emailAwaitingReply ? "opacity-50 cursor-not-allowed" : "hover:bg-[var(--primary-light)]",
             )}
-            title={recipientEmail ? `Pinned approved Demo volunteer: ${recipientEmail}` : "Select an approved Demo volunteer in Demo Controller first"}
+              title={emailAwaitingReply
+                ? "A controlled email is already awaiting a reply; automatic resend is disabled"
+                : recipientEmail ? `Pinned approved Demo volunteer: ${recipientEmail}` : "Select an approved Demo volunteer in Demo Controller first"}
           >
             <Mail className="h-3.5 w-3.5" /> Email current prompt
           </button>
@@ -209,7 +214,7 @@ export function SimulationPanel({ caseId, recipientEmail }: { caseId: number; re
           </p>
           <div className="flex gap-3">
             <button onClick={() => setConfirmEmail(false)} disabled={busy} className="text-xs font-semibold disabled:opacity-50">Cancel</button>
-            <button onClick={handleSendEmail} disabled={busy || !recipientEmail} className="text-xs font-bold bg-[var(--primary)] text-white rounded-md px-3 py-2 disabled:opacity-50">
+            <button onClick={handleSendEmail} disabled={busy || !recipientEmail || emailAwaitingReply} className="text-xs font-bold bg-[var(--primary)] text-white rounded-md px-3 py-2 disabled:opacity-50">
               {emailMutation.isPending ? 'Sending...' : 'Confirm real email send'}
             </button>
           </div>
@@ -241,10 +246,16 @@ export function SimulationPanel({ caseId, recipientEmail }: { caseId: number; re
           {(emailMutation.error as any)?.message || 'The controlled Demo email could not be sent. An uncertain delivery is never retried automatically.'}
         </div>
       )}
-      {emailMutation.data?.emailDelivery && (
+      {emailDelivery && (
         <div className="px-4 py-2 bg-[var(--status-info-bg)] border-b border-[var(--status-info-fg)] border-opacity-20 text-xs text-[var(--status-info-fg)]">
-          <strong>Real delivery:</strong> {emailMutation.data.emailDelivery.status} to {emailMutation.data.emailDelivery.recipient}.
-          {' '}<strong>Business result:</strong> simulated-only; awaiting a monitored Gmail reply.
+          <strong>Real email:</strong> {emailDelivery.status} to {emailDelivery.recipient}.
+          {' '}<strong>Business result:</strong> simulated-only.
+          {emailDelivery.status === 'sending' && <> Delivery is uncertain; automatic resend is disabled.</>}
+          {emailDelivery.status === 'sent' && <> Awaiting a monitored Gmail reply.</>}
+          {emailDelivery.status === 'replied' && <> Reply recorded; the simulated outcome is shown below.</>}
+          {emailDelivery.status === 'stale' && <> This delivery belongs to a retired simulation generation.</>}
+          {emailDelivery.status === 'failed' && <> The provider did not accept the message.</>}
+          {emailDelivery.reason && <span className="block mt-1">{emailDelivery.reason}</span>}
         </div>
       )}
 

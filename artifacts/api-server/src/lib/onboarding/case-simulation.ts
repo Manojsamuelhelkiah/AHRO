@@ -52,6 +52,15 @@ export type SimulationExchange = {
   businessOutcome?: "simulated";
 };
 
+export type SimulationEmailDelivery = {
+  transport: "real-email";
+  businessOutcome: "simulated-only";
+  recipient: string;
+  status: "prepared" | "sent" | "sending" | "failed" | "replied" | "stale";
+  reason: string | null;
+  freshness: "current-generation" | "retired-generation";
+};
+
 export type CaseSimulationState = {
   caseId: number;
   /**
@@ -68,6 +77,8 @@ export type CaseSimulationState = {
   replayed: boolean;
   simulated: true;
   authoritative: false;
+  /** Current controlled-email status, with recipient secrets and correlation tokens removed. */
+  emailDelivery: SimulationEmailDelivery | null;
 };
 
 type StoredSimulationState = CaseSimulationState & {
@@ -86,6 +97,7 @@ export type SimulationEmailDispatch = {
   recipient: string;
   status: "prepared" | "sent" | "sending" | "failed" | "replied" | "stale";
   providerMessageId: string | null;
+  reason?: string | null;
 };
 
 type StoredSimulationRequest =
@@ -182,6 +194,7 @@ function initialState(caseId: number): StoredSimulationState {
     replayed: false,
     simulated: true,
     authoritative: false,
+    emailDelivery: null,
     requests: {},
     emailDispatches: {},
   };
@@ -225,6 +238,7 @@ function parseState(raw: string | null, caseId: number): StoredSimulationState {
     replayed: false,
     simulated: true,
     authoritative: false,
+    emailDelivery: null,
     requests: normalizeRequests(state.requests, typeof state.generationId === "string" && state.generationId.length > 0
       ? state.generationId
       : initialGenerationId(caseId)),
@@ -303,8 +317,30 @@ function publicState(
   operationExchange: SimulationExchange | null = null,
   replayed = false,
 ): CaseSimulationState {
-  const { requests: _requests, emailDispatches: _emailDispatches, ...publicValue } = state;
-  return { ...publicValue, operationExchange, replayed };
+  const { requests: _requests, emailDispatches, ...publicValue } = state;
+  const currentDispatch = Object.values(emailDispatches)
+    .sort((left, right) => {
+      const leftIsCurrent = left.generationId === state.generationId ? 1 : 0;
+      const rightIsCurrent = right.generationId === state.generationId ? 1 : 0;
+      return rightIsCurrent - leftIsCurrent || right.version - left.version;
+    })[0];
+  const emailDelivery: SimulationEmailDelivery | null = currentDispatch
+    ? {
+      transport: "real-email",
+      businessOutcome: "simulated-only",
+      recipient: maskSimulationEmail(currentDispatch.recipient || "not available"),
+      status: currentDispatch.status,
+      reason: currentDispatch.reason ?? (
+        currentDispatch.status === "sending"
+          ? "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled."
+          : null
+      ),
+      freshness: currentDispatch.generationId === state.generationId
+        ? "current-generation"
+        : "retired-generation",
+    }
+    : null;
+  return { ...publicValue, emailDelivery, operationExchange, replayed };
 }
 
 function randomOutcome(): SimulationOutcome {
@@ -784,15 +820,6 @@ export async function simulateNextCaseExchange(input: {
   });
 }
 
-export type SimulationEmailDelivery = {
-  transport: "real-email";
-  businessOutcome: "simulated-only";
-  recipient: string;
-  status: "prepared" | "sent" | "sending" | "failed" | "replied" | "stale";
-  reason: string | null;
-  freshness: "current-generation" | "retired-generation";
-};
-
 export type CaseSimulationEmailResult = CaseSimulationState & {
   emailDelivery: SimulationEmailDelivery;
 };
@@ -997,6 +1024,7 @@ export async function sendCurrentSimulationPrompt(input: {
       recipient: "",
       status: "prepared",
       providerMessageId: null,
+      reason: null,
     };
     state.emailDispatches[input.requestId] = dispatch;
     state.version += 1;
@@ -1026,6 +1054,7 @@ export async function sendCurrentSimulationPrompt(input: {
     failureReason: "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled.",
   };
   let recipient = "";
+  let providerAttempted = false;
   try {
     delivery = await withApprovedDemoVolunteerEmail(
       input.organizationId,
@@ -1033,6 +1062,7 @@ export async function sendCurrentSimulationPrompt(input: {
       input.requestId,
       async (selected) => {
         recipient = selected.email;
+        providerAttempted = true;
         return sendOutbound({
           caseId: input.caseId,
           channel: "email",
@@ -1050,8 +1080,10 @@ export async function sendCurrentSimulationPrompt(input: {
     );
   } catch (caught) {
     delivery = {
-      status: "failed",
-      failureReason: caught instanceof Error ? caught.message : "Live Demo Controller email was blocked.",
+      status: providerAttempted ? "sending" : "failed",
+      failureReason: providerAttempted
+        ? "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled."
+        : caught instanceof Error ? caught.message : "Live Demo Controller email was blocked.",
     };
   }
 
@@ -1060,8 +1092,13 @@ export async function sendCurrentSimulationPrompt(input: {
     const state = await readStoredState(tx, input.organizationId, input.caseId);
     const dispatch = state.emailDispatches[input.requestId] ?? prepared.dispatch;
     if (dispatch.generationId !== state.generationId) {
-      dispatch.status = "stale";
+      dispatch.status = delivery.status === "sent" || delivery.status === "delivered" || delivery.status === "sending"
+        ? "stale"
+        : "failed";
       dispatch.recipient = recipient || dispatch.recipient;
+      dispatch.reason = delivery.failureReason;
+      state.emailDispatches[input.requestId] = dispatch;
+      await saveState(tx, input.organizationId, state);
       return { state, dispatch };
     }
     dispatch.recipient = recipient || dispatch.recipient;
@@ -1071,6 +1108,7 @@ export async function sendCurrentSimulationPrompt(input: {
       : delivery.status === "sending"
         ? "sending"
         : "failed";
+    dispatch.reason = delivery.failureReason;
     // The provider message id is persisted by sendOutbound on the durable
     // communication row. Keep only the dispatch state here so tokens remain
     // server-owned and never become a client-visible secret.
@@ -1115,7 +1153,7 @@ export async function listSimulationEmailRoutes(): Promise<SimulationEmailRoute[
       const parsed = JSON.parse(row.value) as Partial<StoredSimulationState>;
       if (!Number.isSafeInteger(parsed.caseId) || !parsed.emailDispatches) continue;
       for (const dispatch of Object.values(normalizeEmailDispatches(parsed.emailDispatches))) {
-        if (dispatch.status === "sent" || dispatch.status === "sending") {
+        if (["sent", "sending", "stale"].includes(dispatch.status)) {
           const key = `case-simulation-email:${parsed.caseId}:${dispatch.generationId}:${dispatch.requestId}`;
           routes.push({
             ...dispatch,
@@ -1163,7 +1201,7 @@ export async function recordSimulationEmailReply(input: {
     const route = Object.values(state.emailDispatches).find((candidate) =>
       candidate.token === input.token &&
       candidate.threadMarker === input.threadMarker &&
-      ["sent", "sending"].includes(candidate.status),
+      ["sent", "sending", "stale"].includes(candidate.status),
     );
     if (!route || route.recipient.trim().toLowerCase() !== input.fromAddress.trim().toLowerCase()) return "ignored";
     const [communication] = await tx.insert(onbCommunications).values({

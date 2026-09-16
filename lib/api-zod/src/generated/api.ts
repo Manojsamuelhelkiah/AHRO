@@ -16552,6 +16552,15 @@ export const getOnboardingCaseSimulationResponseExchangesMax = 64;
 
 
 
+const onboardingCaseSimulationEmailDelivery = zod.object({
+  "transport": zod.enum(['real-email']),
+  "businessOutcome": zod.enum(['simulated-only']),
+  "recipient": zod.string(),
+  "status": zod.enum(['prepared', 'sent', 'sending', 'failed', 'replied', 'stale']),
+  "reason": zod.string().nullable(),
+  "freshness": zod.enum(['current-generation', 'retired-generation'])
+});
+
 export const GetOnboardingCaseSimulationResponse = zod.object({
   "caseId": zod.number().min(1),
   "generationId": zod.string().min(1).max(getOnboardingCaseSimulationResponseGenerationIdMax).describe('Opaque identity of the current simulation generation; versions are scoped to it'),
@@ -16597,7 +16606,8 @@ export const GetOnboardingCaseSimulationResponse = zod.object({
 }),zod.null()]).describe('The operation exchange created by this request; null on GET'),
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
-  "authoritative": zod.boolean()
+  "authoritative": zod.boolean(),
+  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
 })
 
 
@@ -16682,7 +16692,8 @@ export const SimulateNextOnboardingCaseExchangeResponse = zod.object({
 }),zod.null()]).describe('The operation exchange created by this request; null on GET'),
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
-  "authoritative": zod.boolean()
+  "authoritative": zod.boolean(),
+  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
 })
 
 
@@ -16767,7 +16778,8 @@ export const RestartOnboardingCaseSimulationResponse = zod.object({
 }),zod.null()]).describe('The operation exchange created by this request; null on GET'),
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
-  "authoritative": zod.boolean()
+  "authoritative": zod.boolean(),
+  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
 })
 
 
@@ -16852,7 +16864,8 @@ export const SendOnboardingCaseSimulationEmailResponse = zod.object({
 }),zod.null()]).describe('The operation exchange created by this request; null on GET'),
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
-  "authoritative": zod.boolean()
+  "authoritative": zod.boolean(),
+  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
 }).and(zod.object({
   "emailDelivery": zod.object({
   "transport": zod.enum(['real-email']),

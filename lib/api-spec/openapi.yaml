@@ -11092,7 +11092,23 @@ components:
           description: True when requestId replayed its original exchange after later writes
         simulated: { type: boolean, const: true }
         authoritative: { type: boolean, const: false }
-      required: [caseId, generationId, version, stage, status, exchanges, lastOutcome, operationExchange, replayed, simulated, authoritative]
+        emailDelivery:
+          oneOf:
+            - $ref: "#/components/schemas/OnboardingCaseSimulationEmailDelivery"
+            - type: "null"
+          description: Current controlled real-email delivery status; recipient is masked and correlation secrets are never returned
+      required: [caseId, generationId, version, stage, status, exchanges, lastOutcome, operationExchange, replayed, simulated, authoritative, emailDelivery]
+    OnboardingCaseSimulationEmailDelivery:
+      type: object
+      additionalProperties: false
+      properties:
+        transport: { type: string, enum: [real-email] }
+        businessOutcome: { type: string, enum: [simulated-only] }
+        recipient: { type: string }
+        status: { type: string, enum: [prepared, sent, sending, failed, replied, stale] }
+        reason: { type: [string, "null"] }
+        freshness: { type: string, enum: [current-generation, retired-generation] }
+      required: [transport, businessOutcome, recipient, status, reason, freshness]
     OnboardingCaseSimulationEmailResult:
       allOf:
         - $ref: "#/components/schemas/OnboardingCaseSimulationState"
