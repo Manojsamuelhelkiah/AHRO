@@ -207,6 +207,7 @@ import type {
   OrganizationMemberReinstatement,
   OrganizationMemberRemoval,
   OrganizationMemberRoleChange,
+  OrganizationPrimaryCountryInput,
   ParseActualsLogBody,
   PricingRateRegister,
   PricingRateSetInput,
@@ -268,6 +269,7 @@ import type {
   UpdateGovernanceRequirementCoverageBody,
   UpdateOnbSettings,
   UpdateOnboardingBgvNotificationsRequest,
+  UpdateOrganizationPrimaryCountry200,
   VerifyGovernanceAuthorityBody,
   WithdrawOnboardingAuthorityGovernanceBody
 } from './api.schemas';
@@ -2799,6 +2801,78 @@ export function useGetCurrentOrganization<TData = Awaited<ReturnType<typeof getC
 
 
 
+
+export const getUpdateOrganizationPrimaryCountryUrl = () => {
+
+
+
+
+  return `/api/organizations/current/primary-country`
+}
+
+/**
+ * Owner/admin only. This does not rewrite saved starter proposals or approved policies.
+ * @summary Update the active organization's primary country
+ */
+export const updateOrganizationPrimaryCountry = async (organizationPrimaryCountryInput: OrganizationPrimaryCountryInput, options?: RequestInit): Promise<UpdateOrganizationPrimaryCountry200> => {
+
+  return customFetch<UpdateOrganizationPrimaryCountry200>(getUpdateOrganizationPrimaryCountryUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(organizationPrimaryCountryInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateOrganizationPrimaryCountryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOrganizationPrimaryCountry>>, TError,{data: BodyType<OrganizationPrimaryCountryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOrganizationPrimaryCountry>>, TError,{data: BodyType<OrganizationPrimaryCountryInput>}, TContext> => {
+
+const mutationKey = ['updateOrganizationPrimaryCountry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOrganizationPrimaryCountry>>, {data: BodyType<OrganizationPrimaryCountryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateOrganizationPrimaryCountry(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOrganizationPrimaryCountryMutationResult = NonNullable<Awaited<ReturnType<typeof updateOrganizationPrimaryCountry>>>
+    export type UpdateOrganizationPrimaryCountryMutationBody = BodyType<OrganizationPrimaryCountryInput>
+    export type UpdateOrganizationPrimaryCountryMutationError = ErrorType<void>
+
+    /**
+ * @summary Update the active organization's primary country
+ */
+export const useUpdateOrganizationPrimaryCountry = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOrganizationPrimaryCountry>>, TError,{data: BodyType<OrganizationPrimaryCountryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOrganizationPrimaryCountry>>,
+        TError,
+        {data: BodyType<OrganizationPrimaryCountryInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateOrganizationPrimaryCountryMutationOptions(options));
+    }
 
 export const getCreateOrganizationUrl = () => {
 
@@ -18428,4 +18502,3 @@ export const useRetrySensitiveLifecycleDeletionJob = <TError = ErrorType<void>,
       > => {
       return useMutation(getRetrySensitiveLifecycleDeletionJobMutationOptions(options));
     }
-

@@ -433,6 +433,7 @@ function OrganizationSetup({
   const pendingOrganization = loadPendingOrganization();
   const [mode, setMode] = useState<'create' | 'join'>(initialMode);
   const [name, setName] = useState('');
+  const [primaryCountry, setPrimaryCountry] = useState('');
   const [auditArchive, setAuditArchive] = useState<AuditArchiveSignupConfig>({
     providerId: '',
     archiveNamespace: '',
@@ -477,6 +478,7 @@ function OrganizationSetup({
             kind === 'create'
               ? {
                   name,
+                  primaryCountry,
                   ...(Object.values(auditArchive).some((value) => value.trim())
                     ? { auditArchive }
                     : {}),
@@ -615,6 +617,18 @@ function OrganizationSetup({
               Organization name
               <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme People Operations" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-indigo-500" />
             </label>
+            <label className="mt-4 block text-sm font-semibold text-slate-700">
+              Primary country (ISO code)
+              <input
+                value={primaryCountry}
+                onChange={(event) => setPrimaryCountry(event.target.value.toUpperCase().slice(0, 2))}
+                placeholder="IN"
+                maxLength={2}
+                autoComplete="country"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-mono font-normal uppercase outline-none focus:border-indigo-500"
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-500">Use the two-letter ISO 3166-1 code for the client’s main operating country.</span>
+            </label>
             <details className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
               <summary className="cursor-pointer text-sm font-semibold text-slate-700">
                 Independent audit archive (optional)
@@ -668,7 +682,7 @@ function OrganizationSetup({
 
         {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-        <Button type="button" disabled={saving || (mode === 'create' ? name.trim().length < 2 : !joinCode.trim())} onClick={() => submit(mode)} className="mt-6 w-full justify-center bg-indigo-600 text-white">
+        <Button type="button" disabled={saving || (mode === 'create' ? name.trim().length < 2 || primaryCountry.length !== 2 : !joinCode.trim())} onClick={() => submit(mode)} className="mt-6 w-full justify-center bg-indigo-600 text-white">
           {mode === 'create' ? <Building2 className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
           {saving ? 'Setting up…' : mode === 'create' ? 'Create organization' : 'Join organization'}
         </Button>

@@ -11,6 +11,7 @@ import {
   onbApprovalHistory,
   onbApprovals,
   onbCases,
+  onbConnectors,
   onbGovernanceAuthorityAssignments,
   onbAuthorityGovernance,
   onbGovernanceDispatchMarkers,
@@ -171,6 +172,8 @@ after(async () => {
     .where(eq(onbGovernanceDispatchMarkers.organizationId, organizationId));
   await db.delete(onbCases)
     .where(eq(onbCases.organizationId, organizationId));
+  await db.delete(onbConnectors)
+    .where(eq(onbConnectors.organizationId, organizationId));
   await db.delete(organizationMembershipsTable)
     .where(eq(organizationMembershipsTable.organizationId, otherOrganizationId));
   await db.delete(organizationsTable).where(eq(organizationsTable.id, otherOrganizationId));
@@ -189,6 +192,66 @@ function request(
   }
   return fetch(`${baseUrl}${path}`, { ...options, headers });
 }
+
+test("primary country updates require active tenant admin authority and stay tenant-scoped", { concurrency: false }, async () => {
+  const memberAttempt = await request("/organizations/current/primary-country", targetUserId, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ primaryCountry: "US" }),
+  });
+  assert.equal(memberAttempt.status, 403);
+
+  const invalidAttempt = await request("/organizations/current/primary-country", adminUserId, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ primaryCountry: "not-a-country" }),
+  });
+  assert.equal(invalidAttempt.status, 400);
+
+  const updated = await request("/organizations/current/primary-country", adminUserId, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ primaryCountry: "United Kingdom" }),
+  });
+  assert.equal(updated.status, 200);
+  assert.equal((await updated.json() as { organization: { primaryCountry: string } }).organization.primaryCountry, "GB");
+
+  const [primary, other] = await Promise.all([
+    db.select({ primaryCountry: organizationsTable.primaryCountry })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, organizationId)),
+    db.select({ primaryCountry: organizationsTable.primaryCountry })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, otherOrganizationId)),
+  ]);
+  assert.equal(primary[0]?.primaryCountry, "GB");
+  assert.equal(other[0]?.primaryCountry, "IN");
+});
+
+test("organization creation requires, canonicalizes, stores, and returns a primary country", { concurrency: false }, async () => {
+  const creator = `country-creator-${suffix}`;
+  const missing = await fetch(`${baseUrl}/organizations`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-test-user": creator },
+    body: JSON.stringify({ name: "Missing country" }),
+  });
+  assert.equal(missing.status, 400);
+
+  const created = await fetch(`${baseUrl}/organizations`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-test-user": creator },
+    body: JSON.stringify({ name: "Country creation test", primaryCountry: "ca" }),
+  });
+  assert.equal(created.status, 201);
+  const response = await created.json() as { organization: { id: string; primaryCountry: string } };
+  assert.equal(response.organization.primaryCountry, "CA");
+  const [stored] = await db.select({ primaryCountry: organizationsTable.primaryCountry })
+    .from(organizationsTable)
+    .where(eq(organizationsTable.id, response.organization.id));
+  assert.equal(stored?.primaryCountry, "CA");
+  await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, response.organization.id));
+  await db.delete(organizationsTable).where(eq(organizationsTable.id, response.organization.id));
+});
 
 test("member administration enforces owner-only CAS mutations and active listing", { concurrency: false }, async () => {
   const adminList = await request("/organizations/members", adminUserId);

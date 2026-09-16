@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, onbSettings, organizationMembershipsTable } from "@workspace/db";
+import { db, onbSettings, organizationMembershipsTable, organizationsTable } from "@workspace/db";
 import {
   SENSITIVE_DATA_CLASSES,
   type SensitiveDataClass,
@@ -55,6 +55,9 @@ const COUNTRY_ALIASES: Record<string, string> = {
   "czechia": "CZ",
   holland: "NL",
 };
+const ISO_3166_ALPHA_2 = new Set(
+  "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW".split(" "),
+);
 
 function countryText(value: unknown): string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > 120) {
@@ -71,27 +74,13 @@ function countryText(value: unknown): string {
 export function canonicalStarterCountry(value: unknown): string {
   const input = countryText(value);
   const upper = input.toUpperCase();
-  if (/^[A-Z]{2}$/.test(upper)) {
-    try {
-      const display = new Intl.DisplayNames(["en"], { type: "region" }).of(upper);
-      if (display && display !== upper) return upper;
-    } catch {
-      // Fall through to the explicit aliases below.
-    }
-  }
+  if (ISO_3166_ALPHA_2.has(upper)) return upper;
   const normalized = input.toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
   const alias = COUNTRY_ALIASES[normalized];
   if (alias) return alias;
-  for (let first = 65; first <= 90; first += 1) {
-    for (let second = 65; second <= 90; second += 1) {
-      const code = String.fromCharCode(first, second);
-      try {
-        const display = new Intl.DisplayNames(["en"], { type: "region" }).of(code);
-        if (display && display.toLowerCase() === normalized) return code;
-      } catch {
-        break;
-      }
-    }
+  const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+  for (const code of ISO_3166_ALPHA_2) {
+    if (displayNames.of(code)?.toLowerCase() === normalized) return code;
   }
   throw new SensitiveLifecycleValidationError("country must be a known country name or ISO 3166-1 alpha-2 code.");
 }
@@ -220,6 +209,10 @@ export async function getStarterSensitiveLifecyclePolicy(input: {
     undefined : canonicalStarterCountry(input.country);
   return db.transaction(async (tx) => {
     await assertStarterMember(tx, input.organizationId, input.actorUserId);
+    const [organization] = await tx.select({ primaryCountry: organizationsTable.primaryCountry })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, input.organizationId));
+    if (!organization) throw new SensitiveLifecyclePermissionError("Organization not found.");
     const [row] = await tx.select({ value: onbSettings.value })
       .from(onbSettings)
       .where(and(
@@ -227,7 +220,7 @@ export async function getStarterSensitiveLifecyclePolicy(input: {
         eq(onbSettings.key, STARTER_LIFECYCLE_POLICY_KEY),
       ));
     const stored = row ? parseStored(row.value, requestedCountry) :
-      starterPolicyDefaults(requestedCountry ?? "IN");
+      starterPolicyDefaults(requestedCountry ?? organization.primaryCountry);
     return { inactive: true, reviewRequired: true, ...stored };
   });
 }
@@ -263,10 +256,14 @@ export async function saveStarterSensitiveLifecyclePolicy(input: {
         eq(onbSettings.organizationId, input.organizationId),
         eq(onbSettings.key, STARTER_LIFECYCLE_POLICY_KEY),
       )).for("update");
+    const [organization] = await tx.select({ primaryCountry: organizationsTable.primaryCountry })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, input.organizationId));
+    if (!organization) throw new SensitiveLifecyclePermissionError("Organization not found.");
     const current = row ? parseStored(row.value) : {
-      country: "IN",
+      country: organization.primaryCountry,
       version: 0,
-      proposals: starterPolicyDefaults("IN").proposals,
+      proposals: starterPolicyDefaults(organization.primaryCountry).proposals,
     };
     if (body.expectedVersion !== current.version) {
       throw new SensitiveLifecycleConflictError(`Starter policy changed since it was loaded (current version ${current.version}).`);

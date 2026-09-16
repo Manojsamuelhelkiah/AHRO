@@ -586,6 +586,30 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrganizationCurrentResponse" }
         "401": { description: Authentication required }
+  /organizations/current/primary-country:
+    put:
+      operationId: updateOrganizationPrimaryCountry
+      tags: [organizations]
+      summary: Update the active organization's primary country
+      description: Owner/admin only. This does not rewrite saved starter proposals or approved policies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrganizationPrimaryCountryInput" }
+      responses:
+        "200":
+          description: Updated organization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organization: { $ref: "#/components/schemas/OrganizationSummary" }
+                required: [organization]
+        "400": { description: Invalid country }
+        "401": { description: Authentication required }
+        "403": { description: Owner or admin role required }
   /organizations:
     post:
       operationId: createOrganization
@@ -5852,7 +5876,8 @@ components:
         id: { type: string }
         name: { type: string }
         slug: { type: string }
-      required: [id, name, slug]
+        primaryCountry: { type: string, pattern: "^[A-Z]{2}$" }
+      required: [id, name, slug, primaryCountry]
     OrganizationMembership:
       type: object
       additionalProperties: false
@@ -5860,8 +5885,9 @@ components:
         organizationId: { type: string }
         name: { type: string }
         slug: { type: string }
+        primaryCountry: { type: string, pattern: "^[A-Z]{2}$" }
         role: { type: string, enum: [owner, admin, member] }
-      required: [organizationId, name, slug, role]
+      required: [organizationId, name, slug, primaryCountry, role]
     OrganizationCurrentResponse:
       type: object
       additionalProperties: false
@@ -5878,11 +5904,22 @@ components:
       additionalProperties: false
       properties:
         name: { type: string }
+        primaryCountry:
+          type: string
+          description: ISO 3166-1 alpha-2 code or recognized country name; stored and returned as an uppercase alpha-2 code.
         auditArchive:
           oneOf:
             - $ref: "#/components/schemas/ExternalAuditArchiveConfig"
             - type: "null"
-      required: [name]
+      required: [name, primaryCountry]
+    OrganizationPrimaryCountryInput:
+      type: object
+      additionalProperties: false
+      properties:
+        primaryCountry:
+          type: string
+          description: ISO 3166-1 alpha-2 code or recognized country name; stored and returned as an uppercase alpha-2 code.
+      required: [primaryCountry]
     OrganizationCreateResponse:
       type: object
       additionalProperties: false

@@ -17,6 +17,7 @@ test("demo organization request bootstrap is idempotent", async () => {
       id: organizationsTable.id,
       name: organizationsTable.name,
       slug: organizationsTable.slug,
+      primaryCountry: organizationsTable.primaryCountry,
       createdByUserId: organizationsTable.createdByUserId,
     })
     .from(organizationsTable)
@@ -27,6 +28,7 @@ test("demo organization request bootstrap is idempotent", async () => {
       id: "demo",
       name: "Demo Organization",
       slug: "demo",
+      primaryCountry: "IN",
       createdByUserId: "system",
     },
   ]);

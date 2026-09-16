@@ -43,6 +43,14 @@ export type StarterPolicy = {
   proposals: StarterPolicyProposal[];
 };
 
+export type CurrentOrganizationMembership = {
+  organizationId: string;
+  name: string;
+  slug: string;
+  primaryCountry: string;
+  role: 'owner' | 'admin' | 'member';
+};
+
 export type RetentionShorteningPreview = {
   confirmationId: number;
   expiresAt: string;
@@ -115,6 +123,32 @@ export function useGetStarterLifecyclePolicy(country?: string) {
     queryKey: ['starterLifecyclePolicy', orgId, userId, country?.trim() || ''],
     queryFn: () => customFetch(`${API_BASE}/lifecycle/starter-policy${query}`),
     enabled: !!orgId && !!userId,
+  });
+}
+
+export function useGetCurrentOrganization() {
+  const { userId } = useAuth();
+  const orgId = getPinnedOrganizationIdForPage();
+  return useQuery<{ activeOrganizationId: string | null; memberships: CurrentOrganizationMembership[] }>({
+    queryKey: ['currentOrganization', orgId, userId],
+    queryFn: () => customFetch('/api/organizations/current'),
+    enabled: !!orgId && !!userId,
+  });
+}
+
+export function useUpdateOrganizationPrimaryCountry() {
+  const qc = useQueryClient();
+  const orgId = getPinnedOrganizationIdForPage();
+  return useMutation({
+    mutationFn: (primaryCountry: string) => customFetch('/api/organizations/current/primary-country', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ primaryCountry }),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['currentOrganization', orgId] });
+      qc.invalidateQueries({ queryKey: ['starterLifecyclePolicy', orgId] });
+    },
   });
 }
 

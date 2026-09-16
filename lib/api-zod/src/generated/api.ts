@@ -1387,6 +1387,9 @@ export const ReconcileGovernanceDispatchResponse = zod.unknown()
  * The optional X-Organization-Id header selects the active membership. A missing or invalid selection is returned as null rather than crossing tenant boundaries.
  * @summary Get the authenticated user's organization memberships and active selection
  */
+export const getCurrentOrganizationResponseMembershipsItemPrimaryCountryRegExp = new RegExp('^[A-Z]{2}$');
+
+
 export const GetCurrentOrganizationResponse = zod.object({
   "needsSetup": zod.boolean(),
   "activeOrganizationId": zod.string().nullable(),
@@ -1395,8 +1398,30 @@ export const GetCurrentOrganizationResponse = zod.object({
   "organizationId": zod.string(),
   "name": zod.string(),
   "slug": zod.string(),
+  "primaryCountry": zod.string().regex(getCurrentOrganizationResponseMembershipsItemPrimaryCountryRegExp),
   "role": zod.enum(['owner', 'admin', 'member'])
 }))
+})
+
+
+/**
+ * Owner/admin only. This does not rewrite saved starter proposals or approved policies.
+ * @summary Update the active organization's primary country
+ */
+export const UpdateOrganizationPrimaryCountryBody = zod.object({
+  "primaryCountry": zod.string().describe('ISO 3166-1 alpha-2 code or recognized country name; stored and returned as an uppercase alpha-2 code.')
+})
+
+export const updateOrganizationPrimaryCountryResponseOrganizationPrimaryCountryRegExp = new RegExp('^[A-Z]{2}$');
+
+
+export const UpdateOrganizationPrimaryCountryResponse = zod.object({
+  "organization": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "primaryCountry": zod.string().regex(updateOrganizationPrimaryCountryResponseOrganizationPrimaryCountryRegExp)
+})
 })
 
 
@@ -1408,6 +1433,7 @@ export const createOrganizationBodyAuditArchiveOneCredentialSecretReferenceNameR
 
 export const CreateOrganizationBody = zod.object({
   "name": zod.string(),
+  "primaryCountry": zod.string().describe('ISO 3166-1 alpha-2 code or recognized country name; stored and returned as an uppercase alpha-2 code.'),
   "auditArchive": zod.union([zod.object({
   "providerId": zod.string(),
   "archiveNamespace": zod.string(),
@@ -1418,11 +1444,15 @@ export const CreateOrganizationBody = zod.object({
 }),zod.null()]).optional()
 })
 
+export const createOrganizationResponseOrganizationPrimaryCountryRegExp = new RegExp('^[A-Z]{2}$');
+
+
 export const CreateOrganizationResponse = zod.object({
   "organization": zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "slug": zod.string()
+  "slug": zod.string(),
+  "primaryCountry": zod.string().regex(createOrganizationResponseOrganizationPrimaryCountryRegExp)
 }),
   "role": zod.literal("owner"),
   "joinCode": zod.string(),
@@ -1465,11 +1495,15 @@ export const JoinOrganizationBody = zod.union([zod.object({
   "demo": zod.boolean()
 })])
 
+export const joinOrganizationResponseOrganizationPrimaryCountryRegExp = new RegExp('^[A-Z]{2}$');
+
+
 export const JoinOrganizationResponse = zod.object({
   "organization": zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "slug": zod.string()
+  "slug": zod.string(),
+  "primaryCountry": zod.string().regex(joinOrganizationResponseOrganizationPrimaryCountryRegExp)
 }),
   "role": zod.enum(['owner', 'admin', 'member'])
 })
@@ -16552,15 +16586,6 @@ export const getOnboardingCaseSimulationResponseExchangesMax = 64;
 
 
 
-const onboardingCaseSimulationEmailDelivery = zod.object({
-  "transport": zod.enum(['real-email']),
-  "businessOutcome": zod.enum(['simulated-only']),
-  "recipient": zod.string(),
-  "status": zod.enum(['prepared', 'sent', 'sending', 'failed', 'replied', 'stale']),
-  "reason": zod.string().nullable(),
-  "freshness": zod.enum(['current-generation', 'retired-generation'])
-});
-
 export const GetOnboardingCaseSimulationResponse = zod.object({
   "caseId": zod.number().min(1),
   "generationId": zod.string().min(1).max(getOnboardingCaseSimulationResponseGenerationIdMax).describe('Opaque identity of the current simulation generation; versions are scoped to it'),
@@ -16607,7 +16632,14 @@ export const GetOnboardingCaseSimulationResponse = zod.object({
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
   "authoritative": zod.boolean(),
-  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
+  "emailDelivery": zod.union([zod.object({
+  "transport": zod.enum(['real-email']),
+  "businessOutcome": zod.enum(['simulated-only']),
+  "recipient": zod.string(),
+  "status": zod.enum(['prepared', 'sent', 'sending', 'failed', 'replied', 'stale']),
+  "reason": zod.string().nullable(),
+  "freshness": zod.enum(['current-generation', 'retired-generation'])
+}),zod.null()]).describe('Current controlled real-email delivery status; recipient is masked and correlation secrets are never returned')
 })
 
 
@@ -16693,7 +16725,14 @@ export const SimulateNextOnboardingCaseExchangeResponse = zod.object({
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
   "authoritative": zod.boolean(),
-  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
+  "emailDelivery": zod.union([zod.object({
+  "transport": zod.enum(['real-email']),
+  "businessOutcome": zod.enum(['simulated-only']),
+  "recipient": zod.string(),
+  "status": zod.enum(['prepared', 'sent', 'sending', 'failed', 'replied', 'stale']),
+  "reason": zod.string().nullable(),
+  "freshness": zod.enum(['current-generation', 'retired-generation'])
+}),zod.null()]).describe('Current controlled real-email delivery status; recipient is masked and correlation secrets are never returned')
 })
 
 
@@ -16779,7 +16818,14 @@ export const RestartOnboardingCaseSimulationResponse = zod.object({
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
   "authoritative": zod.boolean(),
-  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
+  "emailDelivery": zod.union([zod.object({
+  "transport": zod.enum(['real-email']),
+  "businessOutcome": zod.enum(['simulated-only']),
+  "recipient": zod.string(),
+  "status": zod.enum(['prepared', 'sent', 'sending', 'failed', 'replied', 'stale']),
+  "reason": zod.string().nullable(),
+  "freshness": zod.enum(['current-generation', 'retired-generation'])
+}),zod.null()]).describe('Current controlled real-email delivery status; recipient is masked and correlation secrets are never returned')
 })
 
 
@@ -16865,7 +16911,14 @@ export const SendOnboardingCaseSimulationEmailResponse = zod.object({
   "replayed": zod.boolean().describe('True when requestId replayed its original exchange after later writes'),
   "simulated": zod.boolean(),
   "authoritative": zod.boolean(),
-  "emailDelivery": zod.union([onboardingCaseSimulationEmailDelivery,zod.null()]).nullable()
+  "emailDelivery": zod.union([zod.object({
+  "transport": zod.enum(['real-email']),
+  "businessOutcome": zod.enum(['simulated-only']),
+  "recipient": zod.string(),
+  "status": zod.enum(['prepared', 'sent', 'sending', 'failed', 'replied', 'stale']),
+  "reason": zod.string().nullable(),
+  "freshness": zod.enum(['current-generation', 'retired-generation'])
+}),zod.null()]).describe('Current controlled real-email delivery status; recipient is masked and correlation secrets are never returned')
 }).and(zod.object({
   "emailDelivery": zod.object({
   "transport": zod.enum(['real-email']),
@@ -18083,5 +18136,3 @@ export const RetrySensitiveLifecycleDeletionJobParams = zod.object({
 })
 
 export const RetrySensitiveLifecycleDeletionJobResponse = zod.unknown()
-
-

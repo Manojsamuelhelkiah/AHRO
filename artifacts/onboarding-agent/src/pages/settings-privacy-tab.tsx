@@ -8,6 +8,8 @@ import {
   useRetryDeletionJob,
   useGetStarterLifecyclePolicy,
   useUpdateStarterLifecyclePolicy,
+  useGetCurrentOrganization,
+  useUpdateOrganizationPrimaryCountry,
   type RetentionPolicy,
   type StarterPolicyProposal,
 } from '../hooks/use-privacy-api';
@@ -146,12 +148,17 @@ export function PrivacyAdministrationCard() {
 }
 
 function StarterPolicyPanel({ onCopy }: { onCopy: (proposal: RetentionPolicy) => void }) {
-  const [countryInput, setCountryInput] = useState('IN');
-  const [selectedCountry, setSelectedCountry] = useState('IN');
+  const [countryInput, setCountryInput] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState<string | undefined>(undefined);
   const { data, isLoading, error, refetch } = useGetStarterLifecyclePolicy(selectedCountry);
+  const currentOrganization = useGetCurrentOrganization();
+  const updatePrimaryCountry = useUpdateOrganizationPrimaryCountry();
   const updateStarter = useUpdateStarterLifecyclePolicy();
   const [draft, setDraft] = useState<StarterPolicyProposal[]>([]);
   const [message, setMessage] = useState('');
+  const organization = currentOrganization.data?.memberships.find(
+    (membership) => membership.organizationId === currentOrganization.data?.activeOrganizationId,
+  );
 
   useEffect(() => {
     const starter = data?.starterPolicy;
@@ -165,6 +172,17 @@ function StarterPolicyPanel({ onCopy }: { onCopy: (proposal: RetentionPolicy) =>
   const loadCountry = () => {
     setMessage('');
     setSelectedCountry(countryInput.trim());
+  };
+
+  const savePrimaryCountry = () => {
+    setMessage('');
+    updatePrimaryCountry.mutate(countryInput, {
+      onSuccess: () => {
+        setSelectedCountry(undefined);
+        setMessage('Primary country updated. Saved starter proposals and approved policies were not changed.');
+      },
+      onError: (saveError: any) => setMessage(saveError?.message || 'Primary country could not be updated.'),
+    });
   };
 
   const updateProposal = (index: number, patch: Partial<StarterPolicyProposal>) => {
@@ -222,6 +240,11 @@ function StarterPolicyPanel({ onCopy }: { onCopy: (proposal: RetentionPolicy) =>
               aria-label="Starter policy country"
             />
           </div>
+          {(organization?.role === 'owner' || organization?.role === 'admin') && (
+            <Button variant="outline" onClick={savePrimaryCountry} disabled={updatePrimaryCountry.isPending || countryInput.length !== 2}>
+              Save as primary
+            </Button>
+          )}
           <Button variant="outline" onClick={loadCountry} disabled={isLoading}>
             <RotateCw className="w-4 h-4 mr-2" /> Load
           </Button>

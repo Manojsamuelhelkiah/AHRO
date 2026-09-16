@@ -24,6 +24,7 @@ import {
   removeOrganizationMember,
   reinstateOrganizationMember,
 } from "../lib/organization-memberships";
+import { canonicalStarterCountry } from "../lib/onboarding/starter-lifecycle-policy";
 import {
   externalAnchoringStatus,
   runExternalAuditArchiveDrill,
@@ -124,6 +125,7 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
         organizationId: organizationMembershipsTable.organizationId,
         name: organizationsTable.name,
         slug: organizationsTable.slug,
+        primaryCountry: organizationsTable.primaryCountry,
         role: organizationMembershipsTable.role,
       })
       .from(organizationMembershipsTable)
@@ -181,6 +183,49 @@ router.get("/organizations/current/audit-archive", async (req, res, next): Promi
       return;
     }
     res.json({ auditArchive: await externalAnchoringStatus(organizationId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/organizations/current/primary-country", requireTenantContext, async (req, res, next): Promise<void> => {
+  try {
+    const organizationId = req.organizationId!;
+    let primaryCountry: string;
+    try {
+      primaryCountry = canonicalStarterCountry(req.body?.primaryCountry);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : "Invalid primary country" });
+      return;
+    }
+    const organization = await db.transaction(async (tx) => {
+      const [membership] = await tx
+        .select({ role: organizationMembershipsTable.role })
+        .from(organizationMembershipsTable)
+        .where(and(
+          eq(organizationMembershipsTable.organizationId, organizationId),
+          eq(organizationMembershipsTable.clerkUserId, req.authUserId!),
+          isNull(organizationMembershipsTable.revokedAt),
+        ))
+        .for("update");
+      if (!membership || (membership.role !== "owner" && membership.role !== "admin")) return null;
+      const [updated] = await tx
+        .update(organizationsTable)
+        .set({ primaryCountry, updatedAt: new Date() })
+        .where(eq(organizationsTable.id, organizationId))
+        .returning({
+          id: organizationsTable.id,
+          name: organizationsTable.name,
+          slug: organizationsTable.slug,
+          primaryCountry: organizationsTable.primaryCountry,
+        });
+      return updated;
+    });
+    if (!organization) {
+      res.status(403).json({ message: "Organization owner or admin role required" });
+      return;
+    }
+    res.json({ organization });
   } catch (error) {
     next(error);
   }
@@ -340,6 +385,13 @@ router.post("/organizations", async (req, res, next): Promise<void> => {
       .json({ message: "Organization name must be 2–100 characters" });
     return;
   }
+  let primaryCountry: string;
+  try {
+    primaryCountry = canonicalStarterCountry(req.body?.primaryCountry);
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : "Invalid primary country" });
+    return;
+  }
   let auditArchive = null;
   try {
     auditArchive = parseExternalAuditArchiveConfig(req.body?.auditArchive);
@@ -360,6 +412,7 @@ router.post("/organizations", async (req, res, next): Promise<void> => {
           id,
           name,
           slug,
+          primaryCountry,
           joinCodeHash: hashJoinCode(joinCode),
           createdByUserId: req.authUserId!,
         })
@@ -367,6 +420,7 @@ router.post("/organizations", async (req, res, next): Promise<void> => {
           id: organizationsTable.id,
           name: organizationsTable.name,
           slug: organizationsTable.slug,
+          primaryCountry: organizationsTable.primaryCountry,
         });
       await tx.insert(organizationMembershipsTable).values({
         organizationId: id,
@@ -420,6 +474,7 @@ router.post("/organizations/join", async (req, res, next): Promise<void> => {
         id: organizationsTable.id,
         name: organizationsTable.name,
         slug: organizationsTable.slug,
+        primaryCountry: organizationsTable.primaryCountry,
       })
       .from(organizationsTable)
       .where(

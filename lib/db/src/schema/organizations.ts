@@ -20,6 +20,7 @@ export const organizationsTable = pgTable("organizations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  primaryCountry: text("primary_country").notNull().default("IN"),
   joinCodeHash: text("join_code_hash").notNull().unique(),
   createdByUserId: text("created_by_user_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -29,6 +29,8 @@ const otherActor = `starter-policy-other-member-${randomUUID()}`;
 test("starter policy defaults are complete, conservative, and canonical", () => {
   assert.equal(canonicalStarterCountry("India"), "IN");
   assert.equal(canonicalStarterCountry("IN"), "IN");
+  assert.throws(() => canonicalStarterCountry("EU"));
+  assert.throws(() => canonicalStarterCountry("XA"));
   const starter = starterPolicyDefaults("IN");
   assert.equal(starter.version, 0);
   assert.equal(starter.inactive, true);
@@ -49,6 +51,7 @@ test("starter policy persists with optimistic versioning and never inserts appro
       id: organizationId,
       name: "Starter policy test",
       slug: organizationId,
+      primaryCountry: "GB",
       joinCodeHash: `hash-${organizationId}`,
       createdByUserId: actor,
     },
@@ -56,6 +59,7 @@ test("starter policy persists with optimistic versioning and never inserts appro
       id: otherOrganizationId,
       name: "Other starter policy test",
       slug: otherOrganizationId,
+      primaryCountry: "US",
       joinCodeHash: `hash-${otherOrganizationId}`,
       createdByUserId: otherActor,
     },
@@ -70,9 +74,17 @@ test("starter policy persists with optimistic versioning and never inserts appro
       organizationId,
       actorUserId: actor,
     });
-    assert.equal(initial.country, "IN");
+    assert.equal(initial.country, "GB");
     assert.equal(initial.version, 0);
     assert.equal(initial.proposals.length, SENSITIVE_DATA_CLASSES.length);
+    await db.update(organizationsTable)
+      .set({ primaryCountry: "US" })
+      .where(eq(organizationsTable.id, organizationId));
+    const changedUnsavedDefault = await getStarterSensitiveLifecyclePolicy({ organizationId, actorUserId: actor });
+    assert.equal(changedUnsavedDefault.country, "US", "unsaved proposals must follow the current organization country");
+    await db.update(organizationsTable)
+      .set({ primaryCountry: "GB" })
+      .where(eq(organizationsTable.id, organizationId));
 
     const proposals = initial.proposals.map((proposal, index) =>
       index === 0 ? { ...proposal, purpose: "Reviewed internally; legal review still required." } : proposal,
@@ -80,9 +92,9 @@ test("starter policy persists with optimistic versioning and never inserts appro
     const saved = await saveStarterSensitiveLifecyclePolicy({
       organizationId,
       actorUserId: actor,
-      policy: { country: "India", expectedVersion: 0, proposals },
+      policy: { country: "GB", expectedVersion: 0, proposals },
     });
-    assert.equal(saved.country, "IN");
+    assert.equal(saved.country, "GB");
     assert.equal(saved.version, 1);
     assert.equal(saved.proposals[0]?.purpose, "Reviewed internally; legal review still required.");
 
@@ -93,7 +105,7 @@ test("starter policy persists with optimistic versioning and never inserts appro
       () => saveStarterSensitiveLifecyclePolicy({
         organizationId,
         actorUserId: actor,
-        policy: { country: "IN", expectedVersion: 0, proposals },
+        policy: { country: "GB", expectedVersion: 0, proposals },
       }),
       SensitiveLifecycleConflictError,
     );
@@ -109,6 +121,16 @@ test("starter policy persists with optimistic versioning and never inserts appro
         eq(onbSettings.key, "privacy:lifecycle:starter-policy"),
       ));
     assert.equal(settingsRows.length, 1);
+
+    await db.update(organizationsTable)
+      .set({ primaryCountry: "US" })
+      .where(eq(organizationsTable.id, organizationId));
+    const afterOrganizationCountryChange = await getStarterSensitiveLifecyclePolicy({
+      organizationId,
+      actorUserId: actor,
+    });
+    assert.equal(afterOrganizationCountryChange.country, "GB", "saved proposals must not follow later organization changes");
+    assert.equal(afterOrganizationCountryChange.proposals[0]?.purpose, "Reviewed internally; legal review still required.");
   } finally {
     await db.delete(onbSettings).where(eq(onbSettings.organizationId, organizationId));
     await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
@@ -121,11 +143,24 @@ test("starter policy persists with optimistic versioning and never inserts appro
 });
 
 test("starter policy reads and writes are tenant-fenced", async () => {
-  await assert.rejects(
-    () => getStarterSensitiveLifecyclePolicy({
-      organizationId: otherOrganizationId,
-      actorUserId: actor,
-    }),
-    SensitiveLifecyclePermissionError,
-  );
+  const liveOrg = `starter-live-${randomUUID()}`;
+  const liveOtherOrg = `starter-live-other-${randomUUID()}`;
+  const liveActor = `starter-live-actor-${randomUUID()}`;
+  await db.insert(organizationsTable).values([
+    { id: liveOrg, name: "Live starter tenant", slug: liveOrg, joinCodeHash: `hash-${liveOrg}`, createdByUserId: liveActor },
+    { id: liveOtherOrg, name: "Other live starter tenant", slug: liveOtherOrg, joinCodeHash: `hash-${liveOtherOrg}`, createdByUserId: "other" },
+  ]);
+  await db.insert(organizationMembershipsTable).values({ organizationId: liveOrg, clerkUserId: liveActor, role: "member" });
+  try {
+    await assert.rejects(
+      () => getStarterSensitiveLifecyclePolicy({
+        organizationId: liveOtherOrg,
+        actorUserId: liveActor,
+      }),
+      SensitiveLifecyclePermissionError,
+    );
+  } finally {
+    await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, liveOrg));
+    await db.delete(organizationsTable).where(inArray(organizationsTable.id, [liveOrg, liveOtherOrg]));
+  }
 });

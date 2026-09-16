@@ -9,6 +9,8 @@ export interface OrganizationSummary {
   id: string;
   name: string;
   slug: string;
+  /** @pattern ^[A-Z]{2}$ */
+  primaryCountry: string;
 }
 
 export type OrganizationMembershipRole = typeof OrganizationMembershipRole[keyof typeof OrganizationMembershipRole];
@@ -24,6 +26,8 @@ export interface OrganizationMembership {
   organizationId: string;
   name: string;
   slug: string;
+  /** @pattern ^[A-Z]{2}$ */
+  primaryCountry: string;
   role: OrganizationMembershipRole;
 }
 
@@ -59,7 +63,14 @@ export interface ExternalAuditArchiveConfig {
 
 export interface OrganizationCreateInput {
   name: string;
+  /** ISO 3166-1 alpha-2 code or recognized country name; stored and returned as an uppercase alpha-2 code. */
+  primaryCountry: string;
   auditArchive?: ExternalAuditArchiveConfig | null;
+}
+
+export interface OrganizationPrimaryCountryInput {
+  /** ISO 3166-1 alpha-2 code or recognized country name; stored and returned as an uppercase alpha-2 code. */
+  primaryCountry: string;
 }
 
 export type ExternalAuditArchiveStatusProviderKind = typeof ExternalAuditArchiveStatusProviderKind[keyof typeof ExternalAuditArchiveStatusProviderKind];
@@ -5390,14 +5401,48 @@ export const OnboardingCaseSimulationStateLastOutcome = {
   exception: 'exception',
 } as const;
 
+export type OnboardingCaseSimulationEmailDeliveryTransport = typeof OnboardingCaseSimulationEmailDeliveryTransport[keyof typeof OnboardingCaseSimulationEmailDeliveryTransport];
+
+
+export const OnboardingCaseSimulationEmailDeliveryTransport = {
+  'real-email': 'real-email',
+} as const;
+
+export type OnboardingCaseSimulationEmailDeliveryBusinessOutcome = typeof OnboardingCaseSimulationEmailDeliveryBusinessOutcome[keyof typeof OnboardingCaseSimulationEmailDeliveryBusinessOutcome];
+
+
+export const OnboardingCaseSimulationEmailDeliveryBusinessOutcome = {
+  'simulated-only': 'simulated-only',
+} as const;
+
+export type OnboardingCaseSimulationEmailDeliveryStatus = typeof OnboardingCaseSimulationEmailDeliveryStatus[keyof typeof OnboardingCaseSimulationEmailDeliveryStatus];
+
+
+export const OnboardingCaseSimulationEmailDeliveryStatus = {
+  prepared: 'prepared',
+  sent: 'sent',
+  sending: 'sending',
+  failed: 'failed',
+  replied: 'replied',
+  stale: 'stale',
+} as const;
+
+export type OnboardingCaseSimulationEmailDeliveryFreshness = typeof OnboardingCaseSimulationEmailDeliveryFreshness[keyof typeof OnboardingCaseSimulationEmailDeliveryFreshness];
+
+
+export const OnboardingCaseSimulationEmailDeliveryFreshness = {
+  'current-generation': 'current-generation',
+  'retired-generation': 'retired-generation',
+} as const;
+
 export interface OnboardingCaseSimulationEmailDelivery {
-  transport: 'real-email';
-  businessOutcome: 'simulated-only';
+  transport: OnboardingCaseSimulationEmailDeliveryTransport;
+  businessOutcome: OnboardingCaseSimulationEmailDeliveryBusinessOutcome;
   recipient: string;
-  status: 'prepared' | 'sent' | 'sending' | 'failed' | 'replied' | 'stale';
+  status: OnboardingCaseSimulationEmailDeliveryStatus;
   /** @nullable */
   reason: string | null;
-  freshness: 'current-generation' | 'retired-generation';
+  freshness: OnboardingCaseSimulationEmailDeliveryFreshness;
 }
 
 export interface OnboardingCaseSimulationState {
@@ -5428,7 +5473,15 @@ export interface OnboardingCaseSimulationState {
 }
 
 export type OnboardingCaseSimulationEmailResult = OnboardingCaseSimulationState & ({
-  emailDelivery: OnboardingCaseSimulationEmailDelivery;
+  emailDelivery: {
+  transport: 'real-email';
+  businessOutcome: 'simulated-only';
+  recipient: string;
+  status: 'prepared' | 'sent' | 'sending' | 'failed' | 'replied' | 'stale';
+  /** @nullable */
+  reason: string | null;
+  freshness: 'current-generation' | 'retired-generation';
+};
 });
 
 export type OnbReadinessSlaStreamKey = typeof OnbReadinessSlaStreamKey[keyof typeof OnbReadinessSlaStreamKey];
@@ -8854,6 +8907,10 @@ export type ReconcileGovernanceDispatchBody = {
   reconciliationReference: string;
 };
 
+export type UpdateOrganizationPrimaryCountry200 = {
+  organization: OrganizationSummary;
+};
+
 export type ListEaAssessmentsParams = {
 status?: EaAssessmentStatus;
 };
@@ -9198,4 +9255,3 @@ export type ListSensitiveLifecycleDeletionJobs200JobsItem = { [key: string]: unk
 export type ListSensitiveLifecycleDeletionJobs200 = {
   jobs: ListSensitiveLifecycleDeletionJobs200JobsItem[];
 };
-
