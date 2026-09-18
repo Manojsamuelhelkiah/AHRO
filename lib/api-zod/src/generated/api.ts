@@ -9,6 +9,89 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary List server-supported client setup system connection choices
+ */
+
+
+
+export const ListScenarioSystemCapabilitiesResponseItem = zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "description": zod.string(),
+  "modes": zod.array(zod.object({
+  "mode": zod.enum(['direct-integration', 'email-watch', 'file-transfer', 'webhook', 'manual']),
+  "label": zod.string(),
+  "description": zod.string()
+})).min(1),
+  "watcherSystem": zod.enum(['bgv', 'itsm', 'payroll']).optional()
+})
+export const ListScenarioSystemCapabilitiesResponse = zod.array(ListScenarioSystemCapabilitiesResponseItem)
+
+
+/**
+ * Requires an organization owner or admin. Scenario saving alone never changes live connectors or open checks.
+ * @summary Apply a saved scenario's system choices to tenant operations
+ */
+
+
+
+export const ActivateScenarioSystemSetupParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const activateScenarioSystemSetupResponseInputsAssumptionOverridesMinOne = 0;
+
+export const activateScenarioSystemSetupResponseInputsAdoptionRampMin = 3;
+export const activateScenarioSystemSetupResponseInputsAdoptionRampMax = 3;
+
+
+
+export const ActivateScenarioSystemSetupResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "inputs": zod.object({
+  "numSystems": zod.number().describe('Number of HR systems of record in the client landscape (drives Act fan-out)'),
+  "annualTransactions": zod.number().describe('Committed HR transactions per year'),
+  "employees": zod.number(),
+  "sector": zod.string(),
+  "companyType": zod.string().describe('single-country | multi-country | global'),
+  "isolationTier": zod.string().describe('pooled | siloed | dedicated'),
+  "hrHourlyCostUsd": zod.number().describe('Loaded hourly cost of client HR staff (as-is baseline)'),
+  "hitlHourlyCostUsd": zod.number().describe('Loaded hourly cost of HITL reviewers in the to-be model'),
+  "countries": zod.number(),
+  "commercialAssumptions": zod.object({
+  "targetGrossMargin": zod.number().optional().describe('Target pricing margin as a fraction (default 0.60).'),
+  "targetClients": zod.number().optional().describe('Expected clients sharing product investment and support capacity (default 10).'),
+  "productRecoveryMonths": zod.number().optional().describe('Planned period for recovering the reusable product build investment (default 36 months).'),
+  "supportTeamFte": zod.number().optional().describe('Shared support and maintenance team capacity in FTE (default 1).'),
+  "supportHourlyCostUsd": zod.number().optional().describe('Loaded hourly cost of support and maintenance capacity (default 60 USD).'),
+  "supportToolingAnnualUsdPerClient": zod.number().optional().describe('Annual per-client support tooling, monitoring and service-management cost (default 5000 USD).'),
+  "actualsOverlayId": zod.number().optional().describe('Optional saved calibration overlay used for measured token and operating-cost repricing.')
+}).optional().describe('Commercial planning inputs applied after the operational cost-benefit calculation. These do not alter client benefit or automation economics.'),
+  "intentShareOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional manual overrides of intent shares (intent key to share fraction)'),
+  "assumptionOverrides": zod.record(zod.string(), zod.number().min(activateScenarioSystemSetupResponseInputsAssumptionOverridesMinOne)).optional().describe('Per-scenario overrides for global assumption values. Keys must match a GlobalAssumption key from the overridable set: slm-call-cost, llm-call-cost, frontier-call-cost, mcp-action-cost, infra-per-txn, landscape-fanout, country-localization, tier-pooled, tier-siloed, tier-dedicated, company-multi-country, company-global. Absent keys use the global defaults. Values must be non-negative finite numbers.\n'),
+  "adoptionRate": zod.number().optional().describe('Share of committed volume arriving through the agentic channel (0-1, default 1). Non-adopted volume incurs no platform cost and yields no benefit.'),
+  "containmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Optional per-flow-class containment overrides (flow-class key to 0-1 fraction). Defaults come from the containment-\* assumptions. Uncontained transactions still incur AI\/infra cost but fall back to full as-is human handling and yield no benefit.'),
+  "hitlSamplingRate": zod.number().optional().describe('Fraction of default residual HITL minutes actually spent on contained transactions (0-1, default 1). Models review sampling as trust matures.'),
+  "landscapeMaturity": zod.string().optional().describe('clean | mixed | legacy (default mixed). Multiplies build cost and Act landscape fan-out.'),
+  "contractYears": zod.number().optional().describe('Contract length in years used to amortize client onboarding cost (default 3)'),
+  "reworkRatePct": zod.number().optional().describe('Client\'s as-is share of transactions requiring rework, in percent (0-20, default 0). Drives a client-specific error-reduction benefit.'),
+  "peakLoadFactor": zod.number().optional().describe('Seasonality premium on avoided human effort (1-1.5, default 1). Reflects that automated capacity at peak avoids overstaffing.'),
+  "containmentRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of transactions that complete in the automated flow (0–1). Non-contained (failed) transactions fall back to full as-is human cost; AI\/infra costs are still charged on the full adopted volume because the attempt ran before the failure was detected. Defaults: fc1-deterministic=0.95, fc2-policy=0.88, fc3-multiagent=0.80, fc4-frontier=0.70.\n'),
+  "adoptionRamp": zod.array(zod.number()).min(activateScenarioSystemSetupResponseInputsAdoptionRampMin).max(activateScenarioSystemSetupResponseInputsAdoptionRampMax).optional().describe('Three-element array [y1, y2, y3] where each element is the fraction of annualTransactions routed to the automated channel in that year (0–1, non-decreasing). Non-adopted volume stays at as-is cost and generates no benefit. Default: [0.40, 0.75, 1.00].\n'),
+  "hitlSamplingRates": zod.record(zod.string(), zod.number()).optional().describe('Per-flow-class fraction of automated (contained) transactions that also receive human review. Multiplies toBeHumanMin to give effective residual human minutes per automated transaction. Defaults: fc1-deterministic=0.05, fc2-policy=0.15, fc3-multiagent=0.30, fc4-frontier=0.60.\n'),
+  "modelSelection": zod.record(zod.string(), zod.string()).optional().describe('Chosen AI model per role (router | reasoning | frontier | data), keys from \/model-catalog. Defaults match the registered \*-call-cost assumptions.'),
+  "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
+  "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
+}),
+  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "fileIds": zod.array(zod.number())
+})
+
+
+/**
  * @summary Get current verified policy-library capabilities
  */
 export const GetHrPolicyCapabilitiesResponse = zod.object({
@@ -7398,6 +7481,20 @@ export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -7435,7 +7532,33 @@ export const CreateScenarioBody = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }),
-  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
+  "setupData": zod.union([zod.object({
+  "clientName": zod.string().min(1),
+  "sector": zod.string().min(1),
+  "employees": zod.number().min(1),
+  "countries": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "companyType": zod.enum(['single-country', 'multi-country', 'global']),
+  "isolationTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "landscapeMaturity": zod.enum(['clean', 'mixed', 'legacy']),
+  "hrHourlyCostUsd": zod.number().min(1),
+  "hitlHourlyCostUsd": zod.number().min(1),
+  "processMode": zod.enum(['recommended', 'hybrid', 'custom']),
+  "selectedDomains": zod.array(zod.string()).min(1),
+  "personas": zod.array(zod.object({
+  "role": zod.string().min(1),
+  "name": zod.string().min(1),
+  "email": zod.string().email()
+})).min(1),
+  "systems": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string().min(1),
+  "vendor": zod.string().min(1),
+  "mode": zod.enum(['direct-integration', 'email-watch', 'file-transfer', 'webhook', 'manual']),
+  "ownerEmail": zod.string()
+})).min(1),
+  "notes": zod.string()
+}),zod.null()]).optional(),
   "fileIds": zod.array(zod.number()).optional()
 })
 
@@ -7564,6 +7687,20 @@ export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -7601,7 +7738,33 @@ export const UpdateScenarioBody = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }).optional(),
-  "setupData": zod.record(zod.string(), zod.unknown()).nullish(),
+  "setupData": zod.union([zod.object({
+  "clientName": zod.string().min(1),
+  "sector": zod.string().min(1),
+  "employees": zod.number().min(1),
+  "countries": zod.number().min(1),
+  "annualTransactions": zod.number().min(1),
+  "companyType": zod.enum(['single-country', 'multi-country', 'global']),
+  "isolationTier": zod.enum(['pooled', 'siloed', 'dedicated']),
+  "landscapeMaturity": zod.enum(['clean', 'mixed', 'legacy']),
+  "hrHourlyCostUsd": zod.number().min(1),
+  "hitlHourlyCostUsd": zod.number().min(1),
+  "processMode": zod.enum(['recommended', 'hybrid', 'custom']),
+  "selectedDomains": zod.array(zod.string()).min(1),
+  "personas": zod.array(zod.object({
+  "role": zod.string().min(1),
+  "name": zod.string().min(1),
+  "email": zod.string().email()
+})).min(1),
+  "systems": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string().min(1),
+  "vendor": zod.string().min(1),
+  "mode": zod.enum(['direct-integration', 'email-watch', 'file-transfer', 'webhook', 'manual']),
+  "ownerEmail": zod.string()
+})).min(1),
+  "notes": zod.string()
+}),zod.null()]).optional(),
   "fileIds": zod.array(zod.number()).optional()
 })
 
@@ -14784,7 +14947,7 @@ export const ListOnboardingConnectorsResponseItem = zod.object({
   "vendor": zod.string().describe('Currently plugged-in vendor adapter'),
   "availableVendors": zod.array(zod.string()),
   "status": zod.string().describe('connected | disconnected'),
-  "trackingMode": zod.enum(['api', 'email']).describe('api = deep integration (poll\/webhook) | email = watch-mailbox tracking via status emails'),
+  "trackingMode": zod.enum(['api', 'email']).describe('api = Direct integration (poll\/webhook) | email = Email watch through status emails sent to the watched mailbox'),
   "description": zod.string(),
   "authoritativeFor": zod.array(zod.string()).describe('Which case fields this system is the source of truth for'),
   "lastSyncAt": zod.string().nullable()
@@ -14802,7 +14965,7 @@ export const UpdateOnboardingConnectorParams = zod.object({
 export const UpdateOnboardingConnectorBody = zod.object({
   "vendor": zod.string().optional(),
   "status": zod.string().optional().describe('connected | disconnected'),
-  "trackingMode": zod.enum(['api', 'email']).optional().describe('Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged')
+  "trackingMode": zod.enum(['api', 'email']).optional().describe('Switch between Direct integration and Email watch; open checks are retagged')
 })
 
 export const UpdateOnboardingConnectorResponse = zod.object({
@@ -14811,7 +14974,7 @@ export const UpdateOnboardingConnectorResponse = zod.object({
   "vendor": zod.string().describe('Currently plugged-in vendor adapter'),
   "availableVendors": zod.array(zod.string()),
   "status": zod.string().describe('connected | disconnected'),
-  "trackingMode": zod.enum(['api', 'email']).describe('api = deep integration (poll\/webhook) | email = watch-mailbox tracking via status emails'),
+  "trackingMode": zod.enum(['api', 'email']).describe('api = Direct integration (poll\/webhook) | email = Email watch through status emails sent to the watched mailbox'),
   "description": zod.string(),
   "authoritativeFor": zod.array(zod.string()).describe('Which case fields this system is the source of truth for'),
   "lastSyncAt": zod.string().nullable()

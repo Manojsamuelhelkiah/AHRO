@@ -25,10 +25,12 @@ import {
   getPinnedOrganizationIdForPage,
   getGetScenarioQueryKey,
   pinOrganizationIdForPage,
+  useActivateScenarioSystemSetup,
   useComputeRollup,
   useCreateScenario,
   useGetScenario,
   useListIntents,
+  useListScenarioSystemCapabilities,
 } from '@workspace/api-client-react';
 import type { Rollup, Scenario, ScenarioInputs } from '@workspace/api-client-react';
 import { Building2, Check, ChevronRight, Copy, FileUp, FlaskConical, Users } from 'lucide-react';
@@ -55,15 +57,18 @@ type OrganizationSummary = {
 function ClientSetupWizard({
   draftSession,
   useSyntheticDemo,
+  canActivateSystemSetup,
 }: {
   draftSession: ClientSetupDraftSession<ClientSetupDraft>;
   useSyntheticDemo: boolean;
+  canActivateSystemSetup: boolean;
 }) {
   const savedScenarioId = Number(new URLSearchParams(window.location.search).get('scenarioId'));
   const [currentStep, setCurrentStep] = useState(0);
   const [rollup, setRollup] = useState<Rollup | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [activationNotice, setActivationNotice] = useState<string | null>(null);
   const [fileOperationPending, setFileOperationPending] = useState(false);
   const fileOperationPendingRef = useRef(false);
   const activeScenarioIdRef = useRef<number | null>(null);
@@ -105,10 +110,16 @@ function ClientSetupWizard({
   
   const computeRollup = useComputeRollup();
   const createScenario = useCreateScenario();
+  const activateSystemSetup = useActivateScenarioSystemSetup();
   const { data: reloadedScenario } = useGetScenario(savedScenarioId || 0, {
     query: { enabled: Number.isInteger(savedScenarioId) && savedScenarioId > 0, queryKey: getGetScenarioQueryKey(savedScenarioId || 0) },
   });
   const { data: intentCorpus, isLoading: intentsLoading } = useListIntents();
+  const {
+    data: systemCapabilities = [],
+    isLoading: systemCapabilitiesLoading,
+    isError: systemCapabilitiesError,
+  } = useListScenarioSystemCapabilities();
 
   useEffect(() => {
     if (reloadedScenario) {
@@ -147,17 +158,18 @@ function ClientSetupWizard({
     const selected = new Set(values.selectedDomains.map((domain) => domainKeys[domain]).filter(Boolean));
     const includedIntents = (intentCorpus?.intents ?? []).filter((intent) => selected.has(intent.domain));
     const totalWeight = includedIntents.reduce((sum, intent) => sum + intent.baseWeight, 0);
-    const manualSystemKey: Record<string, string> = {
-      Intake: 'ats',
-      'Employee Master': 'sf-ec',
-      'IAM/Access': 'idp',
-      Learning: 'lms',
-      'IT Assets': 'ticketing',
-      'Payroll/Benefits': 'sf-ecp',
-      Leave: 'time-system',
-      Compliance: 'knowledge-base',
-      Documents: 'doc-store',
-      Communications: 'ticketing',
+    const assumptionSystemKey: Record<string, string> = {
+      ats: 'ats',
+      hris: 'sf-ec',
+      identity: 'idp',
+      lms: 'lms',
+      itsm: 'ticketing',
+      payroll: 'sf-ecp',
+      leave: 'time-system',
+      compliance: 'knowledge-base',
+      esignature: 'doc-store',
+      communications: 'ticketing',
+      bgv: 'bgv',
     };
 
     return {
@@ -174,8 +186,8 @@ function ClientSetupWizard({
       contractYears: 3,
       nonIntegratedSystems: Array.from(new Set(
         values.systems
-          .filter((system) => system.mode === 'Manual')
-          .map((system) => manualSystemKey[system.domain])
+          .filter((system) => system.mode === 'manual' || system.mode === 'file-transfer')
+          .map((system) => assumptionSystemKey[system.key])
           .filter(Boolean),
       )),
       ...(totalWeight > 0
@@ -216,15 +228,29 @@ function ClientSetupWizard({
         activeScenarioIdRef.current = data.id;
         draftPersistenceEnabled.current = false;
         draftSession.clear();
-        setScenario(data);
-         window.history.replaceState(null, '', `${window.location.pathname}?scenarioId=${data.id}`);
+        window.history.replaceState(null, '', `${window.location.pathname}?scenarioId=${data.id}`);
+        if (!canActivateSystemSetup) {
+          setActivationNotice('Scenario saved. An organization owner or admin must activate these choices before live connector behavior changes.');
+          setScenario(data);
+          return;
+        }
+        activateSystemSetup.mutate({ id: data.id }, {
+          onSuccess: (activated) => {
+            setActivationNotice('System connection choices activated for this organization.');
+            setScenario(activated);
+          },
+          onError: (error: any) => {
+            setActivationNotice(error?.data?.message || error?.message || 'Scenario saved, but system choices could not be activated.');
+            setScenario(data);
+          },
+        });
       },
       onError: (error: any) => setOperationError(error?.response?.data?.message || error?.message || 'The implementation scenario could not be saved.'),
     });
   }
 
   const isSimulating = computeRollup.isPending || (computeRollup as any).isLoading;
-  const isCommitting = createScenario.isPending || (createScenario as any).isLoading;
+  const isCommitting = createScenario.isPending || (createScenario as any).isLoading || activateSystemSetup.isPending;
 
   return (
      <div className="max-w-5xl mx-auto pb-12">
@@ -272,7 +298,11 @@ function ClientSetupWizard({
           <FormProvider {...form}>
             <div className="p-4 sm:p-8">
                {currentStep === 0 && <StepScope />}
-               {currentStep === 1 && <StepLandscape />}
+                {currentStep === 1 && (systemCapabilitiesLoading
+                  ? <div className="py-12 text-center text-sm text-[var(--text-muted)]">Loading supported connection methods…</div>
+                  : systemCapabilitiesError || systemCapabilities.length === 0
+                    ? <div role="alert" className="rounded-lg border border-[var(--status-red)] bg-[var(--status-red-bg)] p-4 text-sm text-[var(--status-red-fg)]">Supported connection methods could not be loaded. Setup cannot continue safely.</div>
+                  : <StepLandscape capabilities={systemCapabilities} />)}
                {currentStep === 2 && <StepProcess onFileOperationPendingChange={handleFileOperationPendingChange} />}
                {currentStep === 3 && <StepReview 
                  onSimulate={handleSimulate} 
@@ -285,6 +315,8 @@ function ClientSetupWizard({
                  onFileOperationPendingChange={handleFileOperationPendingChange}
                  operationError={operationError}
                   intentsLoading={intentsLoading}
+                   capabilities={systemCapabilities}
+                   activationNotice={activationNotice}
                />}
             </div>
             
@@ -293,7 +325,7 @@ function ClientSetupWizard({
                  Previous
                </Button>
                {currentStep < 3 ? (
-                  <Button type="button" onClick={handleNext} disabled={fileOperationPending} className="px-6 bg-[var(--primary)] text-white">
+                   <Button type="button" onClick={handleNext} disabled={fileOperationPending || (currentStep === 1 && (systemCapabilitiesLoading || systemCapabilitiesError || systemCapabilities.length === 0))} className="px-6 bg-[var(--primary)] text-white">
                     {fileOperationPending ? 'Uploading file…' : <>Next Step <ChevronRight className="w-4 h-4 ml-1" /></>}
                  </Button>
                ) : (
@@ -381,6 +413,7 @@ export function ClientSetupPage() {
     <ClientSetupWizard
       draftSession={draftSession}
       useSyntheticDemo={organization.organizationId === 'demo'}
+      canActivateSystemSetup={organization.role === 'owner' || organization.role === 'admin'}
     />
   );
 }

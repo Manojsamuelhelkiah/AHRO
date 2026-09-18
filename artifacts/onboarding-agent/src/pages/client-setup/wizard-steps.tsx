@@ -1,13 +1,12 @@
 import * as React from 'react';
-import { useFormContext, useFieldArray } from 'react-hook-form';
+import { useFormContext, useFieldArray, useWatch } from 'react-hook-form';
 import { ClientSetupDraft } from './schema';
 import { Input, Button, SectionHeading } from '@/components/ui-shared';
 import { Plus, Trash2, Check } from 'lucide-react';
 import { Select, Textarea, FormField } from './ui-form';
-import type { Rollup, Scenario } from '@workspace/api-client-react';
+import type { Rollup, Scenario, ScenarioSystemCapability } from '@workspace/api-client-react';
 import { ProcessFileManager } from '@/components/process-file-manager';
 
-const systemDomains = ['Intake', 'Employee Master', 'IAM/Access', 'Learning', 'IT Assets', 'Payroll/Benefits', 'Leave', 'Compliance', 'Documents', 'Communications'];
 const processDomains = ['Hire', 'Pay', 'Leave', 'Benefits', 'Time', 'Mobility', 'Develop', 'Retire', 'Data/Admin', 'Policy'];
 
 export function StepScope() {
@@ -56,7 +55,7 @@ export function StepScope() {
   );
 }
 
-export function StepLandscape() {
+export function StepLandscape({ capabilities }: { capabilities: ScenarioSystemCapability[] }) {
   const { control, register, formState: { errors } } = useFormContext<ClientSetupDraft>();
   const { fields, append, remove } = useFieldArray({ control, name: 'systems' });
 
@@ -103,44 +102,9 @@ export function StepLandscape() {
                      </tr>
                   </thead>
                    <tbody className="block divide-y divide-[var(--border)] md:table-row-group">
-                     {fields.map((f, i) => (
-                         <tr key={f.id} className="block bg-[var(--surface)] p-3 hover:bg-[var(--surface-soft)] transition-colors md:table-row md:p-0">
-                            <td className="block p-1.5 md:table-cell md:p-2">
-                              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Domain</span>
-                             <Select {...register(`systems.${i}.domain` as const)}>
-                               <option value="">Select...</option>
-                               {systemDomains.map(d => <option key={d} value={d}>{d}</option>)}
-                             </Select>
-                           </td>
-                            <td className="block p-1.5 md:table-cell md:p-2">
-                              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">System Name</span>
-                              <Input {...register(`systems.${i}.name` as const)} placeholder="e.g. Workday" />
-                            </td>
-                            <td className="block p-1.5 md:table-cell md:p-2">
-                              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Vendor</span>
-                              <Input {...register(`systems.${i}.vendor` as const)} placeholder="Vendor" />
-                            </td>
-                            <td className="block p-1.5 md:table-cell md:p-2">
-                              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Mode</span>
-                             <Select {...register(`systems.${i}.mode` as const)}>
-                               <option value="API">API</option>
-                               <option value="Webhook">Webhook</option>
-                               <option value="Flat File">Flat File</option>
-                               <option value="Manual">Manual</option>
-                             </Select>
-                           </td>
-                            <td className="block p-1.5 md:table-cell md:p-2">
-                              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Owner Email</span>
-                              <Input {...register(`systems.${i}.ownerEmail` as const)} placeholder="admin@..." />
-                            </td>
-                            <td className="block p-1.5 text-right md:table-cell md:p-2 md:text-center">
-                             <Button type="button" variant="ghost" size="icon" onClick={() => remove(i)} className="text-[var(--text-muted)] hover:text-[var(--status-red)] h-8 w-8">
-                                <span className="sr-only">Remove system</span>
-                               <Trash2 className="w-4 h-4" />
-                             </Button>
-                           </td>
-                        </tr>
-                     ))}
+                      {fields.map((f, i) => (
+                        <SystemSetupRow key={f.id} index={i} capabilities={capabilities} onRemove={() => remove(i)} />
+                      ))}
                      {fields.length === 0 && (
                        <tr>
                          <td colSpan={6} className="p-6 text-center text-[var(--text-muted)] text-[var(--text-sm)] bg-[var(--surface-alt)]">
@@ -152,13 +116,49 @@ export function StepLandscape() {
                </table>
              </div>
              <div className="p-2 bg-[var(--surface-alt)] border-t border-[var(--border)]">
-                <Button type="button" variant="secondary" size="sm" onClick={() => append({ domain: '', name: '', vendor: '', mode: 'API', ownerEmail: '' })}>
+                 <Button type="button" variant="secondary" size="sm" onClick={() => append({ key: capabilities[0]?.key ?? '', name: '', vendor: '', mode: capabilities[0]?.modes[0]?.mode ?? 'manual', ownerEmail: '' })}>
                    <Plus className="w-4 h-4 mr-1" /> Add System
                 </Button>
              </div>
           </div>
        </div>
     </div>
+  );
+}
+
+function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capabilities: ScenarioSystemCapability[]; onRemove: () => void }) {
+  const { control, register, setValue } = useFormContext<ClientSetupDraft>();
+  const key = useWatch({ control, name: `systems.${index}.key` });
+  const mode = useWatch({ control, name: `systems.${index}.mode` });
+  const capability = capabilities.find((entry) => entry.key === key) ?? capabilities[0];
+  const modeOption = capability?.modes.find((option) => option.mode === mode);
+  return (
+    <tr className="block bg-[var(--surface)] p-3 hover:bg-[var(--surface-soft)] transition-colors md:table-row md:p-0">
+      <td className="block p-1.5 md:table-cell md:p-2">
+        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">System type</span>
+        <Select {...register(`systems.${index}.key`)} onChange={(event) => {
+          const next = capabilities.find((entry) => entry.key === event.target.value);
+          setValue(`systems.${index}.key`, event.target.value, { shouldDirty: true, shouldValidate: true });
+          if (next && !next.modes.some((option) => option.mode === mode)) {
+            setValue(`systems.${index}.mode`, next.modes[0]!.mode, { shouldDirty: true, shouldValidate: true });
+          }
+        }}>
+          {capabilities.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
+        </Select>
+        <p className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{capability?.description}</p>
+      </td>
+      <td className="block p-1.5 md:table-cell md:p-2"><span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">System Name</span><Input {...register(`systems.${index}.name`)} placeholder="e.g. Workday" /></td>
+      <td className="block p-1.5 md:table-cell md:p-2"><span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Vendor</span><Input {...register(`systems.${index}.vendor`)} placeholder="Vendor" /></td>
+      <td className="block p-1.5 md:table-cell md:p-2">
+        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Connection method</span>
+        <Select {...register(`systems.${index}.mode`)}>
+          {capability?.modes.map((option) => <option key={option.mode} value={option.mode}>{option.label}</option>)}
+        </Select>
+        <p className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{modeOption?.description}</p>
+      </td>
+      <td className="block p-1.5 md:table-cell md:p-2"><span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Owner Email</span><Input {...register(`systems.${index}.ownerEmail`)} placeholder="admin@..." /></td>
+      <td className="block p-1.5 text-right md:table-cell md:p-2 md:text-center"><Button type="button" variant="ghost" size="icon" onClick={onRemove} className="text-[var(--text-muted)] hover:text-[var(--status-red)] h-8 w-8"><span className="sr-only">Remove system</span><Trash2 className="w-4 h-4" /></Button></td>
+    </tr>
   );
 }
 
@@ -262,7 +262,7 @@ export function StepProcess({
   );
 }
 
-export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulating, isCommitting, isFileOperationPending, onFileOperationPendingChange, operationError, intentsLoading }: {
+export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulating, isCommitting, isFileOperationPending, onFileOperationPendingChange, operationError, intentsLoading, capabilities, activationNotice }: {
   onSimulate: () => void, 
   onCommit: () => void, 
   rollup: Rollup | null | undefined, 
@@ -273,6 +273,8 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
   onFileOperationPendingChange: (pending: boolean) => void,
   operationError: string | null,
   intentsLoading: boolean,
+  capabilities: ScenarioSystemCapability[],
+  activationNotice: string | null,
 }) {
   const { watch, register, setValue } = useFormContext<ClientSetupDraft>();
   const draft = watch();
@@ -291,6 +293,11 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
          <p className="text-[var(--text-muted)] max-w-md mx-auto mb-8">
             Scenario <strong className="text-[var(--text-primary)]">{scenario.name}</strong> has been saved and locked into the implementation pipeline.
          </p>
+          {activationNotice && (
+            <p role="status" className="mx-auto mb-6 max-w-xl rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+              {activationNotice}
+            </p>
+          )}
          <div className="inline-flex bg-[var(--surface-alt)] border border-[var(--border)] rounded-[var(--radius-lg)] p-6 text-left shadow-sm">
             <div className="space-y-3 text-sm min-w-[280px]">
                <div className="flex justify-between gap-8"><span className="text-[var(--text-muted)]">Scenario ID:</span> <span className="font-mono font-semibold text-[var(--primary)]">{scenario.id}</span></div>
@@ -320,6 +327,15 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
               <div className="flex justify-between border-b border-[var(--border)] pb-2"><dt className="text-[var(--text-muted)]">Scale:</dt><dd className="font-medium">{draft.employees} employees, {draft.countries} countries</dd></div>
               <div className="flex justify-between border-b border-[var(--border)] pb-2"><dt className="text-[var(--text-muted)]">Volume:</dt><dd className="font-medium">{draft.annualTransactions.toLocaleString()} tx/yr</dd></div>
               <div className="flex justify-between border-b border-[var(--border)] pb-2"><dt className="text-[var(--text-muted)]">Systems:</dt><dd className="font-medium">{draft.systems.length} mapped</dd></div>
+               <div className="border-b border-[var(--border)] pb-2">
+                 <dt className="text-[var(--text-muted)]">Connection methods:</dt>
+                 <dd className="mt-2 space-y-1 text-right font-medium">
+                   {draft.systems.map((system) => {
+                     const capability = capabilities.find((entry) => entry.key === system.key);
+                     return <div key={system.key}>{capability?.label ?? system.key}: {capability?.modes.find((option) => option.mode === system.mode)?.label ?? system.mode}</div>;
+                   })}
+                 </dd>
+               </div>
               <div className="flex justify-between border-b border-[var(--border)] pb-2"><dt className="text-[var(--text-muted)]">Process Mode:</dt><dd className="font-medium capitalize">{draft.processMode}</dd></div>
               <div className="flex justify-between border-b border-[var(--border)] pb-2"><dt className="text-[var(--text-muted)]">Domains Scope:</dt><dd className="font-medium">{draft.selectedDomains.length} domains</dd></div>
               <div className="flex justify-between pb-2"><dt className="text-[var(--text-muted)]">Accountable Contacts:</dt><dd className="font-medium">{draft.personas.length} mapped</dd></div>

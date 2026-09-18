@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db, scenariosTable, scenarioFilesTable, actualsOverlaysTable, objectCleanupJobsTable } from "@workspace/db";
+import { onbConnectors, onbSystemChecks } from "@workspace/db/schema";
 import {
   ListScenariosResponse,
   CreateScenarioBody,
@@ -29,8 +30,58 @@ import {
   organizationValues,
   organizationWhere,
 } from "../lib/organization-scope";
+import {
+  canActivateSystemSetup,
+  connectorUpdateForSetupSelection,
+  selectedWatcherConfigurations,
+  SYSTEM_SETUP_CAPABILITIES,
+  validateSystemSetup,
+} from "../lib/onboarding/system-setup-capabilities";
+import { ensureConnectorsSeeded } from "../lib/onboarding/connectors";
+import { systemDef } from "../lib/onboarding/external-systems";
 
 const router: IRouter = Router();
+
+router.get("/scenario-system-capabilities", requireAuth, (_req, res) => {
+  res.json(SYSTEM_SETUP_CAPABILITIES);
+});
+
+async function applySetupWatcherModes(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  organizationId: string,
+  setupData: Parameters<typeof selectedWatcherConfigurations>[0],
+): Promise<void> {
+  for (const selection of selectedWatcherConfigurations(setupData)) {
+    const def = systemDef(selection.system)!;
+    const [current] = await tx.select({
+      trackingMode: onbConnectors.trackingMode,
+      configurationProvenance: onbConnectors.configurationProvenance,
+    }).from(onbConnectors).where(and(
+      eq(onbConnectors.organizationId, organizationId),
+      eq(onbConnectors.key, selection.connectorKey),
+    )).for("update");
+    if (!current) {
+      throw new InputValidationError(`Connector "${selection.connectorKey}" is unavailable`);
+    }
+    const update = connectorUpdateForSetupSelection(current, selection);
+    await tx.update(onbConnectors)
+      .set({
+        ...update,
+        lastSyncAt: new Date(),
+      })
+      .where(and(
+        eq(onbConnectors.organizationId, organizationId),
+        eq(onbConnectors.key, selection.connectorKey),
+      ));
+    await tx.update(onbSystemChecks)
+      .set({ mode: selection.trackingMode === "email" ? "email" : def.mode })
+      .where(and(
+        eq(onbSystemChecks.organizationId, organizationId),
+        eq(onbSystemChecks.system, selection.system),
+        inArray(onbSystemChecks.status, ["pending", "overdue"]),
+      ));
+  }
+}
 
 function scenarioAccessWhere(organizationId: string, ownerUserId: string) {
   return and(
@@ -96,6 +147,7 @@ router.post("/scenarios", requireAuth, async (req, res, next) => {
   try {
     const body = CreateScenarioBody.parse(req.body);
     const organizationId = getOrganizationId(req);
+    validateSystemSetup(body.setupData);
     const [overrides, customIntents] = await Promise.all([
       loadActiveFlowOverrides(organizationId),
       loadRequiredCustomIntents(organizationId),
@@ -168,11 +220,48 @@ router.get("/scenarios/:id", requireAuth, async (req, res, next) => {
   }
 });
 
+router.post("/scenarios/:id/activate-system-setup", requireAuth, async (req, res, next) => {
+  try {
+    if (!canActivateSystemSetup(req.organizationRole)) {
+      res.status(403).json({ message: "Organization owner or admin role required to activate system setup." });
+      return;
+    }
+    const id = parseId(req.params["id"]);
+    const organizationId = getOrganizationId(req);
+    await ensureConnectorsSeeded(organizationId);
+    const row = await db.transaction(async (tx) => {
+      const [lockedScenario] = await tx.select().from(scenariosTable).where(and(
+        eq(scenariosTable.id, id),
+        scenarioAccessWhere(organizationId, req.authUserId!),
+      )).for("update");
+      if (!lockedScenario) return undefined;
+      const setupData = lockedScenario.setupData as Parameters<typeof validateSystemSetup>[0];
+      validateSystemSetup(setupData);
+      await applySetupWatcherModes(tx, organizationId, setupData);
+      return lockedScenario;
+    });
+    if (!row) {
+      res.status(404).json({ message: "Scenario not found" });
+      return;
+    }
+    const files = await db.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable)
+      .where(and(
+        organizationWhere(scenarioFilesTable, organizationId),
+        eq(scenarioFilesTable.scenarioId, id),
+        eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+      ));
+    res.json(CreateScenarioResponse.parse(serialize(row, files.map((file) => file.id))));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
   try {
     const id = parseId(req.params["id"]);
     const organizationId = getOrganizationId(req);
     const body = UpdateScenarioBody.parse(req.body);
+    validateSystemSetup(body.setupData);
     if (body.inputs !== undefined) {
       const customIntents = await loadRequiredCustomIntents(organizationId);
       const customKeys = new Set(customIntents.map((i) => i.key));

@@ -39,6 +39,38 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /scenario-system-capabilities:
+    get:
+      operationId: listScenarioSystemCapabilities
+      tags: [scenarios]
+      summary: List server-supported client setup system connection choices
+      responses:
+        "200":
+          description: Capability matrix used by Client Setup
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScenarioSystemCapability" }
+  /scenarios/{id}/activate-system-setup:
+    post:
+      operationId: activateScenarioSystemSetup
+      tags: [scenarios]
+      summary: Apply a saved scenario's system choices to tenant operations
+      description: Requires an organization owner or admin. Scenario saving alone never changes live connectors or open checks.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Activated scenario setup
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Scenario" }
+        "403": { description: Organization owner or admin required }
+        "404": { description: Scenario not found }
   /policies/capabilities:
     get:
       operationId: getHrPolicyCapabilities
@@ -5870,6 +5902,75 @@ components:
         type: integer
         minimum: 1
   schemas:
+    ScenarioSystemSetupMode:
+      type: string
+      enum: [direct-integration, email-watch, file-transfer, webhook, manual]
+    ScenarioSystemSetupModeOption:
+      type: object
+      additionalProperties: false
+      required: [mode, label, description]
+      properties:
+        mode: { $ref: "#/components/schemas/ScenarioSystemSetupMode" }
+        label: { type: string }
+        description: { type: string }
+    ScenarioSystemCapability:
+      type: object
+      additionalProperties: false
+      required: [key, label, description, modes]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        description: { type: string }
+        modes:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ScenarioSystemSetupModeOption" }
+        watcherSystem:
+          type: string
+          enum: [bgv, itsm, payroll]
+    ScenarioSetupSystem:
+      type: object
+      additionalProperties: false
+      required: [key, name, vendor, mode, ownerEmail]
+      properties:
+        key: { type: string }
+        name: { type: string, minLength: 1 }
+        vendor: { type: string, minLength: 1 }
+        mode: { $ref: "#/components/schemas/ScenarioSystemSetupMode" }
+        ownerEmail: { type: string }
+    ScenarioSetupData:
+      type: object
+      additionalProperties: false
+      required: [clientName, sector, employees, countries, annualTransactions, companyType, isolationTier, landscapeMaturity, hrHourlyCostUsd, hitlHourlyCostUsd, processMode, selectedDomains, personas, systems, notes]
+      properties:
+        clientName: { type: string, minLength: 1 }
+        sector: { type: string, minLength: 1 }
+        employees: { type: number, minimum: 1 }
+        countries: { type: number, minimum: 1 }
+        annualTransactions: { type: number, minimum: 1 }
+        companyType: { type: string, enum: [single-country, multi-country, global] }
+        isolationTier: { type: string, enum: [pooled, siloed, dedicated] }
+        landscapeMaturity: { type: string, enum: [clean, mixed, legacy] }
+        hrHourlyCostUsd: { type: number, minimum: 1 }
+        hitlHourlyCostUsd: { type: number, minimum: 1 }
+        processMode: { type: string, enum: [recommended, hybrid, custom] }
+        selectedDomains: { type: array, minItems: 1, items: { type: string } }
+        personas:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [role, name, email]
+            properties:
+              role: { type: string, minLength: 1 }
+              name: { type: string, minLength: 1 }
+              email: { type: string, format: email }
+        systems:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ScenarioSetupSystem" }
+        notes: { type: string }
     OrganizationSummary:
       type: object
       additionalProperties: false
@@ -7345,9 +7446,9 @@ components:
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
         setupData:
-          type: object
-          nullable: true
-          additionalProperties: true
+          oneOf:
+            - $ref: "#/components/schemas/ScenarioSetupData"
+            - type: "null"
         fileIds:
           type: array
           items: { type: integer }
@@ -7361,9 +7462,9 @@ components:
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
         setupData:
-          type: object
-          nullable: true
-          additionalProperties: true
+          oneOf:
+            - $ref: "#/components/schemas/ScenarioSetupData"
+            - type: "null"
         fileIds:
           type: array
           items: { type: integer }
@@ -10308,7 +10409,7 @@ components:
         trackingMode:
           type: string
           enum: [api, email]
-          description: api = deep integration (poll/webhook) | email = watch-mailbox tracking via status emails
+          description: api = Direct integration (poll/webhook) | email = Email watch through status emails sent to the watched mailbox
         description:
           type: string
         authoritativeFor:
@@ -10330,7 +10431,7 @@ components:
         trackingMode:
           type: string
           enum: [api, email]
-          description: Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged
+          description: Switch between Direct integration and Email watch; open checks are retagged
     OnbDashboard:
       type: object
       properties:

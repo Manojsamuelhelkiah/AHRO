@@ -5,6 +5,123 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type ScenarioSystemSetupMode = typeof ScenarioSystemSetupMode[keyof typeof ScenarioSystemSetupMode];
+
+
+export const ScenarioSystemSetupMode = {
+  'direct-integration': 'direct-integration',
+  'email-watch': 'email-watch',
+  'file-transfer': 'file-transfer',
+  webhook: 'webhook',
+  manual: 'manual',
+} as const;
+
+export interface ScenarioSystemSetupModeOption {
+  mode: ScenarioSystemSetupMode;
+  label: string;
+  description: string;
+}
+
+export type ScenarioSystemCapabilityWatcherSystem = typeof ScenarioSystemCapabilityWatcherSystem[keyof typeof ScenarioSystemCapabilityWatcherSystem];
+
+
+export const ScenarioSystemCapabilityWatcherSystem = {
+  bgv: 'bgv',
+  itsm: 'itsm',
+  payroll: 'payroll',
+} as const;
+
+export interface ScenarioSystemCapability {
+  key: string;
+  label: string;
+  description: string;
+  /** @minItems 1 */
+  modes: ScenarioSystemSetupModeOption[];
+  watcherSystem?: ScenarioSystemCapabilityWatcherSystem;
+}
+
+export interface ScenarioSetupSystem {
+  key: string;
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 1 */
+  vendor: string;
+  mode: ScenarioSystemSetupMode;
+  ownerEmail: string;
+}
+
+export type ScenarioSetupDataCompanyType = typeof ScenarioSetupDataCompanyType[keyof typeof ScenarioSetupDataCompanyType];
+
+
+export const ScenarioSetupDataCompanyType = {
+  'single-country': 'single-country',
+  'multi-country': 'multi-country',
+  global: 'global',
+} as const;
+
+export type ScenarioSetupDataIsolationTier = typeof ScenarioSetupDataIsolationTier[keyof typeof ScenarioSetupDataIsolationTier];
+
+
+export const ScenarioSetupDataIsolationTier = {
+  pooled: 'pooled',
+  siloed: 'siloed',
+  dedicated: 'dedicated',
+} as const;
+
+export type ScenarioSetupDataLandscapeMaturity = typeof ScenarioSetupDataLandscapeMaturity[keyof typeof ScenarioSetupDataLandscapeMaturity];
+
+
+export const ScenarioSetupDataLandscapeMaturity = {
+  clean: 'clean',
+  mixed: 'mixed',
+  legacy: 'legacy',
+} as const;
+
+export type ScenarioSetupDataProcessMode = typeof ScenarioSetupDataProcessMode[keyof typeof ScenarioSetupDataProcessMode];
+
+
+export const ScenarioSetupDataProcessMode = {
+  recommended: 'recommended',
+  hybrid: 'hybrid',
+  custom: 'custom',
+} as const;
+
+export type ScenarioSetupDataPersonasItem = {
+  /** @minLength 1 */
+  role: string;
+  /** @minLength 1 */
+  name: string;
+  email: string;
+};
+
+export interface ScenarioSetupData {
+  /** @minLength 1 */
+  clientName: string;
+  /** @minLength 1 */
+  sector: string;
+  /** @minimum 1 */
+  employees: number;
+  /** @minimum 1 */
+  countries: number;
+  /** @minimum 1 */
+  annualTransactions: number;
+  companyType: ScenarioSetupDataCompanyType;
+  isolationTier: ScenarioSetupDataIsolationTier;
+  landscapeMaturity: ScenarioSetupDataLandscapeMaturity;
+  /** @minimum 1 */
+  hrHourlyCostUsd: number;
+  /** @minimum 1 */
+  hitlHourlyCostUsd: number;
+  processMode: ScenarioSetupDataProcessMode;
+  /** @minItems 1 */
+  selectedDomains: string[];
+  /** @minItems 1 */
+  personas: ScenarioSetupDataPersonasItem[];
+  /** @minItems 1 */
+  systems: ScenarioSetupSystem[];
+  notes: string;
+}
+
 export interface OrganizationSummary {
   id: string;
   name: string;
@@ -1630,33 +1747,29 @@ export interface ScenarioInputs {
   intentContainmentOverrides?: ScenarioInputsIntentContainmentOverrides;
 }
 
-export type ScenarioSetupData = { [key: string]: unknown } | null;
+export type ScenarioSetupDataProperty = { [key: string]: unknown } | null;
 
 export interface Scenario {
   id: number;
   name: string;
   inputs: ScenarioInputs;
-  setupData?: ScenarioSetupData;
+  setupData?: ScenarioSetupDataProperty;
   createdAt: string;
   updatedAt: string;
   fileIds: number[];
 }
 
-export type ScenarioInputSetupData = { [key: string]: unknown } | null;
-
 export interface ScenarioInput {
   name: string;
   inputs: ScenarioInputs;
-  setupData?: ScenarioInputSetupData;
+  setupData?: ScenarioSetupData | null;
   fileIds?: number[];
 }
-
-export type ScenarioUpdateSetupData = { [key: string]: unknown } | null;
 
 export interface ScenarioUpdate {
   name?: string;
   inputs?: ScenarioInputs;
-  setupData?: ScenarioUpdateSetupData;
+  setupData?: ScenarioSetupData | null;
   fileIds?: number[];
 }
 
@@ -4479,7 +4592,7 @@ export interface OnbInboundMessage {
 }
 
 /**
- * api = deep integration (poll/webhook) | email = watch-mailbox tracking via status emails
+ * api = Direct integration (poll/webhook) | email = Email watch through status emails sent to the watched mailbox
  */
 export type OnbConnectorTrackingMode = typeof OnbConnectorTrackingMode[keyof typeof OnbConnectorTrackingMode];
 
@@ -4502,7 +4615,7 @@ export interface OnbConnector {
   availableVendors: string[];
   /** connected | disconnected */
   status: string;
-  /** api = deep integration (poll/webhook) | email = watch-mailbox tracking via status emails */
+  /** api = Direct integration (poll/webhook) | email = Email watch through status emails sent to the watched mailbox */
   trackingMode: OnbConnectorTrackingMode;
   description: string;
   /** Which case fields this system is the source of truth for */
@@ -4512,7 +4625,7 @@ export interface OnbConnector {
 }
 
 /**
- * Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged
+ * Switch between Direct integration and Email watch; open checks are retagged
  */
 export type OnbConnectorUpdateTrackingMode = typeof OnbConnectorUpdateTrackingMode[keyof typeof OnbConnectorUpdateTrackingMode];
 
@@ -4526,7 +4639,7 @@ export interface OnbConnectorUpdate {
   vendor?: string;
   /** connected | disconnected */
   status?: string;
-  /** Switch between deep integration and watch-mailbox (email) tracking; open checks are retagged */
+  /** Switch between Direct integration and Email watch; open checks are retagged */
   trackingMode?: OnbConnectorUpdateTrackingMode;
 }
 

@@ -237,6 +237,7 @@ import type {
   ScenarioFileUploadIntent,
   ScenarioFileUploadRequest,
   ScenarioInput,
+  ScenarioSystemCapability,
   ScenarioUpdate,
   SecurityDrillResult,
   SeedDemoVolunteers200,
@@ -327,6 +328,155 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListScenarioSystemCapabilitiesUrl = () => {
+
+
+
+
+  return `/api/scenario-system-capabilities`
+}
+
+/**
+ * @summary List server-supported client setup system connection choices
+ */
+export const listScenarioSystemCapabilities = async ( options?: RequestInit): Promise<ScenarioSystemCapability[]> => {
+
+  return customFetch<ScenarioSystemCapability[]>(getListScenarioSystemCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListScenarioSystemCapabilitiesQueryKey = () => {
+    return [
+    `/api/scenario-system-capabilities`
+    ] as const;
+    }
+
+
+export const getListScenarioSystemCapabilitiesQueryOptions = <TData = Awaited<ReturnType<typeof listScenarioSystemCapabilities>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScenarioSystemCapabilities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListScenarioSystemCapabilitiesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listScenarioSystemCapabilities>>> = ({ signal }) => listScenarioSystemCapabilities({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listScenarioSystemCapabilities>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListScenarioSystemCapabilitiesQueryResult = NonNullable<Awaited<ReturnType<typeof listScenarioSystemCapabilities>>>
+export type ListScenarioSystemCapabilitiesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List server-supported client setup system connection choices
+ */
+
+export function useListScenarioSystemCapabilities<TData = Awaited<ReturnType<typeof listScenarioSystemCapabilities>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScenarioSystemCapabilities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListScenarioSystemCapabilitiesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getActivateScenarioSystemSetupUrl = (id: number,) => {
+
+
+
+
+  return `/api/scenarios/${id}/activate-system-setup`
+}
+
+/**
+ * Requires an organization owner or admin. Scenario saving alone never changes live connectors or open checks.
+ * @summary Apply a saved scenario's system choices to tenant operations
+ */
+export const activateScenarioSystemSetup = async (id: number, options?: RequestInit): Promise<Scenario> => {
+
+  return customFetch<Scenario>(getActivateScenarioSystemSetupUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getActivateScenarioSystemSetupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateScenarioSystemSetup>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateScenarioSystemSetup>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['activateScenarioSystemSetup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateScenarioSystemSetup>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  activateScenarioSystemSetup(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateScenarioSystemSetupMutationResult = NonNullable<Awaited<ReturnType<typeof activateScenarioSystemSetup>>>
+
+    export type ActivateScenarioSystemSetupMutationError = ErrorType<void>
+
+    /**
+ * @summary Apply a saved scenario's system choices to tenant operations
+ */
+export const useActivateScenarioSystemSetup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateScenarioSystemSetup>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activateScenarioSystemSetup>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getActivateScenarioSystemSetupMutationOptions(options));
+    }
 
 export const getGetHrPolicyCapabilitiesUrl = () => {
 

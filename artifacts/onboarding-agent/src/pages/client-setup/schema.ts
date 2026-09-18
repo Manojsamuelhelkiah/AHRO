@@ -7,10 +7,10 @@ export const personaSchema = z.object({
 });
 
 export const systemSchema = z.object({
-  domain: z.string().min(1, 'Domain is required'),
+  key: z.string().min(1, 'System type is required'),
   name: z.string().min(1, 'System name is required'),
   vendor: z.string().min(1, 'Vendor is required'),
-  mode: z.string().min(1, 'Integration mode is required'),
+  mode: z.enum(['direct-integration', 'email-watch', 'file-transfer', 'webhook', 'manual']),
   ownerEmail: z.string().email('Enter a valid system owner email').or(z.literal('')),
 });
 
@@ -45,6 +45,17 @@ const clientSetupFieldsSchema = z.object({
 export const clientSetupDataSchema = clientSetupFieldsSchema.omit({ processFiles: true });
 
 export const clientSetupSchema = clientSetupFieldsSchema.superRefine((draft, ctx) => {
+  const seenSystems = new Set<string>();
+  draft.systems.forEach((system, index) => {
+    if (seenSystems.has(system.key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['systems', index, 'key'],
+        message: 'Each system type can be mapped only once',
+      });
+    }
+    seenSystems.add(system.key);
+  });
   if (draft.processMode !== 'recommended' && draft.processFiles.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -76,16 +87,17 @@ export const initialDraft: ClientSetupDraft = {
     { role: 'IAM / security approver', name: '', email: '' },
   ],
   systems: [
-    { domain: 'Intake', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'Employee Master', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'IAM/Access', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'Learning', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'IT Assets', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'Payroll/Benefits', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'Leave', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'Compliance', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'Documents', name: '', vendor: '', mode: 'API', ownerEmail: '' },
-    { domain: 'Communications', name: '', vendor: '', mode: 'API', ownerEmail: '' },
+    { key: 'ats', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'hris', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'identity', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'lms', name: '', vendor: '', mode: 'file-transfer', ownerEmail: '' },
+    { key: 'itsm', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'payroll', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'leave', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'compliance', name: '', vendor: '', mode: 'file-transfer', ownerEmail: '' },
+    { key: 'esignature', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'communications', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { key: 'bgv', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
   ],
   notes: ''
 };
@@ -110,16 +122,17 @@ export const demoDraft: ClientSetupDraft = {
     { role: 'IAM / security approver', name: 'Mateo Silva', email: 'mateo.silva@example.com' },
   ],
   systems: [
-    { domain: 'Intake', name: 'Greenhouse Recruiting', vendor: 'Greenhouse', mode: 'API', ownerEmail: 'recruiting.ops@example.com' },
-    { domain: 'Employee Master', name: 'Workday HCM', vendor: 'Workday', mode: 'API', ownerEmail: 'hris@example.com' },
-    { domain: 'IAM/Access', name: 'Microsoft Entra ID', vendor: 'Microsoft', mode: 'API', ownerEmail: 'identity@example.com' },
-    { domain: 'Learning', name: 'Cornerstone Learning', vendor: 'Cornerstone', mode: 'API', ownerEmail: 'learning@example.com' },
-    { domain: 'IT Assets', name: 'ServiceNow ITSM', vendor: 'ServiceNow', mode: 'API', ownerEmail: 'it.operations@example.com' },
-    { domain: 'Payroll/Benefits', name: 'SAP SuccessFactors Payroll', vendor: 'SAP', mode: 'API', ownerEmail: 'payroll@example.com' },
-    { domain: 'Leave', name: 'Workday Absence', vendor: 'Workday', mode: 'API', ownerEmail: 'leave.admin@example.com' },
-    { domain: 'Compliance', name: 'Northstar Policy Hub', vendor: 'Internal', mode: 'Manual', ownerEmail: 'compliance@example.com' },
-    { domain: 'Documents', name: 'SharePoint Records', vendor: 'Microsoft', mode: 'API', ownerEmail: 'records@example.com' },
-    { domain: 'Communications', name: 'Microsoft Teams', vendor: 'Microsoft', mode: 'API', ownerEmail: 'people.comms@example.com' },
+    { key: 'ats', name: 'Greenhouse Recruiting', vendor: 'Greenhouse', mode: 'direct-integration', ownerEmail: 'recruiting.ops@example.com' },
+    { key: 'hris', name: 'Workday HCM', vendor: 'Workday', mode: 'direct-integration', ownerEmail: 'hris@example.com' },
+    { key: 'identity', name: 'Microsoft Entra ID', vendor: 'Microsoft', mode: 'direct-integration', ownerEmail: 'identity@example.com' },
+    { key: 'lms', name: 'Cornerstone Learning Export', vendor: 'Cornerstone', mode: 'file-transfer', ownerEmail: 'learning@example.com' },
+    { key: 'itsm', name: 'ServiceNow ITSM', vendor: 'ServiceNow', mode: 'direct-integration', ownerEmail: 'it.operations@example.com' },
+    { key: 'payroll', name: 'SAP SuccessFactors Payroll', vendor: 'SAP', mode: 'direct-integration', ownerEmail: 'payroll@example.com' },
+    { key: 'leave', name: 'Workday Absence', vendor: 'Workday', mode: 'direct-integration', ownerEmail: 'leave.admin@example.com' },
+    { key: 'compliance', name: 'Northstar Policy Export', vendor: 'Internal', mode: 'file-transfer', ownerEmail: 'compliance@example.com' },
+    { key: 'esignature', name: 'DocuSign', vendor: 'DocuSign', mode: 'direct-integration', ownerEmail: 'records@example.com' },
+    { key: 'communications', name: 'Microsoft Teams', vendor: 'Microsoft', mode: 'direct-integration', ownerEmail: 'people.comms@example.com' },
+    { key: 'bgv', name: 'HireRight', vendor: 'HireRight', mode: 'email-watch', ownerEmail: 'screening@example.com' },
   ],
   notes: 'Synthetic demonstration profile. Every person, address, volume, and system mapping is fictional and can be edited.',
 };

@@ -102,8 +102,8 @@ export function SystemsPage() {
                         onChange={(e) => handleTrackingMode(conn.key, e.target.value as 'api' | 'email')}
                         disabled={updateConnector.isPending}
                       >
-                        <option value="api">Deep integration (API)</option>
-                        <option value="email">Email watch (no API)</option>
+                        <option value="api">Direct integration</option>
+                        <option value="email">Email watch</option>
                       </select>
                     </div>
                   )}
@@ -150,7 +150,7 @@ export function SystemsPage() {
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Inbox className="w-4 h-4 text-[var(--primary)]" /> Email Watch
           </h2>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Shallow-integration fallback: when a system offers no API or webhook, vendors simply CC status emails to the watch mailbox — the System Watcher reads them as status changes.</p>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Email watch tracks status emails sent to the watched mailbox for Background Verification, ITSM / Ticketing, and Payroll & Benefits. It does not grant system access.</p>
         </div>
         {loadingEmailWatch ? (
           <LoadingBlock>Loading email watch status...</LoadingBlock>
@@ -371,7 +371,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
           )}
           {checks.length === 0 && (
             <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-5 pt-5 border-t border-[var(--border)] font-medium">
-              No open checks are on email watch. Switch a system adapter above to <span className="font-semibold text-[var(--text-primary)]">Email watch (no API)</span> and its open checks will be tracked through the mailbox instead.
+               No open checks are on Email watch. Switch a supported system above from <span className="font-semibold text-[var(--text-primary)]">Direct integration</span> to <span className="font-semibold text-[var(--text-primary)]">Email watch</span> and its open checks will be tracked through the mailbox instead.
             </p>
           )}
         </div>
