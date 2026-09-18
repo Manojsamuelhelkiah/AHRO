@@ -44,7 +44,7 @@ const capabilities: ScenarioSystemCapability[] = [
 
 function LandscapeFixture() {
   const form = useForm({ defaultValues: { ...demoDraft, systems: [
-    { id: "bgv-1", key: "bgv", name: "HireRight", vendor: "HireRight", mode: "email-watch" as const, ownerEmail: "" },
+    { id: "bgv-1", key: "bgv", name: "HireRight", vendor: "HireRight", mode: "email-watch" as const, ownerEmail: "", needsReview: true },
     { id: "hris-1", key: "hris", name: "Workday", vendor: "Workday", mode: "direct-integration" as const, ownerEmail: "" },
   ] } });
   return <FormProvider {...form}><StepLandscape capabilities={capabilities} /></FormProvider>;
@@ -57,5 +57,6 @@ test("responsive setup rows render server-provided choices without unsupported e
   assert.match(html, /Track status emails sent to the watched mailbox/);
   assert.match(html, /System type/);
   assert.equal(html.match(/value="email-watch"/g)?.length, 1);
+  assert.match(html, /previously saved connection choice is no longer supported/);
   assert.match(html, /Payroll and ticketing support multiple estates/);
 });

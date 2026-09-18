@@ -147,8 +147,16 @@ function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capa
   const { control, register, setValue, formState: { errors } } = useFormContext<ClientSetupDraft>();
   const key = useWatch({ control, name: `systems.${index}.key` });
   const mode = useWatch({ control, name: `systems.${index}.mode` });
+  const needsReview = useWatch({ control, name: `systems.${index}.needsReview` });
   const capability = capabilities.find((entry) => entry.key === key);
   const modeOption = capability?.modes.find((option) => option.mode === mode);
+  const modeField = register(`systems.${index}.mode`);
+  const clearReviewIfCurrent = (nextKey: string, nextMode: string) => {
+    const nextCapability = capabilities.find((entry) => entry.key === nextKey);
+    if (nextCapability?.modes.some((option) => option.mode === nextMode)) {
+      setValue(`systems.${index}.needsReview`, false, { shouldDirty: true, shouldValidate: true });
+    }
+  };
   return (
     <tr className="block bg-[var(--surface)] p-3 hover:bg-[var(--surface-soft)] transition-colors md:table-row md:p-0">
       <input type="hidden" {...register(`systems.${index}.id`)} />
@@ -156,10 +164,14 @@ function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capa
         <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">System type</span>
         <Select {...register(`systems.${index}.key`)} onChange={(event) => {
           const next = capabilities.find((entry) => entry.key === event.target.value);
+          const nextMode = next && (!mode || !next.modes.some((option) => option.mode === mode))
+            ? next.modes[0]?.mode ?? ''
+            : mode;
           setValue(`systems.${index}.key`, event.target.value, { shouldDirty: true, shouldValidate: true });
-          if (next && mode && !next.modes.some((option) => option.mode === mode)) {
-            setValue(`systems.${index}.mode`, next.modes[0]!.mode, { shouldDirty: true, shouldValidate: true });
+          if (next && nextMode !== mode) {
+            setValue(`systems.${index}.mode`, nextMode, { shouldDirty: true, shouldValidate: true });
           }
+          clearReviewIfCurrent(event.target.value, nextMode);
         }}>
           <option value="" disabled>Choose a system type</option>
           {capabilities.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
@@ -170,11 +182,19 @@ function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capa
       <td className="block p-1.5 md:table-cell md:p-2"><span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Vendor</span><Input {...register(`systems.${index}.vendor`)} placeholder="Vendor" /></td>
       <td className="block p-1.5 md:table-cell md:p-2">
         <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Connection method</span>
-        <Select {...register(`systems.${index}.mode`)}>
+        <Select {...modeField} onChange={(event) => {
+          modeField.onChange(event);
+          clearReviewIfCurrent(key, event.target.value);
+        }}>
           <option value="" disabled>Choose a connection method</option>
           {capability?.modes.map((option) => <option key={option.mode} value={option.mode}>{option.label}</option>)}
         </Select>
         <p className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{modeOption?.description}</p>
+        {needsReview && (
+          <p role="status" className="mt-2 rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] px-2 py-1.5 text-[11px] leading-4 text-[var(--status-amber-fg)]">
+            Needs review: the previously saved connection choice is no longer supported. Select a current system type and connection method.
+          </p>
+        )}
         {errors.systems?.[index]?.mode?.message && (
           <p role="alert" className="mt-1 text-[11px] leading-4 text-[var(--status-red-fg)]">{errors.systems[index]?.mode?.message}</p>
         )}

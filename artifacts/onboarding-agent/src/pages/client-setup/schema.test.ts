@@ -5,6 +5,7 @@ import {
   clientSetupSchema,
   demoDraft,
   initialDraft,
+  migrateLegacyClientSetupDraft,
   resolveInitialDraft,
 } from "./schema";
 
@@ -139,4 +140,23 @@ test("resumed browser drafts upgrade ID-less rows before a second estate can be 
       { ...resumed.systems.find((system) => system.key === "payroll")!, id: "payroll-second" },
     ],
   }).success, true);
+});
+
+test('unsupported migrated system choices are marked for review without leaking UI metadata into setup data', () => {
+  const migrated = migrateLegacyClientSetupDraft({
+    ...demoDraft,
+    systems: [
+      { domain: 'Learning', name: 'Cornerstone', vendor: 'Cornerstone', mode: 'API', ownerEmail: 'lms@example.com' },
+      { domain: 'Compliance', name: 'Policy Hub', vendor: 'Internal', mode: 'Manual', ownerEmail: 'policy@example.com' },
+    ],
+  });
+  assert.ok(migrated);
+  assert.equal(migrated.systems?.[0]?.needsReview, true);
+  assert.equal(migrated.systems?.[1]?.needsReview, undefined);
+
+  const parsed = clientSetupDataSchema.parse({
+    ...demoDraft,
+    systems: demoDraft.systems.map((system) => ({ ...system, needsReview: true })),
+  });
+  assert.equal('needsReview' in parsed.systems[0]!, false);
 });

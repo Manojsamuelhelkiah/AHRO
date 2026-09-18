@@ -13,6 +13,7 @@ export const systemSchema = z.object({
   vendor: z.string().min(1, 'Vendor is required'),
   mode: z.enum(['direct-integration', 'email-watch', 'file-transfer', 'webhook', 'manual']),
   ownerEmail: z.string().email('Enter a valid system owner email').or(z.literal('')),
+  needsReview: z.boolean().optional(),
 });
 
 const MULTI_INSTANCE_SYSTEM_KEYS = new Set(['itsm', 'payroll']);
@@ -69,7 +70,12 @@ function withLegacySystemIds<T extends z.ZodTypeAny>(schema: T) {
   }, schema);
 }
 
-export const clientSetupDataSchema = withLegacySystemIds(clientSetupFieldsObject.omit({ processFiles: true }));
+export const clientSetupDataSchema = withLegacySystemIds(
+  clientSetupFieldsObject.omit({ processFiles: true }).transform(({ systems, ...draft }) => ({
+    ...draft,
+    systems: systems.map(({ needsReview: _needsReview, ...system }) => system),
+  })),
+);
 
 export const clientSetupSchema = withLegacySystemIds(clientSetupFieldsObject).superRefine((draft, ctx) => {
   const seenSystems = new Set<string>();
@@ -264,6 +270,11 @@ export function migrateLegacyClientSetupDraft(
       : LEGACY_SETUP_MODES[normalizedMode] ?? '';
     system.key = key;
     system.mode = key && SUPPORTED_SETUP_MODES[key]?.has(mode as SetupMode) ? mode : '';
+    if (!key || !mode || !SUPPORTED_SETUP_MODES[key]?.has(mode as SetupMode)) {
+      system.needsReview = true;
+    } else {
+      delete system.needsReview;
+    }
     delete system.domain;
     return system;
   });

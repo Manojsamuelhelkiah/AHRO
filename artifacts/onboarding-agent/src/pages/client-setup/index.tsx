@@ -203,7 +203,8 @@ function ClientSetupWizard({
     }
     const values = form.getValues();
     const inputs = buildInputs(values);
-    const { processFiles, ...setupData } = values;
+    const { processFiles, ...setupValues } = values;
+    const setupData = clientSetupDataSchema.parse(setupValues);
     setOperationError(null);
     createScenario.mutate({ data: { name: `${values.clientName} — ${values.processMode} implementation`, inputs, setupData, fileIds: processFiles.map((file) => file.id) } }, {
       onSuccess: (data) => {
