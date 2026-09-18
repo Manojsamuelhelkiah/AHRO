@@ -179,7 +179,8 @@ export function DashboardPage() {
             <>
               <AgentCard
                 name="Onboarding Agent"
-                state={metrics.blocked.length > 0 ? 'Degraded' : 'Operational'}
+                state={metrics.blocked.length > 0 ? 'Needs Attention' : 'Operational'}
+                stateDescription={metrics.blocked.length > 0 ? 'Some cases are blocked and need review' : undefined}
                 workload={agentWorkload(metrics.active.filter((c) => caseTypeOf(c) === 'Onboarding').length, metrics.humanReview.length)}
               />
               <AgentCard name="Payroll Agent" state="Operational" workload="No active work" />
@@ -432,12 +433,12 @@ function KpiCard({ title, value, context, icon: Icon, tone, loading }: { title: 
   );
 }
 
-type AgentState = 'Operational' | 'Waiting' | 'Human Review' | 'Degraded' | 'Blocked' | 'Offline';
+type AgentState = 'Operational' | 'Waiting' | 'Human Review' | 'Needs Attention' | 'Blocked' | 'Offline';
 const AGENT_STATE_STYLE: Record<AgentState, { bg: string; fg: string }> = {
   'Operational': { bg: 'var(--surface-soft)', fg: 'var(--status-green)' },
   'Waiting': { bg: 'var(--surface-alt)', fg: 'var(--text-secondary)' },
   'Human Review': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
-  'Degraded': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
+  'Needs Attention': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
   'Blocked': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
   'Offline': { bg: 'var(--surface-alt)', fg: 'var(--text-muted)' },
 };
@@ -458,7 +459,7 @@ function agentWorkload(activeCount: number, reviewCount: number): string {
   return parts.join(' · ');
 }
 
-function AgentCard({ name, state, workload }: { name: string; state: AgentState; workload: string }) {
+function AgentCard({ name, state, stateDescription, workload }: { name: string; state: AgentState; stateDescription?: string; workload: string }) {
   return (
     <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="shadow-sm flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -470,6 +471,7 @@ function AgentCard({ name, state, workload }: { name: string; state: AgentState;
         </span>
         <AgentStateBadge state={state} />
       </div>
+      {stateDescription && <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{stateDescription}</div>}
       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{workload}</div>
     </Card>
   );
