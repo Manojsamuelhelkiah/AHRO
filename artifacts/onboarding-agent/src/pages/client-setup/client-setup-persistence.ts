@@ -11,14 +11,21 @@ export type ClientSetupDraftSession<TDraft extends object> = {
   save: (draft: Partial<TDraft>) => void;
 };
 
+type StoredDraft<TDraft extends object> = {
+  version: number;
+  draft: Partial<TDraft>;
+};
+
 const LEGACY_DRAFT_KEY = 'clientSetupDraft';
 const LEGACY_DRAFT_QUARANTINE_KEY = 'clientSetupDraft:legacy-unscoped';
 const SCOPED_DRAFT_PREFIX = 'clientSetupDraft:v2';
+export const CLIENT_SETUP_DRAFT_VERSION = 2;
 
 export function createClientSetupDraftSession<TDraft extends object>(
   storage: DraftStorage,
   userId: string | null | undefined,
   organizationId: string | null | undefined,
+  migrateLegacyDraft?: (draft: unknown) => Partial<TDraft> | null,
 ): ClientSetupDraftSession<TDraft> | null {
   const normalizedUserId = userId?.trim();
   const normalizedOrganizationId = organizationId?.trim();
@@ -57,18 +64,34 @@ export function createClientSetupDraftSession<TDraft extends object>(
         const value = storage.getItem(storageKey);
         if (!value) return null;
         const parsed: unknown = JSON.parse(value);
-        return parsed !== null
-          && typeof parsed === 'object'
-          && !Array.isArray(parsed)
-          ? parsed as Partial<TDraft>
-          : null;
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+        const stored = parsed as Partial<StoredDraft<TDraft>>;
+        if (stored.version === CLIENT_SETUP_DRAFT_VERSION) {
+          return stored.draft !== null
+            && typeof stored.draft === 'object'
+            && !Array.isArray(stored.draft)
+            ? stored.draft
+            : null;
+        }
+        if ('version' in stored) return null;
+        const migrated = migrateLegacyDraft?.(parsed) ?? parsed as Partial<TDraft>;
+        if (migrated) {
+          storage.setItem(storageKey, JSON.stringify({
+            version: CLIENT_SETUP_DRAFT_VERSION,
+            draft: migrated,
+          } satisfies StoredDraft<TDraft>));
+        }
+        return migrated;
       } catch {
         return null;
       }
     },
     save: (draft) => {
       try {
-        storage.setItem(storageKey, JSON.stringify(draft));
+        storage.setItem(storageKey, JSON.stringify({
+          version: CLIENT_SETUP_DRAFT_VERSION,
+          draft,
+        } satisfies StoredDraft<TDraft>));
       } catch {
         // Draft persistence is optional.
       }

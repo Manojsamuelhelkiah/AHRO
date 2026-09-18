@@ -3,7 +3,7 @@ import { useUser } from '@clerk/react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useSearch } from 'wouter';
-import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, resolveInitialDraft } from './schema';
+import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, migrateLegacyClientSetupDraft, resolveInitialDraft } from './schema';
 import {
   canNavigateOrCommit,
   createClientSetupDraftSession,
@@ -369,6 +369,7 @@ export function ClientSetupPage() {
         localStorage,
         user?.id,
         organization?.organizationId,
+        migrateLegacyClientSetupDraft,
       ),
     [organization?.organizationId, user?.id],
   );

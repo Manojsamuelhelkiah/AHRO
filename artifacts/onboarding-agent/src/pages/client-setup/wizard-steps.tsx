@@ -147,7 +147,7 @@ function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capa
   const { control, register, setValue, formState: { errors } } = useFormContext<ClientSetupDraft>();
   const key = useWatch({ control, name: `systems.${index}.key` });
   const mode = useWatch({ control, name: `systems.${index}.mode` });
-  const capability = capabilities.find((entry) => entry.key === key) ?? capabilities[0];
+  const capability = capabilities.find((entry) => entry.key === key);
   const modeOption = capability?.modes.find((option) => option.mode === mode);
   return (
     <tr className="block bg-[var(--surface)] p-3 hover:bg-[var(--surface-soft)] transition-colors md:table-row md:p-0">
@@ -157,10 +157,11 @@ function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capa
         <Select {...register(`systems.${index}.key`)} onChange={(event) => {
           const next = capabilities.find((entry) => entry.key === event.target.value);
           setValue(`systems.${index}.key`, event.target.value, { shouldDirty: true, shouldValidate: true });
-          if (next && !next.modes.some((option) => option.mode === mode)) {
+          if (next && mode && !next.modes.some((option) => option.mode === mode)) {
             setValue(`systems.${index}.mode`, next.modes[0]!.mode, { shouldDirty: true, shouldValidate: true });
           }
         }}>
+          <option value="" disabled>Choose a system type</option>
           {capabilities.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
         </Select>
         <p className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{capability?.description}</p>
@@ -170,6 +171,7 @@ function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capa
       <td className="block p-1.5 md:table-cell md:p-2">
         <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Connection method</span>
         <Select {...register(`systems.${index}.mode`)}>
+          <option value="" disabled>Choose a connection method</option>
           {capability?.modes.map((option) => <option key={option.mode} value={option.mode}>{option.label}</option>)}
         </Select>
         <p className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{modeOption?.description}</p>

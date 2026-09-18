@@ -84,6 +84,13 @@ export const clientSetupSchema = withLegacySystemIds(clientSetupFieldsObject).su
       });
     }
     seenSystems.add(system.key);
+    if (!SUPPORTED_SETUP_MODES[system.key]?.has(system.mode)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['systems', index, 'mode'],
+        message: 'Choose a connection method supported by this system type',
+      });
+    }
     if (seenIds.has(system.id)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -120,6 +127,32 @@ export const clientSetupSchema = withLegacySystemIds(clientSetupFieldsObject).su
 
 export type ClientSetupDraft = z.infer<typeof clientSetupSchema>;
 
+const LEGACY_SYSTEM_KEYS: Record<string, string> = {
+  intake: 'ats',
+  'employee master': 'hris',
+  'iam/access': 'identity',
+  learning: 'lms',
+  'it assets': 'itsm',
+  'payroll/benefits': 'payroll',
+  leave: 'leave',
+  compliance: 'compliance',
+  documents: 'esignature',
+  communications: 'communications',
+  'applicant tracking system': 'ats',
+  'applicant tracking': 'ats',
+  'human resources information system': 'hris',
+  'human resource information system': 'hris',
+  'identity provider': 'identity',
+  'learning management system': 'lms',
+  'it service management': 'itsm',
+  'payroll system': 'payroll',
+  'leave management': 'leave',
+  'compliance system': 'compliance',
+  'electronic signature': 'esignature',
+  'communications platform': 'communications',
+  'background verification': 'bgv',
+  'background check': 'bgv',
+};
 export const initialDraft: ClientSetupDraft = {
   clientName: '',
   sector: 'Technology',
@@ -204,3 +237,73 @@ export function resolveInitialDraft(
   }
   return candidate;
 }
+
+const CANONICAL_SYSTEM_KEYS = new Set(initialSystemKeys());
+
+export function migrateLegacyClientSetupDraft(
+  savedDraft: unknown,
+): Partial<ClientSetupDraft> | null {
+  if (savedDraft === null || typeof savedDraft !== 'object' || Array.isArray(savedDraft)) {
+    return null;
+  }
+
+  const draft = { ...(savedDraft as Record<string, unknown>) };
+  if (!Array.isArray(draft.systems)) return draft as Partial<ClientSetupDraft>;
+
+  draft.systems = draft.systems.map((entry) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const system = { ...(entry as Record<string, unknown>) };
+    const normalizedKey = normalizedLegacyValue(system.key ?? system.domain);
+    const normalizedMode = normalizedLegacyValue(system.mode);
+
+    const key = CANONICAL_SYSTEM_KEYS.has(normalizedKey)
+      ? normalizedKey
+      : LEGACY_SYSTEM_KEYS[normalizedKey] ?? '';
+    const mode = CANONICAL_SETUP_MODES.has(normalizedMode as SetupMode)
+      ? normalizedMode
+      : LEGACY_SETUP_MODES[normalizedMode] ?? '';
+    system.key = key;
+    system.mode = key && SUPPORTED_SETUP_MODES[key]?.has(mode as SetupMode) ? mode : '';
+    delete system.domain;
+    return system;
+  });
+
+  return draft as Partial<ClientSetupDraft>;
+}
+
+const LEGACY_SETUP_MODES: Record<string, ClientSetupDraft['systems'][number]['mode']> = {
+  api: 'direct-integration',
+  'direct integration': 'direct-integration',
+  email: 'email-watch',
+  'email watch': 'email-watch',
+  'flat file': 'file-transfer',
+  'file transfer': 'file-transfer',
+  webhook: 'webhook',
+  manual: 'manual',
+};
+
+function initialSystemKeys(): string[] {
+  return ['ats', 'hris', 'identity', 'lms', 'itsm', 'payroll', 'leave', 'compliance', 'esignature', 'communications', 'bgv'];
+}
+
+function normalizedLegacyValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+const CANONICAL_SETUP_MODES = new Set(systemSchema.shape.mode.options);
+
+type SetupMode = ClientSetupDraft['systems'][number]['mode'];
+
+const SUPPORTED_SETUP_MODES: Record<string, ReadonlySet<SetupMode>> = {
+  ats: new Set(['direct-integration', 'webhook', 'file-transfer', 'manual']),
+  hris: new Set(['direct-integration', 'file-transfer', 'manual']),
+  identity: new Set(['direct-integration', 'manual']),
+  lms: new Set(['file-transfer', 'manual']),
+  itsm: new Set(['direct-integration', 'email-watch', 'manual']),
+  payroll: new Set(['direct-integration', 'email-watch', 'file-transfer', 'manual']),
+  leave: new Set(['direct-integration', 'file-transfer', 'manual']),
+  compliance: new Set(['file-transfer', 'manual']),
+  esignature: new Set(['direct-integration', 'webhook', 'manual']),
+  communications: new Set(['direct-integration', 'manual']),
+  bgv: new Set(['direct-integration', 'email-watch', 'manual']),
+};

@@ -64,3 +64,4 @@
 - [Workforce transfer boundaries](workforce-transfer-boundaries.md) — country-specific approval, source-attested human execution, hold-aware retention, and evidence-generation cutover sign-offs.
 - [Starter lifecycle policies](starter-lifecycle-policies.md) — defaults are editable review proposals only; runtime gates read separately approved revisions.
 - [Multi-estate connector modes](multi-estate-connector-modes.md) — payroll and ticketing estates may repeat, but watcher state remains connector-wide and must agree across instances.
+- [Versioned local drafts](versioned-local-drafts.md) — migrate only scoped drafts; map unambiguous legacy values and force explicit choices for unsupported ones.

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  CLIENT_SETUP_DRAFT_VERSION,
   canNavigateOrCommit,
   createClientSetupDraftSession,
   planScenarioHydration,
 } from './client-setup-persistence';
+import { clientSetupSchema, demoDraft, migrateLegacyClientSetupDraft } from './schema';
 
 test('a delayed upload blocks both step navigation and scenario commit', () => {
   assert.equal(canNavigateOrCommit(true), false);
@@ -76,6 +78,71 @@ test('workspace reload cannot adopt another workspace client draft', () => {
   workspaceB.save({ clientName: 'Workspace B client' });
   workspaceB.clear();
   assert.deepEqual(workspaceA.load(), { clientName: 'Confidential A client' });
+});
+
+test('legacy scoped drafts migrate system labels and modes into the current validated shape', () => {
+  const storageKey = 'clientSetupDraft:v2:user-1:workspace-a';
+  const legacyDraft = {
+    ...demoDraft,
+    systems: [
+      { domain: 'Intake', name: 'Greenhouse', vendor: 'Greenhouse', mode: 'API', ownerEmail: 'ats@example.com' },
+      { domain: 'Learning', name: 'Cornerstone', vendor: 'Cornerstone', mode: 'Flat File', ownerEmail: 'lms@example.com' },
+      { domain: 'Compliance', name: 'Policy Hub', vendor: 'Internal', mode: 'Manual', ownerEmail: 'policy@example.com' },
+    ],
+  };
+  const storage = createMemoryStorage({ [storageKey]: JSON.stringify(legacyDraft) });
+  const workspace = createClientSetupDraftSession(
+    storage,
+    'user-1',
+    'workspace-a',
+    migrateLegacyClientSetupDraft,
+  );
+  assert.ok(workspace);
+
+  const migrated = workspace.load();
+  assert.ok(migrated);
+  assert.equal(clientSetupSchema.safeParse(migrated).success, true);
+  assert.deepEqual(migrated.systems?.map(({ key, mode }) => ({ key, mode })), [
+    { key: 'ats', mode: 'direct-integration' },
+    { key: 'lms', mode: 'file-transfer' },
+    { key: 'compliance', mode: 'manual' },
+  ]);
+  assert.deepEqual(JSON.parse(storage.getItem(storageKey)!), {
+    version: CLIENT_SETUP_DRAFT_VERSION,
+    draft: migrated,
+  });
+});
+
+test('unsupported legacy connection choices remain invalid until the user selects replacements', () => {
+  const legacyDraft = {
+    ...demoDraft,
+    systems: [
+      { domain: 'Learning', name: 'Cornerstone', vendor: 'Cornerstone', mode: 'API', ownerEmail: 'lms@example.com' },
+      { domain: 'Mainframe Mystery', name: 'Legacy', vendor: 'Internal', mode: 'Carrier Pigeon', ownerEmail: '' },
+    ],
+  };
+  const migrated = migrateLegacyClientSetupDraft(legacyDraft);
+  assert.ok(migrated);
+  assert.equal(migrated.systems?.[0]?.key, 'lms');
+  assert.equal(migrated.systems?.[0]?.mode, '');
+  assert.equal(migrated.systems?.[1]?.key, '');
+  assert.equal(migrated.systems?.[1]?.mode, '');
+  assert.equal(clientSetupSchema.safeParse(migrated).success, false);
+});
+
+test('future-version drafts are not interpreted with an older reader', () => {
+  const storageKey = 'clientSetupDraft:v2:user-1:workspace-a';
+  const storage = createMemoryStorage({
+    [storageKey]: JSON.stringify({ version: CLIENT_SETUP_DRAFT_VERSION + 1, draft: demoDraft }),
+  });
+  const workspace = createClientSetupDraftSession(
+    storage,
+    'user-1',
+    'workspace-a',
+    migrateLegacyClientSetupDraft,
+  );
+  assert.ok(workspace);
+  assert.equal(workspace.load(), null);
 });
 
 test('unscoped legacy client drafts are quarantined instead of adopted', () => {
