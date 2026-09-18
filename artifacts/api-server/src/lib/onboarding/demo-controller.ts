@@ -28,9 +28,9 @@ import { startVoiceCall, simulateVoiceCall } from "./voice";
 import { runWithDemoControllerLive } from "./provider-policy";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
 import {
+  assertCaseDerivedLifecycleWriteAllowedInTransaction,
   evaluateCaseDerivedLifecycleGateInTransaction,
   SensitiveLifecycleConflictError,
-  withCaseDerivedLifecycleWrite,
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
 
@@ -439,7 +439,24 @@ async function withDemoCaseDerivedLifecycleWrite<T>(
   write: (tx: any, caseRow: typeof onbCases.$inferSelect) => Promise<T>,
 ): Promise<T> {
   try {
-    return await withCaseDerivedLifecycleWrite(input, write);
+    return await withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
+      const [candidate] = await tx.select().from(onbCases).where(and(
+        eq(onbCases.organizationId, input.organizationId),
+        eq(onbCases.id, input.caseId),
+      )).for("update");
+      if (!candidate) {
+        throw error("DemoRunNotFound", "Demo run case was not found.");
+      }
+      const isFullySyntheticControllerCase =
+        input.organizationId === DEMO_ORGANIZATION_ID &&
+        candidate.candidateEmailAuthorizedAt === null &&
+        candidate.notes?.includes(SYNTHETIC_OFFLINE_MARKER) === true &&
+        candidate.notes.includes("[demo-controller-run:");
+      const caseRow = isFullySyntheticControllerCase
+        ? candidate
+        : await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+      return write(tx, caseRow);
+    }));
   } catch (caught) {
     // The demo route already exposes DemoRunConflict as HTTP 409. Preserve
     // that contract while retaining the lifecycle reason for clients.
@@ -524,12 +541,19 @@ export async function createDemoRun(
       // not yet exist, so fail closed before its first persistence when the
       // recorded, explicit work country and its policy envelope cannot be
       // proved. Never infer jurisdiction from a legal entity or region.
-      const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
-        organizationId,
-        jurisdiction: workCountry,
-      });
-      if (!gate.allowed) {
-        throw error("DemoRunConflict", `SENSITIVE_LIFECYCLE_BLOCKED:${gate.reason}`);
+      // A predefined, fully simulated run contains only application-owned
+      // fictional fixture data and cannot dispatch to a person. It therefore
+      // does not claim a real-person lifecycle approval. Selecting a volunteer
+      // introduces real contact/profile data and remains fail-closed behind
+      // the ordinary approved-policy envelope.
+      if (volunteer) {
+        const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+          organizationId,
+          jurisdiction: workCountry,
+        });
+        if (!gate.allowed) {
+          throw error("DemoRunConflict", `SENSITIVE_LIFECYCLE_BLOCKED:${gate.reason}`);
+        }
       }
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
       const c = await createCase(tx, organizationId, input.scenario, volunteer, runId, workCountry!);

@@ -47,6 +47,7 @@
 - [Case explanation boundaries](case-explanation-boundaries.md) — explain recorded evidence, not hidden reasoning; current policy cannot prove historical rationale; chat stays read-only and scope-isolated.
 - [Synthetic case refresh](synthetic-case-refresh.md) — explicit inventory, authoritative offline mode, dispatch/deletion locking, and retained private file references protect real data and recipients.
 - [Hybrid demo boundaries](demo-controller-boundaries.md) — Demo Organization run scope, explicit volunteer outreach, and truthful simulation without changing real employment evidence.
+- [Fictional demo lifecycle boundary](fictional-demo-lifecycle-boundary.md) — fixed no-volunteer Demo Center cases may run without real-person policies; volunteer or entered data may not.
 - [Demo bootstrap approval](demo-bootstrap-approval.md) — initial Demo authority needs private operator approval; managed Clerk metadata editing is not an available setup path.
 - [Operational simulation truthfulness](operational-simulation-truthfulness.md) — show operational emails and agent actions in Communications without implying real external work or readiness.
 - [BGV notification boundaries](bgv-notification-boundaries.md) — human notices versus simulated operations; source provenance, private findings, and stale-email fencing.
