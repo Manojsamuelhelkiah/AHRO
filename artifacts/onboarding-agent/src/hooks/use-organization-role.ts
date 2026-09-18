@@ -4,11 +4,13 @@ import { getPinnedOrganizationIdForPage } from "@workspace/api-client-react";
 type OrganizationMembershipResponse = {
   activeOrganizationId: string | null;
   memberships: Array<{ organizationId: string; role: string }>;
+  demoProfile?: "reviewer" | "administrator" | null;
 };
 
 export function useOrganizationRole() {
   const [role, setRole] = useState<string | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [demoProfile, setDemoProfile] = useState<"reviewer" | "administrator" | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,6 +36,7 @@ export function useOrganizationRole() {
         const membership = data.memberships.find((m) => m.organizationId === orgId);
         setOrganizationId(membership?.organizationId ?? null);
         setRole(membership?.role || null);
+        setDemoProfile(data.demoProfile ?? null);
       })
       .catch(() => {
         if (!controller.signal.aborted) setRole(null);
@@ -47,6 +50,7 @@ export function useOrganizationRole() {
   return { 
     role,
     organizationId,
+    demoProfile,
     isHR: role === 'owner' || role === 'admin',
     loading 
   };

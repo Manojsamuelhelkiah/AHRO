@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { and, asc, desc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   onbAuditEntries,
@@ -156,6 +156,11 @@ function opaqueReference(value: string | null | undefined): string | null {
     ? createHmac("sha256", key).update(compacted).digest("hex")
     : createHash("sha256").update(compacted).digest("hex");
   return `ref:${digest.slice(0, 32)}`;
+}
+
+/** Server-only scoping helper; callers must supply a server-authorized source reference. */
+export function protectedAuditCaseReference(caseId: number): string {
+  return opaqueReference(`case:${caseId}`)!;
 }
 
 /** Reviewers may paste the displayed `ref:…` value or a source identifier. */
@@ -316,11 +321,28 @@ export type AuditFilter = {
   outcome?: AuditOutcome;
   afterSequence?: number;
   limit?: number;
+  /** Internal authorization predicates. Never populate these from request query values. */
+  caseReferences?: string[];
+  includeUnscopedActorId?: string;
 };
 
 export async function listProtectedAudit(organizationId: string, filter: AuditFilter = {}) {
+  const scopePredicate = filter.caseReferences || filter.includeUnscopedActorId
+    ? or(
+        filter.caseReferences?.length
+          ? inArray(onbAuditEntries.caseReference, filter.caseReferences)
+          : undefined,
+        filter.includeUnscopedActorId
+          ? and(
+              eq(onbAuditEntries.actorId, filter.includeUnscopedActorId),
+              isNull(onbAuditEntries.caseReference),
+            )
+          : undefined,
+      )
+    : undefined;
   const predicates = [
     eq(onbAuditEntries.organizationId, organizationId),
+    scopePredicate,
     filter.from ? gte(onbAuditEntries.occurredAt, filter.from) : undefined,
     filter.to ? lte(onbAuditEntries.occurredAt, filter.to) : undefined,
     filter.action ? eq(onbAuditEntries.action, filter.action) : undefined,

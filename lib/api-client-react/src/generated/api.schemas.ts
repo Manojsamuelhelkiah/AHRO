@@ -358,7 +358,8 @@ export interface OnbProtectedAuditPage {
   entries: OnbProtectedAuditEntry[];
   /** @nullable */
   nextCursor: string | null;
-  integrity: OnbProtectedAuditIntegrity;
+  /** Tenant-wide chain integrity for organization scope; withheld for a demo-scoped projection. */
+  integrity: OnbProtectedAuditIntegrity | null;
 }
 
 export type OnbProtectedAuditLifecycleLegalHold = {
@@ -9117,6 +9118,7 @@ export const GetOnboardingOutcomeKpisDomain = {
 } as const;
 
 export type ListOnboardingProtectedAuditParams = {
+scope?: ListOnboardingProtectedAuditScope;
 from?: string;
 to?: string;
 /**
@@ -9146,6 +9148,14 @@ cursor?: number;
  */
 limit?: number;
 };
+
+export type ListOnboardingProtectedAuditScope = typeof ListOnboardingProtectedAuditScope[keyof typeof ListOnboardingProtectedAuditScope];
+
+
+export const ListOnboardingProtectedAuditScope = {
+  organization: 'organization',
+  demo: 'demo',
+} as const;
 
 export type ListOnboardingProtectedAuditOutcome = typeof ListOnboardingProtectedAuditOutcome[keyof typeof ListOnboardingProtectedAuditOutcome];
 

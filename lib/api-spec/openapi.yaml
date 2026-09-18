@@ -5595,9 +5595,10 @@ paths:
     get:
       operationId: listOnboardingProtectedAudit
       tags: [onboarding, audit]
-      summary: Search minimized tenant-scoped protected audit evidence
-      description: Owner/admin only. Existing legacy events are not retroactively certified by this endpoint.
+      summary: Search minimized protected audit evidence
+      description: Owner/admins receive the tenant-wide view. Registered Demo Administrators may request the read-only demo scope, limited to their authorized synthetic cases and their own unscoped demo actions.
       parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [organization, demo], default: organization } }
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
         - { name: action, in: query, schema: { type: string, maxLength: 160 } }
@@ -5613,7 +5614,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OnbProtectedAuditPage" }
-        "403": { description: Organization owner or admin required }
+        "403": { description: Organization owner/admin or eligible Demo Administrator required for the requested scope }
   /onboarding/audit/export:
     get:
       operationId: exportOnboardingProtectedAudit
@@ -6113,7 +6114,11 @@ components:
           type: array
           items: { $ref: "#/components/schemas/OnbProtectedAuditEntry" }
         nextCursor: { type: ["string", "null"] }
-        integrity: { $ref: "#/components/schemas/OnbProtectedAuditIntegrity" }
+        integrity:
+          oneOf:
+            - { $ref: "#/components/schemas/OnbProtectedAuditIntegrity" }
+            - { type: "null" }
+          description: Tenant-wide chain integrity for organization scope; withheld for a demo-scoped projection.
       required: [entries, nextCursor, integrity]
     OnbProtectedAuditLifecycle:
       type: object

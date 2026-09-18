@@ -56,3 +56,9 @@ Controlled volunteer email status is part of the durable public simulation proje
 **Why:** A provider exception after dispatch can leave delivery ambiguous; hiding that state on reload invites duplicate contact and makes the presentation claim more certainty than the provider gave.
 
 **How to apply:** persist the dispatch outcome and expose only safe status/reason fields through simulation GET responses. If a restart races with dispatch, persist the retired/stale transition so a later reply is correlated as stale rather than lost or applied to the new generation.
+
+Demo Administrators may review a read-only audit projection, but that projection must remain synthetic-case scoped and must not include tenant governance controls.
+
+**Why:** The standalone Audit Trail is important for a convincing demonstration, while the shared Demo Organization means organization-wide evidence, exports, integrity details, retention, legal holds, corrections, and retained approval history would expose or control other users' records.
+
+**How to apply:** derive scope on the server from the current registered Demo Administrator, active synthetic-case assignments, and server-generated pseudonymous case references. Include only those case-linked events plus that principal's own unscoped demo actions. Never accept client-supplied case IDs as authority or promote the principal's tenant membership.

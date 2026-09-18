@@ -1,13 +1,21 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { onbAuditEntries, onbAuditLifecycles } from "@workspace/db/schema";
+import {
+  DEMO_ORGANIZATION_ID,
+  onbAuditEntries,
+  onbAuditLifecycles,
+  onbAuthorityAssignments,
+  onbCases,
+} from "@workspace/db/schema";
 import { getOrganizationId } from "../lib/organization-scope";
+import { registeredDemoProfile } from "../lib/demo-principal";
 import {
   appendProtectedAudit,
   appendProtectedAuditInTransaction,
   listProtectedAudit,
   listRetainedApprovalHistory,
+  protectedAuditCaseReference,
   verifyProtectedAudit,
   verifiedAuditAuthority,
   type AuditFilter,
@@ -21,6 +29,10 @@ import {
   hasOpaqueNarrativeAccess,
   resolveSensitiveAccess,
 } from "../lib/onboarding/sensitive-access";
+import {
+  isSyntheticOfflineCase,
+  SYNTHETIC_DEMO_AUTHORITY_SOURCE,
+} from "../lib/onboarding/synthetic-offline";
 
 const router: IRouter = Router();
 
@@ -32,6 +44,44 @@ async function requireAuditReviewer(req: Request, res: Response): Promise<boolea
   if (role === "owner" || role === "admin") return true;
   res.status(403).json({ message: "Organization owner or admin role required for protected audit review." });
   return false;
+}
+
+async function demoAuditFilter(req: Request, res: Response): Promise<Pick<AuditFilter, "caseReferences" | "includeUnscopedActorId"> | null> {
+  const organizationId = getOrganizationId(req);
+  const userId = req.authUserId!;
+  const [profile, membershipRole] = await Promise.all([
+    registeredDemoProfile(userId),
+    verifiedAuditAuthority(organizationId, userId),
+  ]);
+  if (
+    organizationId !== DEMO_ORGANIZATION_ID ||
+    profile !== "administrator" ||
+    membershipRole === null
+  ) {
+    res.status(403).json({
+      message: "A current Demo Administrator profile is required for demo-scoped audit review.",
+    });
+    return null;
+  }
+
+  const assignments = await db.select({
+    caseId: onbAuthorityAssignments.caseId,
+    notes: onbCases.notes,
+    scenarioKey: onbCases.scenarioKey,
+  }).from(onbAuthorityAssignments).innerJoin(onbCases, and(
+    eq(onbCases.organizationId, onbAuthorityAssignments.organizationId),
+    eq(onbCases.id, onbAuthorityAssignments.caseId),
+  )).where(and(
+    eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
+    eq(onbAuthorityAssignments.personUserId, userId),
+    eq(onbAuthorityAssignments.status, "active"),
+    eq(onbAuthorityAssignments.source, SYNTHETIC_DEMO_AUTHORITY_SOURCE),
+    isNull(onbAuthorityAssignments.revokedAt),
+  ));
+  const caseReferences = [...new Set(assignments
+    .filter((row) => row.caseId !== null && isSyntheticOfflineCase(row))
+    .map((row) => protectedAuditCaseReference(row.caseId!)))];
+  return { caseReferences, includeUnscopedActorId: userId };
 }
 
 function positiveInteger(value: unknown): number | undefined {
@@ -154,15 +204,27 @@ async function lifecycleView(organizationId: string) {
 
 router.get("/onboarding/audit", async (req, res, next) => {
   try {
-    if (!(await requireAuditReviewer(req, res))) return;
+    const demoScope = req.query.scope === "demo";
+    if (req.query.scope && req.query.scope !== "organization" && !demoScope) {
+      res.status(400).json({ message: "Invalid audit scope." });
+      return;
+    }
+    const internalScope = demoScope
+      ? await demoAuditFilter(req, res)
+      : null;
+    if (demoScope && !internalScope) return;
+    if (!demoScope && !(await requireAuditReviewer(req, res))) return;
     const filter = queryFilter(req);
     if (!filter) {
       res.status(400).json({ message: "Invalid audit filters." });
       return;
     }
     const organizationId = getOrganizationId(req);
-    const entries = await listProtectedAudit(organizationId, filter);
-    const integrity = await verifyProtectedAudit(organizationId);
+    const entries = await listProtectedAudit(organizationId, {
+      ...filter,
+      ...internalScope,
+    });
+    const integrity = demoScope ? null : await verifyProtectedAudit(organizationId);
     res.json({
       entries: entries.map(entryView),
       nextCursor: entries.length === (filter.limit ?? 100) ? String(entries.at(-1)?.sequence ?? "") : null,

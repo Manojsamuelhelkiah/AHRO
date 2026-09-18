@@ -142,10 +142,13 @@ function auditDateFilter(value: string, endOfDayInclusive = false): string | und
 function AuditPageContent({
   organizationId,
   canReview,
+  mode = 'organization',
 }: {
   organizationId: string | null;
   canReview: boolean;
+  mode?: 'organization' | 'demo';
 }) {
+  const demoMode = mode === 'demo';
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -181,6 +184,7 @@ function AuditPageContent({
   const currentCursor = cursorStack[cursorStack.length - 1] || undefined;
   
   const listParams: ListOnboardingProtectedAuditParams = {
+    scope: demoMode ? 'demo' : 'organization',
     action: appliedFilters.action || undefined,
     actorId: appliedFilters.actorId || undefined,
     objectType: appliedFilters.objectType || undefined,
@@ -197,7 +201,7 @@ function AuditPageContent({
 
   const { data: pageData, isLoading: isLoadingList, isError: isErrorList, refetch: refetchList, isFetching: isFetchingList } = useListOnboardingProtectedAudit(
     listParams,
-    { query: { queryKey: listQueryKey, placeholderData: keepPreviousData, enabled: canReview && Boolean(organizationId) } }
+    { query: { queryKey: listQueryKey, placeholderData: keepPreviousData, enabled: (canReview || demoMode) && Boolean(organizationId) } }
   );
 
   const { data: integrityData, isLoading: isLoadingIntegrity, isError: isErrorIntegrity, refetch: refetchIntegrity } = useGetOnboardingProtectedAuditIntegrity(
@@ -214,8 +218,10 @@ function AuditPageContent({
 
   const handleRefresh = () => {
     refetchList();
-    refetchIntegrity();
-    refetchLifecycle();
+    if (!demoMode) {
+      refetchIntegrity();
+      refetchLifecycle();
+    }
   };
 
   const handleApplyFilters = (e: React.FormEvent) => {
@@ -366,28 +372,34 @@ function AuditPageContent({
 
   return (
     <div className="max-w-[1200px] mx-auto w-full pb-12">
-      <ApprovalHistoryDialog 
-        approvalId={selectedApprovalId} 
-        organizationId={organizationId}
-        enabled={canReview}
-        open={isApprovalDialogOpen} 
-        onOpenChange={setIsApprovalDialogOpen} 
-      />
+      {!demoMode && (
+        <ApprovalHistoryDialog
+          approvalId={selectedApprovalId}
+          organizationId={organizationId}
+          enabled={canReview}
+          open={isApprovalDialogOpen}
+          onOpenChange={setIsApprovalDialogOpen}
+        />
+      )}
       
       <PageHeader 
-        title="Audit Review & Integrity" 
-        subtitle="Accountable, restricted review of system activity."
+        title={demoMode ? "Demo Audit Trail" : "Audit Review & Integrity"}
+        subtitle={demoMode
+          ? "Read-only activity for your authorized synthetic demo cases."
+          : "Accountable, restricted review of system activity."}
       >
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" className="gap-2" onClick={handleRefresh}>
             <RefreshCcw className={`w-4 h-4 ${(isFetchingList || isLoadingIntegrity || isLoadingLifecycle) ? 'animate-spin' : ''}`} /> Refresh
           </Button>
-          <Button variant="outline" size="sm" className="gap-2" onClick={handleExport} disabled={isExporting}>
-            {isExporting ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} 
-            {isExporting ? 'Exporting...' : 'Export Report'}
-          </Button>
+          {!demoMode && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleExport} disabled={isExporting}>
+              {isExporting ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {isExporting ? 'Exporting...' : 'Export Report'}
+            </Button>
+          )}
           
-          <Dialog open={isHoldDialogOpen} onOpenChange={setIsHoldDialogOpen}>
+          {!demoMode && <Dialog open={isHoldDialogOpen} onOpenChange={setIsHoldDialogOpen}>
             <DialogTrigger asChild>
               <Button 
                 variant={isHoldActive ? "destructive" : "default"} 
@@ -421,12 +433,19 @@ function AuditPageContent({
                 </DialogFooter>
               </form>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
         </div>
       </PageHeader>
+
+      {demoMode && (
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+          This view includes case-linked events for synthetic cases assigned to your Demo Administrator profile, plus your own unscoped demo actions.
+          Organization-wide integrity, export, retention, legal-hold, approval-history, and correction controls remain restricted.
+        </div>
+      )}
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className={demoMode ? "mb-6" : "grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6"}>
+        <div className={demoMode ? "space-y-6" : "lg:col-span-2 space-y-6"}>
           <Card>
             <CardHeader className="border-b bg-surface-alt/50" style={{ borderColor: 'var(--border)' }}>
               <div className="flex items-center justify-between mb-4">
@@ -514,7 +533,7 @@ function AuditPageContent({
                   </Button>
                 </div>
               </form>
-              <form onSubmit={viewApprovalById} className="mt-4 flex flex-wrap items-end gap-3 border-t border-border pt-4">
+              {!demoMode && <form onSubmit={viewApprovalById} className="mt-4 flex flex-wrap items-end gap-3 border-t border-border pt-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Retained approval lookup (numeric ID)</Label>
                   <Input
@@ -539,7 +558,7 @@ function AuditPageContent({
                 {approvalLookupError && (
                   <p className="basis-full text-xs text-red-600" role="alert">{approvalLookupError}</p>
                 )}
-              </form>
+              </form>}
             </CardHeader>
             <CardContent className="p-0">
               {isErrorList ? (
@@ -658,7 +677,7 @@ function AuditPageContent({
             </CardContent>
           </Card>
 
-          <Card>
+          {!demoMode && <Card>
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
@@ -711,10 +730,10 @@ function AuditPageContent({
                 </Dialog>
               </div>
             </CardContent>
-          </Card>
+          </Card>}
         </div>
         
-        <div className="space-y-6">
+        {!demoMode && <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between text-lg">
@@ -891,20 +910,20 @@ function AuditPageContent({
               )}
             </CardContent>
           </Card>
-        </div>
+        </div>}
       </div>
     </div>
   );
 }
 
 export function AuditPage() {
-  const { isHR, loading, organizationId } = useOrganizationRole();
+  const { isHR, loading, organizationId, demoProfile } = useOrganizationRole();
 
   if (loading) {
     return <div className="p-8 text-center text-muted-foreground">Checking authorization...</div>;
   }
   
-  if (!isHR) {
+  if (!isHR && demoProfile !== 'administrator') {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
         <PageHeader
@@ -939,5 +958,11 @@ export function AuditPage() {
     );
   }
 
-  return <AuditPageContent organizationId={organizationId} canReview={isHR && Boolean(organizationId)} />;
+  return (
+    <AuditPageContent
+      organizationId={organizationId}
+      canReview={isHR && Boolean(organizationId)}
+      mode={isHR ? 'organization' : 'demo'}
+    />
+  );
 }

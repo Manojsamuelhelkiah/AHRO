@@ -17580,9 +17580,10 @@ export const CreatePricingRateSetResponse = zod.object({
 
 
 /**
- * Owner/admin only. Existing legacy events are not retroactively certified by this endpoint.
- * @summary Search minimized tenant-scoped protected audit evidence
+ * Owner/admins receive the tenant-wide view. Registered Demo Administrators may request the read-only demo scope, limited to their authorized synthetic cases and their own unscoped demo actions.
+ * @summary Search minimized protected audit evidence
  */
+export const listOnboardingProtectedAuditQueryScopeDefault = `organization`;
 export const listOnboardingProtectedAuditQueryActionMax = 160;
 
 export const listOnboardingProtectedAuditQueryObjectTypeMax = 120;
@@ -17598,6 +17599,7 @@ export const listOnboardingProtectedAuditQueryLimitMax = 500;
 
 
 export const ListOnboardingProtectedAuditQueryParams = zod.object({
+  "scope": zod.enum(['organization', 'demo']).default(listOnboardingProtectedAuditQueryScopeDefault),
   "from": zod.date().optional(),
   "to": zod.date().optional(),
   "action": zod.coerce.string().max(listOnboardingProtectedAuditQueryActionMax).optional(),
@@ -17611,7 +17613,7 @@ export const ListOnboardingProtectedAuditQueryParams = zod.object({
 
 
 
-export const listOnboardingProtectedAuditResponseIntegrityCheckedEntriesMin = 0;
+export const listOnboardingProtectedAuditResponseIntegrityOneCheckedEntriesMin = 0;
 
 
 
@@ -17637,9 +17639,9 @@ export const ListOnboardingProtectedAuditResponse = zod.object({
   "entryHash": zod.string()
 })),
   "nextCursor": zod.string().nullable(),
-  "integrity": zod.object({
+  "integrity": zod.union([zod.object({
   "status": zod.enum(['empty', 'verified', 'broken']),
-  "checkedEntries": zod.number().min(listOnboardingProtectedAuditResponseIntegrityCheckedEntriesMin),
+  "checkedEntries": zod.number().min(listOnboardingProtectedAuditResponseIntegrityOneCheckedEntriesMin),
   "firstBrokenSequence": zod.number().nullable(),
   "headMatches": zod.boolean(),
   "externalAnchoring": zod.object({
@@ -17666,7 +17668,7 @@ export const ListOnboardingProtectedAuditResponse = zod.object({
   "limitation": zod.string(),
   "recommendedOutageBehavior": zod.string()
 })
-})
+}),zod.null()]).describe('Tenant-wide chain integrity for organization scope; withheld for a demo-scoped projection.')
 })
 
 

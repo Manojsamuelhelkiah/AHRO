@@ -17245,8 +17245,8 @@ export const getListOnboardingProtectedAuditUrl = (params?: ListOnboardingProtec
 }
 
 /**
- * Owner/admin only. Existing legacy events are not retroactively certified by this endpoint.
- * @summary Search minimized tenant-scoped protected audit evidence
+ * Owner/admins receive the tenant-wide view. Registered Demo Administrators may request the read-only demo scope, limited to their authorized synthetic cases and their own unscoped demo actions.
+ * @summary Search minimized protected audit evidence
  */
 export const listOnboardingProtectedAudit = async (params?: ListOnboardingProtectedAuditParams, options?: RequestInit): Promise<OnbProtectedAuditPage> => {
 
@@ -17293,7 +17293,7 @@ export type ListOnboardingProtectedAuditQueryError = ErrorType<void>
 
 
 /**
- * @summary Search minimized tenant-scoped protected audit evidence
+ * @summary Search minimized protected audit evidence
  */
 
 export function useListOnboardingProtectedAudit<TData = Awaited<ReturnType<typeof listOnboardingProtectedAudit>>, TError = ErrorType<void>>(

@@ -23,6 +23,7 @@ import {
   appendProtectedAuditInTransaction,
   listProtectedAudit,
   listRetainedApprovalHistory,
+  protectedAuditCaseReference,
   reconcileAbandonedProtectedAuditAttempts,
   verifyProtectedAudit,
   verifyProtectedAuditRows,
@@ -328,6 +329,40 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
     const suppressed = entries.filter((entry) => entry.action === "onboarding.guardrail.suppressed-attempt");
     assert.deepEqual(suppressed.map((entry) => entry.payload.suppressedCount), [1, 2, 3, 4, 5]);
     assert.ok(suppressed.every((entry) => entry.payload.guardrailAction === "rejected"));
+  });
+
+  test("demo projection includes authorized case evidence and only the acting user's unscoped events", async () => {
+    const organizationId = tenant("demo-projection");
+    await appendProtectedAudit({
+      ...input(organizationId, "authorized-case"),
+      actorId: "demo-administrator",
+      caseReference: "case:101",
+    });
+    await appendProtectedAudit({
+      ...input(organizationId, "other-case"),
+      actorId: null,
+      actorKind: "system",
+      caseReference: "case:202",
+    });
+    await appendProtectedAudit({
+      ...input(organizationId, "own-unscoped"),
+      actorId: "demo-administrator",
+      caseReference: null,
+    });
+    await appendProtectedAudit({
+      ...input(organizationId, "other-unscoped"),
+      actorId: "another-demo-user",
+      caseReference: null,
+    });
+
+    const entries = await listProtectedAudit(organizationId, {
+      caseReferences: [protectedAuditCaseReference(101)],
+      includeUnscopedActorId: "demo-administrator",
+    });
+    assert.deepEqual(entries.map((entry) => entry.action), [
+      "authorized-case",
+      "own-unscoped",
+    ]);
   });
 
   test("crash-window attempts receive a durable recovery-required resolution", async () => {
