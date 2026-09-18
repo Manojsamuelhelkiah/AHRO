@@ -54,6 +54,106 @@ async function signInDemo(page: Page, email: string) {
   await expect(page.locator("#login-email")).toHaveCount(0);
 }
 
+test("Client Setup recovers scoped legacy drafts without guessing unsupported choices", async ({
+  page,
+}) => {
+  await signInDemo(page, ADMIN_EMAIL);
+
+  const legacyDraft = {
+    clientName: "Legacy Browser Client",
+    sector: "Technology",
+    employees: 2400,
+    countries: 4,
+    annualTransactions: 120000,
+    companyType: "multi-country",
+    isolationTier: "siloed",
+    landscapeMaturity: "mixed",
+    hrHourlyCostUsd: 52,
+    hitlHourlyCostUsd: 68,
+    processMode: "recommended",
+    selectedDomains: ["Hire", "Pay", "Leave"],
+    processFiles: [],
+    personas: [
+      { role: "Implementation lead", name: "Avery Chen", email: "avery.chen@example.com" },
+    ],
+    systems: [
+      {
+        domain: "Intake",
+        name: "Greenhouse",
+        vendor: "Greenhouse",
+        mode: "API",
+        ownerEmail: "ats@example.com",
+      },
+      {
+        domain: "Learning",
+        name: "Cornerstone",
+        vendor: "Cornerstone",
+        mode: "Flat File",
+        ownerEmail: "lms@example.com",
+      },
+      {
+        domain: "Mainframe Mystery",
+        name: "Legacy",
+        vendor: "Internal",
+        mode: "Carrier Pigeon",
+        ownerEmail: "",
+      },
+    ],
+    notes: "Recovered from a pre-v2 browser draft.",
+  };
+  const adminDemoKey = "clientSetupDraft:v2:browser-e2e-administrator:demo";
+  const adminOtherTenantKey = "clientSetupDraft:v2:browser-e2e-administrator:other-tenant";
+
+  await page.evaluate(
+    ({ draft, currentKey, otherTenantKey }) => {
+      localStorage.setItem(currentKey, JSON.stringify(draft));
+      localStorage.setItem(
+        otherTenantKey,
+        JSON.stringify({ ...draft, clientName: "Other Tenant Secret" }),
+      );
+      localStorage.setItem("activeOrganizationId", "demo");
+    },
+    { draft: legacyDraft, currentKey: adminDemoKey, otherTenantKey: adminOtherTenantKey },
+  );
+
+  await page.goto("/client-setup");
+  await expect(page.getByRole("heading", { name: "Implementation Cockpit" })).toBeVisible();
+  await expect(page.getByPlaceholder("e.g. Acme Corp")).toHaveValue("Legacy Browser Client");
+
+  await page.getByRole("button", { name: /Next Step/ }).click();
+  await expect(page.getByText("Source Systems Integration")).toBeVisible();
+
+  const systemTypes = page.locator('select[name$=".key"]');
+  const connectionModes = page.locator('select[name$=".mode"]');
+  await expect(systemTypes).toHaveCount(3);
+  await expect(connectionModes).toHaveCount(3);
+  await expect(systemTypes.nth(0)).toHaveValue("ats");
+  await expect(connectionModes.nth(0)).toHaveValue("direct-integration");
+  await expect(systemTypes.nth(1)).toHaveValue("lms");
+  await expect(connectionModes.nth(1)).toHaveValue("file-transfer");
+  await expect(systemTypes.nth(2)).toHaveValue("");
+  await expect(connectionModes.nth(2)).toHaveValue("");
+  await expect(systemTypes.nth(2).locator("option:checked")).toHaveText("Choose a system type");
+  await expect(connectionModes.nth(2).locator("option:checked")).toHaveText(
+    "Choose a connection method",
+  );
+
+  await page.getByRole("button", { name: /Next Step/ }).click();
+  await expect(page.getByText("Source Systems Integration")).toBeVisible();
+  await expect(page.getByText("Process Adoption Mode")).toHaveCount(0);
+
+  await page.getByTitle("Sign out").click();
+  await expect(page.locator("#login-email")).toBeVisible();
+  await signInDemo(page, REVIEWER_EMAIL);
+  await page.goto("/client-setup");
+  await expect(page.getByRole("heading", { name: "Implementation Cockpit" })).toBeVisible();
+  await expect(page.getByPlaceholder("e.g. Acme Corp")).toHaveValue(
+    "Northstar Global Services — Synthetic Demo",
+  );
+  await expect(page.getByPlaceholder("e.g. Acme Corp")).not.toHaveValue("Legacy Browser Client");
+  await expect(page.getByPlaceholder("e.g. Acme Corp")).not.toHaveValue("Other Tenant Secret");
+});
+
 async function createOfflineCase(page: Page) {
   const workerName = `Browser Regression Worker ${Date.now()}`;
   await page.goto("/cases");

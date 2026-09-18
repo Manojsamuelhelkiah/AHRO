@@ -238,7 +238,14 @@ export function resolveInitialDraft(
     ...baseline,
     ...(savedDraft ?? {}),
   }) as ClientSetupDraft;
-  if (useSyntheticDemo && !clientSetupSchema.safeParse(candidate).success) {
+  const hasUnresolvedSystemChoice = candidate.systems.some(
+    (system) => !system.key || !system.mode,
+  );
+  if (
+    useSyntheticDemo
+    && !hasUnresolvedSystemChoice
+    && !clientSetupSchema.safeParse(candidate).success
+  ) {
     return demoDraft;
   }
   return candidate;
