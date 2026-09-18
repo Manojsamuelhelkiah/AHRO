@@ -5977,6 +5977,18 @@ export interface DemoControllerVolunteer {
   phone: string | null;
   channelPreference: DemoControllerVolunteerChannelPreference;
   approved: boolean;
+  /**
+     * Normalized work-country code used for lifecycle policy routing.
+     * @nullable
+     */
+  workCountry: string | null;
+  /** Whether the current complete lifecycle policy envelope allows a new volunteer-backed run for this work country. */
+  lifecyclePolicyReady: boolean;
+  /**
+     * Plain-language reason this volunteer cannot currently be selected.
+     * @nullable
+     */
+  lifecyclePolicyReason: string | null;
   liveEmailAvailable: boolean;
   liveCallAvailable: boolean;
   /** @nullable */
@@ -9381,3 +9393,4 @@ export type ListSensitiveLifecycleDeletionJobs200JobsItem = { [key: string]: unk
 export type ListSensitiveLifecycleDeletionJobs200 = {
   jobs: ListSensitiveLifecycleDeletionJobs200JobsItem[];
 };
+

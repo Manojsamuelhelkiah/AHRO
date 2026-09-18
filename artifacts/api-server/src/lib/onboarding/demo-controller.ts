@@ -50,6 +50,9 @@ export type ControllerVolunteer = {
   phone: string | null;
   channelPreference: "email" | "whatsapp" | "both";
   approved: boolean;
+  workCountry: string | null;
+  lifecyclePolicyReady: boolean;
+  lifecyclePolicyReason: string | null;
   liveEmailAvailable: boolean;
   liveCallAvailable: boolean;
   capabilityReason: string | null;
@@ -251,7 +254,14 @@ async function actualProviderReadiness(): Promise<ProviderReadiness> {
   return { ...providerReadiness(), email: email.configured, emailReason: email.reason };
 }
 
-function volunteerView(v: DemoVolunteer, readiness = providerReadiness()): ControllerVolunteer {
+function volunteerView(
+  v: DemoVolunteer,
+  readiness = providerReadiness(),
+  lifecycle: Pick<ControllerVolunteer, "lifecyclePolicyReady" | "lifecyclePolicyReason"> = {
+    lifecyclePolicyReady: false,
+    lifecyclePolicyReason: "Privacy approval readiness has not been checked.",
+  },
+): ControllerVolunteer {
   const problem = volunteerProblems(v);
   const id = fingerprintVolunteer(v);
   const emailAvailable = !problem && readiness.email && v.channelPreference !== "whatsapp";
@@ -271,17 +281,41 @@ function volunteerView(v: DemoVolunteer, readiness = providerReadiness()): Contr
     phone: v.phone || null,
     channelPreference: v.channelPreference as ControllerVolunteer["channelPreference"],
     approved: !problem,
+    workCountry: normalizedDemoWorkCountry(v.geography),
+    ...lifecycle,
     liveEmailAvailable: emailAvailable,
     liveCallAvailable: callAvailable,
     capabilityReason,
   };
 }
 
+function lifecyclePolicyUnavailableReason(workCountry: string | null): string {
+  return workCountry
+    ? `A current privacy and retention policy set must be approved for ${workCountry} before this volunteer can be used.`
+    : "Set this volunteer's work country to a supported country before checking privacy approval.";
+}
+
 async function controllerVolunteers(
   organizationId: string,
   readiness = providerReadiness(),
 ): Promise<ControllerVolunteer[]> {
-  return (await loadVolunteers(organizationId)).map((volunteer) => volunteerView(volunteer, readiness));
+  const volunteers = await loadVolunteers(organizationId);
+  return db.transaction(async (tx) => {
+    const results: ControllerVolunteer[] = [];
+    for (const volunteer of volunteers) {
+      const view = volunteerView(volunteer, readiness);
+      const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: view.workCountry,
+      });
+      results.push({
+        ...view,
+        lifecyclePolicyReady: gate.allowed,
+        lifecyclePolicyReason: gate.allowed ? null : lifecyclePolicyUnavailableReason(view.workCountry),
+      });
+    }
+    return results;
+  });
 }
 
 function error(name: string, message: string): Error {
@@ -546,6 +580,7 @@ export async function createDemoRun(
       // does not claim a real-person lifecycle approval. Selecting a volunteer
       // introduces real contact/profile data and remains fail-closed behind
       // the ordinary approved-policy envelope.
+      let volunteerLifecycle: Pick<ControllerVolunteer, "lifecyclePolicyReady" | "lifecyclePolicyReason"> | undefined;
       if (volunteer) {
         const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
           organizationId,
@@ -554,10 +589,14 @@ export async function createDemoRun(
         if (!gate.allowed) {
           throw error("DemoRunConflict", `SENSITIVE_LIFECYCLE_BLOCKED:${gate.reason}`);
         }
+        volunteerLifecycle = {
+          lifecyclePolicyReady: true,
+          lifecyclePolicyReason: null,
+        };
       }
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
       const c = await createCase(tx, organizationId, input.scenario, volunteer, runId, workCountry!);
-      const selected = volunteer ? volunteerView(volunteer, readiness) : null;
+      const selected = volunteer ? volunteerView(volunteer, readiness, volunteerLifecycle) : null;
       const run: DemoRun = {
         runId,
         caseId: c.id,
@@ -859,7 +898,20 @@ async function revalidateSelectedVolunteer(organizationId: string, run: DemoRun)
   if (!current || volunteerProblems(current)) {
     throw error("DemoVolunteerUnavailable", "The selected volunteer was removed, edited, or is no longer approved.");
   }
-  const selected = volunteerView(current);
+  const selected = await db.transaction(async (tx) => {
+    const workCountry = normalizedDemoWorkCountry(current.geography);
+    const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+      organizationId,
+      jurisdiction: workCountry,
+    });
+    return volunteerView(current, providerReadiness(), {
+      lifecyclePolicyReady: gate.allowed,
+      lifecyclePolicyReason: gate.allowed ? null : lifecyclePolicyUnavailableReason(workCountry),
+    });
+  });
+  if (!selected.lifecyclePolicyReady) {
+    throw error("DemoVolunteerUnavailable", selected.lifecyclePolicyReason ?? "Privacy approval is no longer current for this volunteer.");
+  }
   if (selected.email !== run.metadata.email || (selected.phone ?? null) !== run.metadata.phone) {
     throw error("DemoVolunteerUnavailable", "The pinned volunteer identity changed; live contact is blocked.");
   }
@@ -1260,7 +1312,15 @@ export async function getDemoRun(organizationId: string, runId: string): Promise
     };
     run.liveCapabilityReason = run.selectedVolunteer.capabilityReason;
   } else {
-    run.selectedVolunteer = volunteerView(current, readiness);
+    const workCountry = normalizedDemoWorkCountry(current.geography);
+    const gate = await db.transaction((tx) => evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+      organizationId,
+      jurisdiction: workCountry,
+    }));
+    run.selectedVolunteer = volunteerView(current, readiness, {
+      lifecyclePolicyReady: gate.allowed,
+      lifecyclePolicyReason: gate.allowed ? null : lifecyclePolicyUnavailableReason(workCountry),
+    });
     run.liveCapabilityReason = run.selectedVolunteer.approved
       ? "Live contact is available only through an explicit, recipient-pinned controller action."
       : run.selectedVolunteer.capabilityReason;

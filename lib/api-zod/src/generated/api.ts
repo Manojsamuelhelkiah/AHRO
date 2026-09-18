@@ -1929,6 +1929,9 @@ export const GetOnboardingDemoControllerResponse = zod.object({
   "phone": zod.string().nullable(),
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
   "approved": zod.boolean(),
+  "workCountry": zod.string().nullable().describe('Normalized work-country code used for lifecycle policy routing.'),
+  "lifecyclePolicyReady": zod.boolean().describe('Whether the current complete lifecycle policy envelope allows a new volunteer-backed run for this work country.'),
+  "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
   "capabilityReason": zod.string().nullable()
@@ -2050,6 +2053,9 @@ export const CreateOnboardingDemoRunResponse = zod.object({
   "phone": zod.string().nullable(),
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
   "approved": zod.boolean(),
+  "workCountry": zod.string().nullable().describe('Normalized work-country code used for lifecycle policy routing.'),
+  "lifecyclePolicyReady": zod.boolean().describe('Whether the current complete lifecycle policy envelope allows a new volunteer-backed run for this work country.'),
+  "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
   "capabilityReason": zod.string().nullable()
@@ -2142,6 +2148,9 @@ export const GetOnboardingDemoRunResponse = zod.object({
   "phone": zod.string().nullable(),
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
   "approved": zod.boolean(),
+  "workCountry": zod.string().nullable().describe('Normalized work-country code used for lifecycle policy routing.'),
+  "lifecyclePolicyReady": zod.boolean().describe('Whether the current complete lifecycle policy envelope allows a new volunteer-backed run for this work country.'),
+  "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
   "capabilityReason": zod.string().nullable()
@@ -2263,6 +2272,9 @@ export const ApplyOnboardingDemoRunActionResponse = zod.object({
   "phone": zod.string().nullable(),
   "channelPreference": zod.enum(['email', 'whatsapp', 'both']),
   "approved": zod.boolean(),
+  "workCountry": zod.string().nullable().describe('Normalized work-country code used for lifecycle policy routing.'),
+  "lifecyclePolicyReady": zod.boolean().describe('Whether the current complete lifecycle policy envelope allows a new volunteer-backed run for this work country.'),
+  "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
   "capabilityReason": zod.string().nullable()
@@ -18306,3 +18318,5 @@ export const RetrySensitiveLifecycleDeletionJobParams = zod.object({
 })
 
 export const RetrySensitiveLifecycleDeletionJobResponse = zod.unknown()
+
+

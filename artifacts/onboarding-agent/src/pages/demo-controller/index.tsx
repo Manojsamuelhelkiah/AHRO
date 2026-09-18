@@ -107,6 +107,10 @@ function NewRunForm({ caps }: { caps: DemoControllerCapabilities }) {
   const [error, setError] = useState<string|null>(null);
 
   const volunteers = caps.approvedVolunteers;
+  const selectedVolunteer = volunteers.find(v => v.id === volunteerId);
+  const selectedVolunteerUnavailable = selectedVolunteer
+    ? !selectedVolunteer.approved || !selectedVolunteer.lifecyclePolicyReady
+    : false;
 
   const handleStart = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,19 +171,38 @@ function NewRunForm({ caps }: { caps: DemoControllerCapabilities }) {
           >
             <option value="">None (Fully Simulated)</option>
             {volunteers.map(v => (
-              <option key={v.id} value={v.id} disabled={!v.approved}>
-                {v.name} ({v.email}) {!v.approved ? '- Pending Approval' : ''}
+              <option key={v.id} value={v.id} disabled={!v.approved || !v.lifecyclePolicyReady}>
+                {v.name} ({v.email}) {!v.approved
+                  ? '- Volunteer approval required'
+                  : !v.lifecyclePolicyReady
+                    ? `- Privacy approval required${v.workCountry ? ` for ${v.workCountry}` : ''}`
+                    : ''}
               </option>
             ))}
           </select>
           <div className="text-[11px] text-[var(--text-muted)] leading-tight mt-1">
             Volunteers receive real emails/calls during explicit LIVE actions. Add volunteers in Settings.
           </div>
+          {volunteers.some(v => !v.approved || !v.lifecyclePolicyReady) && (
+            <div className="space-y-1 pt-1">
+              {volunteers.filter(v => !v.approved || !v.lifecyclePolicyReady).map(v => (
+                <p key={v.id} className="text-[11px] text-[var(--status-amber-fg)] leading-tight">
+                  <strong>{v.name}:</strong>{' '}
+                  {!v.approved
+                    ? v.capabilityReason || 'This volunteer still needs approval.'
+                    : v.lifecyclePolicyReason || 'Current privacy approval is required before this volunteer can be used.'}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
 
-        <Button type="submit" className="w-full gap-2 mt-2" disabled={createRun.isPending || !caps.canCreateRuns}>
+        <Button type="submit" className="w-full gap-2 mt-2" disabled={createRun.isPending || !caps.canCreateRuns || selectedVolunteerUnavailable}>
           {createRun.isPending ? 'Starting...' : 'Start Walkthrough'}
         </Button>
+        <p className="text-[11px] text-[var(--text-muted)] leading-tight text-center">
+          You can always start a fully simulated walkthrough by choosing “None (Fully Simulated)”; it does not use a real volunteer.
+        </p>
       </form>
     </Card>
   );

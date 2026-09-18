@@ -26,7 +26,7 @@ test("hybrid and custom client setups require real uploaded file IDs", () => {
 
 test("persisted setup data is complete and excludes transient process files", () => {
   const { processFiles: _processFiles, ...setupData } = demoDraft;
-  assert.equal(clientSetupDataSchema.safeParse(setupData).success, false);
+  assert.equal(clientSetupDataSchema.safeParse(setupData).success, true);
   const complete = {
     ...demoDraft,
     systems: demoDraft.systems.map((system) => ({ ...system })),
@@ -62,7 +62,7 @@ test("the demo organization opens with a complete synthetic profile that remains
   assert.equal(clientSetupSchema.safeParse(editedDemo).success, true);
 });
 
-test("old incomplete demo drafts are replaced, while normal workspaces stay blank", () => {
+test("old incomplete demo drafts keep unresolved choices visible, while normal workspaces stay blank", () => {
   const recoveredDemo = resolveInitialDraft({
     ...demoDraft,
     systems: [
@@ -74,7 +74,7 @@ test("old incomplete demo drafts are replaced, while normal workspaces stay blan
     ],
   }, true);
   assert.equal(recoveredDemo.clientName, demoDraft.clientName);
-  assert.equal(clientSetupSchema.safeParse(recoveredDemo).success, true);
+  assert.equal(clientSetupSchema.safeParse(recoveredDemo).success, false);
 
   const normalDraft = resolveInitialDraft(null, false);
   const complete = {
@@ -120,8 +120,8 @@ test("saved setup reload preserves every instance ID and upgrades legacy rows de
     ],
   };
   const parsed = clientSetupDataSchema.parse({
-    ...demoDraft,
-    systems: demoDraft.systems.map((system) => ({ ...system, needsReview: true })),
+    ...multiEstate,
+    systems: multiEstate.systems.map((system) => ({ ...system, needsReview: true })),
   });
   assert.deepEqual(parsed.systems.map((system) => system.id), multiEstate.systems.map((system) => system.id));
   const legacy = clientSetupDataSchema.parse({

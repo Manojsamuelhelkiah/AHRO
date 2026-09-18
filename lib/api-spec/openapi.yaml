@@ -11568,10 +11568,19 @@ components:
           enum: [email, whatsapp, both]
         approved:
           type: boolean
+        workCountry:
+          type: ["string", "null"]
+          description: Normalized work-country code used for lifecycle policy routing.
+        lifecyclePolicyReady:
+          type: boolean
+          description: Whether the current complete lifecycle policy envelope allows a new volunteer-backed run for this work country.
+        lifecyclePolicyReason:
+          type: ["string", "null"]
+          description: Plain-language reason this volunteer cannot currently be selected.
         liveEmailAvailable: { type: boolean }
         liveCallAvailable: { type: boolean }
         capabilityReason: { type: ["string", "null"] }
-      required: [id, name, email, phone, channelPreference, approved, liveEmailAvailable, liveCallAvailable, capabilityReason]
+      required: [id, name, email, phone, channelPreference, approved, workCountry, lifecyclePolicyReady, lifecyclePolicyReason, liveEmailAvailable, liveCallAvailable, capabilityReason]
     DemoControllerCapabilities:
       type: object
       additionalProperties: false
