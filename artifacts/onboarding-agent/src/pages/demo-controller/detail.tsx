@@ -25,6 +25,7 @@ import { format } from 'date-fns';
 import type { DemoControllerVolunteer } from '@workspace/api-client-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getRequestIdForAction } from './action-identity';
+import { recoverDemoActionConflict } from './conflict-recovery';
 
 export function DemoControllerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -75,20 +76,17 @@ export function DemoControllerDetailPage() {
           queryClient.setQueryData(getGetOnboardingDemoRunQueryKey(updatedRun.runId), updatedRun);
       }
     } catch (err: any) {
-      const status = err?.status ?? err?.response?.status;
-      const serverMessage = typeof err?.data?.error === 'string'
-        ? err.data.error
-        : typeof err?.data?.message === 'string'
-          ? err.data.message
-          : null;
-      if (status === 409 && serverMessage?.startsWith('Run changed since version ')) {
-         lastActionAttemptRef.current = null;
-         const refreshed = await refetch();
-         setActionError(refreshed.data
-           ? "This run changed before the action was applied. The latest state is now loaded; review it and try the action again."
-           : "This run changed before the action was applied, but the latest state could not be loaded. Use Refresh and try again.");
+      const recovery = await recoverDemoActionConflict(
+        err,
+        () => {
+          lastActionAttemptRef.current = null;
+        },
+        refetch,
+      );
+      if (recovery.handled) {
+         setActionError(recovery.message);
       } else {
-         setActionError(serverMessage || err.message || "Failed to apply action.");
+         setActionError(recovery.message || err.message || "Failed to apply action.");
       }
     }
   };
