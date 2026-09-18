@@ -102,7 +102,15 @@ async function createControlledDemoCase(page: Page) {
   }, volunteer.id);
   await page.goto(`/cases/${run.caseId}`);
   await expect(page.getByRole("heading", { name: "Response-Driven Simulation" })).toBeVisible();
-  return { caseId: run.caseId as number };
+  return { caseId: run.caseId as number, runId: run.runId as string };
+}
+
+async function getDemoRun(page: Page, runId: string) {
+  return page.evaluate(async (id) => {
+    const response = await fetch(`/api/onboarding/demo-runs/${id}`, { credentials: "include" });
+    if (!response.ok) throw new Error(`demo run read failed: ${response.status}`);
+    return response.json();
+  }, runId);
 }
 
 async function assertNoExternalRequests(page: Page, requests: string[]) {
@@ -224,6 +232,74 @@ test("controlled Demo email status survives reload and blocks duplicate sends", 
   await expect(page.getByText(/Real email: sent to/)).toBeVisible();
   await expect(page.getByText("Awaiting a monitored Gmail reply.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Email current prompt", exact: true })).toBeDisabled();
+});
+
+test("two Demo Center sessions recover from a genuine action version conflict", async ({
+  browser,
+  page,
+}) => {
+  await signInDemo(page, ADMIN_EMAIL);
+  const fixture = await createControlledDemoCase(page);
+  await page.goto(`/demo-controller/${fixture.runId}`);
+  await expect(page.getByRole("heading", { name: "Browser Regression Volunteer" })).toBeVisible();
+
+  const secondContext = await browser.newContext({ viewport: VIEWPORTS[2] });
+  const secondPage = await secondContext.newPage();
+  await signInDemo(secondPage, ADMIN_EMAIL);
+  await secondPage.goto(`/demo-controller/${fixture.runId}`);
+  await expect(secondPage.getByRole("heading", { name: "Browser Regression Volunteer" })).toBeVisible();
+
+  const [firstLoadedRun, secondLoadedRun] = await Promise.all([
+    getDemoRun(page, fixture.runId),
+    getDemoRun(secondPage, fixture.runId),
+  ]);
+  expect(secondLoadedRun.version).toBe(firstLoadedRun.version);
+  const initialVersion = firstLoadedRun.version as number;
+  const initialAdvanceCount = firstLoadedRun.activity.filter(
+    (entry: { kind: string }) => entry.kind === "advance",
+  ).length;
+
+  const firstActionResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/onboarding/demo-runs/${fixture.runId}/actions`),
+  );
+  await page.getByRole("button", { name: "Next Step" }).click();
+  expect((await firstActionResponse).status()).toBe(200);
+
+  const staleActionResponse = secondPage.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/onboarding/demo-runs/${fixture.runId}/actions`),
+  );
+  await secondPage.getByRole("button", { name: "Next Step" }).click();
+  const conflictResponse = await staleActionResponse;
+  expect(conflictResponse.status()).toBe(409);
+  await expect(secondPage.getByText(
+    "This run changed before the action was applied. The latest state is now loaded; review it and try the action again.",
+  )).toBeVisible();
+
+  const afterConflict = await getDemoRun(secondPage, fixture.runId);
+  expect(afterConflict.version).toBe(initialVersion + 1);
+  expect(afterConflict.activity.filter(
+    (entry: { kind: string }) => entry.kind === "advance",
+  )).toHaveLength(initialAdvanceCount + 1);
+
+  const retryResponse = secondPage.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/onboarding/demo-runs/${fixture.runId}/actions`),
+  );
+  await secondPage.getByRole("button", { name: "Next Step" }).click();
+  expect((await retryResponse).status()).toBe(200);
+
+  const afterRetry = await getDemoRun(secondPage, fixture.runId);
+  expect(afterRetry.version).toBe(initialVersion + 2);
+  expect(afterRetry.activity.filter(
+    (entry: { kind: string }) => entry.kind === "advance",
+  )).toHaveLength(initialAdvanceCount + 2);
+
+  await secondContext.close();
 });
 
 test("ambiguous controlled Demo email remains blocked without a second provider dispatch", async ({ page }) => {
