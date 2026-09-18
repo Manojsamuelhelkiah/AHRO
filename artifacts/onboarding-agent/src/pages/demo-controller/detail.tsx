@@ -31,8 +31,12 @@ export function DemoControllerDetailPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   
-  const { data: run, isLoading, isError, refetch } = useGetOnboardingDemoRun(id as string, {
-    query: { queryKey: getGetOnboardingDemoRunQueryKey(id as string) }
+  const { data: run, isLoading, isFetching, isError, refetch } = useGetOnboardingDemoRun(id as string, {
+    query: {
+      queryKey: getGetOnboardingDemoRunQueryKey(id as string),
+      refetchInterval: 15_000,
+      refetchOnWindowFocus: 'always',
+    }
   });
 
   const applyMutation = useApplyOnboardingDemoRunAction();
@@ -71,10 +75,20 @@ export function DemoControllerDetailPage() {
           queryClient.setQueryData(getGetOnboardingDemoRunQueryKey(updatedRun.runId), updatedRun);
       }
     } catch (err: any) {
-      if (err?.response?.status === 409) {
-         setActionError("Version mismatch - this run has been updated elsewhere. Please refresh the page to get the latest state.");
+      const status = err?.status ?? err?.response?.status;
+      const serverMessage = typeof err?.data?.error === 'string'
+        ? err.data.error
+        : typeof err?.data?.message === 'string'
+          ? err.data.message
+          : null;
+      if (status === 409 && serverMessage?.startsWith('Run changed since version ')) {
+         lastActionAttemptRef.current = null;
+         const refreshed = await refetch();
+         setActionError(refreshed.data
+           ? "This run changed before the action was applied. The latest state is now loaded; review it and try the action again."
+           : "This run changed before the action was applied, but the latest state could not be loaded. Use Refresh and try again.");
       } else {
-         setActionError(err?.response?.data?.message || err.message || "Failed to apply action.");
+         setActionError(serverMessage || err.message || "Failed to apply action.");
       }
     }
   };
@@ -118,8 +132,8 @@ export function DemoControllerDetailPage() {
             <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-semibold mb-0.5">Status</div>
             <div className="text-sm font-bold text-[var(--text-primary)] capitalize">{run.status}</div>
           </div>
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4" /> Refresh
+          <Button variant="outline" size="sm" className="gap-2" disabled={isFetching} onClick={() => refetch()}>
+            <RefreshCw className={isFetching ? "w-4 h-4 animate-spin" : "w-4 h-4"} /> Refresh
           </Button>
         </div>
       </header>
@@ -128,9 +142,6 @@ export function DemoControllerDetailPage() {
         <div className="p-3 bg-[var(--status-red-bg)] text-[var(--status-red-fg)] text-sm rounded-md border border-[var(--status-red)] flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="flex-1">{actionError}</div>
-          {actionError.includes('Version mismatch') && (
-            <Button size="sm" onClick={() => { setActionError(null); refetch(); }}>Refresh Now</Button>
-          )}
         </div>
       )}
 
@@ -139,7 +150,7 @@ export function DemoControllerDetailPage() {
           <ControlsPanel 
             run={run} 
             onAction={handleAction} 
-            isPending={applyMutation.isPending} 
+            isPending={applyMutation.isPending || isFetching}
             onError={setActionError}
           />
         </div>

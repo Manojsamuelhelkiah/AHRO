@@ -39,6 +39,7 @@ import { PortalControls } from './detail/portal-controls';
 import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 import { SimulationPanel } from './detail/simulation-panel';
+import { isDemoCoverageCase } from './case-presentation';
 
 export function CaseDetailPage() {
   const { id } = useParams();
@@ -176,6 +177,7 @@ export function CaseDetailPage() {
 
   const demoSession = caps?.available ? caps.existingSessions.find((s: any) => s.caseId === caseId) : undefined;
   const offlineSample = isOfflineDemoSample(c);
+  const uatCoverageSample = isDemoCoverageCase(c);
 
   const restrictedFields: string[] = [];
   if (c.workerName === "Restricted candidate") {
@@ -221,12 +223,27 @@ export function CaseDetailPage() {
               Simulated/manual sample only. No onboarding gateway is completed, and no HRIS, payroll, benefits, IAM, LMS, mobility, document, or other provider connection is active.
             </p>
           </div>
-          <SimulationPanel
-            caseId={caseId}
-            recipientEmail={demoSession?.selectedVolunteerId
-              ? (demoSession.selectedVolunteer?.email ?? null)
-              : null}
-          />
+          {uatCoverageSample ? (
+            <div className="mb-6 rounded-lg border border-[var(--primary)] border-opacity-30 bg-[var(--primary-light)] p-4 shadow-sm">
+              <h2 className="text-sm font-bold text-[var(--primary-dark)]">UAT coverage sample</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+                This sample is evaluated through the UAT Test Center. Per-case response simulation is intentionally unavailable for UAT-isolated cases.
+              </p>
+              <Link
+                href="/uat-test-center"
+                className="mt-3 inline-flex rounded-md border border-[var(--primary)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--primary-dark)] transition-colors hover:bg-[var(--primary-light)]"
+              >
+                Open UAT Test Center
+              </Link>
+            </div>
+          ) : (
+            <SimulationPanel
+              caseId={caseId}
+              recipientEmail={demoSession?.selectedVolunteerId
+                ? (demoSession.selectedVolunteer?.email ?? null)
+                : null}
+            />
+          )}
         </>
       ) : (
         <>

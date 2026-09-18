@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Redirect } from 'wouter';
+import { Link } from 'wouter';
 import { useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
 import { Shield, ShieldAlert, Download, Lock, Filter, History, Database, CheckCircle2, XCircle, FileText, Anchor, RefreshCcw, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
@@ -905,7 +905,38 @@ export function AuditPage() {
   }
   
   if (!isHR) {
-    return <Redirect to="/" />;
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <PageHeader
+          title="Audit Trail"
+          subtitle="Protected organization-wide audit evidence"
+        />
+        <Card className="border-[var(--status-amber)] bg-[var(--status-amber-bg)]">
+          <CardContent className="flex flex-col items-start gap-4 p-6">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-[var(--status-amber-fg)]" />
+              <div>
+                <h2 className="font-semibold text-[var(--status-amber-fg)]">Owner or administrator access required</h2>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--status-amber-fg)]">
+                  The organization-wide protected audit contains evidence across cases and is limited to organization owners and administrators.
+                  Demo membership does not grant that broader authority.
+                </p>
+              </div>
+            </div>
+            <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--text-secondary)]">
+              To review evidence for a synthetic walkthrough, open the run in Demo Center and use its
+              <strong className="text-[var(--text-primary)]"> Audit Trail &amp; Evidence</strong> section.
+            </div>
+            <Link
+              href="/demo-controller"
+              className="inline-flex h-10 items-center justify-center rounded-md bg-[var(--primary)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--primary-dark)]"
+            >
+              Open Demo Center
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return <AuditPageContent organizationId={organizationId} canReview={isHR && Boolean(organizationId)} />;
