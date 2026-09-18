@@ -35,12 +35,15 @@ export interface ScenarioSystemCapability {
   key: string;
   label: string;
   description: string;
+  allowMultipleInstances?: boolean;
   /** @minItems 1 */
   modes: ScenarioSystemSetupModeOption[];
   watcherSystem?: ScenarioSystemCapabilityWatcherSystem;
 }
 
 export interface ScenarioSetupSystem {
+  /** @minLength 1 */
+  id?: string;
   key: string;
   /** @minLength 1 */
   name: string;

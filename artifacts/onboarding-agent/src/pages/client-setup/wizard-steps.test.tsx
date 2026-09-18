@@ -28,12 +28,24 @@ const capabilities: ScenarioSystemCapability[] = [
       { mode: "manual", label: "Manual", description: "No monitoring is activated." },
     ],
   },
+  {
+    key: "payroll",
+    label: "Payroll & Benefits",
+    description: "Payroll readiness.",
+    allowMultipleInstances: true,
+    watcherSystem: "payroll",
+    modes: [
+      { mode: "direct-integration", label: "Direct integration", description: "Connect through the provider adapter." },
+      { mode: "email-watch", label: "Email watch", description: "Track mailbox updates." },
+      { mode: "manual", label: "Manual", description: "No monitoring is activated." },
+    ],
+  },
 ];
 
 function LandscapeFixture() {
   const form = useForm({ defaultValues: { ...demoDraft, systems: [
-    { key: "bgv", name: "HireRight", vendor: "HireRight", mode: "email-watch" as const, ownerEmail: "" },
-    { key: "hris", name: "Workday", vendor: "Workday", mode: "direct-integration" as const, ownerEmail: "" },
+    { id: "bgv-1", key: "bgv", name: "HireRight", vendor: "HireRight", mode: "email-watch" as const, ownerEmail: "" },
+    { id: "hris-1", key: "hris", name: "Workday", vendor: "Workday", mode: "direct-integration" as const, ownerEmail: "" },
   ] } });
   return <FormProvider {...form}><StepLandscape capabilities={capabilities} /></FormProvider>;
 }
@@ -45,4 +57,5 @@ test("responsive setup rows render server-provided choices without unsupported e
   assert.match(html, /Track status emails sent to the watched mailbox/);
   assert.match(html, /System type/);
   assert.equal(html.match(/value="email-watch"/g)?.length, 1);
+  assert.match(html, /Payroll and ticketing support multiple estates/);
 });

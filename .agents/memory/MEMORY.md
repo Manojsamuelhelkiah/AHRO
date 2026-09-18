@@ -63,3 +63,4 @@
 - [Frontline release boundaries](frontline-release-boundaries.md) — recorded release and fresh independent evidence both govern completion; operational history must not expose private references.
 - [Workforce transfer boundaries](workforce-transfer-boundaries.md) — country-specific approval, source-attested human execution, hold-aware retention, and evidence-generation cutover sign-offs.
 - [Starter lifecycle policies](starter-lifecycle-policies.md) — defaults are editable review proposals only; runtime gates read separately approved revisions.
+- [Multi-estate connector modes](multi-estate-connector-modes.md) — payroll and ticketing estates may repeat, but watcher state remains connector-wide and must agree across instances.

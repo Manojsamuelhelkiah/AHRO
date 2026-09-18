@@ -5921,6 +5921,7 @@ components:
         key: { type: string }
         label: { type: string }
         description: { type: string }
+        allowMultipleInstances: { type: boolean }
         modes:
           type: array
           minItems: 1
@@ -5933,6 +5934,7 @@ components:
       additionalProperties: false
       required: [key, name, vendor, mode, ownerEmail]
       properties:
+        id: { type: string, minLength: 1 }
         key: { type: string }
         name: { type: string, minLength: 1 }
         vendor: { type: string, minLength: 1 }

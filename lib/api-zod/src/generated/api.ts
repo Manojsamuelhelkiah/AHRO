@@ -18,6 +18,7 @@ export const ListScenarioSystemCapabilitiesResponseItem = zod.object({
   "key": zod.string(),
   "label": zod.string(),
   "description": zod.string(),
+  "allowMultipleInstances": zod.boolean().optional(),
   "modes": zod.array(zod.object({
   "mode": zod.enum(['direct-integration', 'email-watch', 'file-transfer', 'webhook', 'manual']),
   "label": zod.string(),
@@ -7495,6 +7496,7 @@ export const createScenarioBodyInputsAdoptionRampMax = 3;
 
 
 
+
 export const CreateScenarioBody = zod.object({
   "name": zod.string(),
   "inputs": zod.object({
@@ -7551,6 +7553,7 @@ export const CreateScenarioBody = zod.object({
   "email": zod.string().email()
 })).min(1),
   "systems": zod.array(zod.object({
+  "id": zod.string().min(1).optional(),
   "key": zod.string(),
   "name": zod.string().min(1),
   "vendor": zod.string().min(1),
@@ -7701,6 +7704,7 @@ export const updateScenarioBodyInputsAdoptionRampMax = 3;
 
 
 
+
 export const UpdateScenarioBody = zod.object({
   "name": zod.string().optional(),
   "inputs": zod.object({
@@ -7757,6 +7761,7 @@ export const UpdateScenarioBody = zod.object({
   "email": zod.string().email()
 })).min(1),
   "systems": zod.array(zod.object({
+  "id": zod.string().min(1).optional(),
   "key": zod.string(),
   "name": zod.string().min(1),
   "vendor": zod.string().min(1),

@@ -57,7 +57,10 @@ export function StepScope() {
 
 export function StepLandscape({ capabilities }: { capabilities: ScenarioSystemCapability[] }) {
   const { control, register, formState: { errors } } = useFormContext<ClientSetupDraft>();
-  const { fields, append, remove } = useFieldArray({ control, name: 'systems' });
+  const { fields, append, remove } = useFieldArray({ control, name: 'systems', keyName: '_fieldId' });
+  const systems = useWatch({ control, name: 'systems' });
+  const nextCapability = capabilities.find((capability) =>
+    capability.allowMultipleInstances || !systems.some((system) => system.key === capability.key));
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -103,7 +106,7 @@ export function StepLandscape({ capabilities }: { capabilities: ScenarioSystemCa
                   </thead>
                    <tbody className="block divide-y divide-[var(--border)] md:table-row-group">
                       {fields.map((f, i) => (
-                        <SystemSetupRow key={f.id} index={i} capabilities={capabilities} onRemove={() => remove(i)} />
+                         <SystemSetupRow key={f._fieldId} index={i} capabilities={capabilities} onRemove={() => remove(i)} />
                       ))}
                      {fields.length === 0 && (
                        <tr>
@@ -116,9 +119,23 @@ export function StepLandscape({ capabilities }: { capabilities: ScenarioSystemCa
                </table>
              </div>
              <div className="p-2 bg-[var(--surface-alt)] border-t border-[var(--border)]">
-                 <Button type="button" variant="secondary" size="sm" onClick={() => append({ key: capabilities[0]?.key ?? '', name: '', vendor: '', mode: capabilities[0]?.modes[0]?.mode ?? 'manual', ownerEmail: '' })}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={!nextCapability}
+                    onClick={() => nextCapability && append({
+                      id: crypto.randomUUID(),
+                      key: nextCapability.key,
+                      name: '',
+                      vendor: '',
+                      mode: nextCapability.modes[0]?.mode ?? 'manual',
+                      ownerEmail: '',
+                    })}
+                  >
                    <Plus className="w-4 h-4 mr-1" /> Add System
                 </Button>
+                 <span className="ml-3 text-xs text-[var(--text-muted)]">Payroll and ticketing support multiple estates.</span>
              </div>
           </div>
        </div>
@@ -127,13 +144,14 @@ export function StepLandscape({ capabilities }: { capabilities: ScenarioSystemCa
 }
 
 function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capabilities: ScenarioSystemCapability[]; onRemove: () => void }) {
-  const { control, register, setValue } = useFormContext<ClientSetupDraft>();
+  const { control, register, setValue, formState: { errors } } = useFormContext<ClientSetupDraft>();
   const key = useWatch({ control, name: `systems.${index}.key` });
   const mode = useWatch({ control, name: `systems.${index}.mode` });
   const capability = capabilities.find((entry) => entry.key === key) ?? capabilities[0];
   const modeOption = capability?.modes.find((option) => option.mode === mode);
   return (
     <tr className="block bg-[var(--surface)] p-3 hover:bg-[var(--surface-soft)] transition-colors md:table-row md:p-0">
+      <input type="hidden" {...register(`systems.${index}.id`)} />
       <td className="block p-1.5 md:table-cell md:p-2">
         <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">System type</span>
         <Select {...register(`systems.${index}.key`)} onChange={(event) => {
@@ -155,6 +173,9 @@ function SystemSetupRow({ index, capabilities, onRemove }: { index: number; capa
           {capability?.modes.map((option) => <option key={option.mode} value={option.mode}>{option.label}</option>)}
         </Select>
         <p className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{modeOption?.description}</p>
+        {errors.systems?.[index]?.mode?.message && (
+          <p role="alert" className="mt-1 text-[11px] leading-4 text-[var(--status-red-fg)]">{errors.systems[index]?.mode?.message}</p>
+        )}
       </td>
       <td className="block p-1.5 md:table-cell md:p-2"><span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] md:hidden">Owner Email</span><Input {...register(`systems.${index}.ownerEmail`)} placeholder="admin@..." /></td>
       <td className="block p-1.5 text-right md:table-cell md:p-2 md:text-center"><Button type="button" variant="ghost" size="icon" onClick={onRemove} className="text-[var(--text-muted)] hover:text-[var(--status-red)] h-8 w-8"><span className="sr-only">Remove system</span><Trash2 className="w-4 h-4" /></Button></td>
@@ -332,7 +353,7 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
                  <dd className="mt-2 space-y-1 text-right font-medium">
                    {draft.systems.map((system) => {
                      const capability = capabilities.find((entry) => entry.key === system.key);
-                     return <div key={system.key}>{capability?.label ?? system.key}: {capability?.modes.find((option) => option.mode === system.mode)?.label ?? system.mode}</div>;
+                      return <div key={system.id}>{system.name || capability?.label || system.key}: {capability?.modes.find((option) => option.mode === system.mode)?.label ?? system.mode}</div>;
                    })}
                  </dd>
                </div>

@@ -7,12 +7,32 @@ export const personaSchema = z.object({
 });
 
 export const systemSchema = z.object({
+  id: z.string().min(1, 'System instance ID is required'),
   key: z.string().min(1, 'System type is required'),
   name: z.string().min(1, 'System name is required'),
   vendor: z.string().min(1, 'Vendor is required'),
   mode: z.enum(['direct-integration', 'email-watch', 'file-transfer', 'webhook', 'manual']),
   ownerEmail: z.string().email('Enter a valid system owner email').or(z.literal('')),
 });
+
+const MULTI_INSTANCE_SYSTEM_KEYS = new Set(['itsm', 'payroll']);
+
+function legacySystemId(system: { key?: unknown }, index: number): string {
+  const key = typeof system.key === 'string' && system.key ? system.key : 'system';
+  return `legacy-${key}-${index + 1}`;
+}
+
+export function upgradeLegacySystemIds<T extends Record<string, unknown>>(draft: T): T {
+  if (!Array.isArray(draft.systems)) return draft;
+  return {
+    ...draft,
+    systems: draft.systems.map((system, index) =>
+      system && typeof system === 'object' &&
+        (!('id' in system) || typeof system.id !== 'string' || !system.id.trim())
+        ? { ...system, id: legacySystemId(system, index) }
+        : system),
+  };
+}
 
 export const processFileSchema = z.object({
   id: z.number().int().positive(),
@@ -23,7 +43,7 @@ export const processFileSchema = z.object({
   createdAt: z.string().min(1),
 });
 
-const clientSetupFieldsSchema = z.object({
+const clientSetupFieldsObject = z.object({
   clientName: z.string().min(1, 'Client name is required'),
   sector: z.string().min(1, 'Sector is required'),
   employees: z.coerce.number().min(1, 'Must be at least 1'),
@@ -42,19 +62,52 @@ const clientSetupFieldsSchema = z.object({
   notes: z.string().default(''),
 });
 
-export const clientSetupDataSchema = clientSetupFieldsSchema.omit({ processFiles: true });
+function withLegacySystemIds<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (!value || typeof value !== 'object') return value;
+    return upgradeLegacySystemIds(value as Record<string, unknown>);
+  }, schema);
+}
 
-export const clientSetupSchema = clientSetupFieldsSchema.superRefine((draft, ctx) => {
+export const clientSetupDataSchema = withLegacySystemIds(clientSetupFieldsObject.omit({ processFiles: true }));
+
+export const clientSetupSchema = withLegacySystemIds(clientSetupFieldsObject).superRefine((draft, ctx) => {
   const seenSystems = new Set<string>();
+  const seenIds = new Set<string>();
+  const watcherModes = new Map<string, string>();
   draft.systems.forEach((system, index) => {
-    if (seenSystems.has(system.key)) {
+    if (seenSystems.has(system.key) && !MULTI_INSTANCE_SYSTEM_KEYS.has(system.key)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['systems', index, 'key'],
-        message: 'Each system type can be mapped only once',
+        message: 'This system type can be mapped only once',
       });
     }
     seenSystems.add(system.key);
+    if (seenIds.has(system.id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['systems', index, 'id'],
+        message: 'Each mapped system instance must have a unique identity',
+      });
+    }
+    seenIds.add(system.id);
+    if (MULTI_INSTANCE_SYSTEM_KEYS.has(system.key)) {
+      const watcherMode = system.mode === 'direct-integration'
+        ? 'connected:api'
+        : system.mode === 'email-watch'
+          ? 'connected:email'
+          : 'disconnected:api';
+      const existing = watcherModes.get(system.key);
+      if (existing && existing !== watcherMode) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['systems', index, 'mode'],
+          message: 'All instances of this type must use the same connector-wide tracking mode',
+        });
+      }
+      watcherModes.set(system.key, watcherMode);
+    }
   });
   if (draft.processMode !== 'recommended' && draft.processFiles.length === 0) {
     ctx.addIssue({
@@ -87,17 +140,17 @@ export const initialDraft: ClientSetupDraft = {
     { role: 'IAM / security approver', name: '', email: '' },
   ],
   systems: [
-    { key: 'ats', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'hris', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'identity', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'lms', name: '', vendor: '', mode: 'file-transfer', ownerEmail: '' },
-    { key: 'itsm', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'payroll', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'leave', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'compliance', name: '', vendor: '', mode: 'file-transfer', ownerEmail: '' },
-    { key: 'esignature', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'communications', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
-    { key: 'bgv', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-ats', key: 'ats', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-hris', key: 'hris', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-identity', key: 'identity', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-lms', key: 'lms', name: '', vendor: '', mode: 'file-transfer', ownerEmail: '' },
+    { id: 'default-itsm', key: 'itsm', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-payroll', key: 'payroll', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-leave', key: 'leave', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-compliance', key: 'compliance', name: '', vendor: '', mode: 'file-transfer', ownerEmail: '' },
+    { id: 'default-esignature', key: 'esignature', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-communications', key: 'communications', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
+    { id: 'default-bgv', key: 'bgv', name: '', vendor: '', mode: 'direct-integration', ownerEmail: '' },
   ],
   notes: ''
 };
@@ -122,17 +175,17 @@ export const demoDraft: ClientSetupDraft = {
     { role: 'IAM / security approver', name: 'Mateo Silva', email: 'mateo.silva@example.com' },
   ],
   systems: [
-    { key: 'ats', name: 'Greenhouse Recruiting', vendor: 'Greenhouse', mode: 'direct-integration', ownerEmail: 'recruiting.ops@example.com' },
-    { key: 'hris', name: 'Workday HCM', vendor: 'Workday', mode: 'direct-integration', ownerEmail: 'hris@example.com' },
-    { key: 'identity', name: 'Microsoft Entra ID', vendor: 'Microsoft', mode: 'direct-integration', ownerEmail: 'identity@example.com' },
-    { key: 'lms', name: 'Cornerstone Learning Export', vendor: 'Cornerstone', mode: 'file-transfer', ownerEmail: 'learning@example.com' },
-    { key: 'itsm', name: 'ServiceNow ITSM', vendor: 'ServiceNow', mode: 'direct-integration', ownerEmail: 'it.operations@example.com' },
-    { key: 'payroll', name: 'SAP SuccessFactors Payroll', vendor: 'SAP', mode: 'direct-integration', ownerEmail: 'payroll@example.com' },
-    { key: 'leave', name: 'Workday Absence', vendor: 'Workday', mode: 'direct-integration', ownerEmail: 'leave.admin@example.com' },
-    { key: 'compliance', name: 'Northstar Policy Export', vendor: 'Internal', mode: 'file-transfer', ownerEmail: 'compliance@example.com' },
-    { key: 'esignature', name: 'DocuSign', vendor: 'DocuSign', mode: 'direct-integration', ownerEmail: 'records@example.com' },
-    { key: 'communications', name: 'Microsoft Teams', vendor: 'Microsoft', mode: 'direct-integration', ownerEmail: 'people.comms@example.com' },
-    { key: 'bgv', name: 'HireRight', vendor: 'HireRight', mode: 'email-watch', ownerEmail: 'screening@example.com' },
+    { id: 'demo-ats', key: 'ats', name: 'Greenhouse Recruiting', vendor: 'Greenhouse', mode: 'direct-integration', ownerEmail: 'recruiting.ops@example.com' },
+    { id: 'demo-hris', key: 'hris', name: 'Workday HCM', vendor: 'Workday', mode: 'direct-integration', ownerEmail: 'hris@example.com' },
+    { id: 'demo-identity', key: 'identity', name: 'Microsoft Entra ID', vendor: 'Microsoft', mode: 'direct-integration', ownerEmail: 'identity@example.com' },
+    { id: 'demo-lms', key: 'lms', name: 'Cornerstone Learning Export', vendor: 'Cornerstone', mode: 'file-transfer', ownerEmail: 'learning@example.com' },
+    { id: 'demo-itsm', key: 'itsm', name: 'ServiceNow ITSM', vendor: 'ServiceNow', mode: 'direct-integration', ownerEmail: 'it.operations@example.com' },
+    { id: 'demo-payroll', key: 'payroll', name: 'SAP SuccessFactors Payroll', vendor: 'SAP', mode: 'direct-integration', ownerEmail: 'payroll@example.com' },
+    { id: 'demo-leave', key: 'leave', name: 'Workday Absence', vendor: 'Workday', mode: 'direct-integration', ownerEmail: 'leave.admin@example.com' },
+    { id: 'demo-compliance', key: 'compliance', name: 'Northstar Policy Export', vendor: 'Internal', mode: 'file-transfer', ownerEmail: 'compliance@example.com' },
+    { id: 'demo-esignature', key: 'esignature', name: 'DocuSign', vendor: 'DocuSign', mode: 'direct-integration', ownerEmail: 'records@example.com' },
+    { id: 'demo-communications', key: 'communications', name: 'Microsoft Teams', vendor: 'Microsoft', mode: 'direct-integration', ownerEmail: 'people.comms@example.com' },
+    { id: 'demo-bgv', key: 'bgv', name: 'HireRight', vendor: 'HireRight', mode: 'email-watch', ownerEmail: 'screening@example.com' },
   ],
   notes: 'Synthetic demonstration profile. Every person, address, volume, and system mapping is fictional and can be edited.',
 };
@@ -142,7 +195,10 @@ export function resolveInitialDraft(
   useSyntheticDemo: boolean,
 ): ClientSetupDraft {
   const baseline = useSyntheticDemo ? demoDraft : initialDraft;
-  const candidate = { ...baseline, ...(savedDraft ?? {}) };
+  const candidate = upgradeLegacySystemIds({
+    ...baseline,
+    ...(savedDraft ?? {}),
+  }) as ClientSetupDraft;
   if (useSyntheticDemo && !clientSetupSchema.safeParse(candidate).success) {
     return demoDraft;
   }

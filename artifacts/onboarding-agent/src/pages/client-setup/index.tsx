@@ -20,6 +20,7 @@ import {
   type AuditArchiveSignupConfig,
 } from './audit-archive-config';
 import { StepScope, StepLandscape, StepProcess, StepReview } from './wizard-steps';
+import { countMappedEstates, nonIntegratedSystemKeys } from './scenario-inputs';
 import { Button, PageHeader } from '@/components/ui-shared';
 import {
   getPinnedOrganizationIdForPage,
@@ -158,22 +159,8 @@ function ClientSetupWizard({
     const selected = new Set(values.selectedDomains.map((domain) => domainKeys[domain]).filter(Boolean));
     const includedIntents = (intentCorpus?.intents ?? []).filter((intent) => selected.has(intent.domain));
     const totalWeight = includedIntents.reduce((sum, intent) => sum + intent.baseWeight, 0);
-    const assumptionSystemKey: Record<string, string> = {
-      ats: 'ats',
-      hris: 'sf-ec',
-      identity: 'idp',
-      lms: 'lms',
-      itsm: 'ticketing',
-      payroll: 'sf-ecp',
-      leave: 'time-system',
-      compliance: 'knowledge-base',
-      esignature: 'doc-store',
-      communications: 'ticketing',
-      bgv: 'bgv',
-    };
-
     return {
-      numSystems: Math.max(1, values.systems.length),
+      numSystems: countMappedEstates(values.systems),
       annualTransactions: values.annualTransactions,
       employees: values.employees,
       sector: values.sector.toLowerCase(),
@@ -184,12 +171,7 @@ function ClientSetupWizard({
       countries: values.countries,
       landscapeMaturity: values.landscapeMaturity,
       contractYears: 3,
-      nonIntegratedSystems: Array.from(new Set(
-        values.systems
-          .filter((system) => system.mode === 'manual' || system.mode === 'file-transfer')
-          .map((system) => assumptionSystemKey[system.key])
-          .filter(Boolean),
-      )),
+      nonIntegratedSystems: nonIntegratedSystemKeys(values.systems),
       ...(totalWeight > 0
         ? {
             intentShareOverrides: Object.fromEntries(

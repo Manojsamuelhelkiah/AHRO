@@ -70,7 +70,7 @@ test("old incomplete demo drafts are replaced, while normal workspaces stay blan
   assert.equal(clientSetupSchema.safeParse(normalDraft).success, false);
 });
 
-test("setup modes use canonical values and duplicate system types are rejected", () => {
+test("setup modes use canonical values and only capability-approved system types can repeat", () => {
   const complete = {
     ...demoDraft,
     systems: demoDraft.systems.map((system) => ({ ...system })),
@@ -88,4 +88,55 @@ test("setup modes use canonical values and duplicate system types are rejected",
       ? { ...system, key: complete.systems[0]!.key }
       : system),
   }).success, false);
+  assert.equal(clientSetupSchema.safeParse({
+    ...complete,
+    systems: [
+      ...complete.systems,
+      { ...complete.systems.find((system) => system.key === "payroll")!, id: "payroll-second", name: "Second payroll" },
+    ],
+  }).success, true);
+  assert.equal(clientSetupSchema.safeParse({
+    ...complete,
+    systems: [
+      ...complete.systems,
+      { ...complete.systems.find((system) => system.key === "payroll")!, id: "payroll-second", mode: "email-watch" },
+    ],
+  }).success, false);
+});
+
+test("saved setup reload preserves every instance ID and upgrades legacy rows deterministically", () => {
+  const { processFiles: _processFiles, ...setupData } = demoDraft;
+  const multiEstate = {
+    ...setupData,
+    systems: [
+      ...setupData.systems,
+      { ...setupData.systems.find((system) => system.key === "payroll")!, id: "payroll-emea", name: "EMEA Payroll" },
+    ],
+  };
+  const parsed = clientSetupDataSchema.parse(multiEstate);
+  assert.deepEqual(parsed.systems.map((system) => system.id), multiEstate.systems.map((system) => system.id));
+  const legacy = clientSetupDataSchema.parse({
+    ...multiEstate,
+    systems: multiEstate.systems.map(({ id: _id, ...system }) => system),
+  });
+  assert.deepEqual(
+    legacy.systems.map((system) => system.id),
+    legacy.systems.map((system, index) => `legacy-${system.key}-${index + 1}`),
+  );
+});
+
+test("resumed browser drafts upgrade ID-less rows before a second estate can be added", () => {
+  const legacySystems = demoDraft.systems.map(({ id: _id, ...system }) => system);
+  const resumed = resolveInitialDraft({ ...demoDraft, systems: legacySystems } as any, false);
+  assert.deepEqual(
+    resumed.systems.map((system) => system.id),
+    resumed.systems.map((system, index) => `legacy-${system.key}-${index + 1}`),
+  );
+  assert.equal(clientSetupSchema.safeParse({
+    ...resumed,
+    systems: [
+      ...resumed.systems,
+      { ...resumed.systems.find((system) => system.key === "payroll")!, id: "payroll-second" },
+    ],
+  }).success, true);
 });

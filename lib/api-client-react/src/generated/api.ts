@@ -361,7 +361,6 @@ export const getListScenarioSystemCapabilitiesQueryKey = () => {
     ] as const;
     }
 
-
 export const getListScenarioSystemCapabilitiesQueryOptions = <TData = Awaited<ReturnType<typeof listScenarioSystemCapabilities>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScenarioSystemCapabilities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 

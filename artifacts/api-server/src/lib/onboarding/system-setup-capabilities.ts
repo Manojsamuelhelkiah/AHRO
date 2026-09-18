@@ -9,6 +9,7 @@ export type ScenarioSystemSetupMode =
 
 type ScenarioSetupData = {
   systems: Array<{
+    id?: string;
     key: string;
     mode: ScenarioSystemSetupMode;
   }>;
@@ -25,6 +26,7 @@ export type SystemSetupCapability = {
   label: string;
   description: string;
   modes: readonly SetupModeOption[];
+  allowMultipleInstances?: boolean;
   watcherSystem?: "bgv" | "itsm" | "payroll";
 };
 
@@ -59,8 +61,8 @@ export const SYSTEM_SETUP_CAPABILITIES: readonly SystemSetupCapability[] = [
   { key: "hris", label: "HRIS / Core HR", description: "Worker identity and employment records.", modes: [DIRECT, FILE, MANUAL] },
   { key: "identity", label: "Identity & Access (IAM)", description: "Corporate identity and access provisioning.", modes: [DIRECT, MANUAL] },
   { key: "lms", label: "Learning (LMS)", description: "Learning assignments and completion records.", modes: [FILE, MANUAL] },
-  { key: "itsm", label: "ITSM / Ticketing", description: "Access and equipment service requests.", modes: [DIRECT, EMAIL, MANUAL], watcherSystem: "itsm" },
-  { key: "payroll", label: "Payroll & Benefits", description: "Payroll and benefits activation readiness.", modes: [DIRECT, EMAIL, FILE, MANUAL], watcherSystem: "payroll" },
+  { key: "itsm", label: "ITSM / Ticketing", description: "Access and equipment service requests.", modes: [DIRECT, EMAIL, MANUAL], allowMultipleInstances: true, watcherSystem: "itsm" },
+  { key: "payroll", label: "Payroll & Benefits", description: "Payroll and benefits activation readiness.", modes: [DIRECT, EMAIL, FILE, MANUAL], allowMultipleInstances: true, watcherSystem: "payroll" },
   { key: "leave", label: "Leave / Time", description: "Absence and time records.", modes: [DIRECT, FILE, MANUAL] },
   { key: "compliance", label: "Compliance / Policy", description: "Policy and compliance source material.", modes: [FILE, MANUAL] },
   { key: "esignature", label: "E-Signature & Documents", description: "Document signature and completion tracking.", modes: [DIRECT, WEBHOOK, MANUAL] },
@@ -76,20 +78,54 @@ export function canActivateSystemSetup(role: string | undefined): boolean {
 
 export function validateSystemSetup(setupData: ScenarioSetupData | null | undefined): void {
   if (!setupData) return;
+  const instanceCounts = new Map<string, number>();
+  for (const system of setupData.systems) {
+    instanceCounts.set(system.key, (instanceCounts.get(system.key) ?? 0) + 1);
+  }
   const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const watcherSelections = new Map<string, string>();
   for (const system of setupData.systems) {
     const capability = CAPABILITY_BY_KEY.get(system.key);
     if (!capability) {
       throw new InputValidationError(`Unsupported Client Setup system "${system.key}"`);
     }
-    if (seen.has(system.key)) {
+    if (seen.has(system.key) && !capability.allowMultipleInstances) {
       throw new InputValidationError(`Client Setup system "${capability.label}" is selected more than once`);
     }
     seen.add(system.key);
+    if ((instanceCounts.get(system.key) ?? 0) > 1 && (!system.id || !system.id.trim())) {
+      throw new InputValidationError(
+        `${capability.label} instances must each have a stable instance ID`,
+      );
+    }
+    if (system.id !== undefined) {
+      if (!system.id.trim()) {
+        throw new InputValidationError("Client Setup system instance ID cannot be empty");
+      }
+      if (seenIds.has(system.id)) {
+        throw new InputValidationError(`Client Setup system instance ID "${system.id}" is selected more than once`);
+      }
+      seenIds.add(system.id);
+    }
     if (!capability.modes.some(({ mode }) => mode === system.mode)) {
       throw new InputValidationError(
         `${capability.label} does not support setup mode "${system.mode}"`,
       );
+    }
+    if (capability.watcherSystem) {
+      const watcherSelection = system.mode === "direct-integration"
+        ? "connected:api"
+        : system.mode === "email-watch"
+          ? "connected:email"
+          : "disconnected:api";
+      const existing = watcherSelections.get(capability.watcherSystem);
+      if (existing && existing !== watcherSelection) {
+        throw new InputValidationError(
+          `${capability.label} instances must use the same connector-wide tracking mode`,
+        );
+      }
+      watcherSelections.set(capability.watcherSystem, watcherSelection);
     }
   }
 }
@@ -103,7 +139,7 @@ export function selectedWatcherConfigurations(
   status: "connected" | "disconnected";
 }> {
   if (!setupData) return [];
-  return setupData.systems.flatMap((system) => {
+  const selections = setupData.systems.flatMap((system) => {
     const capability = CAPABILITY_BY_KEY.get(system.key);
     if (!capability?.watcherSystem) {
       return [];
@@ -117,6 +153,8 @@ export function selectedWatcherConfigurations(
         : "disconnected" as const,
     }];
   });
+  return selections.filter((selection, index) =>
+    selections.findIndex((candidate) => candidate.connectorKey === selection.connectorKey) === index);
 }
 
 export function connectorUpdateForSetupSelection(
