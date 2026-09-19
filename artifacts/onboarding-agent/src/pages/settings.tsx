@@ -840,7 +840,9 @@ export function SettingsPage() {
       <ReadinessSlaSettingsCard />
       <EarlyTenureSettingsCard />
       <AuthorityGovernanceCard />
-      <PrivacyAdministrationCard />
+      <div id="sensitive-lifecycle-policies">
+        <PrivacyAdministrationCard />
+      </div>
       <OrganizationMembersSettings />
       <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">

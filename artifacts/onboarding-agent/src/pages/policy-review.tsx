@@ -492,7 +492,7 @@ function AuthorityManager() {
   if (isLoading) return <LoadingBlock>Loading authorities...</LoadingBlock>;
 
   return (
-    <Card>
+    <Card id="authority-assignments">
       <div className="p-[var(--space-md)] bg-[var(--surface-alt)] border-b border-[var(--border)]">
         <h3 className="font-bold text-[var(--text-base)] text-[var(--text-primary)] flex items-center gap-2">
           <Shield className="w-4 h-4 text-[var(--primary)]" /> Verified Authorities

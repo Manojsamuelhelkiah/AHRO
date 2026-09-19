@@ -1904,6 +1904,8 @@ export const getOnboardingDemoControllerResponseScenariosItemKeyMax = 80;
 
 
 
+
+
 export const getOnboardingDemoControllerResponseExistingSessionsItemVersionMin = 0;
 
 
@@ -1934,7 +1936,27 @@ export const GetOnboardingDemoControllerResponse = zod.object({
   "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
-  "capabilityReason": zod.string().nullable()
+  "capabilityReason": zod.string().nullable(),
+  "privacyReadiness": zod.object({
+  "requiredPolicyCoverage": zod.array(zod.string()),
+  "coveredPolicyCoverage": zod.array(zod.string()),
+  "missingPolicyCoverage": zod.array(zod.string()),
+  "authorityStatus": zod.enum(['verified', 'nominated', 'revoked', 'expired', 'missing']),
+  "reviewer": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string().describe('Privacy-safe display derived from the active organization member; no email or profile data.'),
+  "expiresAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "nomination": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string()
+}),zod.null()]),
+  "nextAction": zod.enum(['set-work-country', 'nominate-reviewer', 'wait-for-verification', 'approve-policy-pack', 'ready'])
+})
 })),
   "existingSessions": zod.array(zod.object({
   "runId": zod.string(),
@@ -1984,6 +2006,8 @@ export const createOnboardingDemoRunResponseVersionMin = 0;
 
 export const createOnboardingDemoRunResponseClockOffsetHoursMin = 0;
 export const createOnboardingDemoRunResponseClockOffsetHoursMax = 8760;
+
+
 
 
 
@@ -2058,7 +2082,27 @@ export const CreateOnboardingDemoRunResponse = zod.object({
   "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
-  "capabilityReason": zod.string().nullable()
+  "capabilityReason": zod.string().nullable(),
+  "privacyReadiness": zod.object({
+  "requiredPolicyCoverage": zod.array(zod.string()),
+  "coveredPolicyCoverage": zod.array(zod.string()),
+  "missingPolicyCoverage": zod.array(zod.string()),
+  "authorityStatus": zod.enum(['verified', 'nominated', 'revoked', 'expired', 'missing']),
+  "reviewer": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string().describe('Privacy-safe display derived from the active organization member; no email or profile data.'),
+  "expiresAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "nomination": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string()
+}),zod.null()]),
+  "nextAction": zod.enum(['set-work-country', 'nominate-reviewer', 'wait-for-verification', 'approve-policy-pack', 'ready'])
+})
 }).nullable()
 })
 
@@ -2079,6 +2123,8 @@ export const getOnboardingDemoRunResponseVersionMin = 0;
 
 export const getOnboardingDemoRunResponseClockOffsetHoursMin = 0;
 export const getOnboardingDemoRunResponseClockOffsetHoursMax = 8760;
+
+
 
 
 
@@ -2153,7 +2199,27 @@ export const GetOnboardingDemoRunResponse = zod.object({
   "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
-  "capabilityReason": zod.string().nullable()
+  "capabilityReason": zod.string().nullable(),
+  "privacyReadiness": zod.object({
+  "requiredPolicyCoverage": zod.array(zod.string()),
+  "coveredPolicyCoverage": zod.array(zod.string()),
+  "missingPolicyCoverage": zod.array(zod.string()),
+  "authorityStatus": zod.enum(['verified', 'nominated', 'revoked', 'expired', 'missing']),
+  "reviewer": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string().describe('Privacy-safe display derived from the active organization member; no email or profile data.'),
+  "expiresAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "nomination": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string()
+}),zod.null()]),
+  "nextAction": zod.enum(['set-work-country', 'nominate-reviewer', 'wait-for-verification', 'approve-policy-pack', 'ready'])
+})
 }).nullable()
 })
 
@@ -2203,6 +2269,8 @@ export const applyOnboardingDemoRunActionResponseVersionMin = 0;
 
 export const applyOnboardingDemoRunActionResponseClockOffsetHoursMin = 0;
 export const applyOnboardingDemoRunActionResponseClockOffsetHoursMax = 8760;
+
+
 
 
 
@@ -2277,7 +2345,27 @@ export const ApplyOnboardingDemoRunActionResponse = zod.object({
   "lifecyclePolicyReason": zod.string().nullable().describe('Plain-language reason this volunteer cannot currently be selected.'),
   "liveEmailAvailable": zod.boolean(),
   "liveCallAvailable": zod.boolean(),
-  "capabilityReason": zod.string().nullable()
+  "capabilityReason": zod.string().nullable(),
+  "privacyReadiness": zod.object({
+  "requiredPolicyCoverage": zod.array(zod.string()),
+  "coveredPolicyCoverage": zod.array(zod.string()),
+  "missingPolicyCoverage": zod.array(zod.string()),
+  "authorityStatus": zod.enum(['verified', 'nominated', 'revoked', 'expired', 'missing']),
+  "reviewer": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string().describe('Privacy-safe display derived from the active organization member; no email or profile data.'),
+  "expiresAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "nomination": zod.union([zod.object({
+  "assignmentId": zod.number().min(1),
+  "role": zod.enum(['privacy', 'legal']),
+  "memberId": zod.string(),
+  "memberDisplay": zod.string()
+}),zod.null()]),
+  "nextAction": zod.enum(['set-work-country', 'nominate-reviewer', 'wait-for-verification', 'approve-policy-pack', 'ready'])
+})
 }).nullable()
 })
 

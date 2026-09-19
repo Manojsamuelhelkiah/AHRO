@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
   db,
   onbGovernanceAuthorityAssignments,
@@ -25,6 +25,23 @@ import {
 export type GovernanceActor = {
   userId: string;
   organizationRole?: "owner" | "admin" | "member";
+};
+
+export type SensitiveLifecycleAuthorityContext = {
+  authorityStatus: "verified" | "nominated" | "revoked" | "expired" | "missing";
+  reviewer: {
+    assignmentId: number;
+    role: "privacy" | "legal";
+    memberId: string;
+    memberDisplay: string;
+    expiresAt: string | null;
+  } | null;
+  nomination: {
+    assignmentId: number;
+    role: "privacy" | "legal";
+    memberId: string;
+    memberDisplay: string;
+  } | null;
 };
 
 export class GovernanceNotFoundError extends Error {}
@@ -196,6 +213,96 @@ function assignmentPublic(row: typeof onbGovernanceAuthorityAssignments.$inferSe
     revokedByUserId: row.revokedByUserId,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+function safeMemberDisplay(userId: string): string {
+  const trimmed = userId.trim();
+  if (trimmed.length <= 8) return `Organization member · ${trimmed}`;
+  return `Organization member · ${trimmed.slice(0, 4)}…${trimmed.slice(-4)}`;
+}
+
+/**
+ * Return only the current privacy/legal authority projection needed by
+ * Demo Center. It intentionally contains no email, profile, or unrelated
+ * tenant membership data. A nomination is visible as a route to verification,
+ * never as approval authority.
+ */
+async function sensitiveLifecycleAuthorityContextFrom(
+  executor: Pick<typeof db, "select">,
+  organizationId: string,
+): Promise<SensitiveLifecycleAuthorityContext> {
+  const now = new Date();
+  const rows = await executor.select({
+    assignment: onbGovernanceAuthorityAssignments,
+    memberId: organizationMembershipsTable.clerkUserId,
+  }).from(onbGovernanceAuthorityAssignments).innerJoin(
+    organizationMembershipsTable,
+    and(
+      eq(organizationMembershipsTable.organizationId, onbGovernanceAuthorityAssignments.organizationId),
+      eq(organizationMembershipsTable.clerkUserId, onbGovernanceAuthorityAssignments.assigneeUserId),
+      isNull(organizationMembershipsTable.revokedAt),
+    ),
+  ).where(and(
+    eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
+    inArray(onbGovernanceAuthorityAssignments.authorityRole, ["privacy", "legal"]),
+  )).orderBy(desc(onbGovernanceAuthorityAssignments.createdAt));
+
+  const active = rows.find(({ assignment }) =>
+    assignment.verificationStatus === "verified" &&
+    assignment.revokedAt === null &&
+    (assignment.expiresAt === null || assignment.expiresAt > now),
+  );
+  if (active) {
+    return {
+      authorityStatus: "verified",
+      reviewer: {
+        assignmentId: active.assignment.id,
+        role: active.assignment.authorityRole as "privacy" | "legal",
+        memberId: active.memberId,
+        memberDisplay: safeMemberDisplay(active.memberId),
+        expiresAt: active.assignment.expiresAt?.toISOString() ?? null,
+      },
+      nomination: null,
+    };
+  }
+
+  const nomination = rows.find(({ assignment }) =>
+    assignment.verificationStatus === "pending" && assignment.revokedAt === null,
+  );
+  if (nomination) {
+    return {
+      authorityStatus: "nominated",
+      reviewer: null,
+      nomination: {
+        assignmentId: nomination.assignment.id,
+        role: nomination.assignment.authorityRole as "privacy" | "legal",
+        memberId: nomination.memberId,
+        memberDisplay: safeMemberDisplay(nomination.memberId),
+      },
+    };
+  }
+
+  const previous = rows.find(({ assignment }) => assignment.verificationStatus === "verified");
+  return {
+    authorityStatus: previous
+      ? previous.assignment.revokedAt !== null ? "revoked" : "expired"
+      : "missing",
+    reviewer: null,
+    nomination: null,
+  };
+}
+
+export async function getSensitiveLifecycleAuthorityContext(
+  organizationId: string,
+): Promise<SensitiveLifecycleAuthorityContext> {
+  return sensitiveLifecycleAuthorityContextFrom(db, organizationId);
+}
+
+export async function getSensitiveLifecycleAuthorityContextInTransaction(
+  tx: Pick<typeof db, "select">,
+  organizationId: string,
+): Promise<SensitiveLifecycleAuthorityContext> {
+  return sensitiveLifecycleAuthorityContextFrom(tx, organizationId);
 }
 
 async function recordHistory(

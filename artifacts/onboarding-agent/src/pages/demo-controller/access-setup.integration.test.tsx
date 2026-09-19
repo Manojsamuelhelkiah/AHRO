@@ -32,7 +32,111 @@ const capabilities = {
       description: "A synthetic first-day walkthrough.",
     },
   ],
-  approvedVolunteers: [],
+  approvedVolunteers: [
+    {
+      id: "volunteer-missing",
+      name: "Missing reviewer",
+      email: "missing@example.test",
+      phone: null,
+      channelPreference: "email",
+      approved: true,
+      workCountry: "US",
+      lifecyclePolicyReady: false,
+      lifecyclePolicyReason: "Nominate a privacy or legal reviewer before approving the policy pack.",
+      liveEmailAvailable: false,
+      liveCallAvailable: false,
+      capabilityReason: null,
+      privacyReadiness: {
+        requiredPolicyCoverage: ["identity", "contact"],
+        coveredPolicyCoverage: [],
+        missingPolicyCoverage: ["identity", "contact"],
+        authorityStatus: "missing",
+        reviewer: null,
+        nomination: null,
+        nextAction: "nominate-reviewer",
+      },
+    },
+    {
+      id: "volunteer-nominated",
+      name: "Nominated reviewer",
+      email: "nominated@example.test",
+      phone: null,
+      channelPreference: "email",
+      approved: true,
+      workCountry: "US",
+      lifecyclePolicyReady: false,
+      lifecyclePolicyReason: "A server-verified operator must confirm the nomination.",
+      liveEmailAvailable: false,
+      liveCallAvailable: false,
+      capabilityReason: null,
+      privacyReadiness: {
+        requiredPolicyCoverage: ["identity", "contact"],
+        coveredPolicyCoverage: ["identity"],
+        missingPolicyCoverage: ["contact"],
+        authorityStatus: "nominated",
+        reviewer: null,
+        nomination: {
+          assignmentId: 11,
+          role: "privacy",
+          memberId: "clerk-nominated",
+          memberDisplay: "Organization member · mina…ated",
+        },
+        nextAction: "wait-for-verification",
+      },
+    },
+    {
+      id: "volunteer-verified",
+      name: "Verified reviewer",
+      email: "verified@example.test",
+      phone: null,
+      channelPreference: "email",
+      approved: true,
+      workCountry: "US",
+      lifecyclePolicyReady: true,
+      lifecyclePolicyReason: null,
+      liveEmailAvailable: false,
+      liveCallAvailable: false,
+      capabilityReason: null,
+      privacyReadiness: {
+        requiredPolicyCoverage: ["identity", "contact"],
+        coveredPolicyCoverage: ["identity", "contact"],
+        missingPolicyCoverage: [],
+        authorityStatus: "verified",
+        reviewer: {
+          assignmentId: 12,
+          role: "legal",
+          memberId: "clerk-verified",
+          memberDisplay: "Organization member · veri…fied",
+          expiresAt: null,
+        },
+        nomination: null,
+        nextAction: "ready",
+      },
+    },
+    {
+      id: "volunteer-revoked",
+      name: "Revoked reviewer",
+      email: "revoked@example.test",
+      phone: null,
+      channelPreference: "email",
+      approved: true,
+      workCountry: "US",
+      lifecyclePolicyReady: false,
+      lifecyclePolicyReason: "The previous reviewer is no longer current.",
+      liveEmailAvailable: false,
+      liveCallAvailable: false,
+      capabilityReason: null,
+      privacyReadiness: {
+        requiredPolicyCoverage: ["identity", "contact"],
+        coveredPolicyCoverage: [],
+        missingPolicyCoverage: ["identity", "contact"],
+        authorityStatus: "revoked",
+        reviewer: null,
+        nomination: null,
+        nextAction: "nominate-reviewer",
+      },
+    },
+  ],
   existingSessions: [],
 };
 
@@ -289,6 +393,12 @@ describe("Demo Controller access setup", { concurrency: false }, () => {
       );
       assert.match(pageText(), /Available to every Demo Organization user/);
       assert.doesNotMatch(pageText(), /Demo Controller access required/);
+      assert.match(pageText(), /No verified reviewer/);
+      assert.match(pageText(), /Nominated — verification pending/);
+      assert.match(pageText(), /Verified reviewer/);
+      assert.match(pageText(), /Previous reviewer revoked/);
+      assert.match(pageText(), /Fully simulated walkthroughs are always available/);
+      assert.match(pageText(), /Nominate reviewer/);
 
       const createButton = buttonWithText("Create private setup request");
       await act(async () => {

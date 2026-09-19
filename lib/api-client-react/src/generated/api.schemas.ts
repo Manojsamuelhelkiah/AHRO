@@ -5965,6 +5965,73 @@ export const DemoControllerVolunteerChannelPreference = {
   both: 'both',
 } as const;
 
+export type DemoPrivacyReadinessAuthorityStatus = typeof DemoPrivacyReadinessAuthorityStatus[keyof typeof DemoPrivacyReadinessAuthorityStatus];
+
+
+export const DemoPrivacyReadinessAuthorityStatus = {
+  verified: 'verified',
+  nominated: 'nominated',
+  revoked: 'revoked',
+  expired: 'expired',
+  missing: 'missing',
+} as const;
+
+export type DemoPrivacyAuthorityReviewerRole = typeof DemoPrivacyAuthorityReviewerRole[keyof typeof DemoPrivacyAuthorityReviewerRole];
+
+
+export const DemoPrivacyAuthorityReviewerRole = {
+  privacy: 'privacy',
+  legal: 'legal',
+} as const;
+
+export interface DemoPrivacyAuthorityReviewer {
+  /** @minimum 1 */
+  assignmentId: number;
+  role: DemoPrivacyAuthorityReviewerRole;
+  memberId: string;
+  /** Privacy-safe display derived from the active organization member; no email or profile data. */
+  memberDisplay: string;
+  /** @nullable */
+  expiresAt: string | null;
+}
+
+export type DemoPrivacyAuthorityNominationRole = typeof DemoPrivacyAuthorityNominationRole[keyof typeof DemoPrivacyAuthorityNominationRole];
+
+
+export const DemoPrivacyAuthorityNominationRole = {
+  privacy: 'privacy',
+  legal: 'legal',
+} as const;
+
+export interface DemoPrivacyAuthorityNomination {
+  /** @minimum 1 */
+  assignmentId: number;
+  role: DemoPrivacyAuthorityNominationRole;
+  memberId: string;
+  memberDisplay: string;
+}
+
+export type DemoPrivacyReadinessNextAction = typeof DemoPrivacyReadinessNextAction[keyof typeof DemoPrivacyReadinessNextAction];
+
+
+export const DemoPrivacyReadinessNextAction = {
+  'set-work-country': 'set-work-country',
+  'nominate-reviewer': 'nominate-reviewer',
+  'wait-for-verification': 'wait-for-verification',
+  'approve-policy-pack': 'approve-policy-pack',
+  ready: 'ready',
+} as const;
+
+export interface DemoPrivacyReadiness {
+  requiredPolicyCoverage: string[];
+  coveredPolicyCoverage: string[];
+  missingPolicyCoverage: string[];
+  authorityStatus: DemoPrivacyReadinessAuthorityStatus;
+  reviewer: DemoPrivacyAuthorityReviewer | null;
+  nomination: DemoPrivacyAuthorityNomination | null;
+  nextAction: DemoPrivacyReadinessNextAction;
+}
+
 export interface DemoControllerVolunteer {
   /**
      * Server-derived stable identifier; clients cannot use it to change volunteer records.
@@ -5993,6 +6060,7 @@ export interface DemoControllerVolunteer {
   liveCallAvailable: boolean;
   /** @nullable */
   capabilityReason: string | null;
+  privacyReadiness: DemoPrivacyReadiness;
 }
 
 export type DemoControllerCapabilitiesDefaultMode = typeof DemoControllerCapabilitiesDefaultMode[keyof typeof DemoControllerCapabilitiesDefaultMode];

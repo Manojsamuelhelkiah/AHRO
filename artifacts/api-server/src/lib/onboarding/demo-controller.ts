@@ -29,10 +29,16 @@ import { runWithDemoControllerLive } from "./provider-policy";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  effectiveSensitiveDataClassesForCandidateUpload,
   evaluateCaseDerivedLifecycleGateInTransaction,
   SensitiveLifecycleConflictError,
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
+import {
+  getSensitiveLifecycleAuthorityContext,
+  getSensitiveLifecycleAuthorityContextInTransaction,
+  type SensitiveLifecycleAuthorityContext,
+} from "./governance";
 
 export const DEMO_RUN_KEY_PREFIX = "demo-controller.run.v1:";
 const ALLOWED_SYSTEMS = ["bgv", "hris", "access", "assets", "payroll", "learning"] as const;
@@ -56,6 +62,19 @@ export type ControllerVolunteer = {
   liveEmailAvailable: boolean;
   liveCallAvailable: boolean;
   capabilityReason: string | null;
+  privacyReadiness: {
+    requiredPolicyCoverage: string[];
+    coveredPolicyCoverage: string[];
+    missingPolicyCoverage: string[];
+    authorityStatus: SensitiveLifecycleAuthorityContext["authorityStatus"];
+    reviewer: SensitiveLifecycleAuthorityContext["reviewer"];
+    nomination: SensitiveLifecycleAuthorityContext["nomination"];
+    nextAction: "set-work-country" | "nominate-reviewer" | "wait-for-verification" | "approve-policy-pack" | "ready";
+  };
+};
+
+type RuntimeControllerVolunteer = Omit<ControllerVolunteer, "privacyReadiness"> & {
+  privacyReadiness?: ControllerVolunteer["privacyReadiness"];
 };
 
 type RunAction = {
@@ -162,7 +181,7 @@ type DemoRun = {
   activity: Activity[];
   liveCapabilityReason: string | null;
   selectedVolunteerId: string | null;
-  selectedVolunteer: ControllerVolunteer | null;
+  selectedVolunteer: RuntimeControllerVolunteer | null;
   renewedHRReviewRequired?: boolean;
   auditReason?: string | null;
   /** Durable idempotency ledger. Never exposed to the client. */
@@ -181,7 +200,7 @@ export async function withApprovedDemoVolunteerEmail<T>(
   organizationId: string,
   caseId: number,
   requestId: string,
-  operation: (selected: ControllerVolunteer) => Promise<T>,
+  operation: (selected: RuntimeControllerVolunteer) => Promise<T>,
 ): Promise<T> {
   if (organizationId !== DEMO_ORGANIZATION_ID) {
     throw error("DemoOrganizationOnly", "Demo Controller live email is restricted to Demo Organization.");
@@ -261,7 +280,7 @@ function volunteerView(
     lifecyclePolicyReady: false,
     lifecyclePolicyReason: "Privacy approval readiness has not been checked.",
   },
-): ControllerVolunteer {
+): RuntimeControllerVolunteer {
   const problem = volunteerProblems(v);
   const id = fingerprintVolunteer(v);
   const emailAvailable = !problem && readiness.email && v.channelPreference !== "whatsapp";
@@ -295,11 +314,70 @@ function lifecyclePolicyUnavailableReason(workCountry: string | null): string {
     : "Set this volunteer's work country to a supported country before checking privacy approval.";
 }
 
+type LifecycleGateProjection = {
+  allowed: boolean;
+  reason?: string;
+  missingDataClasses?: string[];
+};
+
+function privacyReadinessFor(
+  view: RuntimeControllerVolunteer,
+  gate: LifecycleGateProjection,
+  authorityContext: SensitiveLifecycleAuthorityContext,
+  requiredPolicyCoverage: string[],
+): ControllerVolunteer["privacyReadiness"] {
+  const coveredPolicyCoverage = !view.workCountry
+    ? []
+    : gate.allowed
+      ? requiredPolicyCoverage
+      : requiredPolicyCoverage.filter((dataClass) => !gate.missingDataClasses?.includes(dataClass));
+  const missingPolicyCoverage = requiredPolicyCoverage.filter((dataClass) => !coveredPolicyCoverage.includes(dataClass));
+  const nextAction = !view.workCountry
+    ? "set-work-country" as const
+    : authorityContext.authorityStatus === "nominated"
+        ? "wait-for-verification" as const
+        : authorityContext.authorityStatus !== "verified"
+          ? "nominate-reviewer" as const
+          : gate.allowed
+            ? "ready" as const
+            : "approve-policy-pack" as const;
+  return {
+    requiredPolicyCoverage,
+    coveredPolicyCoverage,
+    missingPolicyCoverage,
+    authorityStatus: authorityContext.authorityStatus,
+    reviewer: authorityContext.reviewer,
+    nomination: authorityContext.nomination,
+    nextAction,
+  };
+}
+
+function lifecycleReady(
+  gate: LifecycleGateProjection,
+  authorityContext: SensitiveLifecycleAuthorityContext,
+): boolean {
+  return gate.allowed && authorityContext.authorityStatus === "verified";
+}
+
+function lifecycleBlockReason(
+  workCountry: string | null,
+  gate: LifecycleGateProjection,
+  authorityContext: SensitiveLifecycleAuthorityContext,
+): string | null {
+  if (!workCountry) return lifecyclePolicyUnavailableReason(workCountry);
+  if (authorityContext.authorityStatus !== "verified") {
+    return "A current server-verified privacy or legal reviewer is required before this volunteer can be used.";
+  }
+  return gate.allowed ? null : gate.reason ?? lifecyclePolicyUnavailableReason(workCountry);
+}
+
 async function controllerVolunteers(
   organizationId: string,
   readiness = providerReadiness(),
+  authorityContext: SensitiveLifecycleAuthorityContext,
 ): Promise<ControllerVolunteer[]> {
   const volunteers = await loadVolunteers(organizationId);
+  const requiredPolicyCoverage = [...effectiveSensitiveDataClassesForCandidateUpload()];
   return db.transaction(async (tx) => {
     const results: ControllerVolunteer[] = [];
     for (const volunteer of volunteers) {
@@ -310,8 +388,9 @@ async function controllerVolunteers(
       });
       results.push({
         ...view,
-        lifecyclePolicyReady: gate.allowed,
-        lifecyclePolicyReason: gate.allowed ? null : lifecyclePolicyUnavailableReason(view.workCountry),
+        lifecyclePolicyReady: lifecycleReady(gate, authorityContext),
+        lifecyclePolicyReason: lifecycleBlockReason(view.workCountry, gate, authorityContext),
+        privacyReadiness: privacyReadinessFor(view, gate, authorityContext, requiredPolicyCoverage),
       });
     }
     return results;
@@ -512,8 +591,11 @@ export async function getDemoCapabilities(organizationId: string, role?: string)
   // All authenticated Demo Organization members can present demos. Missing
   // membership and other tenants still receive no private controller data.
   const readiness = canManage ? await actualProviderReadiness() : null;
+  const authorityContext = canManage
+    ? await getSensitiveLifecycleAuthorityContext(organizationId)
+    : null;
   const volunteers = canManage
-    ? await controllerVolunteers(organizationId, readiness ?? undefined)
+    ? await controllerVolunteers(organizationId, readiness ?? undefined, authorityContext!)
     : [];
   const sessions = canManage ? await listDemoRuns(organizationId) : [];
   return {
@@ -565,6 +647,7 @@ export async function createDemoRun(
   if (input.volunteerId && !volunteer) throw error("DemoVolunteerUnavailable", "Selected volunteer is no longer approved or has changed.");
   if (volunteer && volunteerProblems(volunteer)) throw error("DemoVolunteerUnavailable", volunteerProblems(volunteer)!);
   const readiness = await actualProviderReadiness();
+  const requiredPolicyCoverage = [...effectiveSensitiveDataClassesForCandidateUpload()];
   const runId = randomUUID();
   const createdAt = nowIso();
   const workCountry = normalizedDemoWorkCountry(volunteer?.geography ?? scenario.intake.geography);
@@ -581,22 +664,33 @@ export async function createDemoRun(
       // introduces real contact/profile data and remains fail-closed behind
       // the ordinary approved-policy envelope.
       let volunteerLifecycle: Pick<ControllerVolunteer, "lifecyclePolicyReady" | "lifecyclePolicyReason"> | undefined;
+      let selected: ControllerVolunteer | null = null;
       if (volunteer) {
         const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
           organizationId,
           jurisdiction: workCountry,
         });
-        if (!gate.allowed) {
-          throw error("DemoRunConflict", `SENSITIVE_LIFECYCLE_BLOCKED:${gate.reason}`);
+        const authorityContext = await getSensitiveLifecycleAuthorityContextInTransaction(tx, organizationId);
+        if (!lifecycleReady(gate, authorityContext)) {
+          throw error("DemoRunConflict", `SENSITIVE_LIFECYCLE_BLOCKED:${lifecycleBlockReason(workCountry, gate, authorityContext)}`);
         }
         volunteerLifecycle = {
           lifecyclePolicyReady: true,
           lifecyclePolicyReason: null,
         };
+        const view = volunteerView(volunteer, readiness, volunteerLifecycle);
+        selected = {
+          ...view,
+          privacyReadiness: privacyReadinessFor(
+            view,
+            gate,
+            authorityContext,
+            requiredPolicyCoverage,
+          ),
+        };
       }
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
       const c = await createCase(tx, organizationId, input.scenario, volunteer, runId, workCountry!);
-      const selected = volunteer ? volunteerView(volunteer, readiness, volunteerLifecycle) : null;
       const run: DemoRun = {
         runId,
         caseId: c.id,
@@ -891,7 +985,7 @@ async function performMutation(
   });
 }
 
-async function revalidateSelectedVolunteer(organizationId: string, run: DemoRun): Promise<ControllerVolunteer> {
+async function revalidateSelectedVolunteer(organizationId: string, run: DemoRun): Promise<RuntimeControllerVolunteer> {
   if (!run.selectedVolunteerId) throw error("DemoVolunteerUnavailable", "No approved volunteer is pinned to this run.");
   const current = (await loadVolunteers(organizationId))
     .find((candidate) => fingerprintVolunteer(candidate) === run.selectedVolunteerId);
@@ -904,10 +998,20 @@ async function revalidateSelectedVolunteer(organizationId: string, run: DemoRun)
       organizationId,
       jurisdiction: workCountry,
     });
-    return volunteerView(current, providerReadiness(), {
-      lifecyclePolicyReady: gate.allowed,
-      lifecyclePolicyReason: gate.allowed ? null : lifecyclePolicyUnavailableReason(workCountry),
+    const authorityContext = await getSensitiveLifecycleAuthorityContextInTransaction(tx, organizationId);
+    const view = volunteerView(current, providerReadiness(), {
+      lifecyclePolicyReady: lifecycleReady(gate, authorityContext),
+      lifecyclePolicyReason: lifecycleBlockReason(workCountry, gate, authorityContext),
     });
+    return {
+      ...view,
+      privacyReadiness: privacyReadinessFor(
+        view,
+        gate,
+        authorityContext,
+        [...effectiveSensitiveDataClassesForCandidateUpload()],
+      ),
+    };
   });
   if (!selected.lifecyclePolicyReady) {
     throw error("DemoVolunteerUnavailable", selected.lifecyclePolicyReason ?? "Privacy approval is no longer current for this volunteer.");
@@ -980,7 +1084,7 @@ async function finishLiveCommunication(
   action: RunAction,
 ): Promise<DemoRun> {
   const channel = action.channel!;
-  let selected: ControllerVolunteer | null = null;
+  let selected: RuntimeControllerVolunteer | null = null;
   let status = "failed";
   let message = "";
   let transcript: string | null = null;
@@ -1313,13 +1417,25 @@ export async function getDemoRun(organizationId: string, runId: string): Promise
     run.liveCapabilityReason = run.selectedVolunteer.capabilityReason;
   } else {
     const workCountry = normalizedDemoWorkCountry(current.geography);
-    const gate = await db.transaction((tx) => evaluateCaseDerivedLifecycleGateInTransaction(tx, {
-      organizationId,
-      jurisdiction: workCountry,
-    }));
-    run.selectedVolunteer = volunteerView(current, readiness, {
-      lifecyclePolicyReady: gate.allowed,
-      lifecyclePolicyReason: gate.allowed ? null : lifecyclePolicyUnavailableReason(workCountry),
+    run.selectedVolunteer = await db.transaction(async (tx) => {
+      const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: workCountry,
+      });
+      const authorityContext = await getSensitiveLifecycleAuthorityContextInTransaction(tx, organizationId);
+      const view = volunteerView(current, readiness, {
+        lifecyclePolicyReady: lifecycleReady(gate, authorityContext),
+        lifecyclePolicyReason: lifecycleBlockReason(workCountry, gate, authorityContext),
+      });
+      return {
+        ...view,
+        privacyReadiness: privacyReadinessFor(
+          view,
+          gate,
+          authorityContext,
+          [...effectiveSensitiveDataClassesForCandidateUpload()],
+        ),
+      };
     });
     run.liveCapabilityReason = run.selectedVolunteer.approved
       ? "Live contact is available only through an explicit, recipient-pinned controller action."

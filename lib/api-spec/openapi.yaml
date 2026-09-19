@@ -11580,7 +11580,58 @@ components:
         liveEmailAvailable: { type: boolean }
         liveCallAvailable: { type: boolean }
         capabilityReason: { type: ["string", "null"] }
-      required: [id, name, email, phone, channelPreference, approved, workCountry, lifecyclePolicyReady, lifecyclePolicyReason, liveEmailAvailable, liveCallAvailable, capabilityReason]
+        privacyReadiness:
+          $ref: "#/components/schemas/DemoPrivacyReadiness"
+      required: [id, name, email, phone, channelPreference, approved, workCountry, lifecyclePolicyReady, lifecyclePolicyReason, liveEmailAvailable, liveCallAvailable, capabilityReason, privacyReadiness]
+    DemoPrivacyAuthorityReviewer:
+      type: object
+      additionalProperties: false
+      properties:
+        assignmentId: { type: integer, minimum: 1 }
+        role: { type: string, enum: [privacy, legal] }
+        memberId: { type: string }
+        memberDisplay:
+          type: string
+          description: Privacy-safe display derived from the active organization member; no email or profile data.
+        expiresAt: { type: ["string", "null"], format: date-time }
+      required: [assignmentId, role, memberId, memberDisplay, expiresAt]
+    DemoPrivacyAuthorityNomination:
+      type: object
+      additionalProperties: false
+      properties:
+        assignmentId: { type: integer, minimum: 1 }
+        role: { type: string, enum: [privacy, legal] }
+        memberId: { type: string }
+        memberDisplay: { type: string }
+      required: [assignmentId, role, memberId, memberDisplay]
+    DemoPrivacyReadiness:
+      type: object
+      additionalProperties: false
+      properties:
+        requiredPolicyCoverage:
+          type: array
+          items: { type: string }
+        coveredPolicyCoverage:
+          type: array
+          items: { type: string }
+        missingPolicyCoverage:
+          type: array
+          items: { type: string }
+        authorityStatus:
+          type: string
+          enum: [verified, nominated, revoked, expired, missing]
+        reviewer:
+          oneOf:
+            - $ref: "#/components/schemas/DemoPrivacyAuthorityReviewer"
+            - type: "null"
+        nomination:
+          oneOf:
+            - $ref: "#/components/schemas/DemoPrivacyAuthorityNomination"
+            - type: "null"
+        nextAction:
+          type: string
+          enum: [set-work-country, nominate-reviewer, wait-for-verification, approve-policy-pack, ready]
+      required: [requiredPolicyCoverage, coveredPolicyCoverage, missingPolicyCoverage, authorityStatus, reviewer, nomination, nextAction]
     DemoControllerCapabilities:
       type: object
       additionalProperties: false

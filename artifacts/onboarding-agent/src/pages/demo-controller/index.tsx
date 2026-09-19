@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGetOnboardingDemoController, useCreateOnboardingDemoRun, getGetOnboardingDemoControllerQueryKey } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { PageHeader, Card, Button, Label, Input } from '@/components/ui-shared';
-import { Presentation, ShieldAlert, Play, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Presentation, ShieldAlert, Play, Clock, AlertTriangle, ArrowRight, CheckCircle2, UserRound, ShieldCheck } from 'lucide-react';
 import type { DemoControllerCapabilities, DemoControllerVolunteer } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -58,6 +58,7 @@ export function DemoControllerIndexPage() {
         subtitle="Available to every Demo Organization user. Run synthetic workflows and use demo overrides for presentation and training."
       />
       <DemoControllerAccessSetup />
+      <DemoPrivacyReadinessPanel caps={caps} />
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
@@ -96,6 +97,134 @@ export function DemoControllerIndexPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function DemoPrivacyReadinessPanel({ caps }: { caps: DemoControllerCapabilities }) {
+  const volunteers = caps.approvedVolunteers;
+  const statusLabel = (status: DemoControllerVolunteer["privacyReadiness"]["authorityStatus"]) => ({
+    verified: "Verified reviewer",
+    nominated: "Nominated — verification pending",
+    revoked: "Previous reviewer revoked",
+    expired: "Previous reviewer expired",
+    missing: "No verified reviewer",
+  }[status]);
+
+  return (
+    <Card className="p-5 space-y-5 border-[var(--primary-light)] bg-[var(--surface)]" aria-labelledby="demo-privacy-readiness">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+        <div>
+          <h2 id="demo-privacy-readiness" className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-[var(--primary)]" /> Privacy readiness for live volunteers
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] mt-1 max-w-3xl">
+            Fully simulated walkthroughs are always available and use fictional data only. A volunteer-backed walkthrough
+            retains real contact/profile information and stays blocked until the server confirms the complete policy envelope.
+          </p>
+        </div>
+        <Link href="/settings#sensitive-lifecycle-policies">
+          <Button variant="outline" size="sm">Open lifecycle policies</Button>
+        </Link>
+      </div>
+
+      {volunteers.length === 0 ? (
+        <div className="rounded-md border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-4 text-sm text-[var(--text-muted)]">
+          No volunteer is configured. Choose <strong>None (Fully Simulated)</strong> below for a synthetic walkthrough.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          {volunteers.map((volunteer) => {
+            const privacy = volunteer.privacyReadiness;
+            const ready = volunteer.lifecyclePolicyReady && volunteer.approved;
+            const actionHref = privacy.nextAction === "nominate-reviewer" || privacy.nextAction === "wait-for-verification"
+              ? "/policy-review#authority-assignments"
+              : "/settings#sensitive-lifecycle-policies";
+            return (
+              <div key={volunteer.id} className="rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <UserRound className="w-4 h-4 shrink-0 text-[var(--text-muted)]" />
+                      <h3 className="font-semibold text-sm truncate">{volunteer.name}</h3>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                      Work country: <strong className="text-[var(--text-secondary)]">{volunteer.workCountry || "Not set"}</strong>
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                    ready ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]"
+                  }`}>
+                    {ready ? "Ready" : "Blocked"}
+                  </span>
+                </div>
+
+                <div className="space-y-1 text-[11px]">
+                  <p className="font-medium text-[var(--text-secondary)]">{statusLabel(privacy.authorityStatus)}</p>
+                  {privacy.reviewer ? (
+                    <p className="text-[var(--text-muted)]">
+                      Approver: <strong className="text-[var(--text-primary)]">{privacy.reviewer.memberDisplay}</strong> ({privacy.reviewer.role})
+                    </p>
+                  ) : privacy.nomination ? (
+                    <p className="text-[var(--status-amber-fg)]">
+                      Nominee: <strong>{privacy.nomination.memberDisplay}</strong>. A server-verified operator must confirm this nomination.
+                    </p>
+                  ) : (
+                    <p className="text-[var(--text-muted)]">
+                      Owner/admin membership, a demo persona, or a mailbox address does not create specialist authority.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-1">
+                    Policy coverage
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {privacy.requiredPolicyCoverage.map((dataClass) => {
+                      const covered = privacy.coveredPolicyCoverage.includes(dataClass);
+                      return (
+                        <span key={dataClass} className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                          covered
+                            ? "border-[var(--status-green)]/30 bg-[var(--status-green-bg)] text-[var(--status-green-fg)]"
+                            : "border-[var(--status-amber)]/40 bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]"
+                        }`}>
+                          {covered ? "✓ " : ""}{dataClass}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {privacy.missingPolicyCoverage.length > 0 && (
+                    <p className="text-[11px] text-[var(--status-amber-fg)] mt-2">
+                      Missing: {privacy.missingPolicyCoverage.join(", ")}
+                    </p>
+                  )}
+                </div>
+
+                {!ready && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      {volunteer.lifecyclePolicyReason || "Current volunteer approval and policy coverage are required."}
+                    </p>
+                    <Link href={actionHref}>
+                      <Button size="sm" variant="outline">
+                        {privacy.nextAction === "nominate-reviewer" ? "Nominate reviewer"
+                          : privacy.nextAction === "wait-for-verification" ? "View verification"
+                            : "Review policy pack"}
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+                {ready && privacy.reviewer && (
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--status-green-fg)] border-t border-[var(--border)] pt-3">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Verified reviewer can approve or revise policies in Settings.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }
 

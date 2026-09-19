@@ -28,6 +28,7 @@ import {
   revokeGovernanceAuthority,
   updateGovernanceRequirementCoverage,
   verifyGovernanceAuthority,
+  getSensitiveLifecycleAuthorityContext,
 } from "./governance";
 import {
   GovernanceDispatchBlockedError,
@@ -37,10 +38,12 @@ import {
 const suffix = `${process.pid}-${randomUUID()}`;
 const organizationId = `governance-${suffix}`;
 const otherOrganizationId = `governance-other-${suffix}`;
+const contextOrganizationId = `governance-context-${suffix}`;
 const adminId = `governance-admin-${suffix}`;
 const operatorId = `governance-operator-${suffix}`;
 const specialistId = `governance-specialist-${suffix}`;
-const organizations = [organizationId, otherOrganizationId];
+const contextMemberId = `governance-context-member-${suffix}`;
+const organizations = [organizationId, otherOrganizationId, contextOrganizationId];
 let priorOperators: string | undefined;
 
 const admin = { userId: adminId, organizationRole: "admin" as const };
@@ -76,6 +79,7 @@ before(async () => {
     { organizationId, clerkUserId: operatorId, role: "member" },
     { organizationId, clerkUserId: specialistId, role: "member" },
     { organizationId: otherOrganizationId, clerkUserId: adminId, role: "admin" },
+    { organizationId: contextOrganizationId, clerkUserId: contextMemberId, role: "member" },
   ]);
 });
 
@@ -94,6 +98,49 @@ after(async () => {
 });
 
 describe("governance decision register", { concurrency: false }, () => {
+  test("projects missing, nominated, verified, revoked, and expired authority safely", async () => {
+    let context = await getSensitiveLifecycleAuthorityContext(contextOrganizationId);
+    assert.equal(context.authorityStatus, "missing");
+    assert.equal(context.reviewer, null);
+    assert.equal(context.nomination, null);
+
+    const [nomination] = await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId: contextOrganizationId,
+      authorityRole: "privacy",
+      assigneeUserId: contextMemberId,
+      verificationStatus: "pending",
+      verifiedByUserId: "operator-pending",
+      verificationReference: "owner-nomination",
+    }).returning();
+    context = await getSensitiveLifecycleAuthorityContext(contextOrganizationId);
+    assert.equal(context.authorityStatus, "nominated");
+    assert.equal(context.nomination?.assignmentId, nomination!.id);
+    assert.match(context.nomination?.memberDisplay ?? "", /Organization member/);
+    assert.doesNotMatch(context.nomination?.memberDisplay ?? "", /@/);
+
+    await db.update(onbGovernanceAuthorityAssignments)
+      .set({ verificationStatus: "verified", verifiedByUserId: operatorId, verificationReference: "operator-check" })
+      .where(eq(onbGovernanceAuthorityAssignments.id, nomination!.id));
+    context = await getSensitiveLifecycleAuthorityContext(contextOrganizationId);
+    assert.equal(context.authorityStatus, "verified");
+    assert.equal(context.reviewer?.assignmentId, nomination!.id);
+    assert.equal(context.nomination, null);
+
+    await db.update(onbGovernanceAuthorityAssignments)
+      .set({ revokedAt: new Date(), revokedByUserId: operatorId })
+      .where(eq(onbGovernanceAuthorityAssignments.id, nomination!.id));
+    context = await getSensitiveLifecycleAuthorityContext(contextOrganizationId);
+    assert.equal(context.authorityStatus, "revoked");
+    assert.equal(context.reviewer, null);
+
+    await db.update(onbGovernanceAuthorityAssignments)
+      .set({ revokedAt: null, expiresAt: new Date(Date.now() - 60_000) })
+      .where(eq(onbGovernanceAuthorityAssignments.id, nomination!.id));
+    context = await getSensitiveLifecycleAuthorityContext(contextOrganizationId);
+    assert.equal(context.authorityStatus, "expired");
+    assert.equal(context.reviewer, null);
+  });
+
   test("rejects admin self-declaration and verifies an owner nomination separately", async () => {
     await assert.rejects(
       assignGovernanceAuthority(organizationId, admin, {
