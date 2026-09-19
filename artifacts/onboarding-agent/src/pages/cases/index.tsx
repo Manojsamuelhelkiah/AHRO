@@ -822,7 +822,7 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
         </p>
         {currentOrganization.data?.demoProfile === 'administrator' && (
           <p className="rounded border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950" role="status">
-            Your server-authorized Demo Administrator profile will create an offline synthetic case in Demo Organization. No emails, messages, provider actions, portal links, SLA enrollment, or orchestration will run.
+            Your server-authorized Demo Administrator profile will create an offline synthetic case in Demo Organization. For privacy, the server replaces every entered person and case detail with an application-generated fictional profile. No emails, messages, provider actions, portal links, SLA enrollment, or orchestration will run.
           </p>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">

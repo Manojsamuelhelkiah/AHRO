@@ -721,15 +721,17 @@ async function insertCaseAndStart(
       workforceContext,
       values,
     );
-    // Case creation retains candidate-provided identity/contact fields, so the
-    // case-derived sensitive lifecycle gate applies to synthetic offline cases
-    // as well as ordinary cases. The offline marker only fences orchestration,
-    // provider work, communications, and readiness/SLA effects.
-    const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
-      organizationId,
-      jurisdiction: jurisdictionForWorkforceContext(workforceContext),
-    });
-    if (!lifecycle.allowed) throw new SensitiveLifecycleConflictError(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
+    // Only this server-owned fictional branch may omit lifecycle policies.
+    // Its values are generated below the authenticated Demo Administrator
+    // check, not copied from the request, and every external effect remains
+    // fenced off. Ordinary and volunteer-backed cases still fail closed.
+    if (!options?.syntheticOffline) {
+      const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId,
+        jurisdiction: jurisdictionForWorkforceContext(workforceContext),
+      });
+      if (!lifecycle.allowed) throw new SensitiveLifecycleConflictError(`SENSITIVE_LIFECYCLE_BLOCKED:${lifecycle.reason}`);
+    }
     const { profile, classification } = workforcePolicy;
     const [inserted] = await tx
       .insert(onbCases)
@@ -997,6 +999,48 @@ router.post("/onboarding/cases", async (req, res, next) => {
       return;
     }
     const body = CreateOnboardingCaseBody.parse(req.body);
+    if (demoProfile === "administrator") {
+      const fictionalId = randomUUID().replace(/-/g, "").slice(0, 10);
+      const joiningDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+      const row = await insertCaseAndStart({
+        workerName: `Fictional Demo Hire ${fictionalId.toUpperCase()}`,
+        workerEmail: `fictional-demo-${fictionalId}@example.invalid`,
+        workerPhone: null,
+        channelPreference: "email",
+        hireType: "external-fte",
+        workerCategory: "employee",
+        workerBand: null,
+        workforceContext: {
+          workCountry: "IN",
+          workEnvironment: "office",
+          hiringMode: "individual",
+        },
+        jobProfileId: null,
+        role: "People Operations Analyst",
+        department: "People Operations",
+        geography: "India",
+        legalEntity: "Demo Organization",
+        managerName: "Fictional Demo Manager",
+        recruiterName: "Fictional Demo Recruiter",
+        joiningDate,
+        primarySkill: null,
+        skillCriticality: null,
+        notes: `${SYNTHETIC_OFFLINE_MARKER}\n${SYNTHETIC_OFFLINE_WARNING}`,
+        candidateEmailAuthorizedAt: null,
+        candidateEmailAuthorizedBy: null,
+        offerAcceptanceComplete: false,
+        offerAcceptanceCompletedAt: null,
+        offerAcceptanceCompletedBy: null,
+        createdByUserId: req.authUserId!,
+      }, organizationId, {
+        startOrchestration: false,
+        syntheticOffline: true,
+        onInserted: (tx, inserted) =>
+          grantSyntheticDemoAuthorityForCase(tx, req.authUserId!, inserted),
+      });
+      res.status(201).json(await serializeCaseForRequest(req, row));
+      return;
+    }
     // Intake does not have a specialist-owned medical/accommodation record
     // path. Do not turn the general case note/context fields into an
     // ungoverned special-category collection channel.
@@ -1040,7 +1084,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       });
       return;
     }
-    const syntheticDemoCase = demoProfile === "administrator";
+    const syntheticDemoCase = false;
     const providedWorkCountry = body.workforceContext?.workCountry;
     const workCountry =
       normalizedDemoWorkCountry(providedWorkCountry) ??

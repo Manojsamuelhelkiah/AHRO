@@ -155,13 +155,13 @@ test("Client Setup recovers scoped legacy drafts without guessing unsupported ch
 });
 
 async function createOfflineCase(page: Page) {
-  const workerName = `Browser Regression Worker ${Date.now()}`;
+  const submittedWorkerName = `Browser Regression Worker ${Date.now()}`;
   await page.goto("/cases");
   await expect(page.getByRole("button", { name: "New Case" })).toBeVisible();
   await page.getByRole("button", { name: "New Case" }).click();
   await expect(page.getByRole("heading", { name: "New Case", exact: true })).toBeVisible();
 
-  await page.locator("#workerName").fill(workerName);
+  await page.locator("#workerName").fill(submittedWorkerName);
   await page.locator("#workerEmail").fill(`browser-${Date.now()}@example.invalid`);
   await page.locator("#role").fill("Demo Engineer");
   await page.locator("#department").fill("Quality");
@@ -176,9 +176,18 @@ async function createOfflineCase(page: Page) {
 
   await expect(page).toHaveURL(/\/cases\/\d+$/);
   await expect(page.getByText("Simulated/manual sample only.", { exact: false })).toBeVisible();
+  const caseId = Number(new URL(page.url()).pathname.split("/").pop());
+  const created = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/onboarding/cases/${id}`, { credentials: "include" });
+    if (!response.ok) throw new Error(`case read failed: ${response.status}`);
+    return response.json();
+  }, caseId);
+  expect(created.workerName).toMatch(/^Fictional Demo Hire /);
+  expect(created.workerName).not.toBe(submittedWorkerName);
+  expect(created.workerEmail).toMatch(/^fictional-demo-[a-f0-9]+@example\.invalid$/);
   return {
-    caseId: Number(new URL(page.url()).pathname.split("/").pop()),
-    workerName,
+    caseId,
+    workerName: created.workerName as string,
   };
 }
 
