@@ -4,13 +4,17 @@ import { Link, useLocation } from 'wouter';
 import { PageHeader, Card, Button, Label, Input } from '@/components/ui-shared';
 import { Presentation, ShieldAlert, Play, Clock, AlertTriangle, ArrowRight, CheckCircle2, UserRound, ShieldCheck } from 'lucide-react';
 import type { DemoControllerCapabilities, DemoControllerVolunteer } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { DemoControllerAccessSetup } from './access-setup';
 
 export function DemoControllerIndexPage() {
   const { data: caps, isLoading, isError, refetch } = useGetOnboardingDemoController({
-    query: { queryKey: getGetOnboardingDemoControllerQueryKey() }
+    query: {
+      queryKey: getGetOnboardingDemoControllerQueryKey(),
+      refetchInterval: 30_000,
+      refetchOnMount: 'always',
+      refetchOnWindowFocus: 'always',
+    }
   });
 
   if (isLoading) {

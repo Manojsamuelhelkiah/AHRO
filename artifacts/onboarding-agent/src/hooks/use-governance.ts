@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react";
+import {
+  customFetch,
+  getGetOnboardingDemoControllerQueryKey,
+} from "@workspace/api-client-react";
 
 export type DecisionStatus = "draft" | "provisional" | "approved" | "rejected" | "superseded";
 
@@ -85,6 +88,11 @@ export const keys = {
   history: () => [...keys.all, "history"] as const,
 };
 
+function invalidateGovernanceAndDemoReadiness(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: keys.all });
+  qc.invalidateQueries({ queryKey: getGetOnboardingDemoControllerQueryKey() });
+}
+
 export function useGetGovernanceDecisions(options?: { query?: { refetchInterval?: number; refetchIntervalInBackground?: boolean } }) {
   return useQuery({ 
     queryKey: keys.decisions(), 
@@ -131,7 +139,7 @@ export function usePostGovernanceDecisionsKeyReviews() {
         reason: vars.reason, verificationReference: vars.verificationReference,
       }),
     onSuccess: (data, vars) => {
-      qc.invalidateQueries({ queryKey: keys.all });
+      invalidateGovernanceAndDemoReadiness(qc);
     },
     onError: (_error, vars) => {
       qc.invalidateQueries({ queryKey: keys.decisions() });
@@ -157,7 +165,7 @@ export function usePutGovernanceRequirementsKeyCoverage() {
         expectedVersion: vars.expectedVersion, ...vars.coverage,
         relatedImplementation: vars.relatedImplementation, evidenceReference: vars.evidenceReference,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
     onError: () => qc.invalidateQueries({ queryKey: keys.requirements() }),
   });
 }
@@ -174,7 +182,7 @@ export function usePostGovernanceAssignments() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Partial<GovernanceAssignment>) => post<{ assignment: GovernanceAssignment }>("/api/governance/assignments", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
   });
 }
 
@@ -182,7 +190,7 @@ export function usePostGovernanceAssignmentsIdRevoke() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => post<{ assignment: GovernanceAssignment }>(`/api/governance/assignments/${id}/revoke`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
   });
 }
 
@@ -199,7 +207,7 @@ export function usePostGovernanceAuthorityBootstrap() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { role: string; assigneeUserId: string; verificationReference: string }) => post<{ assignment: GovernanceAssignment }>("/api/governance/authority-bootstrap", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
   });
 }
 
@@ -207,6 +215,6 @@ export function usePostGovernanceAssignmentsIdVerify() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { id: number; verificationReference: string }) => post<{ assignment: GovernanceAssignment }>(`/api/governance/assignments/${vars.id}/verify`, { verificationReference: vars.verificationReference }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
   });
 }
