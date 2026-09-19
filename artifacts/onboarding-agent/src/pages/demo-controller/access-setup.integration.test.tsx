@@ -4,7 +4,7 @@ import { Window } from "happy-dom";
 import { ClerkProvider } from "@clerk/react";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const requestId = "setup-request-246";
 const approvalValue = "a".repeat(64);
@@ -215,6 +215,197 @@ function buttonWithText(label: string): HTMLButtonElement {
 }
 
 describe("Demo Controller access setup", { concurrency: false }, () => {
+  it("replaces stale volunteer readiness on return, focus, and interval refresh", async () => {
+    const dom = new Window({ url: "http://localhost/demo-controller" });
+    const browserGlobals = [
+      "window",
+      "document",
+      "navigator",
+      "location",
+      "self",
+      "HTMLElement",
+      "HTMLButtonElement",
+      "HTMLSelectElement",
+      "Node",
+      "Element",
+      "Text",
+      "Event",
+      "FocusEvent",
+      "MutationObserver",
+      "addEventListener",
+      "removeEventListener",
+      "dispatchEvent",
+      "history",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "getComputedStyle",
+    ];
+    const originalGlobalDescriptors = new Map<string, PropertyDescriptor | undefined>();
+    for (const name of browserGlobals) {
+      originalGlobalDescriptors.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+      const value = (dom as unknown as Record<string, unknown>)[name];
+      Object.defineProperty(globalThis, name, {
+        configurable: true,
+        writable: true,
+        value: typeof value === "function"
+          ? (value as (...args: unknown[]) => unknown).bind(dom)
+          : value,
+      });
+    }
+    for (const name of ["fetch", "IS_REACT_ACT_ENVIRONMENT"]) {
+      originalGlobalDescriptors.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+    }
+    Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+      configurable: true,
+      writable: true,
+      value: true,
+    });
+
+    dom.localStorage.setItem("activeOrganizationId", "demo");
+    let authorityStatus: "verified" | "revoked" | "expired" = "verified";
+    let capabilitiesRequests = 0;
+    const currentCapabilities = () => {
+      const ready = authorityStatus === "verified";
+      const volunteer = structuredClone(capabilities.approvedVolunteers[2]);
+      volunteer.lifecyclePolicyReady = ready;
+      volunteer.lifecyclePolicyReason = ready
+        ? null
+        : `The previous reviewer is ${authorityStatus}.`;
+      volunteer.privacyReadiness.authorityStatus = authorityStatus;
+      volunteer.privacyReadiness.reviewer = ready
+        ? capabilities.approvedVolunteers[2].privacyReadiness.reviewer
+        : null;
+      volunteer.privacyReadiness.nextAction = ready ? "ready" : "nominate-reviewer";
+      return { ...capabilities, approvedVolunteers: [volunteer] };
+    };
+    const fetchMock = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = new URL(String(input), dom.location.href);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET" && url.pathname === "/api/onboarding/demo-controller") {
+        capabilitiesRequests += 1;
+        return response(currentCapabilities());
+      }
+      if (method === "GET" && url.pathname === "/api/organizations/demo-controller-setup") {
+        return response(completedSetupStatus);
+      }
+      throw new Error(`Unexpected mock HTTP request: ${method} ${url.pathname}`);
+    };
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
+    (dom as unknown as Record<string, unknown>).fetch = fetchMock;
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const {
+      DEMO_CAPABILITIES_REFRESH_INTERVAL_MS,
+      DemoControllerIndexPage,
+    } = await import("./index");
+    assert.equal(
+      DEMO_CAPABILITIES_REFRESH_INTERVAL_MS,
+      30_000,
+      "the open Demo Center must retain its short capabilities refresh interval",
+    );
+    const demoUser = {
+      id: "demo-member-refresh",
+      primaryEmailAddress: { emailAddress: "refresh@example.test" },
+    };
+    const page = (
+      <DemoTestClerkProvider user={demoUser}>
+        <QueryClientProvider client={queryClient}>
+          <DemoControllerIndexPage />
+        </QueryClientProvider>
+      </DemoTestClerkProvider>
+    );
+    const root = createRoot(document.body);
+
+    try {
+      await act(async () => {
+        root.render(page);
+        await tick();
+      });
+      await waitFor(() => pageText().includes("Verified reviewer can approve"), "ready volunteer state");
+      assert.equal(capabilitiesRequests, 1);
+
+      const volunteerSelect = Array.from(document.querySelectorAll("select")).find((select) =>
+        Array.from(select.options).some((option) => option.value === "volunteer-verified"),
+      );
+      assert.ok(volunteerSelect, "Expected the volunteer selector");
+      await act(async () => {
+        volunteerSelect!.value = "volunteer-verified";
+        volunteerSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+        await tick();
+      });
+      assert.equal(buttonWithText("Start Walkthrough").disabled, false);
+
+      await act(async () => {
+        root.render(<></>);
+        await tick();
+      });
+      authorityStatus = "revoked";
+      await act(async () => {
+        root.render(page);
+        await tick();
+      });
+      await waitFor(() => pageText().includes("Previous reviewer revoked"), "revoked state after returning");
+      assert.equal(capabilitiesRequests, 2, "returning to Demo Center must fetch fresh capabilities");
+      const revokedOption = document.querySelector<HTMLOptionElement>('option[value="volunteer-verified"]');
+      assert.equal(revokedOption?.disabled, true);
+
+      authorityStatus = "verified";
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await waitFor(() => capabilitiesRequests === 3, "focus capabilities refresh");
+      await waitFor(() => pageText().includes("Verified reviewer can approve"), "focused ready state");
+
+      const refreshedSelect = Array.from(document.querySelectorAll("select")).find((select) =>
+        Array.from(select.options).some((option) => option.value === "volunteer-verified"),
+      );
+      assert.ok(refreshedSelect);
+      await act(async () => {
+        refreshedSelect!.value = "volunteer-verified";
+        refreshedSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+        await tick();
+      });
+      assert.equal(buttonWithText("Start Walkthrough").disabled, false);
+
+      authorityStatus = "expired";
+      await act(async () => {
+        await queryClient.refetchQueries({
+          queryKey: ["/api/onboarding/demo-controller"],
+        });
+        await tick();
+      });
+      await waitFor(() => capabilitiesRequests === 4, "interval capabilities refresh");
+      await waitFor(() => pageText().includes("Previous reviewer expired"), "expired interval state");
+      assert.equal(
+        buttonWithText("Start Walkthrough").disabled,
+        true,
+        "stale selected volunteer must never keep the start action enabled",
+      );
+      assert.equal(
+        document.querySelector<HTMLOptionElement>('option[value="volunteer-verified"]')?.disabled,
+        true,
+      );
+    } finally {
+      focusManager.setFocused(undefined);
+      await act(async () => {
+        root.unmount();
+      });
+      queryClient.clear();
+      dom.close();
+      for (const [name, descriptor] of originalGlobalDescriptors) {
+        if (descriptor === undefined) {
+          delete (globalThis as Record<string, unknown>)[name];
+        } else {
+          Object.defineProperty(globalThis, name, descriptor);
+        }
+      }
+    }
+  });
+
   it("completes the member setup request from the normal Demo page", async () => {
     const dom = new Window({ url: "http://localhost/demo-controller" });
     const originalGlobalDescriptors = new Map<

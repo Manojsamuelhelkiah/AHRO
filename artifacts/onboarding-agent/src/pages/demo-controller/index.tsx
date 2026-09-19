@@ -7,11 +7,13 @@ import type { DemoControllerCapabilities, DemoControllerVolunteer } from '@works
 import { format } from 'date-fns';
 import { DemoControllerAccessSetup } from './access-setup';
 
+export const DEMO_CAPABILITIES_REFRESH_INTERVAL_MS = 30_000;
+
 export function DemoControllerIndexPage() {
   const { data: caps, isLoading, isError, refetch } = useGetOnboardingDemoController({
     query: {
       queryKey: getGetOnboardingDemoControllerQueryKey(),
-      refetchInterval: 30_000,
+      refetchInterval: DEMO_CAPABILITIES_REFRESH_INTERVAL_MS,
       refetchOnMount: 'always',
       refetchOnWindowFocus: 'always',
     }
