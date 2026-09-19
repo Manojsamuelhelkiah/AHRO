@@ -901,6 +901,13 @@ async function performMutation(
       }
       if (!run.selectedVolunteerId) throw error("DemoVolunteerUnavailable", "Live communication requires a selected approved volunteer.");
       if (action.channel !== "email" && action.channel !== "call") throw error("DemoLiveChannelDenied", "Only email and call are eligible for live demo contact.");
+      const authorityContext = await getSensitiveLifecycleAuthorityContextInTransaction(tx, organizationId);
+      if (authorityContext.authorityStatus !== "verified") {
+        throw error(
+          "DemoVolunteerUnavailable",
+          "A current server-verified privacy or legal reviewer is required before this volunteer can be used.",
+        );
+      }
     }
     const at = new Date(Date.now() + run.clock.offsetHours * 3600000).toISOString();
     const activity: Activity = {

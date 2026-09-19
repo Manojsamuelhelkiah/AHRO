@@ -9,6 +9,8 @@ import {
   onbCases,
   onbDocuments,
   onbEvents,
+  onbGovernanceAuthorityAssignments,
+  onbSensitiveLifecyclePolicies,
   onbSettings,
   organizationMembershipsTable,
 } from "@workspace/db";
@@ -23,6 +25,8 @@ import {
 import { createRequireAuth } from "../../middlewares/require-auth";
 import onboardingDemoControllerRouter from "../../routes/onboarding-demo-controller";
 import { DEMO_RUN_KEY_PREFIX } from "./demo-controller";
+import { DEMO_VOLUNTEERS_KEY, normalizeVolunteer } from "./demo-volunteers";
+import { SENSITIVE_DATA_CLASSES } from "./sensitive-lifecycle";
 
 /**
  * These are intentionally development-only database tests. The normal
@@ -640,6 +644,212 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
       assert.equal(providerCalls, 0);
     } finally {
       globalThis.fetch = priorFetch;
+    }
+  });
+
+  test("blocks volunteer runs and live actions when verified reviewer authority is revoked or expired", async () => {
+    const reviewerId = `demo-controller-reviewer-${randomUUID()}`;
+    const [originalVolunteerSetting] = await db.select().from(onbSettings).where(and(
+      eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+      eq(onbSettings.key, DEMO_VOLUNTEERS_KEY),
+    ));
+    const originalAssignments = await db.select().from(onbGovernanceAuthorityAssignments).where(and(
+      eq(onbGovernanceAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
+      inArray(onbGovernanceAuthorityAssignments.authorityRole, ["privacy", "legal"]),
+    ));
+    const originalPolicies = await db.select().from(onbSensitiveLifecyclePolicies).where(
+      eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
+    );
+    const volunteer = normalizeVolunteer({
+      name: "Demo Controller Authority Regression Volunteer",
+      email: `demo-controller-${randomUUID()}@example.test`,
+      channelPreference: "email",
+      persona: "standard-fte",
+      geography: "India",
+      notes: "Test-owned volunteer for reviewer authority lifecycle regression.",
+    });
+    let assignmentId: number | null = null;
+
+    const createVolunteerRun = async (volunteerId: string): Promise<RequestResult> => request(
+      "/onboarding/demo-runs",
+      {
+        method: "POST",
+        body: JSON.stringify({ scenario: "standard-fte", volunteerId, mode: "hybrid" }),
+      },
+    );
+    const assertAuthorityBlocked = (result: RequestResult): void => {
+      assert.equal(result.response.status, 409);
+      assert.match(bodyRecord(result.body).error as string, /current server-verified privacy or legal reviewer/i);
+    };
+
+    try {
+      if (originalAssignments.length > 0) {
+        await db.update(onbGovernanceAuthorityAssignments).set({
+          revokedAt: new Date(),
+          revokedByUserId: "demo-controller-regression-operator",
+        }).where(inArray(
+          onbGovernanceAuthorityAssignments.id,
+          originalAssignments.map((assignment) => assignment.id),
+        ));
+      }
+      await db.insert(onbSettings).values({
+        organizationId: DEMO_ORGANIZATION_ID,
+        key: DEMO_VOLUNTEERS_KEY,
+        value: JSON.stringify([volunteer]),
+      }).onConflictDoUpdate({
+        target: [onbSettings.organizationId, onbSettings.key],
+        set: { value: JSON.stringify([volunteer]), updatedAt: new Date() },
+      });
+      await db.insert(organizationMembershipsTable).values({
+        organizationId: DEMO_ORGANIZATION_ID,
+        clerkUserId: reviewerId,
+        role: "member",
+      });
+      const [assignment] = await db.insert(onbGovernanceAuthorityAssignments).values({
+        organizationId: DEMO_ORGANIZATION_ID,
+        authorityRole: "privacy",
+        assigneeUserId: reviewerId,
+        verificationStatus: "verified",
+        verifiedByUserId: "demo-controller-regression-operator",
+        verificationReference: "demo-controller-authority-lifecycle-regression",
+        expiresAt: new Date(Date.now() + 60 * 60_000),
+      }).returning({ id: onbGovernanceAuthorityAssignments.id });
+      assert.ok(assignment);
+      assignmentId = assignment.id;
+      await db.delete(onbSensitiveLifecyclePolicies).where(
+        eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
+      );
+      await db.insert(onbSensitiveLifecyclePolicies).values(
+        SENSITIVE_DATA_CLASSES.map((dataClass) => ({
+          organizationId: DEMO_ORGANIZATION_ID,
+          dataClass,
+          jurisdiction: "IN",
+          revision: 1,
+          purpose: `Demo Controller authority lifecycle regression for ${dataClass}`,
+          lawfulBasis: "Test-only approved onboarding administration basis",
+          retentionDays: 30,
+          providerSharingApproved: false,
+          permittedProviders: [],
+          policyReference: `demo-controller-regression-policy:${dataClass}`,
+          approvalReference: `demo-controller-regression-approval:${dataClass}`,
+          approvedByUserId: reviewerId,
+          approvedAuthorityAssignmentId: assignment.id,
+          isCurrent: true,
+        })),
+      );
+
+      const capabilities = GetOnboardingDemoControllerResponse.parse(
+        (await request("/onboarding/demo-controller")).body,
+      );
+      const readyVolunteer = capabilities.approvedVolunteers.find((candidate) =>
+        candidate.email === volunteer.email
+      );
+      assert.ok(readyVolunteer);
+      assert.equal(readyVolunteer.privacyReadiness.authorityStatus, "verified");
+      assert.equal(readyVolunteer.lifecyclePolicyReady, true);
+
+      const created = await createVolunteerRun(readyVolunteer.id);
+      assert.equal(created.response.status, 201, JSON.stringify(created.body));
+      const pinnedRun = CreateOnboardingDemoRunResponse.parse(created.body) as unknown as PublicRun;
+      rememberOwnedRun(pinnedRun);
+
+      await db.update(onbGovernanceAuthorityAssignments).set({
+        revokedAt: new Date(),
+        revokedByUserId: "demo-controller-regression-operator",
+      }).where(eq(onbGovernanceAuthorityAssignments.id, assignment.id));
+
+      const revokedCapabilities = GetOnboardingDemoControllerResponse.parse(
+        (await request("/onboarding/demo-controller")).body,
+      );
+      assert.equal(
+        revokedCapabilities.approvedVolunteers.find((candidate) => candidate.id === readyVolunteer.id)
+          ?.privacyReadiness.authorityStatus,
+        "revoked",
+      );
+      const revokedCreate = await createVolunteerRun(readyVolunteer.id);
+      assertAuthorityBlocked(revokedCreate);
+      const revokedLive = await applyBody(pinnedRun.runId, {
+        expectedVersion: pinnedRun.version,
+        requestId: randomUUID(),
+        kind: "communication",
+        channel: "email",
+        mode: "live",
+        liveConfirmation: "I_UNDERSTAND_LIVE_DEMO",
+      });
+      assertAuthorityBlocked(revokedLive);
+
+      await db.update(onbGovernanceAuthorityAssignments).set({
+        revokedAt: null,
+        revokedByUserId: null,
+        expiresAt: new Date(Date.now() - 60_000),
+      }).where(eq(onbGovernanceAuthorityAssignments.id, assignment.id));
+
+      const expiredCapabilities = GetOnboardingDemoControllerResponse.parse(
+        (await request("/onboarding/demo-controller")).body,
+      );
+      assert.equal(
+        expiredCapabilities.approvedVolunteers.find((candidate) => candidate.id === readyVolunteer.id)
+          ?.privacyReadiness.authorityStatus,
+        "expired",
+      );
+      const expiredCreate = await createVolunteerRun(readyVolunteer.id);
+      assertAuthorityBlocked(expiredCreate);
+      const expiredLive = await applyBody(pinnedRun.runId, {
+        expectedVersion: pinnedRun.version,
+        requestId: randomUUID(),
+        kind: "communication",
+        channel: "email",
+        mode: "live",
+        liveConfirmation: "I_UNDERSTAND_LIVE_DEMO",
+      });
+      assertAuthorityBlocked(expiredLive);
+
+      const simulated = await request("/onboarding/demo-runs", {
+        method: "POST",
+        body: JSON.stringify({ scenario: "standard-fte", mode: "hybrid" }),
+      });
+      assert.equal(simulated.response.status, 201, JSON.stringify(simulated.body));
+      const simulatedRun = CreateOnboardingDemoRunResponse.parse(simulated.body);
+      assert.equal(simulatedRun.selectedVolunteerId, null);
+    } finally {
+      await db.delete(onbSensitiveLifecyclePolicies).where(
+        eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
+      );
+      if (originalPolicies.length > 0) {
+        await db.insert(onbSensitiveLifecyclePolicies).values(originalPolicies);
+      }
+      if (assignmentId !== null) {
+        await db.delete(onbGovernanceAuthorityAssignments)
+          .where(eq(onbGovernanceAuthorityAssignments.id, assignmentId));
+      }
+      await db.delete(organizationMembershipsTable).where(and(
+        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+        eq(organizationMembershipsTable.clerkUserId, reviewerId),
+      ));
+      if (originalVolunteerSetting) {
+        await db.insert(onbSettings).values(originalVolunteerSetting).onConflictDoUpdate({
+          target: [onbSettings.organizationId, onbSettings.key],
+          set: {
+            value: originalVolunteerSetting.value,
+            updatedAt: originalVolunteerSetting.updatedAt,
+          },
+        });
+      } else {
+        await db.delete(onbSettings).where(and(
+          eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+          eq(onbSettings.key, DEMO_VOLUNTEERS_KEY),
+        ));
+      }
+      for (const original of originalAssignments) {
+        await db.update(onbGovernanceAuthorityAssignments).set({
+          verificationStatus: original.verificationStatus,
+          verifiedByUserId: original.verifiedByUserId,
+          verificationReference: original.verificationReference,
+          expiresAt: original.expiresAt,
+          revokedAt: original.revokedAt,
+          revokedByUserId: original.revokedByUserId,
+        }).where(eq(onbGovernanceAuthorityAssignments.id, original.id));
+      }
     }
   });
 
