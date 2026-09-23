@@ -104,6 +104,9 @@ export class SensitiveLifecycleValidationError extends Error {}
 export class SensitiveLifecyclePermissionError extends Error {}
 export class SensitiveLifecycleConflictError extends Error {}
 
+export const MISSING_JURISDICTION_QUARANTINE_RULE =
+  "privacy/sensitive-lifecycle/missing-jurisdiction";
+
 type PolicyInput = {
   dataClass: SensitiveDataClass;
   jurisdiction: string;
@@ -139,6 +142,55 @@ export function jurisdictionForWorkforceContext(value: unknown): string | null {
   // Do not infer a country from the employer entity or a bare state/province.
   if (!/^[A-Z]{2,3}$/.test(country) || (state && !/^[A-Z0-9 -]{2,40}$/.test(state))) return null;
   return state ? `${country}-${state}` : country;
+}
+
+/**
+ * Persist a fixed, non-sensitive operator marker for a legacy case whose work
+ * jurisdiction cannot be proven. This deliberately does not pass through the
+ * case-derived collection gate: the marker contains no case narrative, and
+ * requiring that gate would make it impossible to record why the gate blocked.
+ *
+ * Returns true while the case remains countryless, whether the marker was
+ * created by this call or an earlier worker tick.
+ */
+export async function quarantineCountrylessLegacyCase(input: {
+  organizationId: string;
+  caseId: number;
+  worker: string;
+}): Promise<boolean> {
+  return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
+    const [caseRow] = await tx.select({
+      id: onbCases.id,
+      workforceContext: onbCases.workforceContext,
+    }).from(onbCases).where(and(
+      eq(onbCases.organizationId, input.organizationId),
+      eq(onbCases.id, input.caseId),
+    )).for("update");
+    if (!caseRow || jurisdictionForWorkforceContext(caseRow.workforceContext)) return false;
+    await recordCountrylessLegacyCaseQuarantineInTransaction(tx, input);
+    return true;
+  }));
+}
+
+/** For callers that already hold the lifecycle fence and case row lock. */
+export async function recordCountrylessLegacyCaseQuarantineInTransaction(
+  tx: any,
+  input: { organizationId: string; caseId: number; worker: string },
+): Promise<void> {
+  await tx.insert(onbEvents).values({
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+      agent: input.worker,
+      engine: "rules",
+      hitlPattern: "hard-block",
+      ruleRef: MISSING_JURISDICTION_QUARANTINE_RULE,
+      title: "Sensitive processing blocked: work jurisdiction required",
+      detail:
+        "This legacy case has no provable work jurisdiction. Sensitive collection and readiness automation remain blocked. An authorized operator must record the worker's verified work country (and state or province when applicable), then review the current jurisdiction policies before retrying.",
+      idempotencyKey: `sensitive-lifecycle:${input.caseId}:missing-jurisdiction`,
+    }).onConflictDoNothing({
+      target: [onbEvents.organizationId, onbEvents.idempotencyKey],
+    });
 }
 
 function policyInput(value: unknown): PolicyInput {

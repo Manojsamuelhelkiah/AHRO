@@ -40,6 +40,7 @@ import { runDocumentReminderTick, runDocumentValidationTick } from "./document-v
 import { runGovernanceReminderTick } from "./governance";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  quarantineCountrylessLegacyCase,
   runSensitiveLifecycleDeletionTick,
   SensitiveLifecycleConflictError,
   withCaseDerivedLifecycleWrite,
@@ -86,11 +87,17 @@ import {
 const POLL_INTERVAL_MS = 20_000;
 export const WATCHER_AGENT = "system-watcher";
 
-function reportRestrictedLifecycleRecovery(
+async function reportRestrictedLifecycleRecovery(
   operation: string,
   input: { organizationId: string; caseId: number; checkId?: number },
   error: SensitiveLifecycleConflictError,
-): void {
+): Promise<void> {
+  const quarantined = await quarantineCountrylessLegacyCase({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+    worker: WATCHER_AGENT,
+  });
+  if (quarantined) return;
   logger.warn({
     component: "system-watcher",
     operation,
@@ -1067,7 +1074,7 @@ export async function recoverUntrackedCaseSystems(
         // Historical rows without reviewed authority evidence stay held for
         // human migration review. One such case must not abort recovery for
         // another case or tenant in this heartbeat.
-        reportRestrictedLifecycleRecovery(
+        await reportRestrictedLifecycleRecovery(
           "untracked-workstream-recovery",
           { organizationId: c.organizationId, caseId: c.id },
           error,
@@ -1178,7 +1185,7 @@ export async function recoverDecidedApprovalContinuations(): Promise<void> {
         organizationId: onbCases.organizationId,
       }).from(onbCases).where(eq(onbCases.id, row.id));
       if (caseRow) {
-        reportRestrictedLifecycleRecovery(
+        await reportRestrictedLifecycleRecovery(
           "approval-continuation-recovery",
           { organizationId: caseRow.organizationId, caseId: row.id },
           error,
@@ -1245,7 +1252,7 @@ export async function recoverDueStandardIntakeReviews(now = new Date()): Promise
       ));
     } catch (error) {
       if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
-      reportRestrictedLifecycleRecovery(
+      await reportRestrictedLifecycleRecovery(
         "scheduled-standard-intake-review",
         { organizationId: row.organizationId, caseId: row.caseId },
         error,
@@ -1286,7 +1293,7 @@ export async function recoverApprovedDay1ReadinessGates(): Promise<void> {
         organizationId: onbCases.organizationId,
       }).from(onbCases).where(eq(onbCases.id, approval.caseId));
       if (caseRow) {
-        reportRestrictedLifecycleRecovery(
+        await reportRestrictedLifecycleRecovery(
           "day1-readiness-recovery",
           { organizationId: caseRow.organizationId, caseId: approval.caseId },
           error,
@@ -1324,7 +1331,7 @@ export async function recoverOverdueSystemApprovalQueues(
       }).onConflictDoNothing({ target: [onbApprovals.organizationId, onbApprovals.idempotencyKey] }));
     } catch (error) {
       if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
-      reportRestrictedLifecycleRecovery(
+      await reportRestrictedLifecycleRecovery(
         "overdue-system-approval-recovery",
         { organizationId: check.organizationId, caseId: check.caseId, checkId: check.id },
         error,
@@ -1342,6 +1349,18 @@ export async function recoverChecklistRows(
     try {
       await resume(row.id);
     } catch (error) {
+      if (error instanceof SensitiveLifecycleConflictError) {
+        const [caseRow] = await db.select({
+          organizationId: onbCases.organizationId,
+        }).from(onbCases).where(eq(onbCases.id, row.id));
+        if (caseRow && await quarantineCountrylessLegacyCase({
+          organizationId: caseRow.organizationId,
+          caseId: row.id,
+          worker: WATCHER_AGENT,
+        })) {
+          continue;
+        }
+      }
       // One poisoned/ambiguous effect must not abort the heartbeat or prevent
       // recovery of another tenant. Leave an explicit suspended checkpoint.
       await suspend(row.id, error).catch(() => {});
@@ -1462,7 +1481,7 @@ async function tickOnce(): Promise<void> {
           }
         } catch (error) {
           if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
-          reportRestrictedLifecycleRecovery(
+          await reportRestrictedLifecycleRecovery(
             "poll-check",
             { organizationId: check.organizationId, caseId: check.caseId, checkId: check.id },
             error,
@@ -1511,7 +1530,7 @@ async function tickOnce(): Promise<void> {
       );
     } catch (error) {
       if (!(error instanceof SensitiveLifecycleConflictError)) throw error;
-      reportRestrictedLifecycleRecovery(
+      await reportRestrictedLifecycleRecovery(
         "sla-sweep",
         { organizationId: check.organizationId, caseId: check.caseId, checkId: check.id },
         error,

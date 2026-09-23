@@ -30,6 +30,9 @@ import { sendAdministrativeEmail } from "./channels";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
+  jurisdictionForWorkforceContext,
+  quarantineCountrylessLegacyCase,
+  recordCountrylessLegacyCaseQuarantineInTransaction,
   withCaseDerivedLifecycleWrite,
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
@@ -39,6 +42,7 @@ export const READINESS_SLA_WORKER = "readiness-sla-worker";
 type TickOptions = { now?: Date; owner?: string };
 type TickResult = {
   cases: number;
+  quarantined: number;
   enrolled: number;
   warnings: number;
   breaches: number;
@@ -583,6 +587,20 @@ export async function claimReadinessSlaOutbox(
         )).for("update")
       : [];
     if (!row || row.status !== "pending" || row.channel !== "email" || row.availableAt > now) return null;
+    if (!jurisdictionForWorkforceContext(c.workforceContext)) {
+      await suppressOutboxRowInTransaction(
+        tx,
+        row.id,
+        now,
+        "case work jurisdiction is missing; sensitive readiness automation remains quarantined",
+      );
+      await recordCountrylessLegacyCaseQuarantineInTransaction(tx, {
+        organizationId: row.organizationId,
+        caseId: row.caseId,
+        worker: READINESS_SLA_WORKER,
+      });
+      return null;
+    }
 
     const [state] = c
       ? await tx.select().from(onbReadinessSlaCaseState).where(and(
@@ -812,6 +830,7 @@ export async function runReadinessSlaTick(options: TickOptions = {}): Promise<Ti
     .filter((caseRow) => !isSyntheticOfflineCase(caseRow));
   const result: TickResult = {
     cases: cases.length,
+    quarantined: 0,
     enrolled: 0,
     warnings: 0,
     breaches: 0,
@@ -821,6 +840,15 @@ export async function runReadinessSlaTick(options: TickOptions = {}): Promise<Ti
     notificationFailures: 0,
   };
   for (const c of cases) {
+    if (!jurisdictionForWorkforceContext(c.workforceContext)) {
+      await quarantineCountrylessLegacyCase({
+        organizationId: c.organizationId,
+        caseId: c.id,
+        worker: READINESS_SLA_WORKER,
+      });
+      result.quarantined += 1;
+      continue;
+    }
     const enrollment = await ensureReadinessSlaEnrollment(c.organizationId, c.id);
     if (!enrollment) continue;
     result.enrolled += 1;

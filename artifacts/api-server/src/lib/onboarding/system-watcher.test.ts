@@ -28,7 +28,7 @@ import {
 } from "./connectors";
 import { db } from "@workspace/db";
 import { onbApprovals, onbCases, onbEvents, onbSystemChecks } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   applicableSystems,
   completionAt,
@@ -39,6 +39,8 @@ import {
   WATCHED_SYSTEMS,
 } from "./external-systems";
 import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
+import { MISSING_JURISDICTION_QUARANTINE_RULE } from "./sensitive-lifecycle";
+import { SensitiveLifecycleConflictError } from "./sensitive-lifecycle";
 
 const T0 = Date.parse("2026-08-13T10:00:00Z");
 const INTERVAL = 20_000;
@@ -86,7 +88,49 @@ test("checklist recovery isolates one failed case and continues", async () => {
   assert.deepEqual(suspended, [202]);
 });
 
-test("overdue approval recovery skips a lifecycle-blocked legacy case and reaches the next case", async () => {
+test("checklist recovery quietly quarantines a countryless lifecycle conflict", async () => {
+  const [legacyCase] = await db.insert(onbCases).values({
+    organizationId: systemWatcherOrganizationId,
+    workerName: `Watcher Checklist Legacy ${Date.now()}`,
+    workerEmail: `watcher-checklist-legacy-${Date.now()}@example.invalid`,
+    hireType: "new-hire",
+    workerCategory: "employee",
+    role: "Engineer",
+    department: "R&D",
+    geography: "Unknown",
+    workforceContext: {},
+    legalEntity: "Test Co",
+    managerName: "M",
+    recruiterName: "R",
+    joiningDate: "2026-09-01",
+    lifecycleStage: "preboarding",
+    readiness: [],
+    workstreams: [],
+  }).returning({ id: onbCases.id });
+  try {
+    let suspended = false;
+    await recoverChecklistRows(
+      [{ id: legacyCase!.id }],
+      async () => {
+        throw new SensitiveLifecycleConflictError(
+          "SENSITIVE_LIFECYCLE_BLOCKED:Case-derived sensitive collection is blocked because the case jurisdiction is missing.",
+        );
+      },
+      async () => { suspended = true; },
+    );
+    assert.equal(suspended, false);
+    const events = await db.select({ id: onbEvents.id }).from(onbEvents).where(and(
+      eq(onbEvents.organizationId, systemWatcherOrganizationId),
+      eq(onbEvents.caseId, legacyCase!.id),
+      eq(onbEvents.ruleRef, MISSING_JURISDICTION_QUARANTINE_RULE),
+    ));
+    assert.equal(events.length, 1);
+  } finally {
+    await db.delete(onbCases).where(eq(onbCases.id, legacyCase!.id));
+  }
+});
+
+test("overdue approval recovery quarantines a countryless case once, reaches the next case, and resumes after repair", async () => {
   const now = new Date();
   const [blocked, eligible] = await db.insert(onbCases).values([
     {
@@ -149,6 +193,7 @@ test("overdue approval recovery skips a lifecycle-blocked legacy case and reache
       },
     ]);
     await recoverOverdueSystemApprovalQueues([blocked!.id, eligible!.id]);
+    await recoverOverdueSystemApprovalQueues([blocked!.id, eligible!.id]);
     const [blockedApproval] = await db.select({ id: onbApprovals.id })
       .from(onbApprovals)
       .where(eq(onbApprovals.caseId, blocked!.id));
@@ -157,6 +202,21 @@ test("overdue approval recovery skips a lifecycle-blocked legacy case and reache
       .where(eq(onbApprovals.caseId, eligible!.id));
     assert.equal(blockedApproval, undefined);
     assert.ok(eligibleApproval);
+    const quarantineEvents = await db.select({ id: onbEvents.id }).from(onbEvents).where(and(
+      eq(onbEvents.organizationId, systemWatcherOrganizationId),
+      eq(onbEvents.caseId, blocked!.id),
+      eq(onbEvents.ruleRef, MISSING_JURISDICTION_QUARANTINE_RULE),
+    ));
+    assert.equal(quarantineEvents.length, 1);
+
+    await db.update(onbCases).set({
+      workforceContext: { workCountry: "US" },
+    }).where(eq(onbCases.id, blocked!.id));
+    await recoverOverdueSystemApprovalQueues([blocked!.id]);
+    const [repairedApproval] = await db.select({ id: onbApprovals.id })
+      .from(onbApprovals)
+      .where(eq(onbApprovals.caseId, blocked!.id));
+    assert.ok(repairedApproval);
   } finally {
     await db.delete(onbCases).where(eq(onbCases.id, blocked!.id));
     await db.delete(onbCases).where(eq(onbCases.id, eligible!.id));

@@ -5,11 +5,14 @@ import { and, eq } from "drizzle-orm";
 import {
   db,
   onbApprovals,
+  onbConnectors,
   onbGovernanceAuthorityAssignments,
   onbCases,
+  onbEvents,
   onbReadinessSlaCaseState,
   onbReadinessSlaLedger,
   onbReadinessSlaOutbox,
+  onbReadinessSlaPolicies,
   onbReadinessSlaSnapshots,
   onbSensitiveLifecyclePolicies,
   organizationMembershipsTable,
@@ -17,7 +20,8 @@ import {
 } from "@workspace/db";
 import { approvalRef } from "./approval-version";
 import { defaultReadinessSlaPolicy, readinessSlaApplicability } from "./readiness-sla";
-import { claimReadinessSlaOutbox } from "./readiness-sla-worker";
+import { claimReadinessSlaOutbox, runReadinessSlaTick } from "./readiness-sla-worker";
+import { MISSING_JURISDICTION_QUARANTINE_RULE } from "./sensitive-lifecycle";
 import { rebaseReadinessSlaCase } from "./readiness-sla-policy";
 import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 
@@ -60,6 +64,12 @@ describe("readiness SLA outbox claim fencing (real DB)", { skip: !hasDb }, () =>
     }
     await db.delete(onbSensitiveLifecyclePolicies).where(
       eq(onbSensitiveLifecyclePolicies.organizationId, organizationId),
+    );
+    await db.delete(onbReadinessSlaPolicies).where(
+      eq(onbReadinessSlaPolicies.organizationId, organizationId),
+    );
+    await db.delete(onbConnectors).where(
+      eq(onbConnectors.organizationId, organizationId),
     );
     await db.delete(onbGovernanceAuthorityAssignments).where(
       eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
@@ -192,5 +202,91 @@ describe("readiness SLA outbox claim fencing (real DB)", { skip: !hasDb }, () =>
     const [outbox] = await db.select().from(onbReadinessSlaOutbox).where(eq(onbReadinessSlaOutbox.id, fixture.outboxId));
     assert.equal(outbox.status, "failed");
     assert.match(outbox.deliveryInfo ?? "", /snapshot rebased/);
+  });
+
+  test("countryless legacy cases stay blocked and are quarantined once without failing the tick", async () => {
+    const [legacyCase] = await db.insert(onbCases).values({
+      organizationId,
+      workerName: "Countryless legacy fixture",
+      workerEmail: `${suffix}-countryless@example.com`,
+      hireType: "new-hire",
+      workerCategory: "employee",
+      role: "Engineer",
+      department: "Engineering",
+      geography: "Unknown",
+      workforceContext: {},
+      legalEntity: "Test Co",
+      managerName: "Manager",
+      recruiterName: "Recruiter",
+      joiningDate: "2030-01-01",
+      lifecycleStage: "preboarding",
+      orchestrationStatus: "idle",
+    }).returning();
+    caseIds.push(legacyCase.id);
+
+    const first = await runReadinessSlaTick({ now: new Date("2029-12-20T00:00:00.000Z") });
+    const second = await runReadinessSlaTick({ now: new Date("2029-12-20T00:01:00.000Z") });
+    assert.ok(first.quarantined >= 1);
+    assert.ok(second.quarantined >= 1);
+
+    const events = await db.select().from(onbEvents).where(and(
+      eq(onbEvents.organizationId, organizationId),
+      eq(onbEvents.caseId, legacyCase.id),
+      eq(onbEvents.ruleRef, MISSING_JURISDICTION_QUARANTINE_RULE),
+    ));
+    assert.equal(events.length, 1);
+    assert.match(events[0]!.detail, /record the worker's verified work country/i);
+
+    const [state] = await db.select().from(onbReadinessSlaCaseState).where(and(
+      eq(onbReadinessSlaCaseState.organizationId, organizationId),
+      eq(onbReadinessSlaCaseState.caseId, legacyCase.id),
+    ));
+    assert.equal(state, undefined);
+
+    await db.update(onbCases).set({
+      workforceContext: { workCountry: "US" },
+    }).where(and(
+      eq(onbCases.organizationId, organizationId),
+      eq(onbCases.id, legacyCase.id),
+    ));
+    const repaired = await runReadinessSlaTick({ now: new Date("2029-12-20T00:02:00.000Z") });
+    assert.equal(repaired.quarantined, second.quarantined - 1);
+    const [repairedState] = await db.select().from(onbReadinessSlaCaseState).where(and(
+      eq(onbReadinessSlaCaseState.organizationId, organizationId),
+      eq(onbReadinessSlaCaseState.caseId, legacyCase.id),
+    ));
+    assert.ok(repairedState);
+  });
+
+  test("countryless legacy outbox rows are suppressed without an ambiguous delivery outcome", async () => {
+    const fixture = await createFixture();
+    await db.update(onbCases).set({
+      workforceContext: {},
+    }).where(and(
+      eq(onbCases.organizationId, organizationId),
+      eq(onbCases.id, fixture.caseId),
+    ));
+
+    const claimed = await claimReadinessSlaOutbox(
+      fixture.outboxId,
+      `${suffix}:countryless`,
+      new Date("2029-12-26T00:00:00.000Z"),
+    );
+    assert.equal(claimed, null);
+
+    const [outbox] = await db.select().from(onbReadinessSlaOutbox).where(
+      eq(onbReadinessSlaOutbox.id, fixture.outboxId),
+    );
+    assert.equal(outbox.status, "failed");
+    assert.match(outbox.deliveryInfo ?? "", /jurisdiction is missing/i);
+    assert.match(outbox.lastError ?? "", /sla-obligation-suppressed/i);
+    assert.doesNotMatch(outbox.deliveryInfo ?? "", /unknown|manual reconciliation/i);
+
+    const events = await db.select().from(onbEvents).where(and(
+      eq(onbEvents.organizationId, organizationId),
+      eq(onbEvents.caseId, fixture.caseId),
+      eq(onbEvents.ruleRef, MISSING_JURISDICTION_QUARANTINE_RULE),
+    ));
+    assert.equal(events.length, 1);
   });
 });
