@@ -252,14 +252,22 @@ test("Demo Administrator creates and durably simulates one offline case", async 
   page,
 }) => {
   const externalRequests: string[] = [];
+  const privacyHoldRequests: string[] = [];
+  const browserErrors: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (!["http:", "https:"].includes(url.protocol)) return;
     if (url.origin !== "http://127.0.0.1:4177") externalRequests.push(request.url());
+    if (url.pathname === "/api/privacy/lifecycle/holds") privacyHoldRequests.push(request.url());
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
   });
 
   await signInDemo(page, ADMIN_EMAIL);
   const fixture = await createOfflineCase(page);
+  await expect(page.getByText("Restricted for offline samples")).toBeVisible();
+  await expect(page.getByText("Could not load holds", { exact: false })).toHaveCount(0);
 
   for (const viewport of VIEWPORTS) {
     await page.setViewportSize(viewport);
@@ -290,6 +298,11 @@ test("Demo Administrator creates and durably simulates one offline case", async 
   // observation endpoint. The create/simulation/read requests above all hit
   // the real API router; this endpoint only counts owned durable effects.
   await assertNoExternalRequests(page, externalRequests);
+  expect(privacyHoldRequests, "offline case pages must not request privacy holds").toEqual([]);
+  expect(
+    browserErrors.filter((message) => /privacy|hold|403/i.test(message)),
+    "offline case pages must not log privacy authorization errors",
+  ).toEqual([]);
   expect(fixture.caseId).toBeGreaterThan(0);
 
   const reviewer = await browser.newContext({ viewport: VIEWPORTS[0] });

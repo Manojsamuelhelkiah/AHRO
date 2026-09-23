@@ -199,13 +199,13 @@ export function useConfirmRetentionShortening() {
   });
 }
 
-export function useListLifecycleHolds() {
+export function useListLifecycleHolds(options: { enabled?: boolean } = {}) {
   const { userId } = useAuth();
   const orgId = getPinnedOrganizationIdForPage();
   return useQuery<{ holds: LifecycleHold[] }>({
     queryKey: ['lifecycleHolds', orgId, userId],
     queryFn: () => customFetch(`${API_BASE}/lifecycle/holds`),
-    enabled: !!orgId && !!userId,
+    enabled: options.enabled !== false && !!orgId && !!userId,
   });
 }
 

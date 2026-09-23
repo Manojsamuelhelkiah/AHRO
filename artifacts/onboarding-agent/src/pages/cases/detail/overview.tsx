@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CaseReadiness } from './CaseReadiness';
 import { ConnectedReadinessSla } from './ConnectedReadinessSla';
-import { CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { Button, cn } from '@/components/ui-shared';
 import { EngineBadge } from '@/components/engine-badge';
-import { StatusBadgeText } from './components';
+import { isOfflineDemoSample, StatusBadgeText } from './components';
 import { useApprovalAction } from '../../../hooks/use-approval-action';
 import {
   getApprovalVersionLabel,
@@ -26,12 +26,27 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
         <div className="md:sticky md:top-[120px] space-y-6">
           <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} />
            <WorkforceContextCard c={c} />
-          <CasePrivacyControls caseId={caseId} />
+          {isOfflineDemoSample(c) ? <OfflinePrivacyRestricted /> : <CasePrivacyControls caseId={caseId} />}
           <CaseOwnerCard events={events} approvals={approvals} />
           <LatestCommunicationCard comms={comms} setTab={setTab} />
           <DocumentsSummaryCard docs={docs} setTab={setTab} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function OfflinePrivacyRestricted() {
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-4 shadow-[var(--shadow-sm)]">
+      <div className="flex items-center gap-2 mb-3">
+        <ShieldCheck className="w-4 h-4 text-[var(--text-muted)]" />
+        <h3 className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Privacy & Retention</h3>
+      </div>
+      <p className="text-sm font-medium text-[var(--text-normal)]">Restricted for offline samples</p>
+      <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+        Privacy holds and organization retention controls are intentionally unavailable in this fictional, offline case.
+      </p>
     </div>
   );
 }

@@ -145,7 +145,10 @@ export function CaseDetailPage() {
     }
   });
 
-  const { error: privacyError } = useListLifecycleHolds();
+  const offlineSample = c ? isOfflineDemoSample(c) : false;
+  const { error: privacyError } = useListLifecycleHolds({
+    enabled: Boolean(c) && !offlineSample,
+  });
 
   if (isLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading case workspace...</div>;
 
@@ -176,7 +179,6 @@ export function CaseDetailPage() {
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
 
   const demoSession = caps?.available ? caps.existingSessions.find((s: any) => s.caseId === caseId) : undefined;
-  const offlineSample = isOfflineDemoSample(c);
   const uatCoverageSample = isDemoCoverageCase(c);
 
   const restrictedFields: string[] = [];
