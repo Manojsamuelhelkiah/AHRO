@@ -170,6 +170,11 @@ export type OnbAuthorityScope =
   | "security-approve"
   | "it-security-approve"
   | "authority-administration";
+export type OnbSyntheticProvenance =
+  | "onboarding-demo-fictional"
+  | "synthetic-reset"
+  | "demo-full-coverage"
+  | "demo-controller-fictional";
 export const onbCases = pgTable("onb_cases", {
   id: serial("id").primaryKey(),
   organizationId: text("organization_id")
@@ -220,6 +225,8 @@ export const onbCases = pgTable("onb_cases", {
   scenarioKey: text("scenario_key"),
   planSummary: text("plan_summary"),
   notes: text("notes"),
+  /** Set only by server-owned fictional offline case creators; never inferred from notes. */
+  syntheticProvenance: text("synthetic_provenance").$type<OnbSyntheticProvenance>(),
   /**
    * Case-scoped consent for live candidate email. Set only by the
    * authenticated manual-intake route; scenario/demo seed paths leave it null.
@@ -238,7 +245,17 @@ export const onbCases = pgTable("onb_cases", {
   createdByUserId: text("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [unique("onb_cases_organization_id_id_unique").on(t.organizationId, t.id)]);
+}, (t) => [
+  unique("onb_cases_organization_id_id_unique").on(t.organizationId, t.id),
+  check("onb_cases_synthetic_provenance_check", sql`
+    ${t.syntheticProvenance} is null or ${t.syntheticProvenance} in (
+      'onboarding-demo-fictional',
+      'synthetic-reset',
+      'demo-full-coverage',
+      'demo-controller-fictional'
+    )
+  `),
+]);
 
 export const onbEvents = pgTable("onb_events", {
   id: serial("id").primaryKey(),

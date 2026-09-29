@@ -28,6 +28,12 @@ import {
   onbReadinessSlaPolicies,
   onbSensitiveLifecyclePolicies,
   onbSystemChecks,
+  accessSecurityGroupAttachments,
+  accessSecurityGroupPolicies,
+  accessSecurityGroupUserGroups,
+  accessSecurityGroups,
+  accessUserGroupMembers,
+  accessUserGroups,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
@@ -90,6 +96,65 @@ before(async () => {
     { organizationId: orgA, clerkUserId: user, role: "member" },
     { organizationId: orgB, clerkUserId: user, role: "owner" },
   ]);
+  for (const organizationId of [orgA, orgB]) {
+    const userGroupId = `case-access-users-${organizationId}`;
+    const securityGroupId = `case-access-policy-${organizationId}`;
+    await db.insert(accessUserGroups).values({
+      id: userGroupId,
+      organizationId,
+      name: userGroupId,
+      ownerUserId: user,
+      createdByUserId: user,
+    });
+    await db.insert(accessSecurityGroups).values({
+      id: securityGroupId,
+      organizationId,
+      name: securityGroupId,
+      ownerUserId: user,
+      createdByUserId: user,
+    });
+    await db.insert(accessUserGroupMembers).values({
+      organizationId,
+      groupId: userGroupId,
+      principalType: "human",
+      principalId: user,
+      attachedByUserId: user,
+    });
+    await db.insert(accessSecurityGroupUserGroups).values({
+      organizationId,
+      securityGroupId,
+      userGroupId,
+      attachedByUserId: user,
+    });
+    await db.insert(accessSecurityGroupPolicies).values({
+      organizationId,
+      securityGroupId,
+      version: 1,
+      policy: {
+        fields: [
+          "data.case.profile.read",
+          "data.case.profile.edit",
+          "data.case.notes.read",
+          "data.case.notes.edit",
+          "data.case.readiness.read",
+          "data.case.readiness.edit",
+          "data.documents.edit",
+        ],
+        flows: ["flow.case.read", "flow.case.edit", "flow.document-review.edit"],
+        tools: [],
+      },
+      createdByUserId: user,
+      approvedByUserId: "independent-case-access-approver",
+      approvedAt: new Date(),
+    });
+    await db.insert(accessSecurityGroupAttachments).values({
+      organizationId,
+      securityGroupId,
+      scope: "tenant",
+      caseId: null,
+      attachedByUserId: user,
+    });
+  }
   await seedApprovedSensitiveLifecyclePolicies(orgA);
   await db.insert(onbAuthorityAssignments).values({
     id: `gate-a-authority-${suffix}`,
@@ -248,6 +313,44 @@ test("general intake permits an ordinary case but rejects notes and accessibilit
   assert.equal(permitted.status, 201, permittedBody);
   const permittedCase = JSON.parse(permittedBody) as { id: number; updatedAt: string };
   caseIds.push(permittedCase.id);
+
+  const casePermissions = await call(`/onboarding/cases/${permittedCase.id}/access-permissions`, orgA);
+  assert.equal(casePermissions.status, 200);
+  const permissionBody = await casePermissions.json() as {
+    caseId: number;
+    access: {
+      flowRead: boolean;
+      profileRead: boolean;
+      profileEdit: boolean;
+      notesRead: boolean;
+      notesEdit: boolean;
+      flowEdit: boolean;
+      readinessRead: boolean;
+      readinessEdit: boolean;
+      documentsRead: boolean;
+      documentsEdit: boolean;
+      documentReviewRead: boolean;
+      documentReviewEdit: boolean;
+    };
+    sensitive: { identity: { read: boolean; edit: boolean } };
+  };
+  assert.equal(permissionBody.caseId, permittedCase.id);
+  assert.deepEqual(permissionBody.access, {
+    flowRead: true,
+    profileRead: true,
+    profileEdit: true,
+    notesRead: true,
+    notesEdit: true,
+    flowEdit: true,
+    readinessRead: true,
+    readinessEdit: true,
+    documentsRead: false,
+    documentsEdit: true,
+    documentReviewRead: false,
+    documentReviewEdit: true,
+  });
+  assert.deepEqual(permissionBody.sensitive.identity, { read: false, edit: false });
+  assert.equal((await call(`/onboarding/cases/${permittedCase.id}/access-permissions`, orgB)).status, 404);
 
   const notes = await call("/onboarding/cases", orgA, {
     method: "POST",
@@ -476,6 +579,10 @@ test("batch intake creates cases with all eight approved lifecycle policies", as
   assert.equal(response.status, 201);
   const body = await response.json() as { results: Array<{ caseId: number }> };
   caseIds.push(body.results[0]!.caseId);
+  const [createdCase] = await db.select({
+    syntheticProvenance: onbCases.syntheticProvenance,
+  }).from(onbCases).where(eq(onbCases.id, body.results[0]!.caseId));
+  assert.equal(createdCase?.syntheticProvenance, null, "ordinary batch intake must not assign server-owned synthetic provenance");
 });
 
 test("legacy document recovery holds, binds the explicit requester, and does not bypass its missing governance snapshot", async () => {

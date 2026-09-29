@@ -40,6 +40,7 @@ import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 import { SimulationPanel } from './detail/simulation-panel';
 import { isDemoCoverageCase } from './case-presentation';
+import { CaseAccessProvider, RestrictedActionNotice, type CaseAccessPermissions } from './detail/case-access';
 
 export function CaseDetailPage() {
   const { id } = useParams();
@@ -63,6 +64,21 @@ export function CaseDetailPage() {
       }
     }
   });
+  const {
+    data: permissions,
+    isLoading: permissionsLoading,
+    error: permissionsError,
+  } = useQuery<CaseAccessPermissions>({
+    queryKey: ['onboarding-case-access-permissions', getPinnedOrganizationIdForPage() || 'anon', user?.id || 'anon', caseId],
+    queryFn: () => customFetch<CaseAccessPermissions>(
+      `/api/onboarding/cases/${caseId}/access-permissions`,
+      { responseType: 'json' },
+    ),
+    enabled: Number.isSafeInteger(caseId) && caseId > 0,
+    retry: false,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
   const { data: standardIntakeEvidence } = useQuery({
     queryKey: ['standard-intake-evidence', caseId],
     queryFn: () => customFetch<{
@@ -76,13 +92,13 @@ export function CaseDetailPage() {
     }>(`/api/onboarding/cases/${caseId}/standard-intake-evidence`, { responseType: 'json' }),
     // Most cases do not originate in standard intake. A 404 is deliberately
     // ignored and no request is made until a real case has loaded.
-    enabled: Boolean(c?.id),
+    enabled: Boolean(c?.id) && permissions?.access.flowRead === true && permissions?.sensitive.identity.read === true,
     retry: false,
   });
 
   const { data: events } = useListOnboardingCaseEvents(caseId, {
     query: {
-      enabled: !!caseId,
+      enabled: !!caseId && permissions?.access.flowRead === true && permissions?.access.notesRead === true,
       queryKey: getListOnboardingCaseEventsQueryKey(caseId),
       refetchInterval: () => {
         return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval' || c?.orchestrationStatus === 'blocked' || c?.orchestrationStatus === 'checklist-blocked' || c?.orchestrationStatus === 'idle') ? 2500 : false;
@@ -92,14 +108,17 @@ export function CaseDetailPage() {
 
   const { data: docs } = useListOnboardingCaseDocuments(caseId, {
     query: {
-      enabled: !!caseId,
+      enabled: !!caseId && permissions?.access.flowRead === true,
       queryKey: getListOnboardingCaseDocumentsQueryKey(caseId),
     }
   });
 
   const { data: comms } = useListOnboardingCaseCommunications(caseId, {
     query: {
-      enabled: !!caseId,
+      enabled: !!caseId && permissions?.access.flowRead === true
+        && permissions?.access.notesRead === true
+        && (c?.fictionalOfflineIdentity === true
+          || Object.values(permissions?.sensitive ?? {}).every((permission) => permission.read)),
       queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId),
       refetchInterval: () => {
         return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval' || c?.orchestrationStatus === 'blocked' || c?.orchestrationStatus === 'checklist-blocked' || c?.orchestrationStatus === 'idle') ? 2500 : false;
@@ -108,12 +127,18 @@ export function CaseDetailPage() {
   });
 
   const { data: channels } = useGetOnboardingChannels({
-    query: { enabled: !!caseId, queryKey: getGetOnboardingChannelsQueryKey(), staleTime: 60_000 }
+    query: {
+      enabled: !!caseId && permissions?.access.notesRead === true
+        && Object.values(permissions?.sensitive ?? {}).every((permission) => permission.read),
+      queryKey: getGetOnboardingChannelsQueryKey(),
+      staleTime: 60_000,
+    }
   });
 
   const { data: approvalsRaw } = useListOnboardingApprovals({ status: 'all' }, {
     query: {
       queryKey: getListOnboardingApprovalsQueryKey({ status: 'all' }),
+      enabled: permissions?.access.flowRead === true && permissions?.access.notesRead === true,
       // Email decisions can resolve a review in another session. Poll only
       // while this finite queue contains pending approvals.
       refetchInterval: (query) => getApprovalRefetchInterval(query.state.data),
@@ -124,12 +149,18 @@ export function CaseDetailPage() {
   const pendingApprovals = approvals.filter((a: any) => a.status === 'pending');
 
   const { data: records } = useListOnboardingCaseRecords(caseId, {
-    query: { enabled: !!caseId && c?.hireType === 'rehire', queryKey: getListOnboardingCaseRecordsQueryKey(caseId) }
+    query: {
+      enabled: !!caseId && permissions?.access.flowRead === true
+        && permissions?.access.profileRead === true
+        && permissions?.sensitive.identity.read === true
+        && c?.hireType === 'rehire',
+      queryKey: getListOnboardingCaseRecordsQueryKey(caseId),
+    }
   });
 
   const { data: requestsEnv, isError: requestsLoadError } = useGetOnboardingOperationalRequests(caseId, {
     query: {
-      enabled: !!caseId,
+      enabled: !!caseId && permissions?.access.flowRead === true,
       queryKey: getGetOnboardingOperationalRequestsQueryKey(caseId),
       refetchInterval: () => {
         return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval' || c?.orchestrationStatus === 'blocked' || c?.orchestrationStatus === 'checklist-blocked' || c?.orchestrationStatus === 'idle') ? 2500 : false;
@@ -139,7 +170,7 @@ export function CaseDetailPage() {
 
   const { data: caps } = useGetOnboardingDemoController({
     query: {
-      enabled: !!caseId,
+      enabled: !!caseId && permissions?.access.flowRead === true && permissions?.sensitive.identity.read === true,
       queryKey: getGetOnboardingDemoControllerQueryKey(),
       retry: false
     }
@@ -147,8 +178,34 @@ export function CaseDetailPage() {
 
   const offlineSample = c ? isOfflineDemoSample(c) : false;
   const { error: privacyError } = useListLifecycleHolds({
-    enabled: Boolean(c) && !offlineSample,
+    enabled: Boolean(c) && !offlineSample && permissions?.access.flowRead === true,
   });
+  const hasRestrictedCaseActions = !permissions?.access.flowEdit
+    || !permissions?.access.profileEdit
+    || !permissions?.access.notesEdit
+    || Object.values(permissions?.sensitive ?? {}).some((permission) => !permission.read || !permission.edit);
+
+  if (permissionsLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Checking case permissions...</div>;
+
+  if (permissionsError || !permissions) {
+    return (
+      <div role="alert" className="max-w-3xl mx-auto mt-12 p-8 bg-[var(--status-amber-bg)] border border-[var(--status-amber-fg)] rounded-lg text-center">
+        <div className="flex justify-center mb-4"><AlertTriangle className="h-10 w-10 text-[var(--status-amber-fg)]" /></div>
+        <h2 className="text-xl font-bold text-[var(--status-amber-fg)] mb-2">Case access could not be confirmed</h2>
+        <p className="text-[var(--status-amber-fg)] opacity-90">The current permissions could not be loaded. Refresh the page before viewing or changing case information.</p>
+      </div>
+    );
+  }
+
+  if (!permissions.access.flowRead) {
+    return (
+      <div className="max-w-3xl mx-auto mt-12 p-8 bg-[var(--status-red-bg)] border border-[var(--status-red-fg)] rounded-lg text-center">
+        <div className="flex justify-center mb-4"><AlertTriangle className="h-10 w-10 text-[var(--status-red-fg)]" /></div>
+        <h2 className="text-xl font-bold text-[var(--status-red-fg)] mb-2">Case access restricted</h2>
+        <p className="text-[var(--status-red-fg)] opacity-90">Your current case permissions do not allow you to view this case. Request the appropriate case-read access from your administrator.</p>
+      </div>
+    );
+  }
 
   if (isLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading case workspace...</div>;
 
@@ -182,11 +239,14 @@ export function CaseDetailPage() {
   const uatCoverageSample = isDemoCoverageCase(c);
 
   const restrictedFields: string[] = [];
-  if (c.workerName === "Restricted candidate") {
+  const canViewIdentity = permissions.access.profileRead &&
+    (permissions.sensitive.identity.read || c.fictionalOfflineIdentity === true);
+  if (!canViewIdentity || c.workerName === "Restricted candidate") {
     restrictedFields.push("Identity (Name, Email, Phone, Manager, Recruiter)");
   }
 
   return (
+    <CaseAccessProvider value={permissions}>
     <div className="max-w-7xl mx-auto px-6 md:px-8">
       {restrictedFields.length > 0 && (
         <div className="mb-6 p-3 bg-[var(--status-amber-bg)] border border-[var(--status-amber-fg)] rounded-md flex items-start gap-3 shadow-sm">
@@ -198,6 +258,11 @@ export function CaseDetailPage() {
               <span className="font-mono block mt-1 text-xs opacity-90">{restrictedFields.join(', ')}</span>
             </p>
           </div>
+        </div>
+      )}
+      {hasRestrictedCaseActions && (
+        <div role="status" className="mb-5 rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">
+          Some case actions are restricted by your current permissions. Edit, profile, and notes controls are shown only when their corresponding access is available.
         </div>
       )}
 
@@ -239,12 +304,15 @@ export function CaseDetailPage() {
               </Link>
             </div>
           ) : (
-            <SimulationPanel
-              caseId={caseId}
-              recipientEmail={demoSession?.selectedVolunteerId
-                ? (demoSession.selectedVolunteer?.email ?? null)
-                : null}
-            />
+            permissions.access.flowRead
+              ? <SimulationPanel
+                  caseId={caseId}
+                  recipientEmail={demoSession?.selectedVolunteerId
+                    ? (demoSession.selectedVolunteer?.email ?? null)
+                    : null}
+                  emailPromptAvailable={c.candidateEmailAuthorized === true}
+                />
+              : <RestrictedActionNotice>Simulation is restricted by your current case permissions.</RestrictedActionNotice>
           )}
         </>
       ) : (
@@ -256,7 +324,9 @@ export function CaseDetailPage() {
               approval.ruleRef === 'Gate A — offer-acceptance package',
             )}
           />
-          <PortalControls caseId={caseId} joiningDate={c.joiningDate} />
+          {permissions.access.flowEdit && permissions.access.profileEdit && permissions.sensitive.identity.edit
+            ? <PortalControls caseId={caseId} joiningDate={c.joiningDate} />
+            : <div className="mb-6"><div role="status" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] px-3 py-2 text-xs text-[var(--status-amber-fg)]">Logistics and portal edits are restricted by your current case permissions.</div></div>}
         </>
       )}
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} offlineSample={offlineSample} />
@@ -278,15 +348,25 @@ export function CaseDetailPage() {
           />
         )}
 
-        {activeTab === 'Early tenure' && !offlineSample && <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />}
+        {activeTab === 'Early tenure' && !offlineSample && (permissions.access.flowEdit && permissions.access.profileEdit && permissions.sensitive.identity.edit
+          ? <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />
+          : <RestrictedActionNotice>Early-tenure case actions are restricted by your current permissions.</RestrictedActionNotice>)}
         {activeTab === 'Tasks' && <TasksTab c={c} />}
-        {activeTab === 'Frontline' && <FrontlineTab caseId={caseId} />}
+        {activeTab === 'Frontline' && (permissions.access.flowEdit && permissions.access.notesEdit && Object.values(permissions.sensitive).every((permission) => permission.edit)
+          ? <FrontlineTab caseId={caseId} />
+          : <RestrictedActionNotice>Frontline case actions are restricted by your current permissions.</RestrictedActionNotice>)}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
-        {activeTab === 'Activity' && <ActivityTab events={events || []} />}
-        {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} />}
-        {activeTab === 'Audit' && <AuditTab events={events || []} approvals={approvals} records={records || []} />}
-        {activeTab === 'Ask AI' && <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />}
+        {activeTab === 'Activity' && (permissions.access.notesRead
+          ? <ActivityTab events={events || []} />
+          : <RestrictedActionNotice>Activity notes are restricted by your current permissions.</RestrictedActionNotice>)}
+        {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} enforceCasePermissions />}
+        {activeTab === 'Audit' && (permissions.access.notesRead
+          ? <AuditTab events={events || []} approvals={approvals} records={records || []} />
+          : <RestrictedActionNotice>Audit notes are restricted by your current permissions.</RestrictedActionNotice>)}
+        {activeTab === 'Ask AI' && permissions.access.profileRead && permissions.access.notesRead && Object.values(permissions.sensitive).every((permission) => permission.read)
+          && <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />}
       </div>
     </div>
+    </CaseAccessProvider>
   );
 }

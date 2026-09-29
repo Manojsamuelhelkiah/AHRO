@@ -175,6 +175,7 @@ const {
   onbCommunications,
   onbEffectJournal,
   onbEvents,
+  onbGovernanceAuthorityAssignments,
   onbSensitiveLifecyclePolicies,
   onbSettings,
   organizationMembershipsTable,
@@ -255,6 +256,16 @@ async function ensureFixture() {
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: administrator, role: "member" },
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: reviewer, role: "member" },
   ]);
+  const [privacyReviewer] = await db.insert(onbGovernanceAuthorityAssignments).values({
+    organizationId: DEMO_ORGANIZATION_ID,
+    authorityRole: "privacy",
+    assigneeUserId: reviewer,
+    verificationStatus: "verified",
+    verifiedByUserId: administrator,
+    verificationReference: `browser-regression:${suffix}:verified-privacy-reviewer`,
+    expiresAt: new Date(Date.now() + 60 * 60_000),
+  }).returning({ id: onbGovernanceAuthorityAssignments.id });
+  if (!privacyReviewer) throw new Error("Unable to seed a verified browser-regression privacy reviewer.");
   await db.insert(onbSettings).values([
     {
       organizationId: DEMO_ORGANIZATION_ID,
@@ -319,7 +330,7 @@ async function ensureFixture() {
       policyReference: `browser-regression:${suffix}:${dataClass}`,
       approvalReference: `browser-regression:${suffix}:${dataClass}`,
       approvedByUserId: administrator,
-      approvedAuthorityAssignmentId: 1,
+      approvedAuthorityAssignmentId: privacyReviewer.id,
       isCurrent: true,
     })));
   }

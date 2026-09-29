@@ -36,6 +36,7 @@ import {
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
 import { roleMayExerciseScope, verifyDecisionAuthorityInTransaction } from "./decision-authority";
+import { resolveEffectiveAccessInTransaction } from "../access-governance";
 import {
   isVerifiedGmailDkimTransport,
   type VerifiedGmailDkimTransport,
@@ -321,6 +322,8 @@ export async function decideApproval(opts: {
   decidedByKind?: RequesterKind;
   /** Authenticated Clerk principal for in-app decisions; never client supplied. */
   actorUserId?: string | null;
+  /** Exact governance keys required for this route-specific approval flow. */
+  additionalAccessKeys?: readonly string[];
   /** Exact allowlisted remote address, resolved only by the inbound adapter. */
   responderEmail?: string | null;
   /**
@@ -435,6 +438,23 @@ export async function decideApproval(opts: {
         });
       }
       return { outcome: "stale", reason, currentVersion, status: approval.status } as const;
+    }
+    if (opts.additionalAccessKeys?.length) {
+      const access = opts.actorUserId
+        ? await resolveEffectiveAccessInTransaction(tx, {
+            organizationId: opts.organizationId,
+            principalType: "human",
+            principalId: opts.actorUserId,
+            caseId: approval.caseId,
+            purpose: "onboarding-approval-decision",
+          })
+        : null;
+      if (!access || opts.additionalAccessKeys.some((key) => !access.allows.includes(key))) {
+        return {
+          outcome: "unauthorized",
+          reason: "readiness_access_required",
+        } as const;
+      }
     }
     // Check current, scoped authority inside the case/approval lock, so a
     // concurrent grant revocation cannot authorize this decision.

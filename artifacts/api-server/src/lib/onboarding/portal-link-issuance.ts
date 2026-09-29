@@ -57,6 +57,7 @@ export async function issueCandidatePortalLink(input: {
     actorUserId: input.uatIntent?.authorityActor ?? input.issuedBy,
     classification: "identity",
     additionalClassifications: ["medical", "payroll", "bgv"],
+    additionalAccessKeys: input.sendEmail ? ["tool.notification.send"] : [],
     mutate: () => withCaseDispatchGuard(
       input.caseId,
       () => issueCandidatePortalLinkUnsafe(input),

@@ -6,6 +6,7 @@ import { Button, Input, Label } from '@/components/ui-shared';
 import { Link } from 'wouter';
 import { StatusBadgeText } from './components';
 import { useApprovalCapability } from '../../../hooks/use-approval-action';
+import { RestrictedActionNotice, useCaseAccess } from './case-access';
 
 type GateApprovalTarget = {
   id: number;
@@ -26,6 +27,7 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
     activationDueAt: string | null;
   };
 }) {
+  const access = useCaseAccess();
   const queryClient = useQueryClient();
   const confirmOffer = useConfirmOnboardingOfferAcceptance();
   const gateAuthority = useApprovalCapability(gateApproval);
@@ -42,6 +44,9 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
   // this control based on a browser owner/admin role: only its pending,
   // scoped authority-bound approval can enable it.
   const canConfirmGateA =
+    access?.access.flowEdit === true &&
+    access?.access.notesEdit === true &&
+    access?.sensitive.identity.edit === true &&
     gateApproval?.status === 'pending' &&
     gateAuthority.data?.canDecide === true &&
     !gateAuthority.isLoading;
@@ -55,6 +60,7 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
   ];
 
   const handleConfirm = () => {
+    if (access?.access.flowEdit !== true || access?.access.notesEdit !== true || access?.sensitive.identity.edit !== true) return;
     if (!note.trim()) return;
     confirmOffer.mutate({ id: c.id, data: { note } }, {
       onSuccess: () => {
@@ -71,6 +77,7 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
     });
   };
   const handleStandardRelease = () => {
+    if (access?.access.flowEdit !== true) return;
     setReleaseError(null);
     releaseStandardIntake.mutate(undefined, {
       onSuccess: () => {
@@ -84,7 +91,11 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+    <div className="mb-8">
+    {(!access?.access.flowEdit || !access?.access.notesEdit || !access?.sensitive.identity.edit) && (
+      <div className="mb-3"><RestrictedActionNotice>Gateway release and confirmation controls are restricted by your current case permissions.</RestrictedActionNotice></div>
+    )}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {gates.map(({ key, title, g }) => {
         if (!g) return null;
         const isA = key === 'a';
@@ -121,7 +132,7 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
                </div>
              )}
              {isA && standardIntakeEvidence && c.orchestrationStatus === 'standard-intake-pending-review' &&
-               (standardIntakeEvidence.eventType !== 'scheduled-preboarding' || standardIntakeEvidence.activationStatus === 'due-review') && (
+                (standardIntakeEvidence.eventType !== 'scheduled-preboarding' || standardIntakeEvidence.activationStatus === 'due-review') && access?.access.flowEdit && (
                <div className="mt-3 border-t border-[var(--border)] pt-3">
                  <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={handleStandardRelease} disabled={releaseStandardIntake.isPending}>
                    Release to existing Gate A review
@@ -159,6 +170,7 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

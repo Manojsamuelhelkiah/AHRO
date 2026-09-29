@@ -316,15 +316,12 @@ test("Demo Administrator creates and durably simulates one offline case", async 
   });
   await signInDemo(reviewerPage, REVIEWER_EMAIL);
   await reviewerPage.goto(`/cases/${fixture.caseId}`);
-  await expect(reviewerPage.getByText("Service-case synopsis", { exact: false })).toBeVisible();
-  await reviewerPage.getByRole("button", { name: "Communications", exact: true }).click();
-  await expect(
-    reviewerPage.getByText("Details are restricted to the assigned specialist.", { exact: false }).first(),
-  ).toBeVisible();
-  await reviewerPage.getByRole("button", { name: "Activity", exact: true }).click();
-  await expect(
-    reviewerPage.getByText("Restricted confidential onboarding record", { exact: false }).first(),
-  ).toBeVisible();
+  // A shared low-access reviewer has no explicit case-read grant. The new
+  // governance policy denies the whole case, rather than exposing a partial
+  // operational view solely because the case belongs to Demo Organization.
+  await expect(reviewerPage.getByRole("heading", { name: "Case access restricted" })).toBeVisible();
+  await expect(reviewerPage.getByText("Service-case synopsis", { exact: false })).toHaveCount(0);
+  await expect(reviewerPage.getByRole("button", { name: "Communications", exact: true })).toHaveCount(0);
   await expect(reviewerPage.getByRole("heading", { name: "Response-Driven Simulation" })).toHaveCount(0);
   await expect(reviewerPage.getByRole("button", { name: "Simulate next exchange" })).toHaveCount(0);
   expect(

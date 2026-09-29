@@ -454,6 +454,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     workerEmail: string;
     workerPhone?: string | null;
     notes?: string | null;
+    syntheticProvenance?: typeof onbCases.$inferSelect.syntheticProvenance;
     scenarioKey?: string | null;
     joiningDate?: string;
     hireType: string;
@@ -471,6 +472,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
       workerEmail: input.caseRow.workerEmail,
       workerPhone: input.caseRow.workerPhone,
       notes: input.caseRow.notes ?? null,
+      syntheticProvenance: input.caseRow.syntheticProvenance,
       scenarioKey: input.caseRow.scenarioKey,
     }),
   });

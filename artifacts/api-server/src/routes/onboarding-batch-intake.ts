@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import {
   onbCaseLogistics,
   onbCases,
@@ -26,6 +27,7 @@ import { batchIntakePayloadFingerprint, eligibleForExplicitBatchRelease } from "
 import {
   normalizedWorkforceContext,
 } from "../lib/onboarding/workforce-policies";
+import { SYNTHETIC_OFFLINE_MARKER } from "../lib/onboarding/synthetic-offline";
 import {
   evaluateCaseDerivedLifecycleGateInTransaction,
   jurisdictionForWorkforceContext,
@@ -50,6 +52,12 @@ const asText = (value: unknown, max = 120) =>
   typeof value === "string" && value.trim().length > 0 && value.trim().length <= max
     ? value.trim()
     : null;
+
+function containsReservedSyntheticMarker(notes: unknown): boolean {
+  if (typeof notes !== "string") return false;
+  return notes.toLowerCase().includes(SYNTHETIC_OFFLINE_MARKER.toLowerCase()) ||
+    /\[demo-controller-run:/i.test(notes);
+}
 
 type BatchPerson = {
   personKey: string;
@@ -88,9 +96,10 @@ function parsePerson(value: unknown): BatchPerson | null {
   const managerName = asText(input.managerName);
   const recruiterName = asText(input.recruiterName);
   const joiningDate = asText(input.joiningDate, 20);
+  const notes = asText(input.notes, 4000);
   if (!personKey || !workerName || !workerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workerEmail) ||
     !hireType || !workerCategory || !role || !department || !geography || !legalEntity || !managerName || !recruiterName ||
-    !joiningDate || !/^\d{4}-\d{2}-\d{2}$/.test(joiningDate)) return null;
+    !joiningDate || !/^\d{4}-\d{2}-\d{2}$/.test(joiningDate) || containsReservedSyntheticMarker(notes)) return null;
   const channel = input.channelPreference;
   if (channel !== undefined && channel !== "email" && channel !== "whatsapp" && channel !== "both") return null;
   const workforceContext = input.workforceContext;
@@ -102,7 +111,7 @@ function parsePerson(value: unknown): BatchPerson | null {
     ...(channel ? { channelPreference: channel } : {}),
     ...(asText(input.workerBand) ? { workerBand: asText(input.workerBand)! } : {}),
     ...(asText(input.urgency) ? { urgency: asText(input.urgency)! } : {}),
-    ...(asText(input.notes, 4000) ? { notes: asText(input.notes, 4000)! } : {}),
+    ...(notes ? { notes } : {}),
     ...(asText(input.jobProfileId, 160) ? { jobProfileId: asText(input.jobProfileId, 160)! } : {}),
     ...(workforceContext ? { workforceContext: workforceContext as OnbWorkforceContext } : {}),
   };
@@ -119,7 +128,18 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
     const input = req.body as Record<string, unknown>;
     const idempotencyKey = asText(input.idempotencyKey, 160);
     const name = asText(input.name, 120);
-    const people = Array.isArray(input.people) ? input.people.map(parsePerson) : [];
+    const rawPeople = Array.isArray(input.people) ? input.people : [];
+    if (rawPeople.some((person) =>
+      person && typeof person === "object" && !Array.isArray(person) &&
+      containsReservedSyntheticMarker((person as Record<string, unknown>).notes)
+    )) {
+      res.status(400).json({
+        message: "Batch intake notes cannot contain reserved synthetic offline or Demo Controller run markers.",
+        code: "RESERVED_SYNTHETIC_MARKER",
+      });
+      return;
+    }
+    const people = rawPeople.map(parsePerson);
     if (!idempotencyKey || !name || people.length === 0 || people.length > 500 || people.some((person) => !person)) {
       res.status(400).json({ message: "A batch name, retry key, and 1–500 valid people are required." });
       return;
@@ -138,6 +158,25 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
       await governanceSnapshotForNewCase(organizationId);
       return db.transaction(async (tx) => {
         await assertGovernanceMutationAllowed(tx, organizationId);
+        const caseAccess = await resolveEffectiveAccessInTransaction(tx, {
+          organizationId,
+          principalType: "human",
+          principalId: req.authUserId!,
+          purpose: "onboarding-batch-case-create",
+        });
+        const requiredCaseKeys = [
+          "flow.case.edit",
+          "data.case.profile.edit",
+          ...(parsedPeople.some((person) => Boolean(person.notes?.trim()))
+            ? ["data.case.notes.edit"]
+            : []),
+        ];
+        if (requiredCaseKeys.some((key) => !caseAccess.allows.includes(key))) {
+          throw Object.assign(
+            new Error("Explicit case-flow and case-profile edit grants (and case-notes edit for notes) are required for batch intake."),
+            { statusCode: 403 },
+          );
+        }
         const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
         let [existing] = await tx.select().from(onbIntakeBatches).where(and(
           eq(onbIntakeBatches.organizationId, organizationId),
@@ -246,6 +285,13 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
       res.status(409).json({ message: err instanceof Error ? err.message : "Batch retry payload conflict." });
       return;
     }
+    if (statusCode === 403) {
+      res.status(403).json({
+        message: err instanceof Error ? err.message : "Case edit access is required.",
+        code: "CASE_EDIT_ACCESS_REQUIRED",
+      });
+      return;
+    }
     next(err);
   }
 });
@@ -278,6 +324,19 @@ router.post("/onboarding/batch-intake/:batchId/cases/:caseId/release", async (re
           eq(onbIntakeBatchPeople.caseId, caseId),
         )).for("update");
       if (!row) return { kind: "not-found" as const };
+      const caseAccess = await resolveEffectiveAccessInTransaction(tx, {
+        organizationId,
+        principalType: "human",
+        principalId: req.authUserId!,
+        caseId,
+        purpose: "onboarding-batch-case-release",
+      });
+      if (!caseAccess.allows.includes("flow.case.edit")) {
+        throw Object.assign(
+          new Error("Explicit case-flow edit access is required to release this batch case."),
+          { statusCode: 403 },
+        );
+      }
       if (!eligibleForExplicitBatchRelease(row.case.hireType)) return { kind: "gate-a-required" as const };
       if (row.case.checklistSnapshot.some((item) =>
         item.id === "policy-rebase-required" && item.enabled && item.mandatory,

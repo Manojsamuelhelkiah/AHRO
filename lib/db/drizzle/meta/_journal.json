@@ -785,6 +785,34 @@
       "when": 1789462800000,
       "tag": "0089_organization_primary_country",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1789462800001,
+      "tag": "0090_access_governance_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1789462800002,
+      "tag": "0091_agent_invocation_boundary",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1789462800003,
+      "tag": "0092_access_governance_forward_correction",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1789462800004,
+      "tag": "0093_onb_cases_synthetic_provenance",
+      "breakpoints": true
     }
   ]
 }

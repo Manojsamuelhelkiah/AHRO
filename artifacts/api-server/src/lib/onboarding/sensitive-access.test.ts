@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   NO_SENSITIVE_ACCESS,
+  SENSITIVE_ACCESS_KEY_BY_CLASS,
   classifySensitiveText,
   hasOpaqueNarrativeAccess,
   hasSensitiveAccess,
@@ -59,6 +60,25 @@ test("membership-shaped access cannot unlock a sensitive record", () => {
   assert.equal(hasSensitiveAccess(memberLikeAccess, ["medical"]), false);
   assert.equal(hasSensitiveAccess(memberLikeAccess, ["payroll"]), false);
   assert.equal(hasSensitiveAccess(memberLikeAccess, ["bgv"]), false);
+});
+
+test("sensitive read and write decisions are separate exact field permissions", () => {
+  const readOnly = {
+    ...NO_SENSITIVE_ACCESS,
+    identity: true,
+    edit: { ...NO_SENSITIVE_ACCESS.edit!, identity: false },
+  };
+  const readAndEdit = {
+    ...readOnly,
+    edit: { ...readOnly.edit, identity: true },
+  };
+
+  assert.equal(SENSITIVE_ACCESS_KEY_BY_CLASS.identity.read, "data.identity.read");
+  assert.equal(SENSITIVE_ACCESS_KEY_BY_CLASS.identity.edit, "data.identity.edit");
+  assert.equal(hasSensitiveAccess(readOnly, ["identity"]), true);
+  assert.equal(hasSensitiveAccess(readOnly, ["identity"], "edit"), false);
+  assert.equal(hasSensitiveAccess(readAndEdit, ["identity"], "edit"), true);
+  assert.equal(hasSensitiveAccess(readAndEdit, ["medical"], "edit"), false);
 });
 
 test("redacts restricted document metadata and accessibility context", () => {

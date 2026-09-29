@@ -27,17 +27,23 @@ An uncertain live attempt and a subsequent simulated fallback are separate actio
 
 **How to apply:** keep the original identifier only for an identical retry, retain the live attempt's history, and give the explicit simulated fallback its own identity.
 
-Public shared demo identities need a server-owned registry and a non-bypassable privilege ceiling: effective tenant role stays member, tenant scope stays Demo Organization, and specialist access is valid only for the dedicated administrator on currently marked synthetic cases.
+Public shared demo identities need a server-owned registry and a non-bypassable privilege ceiling: effective tenant role stays member, tenant scope stays Demo Organization, and synthetic demo access never creates specialist authority.
 
 **Why:** Email-allowlisted one-click tickets make each shared principal publicly usable. Any retained membership, normal authority grant, body-supplied case ID, or provider-bound approval can otherwise turn that convenience into access to ordinary cases or governance controls.
 
-**How to apply:** enforce the ceiling in tenant resolution, organization administration, every authority resolver (including final provider checks), and routes whose case ID is outside the URL. Revoke legacy non-synthetic grants at login. Keep the reviewer without specialist authority; do not loosen blocked surfaces until their projections and writes are synthetic-only end to end.
+**How to apply:** enforce the ceiling in tenant resolution, organization administration, every authority resolver (including final provider checks), and routes whose case ID is outside the URL. Revoke legacy synthetic specialist grants too. Keep the reviewer without specialist authority; do not loosen blocked surfaces until their projections and writes are synthetic-only end to end.
 
 Control Tower intake for a public Demo Administrator is an offline synthetic creation path, not implicit authorization for a live-email demo.
 
 **Why:** Allowing the familiar Create Case form must not silently contact addresses supplied by a public shared identity. Approved-volunteer live demonstrations have a separate explicit authorization flow.
 
 **How to apply:** keep creation and case-scoped access atomic and prohibit automatic outreach or orchestration for this intake path. Explain the distinction in the form and delivery summary.
+
+Fictional offline case identity and internal simulated exchanges can use narrowly sanitized read projections without an all-sensitive grant; never extend that exception to volunteered or ordinary cases. Controlled volunteer outreach must resolve the pinned approved recipient server-side rather than require the recipient address to be shown in the case UI.
+
+**Why:** A public demo needs to show its fictional case and simulated activity, but synthetic specialist grants would create an inappropriate authorization precedent. Requiring the address in the UI exposes identity data and makes safe controlled outreach depend on unrelated display permissions.
+
+**How to apply:** Verify server-owned fictional/offline markers and absence of candidate authorization before applying the projection; exclude raw bodies, recipients and real dispatch/reply records. Keep real outreach behind explicit volunteer consent, current lifecycle and reviewer checks, and effect-bound recipient revalidation.
 
 Restarting a synthetic simulation retires its progression, not its audit evidence. Versions are meaningful only within a generation.
 

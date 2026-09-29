@@ -108,6 +108,7 @@ export async function seedDemoFullCoverage(
           workerName: onbCases.workerName,
           scenarioKey: onbCases.scenarioKey,
           notes: onbCases.notes,
+          syntheticProvenance: onbCases.syntheticProvenance,
         })
         .from(onbCases)
         .where(eq(onbCases.organizationId, organizationId));
@@ -119,9 +120,10 @@ export async function seedDemoFullCoverage(
           continue;
         }
         // Upgrade only our former marker-backed rows. This one-time bridge
-        // preserves their IDs and every other record while replacing the
-        // mutable notes-based fence with the reserved durable scenario key.
+        // applies only when the durable server-owned provenance also matches;
+        // legacy marker-only rows are never promoted from mutable notes.
         if (
+          row.syntheticProvenance === "demo-full-coverage" &&
           row.notes?.includes(SYNTHETIC_OFFLINE_MARKER) === true &&
           typeof row.scenarioKey === "string" &&
           DEMO_FULL_COVERAGE_SCENARIO_KEYS.includes(
@@ -186,6 +188,7 @@ export async function seedDemoFullCoverage(
           scenarioKey: demoFullCoverageScenarioKey(scenario.key),
           planSummary: `${scenario.description} ${scenario.expectedBehaviour}`,
           notes: `${SYNTHETIC_OFFLINE_MARKER} ${SYNTHETIC_OFFLINE_WARNING}`,
+          syntheticProvenance: "demo-full-coverage",
           candidateEmailAuthorizedAt: null,
           candidateEmailAuthorizedBy: null,
           offerAcceptanceComplete: false,

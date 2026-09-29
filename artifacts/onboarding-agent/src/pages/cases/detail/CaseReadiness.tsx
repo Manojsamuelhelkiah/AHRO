@@ -17,8 +17,14 @@ import { Button, cn, Label } from '@/components/ui-shared';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { StatusBadgeText } from './components';
 import { updateWorkforceContext } from '@/lib/workforce-policy-api';
+import { RestrictedActionNotice, useCaseAccess } from './case-access';
 
 export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) => void }) {
+  const access = useCaseAccess();
+  const canEditProfile = access?.access.flowEdit === true && access?.access.profileEdit === true;
+  const canEditNotes = access?.access.flowEdit === true && access?.access.notesEdit === true;
+  const canEditSensitiveEvidence = canEditNotes && !!access
+    && Object.values(access.sensitive).every((permission) => permission.edit);
   const queryClient = useQueryClient();
   const updateItem = useUpdateOnboardingChecklistItem();
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -50,6 +56,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
     : blockedStage?.replace(/-/g, ' ');
 
   const handleUpdate = (item: OnbReadinessItem, status: OnbChecklistItemStatusUpdateStatus) => {
+    if (!canEditProfile) return;
     if (!item.id || systemManagedIds.has(item.id)) return;
     setError(null);
     updateItem.mutate({
@@ -86,6 +93,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
         : 'Work environment is unknown. The future policy result will keep a human context review gate.';
 
   const handleRecalculate = () => {
+    if (!canEditProfile) return;
     const isReplace = !allowSimpleRecalculate;
     if (isReplace && !replaceReason.trim()) return;
     setError(null);
@@ -113,6 +121,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
   };
 
   const handleGovernanceRebase = () => {
+    if (!canEditProfile) return;
     if (!governanceImpact) return;
     setError(null);
     rebaseGovernance.mutate({
@@ -134,6 +143,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
   const governanceRebaseAvailable = governanceImpact !== undefined &&
     (governanceImpact.snapshot === null || governanceImpact.impacts.length > 0);
   const submitEvidence = (decision: 'verified' | 'rejected') => {
+    if (!canEditSensitiveEvidence) return;
     if (!evidenceItem?.id || !evidenceReference.trim() || !evidenceReason.trim()) return;
     setError(null);
     verifyEvidence.mutate({
@@ -163,6 +173,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
     });
   };
   const submitContextCorrection = () => {
+    if (!canEditProfile) return;
     if (contextReason.trim().length < 3) return;
     if (JSON.stringify(contextDraft).toLowerCase().includes('accessibilityneeds')) {
       setError('This context contains restricted accessibility information and cannot be saved through this form. Nothing has been removed or submitted. No specialist handoff is available here.');
@@ -190,6 +201,19 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
   return (
     <div className="mb-10">
       <h2 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)] mb-4">Case Readiness</h2>
+      {(!canEditProfile || !canEditNotes || !canEditSensitiveEvidence) && (
+        <div className="mb-4">
+          <RestrictedActionNotice>
+            {!canEditProfile && !canEditNotes
+              ? 'Checklist and profile edits, and evidence notes, are restricted by your current permissions.'
+              : !canEditProfile
+                ? 'Checklist and profile edits are restricted by your current permissions.'
+                : !canEditNotes
+                  ? 'Evidence notes are restricted by your current permissions.'
+                  : 'Sensitive evidence review is restricted by your current permissions.'}
+          </RestrictedActionNotice>
+        </div>
+      )}
 
       <div className="mb-4 p-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] shadow-sm">
         <div className="flex items-start justify-between">
@@ -208,10 +232,10 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
               ))}
             </div>
           </div>
-          <div className="flex shrink-0 gap-2">
+          {canEditProfile && <div className="flex shrink-0 gap-2">
             <Button variant="outline" size="sm" onClick={() => { setContextDraft(c.workforceContext ?? {}); setContextOpen(true); }} className="gap-2"><Pencil className="w-3.5 h-3.5" /> Correct context</Button>
             <Button variant="outline" size="sm" onClick={() => setManageOpen(true)} className="gap-2"><Settings2 className="w-3.5 h-3.5" /> Rebase policy</Button>
-          </div>
+          </div>}
         </div>
         <details className="mt-3 border-t border-[var(--border)] pt-3">
           <summary className="cursor-pointer text-[var(--text-xs)] font-semibold text-[var(--primary)]">View snapshotted effective checklist</summary>
@@ -295,13 +319,13 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Stage: {w.enforcementStage?.replace(/-/g, ' ') || 'Unknown'}</span>
                    {w.evidenceRequired && <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--status-amber-fg)]">Independent evidence · {w.responsibleRole || 'designated human'}</span>}
-                  {w.note && <span className="text-[var(--text-xs)] text-[var(--text-secondary)] flex-1 truncate">&bull; {w.note}</span>}
+                   {access?.access.notesRead && w.note && <span className="text-[var(--text-xs)] text-[var(--text-secondary)] flex-1 truncate">&bull; {w.note}</span>}
                 </div>
               </div>
               
-               {isCustom && w.id && !w.evidenceRequired && (
+                {canEditProfile && isCustom && w.id && !w.evidenceRequired && (
                 <div className="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-2 ml-4">
-                  <input
+                   {canEditNotes && <input
                     value={notes[w.id] ?? ''}
                     onChange={(event) => setNotes((current) => ({ ...current, [w.id!]: event.target.value }))}
                     aria-label={`Note for ${w.label}`}
@@ -309,7 +333,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
                     maxLength={500}
                     placeholder="Add a note"
                     className="h-7 w-40 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-[var(--text-xs)] text-[var(--text-primary)]"
-                  />
+                   />}
                   {w.status === 'ready' ? (
                     <Button
                       variant="outline"
@@ -334,7 +358,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
                   )}
                 </div>
               )}
-               {isCustom && w.id && w.evidenceRequired && (
+                {canEditSensitiveEvidence && isCustom && w.id && w.evidenceRequired && (
                  <div className="shrink-0 ml-4">
                    <Button size="sm" variant="outline" onClick={() => setEvidenceItem(w)} className="max-w-48 text-[10px]">Record {w.responsibleRole || 'designated human'} evidence</Button>
                  </div>
@@ -343,7 +367,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
           );
         })}
       </div>
-      <Dialog open={Boolean(evidenceItem)} onOpenChange={(open) => { if (!open) setEvidenceItem(null); }}>
+      <Dialog open={canEditSensitiveEvidence && Boolean(evidenceItem)} onOpenChange={(open) => { if (!open) setEvidenceItem(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Verify independent evidence</DialogTitle><DialogDescription>
             {evidenceItem?.label}. You are recording a human decision as the configured {evidenceItem?.responsibleRole} authority. Do not enter medical or other sensitive document content—store only its approved-system reference.
@@ -360,7 +384,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={contextOpen} onOpenChange={setContextOpen}>
+      <Dialog open={canEditProfile && contextOpen} onOpenChange={setContextOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Correct job context</DialogTitle>
@@ -410,7 +434,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
         </button>
       </div>
 
-      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+      <Dialog open={canEditProfile && manageOpen} onOpenChange={setManageOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Manage Case Checklist & Policy</DialogTitle>

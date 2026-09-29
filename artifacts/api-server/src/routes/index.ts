@@ -40,6 +40,7 @@ import { protectedAuditCapture } from "../middlewares/protected-audit";
 import governanceRouter from "./governance";
 import hrPolicyRouter from "./hr-policies";
 import privacyLifecycleRouter from "./privacy-lifecycle";
+import agentInvocationsRouter from "./agent-invocations";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -88,6 +89,7 @@ router.use(actionCenterRouter);
 router.use(governanceRouter);
 router.use(hrPolicyRouter);
 router.use(privacyLifecycleRouter);
+router.use(agentInvocationsRouter);
 router.use(onboardingDemoControllerRouter);
 router.use(onboardingUatTestCenterRouter);
 router.use(onboardingSlaRouter);

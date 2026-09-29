@@ -20,10 +20,41 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccessAgentInput,
+  AccessAgentResponse,
+  AccessAgentUpdate,
+  AccessFieldPrincipalsResponse,
+  AccessGovernanceError,
+  AccessGovernanceOk,
+  AccessGovernanceSnapshot,
+  AccessGovernanceStatusResponse,
+  AccessGrantApproval,
+  AccessGrantUpdate,
+  AccessPolicyApproval,
+  AccessPolicyApprovalResponse,
+  AccessSecurityGroupInput,
+  AccessSecurityGroupResponse,
+  AccessSecurityGroupUpdate,
+  AccessSecurityGroupVersionResponse,
+  AccessUserGroupInput,
+  AccessUserGroupMemberApproval,
+  AccessUserGroupMemberUpdate,
+  AccessUserGroupResponse,
+  AccessUserGroupSecurityGroupApproval,
+  AccessUserGroupSecurityGroupUpdate,
+  AccessUserGroupUpdate,
   ActualsLogParseResult,
   ActualsOverlayInput,
   ActualsOverlayRecord,
   ActualsValidationResult,
+  AgentInvocationAuditForbidden,
+  AgentInvocationAuditList,
+  AgentInvocationAuthenticationError,
+  AgentInvocationDenied,
+  AgentInvocationError,
+  AgentInvocationFailure,
+  AgentInvocationInput,
+  AgentInvocationResponse,
   BootstrapOnboardingAuthorityGovernanceBody,
   CompleteDemoControllerSetupBody,
   ConfirmSensitiveRetentionShorteningBody,
@@ -46,6 +77,7 @@ import type {
   EaHandoffRequest,
   EaHandoffSuggestion,
   EaSolutionBaseline,
+  EffectiveAccess,
   ErrorMessage,
   ExportOnboardingProtectedAuditParams,
   ExportScenarioWorkbookLinkParams,
@@ -98,12 +130,14 @@ import type {
   IntentCorpus,
   IntentRegistry,
   IntentRouteError,
+  ListAgentInvocationAuditParams,
   ListCustomIntentsParams,
   ListEaAssessmentsParams,
   ListGovernanceHistoryParams,
   ListOnboardingApprovalsParams,
   ListOnboardingPolicyRecommendationsParams,
   ListOnboardingProtectedAuditParams,
+  ListOrganizationPrincipalsWithFieldAccessParams,
   ListSensitiveLifecycleDeletionJobs200,
   ListSensitiveLifecycleHolds200,
   ModelOption,
@@ -209,6 +243,7 @@ import type {
   OrganizationMemberRoleChange,
   OrganizationPrimaryCountryInput,
   ParseActualsLogBody,
+  PreviewOrganizationPrincipalAccessParams,
   PricingRateRegister,
   PricingRateSetInput,
   PricingRateSetVersion,
@@ -3023,6 +3058,1355 @@ export const useUpdateOrganizationPrimaryCountry = <TError = ErrorType<void>,
       > => {
       return useMutation(getUpdateOrganizationPrimaryCountryMutationOptions(options));
     }
+
+export const getGetOrganizationAccessGovernanceUrl = () => {
+
+
+
+
+  return `/api/organizations/current/access`
+}
+
+/**
+ * Owner/admin only. Includes the reviewed catalog, active organization members, registered agents, user groups, security groups, effective direct grants, and the most recent 250 audit events.
+ * @summary Read the current organization's access-governance snapshot
+ */
+export const getOrganizationAccessGovernance = async ( options?: RequestInit): Promise<AccessGovernanceSnapshot> => {
+
+  return customFetch<AccessGovernanceSnapshot>(getGetOrganizationAccessGovernanceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOrganizationAccessGovernanceQueryKey = () => {
+    return [
+    `/api/organizations/current/access`
+    ] as const;
+    }
+
+
+export const getGetOrganizationAccessGovernanceQueryOptions = <TData = Awaited<ReturnType<typeof getOrganizationAccessGovernance>>, TError = ErrorType<AccessGovernanceError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrganizationAccessGovernance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOrganizationAccessGovernanceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrganizationAccessGovernance>>> = ({ signal }) => getOrganizationAccessGovernance({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrganizationAccessGovernance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOrganizationAccessGovernanceQueryResult = NonNullable<Awaited<ReturnType<typeof getOrganizationAccessGovernance>>>
+export type GetOrganizationAccessGovernanceQueryError = ErrorType<AccessGovernanceError>
+
+
+/**
+ * @summary Read the current organization's access-governance snapshot
+ */
+
+export function useGetOrganizationAccessGovernance<TData = Awaited<ReturnType<typeof getOrganizationAccessGovernance>>, TError = ErrorType<AccessGovernanceError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrganizationAccessGovernance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOrganizationAccessGovernanceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPreviewOrganizationPrincipalAccessUrl = (params: PreviewOrganizationPrincipalAccessParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/organizations/current/access/preview?${stringifiedParams}` : `/api/organizations/current/access/preview`
+}
+
+/**
+ * Owner/admin only. Optional caseId includes case-scoped grants in the evaluation. Previewing a registered agent requires an explicit initiatorUserId; effective agent access is evaluated in that initiator's context and is constrained by the initiator's effective access. The registered owner is never inferred as the initiator.
+ * @summary Resolve effective access for a principal
+ */
+export const previewOrganizationPrincipalAccess = async (params: PreviewOrganizationPrincipalAccessParams, options?: RequestInit): Promise<EffectiveAccess> => {
+
+  return customFetch<EffectiveAccess>(getPreviewOrganizationPrincipalAccessUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewOrganizationPrincipalAccessQueryKey = (params?: PreviewOrganizationPrincipalAccessParams,) => {
+    return [
+    `/api/organizations/current/access/preview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getPreviewOrganizationPrincipalAccessQueryOptions = <TData = Awaited<ReturnType<typeof previewOrganizationPrincipalAccess>>, TError = ErrorType<AccessGovernanceError>>(params: PreviewOrganizationPrincipalAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewOrganizationPrincipalAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPreviewOrganizationPrincipalAccessQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof previewOrganizationPrincipalAccess>>> = ({ signal }) => previewOrganizationPrincipalAccess(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof previewOrganizationPrincipalAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type PreviewOrganizationPrincipalAccessQueryResult = NonNullable<Awaited<ReturnType<typeof previewOrganizationPrincipalAccess>>>
+export type PreviewOrganizationPrincipalAccessQueryError = ErrorType<AccessGovernanceError>
+
+
+/**
+ * @summary Resolve effective access for a principal
+ */
+
+export function usePreviewOrganizationPrincipalAccess<TData = Awaited<ReturnType<typeof previewOrganizationPrincipalAccess>>, TError = ErrorType<AccessGovernanceError>>(
+ params: PreviewOrganizationPrincipalAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewOrganizationPrincipalAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getPreviewOrganizationPrincipalAccessQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListOrganizationPrincipalsWithFieldAccessUrl = (params: ListOrganizationPrincipalsWithFieldAccessParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/organizations/current/access/field-access?${stringifiedParams}` : `/api/organizations/current/access/field-access`
+}
+
+/**
+ * Owner/admin only. Optional caseId includes case-scoped grants. Pass initiatorUserId to resolve agent entries in an explicit initiator context; agent access is constrained by that user's effective access and is never inferred from the registered owner.
+ * @summary List active principals allowed to access a catalog field
+ */
+export const listOrganizationPrincipalsWithFieldAccess = async (params: ListOrganizationPrincipalsWithFieldAccessParams, options?: RequestInit): Promise<AccessFieldPrincipalsResponse> => {
+
+  return customFetch<AccessFieldPrincipalsResponse>(getListOrganizationPrincipalsWithFieldAccessUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOrganizationPrincipalsWithFieldAccessQueryKey = (params?: ListOrganizationPrincipalsWithFieldAccessParams,) => {
+    return [
+    `/api/organizations/current/access/field-access`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListOrganizationPrincipalsWithFieldAccessQueryOptions = <TData = Awaited<ReturnType<typeof listOrganizationPrincipalsWithFieldAccess>>, TError = ErrorType<AccessGovernanceError>>(params: ListOrganizationPrincipalsWithFieldAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOrganizationPrincipalsWithFieldAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOrganizationPrincipalsWithFieldAccessQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOrganizationPrincipalsWithFieldAccess>>> = ({ signal }) => listOrganizationPrincipalsWithFieldAccess(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOrganizationPrincipalsWithFieldAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOrganizationPrincipalsWithFieldAccessQueryResult = NonNullable<Awaited<ReturnType<typeof listOrganizationPrincipalsWithFieldAccess>>>
+export type ListOrganizationPrincipalsWithFieldAccessQueryError = ErrorType<AccessGovernanceError>
+
+
+/**
+ * @summary List active principals allowed to access a catalog field
+ */
+
+export function useListOrganizationPrincipalsWithFieldAccess<TData = Awaited<ReturnType<typeof listOrganizationPrincipalsWithFieldAccess>>, TError = ErrorType<AccessGovernanceError>>(
+ params: ListOrganizationPrincipalsWithFieldAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOrganizationPrincipalsWithFieldAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOrganizationPrincipalsWithFieldAccessQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAccessAgentUrl = () => {
+
+
+
+
+  return `/api/organizations/current/access/agents`
+}
+
+/**
+ * Owner only. The supplied ownerUserId must identify an active human member.
+ * @summary Register an agent for the current organization
+ */
+export const createAccessAgent = async (accessAgentInput: AccessAgentInput, options?: RequestInit): Promise<AccessAgentResponse> => {
+
+  return customFetch<AccessAgentResponse>(getCreateAccessAgentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessAgentInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAccessAgentMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccessAgent>>, TError,{data: BodyType<AccessAgentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAccessAgent>>, TError,{data: BodyType<AccessAgentInput>}, TContext> => {
+
+const mutationKey = ['createAccessAgent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAccessAgent>>, {data: BodyType<AccessAgentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAccessAgent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAccessAgentMutationResult = NonNullable<Awaited<ReturnType<typeof createAccessAgent>>>
+    export type CreateAccessAgentMutationBody = BodyType<AccessAgentInput>
+    export type CreateAccessAgentMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Register an agent for the current organization
+ */
+export const useCreateAccessAgent = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccessAgent>>, TError,{data: BodyType<AccessAgentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAccessAgent>>,
+        TError,
+        {data: BodyType<AccessAgentInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAccessAgentMutationOptions(options));
+    }
+
+export const getRetireAccessAgentUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/agents/${id}`
+}
+
+/**
+ * Owner only. Uses the agent's expected history version to reject stale updates.
+ * @summary Retire a registered agent
+ */
+export const retireAccessAgent = async (id: string,
+    accessAgentUpdate: AccessAgentUpdate, options?: RequestInit): Promise<AccessGovernanceOk> => {
+
+  return customFetch<AccessGovernanceOk>(getRetireAccessAgentUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessAgentUpdate)
+  }
+);}
+
+
+
+
+
+export const getRetireAccessAgentMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireAccessAgent>>, TError,{id: string;data: BodyType<AccessAgentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retireAccessAgent>>, TError,{id: string;data: BodyType<AccessAgentUpdate>}, TContext> => {
+
+const mutationKey = ['retireAccessAgent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retireAccessAgent>>, {id: string;data: BodyType<AccessAgentUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  retireAccessAgent(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetireAccessAgentMutationResult = NonNullable<Awaited<ReturnType<typeof retireAccessAgent>>>
+    export type RetireAccessAgentMutationBody = BodyType<AccessAgentUpdate>
+    export type RetireAccessAgentMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Retire a registered agent
+ */
+export const useRetireAccessAgent = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireAccessAgent>>, TError,{id: string;data: BodyType<AccessAgentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retireAccessAgent>>,
+        TError,
+        {id: string;data: BodyType<AccessAgentUpdate>},
+        TContext
+      > => {
+      return useMutation(getRetireAccessAgentMutationOptions(options));
+    }
+
+export const getCreateAccessUserGroupUrl = () => {
+
+
+
+
+  return `/api/organizations/current/access/user-groups`
+}
+
+/**
+ * Owner only.
+ * @summary Create a user group
+ */
+export const createAccessUserGroup = async (accessUserGroupInput: AccessUserGroupInput, options?: RequestInit): Promise<AccessUserGroupResponse> => {
+
+  return customFetch<AccessUserGroupResponse>(getCreateAccessUserGroupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessUserGroupInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAccessUserGroupMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccessUserGroup>>, TError,{data: BodyType<AccessUserGroupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAccessUserGroup>>, TError,{data: BodyType<AccessUserGroupInput>}, TContext> => {
+
+const mutationKey = ['createAccessUserGroup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAccessUserGroup>>, {data: BodyType<AccessUserGroupInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAccessUserGroup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAccessUserGroupMutationResult = NonNullable<Awaited<ReturnType<typeof createAccessUserGroup>>>
+    export type CreateAccessUserGroupMutationBody = BodyType<AccessUserGroupInput>
+    export type CreateAccessUserGroupMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Create a user group
+ */
+export const useCreateAccessUserGroup = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccessUserGroup>>, TError,{data: BodyType<AccessUserGroupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAccessUserGroup>>,
+        TError,
+        {data: BodyType<AccessUserGroupInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAccessUserGroupMutationOptions(options));
+    }
+
+export const getUpdateAccessUserGroupUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/user-groups/${id}`
+}
+
+/**
+ * Owner only. The expected version is the number of history events for the group; retired groups cannot be changed.
+ * @summary Rename or retire a user group
+ */
+export const updateAccessUserGroup = async (id: string,
+    accessUserGroupUpdate: AccessUserGroupUpdate, options?: RequestInit): Promise<AccessGovernanceOk> => {
+
+  return customFetch<AccessGovernanceOk>(getUpdateAccessUserGroupUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessUserGroupUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAccessUserGroupMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccessUserGroup>>, TError,{id: string;data: BodyType<AccessUserGroupUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAccessUserGroup>>, TError,{id: string;data: BodyType<AccessUserGroupUpdate>}, TContext> => {
+
+const mutationKey = ['updateAccessUserGroup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAccessUserGroup>>, {id: string;data: BodyType<AccessUserGroupUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAccessUserGroup(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAccessUserGroupMutationResult = NonNullable<Awaited<ReturnType<typeof updateAccessUserGroup>>>
+    export type UpdateAccessUserGroupMutationBody = BodyType<AccessUserGroupUpdate>
+    export type UpdateAccessUserGroupMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Rename or retire a user group
+ */
+export const useUpdateAccessUserGroup = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccessUserGroup>>, TError,{id: string;data: BodyType<AccessUserGroupUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAccessUserGroup>>,
+        TError,
+        {id: string;data: BodyType<AccessUserGroupUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAccessUserGroupMutationOptions(options));
+    }
+
+export const getSetAccessUserGroupMemberUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/user-groups/${id}/members`
+}
+
+/**
+ * Owner only. Adding requires an active organization member or registered agent; removing is idempotent.
+ * @summary Add or remove a principal from a user group
+ */
+export const setAccessUserGroupMember = async (id: string,
+    accessUserGroupMemberUpdate: AccessUserGroupMemberUpdate, options?: RequestInit): Promise<AccessGovernanceStatusResponse> => {
+
+  return customFetch<AccessGovernanceStatusResponse>(getSetAccessUserGroupMemberUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessUserGroupMemberUpdate)
+  }
+);}
+
+
+
+
+
+export const getSetAccessUserGroupMemberMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAccessUserGroupMember>>, TError,{id: string;data: BodyType<AccessUserGroupMemberUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setAccessUserGroupMember>>, TError,{id: string;data: BodyType<AccessUserGroupMemberUpdate>}, TContext> => {
+
+const mutationKey = ['setAccessUserGroupMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setAccessUserGroupMember>>, {id: string;data: BodyType<AccessUserGroupMemberUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setAccessUserGroupMember(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetAccessUserGroupMemberMutationResult = NonNullable<Awaited<ReturnType<typeof setAccessUserGroupMember>>>
+    export type SetAccessUserGroupMemberMutationBody = BodyType<AccessUserGroupMemberUpdate>
+    export type SetAccessUserGroupMemberMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Add or remove a principal from a user group
+ */
+export const useSetAccessUserGroupMember = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAccessUserGroupMember>>, TError,{id: string;data: BodyType<AccessUserGroupMemberUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setAccessUserGroupMember>>,
+        TError,
+        {id: string;data: BodyType<AccessUserGroupMemberUpdate>},
+        TContext
+      > => {
+      return useMutation(getSetAccessUserGroupMemberMutationOptions(options));
+    }
+
+export const getApproveAccessUserGroupMemberUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/user-groups/${id}/members/approve`
+}
+
+/**
+ * Owner only. expectedVersion must match the current user-group version; the reviewer must be an active owner other than the requester and member being approved.
+ * @summary Independently approve a pending sensitive user-group membership
+ */
+export const approveAccessUserGroupMember = async (id: string,
+    accessUserGroupMemberApproval: AccessUserGroupMemberApproval, options?: RequestInit): Promise<AccessGovernanceStatusResponse> => {
+
+  return customFetch<AccessGovernanceStatusResponse>(getApproveAccessUserGroupMemberUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessUserGroupMemberApproval)
+  }
+);}
+
+
+
+
+
+export const getApproveAccessUserGroupMemberMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessUserGroupMember>>, TError,{id: string;data: BodyType<AccessUserGroupMemberApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveAccessUserGroupMember>>, TError,{id: string;data: BodyType<AccessUserGroupMemberApproval>}, TContext> => {
+
+const mutationKey = ['approveAccessUserGroupMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveAccessUserGroupMember>>, {id: string;data: BodyType<AccessUserGroupMemberApproval>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  approveAccessUserGroupMember(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveAccessUserGroupMemberMutationResult = NonNullable<Awaited<ReturnType<typeof approveAccessUserGroupMember>>>
+    export type ApproveAccessUserGroupMemberMutationBody = BodyType<AccessUserGroupMemberApproval>
+    export type ApproveAccessUserGroupMemberMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Independently approve a pending sensitive user-group membership
+ */
+export const useApproveAccessUserGroupMember = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessUserGroupMember>>, TError,{id: string;data: BodyType<AccessUserGroupMemberApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveAccessUserGroupMember>>,
+        TError,
+        {id: string;data: BodyType<AccessUserGroupMemberApproval>},
+        TContext
+      > => {
+      return useMutation(getApproveAccessUserGroupMemberMutationOptions(options));
+    }
+
+export const getSetAccessUserGroupSecurityGroupUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/user-groups/${id}/security-groups`
+}
+
+/**
+ * Owner only. Retired groups cannot be attached.
+ * @summary Attach or detach a security group from a user group
+ */
+export const setAccessUserGroupSecurityGroup = async (id: string,
+    accessUserGroupSecurityGroupUpdate: AccessUserGroupSecurityGroupUpdate, options?: RequestInit): Promise<AccessGovernanceStatusResponse> => {
+
+  return customFetch<AccessGovernanceStatusResponse>(getSetAccessUserGroupSecurityGroupUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessUserGroupSecurityGroupUpdate)
+  }
+);}
+
+
+
+
+
+export const getSetAccessUserGroupSecurityGroupMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAccessUserGroupSecurityGroup>>, TError,{id: string;data: BodyType<AccessUserGroupSecurityGroupUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setAccessUserGroupSecurityGroup>>, TError,{id: string;data: BodyType<AccessUserGroupSecurityGroupUpdate>}, TContext> => {
+
+const mutationKey = ['setAccessUserGroupSecurityGroup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setAccessUserGroupSecurityGroup>>, {id: string;data: BodyType<AccessUserGroupSecurityGroupUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setAccessUserGroupSecurityGroup(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetAccessUserGroupSecurityGroupMutationResult = NonNullable<Awaited<ReturnType<typeof setAccessUserGroupSecurityGroup>>>
+    export type SetAccessUserGroupSecurityGroupMutationBody = BodyType<AccessUserGroupSecurityGroupUpdate>
+    export type SetAccessUserGroupSecurityGroupMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Attach or detach a security group from a user group
+ */
+export const useSetAccessUserGroupSecurityGroup = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAccessUserGroupSecurityGroup>>, TError,{id: string;data: BodyType<AccessUserGroupSecurityGroupUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setAccessUserGroupSecurityGroup>>,
+        TError,
+        {id: string;data: BodyType<AccessUserGroupSecurityGroupUpdate>},
+        TContext
+      > => {
+      return useMutation(getSetAccessUserGroupSecurityGroupMutationOptions(options));
+    }
+
+export const getApproveAccessUserGroupSecurityGroupUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/user-groups/${id}/security-groups/approve`
+}
+
+/**
+ * Owner of the security group only. expectedVersion must match its current policy version; the requester and policy must already have independent approval.
+ * @summary Independently approve a pending sensitive group attachment
+ */
+export const approveAccessUserGroupSecurityGroup = async (id: string,
+    accessUserGroupSecurityGroupApproval: AccessUserGroupSecurityGroupApproval, options?: RequestInit): Promise<AccessGovernanceStatusResponse> => {
+
+  return customFetch<AccessGovernanceStatusResponse>(getApproveAccessUserGroupSecurityGroupUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessUserGroupSecurityGroupApproval)
+  }
+);}
+
+
+
+
+
+export const getApproveAccessUserGroupSecurityGroupMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessUserGroupSecurityGroup>>, TError,{id: string;data: BodyType<AccessUserGroupSecurityGroupApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveAccessUserGroupSecurityGroup>>, TError,{id: string;data: BodyType<AccessUserGroupSecurityGroupApproval>}, TContext> => {
+
+const mutationKey = ['approveAccessUserGroupSecurityGroup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveAccessUserGroupSecurityGroup>>, {id: string;data: BodyType<AccessUserGroupSecurityGroupApproval>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  approveAccessUserGroupSecurityGroup(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveAccessUserGroupSecurityGroupMutationResult = NonNullable<Awaited<ReturnType<typeof approveAccessUserGroupSecurityGroup>>>
+    export type ApproveAccessUserGroupSecurityGroupMutationBody = BodyType<AccessUserGroupSecurityGroupApproval>
+    export type ApproveAccessUserGroupSecurityGroupMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Independently approve a pending sensitive group attachment
+ */
+export const useApproveAccessUserGroupSecurityGroup = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessUserGroupSecurityGroup>>, TError,{id: string;data: BodyType<AccessUserGroupSecurityGroupApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveAccessUserGroupSecurityGroup>>,
+        TError,
+        {id: string;data: BodyType<AccessUserGroupSecurityGroupApproval>},
+        TContext
+      > => {
+      return useMutation(getApproveAccessUserGroupSecurityGroupMutationOptions(options));
+    }
+
+export const getCreateAccessSecurityGroupUrl = () => {
+
+
+
+
+  return `/api/organizations/current/access/security-groups`
+}
+
+/**
+ * Owner only. Policies accept only keys in the reviewed access catalog; high-sensitivity policies require independent owner approval before sensitive grants become active.
+ * @summary Create a security group and its initial policy
+ */
+export const createAccessSecurityGroup = async (accessSecurityGroupInput: AccessSecurityGroupInput, options?: RequestInit): Promise<AccessSecurityGroupResponse> => {
+
+  return customFetch<AccessSecurityGroupResponse>(getCreateAccessSecurityGroupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessSecurityGroupInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAccessSecurityGroupMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccessSecurityGroup>>, TError,{data: BodyType<AccessSecurityGroupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAccessSecurityGroup>>, TError,{data: BodyType<AccessSecurityGroupInput>}, TContext> => {
+
+const mutationKey = ['createAccessSecurityGroup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAccessSecurityGroup>>, {data: BodyType<AccessSecurityGroupInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAccessSecurityGroup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAccessSecurityGroupMutationResult = NonNullable<Awaited<ReturnType<typeof createAccessSecurityGroup>>>
+    export type CreateAccessSecurityGroupMutationBody = BodyType<AccessSecurityGroupInput>
+    export type CreateAccessSecurityGroupMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Create a security group and its initial policy
+ */
+export const useCreateAccessSecurityGroup = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccessSecurityGroup>>, TError,{data: BodyType<AccessSecurityGroupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAccessSecurityGroup>>,
+        TError,
+        {data: BodyType<AccessSecurityGroupInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAccessSecurityGroupMutationOptions(options));
+    }
+
+export const getUpdateAccessSecurityGroupUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/security-groups/${id}`
+}
+
+/**
+ * Owner only. expectedVersion must match the current policy version. Sensitive keys require a different owner to approve the published policy.
+ * @summary Publish a new security-group policy version or retire the group
+ */
+export const updateAccessSecurityGroup = async (id: string,
+    accessSecurityGroupUpdate: AccessSecurityGroupUpdate, options?: RequestInit): Promise<AccessSecurityGroupVersionResponse> => {
+
+  return customFetch<AccessSecurityGroupVersionResponse>(getUpdateAccessSecurityGroupUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessSecurityGroupUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAccessSecurityGroupMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccessSecurityGroup>>, TError,{id: string;data: BodyType<AccessSecurityGroupUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAccessSecurityGroup>>, TError,{id: string;data: BodyType<AccessSecurityGroupUpdate>}, TContext> => {
+
+const mutationKey = ['updateAccessSecurityGroup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAccessSecurityGroup>>, {id: string;data: BodyType<AccessSecurityGroupUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAccessSecurityGroup(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAccessSecurityGroupMutationResult = NonNullable<Awaited<ReturnType<typeof updateAccessSecurityGroup>>>
+    export type UpdateAccessSecurityGroupMutationBody = BodyType<AccessSecurityGroupUpdate>
+    export type UpdateAccessSecurityGroupMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Publish a new security-group policy version or retire the group
+ */
+export const useUpdateAccessSecurityGroup = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccessSecurityGroup>>, TError,{id: string;data: BodyType<AccessSecurityGroupUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAccessSecurityGroup>>,
+        TError,
+        {id: string;data: BodyType<AccessSecurityGroupUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAccessSecurityGroupMutationOptions(options));
+    }
+
+export const getSetAccessPrincipalSecurityGroupGrantUrl = () => {
+
+
+
+
+  return `/api/organizations/current/access/grants`
+}
+
+/**
+ * Owner only. Grant targets must be active organization members or agents; sensitive policy resources are granted only after independent approval.
+ * @summary Grant or revoke a security group for a principal
+ */
+export const setAccessPrincipalSecurityGroupGrant = async (accessGrantUpdate: AccessGrantUpdate, options?: RequestInit): Promise<AccessGovernanceStatusResponse> => {
+
+  return customFetch<AccessGovernanceStatusResponse>(getSetAccessPrincipalSecurityGroupGrantUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessGrantUpdate)
+  }
+);}
+
+
+
+
+
+export const getSetAccessPrincipalSecurityGroupGrantMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAccessPrincipalSecurityGroupGrant>>, TError,{data: BodyType<AccessGrantUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setAccessPrincipalSecurityGroupGrant>>, TError,{data: BodyType<AccessGrantUpdate>}, TContext> => {
+
+const mutationKey = ['setAccessPrincipalSecurityGroupGrant'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setAccessPrincipalSecurityGroupGrant>>, {data: BodyType<AccessGrantUpdate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setAccessPrincipalSecurityGroupGrant(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetAccessPrincipalSecurityGroupGrantMutationResult = NonNullable<Awaited<ReturnType<typeof setAccessPrincipalSecurityGroupGrant>>>
+    export type SetAccessPrincipalSecurityGroupGrantMutationBody = BodyType<AccessGrantUpdate>
+    export type SetAccessPrincipalSecurityGroupGrantMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Grant or revoke a security group for a principal
+ */
+export const useSetAccessPrincipalSecurityGroupGrant = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAccessPrincipalSecurityGroupGrant>>, TError,{data: BodyType<AccessGrantUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setAccessPrincipalSecurityGroupGrant>>,
+        TError,
+        {data: BodyType<AccessGrantUpdate>},
+        TContext
+      > => {
+      return useMutation(getSetAccessPrincipalSecurityGroupGrantMutationOptions(options));
+    }
+
+export const getApproveAccessPrincipalSecurityGroupGrantUrl = () => {
+
+
+
+
+  return `/api/organizations/current/access/grants/approve`
+}
+
+/**
+ * Owner of the security group only. expectedVersion must match its current policy version; the grant target must be active and the policy independently approved.
+ * @summary Independently approve a pending sensitive direct grant
+ */
+export const approveAccessPrincipalSecurityGroupGrant = async (accessGrantApproval: AccessGrantApproval, options?: RequestInit): Promise<AccessGovernanceStatusResponse> => {
+
+  return customFetch<AccessGovernanceStatusResponse>(getApproveAccessPrincipalSecurityGroupGrantUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessGrantApproval)
+  }
+);}
+
+
+
+
+
+export const getApproveAccessPrincipalSecurityGroupGrantMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessPrincipalSecurityGroupGrant>>, TError,{data: BodyType<AccessGrantApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveAccessPrincipalSecurityGroupGrant>>, TError,{data: BodyType<AccessGrantApproval>}, TContext> => {
+
+const mutationKey = ['approveAccessPrincipalSecurityGroupGrant'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveAccessPrincipalSecurityGroupGrant>>, {data: BodyType<AccessGrantApproval>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  approveAccessPrincipalSecurityGroupGrant(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveAccessPrincipalSecurityGroupGrantMutationResult = NonNullable<Awaited<ReturnType<typeof approveAccessPrincipalSecurityGroupGrant>>>
+    export type ApproveAccessPrincipalSecurityGroupGrantMutationBody = BodyType<AccessGrantApproval>
+    export type ApproveAccessPrincipalSecurityGroupGrantMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Independently approve a pending sensitive direct grant
+ */
+export const useApproveAccessPrincipalSecurityGroupGrant = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessPrincipalSecurityGroupGrant>>, TError,{data: BodyType<AccessGrantApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveAccessPrincipalSecurityGroupGrant>>,
+        TError,
+        {data: BodyType<AccessGrantApproval>},
+        TContext
+      > => {
+      return useMutation(getApproveAccessPrincipalSecurityGroupGrantMutationOptions(options));
+    }
+
+export const getApproveAccessSecurityGroupPolicyUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/security-groups/${id}/approve`
+}
+
+/**
+ * Owner only; the reviewer must differ from the owner who created the policy. expectedVersion must match the current policy.
+ * @summary Independently approve a high-sensitivity security-group policy
+ */
+export const approveAccessSecurityGroupPolicy = async (id: string,
+    accessPolicyApproval: AccessPolicyApproval, options?: RequestInit): Promise<AccessPolicyApprovalResponse> => {
+
+  return customFetch<AccessPolicyApprovalResponse>(getApproveAccessSecurityGroupPolicyUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessPolicyApproval)
+  }
+);}
+
+
+
+
+
+export const getApproveAccessSecurityGroupPolicyMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessSecurityGroupPolicy>>, TError,{id: string;data: BodyType<AccessPolicyApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveAccessSecurityGroupPolicy>>, TError,{id: string;data: BodyType<AccessPolicyApproval>}, TContext> => {
+
+const mutationKey = ['approveAccessSecurityGroupPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveAccessSecurityGroupPolicy>>, {id: string;data: BodyType<AccessPolicyApproval>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  approveAccessSecurityGroupPolicy(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveAccessSecurityGroupPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof approveAccessSecurityGroupPolicy>>>
+    export type ApproveAccessSecurityGroupPolicyMutationBody = BodyType<AccessPolicyApproval>
+    export type ApproveAccessSecurityGroupPolicyMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Independently approve a high-sensitivity security-group policy
+ */
+export const useApproveAccessSecurityGroupPolicy = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAccessSecurityGroupPolicy>>, TError,{id: string;data: BodyType<AccessPolicyApproval>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveAccessSecurityGroupPolicy>>,
+        TError,
+        {id: string;data: BodyType<AccessPolicyApproval>},
+        TContext
+      > => {
+      return useMutation(getApproveAccessSecurityGroupPolicyMutationOptions(options));
+    }
+
+export const getInvokeRegisteredAgentToolUrl = () => {
+
+
+
+
+  return `/api/agent-invocations`
+}
+
+/**
+ * Authenticated human initiation is required. The server resolves the agent, owner, permissions, and case within the current tenant; request claims cannot establish authority. The currently executable tool is read-only case metadata lookup. Every authorized or denied attempt is durably audited.
+ * @summary Request a tool invocation by a registered organization agent
+ */
+export const invokeRegisteredAgentTool = async (agentInvocationInput: AgentInvocationInput, options?: RequestInit): Promise<AgentInvocationResponse> => {
+
+  return customFetch<AgentInvocationResponse>(getInvokeRegisteredAgentToolUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(agentInvocationInput)
+  }
+);}
+
+
+
+
+
+export const getInvokeRegisteredAgentToolMutationOptions = <TError = ErrorType<AgentInvocationError | AgentInvocationAuthenticationError | AgentInvocationDenied | AgentInvocationFailure>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invokeRegisteredAgentTool>>, TError,{data: BodyType<AgentInvocationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof invokeRegisteredAgentTool>>, TError,{data: BodyType<AgentInvocationInput>}, TContext> => {
+
+const mutationKey = ['invokeRegisteredAgentTool'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof invokeRegisteredAgentTool>>, {data: BodyType<AgentInvocationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  invokeRegisteredAgentTool(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvokeRegisteredAgentToolMutationResult = NonNullable<Awaited<ReturnType<typeof invokeRegisteredAgentTool>>>
+    export type InvokeRegisteredAgentToolMutationBody = BodyType<AgentInvocationInput>
+    export type InvokeRegisteredAgentToolMutationError = ErrorType<AgentInvocationError | AgentInvocationAuthenticationError | AgentInvocationDenied | AgentInvocationFailure>
+
+    /**
+ * @summary Request a tool invocation by a registered organization agent
+ */
+export const useInvokeRegisteredAgentTool = <TError = ErrorType<AgentInvocationError | AgentInvocationAuthenticationError | AgentInvocationDenied | AgentInvocationFailure>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invokeRegisteredAgentTool>>, TError,{data: BodyType<AgentInvocationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof invokeRegisteredAgentTool>>,
+        TError,
+        {data: BodyType<AgentInvocationInput>},
+        TContext
+      > => {
+      return useMutation(getInvokeRegisteredAgentToolMutationOptions(options));
+    }
+
+export const getListAgentInvocationAuditUrl = (params?: ListAgentInvocationAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/agent-invocations/audit?${stringifiedParams}` : `/api/agent-invocations/audit`
+}
+
+/**
+ * Tenant-scoped, read-only audit listing for organization owners and administrators. Returns no tool payload or case contents.
+ * @summary Read registered-agent invocation audit
+ */
+export const listAgentInvocationAudit = async (params?: ListAgentInvocationAuditParams, options?: RequestInit): Promise<AgentInvocationAuditList> => {
+
+  return customFetch<AgentInvocationAuditList>(getListAgentInvocationAuditUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentInvocationAuditQueryKey = (params?: ListAgentInvocationAuditParams,) => {
+    return [
+    `/api/agent-invocations/audit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAgentInvocationAuditQueryOptions = <TData = Awaited<ReturnType<typeof listAgentInvocationAudit>>, TError = ErrorType<AgentInvocationError | AgentInvocationAuditForbidden>>(params?: ListAgentInvocationAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentInvocationAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentInvocationAuditQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentInvocationAudit>>> = ({ signal }) => listAgentInvocationAudit(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentInvocationAudit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentInvocationAuditQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentInvocationAudit>>>
+export type ListAgentInvocationAuditQueryError = ErrorType<AgentInvocationError | AgentInvocationAuditForbidden>
+
+
+/**
+ * @summary Read registered-agent invocation audit
+ */
+
+export function useListAgentInvocationAudit<TData = Awaited<ReturnType<typeof listAgentInvocationAudit>>, TError = ErrorType<AgentInvocationError | AgentInvocationAuditForbidden>>(
+ params?: ListAgentInvocationAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentInvocationAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentInvocationAuditQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getCreateOrganizationUrl = () => {
 

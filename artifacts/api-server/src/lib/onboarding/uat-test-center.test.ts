@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { and, eq, like } from "drizzle-orm";
 import {
-  db, onbAuthorityAssignments, onbAuthorityGovernance, onbCandidateLinks, onbCases,
+  accessNamedGrants, db, onbAuthorityAssignments, onbAuthorityGovernance, onbCandidateLinks, onbCases,
   onbGovernanceDecisionReviews, onbGovernanceDecisions, onbGovernanceDispatchMarkers, onbGovernanceHistory,
   onbGovernanceReminders, onbGovernanceRequirements, onbSettings, organizationMembershipsTable, organizationsTable,
 } from "@workspace/db";
@@ -17,6 +17,40 @@ const organizationId = `${suffix}-a`;
 const otherOrganizationId = `${suffix}-b`;
 const actor = `${suffix}-actor`;
 const unauthorizedActor = `${suffix}-unauthorized`;
+
+async function grantUatCaseAccess(caseId: number) {
+  const resourceKeys = [
+    "data.case.profile.read",
+    "data.case.profile.edit",
+    "data.case.notes.read",
+    "data.case.notes.edit",
+    "flow.case.read",
+    "flow.case.edit",
+    "data.identity.read",
+    "data.identity.edit",
+    "data.medical.read",
+    "data.medical.edit",
+    "data.payroll.read",
+    "data.payroll.edit",
+    "data.bgv.read",
+    "data.bgv.edit",
+  ];
+  await db.insert(accessNamedGrants).values(resourceKeys.map((resourceKey) => ({
+    organizationId,
+    principalType: "human" as const,
+    principalId: actor,
+    scope: "case" as const,
+    caseId,
+    resourceType: resourceKey.startsWith("flow.") ? "flow" as const : "field" as const,
+    resourceKey,
+    source: "named" as const,
+    effect: "allow" as const,
+    requiresApproval: "yes" as const,
+    createdByUserId: actor,
+    approvedByUserId: `${suffix}-independent-approver`,
+    approvedAt: new Date(),
+  })));
+}
 
 describe("UAT Test Center durable isolation", { skip: !hasDb }, () => {
   before(async () => {
@@ -171,6 +205,7 @@ describe("UAT Test Center durable isolation", { skip: !hasDb }, () => {
 
   test("issues a no-email credential through the real authorized local UAT boundary", async () => {
     const run = await createUatRun(organizationId, actor, { scenarioId: "UAT-STD-01", requestId: randomUUID() });
+    await grantUatCaseAccess(run.linkedCaseIds[0]!);
     const issued = await applyUatAction(organizationId, actor, run.runId, {
       expectedVersion: run.version, requestId: randomUUID(), kind: "issue-candidate-portal",
     }, { publicBase: "https://uat.invalid" });

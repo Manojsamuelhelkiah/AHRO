@@ -1,51 +1,61 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AUTHORITY_ROLES, ROLE_SCOPE_MATRIX } from "./decision-authority";
-import { syntheticDemoAuthorityRows } from "./demo-admin-access";
 import {
-  isSyntheticDemoAuthority,
-  SYNTHETIC_DEMO_AUTHORITY_SOURCE,
+  isExplicitSyntheticDemoCase,
+  isVerifiedHybridDemoControllerCase,
+} from "./demo-admin-access";
+import {
   SYNTHETIC_OFFLINE_MARKER,
 } from "./synthetic-offline";
 
-test("demo administrator grants cover every role only for synthetic cases", () => {
-  const rows = syntheticDemoAuthorityRows("user_demo_admin", [
-    { id: 11, notes: SYNTHETIC_OFFLINE_MARKER, scenarioKey: "demo-case" },
-    { id: 12, notes: null, scenarioKey: "UAT-CLIENT-01" },
-    { id: 13, notes: null, scenarioKey: "ordinary-case" },
-  ]);
+test("synthetic Demo read access requires server-owned provenance as well as the offline marker", () => {
+  assert.equal(isExplicitSyntheticDemoCase({
+    notes: SYNTHETIC_OFFLINE_MARKER,
+    scenarioKey: "demo-case",
+    syntheticProvenance: "onboarding-demo-fictional",
+  }), true);
+  assert.equal(isExplicitSyntheticDemoCase({
+    notes: null,
+    scenarioKey: "ordinary-case",
+    syntheticProvenance: null,
+  }), false);
 
-  assert.equal(rows.length, AUTHORITY_ROLES.length * 2);
-  assert.deepEqual(new Set(rows.map((row) => row.caseId)), new Set([11, 12]));
-  assert.ok(rows.every((row) => row.organizationId === "demo"));
-  assert.ok(rows.every((row) => row.personUserId === "user_demo_admin"));
-  assert.ok(rows.every((row) => row.emailResponderAuthorized === false));
-  assert.ok(rows.every((row) => row.source === SYNTHETIC_DEMO_AUTHORITY_SOURCE));
-  for (const row of rows) {
-    assert.deepEqual(row.scopes, ROLE_SCOPE_MATRIX[row.authorityRole]);
-  }
+  const clientBatchLikeCase = {
+    notes: SYNTHETIC_OFFLINE_MARKER,
+    scenarioKey: "ordinary-batch-case",
+    syntheticProvenance: null,
+    workforceContext: { hiringMode: "batch" },
+  };
+  assert.equal(
+    isExplicitSyntheticDemoCase(clientBatchLikeCase),
+    false,
+    "a batch-like case cannot acquire synthetic status by copying client-visible marker text",
+  );
+
+  assert.equal(isExplicitSyntheticDemoCase({
+    notes: `${SYNTHETIC_OFFLINE_MARKER}\nUAT fixture`,
+    scenarioKey: "UAT-CLIENT-02",
+    syntheticProvenance: "onboarding-demo-fictional",
+  }), false);
 });
 
-test("synthetic authority cannot cross tenant, case, or source boundaries", () => {
-  const syntheticCase = { scenarioKey: "UAT-CLIENT-01", notes: null };
-  assert.equal(isSyntheticDemoAuthority({
-    organizationId: "demo",
-    caseRow: syntheticCase,
-    source: SYNTHETIC_DEMO_AUTHORITY_SOURCE,
+test("volunteer-backed hybrid access remains a separate verified Demo Controller path", () => {
+  assert.equal(isVerifiedHybridDemoControllerCase({
+    notes: "[demo-controller-run:run-1]",
+    scenarioKey: "demo-controller",
+    candidateEmailAuthorizedAt: new Date(),
+    candidateEmailAuthorizedBy: "demo-controller",
   }), true);
-  assert.equal(isSyntheticDemoAuthority({
-    organizationId: "client",
-    caseRow: syntheticCase,
-    source: SYNTHETIC_DEMO_AUTHORITY_SOURCE,
+  assert.equal(isVerifiedHybridDemoControllerCase({
+    notes: `${SYNTHETIC_OFFLINE_MARKER}\n[demo-controller-run:forged]`,
+    scenarioKey: "ordinary-case",
+    candidateEmailAuthorizedAt: null,
+    candidateEmailAuthorizedBy: null,
   }), false);
-  assert.equal(isSyntheticDemoAuthority({
-    organizationId: "demo",
-    caseRow: { scenarioKey: "ordinary-case", notes: null },
-    source: SYNTHETIC_DEMO_AUTHORITY_SOURCE,
-  }), false);
-  assert.equal(isSyntheticDemoAuthority({
-    organizationId: "demo",
-    caseRow: syntheticCase,
-    source: "governance-approved",
+  assert.equal(isVerifiedHybridDemoControllerCase({
+    notes: "[demo-controller-run:run-1]",
+    scenarioKey: "UAT-CLIENT-02",
+    candidateEmailAuthorizedAt: new Date(),
+    candidateEmailAuthorizedBy: "demo-controller",
   }), false);
 });

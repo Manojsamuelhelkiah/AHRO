@@ -40,8 +40,12 @@ test("ordinary provider-deny policy remains authoritative inside a demo scope", 
   });
 });
 
-test("synthetic marker remains the authoritative ordinary-engine boundary", () => {
-  assert.equal(isSyntheticOfflineCase({ notes: SYNTHETIC_OFFLINE_MARKER }), true);
+test("synthetic offline boundary requires durable provenance and the marker", () => {
+  assert.equal(isSyntheticOfflineCase({ notes: SYNTHETIC_OFFLINE_MARKER }), false);
+  assert.equal(isSyntheticOfflineCase({
+    notes: SYNTHETIC_OFFLINE_MARKER,
+    syntheticProvenance: "synthetic-reset",
+  }), true);
   assert.equal(isSyntheticOfflineCase({ notes: "edited name only" }), false);
 });
 

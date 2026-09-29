@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  accessNamedGrants,
   db,
   DEMO_ORGANIZATION_ID,
+  onbAuthorityAssignments,
   onbCases,
   onbDocuments,
   onbEvents,
@@ -24,9 +26,11 @@ import {
 } from "@workspace/api-zod";
 import { createRequireAuth } from "../../middlewares/require-auth";
 import onboardingDemoControllerRouter from "../../routes/onboarding-demo-controller";
+import { demoPrincipalSettingKey } from "../demo-principal";
 import { DEMO_RUN_KEY_PREFIX } from "./demo-controller";
 import { DEMO_VOLUNTEERS_KEY, normalizeVolunteer } from "./demo-volunteers";
 import { SENSITIVE_DATA_CLASSES } from "./sensitive-lifecycle";
+import { SYNTHETIC_DEMO_AUTHORITY_SOURCE } from "./synthetic-offline";
 
 /**
  * These are intentionally development-only database tests. The normal
@@ -114,6 +118,7 @@ async function request(
   options: RequestInit = {},
   organizationId = DEMO_ORGANIZATION_ID,
   role: string | null = "owner",
+  authUserId = "demo-controller-regression-test",
 ): Promise<RequestResult> {
   const response = await fetch(`${routeBaseUrl}${path}`, {
     ...options,
@@ -121,6 +126,7 @@ async function request(
       "content-type": "application/json",
       "x-organization-id": organizationId,
       "x-test-auth": "signed-in",
+      "x-test-user": authUserId,
       ...(role === null ? {} : { "x-test-role": role }),
       ...(options.headers ?? {}),
     },
@@ -279,7 +285,7 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
       req.organizationRole = roleFromHeader(req.header("x-test-role"));
       const userId = req.header("x-test-auth") === "unauthenticated"
         ? null
-        : "demo-controller-regression-test";
+        : String(req.header("x-test-user") ?? "demo-controller-regression-test");
       const authHandler = Object.assign(
         () => ({ userId, sessionClaims: null, tokenType: "session_token" }),
         { [Symbol.for("@clerk/express.auth")]: true },
@@ -649,6 +655,8 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
 
   test("blocks volunteer runs and live actions when verified reviewer authority is revoked or expired", async () => {
     const reviewerId = `demo-controller-reviewer-${randomUUID()}`;
+    const administratorId = `demo-controller-administrator-${randomUUID()}`;
+    const administratorProfileKey = demoPrincipalSettingKey(administratorId);
     const [originalVolunteerSetting] = await db.select().from(onbSettings).where(and(
       eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
       eq(onbSettings.key, DEMO_VOLUNTEERS_KEY),
@@ -670,12 +678,18 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
     });
     let assignmentId: number | null = null;
 
-    const createVolunteerRun = async (volunteerId: string): Promise<RequestResult> => request(
+    const createVolunteerRun = async (
+      volunteerId: string,
+      actor = administratorId,
+    ): Promise<RequestResult> => request(
       "/onboarding/demo-runs",
       {
         method: "POST",
         body: JSON.stringify({ scenario: "standard-fte", volunteerId, mode: "hybrid" }),
       },
+      DEMO_ORGANIZATION_ID,
+      "owner",
+      actor,
     );
     const assertAuthorityBlocked = (result: RequestResult): void => {
       assert.equal(result.response.status, 409);
@@ -704,6 +718,16 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
         organizationId: DEMO_ORGANIZATION_ID,
         clerkUserId: reviewerId,
         role: "member",
+      });
+      await db.insert(organizationMembershipsTable).values({
+        organizationId: DEMO_ORGANIZATION_ID,
+        clerkUserId: administratorId,
+        role: "member",
+      });
+      await db.insert(onbSettings).values({
+        organizationId: DEMO_ORGANIZATION_ID,
+        key: administratorProfileKey,
+        value: "administrator",
       });
       const [assignment] = await db.insert(onbGovernanceAuthorityAssignments).values({
         organizationId: DEMO_ORGANIZATION_ID,
@@ -752,6 +776,43 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
       assert.equal(created.response.status, 201, JSON.stringify(created.body));
       const pinnedRun = CreateOnboardingDemoRunResponse.parse(created.body) as unknown as PublicRun;
       rememberOwnedRun(pinnedRun);
+      const caseAccessGrants = await db.select({
+        resourceKey: accessNamedGrants.resourceKey,
+        scope: accessNamedGrants.scope,
+        caseId: accessNamedGrants.caseId,
+      }).from(accessNamedGrants).where(and(
+        eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
+        eq(accessNamedGrants.principalId, administratorId),
+        eq(accessNamedGrants.scope, "case"),
+        eq(accessNamedGrants.caseId, pinnedRun.caseId),
+        eq(accessNamedGrants.source, "named"),
+        eq(accessNamedGrants.effect, "allow"),
+      ));
+      assert.deepEqual(
+        caseAccessGrants.map((grant) => grant.resourceKey).sort(),
+        [
+          "data.case.notes.read",
+          "data.case.profile.read",
+          "data.case.readiness.read",
+          "data.documents.read",
+          "flow.case.read",
+        ].sort(),
+      );
+      assert.ok(caseAccessGrants.every((grant) =>
+        grant.scope === "case" && grant.caseId === pinnedRun.caseId
+      ));
+      const volunteeredCaseAuthority = await db.select().from(onbAuthorityAssignments).where(and(
+        eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
+        eq(onbAuthorityAssignments.personUserId, administratorId),
+        eq(onbAuthorityAssignments.caseId, pinnedRun.caseId),
+        eq(onbAuthorityAssignments.source, SYNTHETIC_DEMO_AUTHORITY_SOURCE),
+        eq(onbAuthorityAssignments.status, "active"),
+      ));
+      assert.equal(
+        volunteeredCaseAuthority.length,
+        0,
+        "a policy-authorized Demo volunteer does not delegate specialist authority to the administrator",
+      );
 
       await db.update(onbGovernanceAuthorityAssignments).set({
         revokedAt: new Date(),
@@ -825,6 +886,14 @@ describe("demo-controller durable regression flow", { skip: !hasDevelopmentDb },
       await db.delete(organizationMembershipsTable).where(and(
         eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
         eq(organizationMembershipsTable.clerkUserId, reviewerId),
+      ));
+      await db.delete(onbSettings).where(and(
+        eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+        eq(onbSettings.key, administratorProfileKey),
+      ));
+      await db.delete(organizationMembershipsTable).where(and(
+        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+        eq(organizationMembershipsTable.clerkUserId, administratorId),
       ));
       if (originalVolunteerSetting) {
         await db.insert(onbSettings).values(originalVolunteerSetting).onConflictDoUpdate({

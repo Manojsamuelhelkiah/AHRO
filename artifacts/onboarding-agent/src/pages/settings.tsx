@@ -31,6 +31,7 @@ import { SyntheticResetCard } from './settings-synthetic-reset';
 import { ActionCenterIdentitiesSettings } from './action-center-settings';
 import { JobProfilesAndAuthorities } from './settings-job-profiles';
 import { OrganizationMembersSettings } from './settings-organization-members';
+import { AccessGovernanceSettings } from './settings-access-governance';
 import { PrivacyAdministrationCard } from './settings-privacy-tab';
 import { EarlyTenureSettingsCard } from './settings-early-tenure';
 
@@ -844,6 +845,7 @@ export function SettingsPage() {
         <PrivacyAdministrationCard />
       </div>
       <OrganizationMembersSettings />
+      <AccessGovernanceSettings />
       <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">
           <div className="flex items-center gap-3">

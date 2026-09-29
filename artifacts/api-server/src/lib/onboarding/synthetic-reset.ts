@@ -960,6 +960,7 @@ async function createFreshCases(
         scenarioKey: scenario.key,
         planSummary: null,
         notes: `${SYNTHETIC_OFFLINE_MARKER} Synthetic offline sample. No real outreach, orchestration, provider dispatch, or readiness completion.`,
+        syntheticProvenance: "synthetic-reset",
         candidateEmailAuthorizedAt: null,
         candidateEmailAuthorizedBy: null,
         offerAcceptanceComplete: false,

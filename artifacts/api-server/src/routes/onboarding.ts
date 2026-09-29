@@ -40,6 +40,7 @@ import {
   onbJobProfiles,
   onbIntakeBatchPeople,
   organizationMembershipsTable,
+  type OnbSyntheticProvenance,
 } from "@workspace/db/schema";
 import {
   CreateOnboardingCaseBody,
@@ -193,6 +194,11 @@ import {
 } from "../lib/onboarding/outcome-reporting";
 import { clerkClient } from "@clerk/express";
 import {
+  resolveEffectiveAccess,
+  resolveEffectiveAccessInTransaction,
+  type EffectiveAccess,
+} from "../lib/access-governance";
+import {
   getOrganizationId,
   organizationValues,
   organizationWhere,
@@ -283,6 +289,8 @@ import {
 import {
   ensureSyntheticDemoAdminAccess,
   grantSyntheticDemoAuthorityForCase,
+  isExplicitSyntheticDemoCase,
+  isVerifiedHybridDemoControllerCase,
   SyntheticDemoCaseAuthorityDeniedError,
 } from "../lib/onboarding/demo-admin-access";
 import {
@@ -312,11 +320,101 @@ const router: IRouter = Router();
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
 const RESTRICTED_WORKFORCE_CONTEXT_MESSAGE =
   "This workforce-context correction cannot be saved here. No specialist handoff is available here; no changes were made.";
+const CASE_PROFILE_READ_KEY = "data.case.profile.read";
+const CASE_PROFILE_EDIT_KEY = "data.case.profile.edit";
+const CASE_NOTES_READ_KEY = "data.case.notes.read";
+const CASE_NOTES_EDIT_KEY = "data.case.notes.edit";
+const CASE_FLOW_READ_KEY = "flow.case.read";
+const CASE_FLOW_EDIT_KEY = "flow.case.edit";
+
+type CaseGovernanceAccess = {
+  flowRead: boolean;
+  profileRead: boolean;
+  profileEdit: boolean;
+  notesRead: boolean;
+  notesEdit: boolean;
+  flowEdit: boolean;
+  readinessRead: boolean;
+  readinessEdit: boolean;
+  documentsRead: boolean;
+  documentsEdit: boolean;
+  documentReviewRead: boolean;
+  documentReviewEdit: boolean;
+};
+
+const NO_CASE_GOVERNANCE_ACCESS: CaseGovernanceAccess = {
+  flowRead: false,
+  profileRead: false,
+  profileEdit: false,
+  notesRead: false,
+  notesEdit: false,
+  flowEdit: false,
+  readinessRead: false,
+  readinessEdit: false,
+  documentsRead: false,
+  documentsEdit: false,
+  documentReviewRead: false,
+  documentReviewEdit: false,
+};
+
+function isDay1ReadinessApproval(
+  approval: Pick<typeof onbApprovals.$inferSelect, "caseId" | "idempotencyKey">,
+): boolean {
+  return approval.idempotencyKey === `gateway-c:${approval.caseId}:human-queue`;
+}
+
+function caseGovernanceAccessFromEffective(access: EffectiveAccess): CaseGovernanceAccess {
+  return {
+    flowRead: access.allows.includes(CASE_FLOW_READ_KEY),
+    profileRead: access.allows.includes(CASE_PROFILE_READ_KEY),
+    profileEdit: access.allows.includes(CASE_PROFILE_EDIT_KEY),
+    notesRead: access.allows.includes(CASE_NOTES_READ_KEY),
+    notesEdit: access.allows.includes(CASE_NOTES_EDIT_KEY),
+    flowEdit: access.allows.includes(CASE_FLOW_EDIT_KEY),
+    readinessRead: access.allows.includes("data.case.readiness.read"),
+    readinessEdit: access.allows.includes("data.case.readiness.edit"),
+    documentsRead: access.allows.includes("data.documents.read"),
+    documentsEdit: access.allows.includes("data.documents.edit"),
+    documentReviewRead: access.allows.includes("flow.document-review.read"),
+    documentReviewEdit: access.allows.includes("flow.document-review.edit"),
+  };
+}
+
+async function caseGovernanceAccessForRequest(
+  req: Request,
+  row: Pick<typeof onbCases.$inferSelect, "organizationId" | "id">,
+): Promise<CaseGovernanceAccess> {
+  if (!req.authUserId) return NO_CASE_GOVERNANCE_ACCESS;
+  const access = await resolveEffectiveAccess({
+    organizationId: row.organizationId,
+    principalType: "human",
+    principalId: req.authUserId,
+    caseId: row.id,
+    purpose: "onboarding-case-api",
+  });
+  return caseGovernanceAccessFromEffective(access);
+}
+
+function caseFlowReadRequired(res: Response, access: CaseGovernanceAccess): boolean {
+  if (access.flowRead) return true;
+  res.status(403).json({
+    message: "Current case-read access is required for this case.",
+    code: "CASE_ACCESS_REQUIRED",
+  });
+  return false;
+}
 
 class WorkforceContextCorrectionPreconditionError extends Error {
   constructor(readonly kind: "not-found" | "conflict") {
     super(kind);
     this.name = "WorkforceContextCorrectionPreconditionError";
+  }
+}
+
+class ReadinessGovernanceAccessRequiredError extends Error {
+  constructor() {
+    super("An explicit data.case.readiness.edit grant is required.");
+    this.name = "ReadinessGovernanceAccessRequiredError";
   }
 }
 
@@ -359,9 +457,14 @@ function requireOperationalMutationRole(
 async function demoPrincipalVisibleCases<T extends {
   notes: string | null;
   scenarioKey: string | null;
+  syntheticProvenance?: OnbSyntheticProvenance | null;
+  candidateEmailAuthorizedAt?: Date | null;
+  candidateEmailAuthorizedBy?: string | null;
 }>(req: Request, rows: T[]): Promise<T[]> {
   return await registeredDemoProfile(req.authUserId!)
-    ? rows.filter(isSyntheticOfflineCase)
+    ? rows.filter((row) =>
+      isSyntheticOfflineCase(row) || isVerifiedHybridDemoControllerCase(row)
+    )
     : rows;
 }
 
@@ -379,13 +482,20 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
     const [caseRow] = await db.select({
       notes: onbCases.notes,
       scenarioKey: onbCases.scenarioKey,
+      syntheticProvenance: onbCases.syntheticProvenance,
+      candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
+      candidateEmailAuthorizedBy: onbCases.candidateEmailAuthorizedBy,
     }).from(onbCases).where(and(
       eq(onbCases.organizationId, getOrganizationId(req)),
       eq(onbCases.id, caseId),
     )).limit(1);
-    if (!caseRow || !isSyntheticOfflineCase(caseRow)) {
+    if (
+      !caseRow ||
+      (!isSyntheticOfflineCase(caseRow) &&
+        !isVerifiedHybridDemoControllerCase(caseRow))
+    ) {
       res.status(403).json({
-        message: "Shared demo accounts may only access server-marked synthetic cases.",
+        message: "Shared demo accounts require server-owned synthetic provenance or a verified Demo Controller run.",
         code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
       });
       return;
@@ -609,71 +719,124 @@ function redactWorkforceClassification(
 async function serializeCase(
   row: typeof onbCases.$inferSelect,
   sensitiveAccess: SensitiveAccess = NO_SENSITIVE_ACCESS,
+  caseAccess: CaseGovernanceAccess = NO_CASE_GOVERNANCE_ACCESS,
 ) {
   const gateways = await deriveGateways(row);
+  const canReadProfile = caseAccess.profileRead && caseAccess.flowRead;
+  const canReadNotes = caseAccess.notesRead && caseAccess.flowRead;
+  const canReadReadiness = caseAccess.readinessRead && caseAccess.flowRead;
+  // The marker is server-owned. Offline, unauthorized Demo cases are wholly
+  // fictional fixtures, so their identity projection does not imply or grant
+  // sensitive-record authority. Volunteered/hybrid cases remain protected.
+  const fictionalOfflineIdentity =
+    row.organizationId === DEMO_ORGANIZATION_ID &&
+    row.candidateEmailAuthorizedAt === null &&
+    row.candidateEmailAuthorizedBy === null &&
+    isExplicitSyntheticDemoCase(row);
+  const canReadIdentity = canReadProfile &&
+    (sensitiveAccess.identity || fictionalOfflineIdentity);
+  const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   return {
     id: row.id,
-    workerName: sensitiveAccess.identity ? row.workerName : "Restricted candidate",
-    workerEmail: sensitiveAccess.identity ? row.workerEmail : null,
-    workerPhone: sensitiveAccess.identity ? row.workerPhone : null,
-    channelPreference: row.channelPreference,
-    hireType: row.hireType,
-    workerCategory: row.workerCategory,
-    workerBand: row.workerBand,
-    role: row.role,
-    department: row.department,
-    geography: row.geography,
-    legalEntity: row.legalEntity,
-    managerName: sensitiveAccess.identity ? row.managerName : null,
-    recruiterName: sensitiveAccess.identity ? row.recruiterName : null,
-    joiningDate: row.joiningDate,
-    urgency: row.urgency,
+    workerName: canReadIdentity ? row.workerName : "Restricted candidate",
+    workerEmail: canReadIdentity ? row.workerEmail : null,
+    workerPhone: canReadIdentity ? row.workerPhone : null,
+    channelPreference: canReadProfile ? row.channelPreference : null,
+    hireType: canReadProfile ? row.hireType : "Restricted case profile",
+    workerCategory: canReadProfile ? row.workerCategory : "Restricted case profile",
+    workerBand: canReadProfile ? row.workerBand : null,
+    role: canReadProfile ? row.role : "Restricted case profile",
+    department: canReadProfile ? row.department : "Restricted case profile",
+    geography: canReadProfile ? row.geography : "Restricted case profile",
+    legalEntity: canReadProfile ? row.legalEntity : "Restricted case profile",
+    managerName: canReadIdentity ? row.managerName : "Restricted candidate",
+    recruiterName: canReadIdentity ? row.recruiterName : "Restricted candidate",
+    joiningDate: canReadProfile ? row.joiningDate : "Restricted",
+    urgency: canReadProfile ? row.urgency : "Restricted",
     lifecycleStage: row.lifecycleStage,
     orchestrationStatus: row.orchestrationStatus,
-    readiness: redactOperationalItems(row.readiness, sensitiveAccess),
-    workstreams: redactOperationalItems(row.workstreams, sensitiveAccess),
-    primarySkill: row.primarySkill,
-    skillCriticality: row.skillCriticality,
-    scenarioKey: row.scenarioKey,
+    readiness: canReadReadiness
+      ? redactOperationalItems(row.readiness, profileSensitiveAccess)
+      : [],
+    workstreams: redactOperationalItems(row.workstreams, profileSensitiveAccess),
+    primarySkill: canReadProfile ? row.primarySkill : null,
+    skillCriticality: canReadProfile ? row.skillCriticality : null,
+    scenarioKey: canReadProfile ? row.scenarioKey : null,
     // This server-derived output flag keeps every marker-backed offline case
     // out of interactive provider/contact controls in the client.
     offlineSample: isSyntheticOfflineCase(row),
-    planSummary: redactSensitiveText(row.planSummary, sensitiveAccess) ?? null,
+    /** Only server-marked, fictional Demo fixtures may bypass identity authority. */
+    fictionalOfflineIdentity: canReadProfile && fictionalOfflineIdentity,
+    planSummary: canReadNotes
+      ? redactSensitiveText(row.planSummary, sensitiveAccess) ?? null
+      : null,
     checklistTemplateVersion: row.checklistTemplateVersion,
-    checklistSnapshot: redactOperationalItems(row.checklistSnapshot, sensitiveAccess),
-    checklistProfileId: row.checklistProfileId,
-    checklistProfileName: row.checklistProfileName,
+    checklistSnapshot: canReadReadiness
+      ? redactOperationalItems(row.checklistSnapshot, profileSensitiveAccess)
+      : [],
+    checklistProfileId: canReadProfile ? row.checklistProfileId : "restricted",
+    checklistProfileName: canReadProfile ? row.checklistProfileName : "Restricted case profile",
     checklistProfileVersion: row.checklistProfileVersion ?? row.checklistTemplateVersion,
-    checklistMatchedCriteria: row.checklistMatchedCriteria,
-    checklistMatchExplanation: redactSensitiveText(row.checklistMatchExplanation, sensitiveAccess) ?? null,
-    workforceContext: redactCaseWorkforceContext(row.workforceContext, sensitiveAccess),
-    workforceClassification: redactWorkforceClassification(row.workforceClassification, sensitiveAccess),
+    checklistMatchedCriteria: canReadProfile && hasOpaqueNarrativeAccess(sensitiveAccess)
+      ? row.checklistMatchedCriteria
+      : {},
+    checklistMatchExplanation: canReadProfile && canReadNotes
+      ? redactSensitiveText(row.checklistMatchExplanation, sensitiveAccess) ?? null
+      : "Restricted case profile.",
+    workforceContext: canReadProfile
+      ? redactCaseWorkforceContext(row.workforceContext, sensitiveAccess)
+      : {},
+    workforceClassification: canReadProfile
+      ? redactWorkforceClassification(row.workforceClassification, sensitiveAccess)
+      : null,
     workforceContextVersion: row.workforceContextVersion,
-    processPolicySnapshot: row.processPolicySnapshot,
-    jobProfileId: row.jobProfileId,
-    jobProfileVersion: row.jobProfileVersion,
+    processPolicySnapshot: canReadProfile && hasOpaqueNarrativeAccess(sensitiveAccess)
+      ? row.processPolicySnapshot
+      : {},
+    jobProfileId: canReadProfile ? row.jobProfileId : null,
+    jobProfileVersion: canReadProfile ? row.jobProfileVersion : null,
     orchestrationCheckpoint: row.orchestrationCheckpoint,
     candidateEmailAuthorized: Boolean(row.candidateEmailAuthorizedAt),
     offerAcceptanceComplete: row.offerAcceptanceComplete,
     offerAcceptanceCompletedAt: iso(row.offerAcceptanceCompletedAt),
     offerAcceptanceCompletedBy: row.offerAcceptanceCompletedBy,
-    gateways,
+    gateways: canReadReadiness
+      ? gateways
+      : {
+          a: { status: "restricted", label: "Restricted readiness", reason: "Readiness details are restricted." },
+          b: { status: "restricted", label: "Restricted readiness", reason: "Readiness details are restricted." },
+          c: { status: "restricted", label: "Restricted readiness", reason: "Readiness details are restricted." },
+        },
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-function serializeEvent(row: typeof onbEvents.$inferSelect, sensitiveAccess: SensitiveAccess = NO_SENSITIVE_ACCESS) {
+function serializeEvent(
+  row: typeof onbEvents.$inferSelect,
+  sensitiveAccess: SensitiveAccess = NO_SENSITIVE_ACCESS,
+  caseAccess: CaseGovernanceAccess = NO_CASE_GOVERNANCE_ACCESS,
+) {
+  const canReadNarrative = row.caseId === null ||
+    (caseAccess.flowRead && caseAccess.notesRead && caseAccess.profileRead);
   return {
     ...row,
-    title: redactSensitiveText(row.title, sensitiveAccess) ?? "Restricted confidential onboarding event.",
-    detail: redactSensitiveText(row.detail, sensitiveAccess) ?? "Restricted confidential onboarding event.",
+    title: canReadNarrative
+      ? redactSensitiveText(row.title, sensitiveAccess) ?? "Restricted confidential onboarding event."
+      : "Restricted case event.",
+    detail: canReadNarrative
+      ? redactSensitiveText(row.detail, sensitiveAccess) ?? "Restricted confidential onboarding event."
+      : "Restricted case event.",
     createdAt: row.createdAt.toISOString(),
   };
 }
 
 async function serializeCaseForRequest(req: Request, row: typeof onbCases.$inferSelect) {
-  return serializeCase(row, await sensitiveAccessForCase(req, row));
+  const [sensitiveAccess, caseAccess] = await Promise.all([
+    sensitiveAccessForCase(req, row),
+    caseGovernanceAccessForRequest(req, row),
+  ]);
+  return serializeCase(row, sensitiveAccess, caseAccess);
 }
 
 async function serializeEventForRequest(req: Request, row: typeof onbEvents.$inferSelect) {
@@ -684,7 +847,13 @@ async function serializeEventForRequest(req: Request, row: typeof onbEvents.$inf
       caseId: row.caseId,
       actorUserId: req.authUserId,
     });
-  return serializeEvent(row, sensitiveAccess);
+  const caseAccess = row.caseId === null
+    ? NO_CASE_GOVERNANCE_ACCESS
+    : await caseGovernanceAccessForRequest(req, {
+      organizationId: row.organizationId,
+      id: row.caseId,
+    });
+  return serializeEvent(row, sensitiveAccess, caseAccess);
 }
 
 async function insertCaseAndStart(
@@ -693,9 +862,16 @@ async function insertCaseAndStart(
   options?: {
     startOrchestration?: boolean;
     syntheticOffline?: boolean;
+    syntheticProvenance?: OnbSyntheticProvenance;
     onInserted?: (tx: OnboardingDbTransaction, row: typeof onbCases.$inferSelect) => Promise<void>;
   },
 ) {
+  if (options?.syntheticOffline && !options.syntheticProvenance) {
+    throw new Error("Synthetic offline case creation requires explicit server-owned provenance.");
+  }
+  if (!options?.syntheticOffline && options?.syntheticProvenance) {
+    throw new Error("Synthetic case provenance is valid only for synthetic offline creation.");
+  }
   const logisticsDefault = await getDay1LogisticsDefault(organizationId);
   // Snapshot before the insert only. Existing cases are intentionally never
   // rewritten when a governance revision later changes.
@@ -738,6 +914,7 @@ async function insertCaseAndStart(
       .values({
         ...values,
         ...organizationValues(organizationId),
+        syntheticProvenance: options?.syntheticProvenance ?? null,
         checklistTemplateVersion: profile.templateVersion,
         checklistSnapshot: workforcePolicy.effectiveItems,
         checklistProfileId: profile.profileId,
@@ -779,11 +956,18 @@ async function insertCaseAndStart(
 router.get("/onboarding/dashboard", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
-    const cases = await demoPrincipalVisibleCases(req, await excludeUatAggregateCases(await db
+    const ownedCases = await demoPrincipalVisibleCases(req, await excludeUatAggregateCases(await db
       .select()
       .from(onbCases)
       .where(organizationWhere(onbCases, organizationId))));
+    const cases = (await Promise.all(ownedCases.map(async (row) =>
+      (await caseGovernanceAccessForRequest(req, row)).flowRead ? row : null,
+    ))).filter((row): row is typeof ownedCases[number] => row !== null);
+    const readinessCases = (await Promise.all(cases.map(async (row) =>
+      (await caseGovernanceAccessForRequest(req, row)).readinessRead ? row : null,
+    ))).filter((row): row is typeof cases[number] => row !== null);
     const aggregateCaseIds = new Set(cases.map((row) => row.id));
+    const readinessCaseIds = new Set(readinessCases.map((row) => row.id));
 
     const approvalRows = await db
       .select({ approval: onbApprovals })
@@ -793,7 +977,9 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
     const approvals = approvalRows
       .map(({ approval }) => approval)
       .filter((approval) =>
-        approval.status === "pending" && aggregateCaseIds.has(approval.caseId));
+        approval.status === "pending" &&
+        aggregateCaseIds.has(approval.caseId) &&
+        (!isDay1ReadinessApproval(approval) || readinessCaseIds.has(approval.caseId)));
     const recent = (await db
       .select()
       .from(onbEvents)
@@ -808,7 +994,7 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
       byStageMap.set(c.lifecycleStage, (byStageMap.get(c.lifecycleStage) ?? 0) + 1);
     }
     const now = Date.now();
-    const day1AtRisk = cases.filter((c) => {
+    const day1AtRisk = readinessCases.filter((c) => {
       const days = (new Date(c.joiningDate).getTime() - now) / 86400000;
       const blocked =
         c.orchestrationStatus === "blocked" ||
@@ -823,7 +1009,7 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
       pendingApprovals: approvals.length,
       hardBlocked: approvals.filter((approval) => approval.hitlPattern === "hard-block").length,
       day1AtRisk,
-      readyCases: cases.filter((c) => c.readiness.every((r) => r.status === "ready")).length,
+      readyCases: readinessCases.filter((c) => c.readiness.every((r) => r.status === "ready")).length,
       recentEvents: await Promise.all(recent.map((event) => serializeEventForRequest(req, event))),
     });
   } catch (err) {
@@ -974,7 +1160,13 @@ router.get("/onboarding/cases", async (req, res, next) => {
       .from(onbCases)
       .where(organizationWhere(onbCases, getOrganizationId(req)))
       .orderBy(desc(onbCases.id)));
-    res.json(await Promise.all(rows.map((row) => serializeCaseForRequest(req, row))));
+    const serialized = await Promise.all(rows.map(async (row) => {
+      const caseAccess = await caseGovernanceAccessForRequest(req, row);
+      if (!caseAccess.flowRead) return null;
+      const sensitiveAccess = await sensitiveAccessForCase(req, row);
+      return serializeCase(row, sensitiveAccess, caseAccess);
+    }));
+    res.json(serialized.filter((row) => row !== null));
   } catch (err) {
     next(err);
   }
@@ -1035,6 +1227,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       }, organizationId, {
         startOrchestration: false,
         syntheticOffline: true,
+        syntheticProvenance: "onboarding-demo-fictional",
         onInserted: (tx, inserted) =>
           grantSyntheticDemoAuthorityForCase(tx, req.authUserId!, inserted),
       });
@@ -1054,6 +1247,19 @@ router.post("/onboarding/cases", async (req, res, next) => {
     if (body.offerAcceptanceComplete) {
       res.status(400).json({
         message: "Offer acceptance cannot be attested during case creation. Create the case, then use the dedicated Gate A confirmation endpoint.",
+      });
+      return;
+    }
+    const createAccess = caseGovernanceAccessFromEffective(await resolveEffectiveAccess({
+      organizationId,
+      principalType: "human",
+      principalId: req.authUserId!,
+      purpose: "onboarding-case-create",
+    }));
+    if (!createAccess.flowEdit || !createAccess.profileEdit) {
+      res.status(403).json({
+        message: "Explicit case-flow edit and case-profile edit grants are required to create an onboarding case.",
+        code: "CASE_EDIT_ACCESS_REQUIRED",
       });
       return;
     }
@@ -1135,6 +1341,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
     }, organizationId, syntheticDemoCase ? {
       startOrchestration: false,
       syntheticOffline: true,
+      syntheticProvenance: "onboarding-demo-fictional",
       onInserted: (tx, inserted) =>
         grantSyntheticDemoAuthorityForCase(tx, req.authUserId!, inserted),
     } : undefined);
@@ -1185,7 +1392,51 @@ router.get("/onboarding/cases/:id", async (req, res, next) => {
       res.status(404).json({ message: "Case not found" });
       return;
     }
-    res.json(await serializeCaseForRequest(req, row));
+    const caseAccess = await caseGovernanceAccessForRequest(req, row);
+    if (!caseFlowReadRequired(res, caseAccess)) return;
+    res.json(await serializeCase(row, await sensitiveAccessForCase(req, row), caseAccess));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/onboarding/cases/:id/access-permissions", async (req, res, next) => {
+  try {
+    if (!req.authUserId) {
+      res.status(401).json({ message: "Authentication is required." });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      res.status(400).json({ message: "A valid case id is required." });
+      return;
+    }
+    const [row] = await db
+      .select()
+      .from(onbCases)
+      .where(and(
+        eq(onbCases.id, id),
+        organizationWhere(onbCases, getOrganizationId(req)),
+      ));
+    if (!row) {
+      res.status(404).json({ message: "Case not found" });
+      return;
+    }
+
+    const [caseAccess, sensitiveAccess] = await Promise.all([
+      caseGovernanceAccessForRequest(req, row),
+      sensitiveAccessForCase(req, row),
+    ]);
+    res.json({
+      caseId: row.id,
+      access: caseAccess,
+      sensitive: {
+        identity: { read: sensitiveAccess.identity, edit: sensitiveAccess.edit?.identity === true },
+        medical: { read: sensitiveAccess.medical, edit: sensitiveAccess.edit?.medical === true },
+        payroll: { read: sensitiveAccess.payroll, edit: sensitiveAccess.edit?.payroll === true },
+        bgv: { read: sensitiveAccess.bgv, edit: sensitiveAccess.edit?.bgv === true },
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -1208,6 +1459,7 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
       offerAcceptanceComplete: onbCases.offerAcceptanceComplete,
       hireType: onbCases.hireType,
       notes: onbCases.notes,
+      syntheticProvenance: onbCases.syntheticProvenance,
       workerName: onbCases.workerName,
       workerEmail: onbCases.workerEmail,
       workerPhone: onbCases.workerPhone,
@@ -1404,6 +1656,17 @@ router.post("/onboarding/cases/:id/document-recovery", async (req, res, next) =>
         eq(onbCases.id, id), eq(onbCases.organizationId, organizationId),
       )).for("update");
       if (!current) return { kind: "not-found" as const };
+      const access = await resolveEffectiveAccessInTransaction(tx, {
+        organizationId,
+        principalType: "human",
+        principalId: req.authUserId!,
+        caseId: id,
+        purpose: "onboarding-document-recovery",
+      });
+      if (!access.allows.includes("data.documents.edit") ||
+        !access.allows.includes("flow.document-review.edit")) {
+        return { kind: "access-denied" as const };
+      }
       // A completed case's historical record is immutable operational history;
       // recovery may not replay a provider operation against it.
       if (current.lifecycleStage === "complete") return { kind: "completed" as const };
@@ -1418,6 +1681,13 @@ router.post("/onboarding/cases/:id/document-recovery", async (req, res, next) =>
     });
     if (outcome.kind === "completed") {
       res.status(409).json({ message: "Completed cases preserve their history and cannot replay document recovery." });
+      return;
+    }
+    if (outcome.kind === "access-denied") {
+      res.status(403).json({
+        message: "Explicit document-edit and document-review edit grants are required to request document recovery.",
+        code: "DOCUMENT_ACCESS_REQUIRED",
+      });
       return;
     }
     if (outcome.kind !== "recoverable") {
@@ -1457,6 +1727,21 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
         organizationWhere(onbCases, organizationId),
       )).for("update");
       if (!current) return { kind: "not-found" as const };
+      const effectiveAccess = await resolveEffectiveAccessInTransaction(tx, {
+        organizationId,
+        principalType: "human",
+        principalId: req.authUserId!,
+        caseId: id,
+        purpose: "onboarding-checklist-profile-replacement",
+      });
+      if (
+        !effectiveAccess.allows.includes(CASE_FLOW_EDIT_KEY) ||
+        !effectiveAccess.allows.includes(CASE_PROFILE_EDIT_KEY) ||
+        !effectiveAccess.allows.includes("data.case.readiness.edit") ||
+        (body.reason?.trim() && !effectiveAccess.allows.includes(CASE_NOTES_EDIT_KEY))
+      ) {
+        return { kind: "access-denied" as const };
+      }
       const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
         organizationId,
         jurisdiction: jurisdictionForWorkforceContext(current.workforceContext),
@@ -1667,6 +1952,13 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
       res.status(404).json({ message: "Case not found" });
       return;
     }
+    if (outcome.kind === "access-denied") {
+      res.status(403).json({
+        message: "Explicit case-flow and case-profile edit grants (and case-notes edit for a reason) are required.",
+        code: "CASE_EDIT_ACCESS_REQUIRED",
+      });
+      return;
+    }
     if (outcome.kind === "conflict") {
       res.status(409).json({ message: outcome.message });
       return;
@@ -1695,8 +1987,29 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
     if (!requireHrChecklistRole(req, res)) return;
     const id = Number(req.params.id);
     const body = req.body as Record<string, unknown>;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      res.status(400).json({ message: "A workforce-context correction object is required." });
+      return;
+    }
+    const acceptedBodyFields = new Set(["workforceContext", "reason", "expectedUpdatedAt"]);
+    const acceptedContextFields = new Set([
+      "roleFamily", "band", "department", "legalEntity", "businessUnit", "industry",
+      "workCountry", "workState", "site", "employmentArrangement", "workerCategory",
+      "payBasis", "shiftPattern", "workEnvironment", "hazards", "requiredLicenses",
+      "hiringMode", "batchId", "assistedIntake", "accessibilityNeeds", "languagePreference",
+      "siteExposure", "safetyCritical",
+    ]);
     const reason = typeof body.reason === "string" ? body.reason.trim() : "";
     const expectedUpdatedAt = typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : "";
+    const context = body.workforceContext;
+    if (
+      Object.keys(body).some((key) => !acceptedBodyFields.has(key)) ||
+      (context && typeof context === "object" && !Array.isArray(context) &&
+        Object.keys(context).some((key) => !acceptedContextFields.has(key)))
+    ) {
+      res.status(400).json({ message: "Unknown workforce-context correction field." });
+      return;
+    }
     if (!Number.isInteger(id) || id < 1 || reason.length < 3 || reason.length > 500 ||
       !body.workforceContext || typeof body.workforceContext !== "object" || Array.isArray(body.workforceContext)) {
       res.status(400).json({ message: "A workforce context, current updatedAt value, and 3–500 character correction reason are required." });
@@ -1713,6 +2026,10 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
         actorUserId: req.authUserId!,
         classification: "identity",
         additionalClassifications: ["medical", "payroll", "bgv"],
+        additionalAccessKeys: [
+          CASE_FLOW_EDIT_KEY, CASE_PROFILE_EDIT_KEY, CASE_NOTES_EDIT_KEY,
+          "data.case.readiness.edit",
+        ],
         beforeAuthorize: async (tx) => {
           await acquireCaseDispatchMutationLock(tx, organizationId, id);
           const [row] = await tx.select().from(onbCases).where(and(
@@ -1723,6 +2040,16 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
           // A stale caller always receives the ordinary conflict response.
           if (row.updatedAt.toISOString() !== expectedUpdatedAt) {
             throw new WorkforceContextCorrectionPreconditionError("conflict");
+          }
+          const readinessAccess = await resolveEffectiveAccessInTransaction(tx, {
+            organizationId,
+            principalType: "human",
+            principalId: req.authUserId!,
+            caseId: id,
+            purpose: "onboarding-readiness-edit",
+          });
+          if (!readinessAccess.allows.includes("data.case.readiness.edit")) {
+            throw new ReadinessGovernanceAccessRequiredError();
           }
           current = row;
           const sensitiveAccess = await resolveSensitiveAccessInTransaction(tx, {
@@ -1817,6 +2144,12 @@ router.put("/onboarding/cases/:id/workforce-context", async (req, res, next) => 
         if (error.kind === "not-found") return void res.status(404).json({ message: "Case not found." });
         return void res.status(409).json({ message: "Case changed since it was loaded. Refresh before correcting context." });
       }
+      if (error instanceof ReadinessGovernanceAccessRequiredError) {
+        return void res.status(403).json({
+          message: error.message,
+          code: "CASE_READINESS_ACCESS_REQUIRED",
+        });
+      }
       if (error instanceof SensitiveAuthorityRequiredError) {
         return void res.status(409).json({ message: RESTRICTED_WORKFORCE_CONTEXT_MESSAGE });
       }
@@ -1856,10 +2189,20 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
       note: body.note,
       reviewer: await resolveReviewerName(req.authUserId!),
       authorize: async (tx) => {
-        return hasCurrentAuthorityScope(tx, {
-          organizationId: getOrganizationId(req), actorUserId: req.authUserId!,
-          scope: "hr-compliance-approve", caseId,
-        });
+        const [specialist, access] = await Promise.all([
+          hasCurrentAuthorityScope(tx, {
+            organizationId: getOrganizationId(req), actorUserId: req.authUserId!,
+            scope: "hr-compliance-approve", caseId,
+          }),
+          resolveEffectiveAccessInTransaction(tx, {
+            organizationId: getOrganizationId(req),
+            principalType: "human",
+            principalId: req.authUserId!,
+            caseId,
+            purpose: "onboarding-readiness-edit",
+          }),
+        ]);
+        return specialist && access.allows.includes("data.case.readiness.edit");
       },
     });
     if (!result.ok) {
@@ -1868,7 +2211,7 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
         "not-custom": "Connector-managed checklist items cannot be changed manually.",
         disabled: "Disabled checklist items cannot be changed.",
         "evidence-required": "This independent evidence gate can only be completed through its designated evidence workflow; a manual toggle, reminder, or agent result is not accepted.",
-        unauthorized: "A current HR/compliance specialist authority assignment is required to attest a checklist item.",
+        unauthorized: "A current HR/compliance specialist authority assignment and explicit readiness-edit grant are required to attest a checklist item.",
         "lifecycle-blocked": "This narrative update is blocked until all required sensitive-data lifecycle policies are approved for the case jurisdiction.",
       };
       res.status(
@@ -1921,6 +2264,16 @@ router.put("/onboarding/cases/:id/evidence/:itemId", async (req, res, next) => {
       reason,
       verifier: await resolveReviewerName(req.authUserId!),
       verifierUserId: req.authUserId!,
+      authorizeAccess: async (tx) => {
+        const access = await resolveEffectiveAccessInTransaction(tx, {
+          organizationId: getOrganizationId(req),
+          principalType: "human",
+          principalId: req.authUserId!,
+          caseId,
+          purpose: "onboarding-readiness-edit",
+        });
+        return access.allows.includes("data.case.readiness.edit");
+      },
       expected: { contextVersion: expected.contextVersion as number, templateVersion: expected.templateVersion as number, profileId: expected.profileId as string, profileVersion: expected.profileVersion as number },
     });
     if (!result.ok) {
@@ -1932,8 +2285,9 @@ router.put("/onboarding/cases/:id/evidence/:itemId", async (req, res, next) => {
         "prerequisites-unmet": "This evidence gate has unmet prerequisites and cannot be verified yet.",
         "stale-policy": "The policy changed before this evidence was submitted. Refresh and submit against the current policy.",
         "lifecycle-blocked": "Evidence narratives are blocked until all required sensitive-data lifecycle policies are approved for the case jurisdiction.",
+        "access-denied": "An explicit readiness-edit grant is required to record this evidence decision.",
       };
-      res.status(result.code === "not-found" ? 404 : 409).json({ message: messages[result.code] });
+      res.status(result.code === "not-found" ? 404 : result.code === "access-denied" ? 403 : 409).json({ message: messages[result.code] });
       return;
     }
     res.json(await serializeCaseForRequest(req, result.case));
@@ -2165,6 +2519,7 @@ router.get("/onboarding/cases/:id/events", async (req, res, next) => {
     const [exists] = await db.select({
       id: onbCases.id,
       notes: onbCases.notes,
+      syntheticProvenance: onbCases.syntheticProvenance,
       workerName: onbCases.workerName,
       workerEmail: onbCases.workerEmail,
       workerPhone: onbCases.workerPhone,
@@ -2176,6 +2531,11 @@ router.get("/onboarding/cases/:id/events", async (req, res, next) => {
       res.status(404).json({ message: "Case not found" });
       return;
     }
+    const caseAccess = await caseGovernanceAccessForRequest(req, {
+      organizationId: getOrganizationId(req),
+      id,
+    });
+    if (!caseFlowReadRequired(res, caseAccess)) return;
     const rows = await db
       .select()
       .from(onbEvents)
@@ -2193,14 +2553,26 @@ router.get("/onboarding/cases/:id/events", async (req, res, next) => {
 router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const [exists] = await db.select({ id: onbCases.id }).from(onbCases).where(and(
+    const [caseRow] = await db.select({
+      id: onbCases.id,
+      notes: onbCases.notes,
+      scenarioKey: onbCases.scenarioKey,
+      syntheticProvenance: onbCases.syntheticProvenance,
+      candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
+      candidateEmailAuthorizedBy: onbCases.candidateEmailAuthorizedBy,
+    }).from(onbCases).where(and(
       eq(onbCases.id, id),
       organizationWhere(onbCases, getOrganizationId(req)),
     ));
-    if (!exists) {
+    if (!caseRow) {
       res.status(404).json({ message: "Case not found" });
       return;
     }
+    const caseAccess = await caseGovernanceAccessForRequest(req, {
+      organizationId: getOrganizationId(req),
+      id,
+    });
+    if (!caseFlowReadRequired(res, caseAccess)) return;
     const rows = await db
       .select()
       .from(onbCommunications)
@@ -2214,12 +2586,43 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
       caseId: id,
       actorUserId: req.authUserId,
     });
+    const fictionalOfflineCase =
+      getOrganizationId(req) === DEMO_ORGANIZATION_ID &&
+      caseRow.candidateEmailAuthorizedAt === null &&
+      caseRow.candidateEmailAuthorizedBy === null &&
+      isExplicitSyntheticDemoCase(caseRow);
+    if (
+      fictionalOfflineCase &&
+      caseAccess.notesRead &&
+      caseAccess.profileRead &&
+      !hasOpaqueNarrativeAccess(sensitiveAccess)
+    ) {
+      const simulationRows = rows.filter((row) =>
+        row.channel === "simulation" &&
+        row.idempotencyKey?.startsWith(`case-simulation:${id}:`),
+      );
+      res.json(simulationRows.map((row) => ({
+        id: row.id,
+        caseId: row.caseId,
+        channel: "simulation",
+        direction: row.direction,
+        audience: "internal",
+        status: row.status,
+        sensitive: false,
+        subject: "Response-driven simulation",
+        body: "A synthetic simulation exchange was recorded. Candidate, recipient, and provider details are not included in this view.",
+        createdAt: row.createdAt.toISOString(),
+      })));
+      return;
+    }
     res.json(rows.map((r) => {
       // Subjects, bodies, and delivery failures are opaque narratives even
       // when an older record carries a candidate-contact/voice label. Labels
       // are not content classification and a single specialist must not gain
       // access to a mixed candidate disclosure by a keyword match.
-      const restricted = !hasOpaqueNarrativeAccess(sensitiveAccess);
+      const restricted = !caseAccess.notesRead ||
+        !caseAccess.profileRead ||
+        !hasOpaqueNarrativeAccess(sensitiveAccess);
       if (restricted) {
         return {
           id: r.id,
@@ -2299,7 +2702,7 @@ router.put("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next)
       caseId,
       actorUserId: req.authUserId,
     });
-    if (!hasSensitiveAccess(sensitiveAccess, ["bgv"])) {
+    if (!hasSensitiveAccess(sensitiveAccess, ["bgv"], "edit")) {
       res.status(403).json({
         message: "A current HR/compliance specialist authority assignment is required to change BGV recipients.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
@@ -2359,7 +2762,7 @@ router.post("/onboarding/cases/:caseId/bgv-notifications/reconcile", async (req,
       caseId,
       actorUserId: req.authUserId,
     });
-    if (!hasSensitiveAccess(sensitiveAccess, ["bgv"])) {
+    if (!hasSensitiveAccess(sensitiveAccess, ["bgv"], "edit")) {
       res.status(403).json({
         message: "A current HR/compliance specialist authority assignment is required to reconcile BGV notifications.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
@@ -2377,6 +2780,9 @@ router.post("/onboarding/cases/:caseId/bgv-notifications/reconcile", async (req,
       caseId,
       actorUserId: req.authUserId!,
       classification: "bgv",
+      additionalAccessKeys: body.simulation || getOrganizationId(req) === DEMO_ORGANIZATION_ID
+        ? []
+        : ["tool.notification.send"],
       mutate: () => reconcileBgvNotifications({
         organizationId: getOrganizationId(req),
         caseId,
@@ -2435,9 +2841,9 @@ router.get("/onboarding/cases/:caseId/operational-requests", async (req, res, ne
     });
     res.json({
       ...result,
-      requests: result.requests.map((request) => request.id === "payroll" && !sensitiveAccess.payroll
+      requests: result.requests.map((request) => request.id.startsWith("payroll") && !sensitiveAccess.payroll
         ? {
-            id: "payroll",
+            id: request.id,
             label: "Restricted payroll workstream",
             status: request.status,
             restricted: true,
@@ -2466,8 +2872,9 @@ router.post("/onboarding/cases/:caseId/operational-requests", async (req, res, n
       return;
     }
     const body = InitializeOnboardingOperationalRequestsBody.parse(req.body);
-    const result = await initializeOperationalRequests({
-      organizationId: getOrganizationId(req),
+    const organizationId = getOrganizationId(req);
+    const initialize = async () => initializeOperationalRequests({
+      organizationId,
       caseId,
       method: body.method,
       requestIds: body.requestIds,
@@ -2475,8 +2882,45 @@ router.post("/onboarding/cases/:caseId/operational-requests", async (req, res, n
       expectedVersion: body.expectedVersion,
       actor: await resolveReviewerName(req.authUserId!),
     });
-    res.json(result);
+    const [caseScope] = await db.select({
+      notes: onbCases.notes,
+      scenarioKey: onbCases.scenarioKey,
+      syntheticProvenance: onbCases.syntheticProvenance,
+    }).from(onbCases).where(and(
+      eq(onbCases.organizationId, organizationId),
+      eq(onbCases.id, caseId),
+    )).limit(1);
+    const result = caseScope && !isSyntheticOfflineCase(caseScope)
+      ? await withSensitiveLifecycleFence(organizationId, () => withSensitiveAuthorityFence({
+        organizationId,
+        caseId,
+        actorUserId: req.authUserId!,
+        classification: "payroll",
+        additionalAccessKeys: ["tool.workflow.run"],
+        mutate: initialize,
+      }))
+      : await initialize();
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    res.json({
+      ...result,
+      requests: result.requests.map((request) => request.id.startsWith("payroll") && !sensitiveAccess.payroll
+        ? {
+            id: request.id,
+            label: "Restricted payroll workstream",
+            status: request.status,
+            restricted: true,
+          }
+        : request),
+    });
   } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "Current payroll specialist authority and explicit payroll edit access are required.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return;
+    }
     if (error instanceof OperationalRequestNotFoundError) {
       res.status(404).json({ message: error.message });
       return;
@@ -2505,8 +2949,9 @@ router.post("/onboarding/cases/:caseId/operational-requests/:requestId/actions",
       return;
     }
     const body = ApplyOnboardingOperationalRequestActionBody.parse(req.body);
-    const result = await applyOperationalRequestAction({
-      organizationId: getOrganizationId(req),
+    const organizationId = getOrganizationId(req);
+    const apply = async () => applyOperationalRequestAction({
+      organizationId,
       caseId,
       operationalRequestId,
       requestId: body.requestId,
@@ -2518,8 +2963,40 @@ router.post("/onboarding/cases/:caseId/operational-requests/:requestId/actions",
       actorUserId: req.authUserId!,
       organizationRole: req.organizationRole,
     });
-    res.json(result);
+    const result = operationalRequestId.startsWith("payroll")
+      ? await withSensitiveLifecycleFence(organizationId, () => withSensitiveAuthorityFence({
+        organizationId,
+        caseId,
+        actorUserId: req.authUserId!,
+        classification: "payroll",
+        additionalAccessKeys: [
+          "tool.workflow.run",
+          ...(body.action === "complete" ? ["tool.external.dispatch"] : []),
+        ],
+        mutate: apply,
+      }))
+      : await apply();
+    const sensitiveAccess = await resolveSensitiveAccess({
+      organizationId,
+      caseId,
+      actorUserId: req.authUserId,
+    });
+    res.json({
+      ...result,
+      requests: result.requests.map((request) => request.id.startsWith("payroll") && !sensitiveAccess.payroll
+        ? {
+            id: request.id,
+            label: "Restricted payroll workstream",
+            status: request.status,
+            restricted: true,
+          }
+        : request),
+    });
   } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "Current payroll specialist authority and explicit payroll edit access are required.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return;
+    }
     if (error instanceof OperationalRequestNotFoundError) {
       res.status(404).json({ message: error.message });
       return;
@@ -2566,7 +3043,7 @@ router.post("/onboarding/cases/:id/communications/:communicationId/retry", async
       caseId,
       actorUserId: req.authUserId,
     });
-    if (!sensitiveAccess.identity) {
+    if (!hasSensitiveAccess(sensitiveAccess, ["identity"], "edit")) {
       res.status(403).json({
         message: "A current HR/compliance authority assignment is required to retry a candidate communication.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
@@ -2579,6 +3056,7 @@ router.post("/onboarding/cases/:id/communications/:communicationId/retry", async
       caseId,
       actorUserId: req.authUserId!,
       classification: "identity",
+      additionalAccessKeys: ["tool.notification.send"],
       mutate: () => retryCandidateEmail(caseId, communicationId, reviewer),
     });
     if (!result.ok) {
@@ -2614,6 +3092,17 @@ router.get("/onboarding/cases/:id/documents", async (req, res, next) => {
     ));
     if (!exists) {
       res.status(404).json({ message: "Case not found" });
+      return;
+    }
+    const caseAccess = await caseGovernanceAccessForRequest(req, {
+      organizationId: getOrganizationId(req),
+      id,
+    });
+    if (!caseAccess.documentsRead) {
+      res.status(403).json({
+        message: "An explicit document-read grant is required to view case documents.",
+        code: "DOCUMENT_ACCESS_REQUIRED",
+      });
       return;
     }
     const rows = await listDocuments(id);
@@ -2668,6 +3157,16 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
     const [owned] = await db.select({ id: onbCases.id }).from(onbCases)
       .where(and(eq(onbCases.id, caseId), organizationWhere(onbCases, organizationId)));
     if (!owned) return res.status(404).json({ message: "Case not found" });
+    const caseAccess = await caseGovernanceAccessForRequest(req, {
+      organizationId,
+      id: caseId,
+    });
+    if (!caseAccess.documentsRead || !caseAccess.documentReviewRead) {
+      return res.status(403).json({
+        message: "Explicit document-read and document-review read grants are required to view review evidence.",
+        code: "DOCUMENT_ACCESS_REQUIRED",
+      });
+    }
     const rows = await db.select({
       id: onbCandidateUploads.id, documentId: onbCandidateUploads.documentId,
       originalName: onbCandidateUploads.originalName, contentType: onbCandidateUploads.contentType,
@@ -2705,6 +3204,7 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
         };
       }
       const isLatest = latestByDocument.get(row.documentId)?.id === row.id;
+      const canEdit = hasSensitiveAccess(sensitiveAccess, classes, "edit");
       const malwareClean = malwareUploadIsClean({ malwareScanState: row.malwareScanState, checksumSha256, malwareScanSha256 });
       return {
         ...row,
@@ -2716,12 +3216,12 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
         malwareScannedAt: iso(row.malwareScannedAt),
         malwareClean,
         isLatest,
-        canReview: isLatest && ["manual_review", "correction_requested"].includes(row.validationState) && malwareClean,
-        canRequestCorrection: isLatest && (
+        canReview: canEdit && isLatest && ["manual_review", "correction_requested"].includes(row.validationState) && malwareClean,
+        canRequestCorrection: canEdit && isLatest && (
           ["manual_review", "correction_requested"].includes(row.validationState) ||
           (!malwareClean && row.validationState !== "rejected")
         ),
-        canRetryScan: isLatest && malwareScanCanRetry(row.malwareScanState),
+        canRetryScan: canEdit && isLatest && malwareScanCanRetry(row.malwareScanState),
       };
     }));
   } catch (error) {
@@ -2762,7 +3262,7 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
       actorUserId: req.authUserId,
     });
     const sensitiveClasses = sensitiveClassForDocument(target);
-    if (!hasSensitiveAccess(sensitiveAccess, sensitiveClasses)) {
+    if (!hasSensitiveAccess(sensitiveAccess, sensitiveClasses, "edit")) {
       return res.status(403).json({
         message: "A current specialist authority assignment is required to decide this sensitive document.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
@@ -2774,6 +3274,12 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
       actorUserId: req.authUserId!,
       classification: sensitiveClasses[0]!,
       additionalClassifications: sensitiveClasses.slice(1),
+      additionalAccessKeys: [
+        "tool.documents.edit",
+        "data.documents.edit",
+        "flow.document-review.edit",
+        "data.case.readiness.edit",
+      ],
       mutate: () => db.transaction(async (tx) => {
       const [caseRow] = await tx.select({ workforceContext: onbCases.workforceContext })
         .from(onbCases).where(and(
@@ -2848,8 +3354,8 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
       return res.status(403).json({
-        message: "A current specialist authority assignment is required to decide this sensitive document.",
-        code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
+        message: "A current specialist authority assignment and explicit document-edit, document-review, readiness-edit, and document-tool grants are required to decide this document.",
+        code: "DOCUMENT_ACCESS_REQUIRED",
       });
     }
     return next(error);
@@ -2891,7 +3397,7 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", asy
       caseId,
       actorUserId: req.authUserId,
     });
-    if (!hasSensitiveAccess(sensitiveAccess, sensitiveClassForDocument(document))) {
+    if (!hasSensitiveAccess(sensitiveAccess, sensitiveClassForDocument(document), "edit")) {
       return res.status(403).json({
         message: "A current specialist authority assignment is required to requeue this sensitive document scan.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
@@ -2915,13 +3421,22 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", asy
       actorUserId: req.authUserId!,
       classification: classes[0]!,
       additionalClassifications: classes.slice(1),
+      additionalAccessKeys: [
+        "tool.documents.edit",
+        "data.documents.edit",
+        "flow.document-review.edit",
+        "data.case.readiness.edit",
+      ],
       mutate: () => requeueDocumentMalwareScan(organizationId, caseId, evidenceId),
     });
     if (!requeued) return res.status(409).json({ message: "This security scan could not be queued again." });
     return res.json({ id: evidenceId, malwareScanState: "pending", malwareScannedAt: null, canRetryScan: false });
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
-      return res.status(403).json({ message: "A current specialist authority assignment is required to requeue this sensitive document scan.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return res.status(403).json({
+        message: "A current specialist authority assignment and explicit document-edit, document-review, readiness-edit, and document-tool grants are required to requeue this scan.",
+        code: "DOCUMENT_ACCESS_REQUIRED",
+      });
     }
     return next(error);
   }
@@ -3966,16 +4481,41 @@ router.get("/onboarding/approvals", async (req, res, next) => {
         workerName: onbCases.workerName,
         notes: onbCases.notes,
         scenarioKey: onbCases.scenarioKey,
+        syntheticProvenance: onbCases.syntheticProvenance,
+        candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
+        candidateEmailAuthorizedBy: onbCases.candidateEmailAuthorizedBy,
       })
       .from(onbApprovals)
       .innerJoin(onbCases, eq(onbApprovals.caseId, onbCases.id))
       .where(organizationWhere(onbCases, getOrganizationId(req)))
       .orderBy(desc(onbApprovals.createdAt), desc(onbApprovals.id));
     const demoProfile = await registeredDemoProfile(req.authUserId!);
-    const visibleRows = demoProfile
-      ? rows.filter(({ notes, scenarioKey }) =>
-          isSyntheticOfflineCase({ notes, scenarioKey }))
-      : rows;
+    const rowsWithAccess = await Promise.all(rows.map(async (row) => ({
+      ...row,
+      caseAccess: await caseGovernanceAccessForRequest(req, {
+        organizationId: getOrganizationId(req),
+        id: row.approval.caseId,
+      }),
+    })));
+    const visibleRows = rowsWithAccess.filter(({
+      approval,
+      notes,
+      scenarioKey,
+      syntheticProvenance,
+      candidateEmailAuthorizedAt,
+      candidateEmailAuthorizedBy,
+      caseAccess,
+    }) =>
+      caseAccess.flowRead &&
+      (!isDay1ReadinessApproval(approval) || caseAccess.readinessRead) &&
+      (!demoProfile ||
+        isSyntheticOfflineCase({ notes, scenarioKey, syntheticProvenance }) ||
+        isVerifiedHybridDemoControllerCase({
+          notes,
+          scenarioKey,
+          candidateEmailAuthorizedAt,
+          candidateEmailAuthorizedBy,
+        })));
     const filtered = wantAll
       ? visibleRows
       : visibleRows.filter((row) => row.approval.status === "pending");
@@ -3984,6 +4524,10 @@ router.get("/onboarding/approvals", async (req, res, next) => {
         organizationId: getOrganizationId(req),
         caseId: a.caseId,
         actorUserId: req.authUserId,
+      });
+      const caseAccess = await caseGovernanceAccessForRequest(req, {
+        organizationId: getOrganizationId(req),
+        id: a.caseId,
       });
       const scopeClasses = a.authorityScope === "occupational-health-approve"
         ? ["medical"] as const
@@ -3995,13 +4539,16 @@ router.get("/onboarding/approvals", async (req, res, next) => {
       // Approval recommendation, rationale, comment, and evidence are opaque
       // narratives. Scope metadata can restrict access further, but cannot
       // turn a partial specialist assignment into a grant for mixed text.
-      const restricted = !hasOpaqueNarrativeAccess(sensitiveAccess) ||
+      const restricted = !caseAccess.notesRead || !caseAccess.profileRead ||
+        !hasOpaqueNarrativeAccess(sensitiveAccess) ||
         !hasSensitiveAccess(sensitiveAccess, scopeClasses);
       if (restricted) {
         return {
           id: a.id,
           caseId: a.caseId,
-          caseWorkerName: sensitiveAccess.identity ? workerName : "Restricted candidate",
+          caseWorkerName: sensitiveAccess.identity && caseAccess.profileRead
+            ? workerName
+            : "Restricted candidate",
           agent: a.agent,
           ruleRef: "restricted-sensitive-approval",
           hitlPattern: a.hitlPattern,
@@ -4058,10 +4605,41 @@ router.get("/onboarding/approvals/:id/history", async (req, res, next) => {
       id: onbApprovals.id,
       caseId: onbApprovals.caseId,
       authorityScope: onbApprovals.authorityScope,
+      idempotencyKey: onbApprovals.idempotencyKey,
     }).from(onbApprovals)
       .where(and(eq(onbApprovals.id, approvalId), eq(onbApprovals.organizationId, organizationId)));
     if (!approval) {
       res.status(404).json({ message: "Approval not found" });
+      return;
+    }
+    if (isDay1ReadinessApproval(approval)) {
+      const readinessAccess = await resolveEffectiveAccess({
+        organizationId,
+        principalType: "human",
+        principalId: req.authUserId!,
+        caseId: approval.caseId,
+        purpose: "onboarding-readiness-history-read",
+      });
+      if (!readinessAccess.allows.includes("data.case.readiness.read")) {
+        res.status(403).json({
+          message: "An explicit readiness-read grant is required to review Gate C approval history.",
+          code: "CASE_READINESS_ACCESS_REQUIRED",
+        });
+        return;
+      }
+    }
+    const auditAccess = await resolveEffectiveAccess({
+      organizationId,
+      principalType: "human",
+      principalId: req.authUserId!,
+      caseId: approval.caseId,
+      purpose: "onboarding-approval-history-read",
+    });
+    if (!auditAccess.allows.includes("data.audit.read")) {
+      res.status(403).json({
+        message: "An explicit audit-read grant is required to review approval history.",
+        code: "AUDIT_ACCESS_REQUIRED",
+      });
       return;
     }
     const authorityScope = approval.authorityScope;
@@ -4111,6 +4689,23 @@ router.get("/onboarding/approvals/:id/capability", async (req, res, next) => {
     if (!Number.isSafeInteger(approval.version) || approval.version < 1) {
       res.json({ canDecide: false, reason: "invalid_approval_version", version: approval.version });
       return;
+    }
+    if (isDay1ReadinessApproval(approval)) {
+      const readinessAccess = await resolveEffectiveAccess({
+        organizationId,
+        principalType: "human",
+        principalId: req.authUserId!,
+        caseId: approval.caseId,
+        purpose: "onboarding-readiness-decision-capability",
+      });
+      if (!readinessAccess.allows.includes("data.case.readiness.edit")) {
+        res.json({
+          canDecide: false,
+          reason: "readiness_access_required",
+          version: approval.version,
+        });
+        return;
+      }
     }
     const authority = await db.transaction((tx) => verifyDecisionAuthorityInTransaction(tx, {
       organizationId,
@@ -4164,6 +4759,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       decidedBy,
       comment: body.comment ?? null,
       actorUserId: req.authUserId!,
+      additionalAccessKeys: isDay1ReadinessApproval(a) ? ["data.case.readiness.edit"] : [],
       auditCorrelationId: req.header("x-request-id") ?? req.header("x-correlation-id") ?? null,
     });
     if (result.outcome === "not-found") {
@@ -4180,8 +4776,10 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
     }
     if (result.outcome === "unauthorized") {
       res.status(403).json({
-        message: "A current governance-approved, tenant-scoped specialist authority is required for this decision. Organization membership, a contact role, and a persona do not grant decision authority.",
-        code: result.reason,
+        message: result.reason === "readiness_access_required"
+          ? "An explicit data.case.readiness.edit grant is required for this approval decision."
+          : "A current governance-approved, tenant-scoped specialist authority is required for this decision. Organization membership, a contact role, and a persona do not grant decision authority.",
+        code: result.reason === "readiness_access_required" ? "CASE_READINESS_ACCESS_REQUIRED" : result.reason,
       });
       return;
     }
@@ -5033,7 +5631,31 @@ router.get("/onboarding/guardrails/:key/events", async (req, res, next) => {
       ))
       .orderBy(desc(onbGuardrailEvents.createdAt), desc(onbGuardrailEvents.id))
       .limit(50);
-    res.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
+    const visibleRows = await Promise.all(rows.map(async (r) => {
+      if (r.caseId === null) {
+        return { ...r, createdAt: r.createdAt.toISOString() };
+      }
+      const caseAccess = await caseGovernanceAccessForRequest(req, {
+        organizationId: getOrganizationId(req),
+        id: r.caseId,
+      });
+      if (!caseAccess.flowRead) return null;
+      const sensitiveAccess = await sensitiveAccessForCase(req, {
+        organizationId: getOrganizationId(req),
+        id: r.caseId,
+      });
+      return {
+        ...r,
+        workerName: caseAccess.profileRead && sensitiveAccess.identity
+          ? r.workerName
+          : "Restricted candidate",
+        detail: caseAccess.profileRead && caseAccess.notesRead
+          ? redactSensitiveText(r.detail, sensitiveAccess) ?? "Restricted case event."
+          : "Restricted case event.",
+        createdAt: r.createdAt.toISOString(),
+      };
+    }));
+    res.json(visibleRows.filter((row) => row !== null));
   } catch (err) {
     next(err);
   }
@@ -5111,7 +5733,12 @@ router.get("/onboarding/systems/watcher", async (req, res, next) => {
     res.json({
       connectors: getSystemWatcherHealth(),
       malwareScanner: await getMalwareScannerMonitorHealth(),
-      checks: await Promise.all(rows.map(async ({ check: c, workerName }) => {
+      checks: (await Promise.all(rows.map(async ({ check: c, workerName }) => {
+        const caseAccess = await caseGovernanceAccessForRequest(req, {
+          organizationId,
+          id: c.caseId,
+        });
+        if (!caseAccess.flowRead) return null;
         const sensitiveAccess = await resolveSensitiveAccess({
           organizationId,
           caseId: c.caseId,
@@ -5121,18 +5748,24 @@ router.get("/onboarding/systems/watcher", async (req, res, next) => {
           return {
             id: c.id,
             caseId: c.caseId,
-            caseWorkerName: sensitiveAccess.identity ? workerName : "Restricted candidate",
+            caseWorkerName: sensitiveAccess.identity && caseAccess.profileRead
+              ? workerName
+              : "Restricted candidate",
             system: c.system,
             label: c.system === "bgv" ? "Restricted background-verification check" : "Restricted payroll check",
             status: c.status,
             restricted: true,
           };
         }
-        const canReadNarratives = hasOpaqueNarrativeAccess(sensitiveAccess);
+        const canReadNarratives = caseAccess.profileRead &&
+          caseAccess.notesRead &&
+          hasOpaqueNarrativeAccess(sensitiveAccess);
         return {
         id: c.id,
         caseId: c.caseId,
-        caseWorkerName: sensitiveAccess.identity ? workerName : "Restricted candidate",
+        caseWorkerName: sensitiveAccess.identity && caseAccess.profileRead
+          ? workerName
+          : "Restricted candidate",
         system: c.system,
         label: systemDef(c.system)?.label ?? c.system,
         mode: c.mode,
@@ -5148,7 +5781,7 @@ router.get("/onboarding/systems/watcher", async (req, res, next) => {
           : "System-provider narrative details are restricted to the assigned confidential-record reviewers.",
         ...(canReadNarratives ? {} : { restrictedNarratives: true }),
         };
-      })),
+      }))).filter((row) => row !== null),
     });
   } catch (err) {
     next(err);
@@ -5460,7 +6093,12 @@ router.get("/onboarding/analytics", async (req, res, next) => {
       .select()
       .from(onbCases)
       .where(organizationWhere(onbCases, organizationId))));
+    const readinessCases = (await Promise.all(cases.map(async (row) => {
+      const access = await caseGovernanceAccessForRequest(req, row);
+      return access.flowRead && access.readinessRead ? row : null;
+    }))).filter((row): row is typeof cases[number] => row !== null);
     const aggregateCaseIds = new Set(cases.map((row) => row.id));
+    const readinessCaseIds = new Set(readinessCases.map((row) => row.id));
 
     const approvalRows = await db
       .select({ approval: onbApprovals })
@@ -5469,7 +6107,9 @@ router.get("/onboarding/analytics", async (req, res, next) => {
       .where(organizationWhere(onbCases, organizationId));
     const approvals = approvalRows
       .map(({ approval }) => approval)
-      .filter((approval) => aggregateCaseIds.has(approval.caseId));
+      .filter((approval) =>
+        aggregateCaseIds.has(approval.caseId) &&
+        (!isDay1ReadinessApproval(approval) || readinessCaseIds.has(approval.caseId)));
 
     const skillMap = new Map<string, { count: number; criticality: string }>();
     for (const c of cases) {
@@ -5514,7 +6154,7 @@ router.get("/onboarding/analytics", async (req, res, next) => {
     }));
 
     const readinessMap = new Map<string, number>();
-    for (const c of cases) {
+    for (const c of readinessCases) {
       const key = c.readiness.every((r) => r.status === "ready")
         ? "day1-ready"
         : c.lifecycleStage === "exception"

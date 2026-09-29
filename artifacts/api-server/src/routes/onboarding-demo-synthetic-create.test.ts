@@ -6,7 +6,10 @@ import express from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   DEMO_ORGANIZATION_ID,
+  accessNamedGrants,
   db,
+  onbIntakeBatchPeople,
+  onbIntakeBatches,
   onbAuthorityAssignments,
   onbCandidateLinks,
   onbCaseLogistics,
@@ -25,10 +28,9 @@ import {
 } from "@workspace/db";
 import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
 import {
-  SYNTHETIC_DEMO_AUTHORITY_SOURCE,
   SYNTHETIC_OFFLINE_MARKER,
 } from "../lib/onboarding/synthetic-offline";
-import { AUTHORITY_ROLES } from "../lib/onboarding/decision-authority";
+import batchIntakeRouter from "./onboarding-batch-intake";
 import { demoPrincipalSettingKey } from "../lib/demo-principal";
 import {
   createTenantContextMiddleware,
@@ -41,6 +43,7 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `${process.pid}-${randomUUID()}`;
 const administrator = `synthetic-create-admin-${suffix}`;
 const reviewer = `synthetic-create-reviewer-${suffix}`;
+const ordinaryCreator = `synthetic-create-ordinary-${suffix}`;
 const foreignOrganizationId = `synthetic-create-foreign-${suffix}`;
 const policyRevision = 1_000_000 + Number.parseInt(
   randomUUID().replaceAll("-", "").slice(0, 6),
@@ -113,6 +116,7 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     await db.insert(organizationMembershipsTable).values([
       { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: administrator, role: "member" },
       { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: reviewer, role: "member" },
+      { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: ordinaryCreator, role: "member" },
       // The registered profile ceiling, rather than the absence of a foreign
       // membership, must deny the foreign-tenant request.
       { organizationId: foreignOrganizationId, clerkUserId: administrator, role: "owner" },
@@ -129,6 +133,30 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
         value: "reviewer",
       },
     ]);
+    const ordinaryAccessKeys = [
+      "data.case.profile.read",
+      "data.case.profile.edit",
+      "data.case.notes.read",
+      "data.case.notes.edit",
+      "data.case.readiness.read",
+      "data.case.readiness.edit",
+      "flow.case.read",
+      "flow.case.edit",
+    ];
+    await db.insert(accessNamedGrants).values(ordinaryAccessKeys.map((resourceKey) => ({
+      organizationId: DEMO_ORGANIZATION_ID,
+      principalType: "human" as const,
+      principalId: ordinaryCreator,
+      scope: "tenant" as const,
+      caseId: null,
+      resourceType: resourceKey.startsWith("flow.") ? "flow" as const : "field" as const,
+      resourceKey,
+      source: "named" as const,
+      effect: "allow" as const,
+      createdByUserId: ordinaryCreator,
+      approvedByUserId: `${suffix}-independent-approver`,
+      approvedAt: new Date(),
+    })));
     // The production route uses the normal sensitive-lifecycle gate for
     // synthetic cases too. These short-lived, test-owned approvals establish
     // that the synthetic path does not bypass that protection.
@@ -158,6 +186,7 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     });
     app.use(createTenantContextMiddleware(lookupMembership));
     app.use(onboardingRouter);
+    app.use(batchIntakeRouter);
     app.use(errorHandler);
     server = app.listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => server!.once("listening", resolve));
@@ -171,6 +200,17 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
       server!.close((error) => error ? reject(error) : resolve()),
     );
     if (createdCaseIds.length > 0) {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const rows = await db.select({
+          orchestrationStatus: onbCases.orchestrationStatus,
+          orchestrationClaimOwner: onbCases.orchestrationClaimOwner,
+        }).from(onbCases).where(inArray(onbCases.id, createdCaseIds));
+        if (!rows.some((row) =>
+          row.orchestrationStatus === "running" || row.orchestrationClaimOwner
+        )) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
       await db.delete(onbAuthorityAssignments).where(and(
         inArray(onbAuthorityAssignments.caseId, createdCaseIds),
         eq(onbAuthorityAssignments.personUserId, administrator),
@@ -180,6 +220,10 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     await db.delete(onbSensitiveLifecyclePolicies).where(and(
       eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
       eq(onbSensitiveLifecyclePolicies.revision, policyRevision),
+    ));
+    await db.delete(accessNamedGrants).where(and(
+      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
+      eq(accessNamedGrants.principalId, ordinaryCreator),
     ));
     await db.delete(onbSettings).where(and(
       eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
@@ -199,10 +243,14 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
       eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
       eq(organizationMembershipsTable.clerkUserId, reviewer),
     ));
+    await db.delete(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, ordinaryCreator),
+    ));
     await db.delete(organizationsTable).where(eq(organizationsTable.id, foreignOrganizationId));
   });
 
-  test("creates an offline case, immediately grants only case-bound authority, and opens it", async () => {
+  test("creates an offline case, grants only case-bound read access, and opens it", async () => {
     const response = await request(administrator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
       method: "POST",
       body: JSON.stringify(intake()),
@@ -219,7 +267,55 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     assert.equal(created.offlineSample, true);
 
     const opened = await request(administrator, DEMO_ORGANIZATION_ID, `/onboarding/cases/${created.id}`);
-    assert.equal(opened.status, 200, await opened.text());
+    const openedBody = await opened.text();
+    assert.equal(opened.status, 200, openedBody);
+    const openedCase = JSON.parse(openedBody) as {
+      workerName: string;
+      workerEmail: string;
+      fictionalOfflineIdentity: boolean;
+    };
+    assert.match(openedCase.workerName, /^Fictional Demo Hire /);
+    assert.match(openedCase.workerEmail, /^fictional-demo-[a-f0-9]+@example\.invalid$/);
+    assert.equal(openedCase.fictionalOfflineIdentity, true);
+    const permissionsResponse = await request(
+      administrator,
+      DEMO_ORGANIZATION_ID,
+      `/onboarding/cases/${created.id}/access-permissions`,
+    );
+    assert.equal(permissionsResponse.status, 200);
+    const permissions = await permissionsResponse.json() as {
+      sensitive: { identity: { read: boolean; edit: boolean } };
+    };
+    assert.deepEqual(permissions.sensitive.identity, { read: false, edit: false });
+    const caseAccessGrants = await db.select({
+      resourceKey: accessNamedGrants.resourceKey,
+      caseId: accessNamedGrants.caseId,
+      scope: accessNamedGrants.scope,
+    }).from(accessNamedGrants).where(and(
+      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
+      eq(accessNamedGrants.principalId, administrator),
+      eq(accessNamedGrants.scope, "case"),
+      eq(accessNamedGrants.caseId, created.id),
+      eq(accessNamedGrants.source, "named"),
+      eq(accessNamedGrants.effect, "allow"),
+    ));
+    assert.deepEqual(
+      caseAccessGrants.map((grant) => grant.resourceKey).sort(),
+      [
+        "data.case.notes.read",
+        "data.case.profile.read",
+        "data.case.readiness.read",
+        "data.documents.read",
+        "flow.case.read",
+      ].sort(),
+    );
+    assert.ok(caseAccessGrants.every((grant) =>
+      grant.scope === "case" && grant.caseId === created.id
+    ));
+
+    const reviewerRead = await request(reviewer, DEMO_ORGANIZATION_ID, `/onboarding/cases/${created.id}`);
+    assert.equal(reviewerRead.status, 403);
+    assert.equal((await reviewerRead.json() as { code?: string }).code, "CASE_ACCESS_REQUIRED");
 
     const [caseRow] = await db.select().from(onbCases).where(and(
       eq(onbCases.id, created.id),
@@ -227,20 +323,19 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     ));
     assert.ok(caseRow);
     assert.ok(caseRow.notes?.includes(SYNTHETIC_OFFLINE_MARKER));
+    assert.equal(caseRow.syntheticProvenance, "onboarding-demo-fictional");
     assert.equal(caseRow.scenarioKey, null);
     assert.equal(caseRow.orchestrationStatus, "blocked");
     assert.equal(caseRow.orchestrationCheckpoint, "synthetic-offline");
     assert.equal(caseRow.candidateEmailAuthorizedAt, null);
     assert.equal(caseRow.candidateEmailAuthorizedBy, null);
 
-    const grants = await db.select().from(onbAuthorityAssignments).where(and(
+    const authorityAssignments = await db.select().from(onbAuthorityAssignments).where(and(
       eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
       eq(onbAuthorityAssignments.personUserId, administrator),
       eq(onbAuthorityAssignments.caseId, created.id),
-      eq(onbAuthorityAssignments.source, SYNTHETIC_DEMO_AUTHORITY_SOURCE),
     ));
-    assert.deepEqual(grants.map((grant) => grant.authorityRole).sort(), [...AUTHORITY_ROLES].sort());
-    assert.ok(grants.every((grant) => grant.caseId === created.id && grant.status === "active"));
+    assert.equal(authorityAssignments.length, 0);
     const [membership] = await db.select({ role: organizationMembershipsTable.role })
       .from(organizationMembershipsTable)
       .where(and(
@@ -266,13 +361,172 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     // Case-local logistics is a persisted planning record, not an outreach or
     // provider effect. Its existence is permitted by normal case creation.
     assert.equal(logistics.length, 1);
+
+    await db.insert(onbCommunications).values([
+      {
+        organizationId: DEMO_ORGANIZATION_ID,
+        caseId: created.id,
+        channel: "simulation",
+        direction: "outbound",
+        audience: "admin",
+        toAddress: "simulation-only",
+        subject: "Raw simulation subject must not be shown",
+        body: "Raw simulation details must not be shown",
+        status: "logged-only",
+        sensitive: false,
+        sensitiveDataClass: "unclassified-legacy",
+        idempotencyKey: `case-simulation:${created.id}:generation-1:exchange-1:communication`,
+      },
+      {
+        organizationId: DEMO_ORGANIZATION_ID,
+        caseId: created.id,
+        channel: "email",
+        direction: "outbound",
+        audience: "candidate",
+        toAddress: `candidate-${suffix}@example.invalid`,
+        subject: "Private candidate subject",
+        body: "Private candidate communication body",
+        status: "sent",
+        sensitive: true,
+        sensitiveDataClass: "candidate-contact",
+        idempotencyKey: `candidate-contact-test:${created.id}`,
+      },
+      {
+        organizationId: DEMO_ORGANIZATION_ID,
+        caseId: created.id,
+        channel: "email",
+        direction: "outbound",
+        audience: "candidate",
+        toAddress: `volunteer-${suffix}@example.invalid`,
+        subject: "[DEMO SIMULATION][SIM-THREAD:private-marker] response prompt",
+        body: "Private email token: private-token",
+        status: "sent",
+        sensitive: true,
+        sensitiveDataClass: "candidate-contact",
+        idempotencyKey: `case-simulation-email:${created.id}:generation-1:email-1`,
+      },
+    ]);
+    const communicationsResponse = await request(
+      administrator,
+      DEMO_ORGANIZATION_ID,
+      `/onboarding/cases/${created.id}/communications`,
+    );
+    assert.equal(communicationsResponse.status, 200);
+    const projectedCommunications = await communicationsResponse.json() as Array<{
+      channel: string;
+      subject: string;
+      body: string;
+      toAddress?: string;
+    }>;
+    assert.equal(projectedCommunications.length, 1);
+    assert.equal(projectedCommunications[0]?.channel, "simulation");
+    assert.equal(projectedCommunications[0]?.subject, "Response-driven simulation");
+    assert.match(projectedCommunications[0]?.body ?? "", /synthetic simulation exchange/i);
+    assert.equal(projectedCommunications[0]?.toAddress, undefined);
+    assert.doesNotMatch(
+      JSON.stringify(projectedCommunications),
+      /Raw simulation|Private candidate|Private email|candidate-private|volunteer-|private-token|example\.invalid/i,
+    );
   });
 
-  test("uses an explicit country geography for synthetic lifecycle jurisdiction", async () => {
+  test("batch intake rejects client-spoofed synthetic markers before a Demo Admin can inherit case access", async () => {
+    const markerCases = [
+      {
+        idempotencyKey: `spoof-offline-${suffix}`,
+        personKey: `spoof-offline-${suffix}`,
+        workerEmail: `spoof-offline-${suffix}@example.invalid`,
+        notes: SYNTHETIC_OFFLINE_MARKER,
+      },
+      {
+        idempotencyKey: `spoof-controller-${suffix}`,
+        personKey: `spoof-controller-${suffix}`,
+        workerEmail: `spoof-controller-${suffix}@example.invalid`,
+        notes: `[demo-controller-run:${suffix}]`,
+      },
+    ];
+    const adminCaseGrantsBefore = await db.select({
+      caseId: accessNamedGrants.caseId,
+      resourceKey: accessNamedGrants.resourceKey,
+    }).from(accessNamedGrants).where(and(
+      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
+      eq(accessNamedGrants.principalId, administrator),
+      eq(accessNamedGrants.scope, "case"),
+      eq(accessNamedGrants.source, "named"),
+    ));
+
+    // Batch intake is an owner/admin route. Promote only this ordinary test
+    // principal for the request; the registered Demo Admin remains a member.
+    await db.update(organizationMembershipsTable).set({ role: "owner" }).where(and(
+      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+      eq(organizationMembershipsTable.clerkUserId, ordinaryCreator),
+    ));
+    try {
+      for (const markerCase of markerCases) {
+        const response = await request(ordinaryCreator, DEMO_ORGANIZATION_ID, "/onboarding/batch-intake", {
+          method: "POST",
+          body: JSON.stringify({
+            idempotencyKey: markerCase.idempotencyKey,
+            name: "Spoofed synthetic marker batch",
+            people: [{
+              ...intake(`Spoofed ${markerCase.personKey}`),
+              personKey: markerCase.personKey,
+              workerEmail: markerCase.workerEmail,
+              notes: markerCase.notes,
+            }],
+          }),
+        });
+        assert.equal(response.status, 400);
+        assert.equal((await response.json() as { code?: string }).code, "RESERVED_SYNTHETIC_MARKER");
+      }
+    } finally {
+      await db.update(organizationMembershipsTable).set({ role: "member" }).where(and(
+        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+        eq(organizationMembershipsTable.clerkUserId, ordinaryCreator),
+      ));
+    }
+
+    const [batchRows, personRows, caseRows] = await Promise.all([
+      db.select({ idempotencyKey: onbIntakeBatches.idempotencyKey }).from(onbIntakeBatches).where(and(
+        eq(onbIntakeBatches.organizationId, DEMO_ORGANIZATION_ID),
+        inArray(onbIntakeBatches.idempotencyKey, markerCases.map((item) => item.idempotencyKey)),
+      )),
+      db.select({ personKey: onbIntakeBatchPeople.personKey }).from(onbIntakeBatchPeople).where(and(
+        eq(onbIntakeBatchPeople.organizationId, DEMO_ORGANIZATION_ID),
+        inArray(onbIntakeBatchPeople.personKey, markerCases.map((item) => item.personKey)),
+      )),
+      db.select({
+        id: onbCases.id,
+        syntheticProvenance: onbCases.syntheticProvenance,
+      }).from(onbCases).where(and(
+        eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
+        inArray(onbCases.workerEmail, markerCases.map((item) => item.workerEmail)),
+      )),
+    ]);
+    assert.deepEqual(batchRows, [], "rejected marker payloads leave no batch record");
+    assert.deepEqual(personRows, [], "rejected marker payloads leave no person snapshot");
+    assert.deepEqual(caseRows, [], "no fake offline case exists to expose its identity or acquire synthetic provenance");
+
+    const adminCaseGrantsAfter = await db.select({
+      caseId: accessNamedGrants.caseId,
+      resourceKey: accessNamedGrants.resourceKey,
+    }).from(accessNamedGrants).where(and(
+      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
+      eq(accessNamedGrants.principalId, administrator),
+      eq(accessNamedGrants.scope, "case"),
+      eq(accessNamedGrants.source, "named"),
+    ));
+    assert.deepEqual(
+      adminCaseGrantsAfter.map((grant) => `${grant.caseId}:${grant.resourceKey}`).sort(),
+      adminCaseGrantsBefore.map((grant) => `${grant.caseId}:${grant.resourceKey}`).sort(),
+      "spoofed batch notes cannot create shared Demo Admin case grants",
+    );
+  });
+
+  test("uses an explicit country geography for lifecycle jurisdiction", async () => {
     const body = intake(`Synthetic geography fallback ${suffix}`);
     body.geography = "USA";
     delete (body as Partial<typeof body>).workforceContext;
-    const response = await request(administrator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
+    const response = await request(ordinaryCreator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -280,7 +534,7 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     assert.equal(response.status, 201, responseBody);
     const created = JSON.parse(responseBody) as { id: number; offlineSample: boolean };
     createdCaseIds.push(created.id);
-    assert.equal(created.offlineSample, true);
+    assert.equal(created.offlineSample, false);
     const [caseRow] = await db.select({ workforceContext: onbCases.workforceContext })
       .from(onbCases)
       .where(eq(onbCases.id, created.id));
@@ -291,7 +545,7 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
     const body = intake(`Synthetic missing jurisdiction ${suffix}`);
     body.geography = "South region";
     delete (body as Partial<typeof body>).workforceContext;
-    const response = await request(administrator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
+    const response = await request(ordinaryCreator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
       method: "POST",
       body: JSON.stringify(body),
     });

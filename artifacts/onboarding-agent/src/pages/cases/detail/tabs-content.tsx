@@ -22,6 +22,7 @@ import { WhatsAppSandboxWarning } from '@/components/whatsapp-sandbox-warning';
 import { StatusBadgeText } from './components';
 import { OperationalRequestsSection } from './OperationalRequestsSection';
 import { BgvNotificationsSection } from './BgvNotificationsSection';
+import { RestrictedActionNotice, useCaseAccess } from './case-access';
 
 export function TasksTab({ c }: { c: any }) {
   return (
@@ -104,11 +105,28 @@ export function ActivityTab({ events }: { events: any[] }) {
   );
 }
 
-export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, requestsLoadError }: any) {
+export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, requestsLoadError, enforceCasePermissions = false }: any) {
+  const access = useCaseAccess();
+  const canReadCommunication = !enforceCasePermissions || (access?.access.notesRead === true
+    && !!access
+    && (c.fictionalOfflineIdentity === true
+      || Object.values(access.sensitive).every((permission) => permission.read)));
+  const canEditCommunication = !enforceCasePermissions || (canReadCommunication
+    && access?.access.flowEdit === true
+    && access?.access.notesEdit === true
+    && !!access
+    && Object.values(access.sensitive).every((permission) => permission.edit));
+  const canEditOperationalRequests = !enforceCasePermissions || (
+    access?.access.flowEdit === true
+    && access?.access.notesEdit === true
+    && !!access
+    && Object.values(access.sensitive).every((permission) => permission.edit)
+  );
   const retryEmail = useRetryOnboardingCaseEmail();
   const queryClient = useQueryClient();
   const [retryError, setRetryError] = useState<string | null>(null);
   const retry = (communicationId: number) => {
+    if (!canEditCommunication) return;
     setRetryError(null);
     retryEmail.mutate({ id: caseId, communicationId }, {
       onSuccess: () => {
@@ -121,10 +139,17 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
       },
     });
   };
+  if (enforceCasePermissions && !canReadCommunication) {
+    return <div className="pb-12 max-w-4xl"><RestrictedActionNotice>Communication content and notes are restricted by your current permissions.</RestrictedActionNotice></div>;
+  }
   return (
     <div className="pb-12 max-w-4xl space-y-6">
-      <OperationalRequestsSection caseId={caseId} requestsEnv={requestsEnv} loadError={requestsLoadError} />
-      <BgvNotificationsSection caseId={caseId} caseData={c} />
+      {canEditOperationalRequests
+        ? <OperationalRequestsSection caseId={caseId} requestsEnv={requestsEnv} loadError={requestsLoadError} />
+        : <RestrictedActionNotice>Operational request actions are restricted by your current case permissions.</RestrictedActionNotice>}
+      {!enforceCasePermissions || access?.sensitive.bgv.read
+        ? <BgvNotificationsSection caseId={caseId} caseData={c} enforceCasePermissions={enforceCasePermissions} />
+        : <RestrictedActionNotice>Background-verification communications are restricted by your current permissions.</RestrictedActionNotice>}
       <WhatsAppSandboxWarning
         caseId={caseId}
         channelPreference={c.channelPreference}
@@ -174,6 +199,7 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
                       && ['failed', 'logged-only'].includes(msg.status)
                       && !/^\[AP-\d+\](?:\s|$)/i.test((msg.subject ?? '').trim())
                       && !/^Onboarding channel test$/i.test((msg.subject ?? '').trim())
+                      && canEditCommunication
                       && (
                       <Button
                         type="button"
@@ -203,7 +229,7 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
         </CardContent>
       </Card>
 
-      <details className="border border-[var(--border)] rounded-[var(--radius-lg)] bg-[var(--surface)] overflow-hidden shadow-sm">
+      {canEditCommunication && <details className="border border-[var(--border)] rounded-[var(--radius-lg)] bg-[var(--surface)] overflow-hidden shadow-sm">
         <summary className="p-4 font-bold text-[var(--text-sm)] cursor-pointer hover:bg-[var(--surface-alt)] select-none uppercase tracking-wider text-[var(--text-secondary)] text-[11px]">
           Simulation Tools (Development Only)
         </summary>
@@ -217,7 +243,8 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
             <SimulateVoiceCall caseId={caseId} />
           </div>
         </div>
-      </details>
+      </details>}
+      {!canEditCommunication && <RestrictedActionNotice>Retry, reply, and simulation controls are restricted by your current permissions.</RestrictedActionNotice>}
     </div>
   );
 }

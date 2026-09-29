@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { ExplainOnboardingCaseBody } from "@workspace/api-zod";
 import { getOrganizationId } from "../lib/organization-scope";
+import { resolveEffectiveAccess } from "../lib/access-governance";
 import {
   collectCaseExplainabilityEvidence,
   findExplainableCase,
@@ -28,10 +29,16 @@ type CaseLookup = (
   organizationId: string,
   caseId: number,
 ) => Promise<ExplainableCase | null>;
+type CaseAccessLookup = (
+  organizationId: string,
+  userId: string,
+  caseId: number,
+) => Promise<Pick<Awaited<ReturnType<typeof resolveEffectiveAccess>>, "allows">>;
 
 export type CaseExplainabilityRouterDeps = {
   findCase?: CaseLookup;
   collectEvidence?: EvidenceCollector;
+  resolveAccess?: CaseAccessLookup;
   complete?: ExplainabilityCompletion;
 };
 
@@ -82,6 +89,14 @@ export function createOnboardingCaseExplainabilityRouter(
 ): IRouter {
   const lookup = deps.findCase ?? findExplainableCase;
   const collect = deps.collectEvidence ?? collectCaseExplainabilityEvidence;
+  const resolveAccess = deps.resolveAccess ?? (async (organizationId, userId, caseId) =>
+    resolveEffectiveAccess({
+      organizationId,
+      principalType: "human",
+      principalId: userId,
+      caseId,
+      purpose: "onboarding-case-explainability",
+    }));
 
   const router: IRouter = Router();
   router.post("/onboarding/cases/:id/explain", async (req, res, next) => {
@@ -105,6 +120,17 @@ export function createOnboardingCaseExplainabilityRouter(
         res.status(404).json({ message: "Case not found" });
         return;
       }
+      const effectiveAccess = await resolveAccess(organizationId, userId, id);
+      if (!effectiveAccess.allows.includes("flow.case.read")) {
+        res.status(403).json({
+          message: "Current case-read access is required for case explainability.",
+          code: "CASE_ACCESS_REQUIRED",
+        });
+        return;
+      }
+      const explainableCase = effectiveAccess.allows.includes("data.case.profile.read")
+        ? ownedCase
+        : { ...ownedCase, joiningDate: "Restricted" };
 
       const body = ExplainOnboardingCaseBody.parse(req.body);
       const question = body.question.trim();
@@ -119,13 +145,13 @@ export function createOnboardingCaseExplainabilityRouter(
         return;
       }
       try {
-        const evidence = await collect(organizationId, id, ownedCase);
+        const evidence = await collect(organizationId, id, explainableCase);
         if (!evidence) {
           res.status(404).json({ message: "Case not found" });
           return;
         }
         const answer = await explainCase(
-          ownedCase,
+          explainableCase,
           question,
           body.history,
           evidence,

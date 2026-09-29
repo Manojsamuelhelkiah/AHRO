@@ -26,6 +26,12 @@ import {
   onbReadinessSlaPolicies,
   onbSensitiveLifecyclePolicies,
   onbWatchEmails,
+  accessSecurityGroups,
+  accessSecurityGroupPolicies,
+  accessSecurityGroupUserGroups,
+  accessSecurityGroupAttachments,
+  accessUserGroups,
+  accessUserGroupMembers,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
@@ -67,6 +73,7 @@ const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `bgv-notifications-a-${suffix}`;
 const orgB = `bgv-notifications-b-${suffix}`;
 const testUser = `bgv-notifications-user-${suffix}`;
+const accessOwner = `bgv-notifications-access-owner-${suffix}`;
 const addresses = {
   hr: `bgv-hr-${suffix}@example.test`,
   bgvTeam: `bgv-provider-${suffix}@example.test`,
@@ -222,10 +229,73 @@ async function createCase(
     workstreams: [],
     processPolicySnapshot,
     notes: options.offline ? SYNTHETIC_OFFLINE_MARKER : null,
+    syntheticProvenance: options.offline ? "synthetic-reset" : null,
     candidateEmailAuthorizedAt: options.candidateAuthorized ? new Date() : null,
     candidateEmailAuthorizedBy: options.candidateAuthorized ? testUser : null,
   }).returning({ id: onbCases.id });
   createdCases.push({ id: created.id, organizationId });
+  if (organizationId === orgA) {
+    const userGroupId = `bgv-case-user-group-${created.id}-${suffix}`;
+    const securityGroupId = `bgv-case-security-group-${created.id}-${suffix}`;
+    await db.insert(accessUserGroups).values({
+      id: userGroupId,
+      organizationId,
+      name: userGroupId,
+      ownerUserId: accessOwner,
+      createdByUserId: testUser,
+    });
+    await db.insert(accessSecurityGroups).values({
+      id: securityGroupId,
+      organizationId,
+      name: securityGroupId,
+      ownerUserId: accessOwner,
+      createdByUserId: testUser,
+    });
+    await db.insert(accessUserGroupMembers).values({
+      organizationId,
+      groupId: userGroupId,
+      principalType: "human",
+      principalId: testUser,
+      attachedByUserId: testUser,
+      requiresApproval: "yes",
+      approvedByUserId: accessOwner,
+      approvedAt: new Date(),
+    });
+    await db.insert(accessSecurityGroupUserGroups).values({
+      organizationId,
+      securityGroupId,
+      userGroupId,
+      attachedByUserId: testUser,
+      requiresApproval: "yes",
+      approvedByUserId: accessOwner,
+      approvedAt: new Date(),
+      approvedPolicyVersion: 1,
+    });
+    await db.insert(accessSecurityGroupPolicies).values({
+      organizationId,
+      securityGroupId,
+      version: 1,
+      policy: {
+        fields: ["data.bgv.read", "data.bgv.edit"],
+        flows: [],
+        tools: ["tool.notification.send"],
+      },
+      createdByUserId: testUser,
+      approvedByUserId: accessOwner,
+      approvedAt: new Date(),
+    });
+    await db.insert(accessSecurityGroupAttachments).values({
+      organizationId,
+      securityGroupId,
+      scope: "case",
+      caseId: created.id,
+      attachedByUserId: testUser,
+      requiresApproval: "yes",
+      approvedByUserId: accessOwner,
+      approvedAt: new Date(),
+      approvedPolicyVersion: 1,
+    });
+  }
   return created.id;
 }
 
@@ -380,6 +450,11 @@ before(async () => {
   await db.insert(organizationMembershipsTable).values({
     organizationId: orgA,
     clerkUserId: testUser,
+    role: "owner",
+  });
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: orgA,
+    clerkUserId: accessOwner,
     role: "owner",
   });
   await db.insert(onbAuthorityGovernance).values({
@@ -1061,7 +1136,10 @@ test("offline, demo, and ordinary simulated cases never reach the sender", async
     role: "owner",
   });
   await db.update(onbCases)
-    .set({ notes: SYNTHETIC_OFFLINE_MARKER })
+    .set({
+      notes: SYNTHETIC_OFFLINE_MARKER,
+      syntheticProvenance: "synthetic-reset",
+    })
     .where(eq(onbCases.id, offlineCase));
   const offlineBefore = await getBgvNotifications({
     organizationId: orgA,

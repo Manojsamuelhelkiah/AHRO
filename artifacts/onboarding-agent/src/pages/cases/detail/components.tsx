@@ -6,6 +6,7 @@ import { useStartOnboardingVoiceCall, getListOnboardingCaseCommunicationsQueryKe
 import { useQueryClient } from '@tanstack/react-query';
 import { ContactDialog } from './ContactDialog';
 import { casePresentationOf, isDemoCoverageCase } from '../case-presentation';
+import { useCaseAccess } from './case-access';
 
 export function isOfflineDemoSample(c: { scenarioKey?: string | null; offlineSample?: boolean }) {
   return c.offlineSample === true || isDemoCoverageCase(c);
@@ -46,6 +47,7 @@ export function StatusDot({ status }: { status: string }) {
 }
 
 export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setTab?: (t: string) => void }) {
+  const access = useCaseAccess();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [actionOpen, setActionOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
@@ -53,6 +55,8 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
   const queryClient = useQueryClient();
 
   const handleCall = (scenario: 'day-before' | 'sla-escalation') => {
+    if (access?.access.flowEdit !== true || access?.access.notesEdit !== true
+      || access?.sensitive.identity.read !== true || access?.sensitive.identity.edit !== true) return;
     startCall.mutate({ id: caseId, data: { scenario, simulate: false } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId) });
@@ -69,6 +73,16 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
     title: c.workerName,
     owner: 'Onboarding Agent',
   };
+  const canViewIdentity = access?.access.profileRead === true &&
+    (access?.sensitive.identity.read === true || c.fictionalOfflineIdentity === true);
+  const canUseContactActions = canViewIdentity
+    && access?.sensitive.identity.edit === true
+    && access?.access.flowEdit === true
+    && access?.access.notesEdit === true;
+  const canAskAboutCase = access?.access.profileRead === true
+    && access?.access.notesRead === true
+    && !!access
+    && Object.values(access.sensitive).every((permission) => permission.read);
 
   return (
     <div className="sticky top-0 z-30 bg-[var(--surface)] pb-4 pt-4 px-6 md:px-8 -mx-6 md:-mx-8 border-b border-[var(--border)] shadow-[var(--shadow-sm)] mb-6">
@@ -76,10 +90,10 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
         <div className="min-w-0">
            <div className="flex items-center gap-3 mb-1">
              <span className="text-[var(--text-xs)] font-bold text-[var(--primary)] bg-[var(--primary-light-bg)] px-2 py-0.5 rounded-full">Case #{c.id}</span>
-              <h1 className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-none m-0">{presentation.title}</h1>
-              <Badge variant="outline" className="uppercase text-[10px] tracking-wider">{presentation.type}</Badge>
+               <h1 className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-none m-0">{canViewIdentity ? presentation.title : 'Restricted candidate'}</h1>
+               <Badge variant="outline" className="uppercase text-[10px] tracking-wider">{access?.access.profileRead ? presentation.type : 'Case details'}</Badge>
            </div>
-            <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{offlineSample ? `For ${c.workerName} • ` : ''}{c.role} • {c.geography} • Effective {format(new Date(c.joiningDate), 'MMM d, yyyy')}</p>
+             <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{offlineSample && canViewIdentity ? `For ${c.workerName} • ` : ''}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity ? ` • Effective ${format(new Date(c.joiningDate), 'MMM d, yyyy')}` : ''}</p>
             {offlineSample && (
               <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
                 Demo-only offline synthetic sample — no provider is connected, authorized, or contacted.
@@ -91,12 +105,13 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
              <span className="flex items-center gap-1">Priority: <span className={c.urgency === 'elevated' ? 'text-[var(--status-red)]' : 'text-[var(--text-primary)]'}>{c.urgency}</span></span>
              <span className="flex items-center gap-1">Stage: <span className="text-[var(--text-primary)]">{c.lifecycleStage.replace(/-/g, ' ')}</span></span>
              <span className="flex items-center gap-1">Status: <span className="text-[var(--text-primary)]">{statusText}</span></span>
-             <span className="flex items-center gap-1">Manager: <span className="text-[var(--text-primary)]">{c.managerName}</span></span>
+              {canViewIdentity && <span className="flex items-center gap-1">Manager: <span className="text-[var(--text-primary)]">{c.managerName}</span></span>}
            </div>
 
-           <button onClick={() => setDetailsOpen(!detailsOpen)} className="mt-2 text-[var(--primary)] text-[var(--text-xs)] font-semibold flex items-center gap-1 hover:underline">
-             Worker Details {detailsOpen ? '▾' : '▸'}
-           </button>
+            {canViewIdentity && <button onClick={() => setDetailsOpen(!detailsOpen)} className="mt-2 text-[var(--primary)] text-[var(--text-xs)] font-semibold flex items-center gap-1 hover:underline">
+              Worker Details {detailsOpen ? '▾' : '▸'}
+            </button>}
+            {!canViewIdentity && <p className="mt-2 text-xs text-[var(--status-amber-fg)]">Worker identity details are restricted by your current permissions.</p>}
            {detailsOpen && (
              <div className="mt-2 bg-[var(--surface-alt)] p-3 rounded-[var(--radius-md)] text-[var(--text-sm)] grid grid-cols-1 sm:grid-cols-2 gap-4 text-[var(--text-secondary)] border border-[var(--border)]">
                <div><strong>Email:</strong> {c.workerEmail}</div>
@@ -107,15 +122,19 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
            )}
         </div>
          <div className="flex shrink-0 items-center gap-2 self-start lg:self-auto relative">
-          {setTab && (
+           {setTab && canAskAboutCase && (
             <Button variant="outline" className="gap-2 text-[var(--primary)] border-[var(--primary)] hover:bg-[var(--primary-light-bg)]" onClick={() => setTab('Ask AI')}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sparkles"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
               Ask about this case
             </Button>
           )}
-          <Button variant="secondary" className="gap-2" onClick={() => setContactOpen(true)}><Mail className="w-4 h-4"/> Contact</Button>
-          <ContactDialog caseId={caseId} open={contactOpen} onOpenChange={setContactOpen} />
-          <div className="relative">
+          {canUseContactActions && (
+            <>
+              <Button variant="secondary" className="gap-2" onClick={() => setContactOpen(true)}><Mail className="w-4 h-4"/> Contact</Button>
+              <ContactDialog caseId={caseId} open={contactOpen} onOpenChange={setContactOpen} />
+            </>
+          )}
+          {canUseContactActions && <div className="relative">
             <Button onClick={() => setActionOpen(!actionOpen)} className="gap-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] border-transparent">
               Take Action <ChevronDown className="w-4 h-4" />
             </Button>
@@ -129,7 +148,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
                 </button>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
     </div>
@@ -192,7 +211,10 @@ export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: 
 }
 
 export function CaseTabs({ activeTab, setTab, offlineSample = false }: { activeTab: string, setTab: (t: string) => void, offlineSample?: boolean }) {
-  const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Tasks', 'Frontline', 'Documents', 'Activity', 'Communications', 'Audit', 'Ask AI'];
+  const access = useCaseAccess();
+  const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Tasks', 'Frontline', 'Documents',
+    ...(access?.access.notesRead ? ['Activity', 'Communications', 'Audit'] : []),
+    ...(access?.access.profileRead && access.access.notesRead && access && Object.values(access.sensitive).every((permission) => permission.read) ? ['Ask AI'] : [])];
   return (
     <div className="flex overflow-x-auto border-b border-[var(--border)] mb-6 hide-scrollbar -mx-6 md:mx-0 px-6 md:px-0">
       {tabs.map(t => (

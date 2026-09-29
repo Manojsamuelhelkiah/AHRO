@@ -28,6 +28,12 @@ import {
   onbSettings,
   onbSystemChecks,
   organizationsTable,
+  accessSecurityGroups,
+  accessSecurityGroupPolicies,
+  accessSecurityGroupUserGroups,
+  accessSecurityGroupAttachments,
+  accessUserGroups,
+  accessUserGroupMembers,
 } from "@workspace/db";
 import onboardingRouter from "../../routes/onboarding";
 import {
@@ -58,6 +64,7 @@ const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `operational-a-${suffix}`;
 const orgB = `operational-b-${suffix}`;
 const user = `operational-user-${suffix}`;
+const accessOwner = `operational-access-owner-${suffix}`;
 let baseUrl: string;
 let server: Server;
 let caseA: number;
@@ -68,6 +75,8 @@ let allNonblockingCase: number;
 let officeNoSiteCase: number;
 let liveGovernanceSnapshot: GovernanceCaseSnapshot;
 const unrelatedSpecialist = `unrelated-${suffix}`;
+const payrollUserGroupId = `operational-payroll-users-${suffix}`;
+const payrollSecurityGroupId = `operational-payroll-access-${suffix}`;
 
 function caseValues(organizationId: string, name: string, notes: string | null = null) {
   return {
@@ -218,6 +227,23 @@ async function seedCurrentExecutionApprovals(caseId: number): Promise<void> {
       idempotencyKey: `orchestration:${caseId}:approval:execution:${connector}`,
     });
   }
+  if (caseId !== caseA) {
+    await db.insert(onbAuthorityAssignments).values({
+      id: `operational-current-user-payroll-${caseId}`,
+      organizationId: orgA,
+      caseId,
+      personUserId: user,
+      authorityRole: "payroll",
+      scopes: ["payroll-approve"],
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: new Date(Date.now() + 60_000),
+      status: "active",
+      revision: 1,
+      grantorUserId: "operational-fixture",
+      source: "fixture",
+      governanceDecisionRef: "OPERATIONAL-FIXTURE",
+    });
+  }
 }
 
 async function seedTrustedAccessReleaseEvidence(caseId: number): Promise<void> {
@@ -286,9 +312,72 @@ before(async () => {
   ]);
   await db.insert(organizationMembershipsTable).values([
     { organizationId: orgA, clerkUserId: user, role: "owner" },
+    { organizationId: orgA, clerkUserId: accessOwner, role: "owner" },
     { organizationId: orgB, clerkUserId: user, role: "owner" },
     { organizationId: orgA, clerkUserId: unrelatedSpecialist, role: "member" },
   ]);
+  await db.insert(accessUserGroups).values({
+    id: payrollUserGroupId,
+    organizationId: orgA,
+    name: payrollUserGroupId,
+    ownerUserId: accessOwner,
+    createdByUserId: user,
+  });
+  await db.insert(accessSecurityGroups).values({
+    id: payrollSecurityGroupId,
+    organizationId: orgA,
+    name: payrollSecurityGroupId,
+    ownerUserId: accessOwner,
+    createdByUserId: user,
+  });
+  await db.insert(accessUserGroupMembers).values({
+    organizationId: orgA,
+    groupId: payrollUserGroupId,
+    principalType: "human",
+    principalId: user,
+    attachedByUserId: user,
+    status: "active",
+    requiresApproval: "yes",
+    approvedByUserId: accessOwner,
+    approvedAt: new Date(),
+  });
+  await db.insert(accessSecurityGroupUserGroups).values({
+    organizationId: orgA,
+    securityGroupId: payrollSecurityGroupId,
+    userGroupId: payrollUserGroupId,
+    attachedByUserId: user,
+    requiresApproval: "yes",
+    approvedByUserId: accessOwner,
+    approvedAt: new Date(),
+    approvedPolicyVersion: 1,
+  });
+  await db.insert(accessSecurityGroupPolicies).values({
+    organizationId: orgA,
+    securityGroupId: payrollSecurityGroupId,
+    version: 1,
+    policy: {
+      fields: [
+        "data.payroll.read", "data.payroll.edit",
+        "data.case.profile.read", "data.case.profile.edit",
+        "data.case.notes.read", "data.case.notes.edit",
+      ],
+      flows: ["flow.case.read", "flow.case.edit"],
+      tools: ["tool.workflow.run", "tool.external.dispatch"],
+    },
+    createdByUserId: user,
+    approvedByUserId: accessOwner,
+    approvedAt: new Date(),
+  });
+  await db.insert(accessSecurityGroupAttachments).values({
+    organizationId: orgA,
+    securityGroupId: payrollSecurityGroupId,
+    scope: "tenant",
+    attachedByUserId: user,
+    requiresApproval: "yes",
+    approvedByUserId: accessOwner,
+    approvedAt: new Date(),
+    approvedPolicyVersion: 1,
+  });
   liveGovernanceSnapshot = await establishLiveGovernanceFixture(orgA);
   await db.insert(onbSensitiveLifecyclePolicies).values(
     [orgA, orgB].flatMap((organizationId) => SENSITIVE_DATA_CLASSES.map((dataClass) => ({
@@ -310,7 +399,10 @@ before(async () => {
   [caseA, caseB, offlineCase, workforceCase, allNonblockingCase, officeNoSiteCase] = (await db.insert(onbCases).values([
     caseValues(orgA, "Operational Alpha"),
     caseValues(orgB, "Operational Beta"),
-    caseValues(orgA, "Offline Sample", SYNTHETIC_OFFLINE_MARKER),
+    {
+      ...caseValues(orgA, "Offline Sample", SYNTHETIC_OFFLINE_MARKER),
+      syntheticProvenance: "synthetic-reset",
+    },
     {
       ...caseValues(orgA, "Workforce Human"),
       joiningDate: "2020-01-02",
@@ -387,6 +479,29 @@ before(async () => {
       }, liveGovernanceSnapshot),
     },
   ]).returning({ id: onbCases.id })).map((row) => row.id);
+  await db.insert(onbAuthorityGovernance).values({
+    organizationId: orgA,
+    status: "governance-approved",
+    approvedByUserId: "operational-fixture",
+    approvedAt: new Date(),
+    governanceSource: "fixture",
+    revision: 1,
+  });
+  await db.insert(onbAuthorityAssignments).values({
+    id: `operational-bootstrap-payroll-${caseA}`,
+    organizationId: orgA,
+    caseId: caseA,
+    personUserId: user,
+    authorityRole: "payroll",
+    scopes: ["payroll-approve"],
+    validFrom: new Date(Date.now() - 60_000),
+    validUntil: new Date(Date.now() + 60_000),
+    status: "active",
+    revision: 1,
+    grantorUserId: "operational-fixture",
+    source: "fixture",
+    governanceDecisionRef: "OPERATIONAL-FIXTURE",
+  });
   await Promise.all([
     seedCurrentExecutionApprovals(workforceCase),
     seedCurrentExecutionApprovals(officeNoSiteCase),

@@ -18,23 +18,40 @@ import {
   onbAuthorityAssignments,
   onbAuthorityGovernance,
   onbGovernanceAuthorityAssignments,
+  accessSecurityGroups,
+  accessSecurityGroupPolicies,
+  accessSecurityGroupUserGroups,
+  accessSecurityGroupAttachments,
+  accessPrincipalSecurityGroupAttachments,
+  accessUserGroups,
+  accessUserGroupMembers,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
 import onboardingRouter, {
   setAfterSensitiveLifecycleGateHookForTests,
 } from "./onboarding";
+import onboardingAuditRouter from "./onboarding-audit";
 import { saveSensitiveLifecyclePolicy } from "../lib/onboarding/sensitive-lifecycle";
 
 const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `evidence-a-${suffix}`;
 const orgB = `evidence-b-${suffix}`;
 const user = `evidence-user-${suffix}`;
+const governanceOwnerUser = `evidence-governance-owner-${suffix}`;
 const allAccessUser = `evidence-all-classes-${suffix}`;
 const identityOnlyUser = `evidence-identity-${suffix}`;
 const medicalOnlyUser = `evidence-medical-${suffix}`;
+const groupOnlyUser = `evidence-group-only-${suffix}`;
 const revokedUser = `evidence-revoked-${suffix}`;
 const otherTenantUser = `evidence-other-tenant-${suffix}`;
+const specialistUserGroupId = `evidence-specialists-${suffix}`;
+const fullAccessUserGroupId = `evidence-full-access-${suffix}`;
+const caseReadOnlyUserGroupId = `evidence-case-read-only-${suffix}`;
+const specialistSecurityGroupId = `evidence-specialist-policy-${suffix}`;
+const fullAccessSecurityGroupId = `evidence-full-access-policy-${suffix}`;
+const caseReadOnlySecurityGroupId = `evidence-case-read-only-policy-${suffix}`;
+const auditSecurityGroupId = `evidence-audit-read-policy-${suffix}`;
 let baseUrl: string;
 let caseA: number;
 let caseB: number;
@@ -94,11 +111,13 @@ before(async () => {
   // request's owner role alone must not be relied upon by sensitive routes.
   await db.insert(organizationMembershipsTable).values([
     { organizationId: orgA, clerkUserId: user, role: "owner" },
+    { organizationId: orgA, clerkUserId: governanceOwnerUser, role: "member" },
     { organizationId: orgA, clerkUserId: revokedUser, role: "owner" },
     { organizationId: orgA, clerkUserId: otherTenantUser, role: "owner" },
     { organizationId: orgA, clerkUserId: identityOnlyUser, role: "member" },
     { organizationId: orgA, clerkUserId: medicalOnlyUser, role: "member" },
     { organizationId: orgA, clerkUserId: allAccessUser, role: "member" },
+    { organizationId: orgA, clerkUserId: groupOnlyUser, role: "member" },
     { organizationId: orgB, clerkUserId: otherTenantUser, role: "owner" },
   ]);
   await db.insert(onbAuthorityGovernance).values([orgA, orgB].map((organizationId) => ({
@@ -203,6 +222,194 @@ before(async () => {
     verificationStatus: "verified",
     verifiedByUserId: "test-governance",
     verificationReference: "test-lifecycle-policy-authority",
+  });
+  await db.insert(accessUserGroups).values([
+    {
+      id: specialistUserGroupId, organizationId: orgA, name: specialistUserGroupId,
+      ownerUserId: governanceOwnerUser,
+      createdByUserId: user,
+    },
+    {
+      id: fullAccessUserGroupId, organizationId: orgA, name: fullAccessUserGroupId,
+      ownerUserId: governanceOwnerUser,
+      createdByUserId: user,
+    },
+    {
+      id: caseReadOnlyUserGroupId, organizationId: orgA, name: caseReadOnlyUserGroupId,
+      ownerUserId: governanceOwnerUser,
+      createdByUserId: user,
+    },
+  ]);
+  await db.insert(accessSecurityGroups).values([
+    {
+      id: specialistSecurityGroupId, organizationId: orgA, name: specialistSecurityGroupId,
+      ownerUserId: governanceOwnerUser,
+      createdByUserId: user,
+    },
+    {
+      id: fullAccessSecurityGroupId, organizationId: orgA, name: fullAccessSecurityGroupId,
+      ownerUserId: governanceOwnerUser,
+      createdByUserId: user,
+    },
+    {
+      id: caseReadOnlySecurityGroupId, organizationId: orgA, name: caseReadOnlySecurityGroupId,
+      ownerUserId: governanceOwnerUser,
+      createdByUserId: user,
+    },
+    {
+      id: auditSecurityGroupId, organizationId: orgA, name: auditSecurityGroupId,
+      ownerUserId: governanceOwnerUser,
+      createdByUserId: user,
+    },
+  ]);
+  await db.insert(accessUserGroupMembers).values([
+    {
+      organizationId: orgA, groupId: specialistUserGroupId, principalType: "human",
+      principalId: user, attachedByUserId: user, requiresApproval: "yes",
+      approvedByUserId: governanceOwnerUser, approvedAt: new Date(),
+    },
+    {
+      organizationId: orgA, groupId: specialistUserGroupId, principalType: "human",
+      principalId: revokedUser, attachedByUserId: user, requiresApproval: "yes",
+      approvedByUserId: governanceOwnerUser, approvedAt: new Date(),
+    },
+    {
+      organizationId: orgA, groupId: fullAccessUserGroupId, principalType: "human",
+      principalId: allAccessUser, attachedByUserId: user, requiresApproval: "yes",
+      approvedByUserId: governanceOwnerUser, approvedAt: new Date(),
+    },
+    {
+      organizationId: orgA, groupId: fullAccessUserGroupId, principalType: "human",
+      principalId: groupOnlyUser, attachedByUserId: user, requiresApproval: "yes",
+      approvedByUserId: governanceOwnerUser, approvedAt: new Date(),
+    },
+    ...[identityOnlyUser, medicalOnlyUser].map((principalId) => ({
+      organizationId: orgA,
+      groupId: caseReadOnlyUserGroupId,
+      principalType: "human" as const,
+      principalId,
+      attachedByUserId: user,
+    })),
+  ]);
+  await db.insert(accessSecurityGroupUserGroups).values([
+    {
+      organizationId: orgA, securityGroupId: specialistSecurityGroupId, userGroupId: specialistUserGroupId,
+      attachedByUserId: user, requiresApproval: "yes", approvedByUserId: governanceOwnerUser,
+      approvedAt: new Date(), approvedPolicyVersion: 1,
+    },
+    {
+      organizationId: orgA, securityGroupId: fullAccessSecurityGroupId, userGroupId: fullAccessUserGroupId,
+      attachedByUserId: user, requiresApproval: "yes", approvedByUserId: governanceOwnerUser,
+      approvedAt: new Date(), approvedPolicyVersion: 1,
+    },
+    {
+      organizationId: orgA, securityGroupId: caseReadOnlySecurityGroupId,
+      userGroupId: caseReadOnlyUserGroupId, attachedByUserId: user,
+    },
+  ]);
+  const allSensitiveDataFields = ["identity", "medical", "payroll", "bgv"]
+    .flatMap((dataClass) => [`data.${dataClass}.read`, `data.${dataClass}.edit`]);
+  await db.insert(accessSecurityGroupPolicies).values([
+    {
+      organizationId: orgA,
+      securityGroupId: specialistSecurityGroupId,
+      version: 1,
+      policy: {
+        fields: [
+          "data.identity.read",
+          "data.identity.edit",
+          "data.bgv.read",
+          "data.case.readiness.read",
+          "data.case.readiness.edit",
+          "data.documents.read",
+          "data.documents.edit",
+          "data.case.profile.read",
+          "data.case.profile.edit",
+          "data.case.notes.read",
+          "data.case.notes.edit",
+        ],
+        flows: ["flow.case.read", "flow.case.edit", "flow.document-review.read", "flow.document-review.edit"],
+        tools: ["tool.documents.edit", "tool.notification.send"],
+      },
+      createdByUserId: user,
+      approvedByUserId: governanceOwnerUser,
+      approvedAt: new Date(),
+    },
+    {
+      organizationId: orgA,
+      securityGroupId: fullAccessSecurityGroupId,
+      version: 1,
+      policy: {
+        fields: [
+          ...allSensitiveDataFields,
+          "data.case.readiness.read",
+          "data.case.readiness.edit",
+          "data.documents.read",
+          "data.documents.edit",
+          "data.case.profile.read",
+          "data.case.notes.read",
+        ],
+        flows: ["flow.case.read", "flow.document-review.read", "flow.document-review.edit"],
+        tools: ["tool.documents.edit", "tool.notification.send", "tool.workflow.run"],
+      },
+      createdByUserId: user,
+      approvedByUserId: governanceOwnerUser,
+      approvedAt: new Date(),
+    },
+    {
+      organizationId: orgA,
+      securityGroupId: caseReadOnlySecurityGroupId,
+      version: 1,
+      policy: {
+        fields: ["data.documents.read"],
+        flows: ["flow.case.read", "flow.document-review.read"],
+        tools: [],
+      },
+      createdByUserId: user,
+    },
+    {
+      organizationId: orgA,
+      securityGroupId: auditSecurityGroupId,
+      version: 1,
+      policy: { fields: ["data.audit.read"], flows: [], tools: [] },
+      createdByUserId: user,
+      approvedByUserId: governanceOwnerUser,
+      approvedAt: new Date(),
+    },
+  ]);
+  await db.insert(accessSecurityGroupAttachments).values([
+    {
+      organizationId: orgA, securityGroupId: specialistSecurityGroupId, scope: "case",
+      caseId: caseA, attachedByUserId: user, requiresApproval: "yes",
+      approvedByUserId: governanceOwnerUser, approvedAt: new Date(), approvedPolicyVersion: 1,
+    },
+    {
+      organizationId: orgA, securityGroupId: fullAccessSecurityGroupId, scope: "case",
+      caseId: caseA, attachedByUserId: user, requiresApproval: "yes",
+      approvedByUserId: governanceOwnerUser, approvedAt: new Date(), approvedPolicyVersion: 1,
+    },
+    {
+      organizationId: orgA, securityGroupId: caseReadOnlySecurityGroupId, scope: "case",
+      caseId: caseA, attachedByUserId: user,
+    },
+    {
+      organizationId: orgA, securityGroupId: auditSecurityGroupId, scope: "tenant",
+      attachedByUserId: user, requiresApproval: "yes",
+      approvedByUserId: governanceOwnerUser, approvedAt: new Date(), approvedPolicyVersion: 1,
+    },
+  ]);
+  await db.insert(accessPrincipalSecurityGroupAttachments).values({
+    organizationId: orgA,
+    principalType: "human",
+    principalId: user,
+    securityGroupId: auditSecurityGroupId,
+    scope: "tenant",
+    status: "active",
+    requiresApproval: "yes",
+    attachedByUserId: user,
+    approvedByUserId: governanceOwnerUser,
+    approvedAt: new Date(),
+    approvedPolicyVersion: 1,
   });
   await db.insert(onbSensitiveLifecyclePolicies).values([
     "candidate-document", "identity", "medical", "payroll",
@@ -313,6 +520,7 @@ before(async () => {
     next();
   });
   app.use(onboardingRouter);
+  app.use(onboardingAuditRouter);
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
@@ -334,6 +542,8 @@ after(async () => {
   await db.delete(onbGovernanceAuthorityAssignments).where(
     inArray(onbGovernanceAuthorityAssignments.organizationId, [orgA, orgB]),
   );
+  await db.delete(accessSecurityGroups).where(eq(accessSecurityGroups.organizationId, orgA));
+  await db.delete(accessUserGroups).where(eq(accessUserGroups.organizationId, orgA));
   await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
 });
 
@@ -342,6 +552,164 @@ test("evidence and BGV lists are tenant scoped", async () => {
   assert.equal((await call(`/onboarding/cases/${caseA}/bgv`, orgA)).status, 200);
   assert.equal((await call(`/onboarding/cases/${caseA}/evidence`, orgB)).status, 404);
   assert.equal((await call(`/onboarding/cases/${caseA}/bgv`, orgB)).status, 404);
+});
+
+test("document-review and readiness keys supplement specialist, case, and lifecycle gates", async () => {
+  const noDocumentRead = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
+    headers: { "x-test-user": otherTenantUser },
+  });
+  assert.equal(noDocumentRead.status, 403);
+  assert.equal((await noDocumentRead.json() as { code: string }).code, "DOCUMENT_ACCESS_REQUIRED");
+
+  const reviewReader = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
+    headers: { "x-test-user": identityOnlyUser },
+  });
+  assert.equal(reviewReader.status, 200);
+  const documents = await call(`/onboarding/cases/${caseA}/documents`, orgA, {
+    headers: { "x-test-user": identityOnlyUser },
+  });
+  assert.equal(documents.status, 200);
+
+  const caseView = await call(`/onboarding/cases/${caseA}`, orgA, {
+    headers: { "x-test-user": identityOnlyUser },
+  });
+  assert.equal(caseView.status, 200);
+  const readinessView = await caseView.json() as {
+    readiness: unknown[];
+    gateways: { a: { status: string }; b: { status: string }; c: { status: string } };
+  };
+  assert.deepEqual(readinessView.readiness, []);
+  assert.deepEqual(
+    [readinessView.gateways.a.status, readinessView.gateways.b.status, readinessView.gateways.c.status],
+    ["restricted", "restricted", "restricted"],
+  );
+
+  const noReadinessEdit = await call(`/onboarding/cases/${caseA}/checklist/custom-readiness-item`, orgA, {
+    method: "PUT",
+    headers: { "x-test-user": identityOnlyUser },
+    body: JSON.stringify({ status: "ready" }),
+  });
+  assert.equal(noReadinessEdit.status, 403);
+});
+
+test("protected audit review requires both reviewer role and data.audit.read", async () => {
+  const missingDataGrant = await call("/onboarding/audit/lifecycle", orgA, {
+    headers: { "x-test-user": revokedUser },
+  });
+  assert.equal(missingDataGrant.status, 403);
+  assert.equal((await missingDataGrant.json() as { code: string }).code, "AUDIT_ACCESS_REQUIRED");
+
+  const memberWithoutReviewerRole = await call("/onboarding/audit/lifecycle", orgA, {
+    headers: { "x-test-user": groupOnlyUser },
+  });
+  assert.equal(memberWithoutReviewerRole.status, 403);
+
+  const authorized = await call("/onboarding/audit/lifecycle", orgA);
+  assert.equal(authorized.status, 200);
+});
+
+test("Gate C approval list, history, capability, and decision honor readiness keys", async () => {
+  const [approval] = await db.insert(onbApprovals).values({
+    organizationId: orgA,
+    caseId: caseA,
+    agent: "day1-readiness-gate",
+    ruleRef: "Gate C — Day-1 readiness confirmation",
+    recommendation: "Review current readiness.",
+    rationale: "Final readiness review.",
+    status: "pending",
+    authorityScope: "hr-compliance-approve",
+    idempotencyKey: `gateway-c:${caseA}:human-queue`,
+  }).returning({ id: onbApprovals.id });
+  assert.ok(approval);
+  try {
+    const queue = await call("/onboarding/approvals", orgA, {
+      headers: { "x-test-user": identityOnlyUser },
+    });
+    const queueRows = await queue.json() as Array<{ id: number }>;
+    assert.ok(!queueRows.some((row) => row.id === approval.id));
+
+    const history = await call(`/onboarding/approvals/${approval.id}/history`, orgA, {
+      headers: { "x-test-user": identityOnlyUser },
+    });
+    assert.equal(history.status, 403);
+    assert.equal((await history.json() as { code: string }).code, "CASE_READINESS_ACCESS_REQUIRED");
+
+    const capability = await call(`/onboarding/approvals/${approval.id}/capability`, orgA, {
+      headers: { "x-test-user": identityOnlyUser },
+    });
+    assert.deepEqual(await capability.json(), {
+      canDecide: false,
+      reason: "readiness_access_required",
+      version: 1,
+    });
+
+    const decision = await call(`/onboarding/approvals/${approval.id}/decide`, orgA, {
+      method: "POST",
+      headers: { "x-test-user": identityOnlyUser },
+      body: JSON.stringify({ decision: "approved", expectedVersion: 1 }),
+    });
+    assert.equal(decision.status, 403);
+    assert.match(
+      (await decision.json() as { message: string }).message,
+      /data\.case\.readiness\.edit grant/i,
+    );
+    const [unchanged] = await db.select({ status: onbApprovals.status })
+      .from(onbApprovals).where(eq(onbApprovals.id, approval.id));
+    assert.equal(unchanged?.status, "pending");
+  } finally {
+    await db.delete(onbApprovals).where(eq(onbApprovals.id, approval.id));
+  }
+});
+
+test("sensitive reads and writes require both current specialist authority and explicit field policy", async () => {
+  const legacyAuthorityOnly = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
+    headers: { "x-test-user": identityOnlyUser },
+  });
+  assert.equal(legacyAuthorityOnly.status, 200);
+  const [legacyDocument] = await legacyAuthorityOnly.json() as Array<Record<string, unknown>>;
+  assert.equal(legacyDocument.restricted, true, "legacy specialist authority must not auto-map to a security-group field allow");
+
+  const groupWithoutSpecialist = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
+    headers: { "x-test-user": groupOnlyUser },
+  });
+  assert.equal(groupWithoutSpecialist.status, 200);
+  const [groupOnlyDocument] = await groupWithoutSpecialist.json() as Array<Record<string, unknown>>;
+  assert.equal(groupOnlyDocument.restricted, true, "a field allow cannot replace the live specialist assignment");
+
+  const specialistAndAllow = await call(`/onboarding/cases/${caseA}/evidence`, orgA);
+  assert.equal(specialistAndAllow.status, 200);
+  const authorizedDocument = (await specialistAndAllow.json() as Array<Record<string, unknown>>)
+    .find((row) => Number(row.id) === uploadA);
+  assert.equal(authorizedDocument?.originalName, "Restricted confidential filename.");
+
+  const noDocumentEdit = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
+    method: "POST",
+    headers: { "x-test-user": identityOnlyUser },
+    body: JSON.stringify({ decision: "approve", reason: "Document edit permission is missing." }),
+  });
+  assert.equal(noDocumentEdit.status, 403);
+  const [unchangedUpload] = await db.select({ state: onbCandidateUploads.validationState })
+    .from(onbCandidateUploads).where(eq(onbCandidateUploads.id, uploadA));
+  assert.equal(unchangedUpload?.state, "manual_review");
+
+  const missingEditField = await call(`/onboarding/cases/${caseA}/bgv-notifications/reconcile`, orgA, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  assert.equal(missingEditField.status, 403, "BGV specialist authority cannot substitute for data.bgv.edit");
+});
+
+test("workforce-context corrections reject unrecognized fields before persistence", async () => {
+  const response = await call(`/onboarding/cases/${caseA}/workforce-context`, orgA, {
+    method: "PUT",
+    body: JSON.stringify({
+      workforceContext: { workCountry: "US", unknownSensitiveField: "private payload" },
+      reason: "Correct job context",
+      expectedUpdatedAt: new Date().toISOString(),
+    }),
+  });
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /Unknown workforce-context correction field/);
 });
 
 test("partial document access exposes typed evidence state but not filename or provider narrative", async () => {
@@ -509,10 +877,14 @@ test("revoked or other-tenant authority assignments never disclose case evidence
     const response = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
       headers: { "x-test-user": actor },
     });
-    assert.equal(response.status, 200);
-    const [row] = await response.json() as Array<Record<string, unknown>>;
-    assert.equal(row.restricted, true, `actor ${actor} must not receive evidence metadata`);
-    assert.equal(row.originalName, undefined);
+    if (actor === otherTenantUser) {
+      assert.equal(response.status, 403);
+    } else {
+      assert.equal(response.status, 200);
+      const [row] = await response.json() as Array<Record<string, unknown>>;
+      assert.equal(row.restricted, true, `actor ${actor} must not receive evidence metadata`);
+      assert.equal(row.originalName, undefined);
+    }
 
     const bgv = await call(`/onboarding/cases/${caseA}/bgv`, orgA, {
       headers: { "x-test-user": actor },

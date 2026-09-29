@@ -1510,6 +1510,505 @@ export const UpdateOrganizationPrimaryCountryResponse = zod.object({
 
 
 /**
+ * Owner/admin only. Includes the reviewed catalog, active organization members, registered agents, user groups, security groups, effective direct grants, and the most recent 250 audit events.
+ * @summary Read the current organization's access-governance snapshot
+ */
+export const getOrganizationAccessGovernanceResponseHistoryMax = 250;
+
+
+
+export const GetOrganizationAccessGovernanceResponse = zod.object({
+  "catalog": zod.array(zod.object({
+  "key": zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide']),
+  "label": zod.string(),
+  "sensitivity": zod.enum(['medium', 'high']),
+  "kind": zod.enum(['field', 'flow', 'tool'])
+})),
+  "members": zod.array(zod.object({
+  "clerkUserId": zod.string(),
+  "role": zod.string()
+})),
+  "agents": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string(),
+  "status": zod.enum(['active', 'retired']),
+  "version": zod.number()
+})),
+  "userGroups": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string(),
+  "status": zod.enum(['active', 'retired']),
+  "version": zod.number(),
+  "members": zod.array(zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string()
+})),
+  "securityGroups": zod.array(zod.string())
+})),
+  "securityGroups": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string(),
+  "status": zod.enum(['active', 'retired']),
+  "version": zod.number(),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
+  "approvalStatus": zod.enum(['blocked', 'pending', 'approved'])
+})),
+  "grants": zod.array(zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string(),
+  "securityGroupId": zod.string(),
+  "status": zod.literal("active"),
+  "version": zod.number()
+})),
+  "pendingGrants": zod.array(zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string(),
+  "securityGroupId": zod.string(),
+  "status": zod.literal("pending"),
+  "requestedByUserId": zod.string(),
+  "bindingVersion": zod.number(),
+  "policyVersion": zod.number()
+})),
+  "pendingAttachments": zod.array(zod.object({
+  "userGroupId": zod.string(),
+  "securityGroupId": zod.string(),
+  "requestedByUserId": zod.string(),
+  "policyVersion": zod.number()
+})),
+  "pendingMembers": zod.array(zod.object({
+  "groupId": zod.string(),
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string(),
+  "requestedByUserId": zod.string().nullable(),
+  "expectedVersion": zod.number(),
+  "policyVersions": zod.string()
+})),
+  "history": zod.array(zod.object({
+  "id": zod.number(),
+  "eventType": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.string(),
+  "actorUserId": zod.string().nullable(),
+  "detail": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+})).max(getOrganizationAccessGovernanceResponseHistoryMax)
+})
+
+
+/**
+ * Owner/admin only. Optional caseId includes case-scoped grants in the evaluation. Previewing a registered agent requires an explicit initiatorUserId; effective agent access is evaluated in that initiator's context and is constrained by the initiator's effective access. The registered owner is never inferred as the initiator.
+ * @summary Resolve effective access for a principal
+ */
+
+
+
+
+
+export const PreviewOrganizationPrincipalAccessQueryParams = zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.coerce.string().min(1),
+  "caseId": zod.coerce.number().min(1).optional().describe('Optional positive case ID whose case-scoped grants should be included.'),
+  "initiatorUserId": zod.coerce.string().min(1).optional().describe('Required when principalType is agent. Explicit organization-member user whose effective access constrains the agent preview.')
+})
+
+export const PreviewOrganizationPrincipalAccessResponse = zod.object({
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
+  "reasons": zod.record(zod.string(), zod.array(zod.string()))
+})
+
+
+/**
+ * Owner/admin only. Optional caseId includes case-scoped grants. Pass initiatorUserId to resolve agent entries in an explicit initiator context; agent access is constrained by that user's effective access and is never inferred from the registered owner.
+ * @summary List active principals allowed to access a catalog field
+ */
+
+
+
+
+export const ListOrganizationPrincipalsWithFieldAccessQueryParams = zod.object({
+  "field": zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read']),
+  "caseId": zod.coerce.number().min(1).optional().describe('Optional positive case ID whose case-scoped grants should be included.'),
+  "initiatorUserId": zod.coerce.string().min(1).optional().describe('Explicit organization-member user context for resolving registered-agent access.')
+})
+
+export const ListOrganizationPrincipalsWithFieldAccessResponse = zod.object({
+  "principals": zod.array(zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string()
+}).and(zod.object({
+  "reasons": zod.array(zod.string())
+})))
+})
+
+
+/**
+ * Owner only. The supplied ownerUserId must identify an active human member.
+ * @summary Register an agent for the current organization
+ */
+
+
+
+
+export const CreateAccessAgentBody = zod.object({
+  "name": zod.string().min(1),
+  "ownerUserId": zod.string().min(1)
+})
+
+export const CreateAccessAgentResponse = zod.object({
+  "agent": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string(),
+  "status": zod.enum(['active', 'retired']),
+  "version": zod.number()
+})
+})
+
+
+/**
+ * Owner only. Uses the agent's expected history version to reject stale updates.
+ * @summary Retire a registered agent
+ */
+export const RetireAccessAgentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RetireAccessAgentBody = zod.object({
+  "status": zod.literal("retired"),
+  "expectedVersion": zod.number()
+})
+
+export const RetireAccessAgentResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * Owner only.
+ * @summary Create a user group
+ */
+
+
+
+export const CreateAccessUserGroupBody = zod.object({
+  "name": zod.string().min(1)
+})
+
+export const CreateAccessUserGroupResponse = zod.object({
+  "userGroup": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string(),
+  "status": zod.enum(['active', 'retired']),
+  "version": zod.number(),
+  "members": zod.array(zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string()
+})),
+  "securityGroups": zod.array(zod.string())
+})
+})
+
+
+/**
+ * Owner only. The expected version is the number of history events for the group; retired groups cannot be changed.
+ * @summary Rename or retire a user group
+ */
+export const UpdateAccessUserGroupParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const UpdateAccessUserGroupBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "status": zod.literal("retired").optional(),
+  "expectedVersion": zod.number()
+})
+
+export const UpdateAccessUserGroupResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * Owner only. Adding requires an active organization member or registered agent; removing is idempotent.
+ * @summary Add or remove a principal from a user group
+ */
+export const SetAccessUserGroupMemberParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const SetAccessUserGroupMemberBody = zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string().min(1),
+  "active": zod.boolean()
+})
+
+export const SetAccessUserGroupMemberResponse = zod.object({
+  "ok": zod.boolean(),
+  "status": zod.enum(['active', 'pending', 'revoked'])
+})
+
+
+/**
+ * Owner only. expectedVersion must match the current user-group version; the reviewer must be an active owner other than the requester and member being approved.
+ * @summary Independently approve a pending sensitive user-group membership
+ */
+export const ApproveAccessUserGroupMemberParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const ApproveAccessUserGroupMemberBody = zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string().min(1),
+  "expectedVersion": zod.number()
+})
+
+export const ApproveAccessUserGroupMemberResponse = zod.object({
+  "ok": zod.boolean(),
+  "status": zod.enum(['active', 'pending', 'revoked'])
+})
+
+
+/**
+ * Owner only. Retired groups cannot be attached.
+ * @summary Attach or detach a security group from a user group
+ */
+export const SetAccessUserGroupSecurityGroupParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const SetAccessUserGroupSecurityGroupBody = zod.object({
+  "securityGroupId": zod.string().min(1),
+  "active": zod.boolean()
+})
+
+export const SetAccessUserGroupSecurityGroupResponse = zod.object({
+  "ok": zod.boolean(),
+  "status": zod.enum(['active', 'pending', 'revoked'])
+})
+
+
+/**
+ * Owner of the security group only. expectedVersion must match its current policy version; the requester and policy must already have independent approval.
+ * @summary Independently approve a pending sensitive group attachment
+ */
+export const ApproveAccessUserGroupSecurityGroupParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const ApproveAccessUserGroupSecurityGroupBody = zod.object({
+  "securityGroupId": zod.string().min(1),
+  "expectedVersion": zod.number()
+})
+
+export const ApproveAccessUserGroupSecurityGroupResponse = zod.object({
+  "ok": zod.boolean(),
+  "status": zod.enum(['active', 'pending', 'revoked'])
+})
+
+
+/**
+ * Owner only. Policies accept only keys in the reviewed access catalog; high-sensitivity policies require independent owner approval before sensitive grants become active.
+ * @summary Create a security group and its initial policy
+ */
+
+
+
+
+export const CreateAccessSecurityGroupBody = zod.object({
+  "name": zod.string().min(1),
+  "ownerUserId": zod.string().min(1).optional(),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide']))
+})
+
+export const CreateAccessSecurityGroupResponse = zod.object({
+  "securityGroup": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string(),
+  "status": zod.enum(['active', 'retired']),
+  "version": zod.number(),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
+  "approvalStatus": zod.enum(['blocked', 'pending', 'approved'])
+})
+})
+
+
+/**
+ * Owner only. expectedVersion must match the current policy version. Sensitive keys require a different owner to approve the published policy.
+ * @summary Publish a new security-group policy version or retire the group
+ */
+export const UpdateAccessSecurityGroupParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+
+export const UpdateAccessSecurityGroupBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "ownerUserId": zod.string().min(1).optional(),
+  "status": zod.literal("retired").optional(),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])).optional(),
+  "expectedVersion": zod.number()
+})
+
+export const UpdateAccessSecurityGroupResponse = zod.object({
+  "ok": zod.boolean(),
+  "version": zod.number()
+})
+
+
+/**
+ * Owner only. Grant targets must be active organization members or agents; sensitive policy resources are granted only after independent approval.
+ * @summary Grant or revoke a security group for a principal
+ */
+
+
+
+
+export const SetAccessPrincipalSecurityGroupGrantBody = zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string().min(1),
+  "securityGroupId": zod.string().min(1),
+  "active": zod.boolean()
+})
+
+export const SetAccessPrincipalSecurityGroupGrantResponse = zod.object({
+  "ok": zod.boolean(),
+  "status": zod.enum(['active', 'pending', 'revoked'])
+})
+
+
+/**
+ * Owner of the security group only. expectedVersion must match its current policy version; the grant target must be active and the policy independently approved.
+ * @summary Independently approve a pending sensitive direct grant
+ */
+
+
+
+
+export const ApproveAccessPrincipalSecurityGroupGrantBody = zod.object({
+  "principalType": zod.enum(['user', 'agent']),
+  "principalId": zod.string().min(1),
+  "securityGroupId": zod.string().min(1),
+  "expectedVersion": zod.number()
+})
+
+export const ApproveAccessPrincipalSecurityGroupGrantResponse = zod.object({
+  "ok": zod.boolean(),
+  "status": zod.enum(['active', 'pending', 'revoked'])
+})
+
+
+/**
+ * Owner only; the reviewer must differ from the owner who created the policy. expectedVersion must match the current policy.
+ * @summary Independently approve a high-sensitivity security-group policy
+ */
+export const ApproveAccessSecurityGroupPolicyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ApproveAccessSecurityGroupPolicyBody = zod.object({
+  "expectedVersion": zod.number()
+})
+
+export const ApproveAccessSecurityGroupPolicyResponse = zod.object({
+  "ok": zod.boolean(),
+  "approvalStatus": zod.literal("approved")
+})
+
+
+/**
+ * Authenticated human initiation is required. The server resolves the agent, owner, permissions, and case within the current tenant; request claims cannot establish authority. The currently executable tool is read-only case metadata lookup. Every authorized or denied attempt is durably audited.
+ * @summary Request a tool invocation by a registered organization agent
+ */
+
+export const invokeRegisteredAgentToolBodyRunIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+export const invokeRegisteredAgentToolBodyCorrelationIdRegExp = new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+export const invokeRegisteredAgentToolBodyCaseIdMax = 9007199254740991;
+
+export const invokeRegisteredAgentToolBodyPurposeMax = 300;
+
+
+
+
+export const InvokeRegisteredAgentToolBody = zod.object({
+  "agentId": zod.string().min(1),
+  "runId": zod.string().uuid().regex(invokeRegisteredAgentToolBodyRunIdRegExp),
+  "correlationId": zod.string().uuid().regex(invokeRegisteredAgentToolBodyCorrelationIdRegExp),
+  "caseId": zod.number().min(1).max(invokeRegisteredAgentToolBodyCaseIdMax),
+  "purpose": zod.string().min(1).max(invokeRegisteredAgentToolBodyPurposeMax),
+  "toolKey": zod.string().min(1),
+  "organizationId": zod.string().optional().describe('Optional claimed organization ID. If present and not the trusted selected tenant, the invocation is denied and audited.')
+})
+
+export const InvokeRegisteredAgentToolResponse = zod.object({
+  "auditId": zod.number(),
+  "result": zod.object({
+  "caseId": zod.number(),
+  "lifecycleStage": zod.string()
+})
+})
+
+
+/**
+ * Tenant-scoped, read-only audit listing for organization owners and administrators. Returns no tool payload or case contents.
+ * @summary Read registered-agent invocation audit
+ */
+export const listAgentInvocationAuditQueryLimitDefault = 100;
+export const listAgentInvocationAuditQueryLimitMax = 200;
+
+export const listAgentInvocationAuditQueryBeforeIdMax = 9007199254740991;
+
+
+
+export const ListAgentInvocationAuditQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(listAgentInvocationAuditQueryLimitMax).default(listAgentInvocationAuditQueryLimitDefault),
+  "beforeId": zod.coerce.number().min(1).max(listAgentInvocationAuditQueryBeforeIdMax).optional()
+})
+
+export const ListAgentInvocationAuditResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.number(),
+  "agentId": zod.string().nullable(),
+  "agentVersion": zod.number().nullable(),
+  "initiatingUserId": zod.string(),
+  "runId": zod.string().uuid(),
+  "correlationId": zod.string().uuid(),
+  "delegatedScope": zod.array(zod.string()),
+  "caseId": zod.number().nullable(),
+  "purpose": zod.string(),
+  "toolKey": zod.string(),
+  "action": zod.string(),
+  "outcome": zod.enum(['success', 'denied', 'failure']),
+  "reasonCode": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})),
+  "nextBeforeId": zod.number().nullable()
+})
+
+
+/**
  * @summary Create an organization and become its owner
  */
 export const createOrganizationBodyAuditArchiveOneCredentialSecretReferenceNameRegExp = new RegExp('^(env:[A-Z][A-Z0-9_]*|vault:[A-Za-z0-9][A-Za-z0-9_./:-]{0,238})$');
@@ -9609,6 +10108,7 @@ export const RunOnboardingScenarioResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -9830,6 +10330,7 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -10144,6 +10645,7 @@ export const CreateOnboardingCaseResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -10369,6 +10871,7 @@ export const GetOnboardingCaseResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -10672,6 +11175,7 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -10914,6 +11418,7 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -13839,6 +14344,7 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -14100,6 +14606,7 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({
@@ -14418,6 +14925,7 @@ export const CorrectOnboardingWorkforceContextResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
   "checklistSnapshot": zod.array(zod.object({

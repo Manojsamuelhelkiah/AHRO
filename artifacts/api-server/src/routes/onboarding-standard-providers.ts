@@ -397,6 +397,7 @@ router.post("/onboarding/standard-providers/:providerKey/source-confirmations/re
       // envelopes. Require all scopes rather than guessing from a label.
       classification: "identity",
       additionalClassifications: ["medical", "payroll", "bgv"],
+      additionalAccessKeys: ["tool.external.dispatch"],
       mutate: async () => {
       const settings = readSettingsFromEnvironment(key, organizationId);
       const confirmedRead = await dispatchWithProviderGovernance({

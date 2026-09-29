@@ -27,6 +27,12 @@ import {
   onbGovernanceRequirements,
   onbSensitiveLifecyclePolicies,
   onbSettings,
+  accessSecurityGroups,
+  accessSecurityGroupPolicies,
+  accessSecurityGroupUserGroups,
+  accessSecurityGroupAttachments,
+  accessUserGroups,
+  accessUserGroupMembers,
   type OnbAuthorityRole,
   type OnbAuthorityScope,
   organizationMembershipsTable,
@@ -64,6 +70,7 @@ const suffix = `${process.pid}-${Date.now()}-${randomUUID().slice(0, 8)}`;
 const orgA = `candidate-security-a-${suffix}`;
 const orgB = `candidate-security-b-${suffix}`;
 const userId = `candidate-security-user-${suffix}`;
+const policyOwnerUserId = `candidate-security-policy-owner-${suffix}`;
 const tokens = {
   active: `active-${"a".repeat(40)}`,
   expired: `expired-${"b".repeat(40)}`,
@@ -197,6 +204,7 @@ before(async () => {
   ]);
   await db.insert(organizationMembershipsTable).values([
     { organizationId: orgA, clerkUserId: userId, role: "owner" },
+    { organizationId: orgA, clerkUserId: policyOwnerUserId, role: "member" },
     { organizationId: orgB, clerkUserId: userId, role: "owner" },
   ]);
   await db.insert(onbAuthorityGovernance).values([
@@ -247,6 +255,70 @@ before(async () => {
       governanceDecisionRef: "candidate-security-test",
     })),
   );
+  for (const targetCaseId of [caseA, caseA2]) {
+    const userGroupId = `candidate-security-full-user-group-${targetCaseId}-${suffix}`;
+    const securityGroupId = `candidate-security-full-security-group-${targetCaseId}-${suffix}`;
+    await db.insert(accessUserGroups).values({
+      id: userGroupId,
+      organizationId: orgA,
+      name: userGroupId,
+      ownerUserId: policyOwnerUserId,
+      createdByUserId: userId,
+    });
+    await db.insert(accessSecurityGroups).values({
+      id: securityGroupId,
+      organizationId: orgA,
+      name: securityGroupId,
+      ownerUserId: policyOwnerUserId,
+      createdByUserId: userId,
+    });
+    await db.insert(accessUserGroupMembers).values({
+      organizationId: orgA,
+      groupId: userGroupId,
+      principalType: "human",
+      principalId: userId,
+      attachedByUserId: userId,
+      requiresApproval: "yes",
+      approvedByUserId: policyOwnerUserId,
+      approvedAt: new Date(),
+    });
+    await db.insert(accessSecurityGroupUserGroups).values({
+      organizationId: orgA,
+      securityGroupId,
+      userGroupId,
+      attachedByUserId: userId,
+      requiresApproval: "yes",
+      approvedByUserId: policyOwnerUserId,
+      approvedAt: new Date(),
+      approvedPolicyVersion: 1,
+    });
+    await db.insert(accessSecurityGroupPolicies).values({
+      organizationId: orgA,
+      securityGroupId,
+      version: 1,
+      policy: {
+        fields: ["identity", "medical", "payroll", "bgv"].flatMap((dataClass) => [
+          `data.${dataClass}.read`, `data.${dataClass}.edit`,
+        ]),
+        flows: [],
+        tools: ["tool.notification.send"],
+      },
+      createdByUserId: userId,
+      approvedByUserId: policyOwnerUserId,
+      approvedAt: new Date(),
+    });
+    await db.insert(accessSecurityGroupAttachments).values({
+      organizationId: orgA,
+      securityGroupId,
+      scope: "case",
+      caseId: targetCaseId,
+      attachedByUserId: userId,
+      requiresApproval: "yes",
+      approvedByUserId: policyOwnerUserId,
+      approvedAt: new Date(),
+      approvedPolicyVersion: 1,
+    });
+  }
   [documentA] = (await db.insert(onbDocuments).values({
     organizationId: orgA,
     caseId: caseA,
@@ -310,6 +382,8 @@ after(async () => {
   await db.delete(onbSensitiveLifecyclePolicies).where(inArray(
     onbSensitiveLifecyclePolicies.organizationId, [orgA, orgB],
   ));
+  await db.delete(accessSecurityGroups).where(inArray(accessSecurityGroups.organizationId, [orgA, orgB]));
+  await db.delete(accessUserGroups).where(inArray(accessUserGroups.organizationId, [orgA, orgB]));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgA));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgB));
   await db.delete(organizationsTable).where(eq(organizationsTable.id, orgA));

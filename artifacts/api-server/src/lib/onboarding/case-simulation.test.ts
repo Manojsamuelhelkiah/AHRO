@@ -5,6 +5,7 @@ import { after, before, describe, test } from "node:test";
 import {
   db,
   DEMO_ORGANIZATION_ID,
+  onbAuthorityAssignments,
   onbCases,
   onbCommunications,
   onbEvents,
@@ -126,7 +127,10 @@ describe("response-driven case simulation", { skip: !hasDb }, () => {
     ));
   });
 
-  async function createCase(scenarioKey: string | null = null): Promise<number> {
+  async function createCase(
+    scenarioKey: string | null = null,
+    volunteered = false,
+  ): Promise<number> {
     const [row] = await db.insert(onbCases).values({
       organizationId: DEMO_ORGANIZATION_ID,
       workerName: `Simulation Worker ${suffix}`,
@@ -141,7 +145,14 @@ describe("response-driven case simulation", { skip: !hasDb }, () => {
       recruiterName: "Simulation Recruiter",
       joiningDate: "2035-01-01",
       scenarioKey,
-      notes: SYNTHETIC_OFFLINE_MARKER,
+      notes: volunteered
+        ? `${SYNTHETIC_OFFLINE_MARKER}\n[demo-controller-run:${suffix}]`
+        : SYNTHETIC_OFFLINE_MARKER,
+      syntheticProvenance: !volunteered && !scenarioKey?.startsWith("UAT-")
+        ? "synthetic-reset"
+        : null,
+      candidateEmailAuthorizedAt: volunteered ? new Date() : null,
+      candidateEmailAuthorizedBy: volunteered ? administrator : null,
       readiness: [{ key: "payroll", label: "Payroll", status: "pending" }],
     }).returning({ id: onbCases.id });
     assert.ok(row);
@@ -372,6 +383,24 @@ describe("response-driven case simulation", { skip: !hasDb }, () => {
     assert.equal((await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, uatCaseId))).length, 0);
   });
 
+  test("marker-only hybrid-looking case is not eligible for synthetic response simulation", async () => {
+    const caseId = await createCase("demo-controller", true);
+    await assert.rejects(
+      getCaseSimulation({
+        organizationId: DEMO_ORGANIZATION_ID,
+        actor: administrator,
+        caseId,
+      }),
+      CaseSimulationDeniedError,
+    );
+    const authorityAssignments = await db.select().from(onbAuthorityAssignments).where(and(
+      eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
+      eq(onbAuthorityAssignments.personUserId, administrator),
+      eq(onbAuthorityAssignments.caseId, caseId),
+    ));
+    assert.equal(authorityAssignments.length, 0);
+  });
+
   async function installEmailDispatch(caseId: number, requestId: string, generationId: string, version: number) {
     const state = await getCaseSimulation({
       organizationId: DEMO_ORGANIZATION_ID,
@@ -449,6 +478,7 @@ describe("response-driven case simulation", { skip: !hasDb }, () => {
     assert.equal(after.exchanges[0]?.outcome, "success");
     assert.equal(after.exchanges[0]?.deliveryProvenance, "real-email");
     assert.equal(after.exchanges[0]?.businessOutcome, "simulated");
+    assert.equal(after.emailDelivery?.recipient, "pinned Demo volunteer");
     assert.deepEqual((await db.select({
       readiness: onbCases.readiness,
       lifecycleStage: onbCases.lifecycleStage,

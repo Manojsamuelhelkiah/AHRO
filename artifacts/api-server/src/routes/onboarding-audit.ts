@@ -10,6 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { getOrganizationId } from "../lib/organization-scope";
 import { registeredDemoProfile } from "../lib/demo-principal";
+import { resolveEffectiveAccess } from "../lib/access-governance";
 import {
   appendProtectedAudit,
   appendProtectedAuditInTransaction,
@@ -35,6 +36,24 @@ import {
 } from "../lib/onboarding/synthetic-offline";
 
 const router: IRouter = Router();
+
+async function requireAuditDataRead(req: Request, res: Response): Promise<boolean> {
+  const organizationId = getOrganizationId(req);
+  const access = req.authUserId
+    ? await resolveEffectiveAccess({
+        organizationId,
+        principalType: "human",
+        principalId: req.authUserId,
+        purpose: "onboarding-audit-read",
+      })
+    : null;
+  if (access?.allows.includes("data.audit.read")) return true;
+  res.status(403).json({
+    message: "An explicit audit-read grant is required to review protected audit data.",
+    code: "AUDIT_ACCESS_REQUIRED",
+  });
+  return false;
+}
 
 async function requireAuditReviewer(req: Request, res: Response): Promise<boolean> {
   const organizationId = getOrganizationId(req);
@@ -68,6 +87,7 @@ async function demoAuditFilter(req: Request, res: Response): Promise<Pick<AuditF
     caseId: onbAuthorityAssignments.caseId,
     notes: onbCases.notes,
     scenarioKey: onbCases.scenarioKey,
+    syntheticProvenance: onbCases.syntheticProvenance,
   }).from(onbAuthorityAssignments).innerJoin(onbCases, and(
     eq(onbCases.organizationId, onbAuthorityAssignments.organizationId),
     eq(onbCases.id, onbAuthorityAssignments.caseId),
@@ -214,6 +234,7 @@ router.get("/onboarding/audit", async (req, res, next) => {
       : null;
     if (demoScope && !internalScope) return;
     if (!demoScope && !(await requireAuditReviewer(req, res))) return;
+    if (!(await requireAuditDataRead(req, res))) return;
     const filter = queryFilter(req);
     if (!filter) {
       res.status(400).json({ message: "Invalid audit filters." });
@@ -238,6 +259,7 @@ router.get("/onboarding/audit", async (req, res, next) => {
 router.get("/onboarding/audit/export", async (req, res, next) => {
   try {
     if (!(await requireAuditReviewer(req, res))) return;
+    if (!(await requireAuditDataRead(req, res))) return;
     const filter = queryFilter(req);
     if (!filter) {
       res.status(400).json({ message: "Invalid audit filters." });
@@ -270,6 +292,7 @@ router.get("/onboarding/audit/export", async (req, res, next) => {
 router.get("/onboarding/audit/integrity", async (req, res, next) => {
   try {
     if (!(await requireAuditReviewer(req, res))) return;
+    if (!(await requireAuditDataRead(req, res))) return;
     res.json(await verifyProtectedAudit(getOrganizationId(req)));
   } catch (error) {
     next(error);
@@ -284,6 +307,7 @@ router.get("/onboarding/audit/integrity", async (req, res, next) => {
 router.get("/onboarding/audit/approval-history/:approvalId", async (req, res, next) => {
   try {
     if (!(await requireAuditReviewer(req, res))) return;
+    if (!(await requireAuditDataRead(req, res))) return;
     const approvalId = positiveInteger(req.params.approvalId);
     if (!approvalId) {
       res.status(400).json({ message: "approvalId must be a positive integer." });
@@ -331,6 +355,7 @@ router.get("/onboarding/audit/approval-history/:approvalId", async (req, res, ne
 router.get("/onboarding/audit/lifecycle", async (req, res, next) => {
   try {
     if (!(await requireAuditReviewer(req, res))) return;
+    if (!(await requireAuditDataRead(req, res))) return;
     res.json(await lifecycleView(getOrganizationId(req)));
   } catch (error) {
     next(error);

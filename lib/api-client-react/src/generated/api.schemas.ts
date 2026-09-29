@@ -1279,6 +1279,492 @@ export interface EaHandoffSuggestion {
   traceability: EaHandoffSuggestionTraceability;
 }
 
+export type AccessFieldKey = typeof AccessFieldKey[keyof typeof AccessFieldKey];
+
+
+export const AccessFieldKey = {
+  dataidentityread: 'data.identity.read',
+  dataidentityedit: 'data.identity.edit',
+  datamedicalread: 'data.medical.read',
+  datamedicaledit: 'data.medical.edit',
+  datapayrollread: 'data.payroll.read',
+  datapayrolledit: 'data.payroll.edit',
+  databgvread: 'data.bgv.read',
+  databgvedit: 'data.bgv.edit',
+  datacaseprofileread: 'data.case.profile.read',
+  datacaseprofileedit: 'data.case.profile.edit',
+  datacasereadinessread: 'data.case.readiness.read',
+  datacasereadinessedit: 'data.case.readiness.edit',
+  datacasenotesread: 'data.case.notes.read',
+  datacasenotesedit: 'data.case.notes.edit',
+  datadocumentsread: 'data.documents.read',
+  datadocumentsedit: 'data.documents.edit',
+  dataauditread: 'data.audit.read',
+} as const;
+
+export type AccessGovernanceKey = typeof AccessGovernanceKey[keyof typeof AccessGovernanceKey];
+
+
+export const AccessGovernanceKey = {
+  dataidentityread: 'data.identity.read',
+  dataidentityedit: 'data.identity.edit',
+  datamedicalread: 'data.medical.read',
+  datamedicaledit: 'data.medical.edit',
+  datapayrollread: 'data.payroll.read',
+  datapayrolledit: 'data.payroll.edit',
+  databgvread: 'data.bgv.read',
+  databgvedit: 'data.bgv.edit',
+  datacaseprofileread: 'data.case.profile.read',
+  datacaseprofileedit: 'data.case.profile.edit',
+  datacasereadinessread: 'data.case.readiness.read',
+  datacasereadinessedit: 'data.case.readiness.edit',
+  datacasenotesread: 'data.case.notes.read',
+  datacasenotesedit: 'data.case.notes.edit',
+  datadocumentsread: 'data.documents.read',
+  datadocumentsedit: 'data.documents.edit',
+  dataauditread: 'data.audit.read',
+  flowcaseread: 'flow.case.read',
+  flowcaseedit: 'flow.case.edit',
+  flowonboardingread: 'flow.onboarding.read',
+  flowonboardingedit: 'flow.onboarding.edit',
+  'flowdocument-reviewread': 'flow.document-review.read',
+  'flowdocument-reviewedit': 'flow.document-review.edit',
+  toolcaseread: 'tool.case.read',
+  toolcaseedit: 'tool.case.edit',
+  tooldocumentsread: 'tool.documents.read',
+  tooldocumentsedit: 'tool.documents.edit',
+  toolnotificationsend: 'tool.notification.send',
+  toolworkflowrun: 'tool.workflow.run',
+  toolexternaldispatch: 'tool.external.dispatch',
+  toolpolicymanage: 'tool.policy.manage',
+  toolapprovaldecide: 'tool.approval.decide',
+} as const;
+
+export interface AccessGovernanceError {
+  message: string;
+  code: string;
+}
+
+export interface AccessGovernanceOk {
+  ok: boolean;
+}
+
+export type AccessCatalogEntrySensitivity = typeof AccessCatalogEntrySensitivity[keyof typeof AccessCatalogEntrySensitivity];
+
+
+export const AccessCatalogEntrySensitivity = {
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type AccessCatalogEntryKind = typeof AccessCatalogEntryKind[keyof typeof AccessCatalogEntryKind];
+
+
+export const AccessCatalogEntryKind = {
+  field: 'field',
+  flow: 'flow',
+  tool: 'tool',
+} as const;
+
+export interface AccessCatalogEntry {
+  key: AccessGovernanceKey;
+  label: string;
+  sensitivity: AccessCatalogEntrySensitivity;
+  kind: AccessCatalogEntryKind;
+}
+
+export interface AccessOrganizationMember {
+  clerkUserId: string;
+  role: string;
+}
+
+export type AccessAgentStatus = typeof AccessAgentStatus[keyof typeof AccessAgentStatus];
+
+
+export const AccessAgentStatus = {
+  active: 'active',
+  retired: 'retired',
+} as const;
+
+export interface AccessAgent {
+  id: string;
+  name: string;
+  ownerUserId: string;
+  status: AccessAgentStatus;
+  version: number;
+}
+
+export type AccessPrincipalType = typeof AccessPrincipalType[keyof typeof AccessPrincipalType];
+
+
+export const AccessPrincipalType = {
+  user: 'user',
+  agent: 'agent',
+} as const;
+
+export interface AccessPrincipal {
+  principalType: AccessPrincipalType;
+  principalId: string;
+}
+
+export type AccessUserGroupStatus = typeof AccessUserGroupStatus[keyof typeof AccessUserGroupStatus];
+
+
+export const AccessUserGroupStatus = {
+  active: 'active',
+  retired: 'retired',
+} as const;
+
+export interface AccessUserGroup {
+  id: string;
+  name: string;
+  ownerUserId: string;
+  status: AccessUserGroupStatus;
+  version: number;
+  members: AccessPrincipal[];
+  securityGroups: string[];
+}
+
+export type AccessSecurityGroupStatus = typeof AccessSecurityGroupStatus[keyof typeof AccessSecurityGroupStatus];
+
+
+export const AccessSecurityGroupStatus = {
+  active: 'active',
+  retired: 'retired',
+} as const;
+
+export type AccessSecurityGroupApprovalStatus = typeof AccessSecurityGroupApprovalStatus[keyof typeof AccessSecurityGroupApprovalStatus];
+
+
+export const AccessSecurityGroupApprovalStatus = {
+  blocked: 'blocked',
+  pending: 'pending',
+  approved: 'approved',
+} as const;
+
+export interface AccessSecurityGroup {
+  id: string;
+  name: string;
+  ownerUserId: string;
+  status: AccessSecurityGroupStatus;
+  version: number;
+  allows: AccessGovernanceKey[];
+  approvalStatus: AccessSecurityGroupApprovalStatus;
+}
+
+export interface AccessDirectGrant {
+  principalType: AccessPrincipalType;
+  principalId: string;
+  securityGroupId: string;
+  status: 'active';
+  version: number;
+}
+
+export interface AccessPendingGrant {
+  principalType: AccessPrincipalType;
+  principalId: string;
+  securityGroupId: string;
+  status: 'pending';
+  requestedByUserId: string;
+  bindingVersion: number;
+  policyVersion: number;
+}
+
+export interface AccessPendingAttachment {
+  userGroupId: string;
+  securityGroupId: string;
+  requestedByUserId: string;
+  policyVersion: number;
+}
+
+export interface AccessPendingMember {
+  groupId: string;
+  principalType: AccessPrincipalType;
+  principalId: string;
+  /** @nullable */
+  requestedByUserId: string | null;
+  expectedVersion: number;
+  policyVersions: string;
+}
+
+export type AccessGovernanceHistoryEntryDetail = { [key: string]: unknown };
+
+export interface AccessGovernanceHistoryEntry {
+  id: number;
+  eventType: string;
+  entityType: string;
+  entityId: string;
+  /** @nullable */
+  actorUserId: string | null;
+  detail: AccessGovernanceHistoryEntryDetail;
+  createdAt: string;
+}
+
+export interface AccessGovernanceSnapshot {
+  catalog: AccessCatalogEntry[];
+  members: AccessOrganizationMember[];
+  agents: AccessAgent[];
+  userGroups: AccessUserGroup[];
+  securityGroups: AccessSecurityGroup[];
+  grants: AccessDirectGrant[];
+  pendingGrants: AccessPendingGrant[];
+  pendingAttachments: AccessPendingAttachment[];
+  pendingMembers: AccessPendingMember[];
+  /** @maxItems 250 */
+  history: AccessGovernanceHistoryEntry[];
+}
+
+export type EffectiveAccessReasons = {[key: string]: string[]};
+
+export interface EffectiveAccess {
+  allows: AccessGovernanceKey[];
+  reasons: EffectiveAccessReasons;
+}
+
+export type AccessFieldPrincipal = AccessPrincipal & {
+  reasons: string[];
+};
+
+export interface AccessFieldPrincipalsResponse {
+  principals: AccessFieldPrincipal[];
+}
+
+export interface AccessAgentInput {
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 1 */
+  ownerUserId: string;
+}
+
+export interface AccessAgentResponse {
+  agent: AccessAgent;
+}
+
+export interface AccessAgentUpdate {
+  status: 'retired';
+  expectedVersion: number;
+}
+
+export interface AccessUserGroupInput {
+  /** @minLength 1 */
+  name: string;
+}
+
+export interface AccessUserGroupResponse {
+  userGroup: AccessUserGroup;
+}
+
+export interface AccessUserGroupUpdate {
+  /** @minLength 1 */
+  name?: string;
+  status?: 'retired';
+  expectedVersion: number;
+}
+
+export interface AccessUserGroupMemberUpdate {
+  principalType: AccessPrincipalType;
+  /** @minLength 1 */
+  principalId: string;
+  active: boolean;
+}
+
+export interface AccessUserGroupMemberApproval {
+  principalType: AccessPrincipalType;
+  /** @minLength 1 */
+  principalId: string;
+  expectedVersion: number;
+}
+
+export interface AccessUserGroupSecurityGroupUpdate {
+  /** @minLength 1 */
+  securityGroupId: string;
+  active: boolean;
+}
+
+export interface AccessUserGroupSecurityGroupApproval {
+  /** @minLength 1 */
+  securityGroupId: string;
+  expectedVersion: number;
+}
+
+export interface AccessSecurityGroupInput {
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 1 */
+  ownerUserId?: string;
+  allows: AccessGovernanceKey[];
+}
+
+export interface AccessSecurityGroupResponse {
+  securityGroup: AccessSecurityGroup;
+}
+
+export interface AccessSecurityGroupUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @minLength 1 */
+  ownerUserId?: string;
+  status?: 'retired';
+  allows?: AccessGovernanceKey[];
+  expectedVersion: number;
+}
+
+export interface AccessSecurityGroupVersionResponse {
+  ok: boolean;
+  version: number;
+}
+
+export interface AccessGrantUpdate {
+  principalType: AccessPrincipalType;
+  /** @minLength 1 */
+  principalId: string;
+  /** @minLength 1 */
+  securityGroupId: string;
+  active: boolean;
+}
+
+export interface AccessGrantApproval {
+  principalType: AccessPrincipalType;
+  /** @minLength 1 */
+  principalId: string;
+  /** @minLength 1 */
+  securityGroupId: string;
+  expectedVersion: number;
+}
+
+export type AccessGovernanceStatusResponseStatus = typeof AccessGovernanceStatusResponseStatus[keyof typeof AccessGovernanceStatusResponseStatus];
+
+
+export const AccessGovernanceStatusResponseStatus = {
+  active: 'active',
+  pending: 'pending',
+  revoked: 'revoked',
+} as const;
+
+export interface AccessGovernanceStatusResponse {
+  ok: true;
+  status: AccessGovernanceStatusResponseStatus;
+}
+
+export interface AccessPolicyApproval {
+  expectedVersion: number;
+}
+
+export interface AccessPolicyApprovalResponse {
+  ok: boolean;
+  approvalStatus: 'approved';
+}
+
+export interface AgentInvocationInput {
+  /** @minLength 1 */
+  agentId: string;
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ */
+  runId: string;
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ */
+  correlationId: string;
+  /**
+     * @minimum 1
+     * @maximum 9007199254740991
+     */
+  caseId: number;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  purpose: string;
+  /** @minLength 1 */
+  toolKey: string;
+  /** Optional claimed organization ID. If present and not the trusted selected tenant, the invocation is denied and audited. */
+  organizationId?: string;
+}
+
+export interface AgentInvocationToolResult {
+  caseId: number;
+  lifecycleStage: string;
+}
+
+export interface AgentInvocationResponse {
+  auditId: number;
+  result: AgentInvocationToolResult;
+}
+
+export interface AgentInvocationAuthenticationError {
+  code: 'AUTHENTICATION_REQUIRED';
+  message: string;
+}
+
+export interface AgentInvocationError {
+  code: 'AGENT_INVOCATION_INVALID';
+  message: string;
+}
+
+export type AgentInvocationDenialCode = typeof AgentInvocationDenialCode[keyof typeof AgentInvocationDenialCode];
+
+
+export const AgentInvocationDenialCode = {
+  AGENT_INVOCATION_TENANT_MISMATCH: 'AGENT_INVOCATION_TENANT_MISMATCH',
+  AGENT_INVOCATION_AGENT_NOT_ACTIVE: 'AGENT_INVOCATION_AGENT_NOT_ACTIVE',
+  AGENT_INVOCATION_AGENT_OWNER_MISMATCH: 'AGENT_INVOCATION_AGENT_OWNER_MISMATCH',
+  AGENT_INVOCATION_CASE_OUT_OF_SCOPE: 'AGENT_INVOCATION_CASE_OUT_OF_SCOPE',
+  AGENT_INVOCATION_UNKNOWN_TOOL: 'AGENT_INVOCATION_UNKNOWN_TOOL',
+  AGENT_INVOCATION_TOOL_NOT_IMPLEMENTED: 'AGENT_INVOCATION_TOOL_NOT_IMPLEMENTED',
+  AGENT_INVOCATION_TOOL_ACCESS_DENIED: 'AGENT_INVOCATION_TOOL_ACCESS_DENIED',
+  AGENT_INVOCATION_RUN_REPLAY: 'AGENT_INVOCATION_RUN_REPLAY',
+} as const;
+
+export interface AgentInvocationDenied {
+  code: AgentInvocationDenialCode;
+  message: string;
+  auditId: number;
+}
+
+export interface AgentInvocationFailure {
+  code: 'AGENT_INVOCATION_FAILED';
+  message: string;
+  auditId: number;
+}
+
+export interface AgentInvocationAuditForbidden {
+  code: 'AGENT_INVOCATION_AUDIT_FORBIDDEN';
+  message: string;
+}
+
+export type AgentInvocationAuditEntryOutcome = typeof AgentInvocationAuditEntryOutcome[keyof typeof AgentInvocationAuditEntryOutcome];
+
+
+export const AgentInvocationAuditEntryOutcome = {
+  success: 'success',
+  denied: 'denied',
+  failure: 'failure',
+} as const;
+
+export interface AgentInvocationAuditEntry {
+  id: number;
+  /** @nullable */
+  agentId: string | null;
+  /** @nullable */
+  agentVersion: number | null;
+  initiatingUserId: string;
+  runId: string;
+  correlationId: string;
+  delegatedScope: string[];
+  /** @nullable */
+  caseId: number | null;
+  purpose: string;
+  toolKey: string;
+  action: string;
+  outcome: AgentInvocationAuditEntryOutcome;
+  /** @nullable */
+  reasonCode: string | null;
+  createdAt: string;
+}
+
+export interface AgentInvocationAuditList {
+  entries: AgentInvocationAuditEntry[];
+  /** @nullable */
+  nextBeforeId: number | null;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -3446,6 +3932,8 @@ export interface OnbCase {
   scenarioKey: string | null;
   /** Server-derived marker for a provider-isolated offline Demo sample */
   offlineSample: boolean;
+  /** Case-scoped identity projection is synthetic and does not represent sensitive-record authority */
+  fictionalOfflineIdentity: boolean;
   /**
      * LLM-generated onboarding plan narrative
      * @nullable
@@ -9106,6 +9594,59 @@ export type ReconcileGovernanceDispatchBody = {
 
 export type UpdateOrganizationPrimaryCountry200 = {
   organization: OrganizationSummary;
+};
+
+export type PreviewOrganizationPrincipalAccessParams = {
+principalType: PreviewOrganizationPrincipalAccessPrincipalType;
+/**
+ * @minLength 1
+ */
+principalId: string;
+/**
+ * Optional positive case ID whose case-scoped grants should be included.
+ * @minimum 1
+ */
+caseId?: number;
+/**
+ * Required when principalType is agent. Explicit organization-member user whose effective access constrains the agent preview.
+ * @minLength 1
+ */
+initiatorUserId?: string;
+};
+
+export type PreviewOrganizationPrincipalAccessPrincipalType = typeof PreviewOrganizationPrincipalAccessPrincipalType[keyof typeof PreviewOrganizationPrincipalAccessPrincipalType];
+
+
+export const PreviewOrganizationPrincipalAccessPrincipalType = {
+  user: 'user',
+  agent: 'agent',
+} as const;
+
+export type ListOrganizationPrincipalsWithFieldAccessParams = {
+field: AccessFieldKey;
+/**
+ * Optional positive case ID whose case-scoped grants should be included.
+ * @minimum 1
+ */
+caseId?: number;
+/**
+ * Explicit organization-member user context for resolving registered-agent access.
+ * @minLength 1
+ */
+initiatorUserId?: string;
+};
+
+export type ListAgentInvocationAuditParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 1
+ * @maximum 9007199254740991
+ */
+beforeId?: number;
 };
 
 export type ListEaAssessmentsParams = {

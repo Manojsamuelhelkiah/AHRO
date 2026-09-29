@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import type { OnbAuthorityScope } from "@workspace/db/schema";
+import { resolveEffectiveAccessInTransaction } from "../access-governance";
 import { hasCurrentAuthorityScope } from "./decision-authority";
 
 type SensitiveAuthorityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -20,7 +21,18 @@ export const SENSITIVE_SCOPE_BY_CLASS: Readonly<Record<SensitiveRecordClass, Onb
   bgv: "hr-compliance-approve",
 };
 
-export type SensitiveAccess = Readonly<Record<SensitiveRecordClass, boolean>>;
+export type SensitiveRecordAction = "read" | "edit";
+export const SENSITIVE_ACCESS_KEY_BY_CLASS: Readonly<Record<SensitiveRecordClass, Readonly<Record<SensitiveRecordAction, string>>>> = {
+  identity: { read: "data.identity.read", edit: "data.identity.edit" },
+  medical: { read: "data.medical.read", edit: "data.medical.edit" },
+  payroll: { read: "data.payroll.read", edit: "data.payroll.edit" },
+  bgv: { read: "data.bgv.read", edit: "data.bgv.edit" },
+};
+
+export type SensitiveAccess = Readonly<Record<SensitiveRecordClass, boolean>> & {
+  /** Existing read projections use the top-level class booleans. */
+  readonly edit?: Readonly<Record<SensitiveRecordClass, boolean>>;
+};
 export const ALL_SENSITIVE_RECORD_CLASSES: readonly SensitiveRecordClass[] = [
   "identity", "medical", "payroll", "bgv",
 ];
@@ -30,6 +42,12 @@ export const NO_SENSITIVE_ACCESS: SensitiveAccess = {
   medical: false,
   payroll: false,
   bgv: false,
+  edit: {
+    identity: false,
+    medical: false,
+    payroll: false,
+    bgv: false,
+  },
 };
 
 export class SensitiveAuthorityRequiredError extends Error {
@@ -105,8 +123,13 @@ export function sensitiveClassForDocument(input: {
 export function hasSensitiveAccess(
   access: SensitiveAccess,
   classes: readonly SensitiveRecordClass[],
+  action: SensitiveRecordAction = "read",
 ): boolean {
-  return classes.every((classification) => access[classification]);
+  return classes.every((classification) =>
+    action === "read"
+      ? access[classification]
+      : access.edit?.[classification] === true,
+  );
 }
 
 /** Free-form onboarding narratives are unclassified opaque envelopes. A
@@ -142,14 +165,36 @@ export async function resolveSensitiveAccessInTransaction(
   if (!input.actorUserId || !Number.isSafeInteger(input.caseId) || input.caseId < 1) {
     return NO_SENSITIVE_ACCESS;
   }
-  const result = { ...NO_SENSITIVE_ACCESS };
+  const effectiveAccess = await resolveEffectiveAccessInTransaction(tx, {
+    organizationId: input.organizationId,
+    principalType: "human",
+    principalId: input.actorUserId,
+    caseId: input.caseId,
+    purpose: "onboarding-sensitive-record",
+  });
+  const result = {
+    identity: false,
+    medical: false,
+    payroll: false,
+    bgv: false,
+    edit: {
+      identity: false,
+      medical: false,
+      payroll: false,
+      bgv: false,
+    },
+  };
   for (const classification of Object.keys(SENSITIVE_SCOPE_BY_CLASS) as SensitiveRecordClass[]) {
-    result[classification] = await hasCurrentAuthorityScope(tx, {
+    const specialistAuthority = await hasCurrentAuthorityScope(tx, {
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       scope: SENSITIVE_SCOPE_BY_CLASS[classification],
       caseId: input.caseId,
     });
+    result[classification] = specialistAuthority &&
+      effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read);
+    result.edit[classification] = specialistAuthority &&
+      effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit);
   }
   return result;
 }
@@ -166,6 +211,8 @@ export async function withSensitiveAuthorityFence<T>(input: {
   actorUserId: string;
   classification: SensitiveRecordClass;
   additionalClassifications?: readonly SensitiveRecordClass[];
+  /** Optional exact catalogued tool permissions for provider/workflow calls. */
+  additionalAccessKeys?: readonly string[];
   /** Runs under the tenant authority fence before live authority is checked. */
   beforeAuthorize?: (tx: SensitiveAuthorityTransaction) => Promise<void>;
   /** Optional same-transaction mutation for callers that need a precondition
@@ -176,15 +223,29 @@ export async function withSensitiveAuthorityFence<T>(input: {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${input.organizationId}))`);
     await input.beforeAuthorize?.(tx);
+    const effectiveAccess = await resolveEffectiveAccessInTransaction(tx, {
+      organizationId: input.organizationId,
+      principalType: "human",
+      principalId: input.actorUserId,
+      caseId: input.caseId,
+      purpose: "onboarding-sensitive-record-edit",
+    });
     for (const classification of [input.classification, ...(input.additionalClassifications ?? [])]) {
-      if (!(await hasCurrentAuthorityScope(tx, {
+      const hasSpecialistAuthority = await hasCurrentAuthorityScope(tx, {
         organizationId: input.organizationId,
         actorUserId: input.actorUserId,
         scope: SENSITIVE_SCOPE_BY_CLASS[classification],
         caseId: input.caseId,
-      }))) {
+      });
+      const hasGovernanceGrant = effectiveAccess.allows.includes(
+        SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit,
+      );
+      if (!hasSpecialistAuthority || !hasGovernanceGrant) {
         throw new SensitiveAuthorityRequiredError();
       }
+    }
+    if ((input.additionalAccessKeys ?? []).some((key) => !effectiveAccess.allows.includes(key))) {
+      throw new SensitiveAuthorityRequiredError();
     }
     if (input.mutateInTransaction) return input.mutateInTransaction(tx);
     if (!input.mutate) throw new Error("Sensitive authority mutation callback is required.");

@@ -1221,7 +1221,11 @@ export async function getOperationalRequests(
   caseId: number,
 ): Promise<OperationalRequestsEnvelope> {
   const [caseRow] = await db
-    .select({ id: onbCases.id, notes: onbCases.notes })
+    .select({
+      id: onbCases.id,
+      notes: onbCases.notes,
+      syntheticProvenance: onbCases.syntheticProvenance,
+    })
     .from(onbCases)
     .where(
       and(eq(onbCases.id, caseId), eq(onbCases.organizationId, organizationId)),

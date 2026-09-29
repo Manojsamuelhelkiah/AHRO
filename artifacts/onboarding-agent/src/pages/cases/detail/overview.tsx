@@ -12,23 +12,33 @@ import {
   isApprovalAcknowledgement,
 } from '../../../lib/approval-actions';
 import { CasePrivacyControls } from './case-privacy-controls';
+import { RestrictedActionNotice, useCaseAccess } from './case-access';
 
 export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
+  const access = useCaseAccess();
   return (
     <div className="flex flex-col md:flex-row gap-8 pb-12">
       <div className="flex-1 min-w-0">
         <ConnectedReadinessSla caseId={caseId} />
-        <CaseReadiness c={c} setTab={setTab} />
+        {access?.access.profileRead
+          ? <CaseReadiness c={c} setTab={setTab} />
+          : <RestrictedActionNotice>Case profile and readiness details are restricted by your current permissions.</RestrictedActionNotice>}
         <NextActions c={c} pendingApprovals={pendingApprovals} setTab={setTab} />
-        <RecentActivitySummary events={events} />
+        {access?.access.notesRead
+          ? <RecentActivitySummary events={events} />
+          : <RestrictedActionNotice>Case notes and activity details are restricted by your current permissions.</RestrictedActionNotice>}
       </div>
       <div className="w-full md:w-[320px] lg:w-[360px] shrink-0">
         <div className="md:sticky md:top-[120px] space-y-6">
-          <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} />
-           <WorkforceContextCard c={c} />
+           {access?.access.notesRead
+             ? <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} />
+             : <RestrictedActionNotice>Approval notes and decision details are restricted by your current permissions.</RestrictedActionNotice>}
+           {access?.access.profileRead && <WorkforceContextCard c={c} />}
           {isOfflineDemoSample(c) ? <OfflinePrivacyRestricted /> : <CasePrivacyControls caseId={caseId} />}
-          <CaseOwnerCard events={events} approvals={approvals} />
-          <LatestCommunicationCard comms={comms} setTab={setTab} />
+           {access?.access.notesRead && <CaseOwnerCard events={events} approvals={approvals} />}
+           {access?.access.notesRead && access && Object.values(access.sensitive).every((permission) => permission.read)
+             ? <LatestCommunicationCard comms={comms} setTab={setTab} />
+             : <RestrictedActionNotice>Communication details are restricted by your current permissions.</RestrictedActionNotice>}
           <DocumentsSummaryCard docs={docs} setTab={setTab} />
         </div>
       </div>
@@ -84,6 +94,7 @@ function WorkforceContextCard({ c }: { c: any }) {
 }
 
 function AttentionPanel({ approval, caseId }: any) {
+  const access = useCaseAccess();
   const action = useApprovalAction(approval, { caseId });
   const [expanded, setExpanded] = useState(false);
 
@@ -101,6 +112,7 @@ function AttentionPanel({ approval, caseId }: any) {
 
   const isAcknowledgement = isApprovalAcknowledgement(approval);
   const versionLabel = getApprovalVersionLabel(approval);
+  const canUseCaseDecision = access?.access.flowEdit === true && access.access.notesEdit;
 
   return (
     <div className="bg-[var(--surface)] border-2 border-[var(--status-amber)] rounded-[var(--radius-lg)] shadow-[var(--shadow-md)] overflow-hidden">
@@ -141,6 +153,11 @@ function AttentionPanel({ approval, caseId }: any) {
             A current governance-approved specialist assignment is required. Organization membership and display personas do not grant decision authority.
           </p>
         )}
+        {!canUseCaseDecision && (
+          <p className="text-[var(--text-xs)] text-[var(--status-amber-fg)]" role="status">
+            Case-flow and notes edit permissions are required to submit this decision.
+          </p>
+        )}
         {!action.hasValidVersion && (
           <p className="text-[var(--text-xs)] text-[var(--status-red)]" role="alert">
             This review has no valid version. Reload the review before taking action.
@@ -159,7 +176,7 @@ function AttentionPanel({ approval, caseId }: any) {
         <div className="flex items-center gap-2 pt-2">
           <Button
             onClick={() => action.submit('approved')}
-            disabled={!action.canAct}
+            disabled={!canUseCaseDecision || !action.canAct}
             className="flex-1 bg-[var(--status-green)] hover:bg-[#1bbd72] text-white border-transparent"
           >
             {action.actionLabel}
@@ -167,7 +184,7 @@ function AttentionPanel({ approval, caseId }: any) {
           {!isAcknowledgement && (
             <Button
               onClick={() => action.submit('rejected')}
-              disabled={!action.canAct}
+              disabled={!canUseCaseDecision || !action.canAct}
               variant="outline"
               className="flex-1 text-[var(--status-red)] border-[var(--status-red)] hover:bg-[var(--status-red)] hover:text-white"
             >

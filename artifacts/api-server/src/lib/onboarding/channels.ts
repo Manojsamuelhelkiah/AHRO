@@ -1036,6 +1036,7 @@ async function sendAdministrativeEmailUnsafe(opts: {
     workerEmail: onbCases.workerEmail,
     workerPhone: onbCases.workerPhone,
     notes: onbCases.notes,
+    syntheticProvenance: onbCases.syntheticProvenance,
     hireType: onbCases.hireType,
     workerCategory: onbCases.workerCategory,
     workforceContext: onbCases.workforceContext,

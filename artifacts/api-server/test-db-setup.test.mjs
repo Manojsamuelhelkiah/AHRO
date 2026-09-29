@@ -10,6 +10,7 @@ import {
 import { assertAutomaticMigrationIsSafe } from "./test-db-setup.mjs";
 import { applyReviewedMigration } from "./test-db-setup.mjs";
 import { assertReviewedMigrationKeepsTransactionControl } from "./test-db-setup.mjs";
+import { isLegacyAccessGovernanceMigrationReceipt } from "./test-db-setup.mjs";
 import { loadCheckedInMigrations } from "./test-db-setup.mjs";
 import { prepareDatabaseBackedTests } from "./test-db-setup.mjs";
 import { reconcileDevelopmentDatabase } from "./test-db-setup.mjs";
@@ -33,6 +34,35 @@ function planIndexNames(plan) {
   };
   visit(plan);
   return names;
+}
+
+async function installPgcryptoDigestSearchPathShim(pool, schema) {
+  const installedExtension = await pool.query(
+    `
+      SELECT namespace_record.nspname AS schema_name
+      FROM pg_extension extension_record
+      JOIN pg_namespace namespace_record
+        ON namespace_record.oid = extension_record.extnamespace
+      WHERE extension_record.extname = 'pgcrypto'
+    `,
+  );
+  const extensionSchema = installedExtension.rows[0]?.schema_name;
+  if (!extensionSchema || extensionSchema === schema) return;
+
+  const quoteIdentifier = (identifier) =>
+    `"${identifier.replaceAll('"', '""')}"`;
+  await pool.query(
+    `
+      CREATE FUNCTION ${quoteIdentifier(schema)}."digest"(text, text)
+      RETURNS bytea
+      LANGUAGE sql
+      IMMUTABLE
+      STRICT
+      AS $fixture$
+        SELECT ${quoteIdentifier(extensionSchema)}."digest"($1, $2)
+      $fixture$
+    `,
+  );
 }
 
 function schemaTableBlocks(source) {
@@ -301,6 +331,69 @@ test("loads every journal migration with a stable hash", async () => {
     assert.match(migration.hash, /^[a-f0-9]{64}$/);
     assert.ok(migration.statements.length > 0);
   }
+});
+
+test("pins the access-governance migration exception and legacy receipt narrowly", async () => {
+  const migrations = await loadCheckedInMigrations();
+  const forwardCorrection = migrations.find(
+    ({ tag }) => tag === "0092_access_governance_forward_correction",
+  );
+  assert.ok(forwardCorrection);
+  assert.equal(
+    forwardCorrection.createdAt,
+    1789462800003,
+  );
+  assert.equal(
+    forwardCorrection.hash,
+    "3c575cc6a29a61cb5d8377b759b8b32e5a03326dfeef100fb153cace151e23e8",
+  );
+  assert.doesNotThrow(() => assertAutomaticMigrationIsSafe(forwardCorrection));
+  assert.throws(
+    () => assertAutomaticMigrationIsSafe({ ...forwardCorrection, hash: "changed" }),
+    /refused destructive or unsupported migration/,
+  );
+  assert.throws(
+    () => assertAutomaticMigrationIsSafe({ ...forwardCorrection, createdAt: 1789462800002 }),
+    /refused destructive or unsupported migration/,
+  );
+  assert.throws(
+    () => assertAutomaticMigrationIsSafe({ ...forwardCorrection, tag: "changed_tag" }),
+    /refused destructive or unsupported migration/,
+  );
+
+  const legacyMigration = {
+    tag: "0090_access_governance_core",
+    createdAt: 1789462800001,
+  };
+  const legacyReceipt = {
+    hash: "6d09bb0d32b493c03b7c36879496b7ad310262fe6ee83664923ab84ffecf065c",
+    created_at: "1789462800001",
+  };
+  assert.equal(
+    isLegacyAccessGovernanceMigrationReceipt(legacyMigration, legacyReceipt),
+    true,
+  );
+  assert.equal(
+    isLegacyAccessGovernanceMigrationReceipt(legacyMigration, {
+      ...legacyReceipt,
+      created_at: "1789462800000",
+    }),
+    false,
+  );
+  assert.equal(
+    isLegacyAccessGovernanceMigrationReceipt(legacyMigration, {
+      ...legacyReceipt,
+      hash: "changed",
+    }),
+    false,
+  );
+  assert.equal(
+    isLegacyAccessGovernanceMigrationReceipt(
+      { ...legacyMigration, tag: "0092_access_governance_forward_correction" },
+      legacyReceipt,
+    ),
+    false,
+  );
 });
 
 test("tenant Phase A keeps the publish target data-preserving and legacy-compatible", async () => {
@@ -583,6 +676,7 @@ test(
       await adminPool.query(`DROP SCHEMA IF EXISTS "${partialSchema}" CASCADE`);
       await adminPool.query(`DROP SCHEMA IF EXISTS "${reviewedSchema}" CASCADE`);
       await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await installPgcryptoDigestSearchPathShim(adminPool, schema);
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(schema),
       });
@@ -814,6 +908,13 @@ test(
         `,
         [receiptInstant],
       );
+      // 0083 replaces this table's primary key. If the entire migration ledger
+      // is removed from the final schema, replay begins at 0082 and cannot
+      // drop the already-replaced 0082 key. Reconstruct this untouched fixture
+      // table from its pre-0082 state so the adoption test models real history.
+      await adminPool.query(
+        `DROP TABLE "${schema}".onb_transfer_kpi_definitions CASCADE`,
+      );
       await adminPool.query(
         `DROP TABLE "${schema}".__api_test_schema_migrations`,
       );
@@ -836,6 +937,7 @@ test(
       );
 
       await adminPool.query(`CREATE SCHEMA "${reviewedSchema}"`);
+      await installPgcryptoDigestSearchPathShim(adminPool, reviewedSchema);
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(reviewedSchema),
       });
@@ -880,6 +982,7 @@ test(
       );
       await adminPool.query(`DROP SCHEMA "${reviewedSchema}" CASCADE`);
       await adminPool.query(`CREATE SCHEMA "${reviewedSchema}"`);
+      await installPgcryptoDigestSearchPathShim(adminPool, reviewedSchema);
       await prepareDatabaseBackedTests({
         connectionString: schemaConnection(reviewedSchema),
       });
@@ -1151,6 +1254,7 @@ test(
       );
 
       await adminPool.query(`CREATE SCHEMA "${partialSchema}"`);
+      await installPgcryptoDigestSearchPathShim(adminPool, partialSchema);
       await adminPool.query(`
         CREATE TABLE "${partialSchema}".scenarios (
           id serial PRIMARY KEY NOT NULL,
@@ -1199,6 +1303,7 @@ test(
     try {
       await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await installPgcryptoDigestSearchPathShim(adminPool, schema);
       const migrations = await loadCheckedInMigrations();
       const preOrganizationMigrations = migrations.filter(
         ({ tag }) =>
@@ -1209,6 +1314,26 @@ test(
           tag !== "0026_preserve_scenario_context" &&
           tag !== "0027_quarantine_scenario_file_ownership" &&
            tag !== "0028_restore_staged_scenario_context" &&
+          // This pre-organization recovery fixture intentionally has no
+          // organizations table. The later frontline, transfer, and access
+          // governance migrations require it and are exercised after the
+          // fixture is upgraded through the organization migrations below.
+          tag !== "0077_frontline_operations" &&
+          tag !== "0078_frontline_age_skill_evidence" &&
+          tag !== "0079_frontline_age_skill_constraints" &&
+          tag !== "0080_frontline_fulfillment_accountability" &&
+          tag !== "0081_frontline_fulfillment_ack_constraint" &&
+          tag !== "0082_workforce_transfer" &&
+          tag !== "0083_workforce_transfer_safety_fences" &&
+          tag !== "0084_workforce_transfer_lifecycle_custody" &&
+          tag !== "0085_workforce_transfer_kpi_cohorts" &&
+          tag !== "0086_workforce_transfer_action_supersession" &&
+          tag !== "0087_workforce_transfer_lifecycle_record_kind" &&
+          tag !== "0088_workforce_transfer_action_facts" &&
+          tag !== "0089_organization_primary_country" &&
+          tag !== "0090_access_governance_core" &&
+          tag !== "0091_agent_invocation_boundary" &&
+          tag !== "0092_access_governance_forward_correction" &&
            tag !== "0030_candidate_portal" &&
            tag !== "0037_document_malware_quarantine" &&
            tag !== "0039_weighted_readiness_sla" &&

@@ -41,6 +41,7 @@ async function request(
     organizationId?: string;
     findCase?: boolean;
     evidence?: CaseExplainabilityEvidence;
+    caseAccess?: string[];
   } = {},
 ): Promise<{ response: Response; modelCalls: number }> {
   let modelCalls = 0;
@@ -54,6 +55,12 @@ async function request(
   app.use(createOnboardingCaseExplainabilityRouter({
     findCase: async () => options.findCase === false ? null : ownedCase,
     collectEvidence: async () => options.evidence ?? evidence,
+    resolveAccess: async () => ({
+      allows: options.caseAccess ?? [
+        "flow.case.read",
+        "data.case.profile.read",
+      ],
+    }),
     complete: async (system, user, maxTokens, signal) => {
       modelCalls += 1;
       return complete(system, user, maxTokens, signal);
@@ -114,6 +121,14 @@ test("case explainability keeps history untrusted and cites only server evidence
   assert.doesNotMatch(body.paragraphs[0]?.text ?? "", /Ada Lovelace|ada@example\.com/i);
   assert.equal(body.redactionIdentifiers, undefined);
   assert.equal(result.modelCalls, 2);
+});
+
+test("case explainability denies requests without case-flow read before model access", async () => {
+  const result = await request(async () => {
+    throw new Error("The model must not be called without case-flow read.");
+  }, { question: "What happened?" }, { caseAccess: [] });
+  assert.equal(result.response.status, 403);
+  assert.equal(result.modelCalls, 0);
 });
 
 test("cross-tenant ownership denial happens before model access", async () => {

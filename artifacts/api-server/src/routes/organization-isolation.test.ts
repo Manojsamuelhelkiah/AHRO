@@ -39,6 +39,12 @@ import {
   pricingSheetsTable,
   scenarioFilesTable,
   scenarioUploadIntentsTable,
+  accessSecurityGroups,
+  accessSecurityGroupPolicies,
+  accessSecurityGroupUserGroups,
+  accessSecurityGroupAttachments,
+  accessUserGroups,
+  accessUserGroupMembers,
   scenariosTable,
 } from "@workspace/db";
 import { DEMO_ORGANIZATION_ID } from "@workspace/db/schema";
@@ -76,10 +82,18 @@ import { saveSensitiveLifecyclePolicy } from "../lib/onboarding/sensitive-lifecy
 const suffix = `${process.pid}-${Date.now()}`;
 const orgA = `isolation-a-${suffix}`;
 const orgB = `isolation-b-${suffix}`;
+const profileReader = `isolation-profile-reader-${suffix}`;
+const noFlowReader = `isolation-no-flow-reader-${suffix}`;
 let server: Server;
 let baseUrl: string;
 
 async function grantOpaqueNarrativeAuthority(caseId: number) {
+  const policyOwnerUserId = "test-independent-policy-owner";
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: orgA,
+    clerkUserId: policyOwnerUserId,
+    role: "member",
+  }).onConflictDoNothing();
   await db.insert(onbAuthorityGovernance).values({
     organizationId: orgA,
     status: "governance-approved",
@@ -150,6 +164,76 @@ async function grantOpaqueNarrativeAuthority(caseId: number) {
       governanceDecisionRef: "route-test",
     },
   ]);
+  const userGroupId = `isolation-opaque-user-group-${caseId}-${suffix}`;
+  const securityGroupId = `isolation-opaque-security-group-${caseId}-${suffix}`;
+  await db.insert(accessUserGroups).values({
+    id: userGroupId,
+    organizationId: orgA,
+    name: userGroupId,
+    ownerUserId: policyOwnerUserId,
+    createdByUserId: "test-user-a",
+  });
+  await db.insert(accessSecurityGroups).values({
+    id: securityGroupId,
+    organizationId: orgA,
+    name: securityGroupId,
+    ownerUserId: policyOwnerUserId,
+    createdByUserId: "test-user-a",
+  });
+  await db.insert(accessUserGroupMembers).values({
+    organizationId: orgA,
+    groupId: userGroupId,
+    principalType: "human",
+    principalId: "test-user-a",
+    requiresApproval: "yes",
+    attachedByUserId: "test-user-a",
+    approvedByUserId: policyOwnerUserId,
+    approvedAt: new Date(),
+  });
+  await db.insert(accessSecurityGroupUserGroups).values({
+    organizationId: orgA,
+    securityGroupId,
+    userGroupId,
+    requiresApproval: "yes",
+    approvedByUserId: policyOwnerUserId,
+    approvedAt: new Date(),
+    approvedPolicyVersion: 1,
+    attachedByUserId: "test-user-a",
+  });
+  await db.insert(accessSecurityGroupPolicies).values({
+    organizationId: orgA,
+    securityGroupId,
+    version: 1,
+    policy: {
+      fields: [
+        ...["identity", "medical", "payroll", "bgv"].flatMap((dataClass) => [
+          `data.${dataClass}.read`, `data.${dataClass}.edit`,
+        ]),
+        "data.case.profile.read",
+        "data.case.profile.edit",
+        "data.case.notes.read",
+        "data.case.notes.edit",
+        "data.case.readiness.read",
+        "data.case.readiness.edit",
+      ],
+      flows: ["flow.case.read", "flow.case.edit"],
+      tools: [],
+    },
+    createdByUserId: "test-user-a",
+    approvedByUserId: policyOwnerUserId,
+    approvedAt: new Date(),
+  });
+  await db.insert(accessSecurityGroupAttachments).values({
+    organizationId: orgA,
+    securityGroupId,
+    scope: "case",
+    caseId,
+    requiresApproval: "yes",
+    attachedByUserId: "test-user-a",
+    approvedByUserId: policyOwnerUserId,
+    approvedAt: new Date(),
+    approvedPolicyVersion: 1,
+  });
 }
 
 before(async () => {
@@ -180,7 +264,124 @@ before(async () => {
       clerkUserId: "test-user-b",
       role: "owner",
     },
+    {
+      organizationId: orgA,
+      clerkUserId: profileReader,
+      role: "member",
+    },
+    {
+      organizationId: orgA,
+      clerkUserId: noFlowReader,
+      role: "member",
+    },
   ]);
+  for (const [organizationId, principalId] of [[orgA, "test-user-a"], [orgB, "test-user-b"]] as const) {
+    const userGroupId = `isolation-case-users-${organizationId}`;
+    const securityGroupId = `isolation-case-policy-${organizationId}`;
+    await db.insert(accessUserGroups).values({
+      id: userGroupId,
+      organizationId,
+      name: userGroupId,
+      ownerUserId: principalId,
+      createdByUserId: principalId,
+    });
+    await db.insert(accessSecurityGroups).values({
+      id: securityGroupId,
+      organizationId,
+      name: securityGroupId,
+      ownerUserId: principalId,
+      createdByUserId: principalId,
+    });
+    await db.insert(accessUserGroupMembers).values({
+      organizationId,
+      groupId: userGroupId,
+      principalType: "human",
+      principalId,
+      attachedByUserId: principalId,
+    });
+    await db.insert(accessSecurityGroupUserGroups).values({
+      organizationId,
+      securityGroupId,
+      userGroupId,
+      attachedByUserId: principalId,
+    });
+    await db.insert(accessSecurityGroupPolicies).values({
+      organizationId,
+      securityGroupId,
+      version: 1,
+      policy: {
+        fields: [
+          "data.case.profile.read",
+          "data.case.profile.edit",
+          "data.case.notes.read",
+          "data.case.notes.edit",
+          "data.case.readiness.read",
+          "data.case.readiness.edit",
+        ],
+        flows: ["flow.case.read", "flow.case.edit"],
+        tools: [],
+      },
+      createdByUserId: principalId,
+      approvedByUserId: "independent-isolation-case-approver",
+      approvedAt: new Date(),
+    });
+    await db.insert(accessSecurityGroupAttachments).values({
+      organizationId,
+      securityGroupId,
+      scope: "tenant",
+      caseId: null,
+      attachedByUserId: principalId,
+    });
+  }
+  const profileReaderGroupId = `isolation-profile-reader-group-${suffix}`;
+  const profileReaderSecurityGroupId = `isolation-profile-reader-policy-${suffix}`;
+  await db.insert(accessUserGroups).values({
+    id: profileReaderGroupId,
+    organizationId: orgA,
+    name: profileReaderGroupId,
+    ownerUserId: profileReader,
+    createdByUserId: profileReader,
+  });
+  await db.insert(accessSecurityGroups).values({
+    id: profileReaderSecurityGroupId,
+    organizationId: orgA,
+    name: profileReaderSecurityGroupId,
+    ownerUserId: profileReader,
+    createdByUserId: profileReader,
+  });
+  await db.insert(accessUserGroupMembers).values({
+    organizationId: orgA,
+    groupId: profileReaderGroupId,
+    principalType: "human",
+    principalId: profileReader,
+    attachedByUserId: profileReader,
+  });
+  await db.insert(accessSecurityGroupUserGroups).values({
+    organizationId: orgA,
+    securityGroupId: profileReaderSecurityGroupId,
+    userGroupId: profileReaderGroupId,
+    attachedByUserId: profileReader,
+  });
+  await db.insert(accessSecurityGroupPolicies).values({
+    organizationId: orgA,
+    securityGroupId: profileReaderSecurityGroupId,
+    version: 1,
+    policy: {
+      fields: ["data.case.profile.read"],
+      flows: ["flow.case.read"],
+      tools: [],
+    },
+    createdByUserId: profileReader,
+    approvedByUserId: "independent-profile-reader-approver",
+    approvedAt: new Date(),
+  });
+  await db.insert(accessSecurityGroupAttachments).values({
+    organizationId: orgA,
+    securityGroupId: profileReaderSecurityGroupId,
+    scope: "tenant",
+    caseId: null,
+    attachedByUserId: profileReader,
+  });
   for (const organizationId of [orgA, orgB]) {
     await db.insert(scenariosTable).values({
       ...organizationValues(organizationId),
@@ -281,6 +482,8 @@ before(async () => {
       recruiterName: "Recruiter",
       joiningDate: "2030-01-01",
       workforceContext: { workCountry: "US" },
+      planSummary: "Restricted plan narrative.",
+      notes: "Restricted case note.",
     });
   }
   await seedApprovedSensitiveLifecyclePolicies(orgA);
@@ -390,6 +593,24 @@ after(async () => {
   await db.delete(actualsOverlaysTable).where(eq(actualsOverlaysTable.organizationId, orgB));
   await db.delete(scenariosTable).where(eq(scenariosTable.organizationId, orgA));
   await db.delete(scenariosTable).where(eq(scenariosTable.organizationId, orgB));
+  await db.delete(accessSecurityGroupAttachments).where(inArray(
+    accessSecurityGroupAttachments.organizationId, [orgA, orgB],
+  ));
+  await db.delete(accessSecurityGroupUserGroups).where(inArray(
+    accessSecurityGroupUserGroups.organizationId, [orgA, orgB],
+  ));
+  await db.delete(accessSecurityGroupPolicies).where(inArray(
+    accessSecurityGroupPolicies.organizationId, [orgA, orgB],
+  ));
+  await db.delete(accessUserGroupMembers).where(inArray(
+    accessUserGroupMembers.organizationId, [orgA, orgB],
+  ));
+  await db.delete(accessSecurityGroups).where(inArray(
+    accessSecurityGroups.organizationId, [orgA, orgB],
+  ));
+  await db.delete(accessUserGroups).where(inArray(
+    accessUserGroups.organizationId, [orgA, orgB],
+  ));
   await db
     .delete(organizationMembershipsTable)
     .where(eq(organizationMembershipsTable.organizationId, orgA));
@@ -459,6 +680,31 @@ test("list route families do not expose another organization's records", async (
   assert.notEqual(rowsA[0]?.id, rowsB[0]?.id, "case records stay tenant-scoped");
   assert.equal(rowsA[0]?.workerName, "Restricted candidate");
   assert.equal(rowsB[0]?.workerName, "Restricted candidate");
+});
+
+test("case profile and notes are independently redacted and flow read is enforced", async () => {
+  const profileResponse = await fetch(`${baseUrl}/onboarding/cases`, {
+    headers: { "x-test-user": profileReader, "x-organization-id": orgA },
+  });
+  assert.equal(profileResponse.status, 200);
+  const profileRows = await profileResponse.json() as Array<Record<string, unknown>>;
+  assert.equal(profileRows.length, 1);
+  assert.equal(profileRows[0]?.role, "Engineer");
+  assert.equal(profileRows[0]?.workerName, "Restricted candidate");
+  assert.equal(profileRows[0]?.planSummary, null);
+  // Profile-read does not bypass the existing all-class specialist gate for
+  // opaque workforce context.
+  assert.deepEqual(profileRows[0]?.workforceContext, {});
+
+  const noFlowDetail = await fetch(`${baseUrl}/onboarding/cases/${profileRows[0]?.id}`, {
+    headers: { "x-test-user": noFlowReader, "x-organization-id": orgA },
+  });
+  assert.equal(noFlowDetail.status, 403);
+  const noFlowList = await fetch(`${baseUrl}/onboarding/cases`, {
+    headers: { "x-test-user": noFlowReader, "x-organization-id": orgA },
+  });
+  assert.equal(noFlowList.status, 200);
+  assert.deepEqual(await noFlowList.json(), []);
 });
 
 test("dashboard includes tenant-owned monitor events without a case", async () => {

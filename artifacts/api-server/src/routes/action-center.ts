@@ -17,6 +17,7 @@ import {
   ResolveOnboardingActionCenterWorkResponse,
 } from "@workspace/api-zod";
 import { getOrganizationId } from "../lib/organization-scope";
+import { resolveEffectiveAccess } from "../lib/access-governance";
 import { resolveReviewerName } from "../middlewares/require-auth";
 import {
   ActionCenterConflictError,
@@ -58,6 +59,35 @@ async function actionCenterAccess(
   return "standard";
 }
 
+async function requireCaseEditAccess(
+  organizationId: string,
+  actorUserId: string,
+  caseId: number,
+  res: Response,
+  requiresNotes: boolean,
+): Promise<boolean> {
+  const effective = await resolveEffectiveAccess({
+    organizationId,
+    principalType: "human",
+    principalId: actorUserId,
+    caseId,
+    purpose: "onboarding-action-center-mutation",
+  });
+  if (
+    !effective.allows.includes("flow.case.edit") ||
+    (requiresNotes && !effective.allows.includes("data.case.notes.edit"))
+  ) {
+    res.status(403).json({
+      message: requiresNotes
+        ? "Explicit case-flow edit and case-notes edit grants are required for this action."
+        : "Explicit case-flow edit access is required for this action.",
+      code: "CASE_EDIT_ACCESS_REQUIRED",
+    });
+    return false;
+  }
+  return true;
+}
+
 router.use("/onboarding/action-center/actions", async (req, res, next) => {
   try {
     if (await actionCenterAccess(req.authUserId!) === "denied") {
@@ -86,12 +116,33 @@ async function sensitiveActionCenterProjection(
   access: ActionCenterAccess = "standard",
 ) {
   const accessByCase = new Map<number, SensitiveAccess>();
+  const caseAccessByCase = new Map<number, {
+    flowRead: boolean;
+    profileRead: boolean;
+  }>();
   const accessFor = async (caseId: number) => {
     const cached = accessByCase.get(caseId);
     if (cached) return cached;
     const access = await resolveSensitiveAccess({ organizationId, caseId, actorUserId });
     accessByCase.set(caseId, access);
     return access;
+  };
+  const caseAccessFor = async (caseId: number) => {
+    const cached = caseAccessByCase.get(caseId);
+    if (cached) return cached;
+    const effective = await resolveEffectiveAccess({
+      organizationId,
+      principalType: "human",
+      principalId: actorUserId ?? "",
+      caseId,
+      purpose: "onboarding-action-center",
+    });
+    const caseAccess = {
+      flowRead: effective.allows.includes("flow.case.read"),
+      profileRead: effective.allows.includes("data.case.profile.read"),
+    };
+    caseAccessByCase.set(caseId, caseAccess);
+    return caseAccess;
   };
   const safeClassification = (classification: {
     label: string;
@@ -120,19 +171,39 @@ async function sensitiveActionCenterProjection(
       correction?: { label: string };
     } | null;
   }>(entry: T, caseId: number) => {
-    const access = await accessFor(caseId);
-    return access.identity
+    const [access, caseAccess] = await Promise.all([accessFor(caseId), caseAccessFor(caseId)]);
+    return access.identity && caseAccess.profileRead && caseAccess.flowRead
       ? { ...entry, workforceClassification: safeClassification(entry.workforceClassification, access) }
       : {
           ...entry,
           workerName: "Restricted candidate",
           workerEmail: "restricted",
+          role: "Restricted case profile",
+          joiningDate: "Restricted",
+          siteExposure: false,
+          safetyCritical: false,
           // Classification rationale is server-derived free text, not a
           // general Action Center entitlement.
           workforceClassification: null,
         };
   };
-  const documentFollowups = await Promise.all(result.documentFollowups.map(async (item) => {
+  const visibleCaseItems = async <T>(items: T[]): Promise<T[]> => {
+    const visible: T[] = [];
+    for (const item of items) {
+      const caseId = (item as { caseId?: unknown }).caseId;
+      if (typeof caseId === "number" && (await caseAccessFor(caseId)).flowRead) {
+        visible.push(item);
+      }
+    }
+    return visible;
+  };
+  const visibleDocuments = await visibleCaseItems(result.documentFollowups);
+  const visibleApprovals = await visibleCaseItems(result.approvals);
+  const visibleNotifications = await visibleCaseItems(result.notifications);
+  const visibleWorkItems = await visibleCaseItems(result.workItems);
+  const visibleCompleted = await visibleCaseItems(result.completed);
+  const visibleOpportunities = await visibleCaseItems(result.opportunities);
+  const documentFollowups = await Promise.all(visibleDocuments.map(async (item) => {
     const access = await accessFor(item.caseId);
     const { category, ...publicItem } = item;
     const classes = sensitiveClassForDocument({ key: item.key, label: item.label, category });
@@ -148,7 +219,7 @@ async function sensitiveActionCenterProjection(
       case: await safeCase(item.case, item.caseId),
     };
   }));
-  const approvals = await Promise.all(result.approvals.map(async (item) => ({
+  const approvals = await Promise.all(visibleApprovals.map(async (item) => ({
     ...item,
     // Approval recommendation/rationale are opaque free text. Do not pass
     // them through a list/dashboard merely because their wording had no
@@ -158,7 +229,7 @@ async function sensitiveActionCenterProjection(
     rationale: "Details are restricted to the assigned specialist.",
     case: await safeCase(item.case, item.caseId),
   })));
-  const notifications = result.notifications.map((item) => ({
+  const notifications = visibleNotifications.map((item) => ({
     ...item,
     // BGV clearance state is operationally visible; raw event/message text,
     // provider recipient, and actor identity are not.
@@ -171,19 +242,19 @@ async function sensitiveActionCenterProjection(
     recipient: "Restricted",
     initiator: "Restricted",
   }));
-  const workItems = result.workItems.map((item) => ({
+  const workItems = visibleWorkItems.map((item) => ({
     ...item,
     owner: null,
     assignee: null,
     reason: null,
     actor: "Restricted",
   }));
-  const completed = result.completed.map((item) => ({
+  const completed = visibleCompleted.map((item) => ({
     ...item,
     summary: "Restricted onboarding action recorded.",
     actor: "Restricted",
   }));
-  const opportunities = result.opportunities.map((item) => ({
+  const opportunities = visibleOpportunities.map((item) => ({
     id: item.id,
     caseId: item.caseId,
     actionVersion: item.actionVersion,
@@ -209,6 +280,14 @@ async function sensitiveActionCenterProjection(
   }));
   return {
     ...result,
+    counts: {
+      pendingApprovals: approvals.filter((item) => item.status === "pending").length,
+      notifications: notifications.length,
+      missingDocuments: documentFollowups.length,
+      openWorkItems: workItems.length,
+      completed: completed.length,
+      opportunities: opportunities.length,
+    },
     approvals,
     notifications,
     documentFollowups,
@@ -331,6 +410,13 @@ router.post("/onboarding/action-center/actions/manual-call-outcome", async (req,
       undefined,
       access === "denied" ? "standard" : access,
     );
+    if (!await requireCaseEditAccess(
+      getOrganizationId(req),
+      req.authUserId!,
+      body.caseId,
+      res,
+      Boolean(body.notes?.trim()),
+    )) return;
     const result = await recordManualCallOutcome({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -362,6 +448,7 @@ router.post("/onboarding/action-center/actions/remind-document", async (req, res
       );
     }
     assertActionCenterMutationAuthorized(organizationId, req.organizationRole, body.mode);
+    if (!await requireCaseEditAccess(organizationId, req.authUserId!, body.caseId, res, false)) return;
     const result = await recordDocumentReminder({
       organizationId,
       actorUserId: req.authUserId!,
@@ -384,6 +471,7 @@ router.post("/onboarding/action-center/actions/assign", async (req, res, next) =
     const body = AssignOnboardingActionCenterWorkBody.parse(req.body);
     const access = await actionCenterAccess(req.authUserId!);
     assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
+    if (!await requireCaseEditAccess(getOrganizationId(req), req.authUserId!, body.caseId, res, true)) return;
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -410,6 +498,7 @@ router.post("/onboarding/action-center/actions/escalate", async (req, res, next)
     const body = EscalateOnboardingActionCenterWorkBody.parse(req.body);
     const access = await actionCenterAccess(req.authUserId!);
     assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
+    if (!await requireCaseEditAccess(getOrganizationId(req), req.authUserId!, body.caseId, res, true)) return;
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -436,6 +525,7 @@ router.post("/onboarding/action-center/actions/reassign", async (req, res, next)
     const body = ReassignOnboardingActionCenterWorkBody.parse(req.body);
     const access = await actionCenterAccess(req.authUserId!);
     assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
+    if (!await requireCaseEditAccess(getOrganizationId(req), req.authUserId!, body.caseId, res, true)) return;
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,
@@ -463,6 +553,7 @@ router.post("/onboarding/action-center/actions/resolve", async (req, res, next) 
     const body = ResolveOnboardingActionCenterWorkBody.parse(req.body);
     const access = await actionCenterAccess(req.authUserId!);
     assertActionCenterMutationAuthorized(getOrganizationId(req), req.organizationRole, undefined, access === "denied" ? "standard" : access);
+    if (!await requireCaseEditAccess(getOrganizationId(req), req.authUserId!, body.caseId, res, false)) return;
     const result = await recordWorkItem({
       organizationId: getOrganizationId(req),
       actorUserId: req.authUserId!,

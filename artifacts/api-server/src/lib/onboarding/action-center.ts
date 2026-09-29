@@ -369,25 +369,48 @@ export async function recordManualCallOutcome(input: {
       "Named call personas are available only in Demo Organization simulations.",
     );
   }
-  const result = await reserveAction({
-    ...input,
-    kind: "manual-call-outcome",
-    body: {
-      requestId: input.requestId,
-      caseId: input.caseId,
-      outcome: input.outcome,
-      notes: input.notes ?? null,
-      persona: input.persona ?? null,
-      selfReported: input.selfReported,
-    },
-    status: "completed",
-    verified: false,
-  });
-  return {
-    action: actionPublic(result.row),
-    idempotent: result.idempotent,
-    actionVersion: result.actionVersion,
+  const persist = async () => {
+    const result = await reserveAction({
+      ...input,
+      kind: "manual-call-outcome",
+      body: {
+        requestId: input.requestId,
+        caseId: input.caseId,
+        outcome: input.outcome,
+        notes: input.notes ?? null,
+        persona: input.persona ?? null,
+        selfReported: input.selfReported,
+      },
+      status: "completed",
+      verified: false,
+    });
+    return {
+      action: actionPublic(result.row),
+      idempotent: result.idempotent,
+      actionVersion: result.actionVersion,
+    };
   };
+  const [caseRow] = await db.select({
+    notes: onbCases.notes,
+    scenarioKey: onbCases.scenarioKey,
+    syntheticProvenance: onbCases.syntheticProvenance,
+  }).from(onbCases).where(and(
+    eq(onbCases.organizationId, input.organizationId),
+    eq(onbCases.id, input.caseId),
+  )).limit(1);
+  // Preserve not-found/offline error semantics and the Demo simulation path;
+  // neither can persist an ordinary sensitive online case mutation.
+  if (!caseRow || isSyntheticOfflineCase(caseRow) || input.access === "synthetic-demo-simulation") {
+    return persist();
+  }
+  return withSensitiveAuthorityFence({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+    actorUserId: input.actorUserId,
+    classification: "identity",
+    additionalClassifications: ["medical", "payroll", "bgv"],
+    mutate: persist,
+  });
 }
 
 export async function recordWorkItem(input: {
@@ -485,6 +508,10 @@ async function recordDocumentReminderOnce(input: DocumentReminderInput): Promise
     actorUserId: input.actorUserId,
     classification: classes[0]!,
     additionalClassifications: classes.slice(1),
+    additionalAccessKeys: [
+      "tool.documents.edit",
+      ...(input.mode === "live" ? ["tool.notification.send"] : []),
+    ],
     // Keep the authority lock through replay recovery and provider dispatch,
     // not merely through its initial Action Center reservation.
     mutate: () => recordDocumentReminderUnsafe(input),

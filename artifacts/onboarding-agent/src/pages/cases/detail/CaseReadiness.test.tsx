@@ -9,12 +9,31 @@ import {
   testWindow,
 } from "../../cases/test-support/cases-dom";
 
-const [{ createRoot }, { QueryClient, QueryClientProvider }, { CaseReadiness }] =
+const [{ createRoot }, { QueryClient, QueryClientProvider }, { CaseReadiness }, { CaseAccessProvider }] =
   await Promise.all([
     import("react-dom/client"),
     import("@tanstack/react-query"),
     import("./CaseReadiness"),
+    import("./case-access"),
   ]);
+
+const testCasePermissions = {
+  caseId: 274,
+  access: {
+    flowRead: true,
+    profileRead: true,
+    profileEdit: true,
+    notesRead: true,
+    notesEdit: true,
+    flowEdit: true,
+  },
+  sensitive: {
+    identity: { read: true, edit: true },
+    medical: { read: true, edit: true },
+    payroll: { read: true, edit: true },
+    bgv: { read: true, edit: true },
+  },
+};
 
 after(async () => {
   await disposeCasesDom();
@@ -95,7 +114,9 @@ async function mountReadiness(
   await act(async () => {
     root.render(
       <QueryClientProvider client={queryClient}>
-        <CaseReadiness c={c as never} setTab={() => {}} />
+        <CaseAccessProvider value={testCasePermissions}>
+          <CaseReadiness c={c as never} setTab={() => {}} />
+        </CaseAccessProvider>
       </QueryClientProvider>,
     );
   });

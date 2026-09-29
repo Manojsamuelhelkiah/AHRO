@@ -23,3 +23,5 @@ export * from "./early-tenure";
 export * from "./outcome-reporting";
 export * from "./frontline-operations";
 export * from "./workforce-transfer";
+export * from "./access-governance";
+export * from "./agent-invocations";

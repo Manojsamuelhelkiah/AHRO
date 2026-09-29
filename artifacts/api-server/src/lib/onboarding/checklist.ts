@@ -138,7 +138,7 @@ export { mandatoryChecklistReady };
 
 export type EvidenceVerificationResult =
   | { ok: true; case: typeof onbCases.$inferSelect }
-  | { ok: false; code: "not-found" | "not-evidence-gate" | "wrong-authority" | "not-designated" | "prerequisites-unmet" | "stale-policy" | "lifecycle-blocked" };
+  | { ok: false; code: "not-found" | "not-evidence-gate" | "wrong-authority" | "not-designated" | "prerequisites-unmet" | "stale-policy" | "lifecycle-blocked" | "access-denied" };
 
 /**
  * The only in-product completion path for a policy evidence gate. It stores
@@ -155,6 +155,7 @@ export async function verifyChecklistEvidence(opts: {
   reason: string;
   verifier: string;
   verifierUserId: string;
+  authorizeAccess?: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<boolean>;
   expected: { contextVersion: number; templateVersion: number; profileId: string; profileVersion: number };
 }): Promise<EvidenceVerificationResult> {
   const result = await withSensitiveLifecycleFence(opts.organizationId, () => db.transaction(async (tx): Promise<EvidenceVerificationResult> => {
@@ -163,6 +164,9 @@ export async function verifyChecklistEvidence(opts: {
       eq(onbCases.organizationId, opts.organizationId),
     )).for("update");
     if (!c) return { ok: false, code: "not-found" };
+    if (opts.authorizeAccess && !(await opts.authorizeAccess(tx))) {
+      return { ok: false, code: "access-denied" };
+    }
     if (c.workforceContextVersion !== opts.expected.contextVersion ||
       c.checklistTemplateVersion !== opts.expected.templateVersion ||
       c.checklistProfileId !== opts.expected.profileId ||

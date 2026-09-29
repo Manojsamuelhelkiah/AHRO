@@ -17,6 +17,7 @@ import { withApprovedDemoVolunteerEmail } from "./demo-controller";
 
 export const CASE_SIMULATION_SETTING_PREFIX = "onboarding:case-simulation:";
 export const CASE_SIMULATION_MAX_EXCHANGES = 64;
+const SIMULATION_EMAIL_RECIPIENT_LABEL = "pinned Demo volunteer";
 
 export const SIMULATION_STAGES = [
   "offer",
@@ -341,7 +342,7 @@ function publicState(
     ? {
       transport: "real-email",
       businessOutcome: "simulated-only",
-      recipient: maskSimulationEmail(currentDispatch.recipient || "not available"),
+      recipient: SIMULATION_EMAIL_RECIPIENT_LABEL,
       status: currentDispatch.status,
       reason: currentDispatch.reason ?? (
         currentDispatch.status === "sending"
@@ -971,7 +972,7 @@ export async function sendCurrentSimulationPrompt(input: {
         emailDelivery: {
           transport: "real-email",
           businessOutcome: "simulated-only",
-          recipient: maskSimulationEmail(priorDispatch.recipient || "not available"),
+          recipient: SIMULATION_EMAIL_RECIPIENT_LABEL,
           status: priorDispatch.status,
           reason: priorDispatch.status === "sending"
             ? "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled."
@@ -1054,7 +1055,7 @@ export async function sendCurrentSimulationPrompt(input: {
       emailDelivery: {
         transport: "real-email",
         businessOutcome: "simulated-only",
-        recipient: maskSimulationEmail(prepared.dispatch.recipient || "not available"),
+        recipient: SIMULATION_EMAIL_RECIPIENT_LABEL,
         status: prepared.dispatch.status,
         reason: prepared.dispatch.status === "sending"
           ? "Delivery outcome unknown; manual reconciliation is required. Automatic resend is disabled."
@@ -1145,7 +1146,7 @@ export async function sendCurrentSimulationPrompt(input: {
     emailDelivery: {
       transport: "real-email",
       businessOutcome: "simulated-only",
-      recipient: maskSimulationEmail(final.dispatch.recipient || recipient || "not available"),
+      recipient: SIMULATION_EMAIL_RECIPIENT_LABEL,
       status: final.dispatch.status,
       reason: delivery.failureReason,
       freshness: final.dispatch.generationId === final.state.generationId ? "current-generation" : "retired-generation",

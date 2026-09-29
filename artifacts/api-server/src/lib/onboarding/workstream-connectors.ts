@@ -71,6 +71,7 @@ export type WorkstreamConnectorCase = Pick<
   workerName?: string;
   workerPhone?: string | null;
   notes?: string | null;
+  syntheticProvenance?: CaseRow["syntheticProvenance"];
   scenarioKey?: string | null;
   checklistSnapshot?: OnbChecklistTemplateItem[];
   readiness?: OnbReadinessItemRow[];
@@ -577,6 +578,7 @@ export async function dispatchCaseConnectorMutation(input: {
         workerEmail: input.c.workerEmail,
         workerPhone: input.c.workerPhone ?? null,
         notes: input.c.notes ?? null,
+        syntheticProvenance: input.c.syntheticProvenance,
         scenarioKey: input.c.scenarioKey,
       }),
       verifyCurrentAuthority: (tx) =>
@@ -705,6 +707,7 @@ export async function dispatchWorkstreamConnectorMutations(
     workerEmail: c.workerEmail,
     workerPhone: c.workerPhone ?? null,
     notes: c.notes ?? null,
+    syntheticProvenance: c.syntheticProvenance,
     scenarioKey: c.scenarioKey,
   });
   if (syntheticOffline) return { releaseHeld: false, heldConnectors: [] };

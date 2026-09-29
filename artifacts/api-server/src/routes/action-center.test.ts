@@ -8,6 +8,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   DEMO_ORGANIZATION_ID,
   db,
+  accessNamedGrants,
   onbAuthorityAssignments,
   onbAuthorityGovernance,
   onbActionCenterActions,
@@ -31,6 +32,12 @@ import {
   onbSystemChecks,
   organizationMembershipsTable,
   organizationsTable,
+  accessSecurityGroups,
+  accessSecurityGroupPolicies,
+  accessSecurityGroupUserGroups,
+  accessSecurityGroupAttachments,
+  accessUserGroups,
+  accessUserGroupMembers,
 } from "@workspace/db";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import actionCenterRouter from "./action-center";
@@ -85,11 +92,16 @@ const orgB = `action-center-b-${suffix}`;
 const orgC = `action-center-c-${suffix}`;
 const ownerA = `action-center-owner-a-${suffix}`;
 const memberA = `action-center-member-a-${suffix}`;
+const accessOwnerA = `action-center-access-owner-a-${suffix}`;
 const ownerB = `action-center-owner-b-${suffix}`;
+const offlineAccessUserGroupId = `action-center-offline-users-${suffix}`;
+const offlineAccessSecurityGroupId = `action-center-offline-policy-${suffix}`;
 const demoMember = `action-center-demo-member-${suffix}`;
 const demoAdministrator = `action-center-demo-administrator-${suffix}`;
 const demoReviewer = `action-center-demo-reviewer-${suffix}`;
 const actorName = ownerA;
+const actionCenterUserGroupId = `action-center-sensitive-users-${suffix}`;
+const actionCenterSecurityGroupId = `action-center-sensitive-policy-${suffix}`;
 
 let server: Server | undefined;
 let baseUrl = "";
@@ -110,6 +122,7 @@ function caseValues(organizationId: string, options: {
   name: string;
   email?: string;
   notes?: string | null;
+  syntheticProvenance?: "synthetic-reset" | null;
   candidateAuthorized?: boolean;
   workforceContext?: { siteExposure?: boolean; safetyCritical?: boolean };
   workforceClassification?: {
@@ -138,6 +151,7 @@ function caseValues(organizationId: string, options: {
     lifecycleStage: "complete",
     orchestrationStatus: "idle",
     notes: options.notes ?? null,
+    syntheticProvenance: options.syntheticProvenance ?? null,
     candidateEmailAuthorizedAt: options.candidateAuthorized ? new Date() : null,
     candidateEmailAuthorizedBy: options.candidateAuthorized ? actorName : null,
     readiness: [],
@@ -361,6 +375,7 @@ before(async () => {
   ]);
   await db.insert(organizationMembershipsTable).values([
     { organizationId: orgA, clerkUserId: ownerA, role: "owner" },
+    { organizationId: orgA, clerkUserId: accessOwnerA, role: "owner" },
     { organizationId: orgC, clerkUserId: ownerA, role: "owner" },
     { organizationId: orgA, clerkUserId: memberA, role: "member" },
     { organizationId: orgB, clerkUserId: ownerB, role: "owner" },
@@ -368,6 +383,120 @@ before(async () => {
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: demoAdministrator, role: "member" },
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: demoReviewer, role: "member" },
   ]);
+  await db.insert(accessUserGroups).values({
+    id: actionCenterUserGroupId,
+    organizationId: orgA,
+    name: actionCenterUserGroupId,
+    ownerUserId: accessOwnerA,
+    createdByUserId: ownerA,
+  });
+  await db.insert(accessSecurityGroups).values({
+    id: actionCenterSecurityGroupId,
+    organizationId: orgA,
+    name: actionCenterSecurityGroupId,
+    ownerUserId: accessOwnerA,
+    createdByUserId: ownerA,
+  });
+  await db.insert(accessUserGroupMembers).values([ownerA, memberA].map((principalId) => ({
+    organizationId: orgA,
+    groupId: actionCenterUserGroupId,
+    principalType: "human" as const,
+    principalId,
+    status: "active" as const,
+    requiresApproval: "yes" as const,
+    attachedByUserId: ownerA,
+    approvedByUserId: accessOwnerA,
+    approvedAt: new Date(),
+  })));
+  await db.insert(accessSecurityGroupUserGroups).values({
+    organizationId: orgA,
+    securityGroupId: actionCenterSecurityGroupId,
+    userGroupId: actionCenterUserGroupId,
+    attachedByUserId: ownerA,
+    requiresApproval: "yes",
+    approvedByUserId: accessOwnerA,
+    approvedAt: new Date(),
+    approvedPolicyVersion: 1,
+  });
+  await db.insert(accessSecurityGroupPolicies).values({
+    organizationId: orgA,
+    securityGroupId: actionCenterSecurityGroupId,
+    version: 1,
+    policy: {
+      fields: ["identity", "medical", "payroll", "bgv"].flatMap((dataClass) => [
+        `data.${dataClass}.read`, `data.${dataClass}.edit`,
+      ]).concat([
+        "data.case.profile.read",
+        "data.case.profile.edit",
+        "data.case.notes.read",
+        "data.case.notes.edit",
+        "data.case.readiness.read",
+        "data.case.readiness.edit",
+      ]),
+      flows: ["flow.case.read", "flow.case.edit"],
+      tools: ["tool.documents.edit", "tool.notification.send"],
+    },
+    createdByUserId: ownerA,
+    approvedByUserId: accessOwnerA,
+    approvedAt: new Date(),
+  });
+  await db.insert(accessSecurityGroupAttachments).values({
+    organizationId: orgA,
+    securityGroupId: actionCenterSecurityGroupId,
+    scope: "tenant",
+    attachedByUserId: ownerA,
+    requiresApproval: "yes",
+    approvedByUserId: accessOwnerA,
+    approvedAt: new Date(),
+    approvedPolicyVersion: 1,
+  });
+  await db.insert(accessUserGroups).values({
+    id: offlineAccessUserGroupId,
+    organizationId: orgB,
+    name: offlineAccessUserGroupId,
+    ownerUserId: ownerB,
+    createdByUserId: ownerB,
+  });
+  await db.insert(accessSecurityGroups).values({
+    id: offlineAccessSecurityGroupId,
+    organizationId: orgB,
+    name: offlineAccessSecurityGroupId,
+    ownerUserId: ownerB,
+    createdByUserId: ownerB,
+  });
+  await db.insert(accessUserGroupMembers).values({
+    organizationId: orgB,
+    groupId: offlineAccessUserGroupId,
+    principalType: "human",
+    principalId: ownerB,
+    attachedByUserId: ownerB,
+  });
+  await db.insert(accessSecurityGroupUserGroups).values({
+    organizationId: orgB,
+    securityGroupId: offlineAccessSecurityGroupId,
+    userGroupId: offlineAccessUserGroupId,
+    attachedByUserId: ownerB,
+  });
+  await db.insert(accessSecurityGroupPolicies).values({
+    organizationId: orgB,
+    securityGroupId: offlineAccessSecurityGroupId,
+    version: 1,
+    policy: {
+      fields: [
+        "data.case.profile.read", "data.case.profile.edit",
+        "data.case.notes.read", "data.case.notes.edit",
+      ],
+      flows: ["flow.case.read", "flow.case.edit"],
+      tools: [],
+    },
+    createdByUserId: ownerB,
+  });
+  await db.insert(accessSecurityGroupAttachments).values({
+    organizationId: orgB,
+    securityGroupId: offlineAccessSecurityGroupId,
+    scope: "tenant",
+    attachedByUserId: ownerB,
+  });
   await db.insert(onbSettings).values([
     {
       organizationId: DEMO_ORGANIZATION_ID,
@@ -502,6 +631,7 @@ before(async () => {
     name: `Action Center Offline ${suffix}`,
     email: `action-center-offline-${suffix}@example.test`,
     notes: SYNTHETIC_OFFLINE_MARKER,
+    syntheticProvenance: "synthetic-reset",
   });
   await createDocument(orgB, offlineCaseId, {
     key: `offline-${suffix}`,
@@ -523,9 +653,40 @@ before(async () => {
     name: `Action Center Synthetic Demo ${suffix}`,
     email: `action-center-synthetic-demo-${suffix}@example.test`,
     notes: SYNTHETIC_OFFLINE_MARKER,
+    syntheticProvenance: "synthetic-reset",
     candidateAuthorized: true,
     workforceContext: { siteExposure: true, safetyCritical: true },
   });
+  await db.insert(accessNamedGrants).values([
+    { resourceType: "flow" as const, resourceKey: "flow.case.read" },
+    { resourceType: "flow" as const, resourceKey: "flow.case.edit" },
+    { resourceType: "field" as const, resourceKey: "data.case.profile.read" },
+    { resourceType: "field" as const, resourceKey: "data.case.notes.edit" },
+  ].map((grant) => ({
+    organizationId: DEMO_ORGANIZATION_ID,
+    principalType: "human" as const,
+    principalId: demoAdministrator,
+    scope: "case" as const,
+    caseId: syntheticDemoCaseId,
+    source: "named" as const,
+    effect: "allow" as const,
+    createdByUserId: "action-center-test-fixture",
+    ...grant,
+  })));
+  await db.insert(accessNamedGrants).values(
+    ["flow.case.edit", "data.case.notes.edit"].map((resourceKey) => ({
+      organizationId: DEMO_ORGANIZATION_ID,
+      principalType: "human" as const,
+      principalId: demoAdministrator,
+      scope: "case" as const,
+      caseId: caseIds[2]!,
+      resourceType: resourceKey.startsWith("flow.") ? "flow" as const : "field" as const,
+      resourceKey,
+      source: "named" as const,
+      effect: "allow" as const,
+      createdByUserId: "action-center-test-fixture",
+    })),
+  );
   await createDocument(DEMO_ORGANIZATION_ID, syntheticDemoCaseId, {
     key: `synthetic-demo-${suffix}`,
     updatedAt: new Date(Date.now() - 2 * 86_400_000),
@@ -581,6 +742,10 @@ after(async () => {
   }
   // Child rows are deleted explicitly so this cleanup is safe even if a
   // database fixture has a historical non-cascading foreign key.
+  await db.delete(accessNamedGrants).where(and(
+    eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
+    inArray(accessNamedGrants.caseId, [syntheticDemoCaseId, caseIds[2]!]),
+  ));
   await db.delete(onbEffectJournal).where(
     inArray(onbEffectJournal.organizationId, organizationIds),
   );
@@ -630,6 +795,12 @@ after(async () => {
   );
   await db.delete(onbSensitiveLifecyclePolicies).where(
     inArray(onbSensitiveLifecyclePolicies.organizationId, organizationIds),
+  );
+  await db.delete(accessUserGroups).where(
+    inArray(accessUserGroups.organizationId, organizationIds),
+  );
+  await db.delete(accessSecurityGroups).where(
+    inArray(accessSecurityGroups.organizationId, organizationIds),
   );
   await db.delete(organizationMembershipsTable).where(
     inArray(organizationMembershipsTable.organizationId, organizationIds),

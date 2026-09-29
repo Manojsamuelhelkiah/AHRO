@@ -415,12 +415,16 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
     await db.update(onbCases).set({
       offerAcceptanceComplete: true,
       offerAcceptanceCompletedAt: acceptanceAt,
+      // Keep this regression focused on reopening and re-completing the
+      // Gate C evidence cycle. The HSE evidence authority remains site-scoped,
+      // but this case is explicitly an office role rather than a frontline
+      // floor-release scenario.
       workforceContext: {
-         workCountry: "US",
-        workEnvironment: "site",
+        workCountry: "US",
+        workEnvironment: "office",
         site: "yard",
-        siteExposure: true,
-        safetyCritical: true,
+        siteExposure: false,
+        safetyCritical: false,
       },
       checklistSnapshot: [...LEGACY_CHECKLIST, evidenceGate],
       readiness: [

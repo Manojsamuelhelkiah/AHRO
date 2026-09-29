@@ -36,6 +36,10 @@ tags:
     description: Tenant-isolated, governed curated HR policy sources and cited answers; separate from case chat
   - name: organizations
     description: Authenticated organization selection, creation, and membership joining
+  - name: accessGovernance
+    description: Owner-managed tenant access catalog, groups, grants, and effective-access review
+  - name: agentInvocations
+    description: Authenticated agent invocation requests and records
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
@@ -642,6 +646,477 @@ paths:
         "400": { description: Invalid country }
         "401": { description: Authentication required }
         "403": { description: Owner or admin role required }
+  /organizations/current/access:
+    get:
+      operationId: getOrganizationAccessGovernance
+      tags: [accessGovernance]
+      summary: Read the current organization's access-governance snapshot
+      description: Owner/admin only. Includes the reviewed catalog, active organization members, registered agents, user groups, security groups, effective direct grants, and the most recent 250 audit events.
+      responses:
+        "200":
+          description: Access-governance snapshot
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceSnapshot" } } }
+        "403":
+          description: Owner or administrator access is required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/preview:
+    get:
+      operationId: previewOrganizationPrincipalAccess
+      tags: [accessGovernance]
+      summary: Resolve effective access for a principal
+      description: Owner/admin only. Optional caseId includes case-scoped grants in the evaluation. Previewing a registered agent requires an explicit initiatorUserId; effective agent access is evaluated in that initiator's context and is constrained by the initiator's effective access. The registered owner is never inferred as the initiator.
+      parameters:
+        - name: principalType
+          in: query
+          required: true
+          schema: { type: string, enum: [user, agent] }
+        - name: principalId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: caseId
+          in: query
+          required: false
+          description: Optional positive case ID whose case-scoped grants should be included.
+          schema: { type: integer, minimum: 1 }
+        - name: initiatorUserId
+          in: query
+          required: false
+          description: Required when principalType is agent. Explicit organization-member user whose effective access constrains the agent preview.
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Effective access and per-key explanation
+          content: { application/json: { schema: { $ref: "#/components/schemas/EffectiveAccess" } } }
+        "400":
+          description: Principal type or ID is invalid
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Owner or administrator access is required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/field-access:
+    get:
+      operationId: listOrganizationPrincipalsWithFieldAccess
+      tags: [accessGovernance]
+      summary: List active principals allowed to access a catalog field
+      description: Owner/admin only. Optional caseId includes case-scoped grants. Pass initiatorUserId to resolve agent entries in an explicit initiator context; agent access is constrained by that user's effective access and is never inferred from the registered owner.
+      parameters:
+        - name: field
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AccessFieldKey" }
+        - name: caseId
+          in: query
+          required: false
+          description: Optional positive case ID whose case-scoped grants should be included.
+          schema: { type: integer, minimum: 1 }
+        - name: initiatorUserId
+          in: query
+          required: false
+          description: Explicit organization-member user context for resolving registered-agent access.
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Principals with effective access and reasons
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessFieldPrincipalsResponse" } } }
+        "400":
+          description: A known catalog field key is required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Owner or administrator access is required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/agents:
+    post:
+      operationId: createAccessAgent
+      tags: [accessGovernance]
+      summary: Register an agent for the current organization
+      description: Owner only. The supplied ownerUserId must identify an active human member.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessAgentInput" } } }
+      responses:
+        "201":
+          description: Registered agent
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessAgentResponse" } } }
+        "400":
+          description: Invalid agent or inactive owner
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/agents/{id}:
+    patch:
+      operationId: retireAccessAgent
+      tags: [accessGovernance]
+      summary: Retire a registered agent
+      description: Owner only. Uses the agent's expected history version to reject stale updates.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessAgentUpdate" } } }
+      responses:
+        "200":
+          description: Retirement result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceOk" } } }
+        "400":
+          description: Invalid agent update
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Agent not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Agent version conflict
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/user-groups:
+    post:
+      operationId: createAccessUserGroup
+      tags: [accessGovernance]
+      summary: Create a user group
+      description: Owner only.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupInput" } } }
+      responses:
+        "201":
+          description: Created user group
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupResponse" } } }
+        "400":
+          description: Invalid user group
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/user-groups/{id}:
+    patch:
+      operationId: updateAccessUserGroup
+      tags: [accessGovernance]
+      summary: Rename or retire a user group
+      description: Owner only. The expected version is the number of history events for the group; retired groups cannot be changed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupUpdate" } } }
+      responses:
+        "200":
+          description: Update result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceOk" } } }
+        "400":
+          description: Invalid user-group update
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: User group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Version conflict or retired group
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/user-groups/{id}/members:
+    put:
+      operationId: setAccessUserGroupMember
+      tags: [accessGovernance]
+      summary: Add or remove a principal from a user group
+      description: Owner only. Adding requires an active organization member or registered agent; removing is idempotent.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupMemberUpdate" } } }
+      responses:
+        "200":
+          description: Membership update result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceStatusResponse" } } }
+        "400":
+          description: Invalid membership or inactive principal
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Active user group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/user-groups/{id}/members/approve:
+    post:
+      operationId: approveAccessUserGroupMember
+      tags: [accessGovernance]
+      summary: Independently approve a pending sensitive user-group membership
+      description: Owner only. expectedVersion must match the current user-group version; the reviewer must be an active owner other than the requester and member being approved.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupMemberApproval" } } }
+      responses:
+        "200":
+          description: Membership approval result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceStatusResponse" } } }
+        "400":
+          description: Invalid approval request or inactive principal
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Owner or independent-review requirement not met
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Active user group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Version conflict, no pending membership, or review no longer required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/user-groups/{id}/security-groups:
+    put:
+      operationId: setAccessUserGroupSecurityGroup
+      tags: [accessGovernance]
+      summary: Attach or detach a security group from a user group
+      description: Owner only. Retired groups cannot be attached.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupSecurityGroupUpdate" } } }
+      responses:
+        "200":
+          description: Attachment update result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceStatusResponse" } } }
+        "400":
+          description: Invalid attachment
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: User or security group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Retired group cannot be attached
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/user-groups/{id}/security-groups/approve:
+    post:
+      operationId: approveAccessUserGroupSecurityGroup
+      tags: [accessGovernance]
+      summary: Independently approve a pending sensitive group attachment
+      description: Owner of the security group only. expectedVersion must match its current policy version; the requester and policy must already have independent approval.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupSecurityGroupApproval" } } }
+      responses:
+        "200":
+          description: Attachment approval result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceStatusResponse" } } }
+        "400":
+          description: Invalid approval request
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Active security-group owner or independent-review requirement not met
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Active group binding not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Version conflict, no pending attachment, or review requirement not met
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/security-groups:
+    post:
+      operationId: createAccessSecurityGroup
+      tags: [accessGovernance]
+      summary: Create a security group and its initial policy
+      description: Owner only. Policies accept only keys in the reviewed access catalog; high-sensitivity policies require independent owner approval before sensitive grants become active.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessSecurityGroupInput" } } }
+      responses:
+        "201":
+          description: Created security group
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessSecurityGroupResponse" } } }
+        "400":
+          description: Invalid security group or catalog keys
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/security-groups/{id}:
+    patch:
+      operationId: updateAccessSecurityGroup
+      tags: [accessGovernance]
+      summary: Publish a new security-group policy version or retire the group
+      description: Owner only. expectedVersion must match the current policy version. Sensitive keys require a different owner to approve the published policy.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessSecurityGroupUpdate" } } }
+      responses:
+        "200":
+          description: Update result and new policy version
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessSecurityGroupVersionResponse" } } }
+        "400":
+          description: Invalid security-group update or catalog keys
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Security group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Version conflict, retired group, or unknown policy key
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/grants:
+    put:
+      operationId: setAccessPrincipalSecurityGroupGrant
+      tags: [accessGovernance]
+      summary: Grant or revoke a security group for a principal
+      description: Owner only. Grant targets must be active organization members or agents; sensitive policy resources are granted only after independent approval.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessGrantUpdate" } } }
+      responses:
+        "200":
+          description: Grant update result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceStatusResponse" } } }
+        "400":
+          description: Invalid grant or inactive principal
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Security group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Security group is retired or its policy is unavailable
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/grants/approve:
+    post:
+      operationId: approveAccessPrincipalSecurityGroupGrant
+      tags: [accessGovernance]
+      summary: Independently approve a pending sensitive direct grant
+      description: Owner of the security group only. expectedVersion must match its current policy version; the grant target must be active and the policy independently approved.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessGrantApproval" } } }
+      responses:
+        "200":
+          description: Direct-grant approval result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceStatusResponse" } } }
+        "400":
+          description: Invalid approval request or inactive principal
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Active security-group owner or independent-review requirement not met
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Security group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Version conflict, no pending grant, or review requirement not met
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/security-groups/{id}/approve:
+    post:
+      operationId: approveAccessSecurityGroupPolicy
+      tags: [accessGovernance]
+      summary: Independently approve a high-sensitivity security-group policy
+      description: Owner only; the reviewer must differ from the owner who created the policy. expectedVersion must match the current policy.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessPolicyApproval" } } }
+      responses:
+        "200":
+          description: Approval result
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessPolicyApprovalResponse" } } }
+        "400":
+          description: Invalid approval request
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Organization owner or independent reviewer required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: Security group not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Version conflict, unknown policy key, or independent review is not required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /agent-invocations:
+    post:
+      operationId: invokeRegisteredAgentTool
+      tags: [agentInvocations]
+      summary: Request a tool invocation by a registered organization agent
+      description: Authenticated human initiation is required. The server resolves the agent, owner, permissions, and case within the current tenant; request claims cannot establish authority. The currently executable tool is read-only case metadata lookup. Every authorized or denied attempt is durably audited.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationInput" } } }
+      responses:
+        "200":
+          description: Tool result and durable audit record ID
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationResponse" } } }
+        "400":
+          description: Invocation request is malformed or missing required fields
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationError" } } }
+        "401":
+          description: Authenticated human initiation is required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationAuthenticationError" } } }
+        "403":
+          description: Invocation denied by tenant, agent, case, tool, or delegated-access authorization
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationDenied" } } }
+        "500":
+          description: Authorized tool operation failed and its outcome was durably recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationFailure" } } }
+  /agent-invocations/audit:
+    get:
+      operationId: listAgentInvocationAudit
+      tags: [agentInvocations]
+      summary: Read registered-agent invocation audit
+      description: Tenant-scoped, read-only audit listing for organization owners and administrators. Returns no tool payload or case contents.
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+        - in: query
+          name: beforeId
+          schema: { type: integer, minimum: 1, maximum: 9007199254740991 }
+      responses:
+        "200":
+          description: Invocation audit records for the current tenant
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationAuditList" } } }
+        "400":
+          description: Invalid pagination parameters
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationError" } } }
+        "403":
+          description: Organization owner or administrator access is required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentInvocationAuditForbidden" } } }
   /organizations:
     post:
       operationId: createOrganization
@@ -6757,6 +7232,468 @@ components:
             requestedPricingSheetId: { type: integer, nullable: true }
           required: [gapIds, targetComponentIds, workPackageIds, requestedScenarioId, requestedPricingSheetId]
       required: [assessmentId, generatedAt, scenario, productPricing, traceability]
+    AccessFieldKey:
+      type: string
+      enum:
+        - data.identity.read
+        - data.identity.edit
+        - data.medical.read
+        - data.medical.edit
+        - data.payroll.read
+        - data.payroll.edit
+        - data.bgv.read
+        - data.bgv.edit
+        - data.case.profile.read
+        - data.case.profile.edit
+        - data.case.readiness.read
+        - data.case.readiness.edit
+        - data.case.notes.read
+        - data.case.notes.edit
+        - data.documents.read
+        - data.documents.edit
+        - data.audit.read
+    AccessGovernanceKey:
+      type: string
+      enum:
+        - data.identity.read
+        - data.identity.edit
+        - data.medical.read
+        - data.medical.edit
+        - data.payroll.read
+        - data.payroll.edit
+        - data.bgv.read
+        - data.bgv.edit
+        - data.case.profile.read
+        - data.case.profile.edit
+        - data.case.readiness.read
+        - data.case.readiness.edit
+        - data.case.notes.read
+        - data.case.notes.edit
+        - data.documents.read
+        - data.documents.edit
+        - data.audit.read
+        - flow.case.read
+        - flow.case.edit
+        - flow.onboarding.read
+        - flow.onboarding.edit
+        - flow.document-review.read
+        - flow.document-review.edit
+        - tool.case.read
+        - tool.case.edit
+        - tool.documents.read
+        - tool.documents.edit
+        - tool.notification.send
+        - tool.workflow.run
+        - tool.external.dispatch
+        - tool.policy.manage
+        - tool.approval.decide
+    AccessGovernanceError:
+      type: object
+      properties:
+        message: { type: string }
+        code: { type: string }
+      required: [message, code]
+    AccessGovernanceOk:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]
+    AccessCatalogEntry:
+      type: object
+      properties:
+        key: { $ref: "#/components/schemas/AccessGovernanceKey" }
+        label: { type: string }
+        sensitivity: { type: string, enum: [medium, high] }
+        kind: { type: string, enum: [field, flow, tool] }
+      required: [key, label, sensitivity, kind]
+    AccessOrganizationMember:
+      type: object
+      properties:
+        clerkUserId: { type: string }
+        role: { type: string }
+      required: [clerkUserId, role]
+    AccessAgent:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ownerUserId: { type: string }
+        status: { type: string, enum: [active, retired] }
+        version: { type: integer }
+      required: [id, name, ownerUserId, status, version]
+    AccessPrincipalType:
+      type: string
+      enum: [user, agent]
+    AccessPrincipal:
+      type: object
+      properties:
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string }
+      required: [principalType, principalId]
+    AccessUserGroup:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ownerUserId: { type: string }
+        status: { type: string, enum: [active, retired] }
+        version: { type: integer }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/AccessPrincipal" }
+        securityGroups:
+          type: array
+          items: { type: string }
+      required: [id, name, ownerUserId, status, version, members, securityGroups]
+    AccessSecurityGroup:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ownerUserId: { type: string }
+        status: { type: string, enum: [active, retired] }
+        version: { type: integer }
+        allows:
+          type: array
+          items: { $ref: "#/components/schemas/AccessGovernanceKey" }
+        approvalStatus: { type: string, enum: [blocked, pending, approved] }
+      required: [id, name, ownerUserId, status, version, allows, approvalStatus]
+    AccessDirectGrant:
+      type: object
+      properties:
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string }
+        securityGroupId: { type: string }
+        status: { type: string, const: active }
+        version: { type: integer }
+      required: [principalType, principalId, securityGroupId, status, version]
+    AccessPendingGrant:
+      type: object
+      properties:
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string }
+        securityGroupId: { type: string }
+        status: { type: string, const: pending }
+        requestedByUserId: { type: string }
+        bindingVersion: { type: integer }
+        policyVersion: { type: integer }
+      required: [principalType, principalId, securityGroupId, status, requestedByUserId, bindingVersion, policyVersion]
+    AccessPendingAttachment:
+      type: object
+      properties:
+        userGroupId: { type: string }
+        securityGroupId: { type: string }
+        requestedByUserId: { type: string }
+        policyVersion: { type: integer }
+      required: [userGroupId, securityGroupId, requestedByUserId, policyVersion]
+    AccessPendingMember:
+      type: object
+      properties:
+        groupId: { type: string }
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string }
+        requestedByUserId: { type: ["string", "null"] }
+        expectedVersion: { type: integer }
+        policyVersions: { type: string }
+      required: [groupId, principalType, principalId, requestedByUserId, expectedVersion, policyVersions]
+    AccessGovernanceHistoryEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        eventType: { type: string }
+        entityType: { type: string }
+        entityId: { type: string }
+        actorUserId: { type: ["string", "null"] }
+        detail: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+      required: [id, eventType, entityType, entityId, actorUserId, detail, createdAt]
+    AccessGovernanceSnapshot:
+      type: object
+      properties:
+        catalog:
+          type: array
+          items: { $ref: "#/components/schemas/AccessCatalogEntry" }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/AccessOrganizationMember" }
+        agents:
+          type: array
+          items: { $ref: "#/components/schemas/AccessAgent" }
+        userGroups:
+          type: array
+          items: { $ref: "#/components/schemas/AccessUserGroup" }
+        securityGroups:
+          type: array
+          items: { $ref: "#/components/schemas/AccessSecurityGroup" }
+        grants:
+          type: array
+          items: { $ref: "#/components/schemas/AccessDirectGrant" }
+        pendingGrants:
+          type: array
+          items: { $ref: "#/components/schemas/AccessPendingGrant" }
+        pendingAttachments:
+          type: array
+          items: { $ref: "#/components/schemas/AccessPendingAttachment" }
+        pendingMembers:
+          type: array
+          items: { $ref: "#/components/schemas/AccessPendingMember" }
+        history:
+          type: array
+          maxItems: 250
+          items: { $ref: "#/components/schemas/AccessGovernanceHistoryEntry" }
+      required: [catalog, members, agents, userGroups, securityGroups, grants, pendingGrants, pendingAttachments, pendingMembers, history]
+    EffectiveAccess:
+      type: object
+      properties:
+        allows:
+          type: array
+          items: { $ref: "#/components/schemas/AccessGovernanceKey" }
+        reasons:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+      required: [allows, reasons]
+    AccessFieldPrincipal:
+      allOf:
+        - $ref: "#/components/schemas/AccessPrincipal"
+        - type: object
+          properties:
+            reasons:
+              type: array
+              items: { type: string }
+          required: [reasons]
+    AccessFieldPrincipalsResponse:
+      type: object
+      properties:
+        principals:
+          type: array
+          items: { $ref: "#/components/schemas/AccessFieldPrincipal" }
+      required: [principals]
+    AccessAgentInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        ownerUserId: { type: string, minLength: 1 }
+      required: [name, ownerUserId]
+    AccessAgentResponse:
+      type: object
+      properties:
+        agent: { $ref: "#/components/schemas/AccessAgent" }
+      required: [agent]
+    AccessAgentUpdate:
+      type: object
+      properties:
+        status: { type: string, const: retired }
+        expectedVersion: { type: integer }
+      required: [status, expectedVersion]
+    AccessUserGroupInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+      required: [name]
+    AccessUserGroupResponse:
+      type: object
+      properties:
+        userGroup: { $ref: "#/components/schemas/AccessUserGroup" }
+      required: [userGroup]
+    AccessUserGroupUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        status: { type: string, const: retired }
+        expectedVersion: { type: integer }
+      required: [expectedVersion]
+    AccessUserGroupMemberUpdate:
+      type: object
+      properties:
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string, minLength: 1 }
+        active: { type: boolean }
+      required: [principalType, principalId, active]
+    AccessUserGroupMemberApproval:
+      type: object
+      properties:
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string, minLength: 1 }
+        expectedVersion: { type: integer }
+      required: [principalType, principalId, expectedVersion]
+    AccessUserGroupSecurityGroupUpdate:
+      type: object
+      properties:
+        securityGroupId: { type: string, minLength: 1 }
+        active: { type: boolean }
+      required: [securityGroupId, active]
+    AccessUserGroupSecurityGroupApproval:
+      type: object
+      properties:
+        securityGroupId: { type: string, minLength: 1 }
+        expectedVersion: { type: integer }
+      required: [securityGroupId, expectedVersion]
+    AccessSecurityGroupInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        ownerUserId: { type: string, minLength: 1 }
+        allows:
+          type: array
+          items: { $ref: "#/components/schemas/AccessGovernanceKey" }
+      required: [name, allows]
+    AccessSecurityGroupResponse:
+      type: object
+      properties:
+        securityGroup: { $ref: "#/components/schemas/AccessSecurityGroup" }
+      required: [securityGroup]
+    AccessSecurityGroupUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        ownerUserId: { type: string, minLength: 1 }
+        status: { type: string, const: retired }
+        allows:
+          type: array
+          items: { $ref: "#/components/schemas/AccessGovernanceKey" }
+        expectedVersion: { type: integer }
+      required: [expectedVersion]
+    AccessSecurityGroupVersionResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        version: { type: integer }
+      required: [ok, version]
+    AccessGrantUpdate:
+      type: object
+      properties:
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string, minLength: 1 }
+        securityGroupId: { type: string, minLength: 1 }
+        active: { type: boolean }
+      required: [principalType, principalId, securityGroupId, active]
+    AccessGrantApproval:
+      type: object
+      properties:
+        principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
+        principalId: { type: string, minLength: 1 }
+        securityGroupId: { type: string, minLength: 1 }
+        expectedVersion: { type: integer }
+      required: [principalType, principalId, securityGroupId, expectedVersion]
+    AccessGovernanceStatusResponse:
+      type: object
+      properties:
+        ok: { type: boolean, const: true }
+        status: { type: string, enum: [active, pending, revoked] }
+      required: [ok, status]
+    AccessPolicyApproval:
+      type: object
+      properties:
+        expectedVersion: { type: integer }
+      required: [expectedVersion]
+    AccessPolicyApprovalResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        approvalStatus: { type: string, const: approved }
+      required: [ok, approvalStatus]
+    AgentInvocationInput:
+      type: object
+      properties:
+        agentId: { type: string, minLength: 1 }
+        runId:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+        correlationId:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+        caseId: { type: integer, minimum: 1, maximum: 9007199254740991 }
+        purpose: { type: string, minLength: 1, maxLength: 300 }
+        toolKey: { type: string, minLength: 1 }
+        organizationId:
+          type: string
+          description: Optional claimed organization ID. If present and not the trusted selected tenant, the invocation is denied and audited.
+      required: [agentId, runId, correlationId, caseId, purpose, toolKey]
+    AgentInvocationToolResult:
+      type: object
+      properties:
+        caseId: { type: integer }
+        lifecycleStage: { type: string }
+      required: [caseId, lifecycleStage]
+    AgentInvocationResponse:
+      type: object
+      properties:
+        auditId: { type: integer }
+        result: { $ref: "#/components/schemas/AgentInvocationToolResult" }
+      required: [auditId, result]
+    AgentInvocationAuthenticationError:
+      type: object
+      properties:
+        code: { type: string, const: AUTHENTICATION_REQUIRED }
+        message: { type: string }
+      required: [code, message]
+    AgentInvocationError:
+      type: object
+      properties:
+        code: { type: string, const: AGENT_INVOCATION_INVALID }
+        message: { type: string }
+      required: [code, message]
+    AgentInvocationDenialCode:
+      type: string
+      enum:
+        - AGENT_INVOCATION_TENANT_MISMATCH
+        - AGENT_INVOCATION_AGENT_NOT_ACTIVE
+        - AGENT_INVOCATION_AGENT_OWNER_MISMATCH
+        - AGENT_INVOCATION_CASE_OUT_OF_SCOPE
+        - AGENT_INVOCATION_UNKNOWN_TOOL
+        - AGENT_INVOCATION_TOOL_NOT_IMPLEMENTED
+        - AGENT_INVOCATION_TOOL_ACCESS_DENIED
+        - AGENT_INVOCATION_RUN_REPLAY
+    AgentInvocationDenied:
+      type: object
+      properties:
+        code: { $ref: "#/components/schemas/AgentInvocationDenialCode" }
+        message: { type: string }
+        auditId: { type: integer }
+      required: [code, message, auditId]
+    AgentInvocationFailure:
+      type: object
+      properties:
+        code: { type: string, const: AGENT_INVOCATION_FAILED }
+        message: { type: string }
+        auditId: { type: integer }
+      required: [code, message, auditId]
+    AgentInvocationAuditForbidden:
+      type: object
+      properties:
+        code: { type: string, const: AGENT_INVOCATION_AUDIT_FORBIDDEN }
+        message: { type: string }
+      required: [code, message]
+    AgentInvocationAuditList:
+      type: object
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/AgentInvocationAuditEntry" }
+        nextBeforeId: { type: [integer, "null"] }
+      required: [entries, nextBeforeId]
+    AgentInvocationAuditEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        agentId: { type: [string, "null"] }
+        agentVersion: { type: [integer, "null"] }
+        initiatingUserId: { type: string }
+        runId: { type: string, format: uuid }
+        correlationId: { type: string, format: uuid }
+        delegatedScope: { type: array, items: { type: string } }
+        caseId: { type: [integer, "null"] }
+        purpose: { type: string }
+        toolKey: { type: string }
+        action: { type: string }
+        outcome: { type: string, enum: [success, denied, failure] }
+        reasonCode: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+      required: [id, agentId, agentVersion, initiatingUserId, runId, correlationId, delegatedScope, caseId, purpose, toolKey, action, outcome, reasonCode, createdAt]
     HealthStatus:
       type: object
       properties:
@@ -9175,6 +10112,9 @@ components:
         offlineSample:
           type: boolean
           description: Server-derived marker for a provider-isolated offline Demo sample
+        fictionalOfflineIdentity:
+          type: boolean
+          description: Case-scoped identity projection is synthetic and does not represent sensitive-record authority
         planSummary:
           type: ["string", "null"]
           description: LLM-generated onboarding plan narrative
@@ -9259,6 +10199,7 @@ components:
         - skillCriticality
         - scenarioKey
         - offlineSample
+        - fictionalOfflineIdentity
         - planSummary
         - checklistTemplateVersion
         - checklistSnapshot

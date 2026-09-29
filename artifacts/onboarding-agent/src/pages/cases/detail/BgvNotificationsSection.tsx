@@ -22,8 +22,23 @@ import {
   BgvNotificationDeliveryState,
   BgvNotificationRole
 } from '@workspace/api-client-react';
+import { RestrictedActionNotice, useCaseAccess } from './case-access';
 
-export function BgvNotificationsSection({ caseId, caseData }: { caseId: number, caseData?: { workerEmail?: string } }) {
+export function BgvNotificationsSection({
+  caseId,
+  caseData,
+  enforceCasePermissions = false,
+}: {
+  caseId: number;
+  caseData?: { workerEmail?: string };
+  enforceCasePermissions?: boolean;
+}) {
+  const access = useCaseAccess();
+  const hasEditPermission = !enforceCasePermissions || (
+    access?.sensitive.bgv.edit === true
+    && access?.access.flowEdit === true
+    && access?.access.notesEdit === true
+  );
   const queryClient = useQueryClient();
   const getQueryKey = () => getGetOnboardingBgvNotificationsQueryKey(caseId);
 
@@ -86,10 +101,11 @@ export function BgvNotificationsSection({ caseId, caseData }: { caseId: number, 
   }
 
   const res = data;
-  const canManage = res.authority.canManage && !res.authority.offline && !updateConfig.isPending && !reconcile.isPending;
+  const canManage = hasEditPermission && res.authority.canManage && !res.authority.offline && !updateConfig.isPending && !reconcile.isPending;
   const isOffline = res.authority.offline;
 
   const handleSave = () => {
+    if (!hasEditPermission) return;
     if (!editState) return;
     setSaveError(null);
     setConflictError(false);
@@ -124,6 +140,7 @@ export function BgvNotificationsSection({ caseId, caseData }: { caseId: number, 
   };
 
   const handleReconcile = (simulation: boolean) => {
+    if (!hasEditPermission) return;
     if (!confirm(simulation ? 
       "Simulate sending these notifications? (No actual emails will be sent)" : 
       "Trigger live reconciliation? This may deliver real human emails to authorized recipients if criteria are met."
@@ -394,6 +411,7 @@ export function BgvNotificationsSection({ caseId, caseData }: { caseId: number, 
           </div>
         </div>
       )}
+      {!hasEditPermission && <div className="border-t border-[var(--border)] p-4"><RestrictedActionNotice>Background-verification configuration and notification actions are restricted by your current permissions.</RestrictedActionNotice></div>}
     </Card>
   );
 }

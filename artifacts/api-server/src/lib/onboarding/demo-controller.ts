@@ -28,6 +28,11 @@ import { startVoiceCall, simulateVoiceCall } from "./voice";
 import { runWithDemoControllerLive } from "./provider-policy";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
 import {
+  grantSyntheticDemoAuthorityForCase,
+  SyntheticDemoCaseAuthorityDeniedError,
+} from "./demo-admin-access";
+import { demoPrincipalSettingKey, parseRegisteredDemoProfile } from "../demo-principal";
+import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
   effectiveSensitiveDataClassesForCandidateUpload,
   evaluateCaseDerivedLifecycleGateInTransaction,
@@ -540,6 +545,9 @@ async function createCase(
     primarySkill: intake.primarySkill,
     skillCriticality: intake.skillCriticality,
     notes: `${SYNTHETIC_OFFLINE_MARKER}\n[demo-controller-run:${runId}]\n${intake.notes ?? "Synthetic case; no ordinary engine authority."}`,
+    // Only fully fictional runs receive synthetic provenance. Volunteer-backed
+    // hybrid cases retain their distinct live-person lifecycle path.
+    syntheticProvenance: volunteer ? null : "demo-controller-fictional",
     candidateEmailAuthorizedAt: volunteer ? new Date() : null,
     candidateEmailAuthorizedBy: volunteer ? "demo-controller" : null,
   }).returning();
@@ -563,6 +571,7 @@ async function withDemoCaseDerivedLifecycleWrite<T>(
       const isFullySyntheticControllerCase =
         input.organizationId === DEMO_ORGANIZATION_ID &&
         candidate.candidateEmailAuthorizedAt === null &&
+        candidate.syntheticProvenance === "demo-controller-fictional" &&
         candidate.notes?.includes(SYNTHETIC_OFFLINE_MARKER) === true &&
         candidate.notes.includes("[demo-controller-run:");
       const caseRow = isFullySyntheticControllerCase
@@ -691,6 +700,23 @@ export async function createDemoRun(
       }
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`demo-controller:${organizationId}`}))`);
       const c = await createCase(tx, organizationId, input.scenario, volunteer, runId, workCountry!);
+      const [profile] = await tx.select({ value: onbSettings.value })
+        .from(onbSettings)
+        .where(and(
+          eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+          eq(onbSettings.key, demoPrincipalSettingKey(actor)),
+        ))
+        .limit(1);
+      if (parseRegisteredDemoProfile(profile?.value) === "administrator") {
+        try {
+          await grantSyntheticDemoAuthorityForCase(tx, actor, c);
+        } catch (caught) {
+          if (caught instanceof SyntheticDemoCaseAuthorityDeniedError) {
+            throw error("DemoRunConflict", caught.message);
+          }
+          throw caught;
+        }
+      }
       const run: DemoRun = {
         runId,
         caseId: c.id,

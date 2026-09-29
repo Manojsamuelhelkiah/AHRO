@@ -102,6 +102,7 @@ async function createIsolatedSchema(): Promise<void> {
       id text PRIMARY KEY,
       name text NOT NULL,
       slug text NOT NULL UNIQUE,
+      primary_country text NOT NULL DEFAULT 'IN',
       join_code_hash text NOT NULL UNIQUE,
       created_by_user_id text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),

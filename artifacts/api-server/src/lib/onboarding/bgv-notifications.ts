@@ -1909,7 +1909,10 @@ export async function reconcileBgvNotifications(input: {
     throw new BgvNotificationConflictError("Owner or admin HR role required to reconcile BGV notifications.");
   }
   if (reason === "manual") {
-    const [caseRow] = await db.select({ notes: onbCases.notes }).from(onbCases).where(and(
+    const [caseRow] = await db.select({
+      notes: onbCases.notes,
+      syntheticProvenance: onbCases.syntheticProvenance,
+    }).from(onbCases).where(and(
       eq(onbCases.id, input.caseId),
       eq(onbCases.organizationId, input.organizationId),
     ));

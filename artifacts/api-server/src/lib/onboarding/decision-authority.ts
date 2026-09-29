@@ -310,6 +310,7 @@ export async function decisionAuthorityStillCurrent(
     legalEntity: onbCases.legalEntity,
     notes: onbCases.notes,
     scenarioKey: onbCases.scenarioKey,
+    syntheticProvenance: onbCases.syntheticProvenance,
   }).from(onbCases).where(and(
     eq(onbCases.organizationId, approval.organizationId),
     eq(onbCases.id, approval.caseId),
@@ -526,6 +527,7 @@ export async function hasCurrentAuthorityScope(
     legalEntity: onbCases.legalEntity,
     notes: onbCases.notes,
     scenarioKey: onbCases.scenarioKey,
+    syntheticProvenance: onbCases.syntheticProvenance,
   }).from(onbCases).where(and(
     eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId),
   )))[0];
@@ -606,6 +608,7 @@ export async function verifyCurrentCompoundAuthorities(input: {
       legalEntity: onbCases.legalEntity,
       notes: onbCases.notes,
       scenarioKey: onbCases.scenarioKey,
+      syntheticProvenance: onbCases.syntheticProvenance,
     }).from(onbCases).where(and(
       eq(onbCases.organizationId, input.proposal.tenantId),
       eq(onbCases.id, caseId),

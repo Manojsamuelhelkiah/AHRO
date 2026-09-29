@@ -458,7 +458,9 @@ export async function persistInbound(opts: InboundMessage): Promise<boolean> {
   // hold or withdrawn policy to race the sensitive body into storage.
   return withSensitiveLifecycleFence(opts.organizationId, async () => {
     const [caseRow] = await db.select({
-      workforceContext: onbCases.workforceContext, notes: onbCases.notes,
+      workforceContext: onbCases.workforceContext,
+      notes: onbCases.notes,
+      syntheticProvenance: onbCases.syntheticProvenance,
     })
       .from(onbCases).where(and(
         eq(onbCases.organizationId, opts.organizationId),

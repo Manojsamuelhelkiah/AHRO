@@ -131,6 +131,28 @@ export const tenantSafeguards = [
   { table: "onb_transfer_reconciliation_repairs", phaseB: false },
   { table: "onb_transfer_kpi_evidence", phaseB: false },
   { table: "onb_transfer_kpi_definitions", phaseB: false },
+  // Frontline operations are tenant-owned from creation and remain subject to
+  // the same tenant/FK/RLS startup safeguards as the other case records.
+  { table: "onb_frontline_evidence", phaseB: false },
+  { table: "onb_frontline_fulfillments", phaseB: false },
+  { table: "onb_frontline_policy_exceptions", phaseB: false },
+  { table: "onb_frontline_release_state", phaseB: false },
+  { table: "onb_frontline_kpi_inputs", phaseB: false },
+  // Access governance records are tenant-scoped; join tables inherit tenant
+  // ownership through their composite parent FKs rather than direct org FKs.
+  { table: "access_agents", phaseB: false },
+  { table: "access_user_groups", phaseB: false },
+  { table: "access_user_group_members", phaseB: false, requiresOrganizationForeignKey: false },
+  { table: "access_security_groups", phaseB: false },
+  { table: "access_security_group_policies", phaseB: false, requiresOrganizationForeignKey: false },
+  { table: "access_security_group_user_groups", phaseB: false, requiresOrganizationForeignKey: false },
+  { table: "access_security_group_attachments", phaseB: false },
+  { table: "access_principal_security_group_attachments", phaseB: false },
+  { table: "access_named_grants", phaseB: false },
+  { table: "access_governance_history", phaseB: false },
+  // Invocation audit retains tenant identity but intentionally has no
+  // organization FK, so cleanup cannot remove append-only invocation evidence.
+  { table: "agent_invocation_audit", phaseB: false, requiresOrganizationForeignKey: false },
 ];
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);

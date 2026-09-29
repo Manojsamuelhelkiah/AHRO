@@ -15,14 +15,33 @@ import {
    getGetOnboardingCaseQueryKey,
    useRecoverOnboardingCaseDocuments,
 } from '@workspace/api-client-react';
+import { RestrictedActionNotice, useCaseAccess } from './case-access';
+
+const KNOWN_DOCUMENT_CLASS: Record<string, { category: string; classification: 'identity' | 'payroll' }> = {
+  'id-proof': { category: 'identity', classification: 'identity' },
+  'address-proof': { category: 'identity', classification: 'identity' },
+  'education-certs': { category: 'identity', classification: 'identity' },
+  'prior-employment': { category: 'identity', classification: 'identity' },
+  'pan-card': { category: 'statutory', classification: 'payroll' },
+  'uan-epf': { category: 'statutory', classification: 'payroll' },
+  'tax-form': { category: 'statutory', classification: 'payroll' },
+  'bank-details': { category: 'statutory', classification: 'payroll' },
+  'work-authorization': { category: 'statutory', classification: 'identity' },
+  'signed-sow': { category: 'contract', classification: 'identity' },
+  'signed-offer': { category: 'contract', classification: 'identity' },
+  'nda-coc': { category: 'policy', classification: 'identity' },
+  'policy-ack': { category: 'policy', classification: 'identity' },
+};
 
 export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) {
+  const access = useCaseAccess();
+  const canReadAnySensitive = Boolean(access && Object.values(access.sensitive).some((permission) => permission.read));
   const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const recoverDocuments = useRecoverOnboardingCaseDocuments();
   const { data: evidenceList, isLoading: evidenceLoading } = useListOnboardingCaseEvidence(caseId, {
     query: {
-      enabled: !!caseId,
+      enabled: !!caseId && canReadAnySensitive,
       queryKey: getListOnboardingCaseEvidenceQueryKey(caseId),
       refetchInterval: 4_000,
     }
@@ -30,7 +49,7 @@ export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) 
 
   const { data: bgvList, isLoading: bgvLoading } = useGetOnboardingCaseBgv(caseId, {
     query: {
-      enabled: !!caseId,
+      enabled: !!caseId && access?.sensitive.bgv.read === true,
       queryKey: getGetOnboardingCaseBgvQueryKey(caseId),
       refetchInterval: 10_000,
     }
@@ -40,7 +59,7 @@ export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) 
     <div className="pb-12 max-w-4xl space-y-6">
       
       {/* Background Verification (BGV) Section */}
-      <Card>
+      {access?.sensitive.bgv.read ? <Card>
         <CardHeader className="pb-3 border-b">
           <CardTitle className="text-[var(--text-base)] flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-[var(--primary)]" /> 
@@ -62,7 +81,7 @@ export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) 
             <p className="text-[var(--text-sm)] text-[var(--text-muted)] italic">No background verification records for this case.</p>
           )}
         </CardContent>
-      </Card>
+      </Card> : <RestrictedActionNotice>Background-verification details are restricted by your current permissions.</RestrictedActionNotice>}
 
       {/* Document Checklist & Evidence Section */}
       <Card>
@@ -80,7 +99,7 @@ export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) 
           ) : (docs ?? []).length === 0 ? (
             <div className="space-y-3">
               <p className="text-[var(--text-sm)] text-[var(--text-muted)] italic">Documentation pack not issued yet.</p>
-              <Button size="sm" disabled={recoverDocuments.isPending} onClick={() => {
+              {access?.access.flowEdit && access?.sensitive.identity.edit && <Button size="sm" disabled={recoverDocuments.isPending} onClick={() => {
                 setRecoveryNotice(null);
                 recoverDocuments.mutate({ id: caseId }, {
                   onSuccess: (result) => {
@@ -92,7 +111,8 @@ export function DocumentsTab({ caseId, docs }: { caseId: number, docs: any[] }) 
                     setRecoveryNotice(error?.data?.message || error?.message || 'Document recovery could not be queued.');
                   },
                 });
-              }}>{recoverDocuments.isPending ? 'Queuing recovery…' : 'Queue legal document recovery'}</Button>
+              }}>{recoverDocuments.isPending ? 'Queuing recovery…' : 'Queue legal document recovery'}</Button>}
+              {(!access?.access.flowEdit || !access?.sensitive.identity.edit) && <RestrictedActionNotice>Document recovery is restricted by your current case permissions.</RestrictedActionNotice>}
               {recoveryNotice && <p className="text-[var(--text-xs)] text-[var(--text-muted)]" role="status">{recoveryNotice}</p>}
             </div>
           ) : (
@@ -184,6 +204,7 @@ function BgvItem({ bgv }: { bgv: any }) {
 }
 
 function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evidence: any }) {
+  const access = useCaseAccess();
   const [decisionOpen, setDecisionOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [decisionMessage, setDecisionMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -191,8 +212,19 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
   const queryClient = useQueryClient();
   const decide = useDecideOnboardingEvidence();
   const retryScan = useRetryOnboardingEvidenceMalwareScan();
+  const knownDocumentClass = KNOWN_DOCUMENT_CLASS[doc.key];
+  const documentSensitiveClass = knownDocumentClass?.category === doc.category ? knownDocumentClass.classification : null;
+  const requiredSensitiveClasses = documentSensitiveClass
+    ? [documentSensitiveClass]
+    : (['identity', 'medical', 'payroll', 'bgv'] as const);
+  const canReadDocument = requiredSensitiveClasses.every((classification) => access?.sensitive[classification].read === true);
+  const canEditDocument = canReadDocument
+    && access?.access.flowEdit === true
+    && access?.access.notesEdit === true
+    && requiredSensitiveClasses.every((classification) => access?.sensitive[classification].edit === true);
 
   const handleDecision = (decision: 'approve' | 'reject' | 'request_correction') => {
+    if (!canEditDocument) return;
     if (reason.trim().length < 3) {
       setDecisionMessage({ kind: 'error', text: 'Enter a reason of at least 3 characters.' });
       return;
@@ -220,6 +252,7 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
   };
 
   const retryMalwareScan = () => {
+    if (!canEditDocument) return;
     if (!evidence?.canRetryScan || retryScan.isPending) return;
     setDecisionMessage(null);
     retryScan.mutate({ id: caseId, evidenceId: evidence.id }, {
@@ -256,6 +289,9 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
   else if (doc.status === 'received') docIcon = <Clock className="w-4 h-4 text-[var(--status-blue)]" />;
 
   return (
+    !canReadDocument || doc.restricted ? (
+      <RestrictedActionNotice>Document details and review actions are restricted by your current permissions.</RestrictedActionNotice>
+    ) :
     <div className="flex flex-col p-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-alt)]">
       <div className="flex items-start gap-4">
         <div className="mt-0.5 bg-[var(--surface)] p-2 rounded-full shadow-sm shrink-0 border border-[var(--border)]">
@@ -332,7 +368,7 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
                               : 'A security scan is required before approval.'}
                     </span>
                   </div>
-                  {evidence.canRetryScan && (
+                  {evidence.canRetryScan && canEditDocument && (
                     <Button
                       data-testid={`button-retry-malware-scan-${evidence.id}`}
                       size="sm"
@@ -384,7 +420,7 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
                   )}
                 </div>
 
-                {isReviewNeeded && (
+                {isReviewNeeded && canEditDocument && (
                   <Button
                     data-testid={`button-open-document-review-${evidence.id}`}
                     size="sm" 
@@ -397,7 +433,7 @@ function DocumentItem({ caseId, doc, evidence }: { caseId: number, doc: any, evi
                 )}
               </div>
 
-              {decisionOpen && isReviewNeeded && (
+              {decisionOpen && isReviewNeeded && canEditDocument && (
                 <div className="mt-4 pt-4 border-t border-[var(--border)]">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Manual Decision Required</p>
                   <textarea 
