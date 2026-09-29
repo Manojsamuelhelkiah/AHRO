@@ -39,12 +39,6 @@ Control Tower intake for a public Demo Administrator is an offline synthetic cre
 
 **How to apply:** keep creation and case-scoped access atomic and prohibit automatic outreach or orchestration for this intake path. Explain the distinction in the form and delivery summary.
 
-Offline synthetic Demo Administrator intake still requires tenant lifecycle-policy records because it accepts candidate-provided identity/contact material, even though that branch cannot start communications, providers, readiness, SLA, or orchestration effects.
-
-**Why:** The synthetic marker fences operational effects but does not make retained PII non-sensitive. The recorded work jurisdiction must therefore have the same approved lifecycle coverage as an ordinary case; the isolated browser fixture supplies that policy coverage without weakening the production gate.
-
-**How to apply:** Keep the offline path server-owned and limited to the registered Demo Administrator plus Demo Organization plus the offline synthetic marker. Require the normal lifecycle gate for both offline and ordinary cases, while continuing to prohibit automatic outreach or orchestration for the offline path.
-
 Restarting a synthetic simulation retires its progression, not its audit evidence. Versions are meaningful only within a generation.
 
 **Why:** Resetting a numeric version alone lets delayed requests from an earlier run match a new run and apply unintended exchanges. Deleting history would misrepresent prior simulated activity.
@@ -62,3 +56,9 @@ Demo Administrators may review a read-only audit projection, but that projection
 **Why:** The standalone Audit Trail is important for a convincing demonstration, while the shared Demo Organization means organization-wide evidence, exports, integrity details, retention, legal holds, corrections, and retained approval history would expose or control other users' records.
 
 **How to apply:** derive scope on the server from the current registered Demo Administrator, active synthetic-case assignments, and server-generated pseudonymous case references. Include only those case-linked events plus that principal's own unscoped demo actions. Never accept client-supplied case IDs as authority or promote the principal's tenant membership.
+
+Real client tenant selection must use a named, individually authenticated person with explicit client-granted access; the selectable public Demo Administrator sign-in remains pinned to Demo Organization.
+
+**Why:** The user confirmed named sign-in for real tenants. Public one-click demo identities cannot safely hold a client grant, even when a UI offers a tenant or group-mode chooser.
+
+**How to apply:** Show only tenants that granted the named person access; revalidate membership, grant scope and group mode server-side on each request. Preserve the demo profile's current default and do not turn no selection into cross-client access.
