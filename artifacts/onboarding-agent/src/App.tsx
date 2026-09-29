@@ -32,6 +32,7 @@ import { DemoControllerIndexPage } from './pages/demo-controller';
 import { DemoControllerDetailPage } from './pages/demo-controller/detail';
 import {
   resolveOrganizationBootstrap,
+  resolveOrganizationSwitch,
   type OrganizationBootstrapResponse,
 } from './lib/organization-bootstrap';
 import { PolicyAssistantPage } from './pages/policy-assistant';
@@ -197,7 +198,9 @@ function getStoredOrganizationId(): string | null {
 
 function OrganizationBootstrapGate({ children }: { children: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<'loading' | 'setup' | 'ready' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'setup' | 'choose' | 'ready' | 'error'>('loading');
+  const [memberships, setMemberships] = useState<Array<{ organizationId: string; name: string }>>([]);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -227,6 +230,15 @@ function OrganizationBootstrapGate({ children }: { children: ReactNode }) {
           setState('setup');
           return;
         }
+        if (decision.kind === 'choose') {
+          setMemberships(response.memberships.filter(
+            (membership): membership is { organizationId: string; name: string } =>
+              typeof membership.organizationId === 'string' &&
+              'name' in membership && typeof membership.name === 'string',
+          ));
+          setState('choose');
+          return;
+        }
         if (decision.selectorChanged) {
           localStorage.setItem('activeOrganizationId', decision.organizationId);
           queryClient.clear();
@@ -248,6 +260,56 @@ function OrganizationBootstrapGate({ children }: { children: ReactNode }) {
 
   if (state === 'setup') return <Redirect to="/client-setup" />;
   if (state === 'ready') return <>{children}</>;
+  if (state === 'choose') {
+    return (
+      <main className="flex min-h-[100dvh] items-center justify-center bg-slate-50 px-4 py-8">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <h1 className="text-xl font-bold text-slate-900">Choose a workspace</h1>
+          <p className="mt-2 text-sm text-slate-600">Select a client workspace you have been granted access to. Your access is checked again when you open it.</p>
+          {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+          <div className="mt-6 flex flex-col gap-3">
+            {memberships.map((membership) => (
+              <button
+                key={membership.organizationId}
+                type="button"
+                disabled={pendingId !== null}
+                aria-busy={pendingId === membership.organizationId}
+                className="min-h-12 w-full rounded-lg border border-slate-300 px-4 py-3 text-left text-sm font-semibold text-slate-900 hover:border-indigo-500 hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-60"
+                onClick={async () => {
+                  if (pendingId !== null) return;
+                  setPendingId(membership.organizationId);
+                  setError('');
+                  try {
+                    const response = await fetch('/api/organizations/current', {
+                      credentials: 'include',
+                      headers: { 'x-organization-id': membership.organizationId },
+                    });
+                    const body = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(body.message || 'Could not validate workspace access');
+                    const decision = resolveOrganizationSwitch(body as OrganizationBootstrapResponse, membership.organizationId);
+                    if (decision.kind !== 'ready') throw new Error('You no longer have access to this workspace. Refresh to see your current choices.');
+                    localStorage.setItem('activeOrganizationId', decision.organizationId);
+                    queryClient.clear();
+                    pinOrganizationIdForPage(decision.organizationId);
+                    setState('ready');
+                  } catch (caught) {
+                    setError(caught instanceof Error ? caught.message : 'Could not open workspace');
+                  } finally {
+                    setPendingId(null);
+                  }
+                }}
+              >
+                {membership.name}{pendingId === membership.organizationId ? ' — Opening…' : ''}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }} className="mt-6 min-h-11 text-sm font-medium text-indigo-700 underline underline-offset-2">
+            Refresh access
+          </button>
+        </div>
+      </main>
+    );
+  }
   if (state === 'error') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-4">

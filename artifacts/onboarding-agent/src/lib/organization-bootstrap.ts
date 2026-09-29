@@ -10,6 +10,7 @@ export type OrganizationBootstrapResponse = {
 
 export type OrganizationBootstrapDecision =
   | { kind: 'setup' }
+  | { kind: 'choose' }
   | { kind: 'ready'; organizationId: string; selectorChanged: boolean };
 
 export type OrganizationSwitchDecision =
@@ -36,7 +37,11 @@ export function resolveOrganizationBootstrap(
         ({ organizationId }) => organizationId === response.activeOrganizationId,
       )
     : undefined;
-  const selected = storedMembership ?? activeMembership ?? response.memberships[0];
+  // Never silently choose a client when a person belongs to several. A
+  // revoked/stale saved selector also requires a fresh explicit choice.
+  const selected = storedMembership ?? activeMembership ??
+    (response.memberships.length === 1 ? response.memberships[0] : undefined);
+  if (!selected) return { kind: 'choose' };
 
   return {
     kind: 'ready',
@@ -81,6 +86,14 @@ export function resolveOrganizationSwitch(
     (membership) => membership.organizationId === organizationId,
   );
   if (!isMember) {
+    return {
+      kind: 'rejected',
+      organizationId,
+      reason: 'not-member',
+    };
+  }
+
+  if (response.activeOrganizationId !== organizationId) {
     return {
       kind: 'rejected',
       organizationId,

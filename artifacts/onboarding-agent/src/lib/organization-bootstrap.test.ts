@@ -29,6 +29,19 @@ test('organization bootstrap replaces a stale stored selector', () => {
   );
 });
 
+test('multiple memberships require an explicit choice unless the saved one remains valid', () => {
+  const response = {
+    needsSetup: false,
+    activeOrganizationId: null,
+    memberships: [{ organizationId: 'client_a' }, { organizationId: 'client_b' }],
+  };
+  assert.deepEqual(resolveOrganizationBootstrap(response, null), { kind: 'choose' });
+  assert.deepEqual(resolveOrganizationBootstrap(response, 'revoked_client'), { kind: 'choose' });
+  assert.deepEqual(resolveOrganizationBootstrap(response, 'client_b'), {
+    kind: 'ready', organizationId: 'client_b', selectorChanged: false,
+  });
+});
+
 test('organization switch accepts a freshly validated current membership', () => {
   assert.deepEqual(
     resolveOrganizationSwitch(
@@ -61,6 +74,17 @@ test('organization switch rejects a stale target that is not in current membersh
       organizationId: 'org_stale',
       reason: 'not-member',
     },
+  );
+});
+
+test('organization switch requires the server to confirm the requested active workspace', () => {
+  assert.deepEqual(
+    resolveOrganizationSwitch({
+      needsSetup: false,
+      activeOrganizationId: null,
+      memberships: [{ organizationId: 'client_a' }, { organizationId: 'client_b' }],
+    }, 'client_b'),
+    { kind: 'rejected', organizationId: 'client_b', reason: 'not-member' },
   );
 });
 
