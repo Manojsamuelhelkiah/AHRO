@@ -26,3 +26,9 @@ Execution-history seek cursors must retain PostgreSQL timestamp precision, not J
 **Why:** PostgreSQL stores microseconds while JavaScript Date keeps milliseconds; rounding a seek boundary can silently skip attempts. Retention runs independently of investigation.
 
 **How to apply:** Use an exact database timestamp plus a deterministic tie-breaker for seeks, bind the cursor to the tenant, principal and filters, and recheck current metadata authority on each page.
+
+Access-expiry regressions must exercise the real client query cache and every confidential child surface mounted alongside the viewer, including review drafts.
+
+**Why:** React Query retains a previous successful payload after a denied refetch. A separately cached child panel can still expose another viewer's data even when the main history list correctly hides its own error-state payload.
+
+**How to apply:** Mock network/auth boundaries, not query state. Assert denial hides retained data, and switch users and organizations while requests are pending. Treat each composed panel's permission and draft isolation independently.

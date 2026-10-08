@@ -130,6 +130,48 @@ test("whole chains preserve running, recent and inconsistent links; concurrent s
   assert.deepEqual(await db.select().from(hroContextRetentionPolicies).where(eq(hroContextRetentionPolicies.organizationId, org)), policiesBefore);
 });
 
+test("recent activity committed between candidate selection and locking preserves the whole chain", async () => {
+  for (const activity of ['step', 'transaction'] as const) {
+    await clearMetadata();
+    const id = await attempt();
+    let injected = false;
+    const originalTransaction = db.transaction.bind(db);
+    const stub = mock.method(db, "transaction", async (action: Parameters<typeof db.transaction>[0]) =>
+      originalTransaction(tx => action(new Proxy(tx, {
+        get(target, prop) {
+          if (prop === "execute") return async (query: Parameters<typeof tx.execute>[0]) => {
+            const result = await target.execute(query);
+            if (!injected && result.rows.some(row => typeof row === 'object' && row !== null && 'correlation_id' in row)) {
+              injected = true;
+              // A separate committed writer, before the sweep holds member row
+              // locks. No providers, real cases, or production authority changes.
+              if (activity === 'step') {
+                await db.insert(hroContextSteps).values({
+                  organizationId: org, transactionId: id, code: 'approval-observed', createdAt: now,
+                });
+              } else {
+                await db.update(hroContextTransactions).set({ updatedAt: now })
+                  .where(eq(hroContextTransactions.id, id));
+              }
+            }
+            return result;
+          };
+          const value = Reflect.get(target, prop);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }))));
+    try {
+      const swept = await pruneContextOrganization(org, now);
+      assert(injected, 'the interleaving must execute after candidate selection');
+      assert.equal(swept.transactionsPruned, 0, activity);
+      assert.equal(swept.stepsPruned, 0, activity);
+      assert(await present(id), 'recent activity protects the transaction and all its steps');
+      assert.equal((await db.select().from(hroContextSteps).where(eq(hroContextSteps.transactionId, id))).length,
+        activity === 'step' ? 2 : 1);
+    } finally { stub.mock.restore(); }
+  }
+});
+
 test("any class/object hold blocks opaque metadata, shared hold fence serializes a sweep, and release resumes", async () => {
   await clearMetadata();
   const id = await attempt();

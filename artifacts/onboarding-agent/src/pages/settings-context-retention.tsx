@@ -11,7 +11,8 @@ import { Button, Input } from '@/components/ui-shared';
 export function ContextRetentionSettings() {
   const { userId } = useAuth();
   const organizationId = getPinnedOrganizationIdForPage();
-  return <ContextRetentionSettingsForPrincipal key={`${userId}:${organizationId}`}
+  // Reset review drafts too, not just fetched data, when this viewer changes.
+  return <ContextRetentionSettingsForPrincipal key={JSON.stringify([userId, organizationId])}
     userId={userId} organizationId={organizationId} />;
 }
 

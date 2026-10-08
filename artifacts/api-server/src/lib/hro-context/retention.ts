@@ -147,15 +147,25 @@ export async function pruneContextOrganization(organizationId: string, now = new
         order by min(t.finished_at), t.correlation_id limit ${CONTEXT_RETENTION_LIMITS.correlations}
       `);
       for (const candidate of candidates.rows) {
-        const members = await tx.select({ id: hroContextTransactions.id }).from(hroContextTransactions).where(and(
+        const members = await tx.select({
+          id: hroContextTransactions.id, status: hroContextTransactions.status,
+          startedAt: hroContextTransactions.startedAt, updatedAt: hroContextTransactions.updatedAt,
+          finishedAt: hroContextTransactions.finishedAt,
+        }).from(hroContextTransactions).where(and(
           eq(hroContextTransactions.organizationId, organizationId), eq(hroContextTransactions.correlationId, candidate.correlation_id),
         )).limit(CONTEXT_RETENTION_LIMITS.transactions + 1).for("update");
         const ids = members.map(m => m.id);
         if (!ids.length || counts.transactionsPruned + ids.length > CONTEXT_RETENTION_LIMITS.transactions) continue;
-        const steps = await tx.select({ id: hroContextSteps.id }).from(hroContextSteps).where(and(
+        // Candidate selection is only a hint. A writer may have committed new
+        // activity before these row locks were acquired; recheck before deleting.
+        if (members.some(member => !['completed', 'failed'].includes(member.status) ||
+          !member.finishedAt || Math.max(member.startedAt.getTime(), member.updatedAt.getTime(),
+            member.finishedAt.getTime()) > cutoff.getTime())) continue;
+        const steps = await tx.select({ id: hroContextSteps.id, createdAt: hroContextSteps.createdAt }).from(hroContextSteps).where(and(
           eq(hroContextSteps.organizationId, organizationId), inArray(hroContextSteps.transactionId, ids),
-        )).limit(CONTEXT_RETENTION_LIMITS.steps + 1);
+        )).limit(CONTEXT_RETENTION_LIMITS.steps + 1).for("update");
         if (counts.stepsPruned + steps.length > CONTEXT_RETENTION_LIMITS.steps) continue;
+        if (steps.some(step => step.createdAt.getTime() > cutoff.getTime())) continue;
         await tx.delete(hroContextSteps).where(and(eq(hroContextSteps.organizationId, organizationId), inArray(hroContextSteps.transactionId, ids)));
         await tx.delete(hroContextTransactions).where(and(eq(hroContextTransactions.organizationId, organizationId), inArray(hroContextTransactions.id, ids)));
         counts.transactionsPruned += ids.length;

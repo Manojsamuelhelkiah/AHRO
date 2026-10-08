@@ -7,14 +7,17 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
+const requestedTestFile = process.env.TEST_FILE?.trim();
 const entryPoints = [
   ...globSync("src/**/*.test.ts", { cwd: dir }),
   ...globSync("src/**/*.test.tsx", { cwd: dir }),
-].map((f) => path.join(dir, f));
-const integratedEntryPoints = [path.join(
-  dir,
+].filter((file) => !requestedTestFile || file === requestedTestFile)
+  .map((f) => path.join(dir, f));
+const integratedEntryPoints = [
   "src/pages/demo-controller/access-setup.integration.test.tsx",
-), path.join(dir, "src/pages/settings-context-retention.integration.test.tsx")];
+  "src/pages/settings-context-retention.integration.test.tsx",
+  "src/pages/settings-context-manager.integration.test.tsx",
+].map((file) => path.join(dir, file));
 const standardEntryPoints = entryPoints.filter(
   (entryPoint) => !integratedEntryPoints.includes(entryPoint),
 );
@@ -99,10 +102,13 @@ if (standardEntryPoints.length > 0) {
   });
 }
 
-if (integratedEntryPoints.some(entryPoint => entryPoints.includes(entryPoint))) {
+const integrationEntryPoints = integratedEntryPoints.filter(
+  (entryPoint) => entryPoints.includes(entryPoint),
+);
+if (integrationEntryPoints.length > 0) {
   await build({
     ...commonBuildOptions,
-    entryPoints: integratedEntryPoints.filter(entryPoint => entryPoints.includes(entryPoint)),
+    entryPoints: integrationEntryPoints,
     outdir: path.join(dir, "dist-test/integration"),
     external: [
       "node:*",
@@ -131,12 +137,12 @@ if (integratedEntryPoints.some(entryPoint => entryPoints.includes(entryPoint))) 
               contents:
                 [
                   'import React, { createContext, useContext } from "react";',
-                  "const UserContext = createContext({ user: null });",
-                  "export function ClerkProvider({ children, user }) {",
-                  "  return React.createElement(UserContext.Provider, { value: { user } }, children);",
+                  "const UserContext = createContext({ user: null, userId: null });",
+                  "export function ClerkProvider({ children, user, userId }) {",
+                  "  return React.createElement(UserContext.Provider, { value: { user, userId: userId === undefined ? user?.id : userId } }, children);",
                   "}",
                   "export function useUser() { return useContext(UserContext); }",
-                  "export function useAuth() { return { userId: useContext(UserContext).user?.id }; }",
+                  "export function useAuth() { return { userId: useContext(UserContext).userId }; }",
                 ].join("\n"),
             }),
           );

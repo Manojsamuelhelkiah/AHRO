@@ -6,6 +6,9 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   db, pool, organizationsTable, organizationMembershipsTable, accessNamedGrants,
   hroContextTransactions, onbSettings, DEMO_ORGANIZATION_ID,
+  accessSecurityGroups, accessSecurityGroupPolicies, accessSecurityGroupAttachments,
+  accessPrincipalSecurityGroupAttachments, accessUserGroups, accessUserGroupMembers,
+  accessSecurityGroupUserGroups,
 } from "@workspace/db";
 import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import { createTenantContextMiddleware } from "../../middlewares/tenant-context";
@@ -26,6 +29,110 @@ async function readHistory(response: Response): Promise<History> {
 }
 
 after(async () => { await pool.end(); });
+
+for (const expiringPath of ['direct attachment', 'tenant attachment', 'group link', 'group membership'] as const) {
+  test(`operator history denies timed ${expiringPath} expiry without revocation`, async t => {
+    const start = Date.parse('2026-10-08T12:00:00Z');
+    t.mock.timers.enable({ apis: ['Date'], now: start });
+    const expiry = new Date(start + 60_000);
+    const organizationId = `operator-expiry-${randomUUID()}`;
+    const actor = `operator-${randomUUID()}`, owner = `owner-${randomUUID()}`;
+    const securityGroupId = `security-${randomUUID()}`, userGroupId = `users-${randomUUID()}`;
+    const app = express();
+    app.use((req, _res, next) => { req.authUserId = req.header('x-test-user') || actor; next(); });
+    app.use(createTenantContextMiddleware());
+    app.use(contextRouter);
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise<void>(resolve => server.once('listening', resolve));
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const get = (view = 'operator', user = actor) => fetch(
+      `http://127.0.0.1:${address.port}/context-manager/transactions?view=${view}`,
+      { headers: { 'x-organization-id': organizationId, 'x-test-user': user } },
+    );
+    try {
+      await db.insert(organizationsTable).values({
+        id: organizationId, name: 'Temporary operator regression', slug: organizationId,
+        joinCodeHash: organizationId, createdByUserId: owner,
+      });
+      await db.insert(organizationMembershipsTable).values([actor, owner].map(clerkUserId => ({
+        organizationId, clerkUserId, role: 'member' as const,
+      })));
+      await db.insert(accessSecurityGroups).values({
+        organizationId, id: securityGroupId, name: 'Temporary metadata', ownerUserId: owner, createdByUserId: actor,
+      });
+      await db.insert(accessSecurityGroupPolicies).values({
+        organizationId, securityGroupId, version: 1,
+        policy: { fields: ['data.context.metadata.read'], flows: [], tools: [] },
+        createdByUserId: actor, approvedByUserId: owner, approvedAt: new Date(start),
+      });
+      const approval = {
+        status: 'active' as const, attachedByUserId: actor, requiresApproval: 'yes' as const,
+        approvedByUserId: owner, approvedAt: new Date(start), approvedPolicyVersion: 1,
+      };
+      if (expiringPath === 'direct attachment') {
+        await db.insert(accessPrincipalSecurityGroupAttachments).values({
+          organizationId, securityGroupId, principalType: 'human', principalId: actor,
+          scope: 'tenant', expiresAt: expiry, ...approval,
+        });
+      } else {
+        await db.insert(accessUserGroups).values({
+          organizationId, id: userGroupId, name: 'Temporary operators', ownerUserId: owner, createdByUserId: actor,
+        });
+        await db.insert(accessUserGroupMembers).values({
+          organizationId, groupId: userGroupId, principalType: 'human', principalId: actor,
+          status: 'active', attachedByUserId: actor, requiresApproval: 'yes',
+          approvedByUserId: owner, approvedAt: new Date(start),
+          expiresAt: expiringPath === 'group membership' ? expiry : null,
+        });
+        await db.insert(accessSecurityGroupUserGroups).values({
+          organizationId, securityGroupId, userGroupId, ...approval,
+          expiresAt: expiringPath === 'group link' ? expiry : null,
+        });
+        await db.insert(accessSecurityGroupAttachments).values({
+          organizationId, securityGroupId, scope: 'tenant', ...approval,
+          expiresAt: expiringPath === 'tenant attachment' ? expiry : null,
+        });
+      }
+      const own = await openHroContext({
+        organizationId, workflow: 'onboarding', subjectType: 'tenant', subjectId: organizationId,
+        initiatingUserId: actor,
+      });
+      const background = await openHroContext({
+        organizationId, workflow: 'documents', subjectType: 'tenant', subjectId: organizationId,
+      });
+      assert.equal((await get('operator', owner)).status, 403);
+      t.mock.timers.setTime(expiry.getTime() - 1);
+      const before = await get();
+      assert.equal(before.status, 200, 'access is live one millisecond before expiry');
+      assert.equal(before.headers.get('cache-control'), 'no-store');
+      assert.deepEqual(new Set((await readHistory(before)).transactions.map(row => row.id)), new Set([own.id, background.id]));
+      for (const now of [expiry.getTime(), expiry.getTime() + 1]) {
+        t.mock.timers.setTime(now);
+        const access = await resolveEffectiveAccess({ organizationId, principalType: 'human', principalId: actor });
+        assert(!access.allows.includes('data.context.metadata.read'), 'live evaluator excludes timed grant at equality');
+        const denied = await get();
+        assert.equal(denied.status, 403);
+        assert.equal(denied.headers.get('cache-control'), 'no-store');
+        const body = await denied.json();
+        assert(body && typeof body === 'object');
+        assert.deepEqual(Object.keys(body), ['message'], 'no stale metadata in a denied response');
+        assert(!JSON.stringify(body).includes(background.id));
+        const personal = await readHistory(await get('personal'));
+        assert.equal(personal.operatorAvailable, false);
+        assert.deepEqual(personal.transactions.map(row => row.id), [own.id], 'own history remains available, not background history');
+      }
+      const [membership] = await db.select().from(organizationMembershipsTable).where(and(
+        eq(organizationMembershipsTable.organizationId, organizationId),
+        eq(organizationMembershipsTable.clerkUserId, actor),
+      ));
+      assert.equal(membership?.revokedAt, null, 'expiry needs no tenant membership revocation');
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
+    }
+  });
+}
 
 test("operator history is live, human-only, tenant-scoped metadata and never replay authority", async () => {
   const actor = `operator-${randomUUID()}`;
@@ -51,6 +158,7 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
     fetch(`http://127.0.0.1:${address.port}/context-manager/transactions${query}`, {
       method, headers: { "x-organization-id": organization, "x-test-user": user },
     });
+
   const grant = async (organizationId: string, principalId = actor) => {
     const [row] = await db.insert(accessNamedGrants).values({
       organizationId, principalType: "human", principalId, scope: "tenant",
@@ -63,6 +171,7 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
     const background = await openHroContext({
       organizationId: orgA, workflow: "documents", subjectType: "case", subjectId: "private-case",
     });
+
     await db.update(hroContextTransactions).set({ startedAt: new Date(Date.now() - 86_400_000) })
       .where(eq(hroContextTransactions.id, background.id));
     await runInHroContext(background, () =>
@@ -93,10 +202,12 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
       assert.equal((await get("?view=operator")).status, 403, `${role} is not an operator grant`);
     }
     const personal = await readHistory(await get());
+
     assert.equal(personal.operatorAvailable, false);
     assert.deepEqual(personal.transactions.map((t: { id: string }) => t.id), [own.id]);
     const permission = await grant(orgA);
     const access = await resolveEffectiveAccess({ organizationId: orgA, principalType: "human", principalId: actor });
+
     assert.deepEqual(access.allows, ["data.context.metadata.read"], "metadata grants no evidence or workflow authority");
 
     const response = await get("?view=operator");
@@ -253,3 +364,4 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
     for (const id of [orgA, orgB]) await deleteTestOrganizations(eq(organizationsTable.id, id));
   }
 });
+
