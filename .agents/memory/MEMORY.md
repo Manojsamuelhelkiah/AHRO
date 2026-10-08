@@ -20,6 +20,7 @@
 - [TSX tests in node harness](tsx-tests-node-harness.md) — renderToStaticMarkup UI tests need jsx:automatic, bare builtin externals, and a createRequire banner in the esbuild bundle.
 - [Commercial pricing basis](commercial-pricing-basis.md) — quote full committed volume; exclude client labor from supplier COGS; overage recovers variable supplier cost only.
 - [Customer-facing copy](customer-facing-copy.md) — product screens must stand alone; never refer users to decks, slides, or other internal documents.
+- [Security assurance documentation](security-assurance-documentation.md) — business and shorter security-leadership explainers must cover privacy, AI metrics and both harnesses.
 - [OpenAPI integer persistence](openapi-integer-persistence.md) — generated Zod may accept fractional values for integer fields; enforce integrality before storing inputs used for derived snapshots.
 - [Versioned aggregate editing](versioned-aggregate-editing.md) — JSON aggregate editors need server version preconditions plus queued latest-state transforms, including archive and delete.
 - [Intent taxonomy provenance](intent-taxonomy-provenance.md) — count reference outcomes separately from parents, aliases, custom rows, and candidates; type source edges by evidence strength.
