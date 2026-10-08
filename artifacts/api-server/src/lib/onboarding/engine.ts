@@ -37,6 +37,7 @@ import {
 import { dispatchWorkstreamConnectorMutations } from "./workstream-connectors";
 import { applicableSystems, isNonEmployee } from "./external-systems";
 import { hasTrustedBgvClearanceEvidence } from "./connector-evidence-provenance";
+import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 import {
   EXECUTION_AUTHORIZATION_RULES,
   executionAuthorityScopes,
@@ -1385,7 +1386,7 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
       eq(onbSystemChecks.caseId, caseId),
       eq(onbSystemChecks.system, "bgv"),
     ));
-    const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks);
+    const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks) || await hasCurrentVaultBgvReceipt(tx, c.organizationId, caseId);
     // The weighted readiness policy is optional during rollout. When the SLA
     // agent exports its hook, evaluate it inside this same final-review
     // transaction so the score and the approval cannot observe different

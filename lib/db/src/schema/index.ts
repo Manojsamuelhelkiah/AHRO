@@ -26,3 +26,4 @@ export * from "./workforce-transfer";
 export * from "./access-governance";
 export * from "./agent-invocations";
 export * from "./hro-context";
+export * from "./employee-vault";

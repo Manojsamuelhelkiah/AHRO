@@ -39,6 +39,7 @@ import {
   hasTrustedBgvClearanceEvidence,
   hasTrustedHrisActivationEvidence,
 } from "./connector-evidence-provenance";
+import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
   withSensitiveLifecycleFence,
@@ -419,7 +420,7 @@ async function resolveStreamResults(
   const bgvCheck = checks.find((check) => check.system === "bgv");
   const itsmCheck = checks.find((check) => check.system === "itsm");
   const payrollCheck = checks.find((check) => check.system === "payroll");
-  const trustedBgv = hasTrustedBgvClearanceEvidence(checks);
+  const trustedBgv = hasTrustedBgvClearanceEvidence(checks) || await hasCurrentVaultBgvReceipt(tx, organizationId, c.id);
   const trustedPayroll = Boolean(
     payrollCheck?.status === "done" &&
     payrollCheck.completedAt !== null &&

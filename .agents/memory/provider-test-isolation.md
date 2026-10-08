@@ -38,3 +38,13 @@ Permission-gated test tools need an authorized-success regression as well as a d
 **Why:** A deterministic receipt identity was once mistaken for the authenticated principal. Denial-only tests passed, incorrectly suggesting that a reviewer needed more permissions even though no reviewer could succeed.
 
 **How to apply:** Keep receipt/correlation identities separate from authority principals, and verify both outcomes with controlled test-only grants before attributing a blocked journey to user configuration.
+
+Fixture teardown must also serialize against live organization bootstrap
+writers: lock the synthetic parent organization and remove its dynamically
+seeded configuration children in the same transaction as parent deletion.
+
+**Why:** The running API can create inert connector/settings rows while an
+isolated test is executing, causing intermittent foreign-key teardown failures.
+
+**How to apply:** Apply this only to explicitly scoped synthetic fixtures;
+never disable production foreign keys or append-only history guards.

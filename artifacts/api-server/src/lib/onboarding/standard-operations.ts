@@ -15,6 +15,7 @@ import {
   hasTrustedBgvClearanceEvidence,
   hasTrustedHrisActivationEvidence,
 } from "./connector-evidence-provenance";
+import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 import {
   resolveCurrentCaseExecutionAuthorityEvidence,
 } from "./decision-authority";
@@ -519,7 +520,7 @@ export async function getStandardOperationsViewInTransaction(
     facts: {
       standardNewHire: standardNewHireForStoredCase(caseRow),
       bgvApplicable: standardNewHireForStoredCase(caseRow) || policyRequiresBgv(snapshot),
-      bgvClear: hasTrustedBgvClearanceEvidence(bgvChecks),
+      bgvClear: hasTrustedBgvClearanceEvidence(bgvChecks) || await hasCurrentVaultBgvReceipt(tx, organizationId, caseId),
       hrisActive: trustedHris,
       // Provider provenance is authoritative only when its effective date,
       // source receipt, and SLA snapshot remain bound to this case.

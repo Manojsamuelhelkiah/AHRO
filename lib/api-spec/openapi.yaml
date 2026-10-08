@@ -71,6 +71,157 @@ paths:
         "401": { description: Authentication required }
         "403": { description: Verified privacy or legal authority required }
         "409": { description: Policy revision changed; reload and review }
+  /vault/profile:
+    get:
+      operationId: getVaultDashboard
+      tags: [employeeVault]
+      responses:
+        "200":
+          description: Private independent employee dashboard
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultDashboard" } } }
+  /vault/source-results:
+    post:
+      operationId: acceptVaultSourceResult
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultSourceEnvelope" } } }
+      responses:
+        "204": { description: Exact authenticated source result or idempotent replay }
+        "403": { description: "Unapproved, forged, stale or conflicting source evidence" }
+  /vault/documents:
+    post:
+      operationId: reserveVaultDocument
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultDocumentInput" } } }
+      responses:
+        "201":
+          description: Durable upload reservation
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultDocument" } } }
+  /vault/documents/{id}/bytes:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: uploadVaultDocument
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/octet-stream: { schema: { type: string, format: binary } } }
+      responses:
+        "204": { description: Quarantined private upload }
+    get:
+      operationId: downloadVaultDocument
+      tags: [employeeVault]
+      responses:
+        "200":
+          description: Owner-only malware-cleared bytes
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+  /vault/documents/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: deleteVaultDocument
+      tags: [employeeVault]
+      responses:
+        "204": { description: Access withdrawn; durable cleanup scheduled }
+  /vault/checks:
+    post:
+      operationId: submitVaultCheck
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultCheckInput" } } }
+      responses:
+        "201":
+          description: Revision-bound submission, not trusted clearance
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultCheck" } } }
+  /vault/requests/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getVaultShareRequest
+      tags: [employeeVault]
+      responses:
+        "200":
+          description: Authenticated employer request metadata only
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultShareRequest" } } }
+    post:
+      operationId: decideVaultShareRequest
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultConsentInput" } } }
+      responses:
+        "200":
+          description: Employee decision
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultShareRequest" } } }
+  /vault/requests/{id}/revoke:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: revokeVaultShareRequest
+      tags: [employeeVault]
+      responses:
+        "204": { description: Future access revoked }
+  /employee-vault/settings:
+    get:
+      operationId: getEmployeeVaultSettings
+      tags: [employeeVault]
+      responses:
+        "200":
+          description: Tenant feature readiness
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultProductSettings" } } }
+    put:
+      operationId: updateEmployeeVaultSettings
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultProductInput" } } }
+      responses:
+        "200":
+          description: Owner-only product configuration
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultProductSettings" } } }
+  /onboarding/cases/{caseId}/employee-vault:
+    parameters: [{ name: caseId, in: path, required: true, schema: { type: integer } }]
+    get:
+      operationId: getCaseVaultReuse
+      tags: [employeeVault]
+      responses:
+        "200":
+          description: Live reuse evaluation
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultReuse" } } }
+    post:
+      operationId: requestCaseVaultReuse
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultEmployerRequestInput" } } }
+      responses:
+        "201":
+          description: Case-bound request; no ID or email lookup
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultShareRequest" } } }
+  /onboarding/cases/{caseId}/employee-vault/consume:
+    parameters: [{ name: caseId, in: path, required: true, schema: { type: integer } }]
+    post:
+      operationId: consumeCaseVaultReuse
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultConsumptionInput" } } }
+      responses:
+        "200":
+          description: Minimal dated consumption receipt
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultReuse" } } }
+  /onboarding/cases/{caseId}/employee-vault/requests/{requestId}/documents/{documentId}:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+      - { name: documentId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: downloadCaseVaultDocument
+      tags: [employeeVault]
+      responses:
+        "200":
+          description: Separate live employee grant plus all sensitive-record recipient authorities required
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
   /context-manager/transactions:
     get:
       operationId: listHroContextTransactions
@@ -6443,6 +6594,159 @@ components:
         type: integer
         minimum: 1
   schemas:
+    VaultEvidenceBinding:
+      type: object
+      additionalProperties: false
+      required: [id, revision, sha256]
+      properties:
+        id: { type: string }
+        revision: { type: integer }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+    VaultSourceResult:
+      type: object
+      additionalProperties: false
+      required: [submissionId, profileId, issuerId, kind, jurisdiction, bindings, outcome, sourceReference, verifiedAt, expiresAt]
+      properties:
+        submissionId: { type: string }
+        profileId: { type: string }
+        issuerId: { type: string }
+        kind: { type: string }
+        jurisdiction: { type: string }
+        bindings: { type: array, minItems: 1, maxItems: 10, items: { $ref: "#/components/schemas/VaultEvidenceBinding" } }
+        outcome: { type: string, enum: [clear, adverse, inconclusive] }
+        sourceReference: { type: string, minLength: 1, maxLength: 400 }
+        verifiedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    VaultSourceEnvelope:
+      type: object
+      additionalProperties: false
+      required: [result, signature]
+      properties:
+        result: { $ref: "#/components/schemas/VaultSourceResult" }
+        signature: { type: string, minLength: 88, maxLength: 88 }
+    VaultConsumptionInput:
+      type: object
+      additionalProperties: false
+      required: [requestId, vaultId, acknowledgeEmployeeBinding]
+      properties:
+        requestId: { type: string }
+        vaultId: { type: string }
+        acknowledgeEmployeeBinding: { type: boolean }
+    VaultDocumentInput:
+      type: object
+      additionalProperties: false
+      required: [name, contentType, sizeBytes, policyAccepted, policyRevision, jurisdiction]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        contentType: { type: string, enum: [application/pdf, image/jpeg, image/png] }
+        sizeBytes: { type: integer }
+        replacesId: { type: string }
+        policyAccepted: { type: boolean }
+        policyRevision: { type: integer }
+        jurisdiction: { type: string, pattern: "^[A-Z]{2}$" }
+    VaultDocument:
+      type: object
+      required: [id, name, contentType, sizeBytes, revision, state, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        revision: { type: integer }
+        state: { type: string }
+        createdAt: { type: string }
+        replacesId: { type: [string, "null"] }
+        jurisdiction: { type: [string, "null"] }
+    VaultCheckInput:
+      type: object
+      additionalProperties: false
+      required: [kind, jurisdiction, documentIds]
+      properties:
+        kind: { type: string, enum: [identity, criminal, employment, education, address, sanctions, reference, medical] }
+        jurisdiction: { type: string, minLength: 2, maxLength: 80 }
+        documentIds: { type: array, items: { type: string }, minItems: 1, maxItems: 10 }
+    VaultCheck:
+      type: object
+      required: [id, kind, jurisdiction, state, explanation, documentIds]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        jurisdiction: { type: string }
+        state: { type: string }
+        explanation: { type: string }
+        documentIds: { type: array, items: { type: string } }
+        issuer: { type: [string, "null"] }
+        source: { type: [string, "null"] }
+        verifiedAt: { type: [string, "null"] }
+        expiresAt: { type: [string, "null"] }
+    VaultConsentInput:
+      type: object
+      additionalProperties: false
+      required: [decision, expectedVersion, acknowledgeCaseBinding, documentIds]
+      properties:
+        decision: { type: string, enum: [approve, decline] }
+        expectedVersion: { type: integer }
+        acknowledgeCaseBinding: { type: boolean }
+        documentIds: { type: array, items: { type: string }, maxItems: 10 }
+    VaultShareRequest:
+      type: object
+      required: [id, employer, caseId, purpose, scope, jurisdiction, expiresAt, state, version, documentIds]
+      properties:
+        id: { type: string }
+        employer: { type: string }
+        caseId: { type: integer }
+        purpose: { type: string }
+        scope: { type: array, items: { type: string } }
+        jurisdiction: { type: string }
+        expiresAt: { type: string }
+        state: { type: string }
+        version: { type: integer }
+        documentIds: { type: array, items: { type: string } }
+        employeeBound: { type: boolean }
+    VaultDashboard:
+      type: object
+      required: [vaultId, documents, checks, requests, readiness, privacyNotice, policyRevision, policyJurisdiction]
+      properties:
+        vaultId: { type: string }
+        documents: { type: array, items: { $ref: "#/components/schemas/VaultDocument" } }
+        checks: { type: array, items: { $ref: "#/components/schemas/VaultCheck" } }
+        requests: { type: array, items: { $ref: "#/components/schemas/VaultShareRequest" } }
+        readiness: { type: string }
+        privacyNotice: { type: string, nullable: true }
+        policyRevision: { type: integer, nullable: true }
+        policyJurisdiction: { type: string, nullable: true }
+    VaultProductInput:
+      type: object
+      additionalProperties: false
+      required: [enabled, expectedVersion]
+      properties:
+        enabled: { type: boolean }
+        expectedVersion: { type: integer }
+    VaultProductSettings:
+      type: object
+      required: [enabled, version, providerReadiness, requirementPolicy]
+      properties:
+        enabled: { type: boolean }
+        version: { type: integer }
+        providerReadiness: { type: string }
+        requirementPolicy: { type: string }
+    VaultEmployerRequestInput:
+      type: object
+      additionalProperties: false
+      required: [purpose, expiresAt]
+      properties:
+        purpose: { type: string, minLength: 1, maxLength: 400 }
+        expiresAt: { type: string, format: date-time }
+    VaultReuse:
+      type: object
+      required: [enabled, complete, reused, outstanding, requests, explanation]
+      properties:
+        enabled: { type: boolean }
+        complete: { type: boolean }
+        reused: { type: array, items: { type: string } }
+        outstanding: { type: array, items: { type: string } }
+        requests: { type: array, items: { $ref: "#/components/schemas/VaultShareRequest" } }
+        explanation: { type: string }
     HroContextRetentionInput:
       type: object
       required: [expectedRevision, enabled, retentionDays, purpose, lawfulBasis, policyReference, approvalReference, confirmPruning]

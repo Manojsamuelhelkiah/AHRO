@@ -310,6 +310,19 @@ import type {
   UpdateOnbSettings,
   UpdateOnboardingBgvNotificationsRequest,
   UpdateOrganizationPrimaryCountry200,
+  VaultCheck,
+  VaultCheckInput,
+  VaultConsentInput,
+  VaultConsumptionInput,
+  VaultDashboard,
+  VaultDocument,
+  VaultDocumentInput,
+  VaultEmployerRequestInput,
+  VaultProductInput,
+  VaultProductSettings,
+  VaultReuse,
+  VaultShareRequest,
+  VaultSourceEnvelope,
   VerifyGovernanceAuthorityBody,
   WithdrawOnboardingAuthorityGovernanceBody
 } from './api.schemas';
@@ -517,6 +530,1096 @@ export const useSaveHroContextRetention = <TError = ErrorType<void>,
       > => {
       return useMutation(getSaveHroContextRetentionMutationOptions(options));
     }
+
+export const getGetVaultDashboardUrl = () => {
+
+
+
+
+  return `/api/vault/profile`
+}
+
+export const getVaultDashboard = async ( options?: RequestInit): Promise<VaultDashboard> => {
+
+  return customFetch<VaultDashboard>(getGetVaultDashboardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVaultDashboardQueryKey = () => {
+    return [
+    `/api/vault/profile`
+    ] as const;
+    }
+
+
+export const getGetVaultDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getVaultDashboard>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVaultDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVaultDashboardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVaultDashboard>>> = ({ signal }) => getVaultDashboard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVaultDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVaultDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getVaultDashboard>>>
+export type GetVaultDashboardQueryError = ErrorType<unknown>
+
+
+
+export function useGetVaultDashboard<TData = Awaited<ReturnType<typeof getVaultDashboard>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVaultDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVaultDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAcceptVaultSourceResultUrl = () => {
+
+
+
+
+  return `/api/vault/source-results`
+}
+
+export const acceptVaultSourceResult = async (vaultSourceEnvelope: VaultSourceEnvelope, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getAcceptVaultSourceResultUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultSourceEnvelope)
+  }
+);}
+
+
+
+
+
+export const getAcceptVaultSourceResultMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptVaultSourceResult>>, TError,{data: BodyType<VaultSourceEnvelope>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptVaultSourceResult>>, TError,{data: BodyType<VaultSourceEnvelope>}, TContext> => {
+
+const mutationKey = ['acceptVaultSourceResult'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptVaultSourceResult>>, {data: BodyType<VaultSourceEnvelope>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  acceptVaultSourceResult(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptVaultSourceResultMutationResult = NonNullable<Awaited<ReturnType<typeof acceptVaultSourceResult>>>
+    export type AcceptVaultSourceResultMutationBody = BodyType<VaultSourceEnvelope>
+    export type AcceptVaultSourceResultMutationError = ErrorType<void>
+
+    export const useAcceptVaultSourceResult = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptVaultSourceResult>>, TError,{data: BodyType<VaultSourceEnvelope>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptVaultSourceResult>>,
+        TError,
+        {data: BodyType<VaultSourceEnvelope>},
+        TContext
+      > => {
+      return useMutation(getAcceptVaultSourceResultMutationOptions(options));
+    }
+
+export const getReserveVaultDocumentUrl = () => {
+
+
+
+
+  return `/api/vault/documents`
+}
+
+export const reserveVaultDocument = async (vaultDocumentInput: VaultDocumentInput, options?: RequestInit): Promise<VaultDocument> => {
+
+  return customFetch<VaultDocument>(getReserveVaultDocumentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultDocumentInput)
+  }
+);}
+
+
+
+
+
+export const getReserveVaultDocumentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reserveVaultDocument>>, TError,{data: BodyType<VaultDocumentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reserveVaultDocument>>, TError,{data: BodyType<VaultDocumentInput>}, TContext> => {
+
+const mutationKey = ['reserveVaultDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reserveVaultDocument>>, {data: BodyType<VaultDocumentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reserveVaultDocument(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReserveVaultDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof reserveVaultDocument>>>
+    export type ReserveVaultDocumentMutationBody = BodyType<VaultDocumentInput>
+    export type ReserveVaultDocumentMutationError = ErrorType<unknown>
+
+    export const useReserveVaultDocument = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reserveVaultDocument>>, TError,{data: BodyType<VaultDocumentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reserveVaultDocument>>,
+        TError,
+        {data: BodyType<VaultDocumentInput>},
+        TContext
+      > => {
+      return useMutation(getReserveVaultDocumentMutationOptions(options));
+    }
+
+export const getUploadVaultDocumentUrl = (id: string,) => {
+
+
+
+
+  return `/api/vault/documents/${id}/bytes`
+}
+
+export const uploadVaultDocument = async (id: string,
+    uploadVaultDocumentBody: Blob, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUploadVaultDocumentUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/octet-stream', ...options?.headers },
+    body: uploadVaultDocumentBody
+  }
+);}
+
+
+
+
+
+export const getUploadVaultDocumentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadVaultDocument>>, TError,{id: string;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadVaultDocument>>, TError,{id: string;data: BodyType<Blob>}, TContext> => {
+
+const mutationKey = ['uploadVaultDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadVaultDocument>>, {id: string;data: BodyType<Blob>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  uploadVaultDocument(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadVaultDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof uploadVaultDocument>>>
+    export type UploadVaultDocumentMutationBody = BodyType<Blob>
+    export type UploadVaultDocumentMutationError = ErrorType<unknown>
+
+    export const useUploadVaultDocument = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadVaultDocument>>, TError,{id: string;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadVaultDocument>>,
+        TError,
+        {id: string;data: BodyType<Blob>},
+        TContext
+      > => {
+      return useMutation(getUploadVaultDocumentMutationOptions(options));
+    }
+
+export const getDownloadVaultDocumentUrl = (id: string,) => {
+
+
+
+
+  return `/api/vault/documents/${id}/bytes`
+}
+
+export const downloadVaultDocument = async (id: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadVaultDocumentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadVaultDocumentQueryKey = (id: string,) => {
+    return [
+    `/api/vault/documents/${id}/bytes`
+    ] as const;
+    }
+
+
+export const getDownloadVaultDocumentQueryOptions = <TData = Awaited<ReturnType<typeof downloadVaultDocument>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadVaultDocument>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadVaultDocumentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadVaultDocument>>> = ({ signal }) => downloadVaultDocument(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadVaultDocument>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadVaultDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof downloadVaultDocument>>>
+export type DownloadVaultDocumentQueryError = ErrorType<unknown>
+
+
+
+export function useDownloadVaultDocument<TData = Awaited<ReturnType<typeof downloadVaultDocument>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadVaultDocument>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadVaultDocumentQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteVaultDocumentUrl = (id: string,) => {
+
+
+
+
+  return `/api/vault/documents/${id}`
+}
+
+export const deleteVaultDocument = async (id: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteVaultDocumentUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteVaultDocumentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteVaultDocument>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteVaultDocument>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteVaultDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteVaultDocument>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteVaultDocument(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteVaultDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteVaultDocument>>>
+
+    export type DeleteVaultDocumentMutationError = ErrorType<unknown>
+
+    export const useDeleteVaultDocument = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteVaultDocument>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteVaultDocument>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteVaultDocumentMutationOptions(options));
+    }
+
+export const getSubmitVaultCheckUrl = () => {
+
+
+
+
+  return `/api/vault/checks`
+}
+
+export const submitVaultCheck = async (vaultCheckInput: VaultCheckInput, options?: RequestInit): Promise<VaultCheck> => {
+
+  return customFetch<VaultCheck>(getSubmitVaultCheckUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultCheckInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitVaultCheckMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitVaultCheck>>, TError,{data: BodyType<VaultCheckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitVaultCheck>>, TError,{data: BodyType<VaultCheckInput>}, TContext> => {
+
+const mutationKey = ['submitVaultCheck'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitVaultCheck>>, {data: BodyType<VaultCheckInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitVaultCheck(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitVaultCheckMutationResult = NonNullable<Awaited<ReturnType<typeof submitVaultCheck>>>
+    export type SubmitVaultCheckMutationBody = BodyType<VaultCheckInput>
+    export type SubmitVaultCheckMutationError = ErrorType<unknown>
+
+    export const useSubmitVaultCheck = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitVaultCheck>>, TError,{data: BodyType<VaultCheckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitVaultCheck>>,
+        TError,
+        {data: BodyType<VaultCheckInput>},
+        TContext
+      > => {
+      return useMutation(getSubmitVaultCheckMutationOptions(options));
+    }
+
+export const getGetVaultShareRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/vault/requests/${id}`
+}
+
+export const getVaultShareRequest = async (id: string, options?: RequestInit): Promise<VaultShareRequest> => {
+
+  return customFetch<VaultShareRequest>(getGetVaultShareRequestUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVaultShareRequestQueryKey = (id: string,) => {
+    return [
+    `/api/vault/requests/${id}`
+    ] as const;
+    }
+
+
+export const getGetVaultShareRequestQueryOptions = <TData = Awaited<ReturnType<typeof getVaultShareRequest>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVaultShareRequest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVaultShareRequestQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVaultShareRequest>>> = ({ signal }) => getVaultShareRequest(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVaultShareRequest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVaultShareRequestQueryResult = NonNullable<Awaited<ReturnType<typeof getVaultShareRequest>>>
+export type GetVaultShareRequestQueryError = ErrorType<unknown>
+
+
+
+export function useGetVaultShareRequest<TData = Awaited<ReturnType<typeof getVaultShareRequest>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVaultShareRequest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVaultShareRequestQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideVaultShareRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/vault/requests/${id}`
+}
+
+export const decideVaultShareRequest = async (id: string,
+    vaultConsentInput: VaultConsentInput, options?: RequestInit): Promise<VaultShareRequest> => {
+
+  return customFetch<VaultShareRequest>(getDecideVaultShareRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultConsentInput)
+  }
+);}
+
+
+
+
+
+export const getDecideVaultShareRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideVaultShareRequest>>, TError,{id: string;data: BodyType<VaultConsentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideVaultShareRequest>>, TError,{id: string;data: BodyType<VaultConsentInput>}, TContext> => {
+
+const mutationKey = ['decideVaultShareRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideVaultShareRequest>>, {id: string;data: BodyType<VaultConsentInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideVaultShareRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideVaultShareRequestMutationResult = NonNullable<Awaited<ReturnType<typeof decideVaultShareRequest>>>
+    export type DecideVaultShareRequestMutationBody = BodyType<VaultConsentInput>
+    export type DecideVaultShareRequestMutationError = ErrorType<unknown>
+
+    export const useDecideVaultShareRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideVaultShareRequest>>, TError,{id: string;data: BodyType<VaultConsentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideVaultShareRequest>>,
+        TError,
+        {id: string;data: BodyType<VaultConsentInput>},
+        TContext
+      > => {
+      return useMutation(getDecideVaultShareRequestMutationOptions(options));
+    }
+
+export const getRevokeVaultShareRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/vault/requests/${id}/revoke`
+}
+
+export const revokeVaultShareRequest = async (id: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRevokeVaultShareRequestUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeVaultShareRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeVaultShareRequest>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeVaultShareRequest>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['revokeVaultShareRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeVaultShareRequest>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revokeVaultShareRequest(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeVaultShareRequestMutationResult = NonNullable<Awaited<ReturnType<typeof revokeVaultShareRequest>>>
+
+    export type RevokeVaultShareRequestMutationError = ErrorType<unknown>
+
+    export const useRevokeVaultShareRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeVaultShareRequest>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeVaultShareRequest>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRevokeVaultShareRequestMutationOptions(options));
+    }
+
+export const getGetEmployeeVaultSettingsUrl = () => {
+
+
+
+
+  return `/api/employee-vault/settings`
+}
+
+export const getEmployeeVaultSettings = async ( options?: RequestInit): Promise<VaultProductSettings> => {
+
+  return customFetch<VaultProductSettings>(getGetEmployeeVaultSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEmployeeVaultSettingsQueryKey = () => {
+    return [
+    `/api/employee-vault/settings`
+    ] as const;
+    }
+
+
+export const getGetEmployeeVaultSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getEmployeeVaultSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEmployeeVaultSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEmployeeVaultSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEmployeeVaultSettings>>> = ({ signal }) => getEmployeeVaultSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEmployeeVaultSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEmployeeVaultSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getEmployeeVaultSettings>>>
+export type GetEmployeeVaultSettingsQueryError = ErrorType<unknown>
+
+
+
+export function useGetEmployeeVaultSettings<TData = Awaited<ReturnType<typeof getEmployeeVaultSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEmployeeVaultSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEmployeeVaultSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateEmployeeVaultSettingsUrl = () => {
+
+
+
+
+  return `/api/employee-vault/settings`
+}
+
+export const updateEmployeeVaultSettings = async (vaultProductInput: VaultProductInput, options?: RequestInit): Promise<VaultProductSettings> => {
+
+  return customFetch<VaultProductSettings>(getUpdateEmployeeVaultSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultProductInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateEmployeeVaultSettingsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEmployeeVaultSettings>>, TError,{data: BodyType<VaultProductInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateEmployeeVaultSettings>>, TError,{data: BodyType<VaultProductInput>}, TContext> => {
+
+const mutationKey = ['updateEmployeeVaultSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEmployeeVaultSettings>>, {data: BodyType<VaultProductInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateEmployeeVaultSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateEmployeeVaultSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateEmployeeVaultSettings>>>
+    export type UpdateEmployeeVaultSettingsMutationBody = BodyType<VaultProductInput>
+    export type UpdateEmployeeVaultSettingsMutationError = ErrorType<unknown>
+
+    export const useUpdateEmployeeVaultSettings = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEmployeeVaultSettings>>, TError,{data: BodyType<VaultProductInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateEmployeeVaultSettings>>,
+        TError,
+        {data: BodyType<VaultProductInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateEmployeeVaultSettingsMutationOptions(options));
+    }
+
+export const getGetCaseVaultReuseUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/employee-vault`
+}
+
+export const getCaseVaultReuse = async (caseId: number, options?: RequestInit): Promise<VaultReuse> => {
+
+  return customFetch<VaultReuse>(getGetCaseVaultReuseUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCaseVaultReuseQueryKey = (caseId: number,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/employee-vault`
+    ] as const;
+    }
+
+
+export const getGetCaseVaultReuseQueryOptions = <TData = Awaited<ReturnType<typeof getCaseVaultReuse>>, TError = ErrorType<unknown>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCaseVaultReuse>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCaseVaultReuseQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCaseVaultReuse>>> = ({ signal }) => getCaseVaultReuse(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCaseVaultReuse>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCaseVaultReuseQueryResult = NonNullable<Awaited<ReturnType<typeof getCaseVaultReuse>>>
+export type GetCaseVaultReuseQueryError = ErrorType<unknown>
+
+
+
+export function useGetCaseVaultReuse<TData = Awaited<ReturnType<typeof getCaseVaultReuse>>, TError = ErrorType<unknown>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCaseVaultReuse>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCaseVaultReuseQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRequestCaseVaultReuseUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/employee-vault`
+}
+
+export const requestCaseVaultReuse = async (caseId: number,
+    vaultEmployerRequestInput: VaultEmployerRequestInput, options?: RequestInit): Promise<VaultShareRequest> => {
+
+  return customFetch<VaultShareRequest>(getRequestCaseVaultReuseUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultEmployerRequestInput)
+  }
+);}
+
+
+
+
+
+export const getRequestCaseVaultReuseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCaseVaultReuse>>, TError,{caseId: number;data: BodyType<VaultEmployerRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestCaseVaultReuse>>, TError,{caseId: number;data: BodyType<VaultEmployerRequestInput>}, TContext> => {
+
+const mutationKey = ['requestCaseVaultReuse'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestCaseVaultReuse>>, {caseId: number;data: BodyType<VaultEmployerRequestInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  requestCaseVaultReuse(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestCaseVaultReuseMutationResult = NonNullable<Awaited<ReturnType<typeof requestCaseVaultReuse>>>
+    export type RequestCaseVaultReuseMutationBody = BodyType<VaultEmployerRequestInput>
+    export type RequestCaseVaultReuseMutationError = ErrorType<unknown>
+
+    export const useRequestCaseVaultReuse = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCaseVaultReuse>>, TError,{caseId: number;data: BodyType<VaultEmployerRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestCaseVaultReuse>>,
+        TError,
+        {caseId: number;data: BodyType<VaultEmployerRequestInput>},
+        TContext
+      > => {
+      return useMutation(getRequestCaseVaultReuseMutationOptions(options));
+    }
+
+export const getConsumeCaseVaultReuseUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/employee-vault/consume`
+}
+
+export const consumeCaseVaultReuse = async (caseId: number,
+    vaultConsumptionInput: VaultConsumptionInput, options?: RequestInit): Promise<VaultReuse> => {
+
+  return customFetch<VaultReuse>(getConsumeCaseVaultReuseUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultConsumptionInput)
+  }
+);}
+
+
+
+
+
+export const getConsumeCaseVaultReuseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof consumeCaseVaultReuse>>, TError,{caseId: number;data: BodyType<VaultConsumptionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof consumeCaseVaultReuse>>, TError,{caseId: number;data: BodyType<VaultConsumptionInput>}, TContext> => {
+
+const mutationKey = ['consumeCaseVaultReuse'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof consumeCaseVaultReuse>>, {caseId: number;data: BodyType<VaultConsumptionInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  consumeCaseVaultReuse(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConsumeCaseVaultReuseMutationResult = NonNullable<Awaited<ReturnType<typeof consumeCaseVaultReuse>>>
+    export type ConsumeCaseVaultReuseMutationBody = BodyType<VaultConsumptionInput>
+    export type ConsumeCaseVaultReuseMutationError = ErrorType<unknown>
+
+    export const useConsumeCaseVaultReuse = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof consumeCaseVaultReuse>>, TError,{caseId: number;data: BodyType<VaultConsumptionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof consumeCaseVaultReuse>>,
+        TError,
+        {caseId: number;data: BodyType<VaultConsumptionInput>},
+        TContext
+      > => {
+      return useMutation(getConsumeCaseVaultReuseMutationOptions(options));
+    }
+
+export const getDownloadCaseVaultDocumentUrl = (caseId: number,
+    requestId: string,
+    documentId: string,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/employee-vault/requests/${requestId}/documents/${documentId}`
+}
+
+export const downloadCaseVaultDocument = async (caseId: number,
+    requestId: string,
+    documentId: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadCaseVaultDocumentUrl(caseId,requestId,documentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadCaseVaultDocumentQueryKey = (caseId: number,
+    requestId: string,
+    documentId: string,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/employee-vault/requests/${requestId}/documents/${documentId}`
+    ] as const;
+    }
+
+
+export const getDownloadCaseVaultDocumentQueryOptions = <TData = Awaited<ReturnType<typeof downloadCaseVaultDocument>>, TError = ErrorType<unknown>>(caseId: number,
+    requestId: string,
+    documentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadCaseVaultDocument>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadCaseVaultDocumentQueryKey(caseId,requestId,documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadCaseVaultDocument>>> = ({ signal }) => downloadCaseVaultDocument(caseId,requestId,documentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined && requestId !== null && requestId !== undefined && documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadCaseVaultDocument>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadCaseVaultDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof downloadCaseVaultDocument>>>
+export type DownloadCaseVaultDocumentQueryError = ErrorType<unknown>
+
+
+
+export function useDownloadCaseVaultDocument<TData = Awaited<ReturnType<typeof downloadCaseVaultDocument>>, TError = ErrorType<unknown>>(
+ caseId: number,
+    requestId: string,
+    documentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadCaseVaultDocument>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadCaseVaultDocumentQueryOptions(caseId,requestId,documentId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListHroContextTransactionsUrl = (params?: ListHroContextTransactionsParams,) => {
   const normalizedParams = new URLSearchParams();

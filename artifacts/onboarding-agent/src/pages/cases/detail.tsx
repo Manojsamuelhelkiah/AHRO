@@ -30,6 +30,7 @@ import { Presentation, AlertTriangle } from 'lucide-react';
 import { useUser } from '@clerk/react';
 import { CaseHeader, CaseHealthStrip, CaseTabs, isOfflineDemoSample } from './detail/components';
 import { GatewaysStrip } from './detail/gateways-strip';
+import { EmployeeVaultPanel } from './detail/employee-vault-panel';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
 import { FrontlineTab } from './detail/frontline-tab';
@@ -278,6 +279,7 @@ export function CaseDetailPage() {
         </div>
       )}
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
+      {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
 
       {!offlineSample && c.hybridDemoSimulation === true && permissions.access.flowRead && (
         <SimulationPanel

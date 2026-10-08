@@ -172,6 +172,7 @@ import { malwareScanRetryable, malwareUploadIsClean } from "../lib/onboarding/ma
 import { latestRequiredUploadMalwareBlockers } from "../lib/onboarding/document-readiness-guard";
 import { documentationGateConfigured } from "../lib/onboarding/engine";
 import { hasTrustedBgvClearanceEvidence } from "../lib/onboarding/connector-evidence-provenance";
+import { currentVaultBgvForCase } from "../lib/employee-vault/reuse";
 import {
   evaluateCaseDerivedLifecycleGateInTransaction,
   evaluateSensitiveLifecycleGate,
@@ -646,7 +647,7 @@ async function deriveGateways(row: typeof onbCases.$inferSelect) {
   // A simulated watcher completion is display/planning data, never proof at a
   // live gate. The provenance predicate also requires an actual external
   // reference, completion timestamp, and supported inbound mechanism.
-  const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks);
+  const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks) || await currentVaultBgvForCase(row.organizationId, row.id);
   const bgvRequiredForDay1 = applicableSystems(row).some((system) => system.key === "bgv");
   const [finalApproval] = await db.select({
     status: onbApprovals.status,

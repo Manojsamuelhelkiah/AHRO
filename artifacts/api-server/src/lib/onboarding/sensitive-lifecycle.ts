@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { withHroOrganizationContext, withHroCaseContext } from "../hro-context/manager";
+import { currentHroContext } from "../hro-context/core";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   and, asc, desc, eq, gt, inArray, isNull, lte, or, sql,
@@ -266,6 +267,36 @@ function notifyNestedFenceCallsDrained(token: LifecycleFenceToken): void {
  */
 export async function withSensitiveLifecycleFence<T>(organizationId: string, action: () => Promise<T>): Promise<T> {
   return withHroOrganizationContext(organizationId, () => withSensitiveLifecycleFenceInner(organizationId, action));
+}
+
+/**
+ * Independent ownership can span employers; locks are not tenant authority.
+ * Acquire the same lifecycle locks on ONE session without nesting tenant
+ * contexts or exhausting the pool. Employer-scoped executions may not use it.
+ */
+export async function withIndependentOwnerLifecycleFences<T>(organizationIds: string[], action: () => Promise<T>): Promise<T> {
+  if (currentHroContext() || [...(lifecycleFenceContext.getStore()?.values() ?? [])].some(t => t.active)) {
+    throw new Error("Independent-owner mutations cannot inherit an employer execution or lifecycle context.");
+  }
+  const client = await pool.connect();
+  const locked: string[] = [];
+  const tokens = new Map<string, LifecycleFenceToken>();
+  try {
+    for (const org of [...new Set(organizationIds)].sort()) {
+      await client.query("select pg_advisory_lock(hashtextextended($1, 252))", [org]);
+      locked.push(org);
+      tokens.set(org, newLifecycleFenceToken());
+    }
+    return await lifecycleFenceContext.run(tokens, action);
+  } finally {
+    try {
+      for (const token of tokens.values()) {
+        while (token.nested > 0) await waitForNestedFenceCalls(token);
+        token.active = false;
+      }
+      for (const org of locked.reverse()) await client.query("select pg_advisory_unlock(hashtextextended($1, 252))", [org]);
+    } finally { client.release(); }
+  }
 }
 
 async function withSensitiveLifecycleFenceInner<T>(organizationId: string, action: () => Promise<T>): Promise<T> {

@@ -44,6 +44,7 @@ import {
 } from "./effect-journal";
 import type { OnboardingDbTransaction } from "./settings";
 import { evaluateStoredCaseGovernanceGate } from "./governance-runtime";
+import { currentVaultBgvForCase, currentVaultConsumedScope } from "../employee-vault/reuse";
 import {
   getStandardOperationsView,
   getStandardOperationsViewInTransaction,
@@ -725,6 +726,15 @@ export async function dispatchWorkstreamConnectorMutations(
       if (!workstreamPolicyGateOpen(caseRow)) return { releaseHeld: false, heldConnectors: [] };
       const heldConnectors: Array<"iam" | "payroll"> = [];
       for (const mutation of workstreamMutations(caseRow)) {
+        if (mutation.connector === "background-verification" &&
+          await currentVaultBgvForCase(caseRow.organizationId, caseRow.id)) continue;
+        if (mutation.connector === "background-verification") {
+          const reused = await currentVaultConsumedScope(caseRow);
+          if (reused.reused.length) mutation.payload = {
+            ...(mutation.payload && typeof mutation.payload === "object" ? mutation.payload : {}),
+            requiredChecks: reused.outstanding, reusedChecks: reused.reused,
+          };
+        }
         if (!await mutationMayDispatch(caseRow, mutation)) continue;
         try {
           await dispatchCaseConnectorMutation({ c: caseRow, mutation, dependencies });

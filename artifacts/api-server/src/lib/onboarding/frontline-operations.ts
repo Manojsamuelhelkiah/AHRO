@@ -16,6 +16,7 @@ import {
   type OnbAuthorityScope,
 } from "@workspace/db";
 import { hasTrustedBgvClearanceEvidence } from "./connector-evidence-provenance";
+import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 import { hasCurrentAuthorityScope, roleMayExerciseScope } from "./decision-authority";
 import { reopenApprovalInTransaction } from "./approval-version";
 import {
@@ -610,7 +611,7 @@ async function evaluateRelease(tx: any, c: typeof onbCases.$inferSelect) {
     tx.select().from(onbFrontlineFulfillments).where(and(eq(onbFrontlineFulfillments.organizationId, c.organizationId), eq(onbFrontlineFulfillments.caseId, c.id))).orderBy(desc(onbFrontlineFulfillments.revision)),
     tx.select().from(onbSystemChecks).where(and(eq(onbSystemChecks.organizationId, c.organizationId), eq(onbSystemChecks.caseId, c.id), eq(onbSystemChecks.system, "bgv"))),
   ]);
-  if (!hasTrustedBgvClearanceEvidence(bgv)) blockers.push("A current trusted BGV clearance is required for floor release.");
+  if (!hasTrustedBgvClearanceEvidence(bgv) && !await hasCurrentVaultBgvReceipt(tx, c.organizationId, c.id)) blockers.push("A current trusted BGV clearance is required for floor release.");
   const latest = new Map<string, typeof evidence[number]>();
   for (const row of evidence) {
     const key = `${row.kind}:${row.statutoryKey ?? row.skillRequirementKey ?? ""}`;

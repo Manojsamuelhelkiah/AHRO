@@ -43,11 +43,16 @@ import privacyLifecycleRouter from "./privacy-lifecycle";
 import agentInvocationsRouter from "./agent-invocations";
 import { hroRequestContext } from "../middlewares/hro-context";
 import hroContextRouter from "./hro-context";
+import employeeVaultRouter, { employeeVaultSourceRouter } from "./employee-vault";
+import employeeVaultEmployerRouter from "./employee-vault-employer";
 
 const router: IRouter = Router();
 router.use(healthRouter);
 router.use(organizationsRouter);
 router.use(candidatePublicRouter);
+// Independent employees authenticate here, before HRO membership resolution.
+router.use(employeeVaultSourceRouter);
+router.use(employeeVaultRouter);
 // TA middleware uses a tenant-pinned HMAC source contract rather than a
 // browser Clerk session. Its own middleware authenticates every request.
 router.use(onboardingTaIntakeRouter);
@@ -70,6 +75,7 @@ router.use((req, res, next) => {
 });
 router.use(hroRequestContext);
 router.use(hroContextRouter);
+router.use(employeeVaultEmployerRouter);
 router.use(corpusRouter);
 router.use(scenariosRouter);
 router.use(scenarioFilesRouter);

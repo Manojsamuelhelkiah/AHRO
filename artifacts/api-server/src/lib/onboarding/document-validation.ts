@@ -22,6 +22,7 @@ export { normalizeBgvStatus, reminderEligible } from "./document-validation-poli
 import { actionableCorrectionReason, decideValidationOutcome, reminderEligible } from "./document-validation-policy";
 import { documentationGateReady } from "./document-validation-policy";
 import { hasTrustedBgvClearanceEvidence } from "./connector-evidence-provenance";
+import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 import { checklistStageBlockers, mandatoryChecklistReady } from "./settings";
 import { documentMalwareGateSql } from "./document-malware-gate";
 import { malwareUploadIsClean } from "./malware-policy";
@@ -65,7 +66,7 @@ export async function reconcileDocumentationReadiness(organizationId: string, ca
       eq(onbSystemChecks.system, "bgv"),
     ));
     const bgv = bgvChecks[0];
-    const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks);
+    const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks) || await hasCurrentVaultBgvReceipt(tx, organizationId, caseId);
     const bgvApplicable = c.hireType !== "internal-transfer";
     const ready = documentationGateReady({ bgvApplicable, bgvClear, requiredDocuments: required.length, verifiedDocuments: verified.length });
     const readiness = c.readiness.map((row) => ({ ...row }));

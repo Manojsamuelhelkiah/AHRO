@@ -46,6 +46,7 @@ import {
   withCaseDerivedLifecycleWrite,
 } from "./sensitive-lifecycle";
 import { runDocumentMalwareTick } from "./document-malware";
+import { runEmployeeVaultTick } from "../employee-vault/worker";
 import { documentMalwareGateSql } from "./document-malware-gate";
 import { runMalwareScannerMonitorTick } from "./malware-scanner-monitor";
 import { logger } from "../logger";
@@ -959,10 +960,19 @@ export function disconnectedCheckIsOverdue(
 /* ------------------------------------------------------------------ */
 
 async function openChecks() {
-  return db
+  const checks = await db
     .select()
     .from(onbSystemChecks)
     .where(sql`${onbSystemChecks.status} in ('pending', 'overdue')`);
+  const remaining = [];
+  for (const check of checks) {
+    if (check.system === "bgv") {
+      const { currentVaultBgvForCase } = await import("../employee-vault/reuse");
+      if (await currentVaultBgvForCase(check.organizationId, check.caseId)) continue;
+    }
+    remaining.push(check);
+  }
+  return remaining;
 }
 
 export async function recoverUntrackedCaseSystems(
@@ -1386,6 +1396,9 @@ async function tickOnce(): Promise<void> {
     }),
   ));
   await sweepExpiredNonIdempotentEffects();
+  await runEmployeeVaultTick().catch(() => {
+    logger.error({ component: "employee-vault-worker" }, "Vault reconciliation failed; current access remains fail-closed");
+  });
   // Document evidence is validated asynchronously from the shared heartbeat.
   // Failures are isolated so an unavailable object/provider never stops BGV monitoring.
   await runDocumentMalwareTick().catch(() => {

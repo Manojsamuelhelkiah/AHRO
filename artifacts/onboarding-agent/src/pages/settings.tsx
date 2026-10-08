@@ -33,6 +33,7 @@ import { JobProfilesAndAuthorities } from './settings-job-profiles';
 import { OrganizationMembersSettings } from './settings-organization-members';
 import { ContextManagerSettingsCard } from './settings-context-manager';
 import { AccessGovernanceSettings } from './settings-access-governance';
+import { EmployeeVaultSettings } from '../components/employee-vault-settings';
 import { PrivacyAdministrationCard } from './settings-privacy-tab';
 import { EarlyTenureSettingsCard } from './settings-early-tenure';
 
@@ -842,6 +843,7 @@ export function SettingsPage() {
       <ReadinessSlaSettingsCard />
       <EarlyTenureSettingsCard />
       <AuthorityGovernanceCard />
+      <EmployeeVaultSettings />
       <div id="sensitive-lifecycle-policies">
         <PrivacyAdministrationCard />
       </div>

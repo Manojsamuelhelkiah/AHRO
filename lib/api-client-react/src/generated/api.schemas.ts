@@ -5,6 +5,212 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface VaultEvidenceBinding {
+  id: string;
+  revision: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  sha256: string;
+}
+
+export type VaultSourceResultOutcome = typeof VaultSourceResultOutcome[keyof typeof VaultSourceResultOutcome];
+
+
+export const VaultSourceResultOutcome = {
+  clear: 'clear',
+  adverse: 'adverse',
+  inconclusive: 'inconclusive',
+} as const;
+
+export interface VaultSourceResult {
+  submissionId: string;
+  profileId: string;
+  issuerId: string;
+  kind: string;
+  jurisdiction: string;
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  bindings: VaultEvidenceBinding[];
+  outcome: VaultSourceResultOutcome;
+  /**
+     * @minLength 1
+     * @maxLength 400
+     */
+  sourceReference: string;
+  verifiedAt: string;
+  expiresAt: string;
+}
+
+export interface VaultSourceEnvelope {
+  result: VaultSourceResult;
+  /**
+     * @minLength 88
+     * @maxLength 88
+     */
+  signature: string;
+}
+
+export interface VaultConsumptionInput {
+  requestId: string;
+  vaultId: string;
+  acknowledgeEmployeeBinding: boolean;
+}
+
+export type VaultDocumentInputContentType = typeof VaultDocumentInputContentType[keyof typeof VaultDocumentInputContentType];
+
+
+export const VaultDocumentInputContentType = {
+  'application/pdf': 'application/pdf',
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+} as const;
+
+export interface VaultDocumentInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  contentType: VaultDocumentInputContentType;
+  sizeBytes: number;
+  replacesId?: string;
+  policyAccepted: boolean;
+  policyRevision: number;
+  /** @pattern ^[A-Z]{2}$ */
+  jurisdiction: string;
+}
+
+export interface VaultDocument {
+  id: string;
+  name: string;
+  contentType: string;
+  sizeBytes: number;
+  revision: number;
+  state: string;
+  createdAt: string;
+  /** @nullable */
+  replacesId?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+}
+
+export type VaultCheckInputKind = typeof VaultCheckInputKind[keyof typeof VaultCheckInputKind];
+
+
+export const VaultCheckInputKind = {
+  identity: 'identity',
+  criminal: 'criminal',
+  employment: 'employment',
+  education: 'education',
+  address: 'address',
+  sanctions: 'sanctions',
+  reference: 'reference',
+  medical: 'medical',
+} as const;
+
+export interface VaultCheckInput {
+  kind: VaultCheckInputKind;
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  jurisdiction: string;
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  documentIds: string[];
+}
+
+export interface VaultCheck {
+  id: string;
+  kind: string;
+  jurisdiction: string;
+  state: string;
+  explanation: string;
+  documentIds: string[];
+  /** @nullable */
+  issuer?: string | null;
+  /** @nullable */
+  source?: string | null;
+  /** @nullable */
+  verifiedAt?: string | null;
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export type VaultConsentInputDecision = typeof VaultConsentInputDecision[keyof typeof VaultConsentInputDecision];
+
+
+export const VaultConsentInputDecision = {
+  approve: 'approve',
+  decline: 'decline',
+} as const;
+
+export interface VaultConsentInput {
+  decision: VaultConsentInputDecision;
+  expectedVersion: number;
+  acknowledgeCaseBinding: boolean;
+  /** @maxItems 10 */
+  documentIds: string[];
+}
+
+export interface VaultShareRequest {
+  id: string;
+  employer: string;
+  caseId: number;
+  purpose: string;
+  scope: string[];
+  jurisdiction: string;
+  expiresAt: string;
+  state: string;
+  version: number;
+  documentIds: string[];
+  employeeBound?: boolean;
+}
+
+export interface VaultDashboard {
+  vaultId: string;
+  documents: VaultDocument[];
+  checks: VaultCheck[];
+  requests: VaultShareRequest[];
+  readiness: string;
+  privacyNotice: string | null;
+  policyRevision: number | null;
+  policyJurisdiction: string | null;
+}
+
+export interface VaultProductInput {
+  enabled: boolean;
+  expectedVersion: number;
+}
+
+export interface VaultProductSettings {
+  enabled: boolean;
+  version: number;
+  providerReadiness: string;
+  requirementPolicy: string;
+}
+
+export interface VaultEmployerRequestInput {
+  /**
+     * @minLength 1
+     * @maxLength 400
+     */
+  purpose: string;
+  expiresAt: string;
+}
+
+export interface VaultReuse {
+  enabled: boolean;
+  complete: boolean;
+  reused: string[];
+  outstanding: string[];
+  requests: VaultShareRequest[];
+  explanation: string;
+}
+
 export interface HroContextRetentionInput {
   expectedRevision: number;
   enabled: boolean;

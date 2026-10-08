@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/employee-vault/"
+title = "Employee Vault"
+description = "Independent employee-owned private documents and consent-based reusable authoritative verification records, without employer membership."
+version = "1.0.0"
+id = "artifacts/employee-vault"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/employee-vault/" ]
+localPort = 21699
+
+[services.development]
+run = "pnpm --filter @workspace/employee-vault run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/employee-vault", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/employee-vault/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21699"
+BASE_PATH = "/employee-vault/"

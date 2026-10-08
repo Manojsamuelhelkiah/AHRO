@@ -167,6 +167,8 @@ export type ReopenApprovalOptions = {
   /** A legacy row may have no scope at all; the renewed cycle must be
    * decidable by a real specialist rather than remaining null-scoped. */
   authorityScope?: typeof onbApprovals.$inferInsert.authorityScope;
+  /** Safety withdrawal only: no new narrative/collection; never grants authority. */
+  invalidationOnly?: boolean;
 };
 
 export type ReopenApprovalResult = {
@@ -193,7 +195,7 @@ export async function reopenOnboardingApproval(
   tx: OnboardingDbTransaction,
   opts: ReopenApprovalOptions,
 ): Promise<ReopenApprovalResult> {
-  await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, {
+  if (!opts.invalidationOnly) await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, {
     organizationId: opts.organizationId, caseId: opts.caseId,
   });
   const reopenStatuses = opts.reopenStatuses ?? ["approved"];
@@ -219,7 +221,7 @@ export async function reopenOnboardingApproval(
     decidedAuthorityId: null,
     decidedAuthorityRevision: null,
     ...(opts.authorityScope === undefined ? {} : { authorityScope: opts.authorityScope }),
-    comment: `${opts.reason}${opts.actor ? ` (${opts.actor})` : ""}`,
+    comment: opts.invalidationOnly ? null : `${opts.reason}${opts.actor ? ` (${opts.actor})` : ""}`,
   }).where(and(
     eq(onbApprovals.organizationId, opts.organizationId),
     eq(onbApprovals.id, approval.id),

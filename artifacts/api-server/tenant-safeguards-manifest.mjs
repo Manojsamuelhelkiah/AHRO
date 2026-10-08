@@ -1,4 +1,7 @@
 export const tenantSafeguards = [
+  { table: "employee_vault_products", phaseB: false },
+  { table: "employee_vault_requests", phaseB: false },
+  { table: "employee_vault_receipts", phaseB: false },
   { table: "organization_memberships", phaseB: false },
   { table: "scenarios", phaseB: true },
   { table: "scenario_files", phaseB: false },
@@ -157,6 +160,13 @@ export const tenantSafeguards = [
 
 export const tenantTables = tenantSafeguards.map(({ table }) => table);
 
+// Explicit independent domain inventory: these are not unscoped HRO tenant data.
+export const employeeOwnedTables = [
+  "employee_vault_profiles", "employee_vault_documents",
+  "employee_vault_checks", "employee_vault_audit",
+];
+export const platformVaultConfigurationTables = ["employee_vault_policies", "employee_vault_issuers"];
+
 // Having an organization_id is an isolation requirement for every tenant
 // table. Parent-row existence is a different requirement: retained,
 // append-only evidence intentionally survives deletion of its live tenant.
@@ -169,6 +179,13 @@ export const phaseBTenantTables = tenantSafeguards
   .map(({ table }) => table);
 
 export const expectedForeignKeys = [
+  ...["employee_vault_documents", "employee_vault_checks", "employee_vault_audit", "employee_vault_requests"].map(table => ({
+    table, columns: ["profile_id"], referencedTable: "employee_vault_profiles", referencedColumns: ["id"],
+  })),
+  ...["employee_vault_requests", "employee_vault_receipts"].map(table => ({
+    table, columns: ["organization_id", "case_id"], referencedTable: "onb_cases", referencedColumns: ["organization_id", "id"],
+  })),
+  { table: "employee_vault_receipts", columns: ["organization_id", "request_id"], referencedTable: "employee_vault_requests", referencedColumns: ["organization_id", "id"] },
   ...tenantSafeguards
     .filter(
       ({ requiresOrganizationForeignKey = true }) =>

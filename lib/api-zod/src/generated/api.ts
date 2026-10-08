@@ -91,6 +91,332 @@ export const SaveHroContextRetentionResponse = zod.object({
 })
 
 
+export const GetVaultDashboardResponse = zod.object({
+  "vaultId": zod.string(),
+  "documents": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.number(),
+  "revision": zod.number(),
+  "state": zod.string(),
+  "createdAt": zod.string(),
+  "replacesId": zod.string().nullish(),
+  "jurisdiction": zod.string().nullish()
+})),
+  "checks": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "jurisdiction": zod.string(),
+  "state": zod.string(),
+  "explanation": zod.string(),
+  "documentIds": zod.array(zod.string()),
+  "issuer": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "verifiedAt": zod.string().nullish(),
+  "expiresAt": zod.string().nullish()
+})),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "employer": zod.string(),
+  "caseId": zod.number(),
+  "purpose": zod.string(),
+  "scope": zod.array(zod.string()),
+  "jurisdiction": zod.string(),
+  "expiresAt": zod.string(),
+  "state": zod.string(),
+  "version": zod.number(),
+  "documentIds": zod.array(zod.string()),
+  "employeeBound": zod.boolean().optional()
+})),
+  "readiness": zod.string(),
+  "privacyNotice": zod.string().nullable(),
+  "policyRevision": zod.number().nullable(),
+  "policyJurisdiction": zod.string().nullable()
+})
+
+
+export const acceptVaultSourceResultBodyResultBindingsItemSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const acceptVaultSourceResultBodyResultBindingsMax = 10;
+
+export const acceptVaultSourceResultBodyResultSourceReferenceMax = 400;
+
+export const acceptVaultSourceResultBodySignatureMin = 88;
+export const acceptVaultSourceResultBodySignatureMax = 88;
+
+
+
+export const AcceptVaultSourceResultBody = zod.object({
+  "result": zod.object({
+  "submissionId": zod.string(),
+  "profileId": zod.string(),
+  "issuerId": zod.string(),
+  "kind": zod.string(),
+  "jurisdiction": zod.string(),
+  "bindings": zod.array(zod.object({
+  "id": zod.string(),
+  "revision": zod.number(),
+  "sha256": zod.string().regex(acceptVaultSourceResultBodyResultBindingsItemSha256RegExp)
+})).min(1).max(acceptVaultSourceResultBodyResultBindingsMax),
+  "outcome": zod.enum(['clear', 'adverse', 'inconclusive']),
+  "sourceReference": zod.string().min(1).max(acceptVaultSourceResultBodyResultSourceReferenceMax),
+  "verifiedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+}),
+  "signature": zod.string().min(acceptVaultSourceResultBodySignatureMin).max(acceptVaultSourceResultBodySignatureMax)
+})
+
+export const AcceptVaultSourceResultResponse = zod.void()
+
+
+export const reserveVaultDocumentBodyNameMax = 200;
+
+export const reserveVaultDocumentBodyJurisdictionRegExp = new RegExp('^[A-Z]{2}$');
+
+
+export const ReserveVaultDocumentBody = zod.object({
+  "name": zod.string().min(1).max(reserveVaultDocumentBodyNameMax),
+  "contentType": zod.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  "sizeBytes": zod.number(),
+  "replacesId": zod.string().optional(),
+  "policyAccepted": zod.boolean(),
+  "policyRevision": zod.number(),
+  "jurisdiction": zod.string().regex(reserveVaultDocumentBodyJurisdictionRegExp)
+})
+
+export const ReserveVaultDocumentResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.number(),
+  "revision": zod.number(),
+  "state": zod.string(),
+  "createdAt": zod.string(),
+  "replacesId": zod.string().nullish(),
+  "jurisdiction": zod.string().nullish()
+})
+
+
+export const UploadVaultDocumentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UploadVaultDocumentResponse = zod.void()
+
+
+export const DownloadVaultDocumentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DownloadVaultDocumentResponse = zod.unknown()
+
+
+export const DeleteVaultDocumentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteVaultDocumentResponse = zod.void()
+
+
+export const submitVaultCheckBodyJurisdictionMin = 2;
+export const submitVaultCheckBodyJurisdictionMax = 80;
+
+export const submitVaultCheckBodyDocumentIdsMax = 10;
+
+
+
+export const SubmitVaultCheckBody = zod.object({
+  "kind": zod.enum(['identity', 'criminal', 'employment', 'education', 'address', 'sanctions', 'reference', 'medical']),
+  "jurisdiction": zod.string().min(submitVaultCheckBodyJurisdictionMin).max(submitVaultCheckBodyJurisdictionMax),
+  "documentIds": zod.array(zod.string()).min(1).max(submitVaultCheckBodyDocumentIdsMax)
+})
+
+export const SubmitVaultCheckResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "jurisdiction": zod.string(),
+  "state": zod.string(),
+  "explanation": zod.string(),
+  "documentIds": zod.array(zod.string()),
+  "issuer": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "verifiedAt": zod.string().nullish(),
+  "expiresAt": zod.string().nullish()
+})
+
+
+export const GetVaultShareRequestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetVaultShareRequestResponse = zod.object({
+  "id": zod.string(),
+  "employer": zod.string(),
+  "caseId": zod.number(),
+  "purpose": zod.string(),
+  "scope": zod.array(zod.string()),
+  "jurisdiction": zod.string(),
+  "expiresAt": zod.string(),
+  "state": zod.string(),
+  "version": zod.number(),
+  "documentIds": zod.array(zod.string()),
+  "employeeBound": zod.boolean().optional()
+})
+
+
+export const DecideVaultShareRequestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const decideVaultShareRequestBodyDocumentIdsMax = 10;
+
+
+
+export const DecideVaultShareRequestBody = zod.object({
+  "decision": zod.enum(['approve', 'decline']),
+  "expectedVersion": zod.number(),
+  "acknowledgeCaseBinding": zod.boolean(),
+  "documentIds": zod.array(zod.string()).max(decideVaultShareRequestBodyDocumentIdsMax)
+})
+
+export const DecideVaultShareRequestResponse = zod.object({
+  "id": zod.string(),
+  "employer": zod.string(),
+  "caseId": zod.number(),
+  "purpose": zod.string(),
+  "scope": zod.array(zod.string()),
+  "jurisdiction": zod.string(),
+  "expiresAt": zod.string(),
+  "state": zod.string(),
+  "version": zod.number(),
+  "documentIds": zod.array(zod.string()),
+  "employeeBound": zod.boolean().optional()
+})
+
+
+export const RevokeVaultShareRequestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevokeVaultShareRequestResponse = zod.void()
+
+
+export const GetEmployeeVaultSettingsResponse = zod.object({
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "providerReadiness": zod.string(),
+  "requirementPolicy": zod.string()
+})
+
+
+export const UpdateEmployeeVaultSettingsBody = zod.object({
+  "enabled": zod.boolean(),
+  "expectedVersion": zod.number()
+})
+
+export const UpdateEmployeeVaultSettingsResponse = zod.object({
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "providerReadiness": zod.string(),
+  "requirementPolicy": zod.string()
+})
+
+
+export const GetCaseVaultReuseParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const GetCaseVaultReuseResponse = zod.object({
+  "enabled": zod.boolean(),
+  "complete": zod.boolean(),
+  "reused": zod.array(zod.string()),
+  "outstanding": zod.array(zod.string()),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "employer": zod.string(),
+  "caseId": zod.number(),
+  "purpose": zod.string(),
+  "scope": zod.array(zod.string()),
+  "jurisdiction": zod.string(),
+  "expiresAt": zod.string(),
+  "state": zod.string(),
+  "version": zod.number(),
+  "documentIds": zod.array(zod.string()),
+  "employeeBound": zod.boolean().optional()
+})),
+  "explanation": zod.string()
+})
+
+
+export const RequestCaseVaultReuseParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const requestCaseVaultReuseBodyPurposeMax = 400;
+
+
+
+export const RequestCaseVaultReuseBody = zod.object({
+  "purpose": zod.string().min(1).max(requestCaseVaultReuseBodyPurposeMax),
+  "expiresAt": zod.coerce.date()
+})
+
+export const RequestCaseVaultReuseResponse = zod.object({
+  "id": zod.string(),
+  "employer": zod.string(),
+  "caseId": zod.number(),
+  "purpose": zod.string(),
+  "scope": zod.array(zod.string()),
+  "jurisdiction": zod.string(),
+  "expiresAt": zod.string(),
+  "state": zod.string(),
+  "version": zod.number(),
+  "documentIds": zod.array(zod.string()),
+  "employeeBound": zod.boolean().optional()
+})
+
+
+export const ConsumeCaseVaultReuseParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const ConsumeCaseVaultReuseBody = zod.object({
+  "requestId": zod.string(),
+  "vaultId": zod.string(),
+  "acknowledgeEmployeeBinding": zod.boolean()
+})
+
+export const ConsumeCaseVaultReuseResponse = zod.object({
+  "enabled": zod.boolean(),
+  "complete": zod.boolean(),
+  "reused": zod.array(zod.string()),
+  "outstanding": zod.array(zod.string()),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "employer": zod.string(),
+  "caseId": zod.number(),
+  "purpose": zod.string(),
+  "scope": zod.array(zod.string()),
+  "jurisdiction": zod.string(),
+  "expiresAt": zod.string(),
+  "state": zod.string(),
+  "version": zod.number(),
+  "documentIds": zod.array(zod.string()),
+  "employeeBound": zod.boolean().optional()
+})),
+  "explanation": zod.string()
+})
+
+
+export const DownloadCaseVaultDocumentParams = zod.object({
+  "caseId": zod.coerce.number(),
+  "requestId": zod.coerce.string(),
+  "documentId": zod.coerce.string()
+})
+
+export const DownloadCaseVaultDocumentResponse = zod.unknown()
+
+
 /**
  * @summary Read bounded metadata-only execution attempts, with operator keyset pagination
  */

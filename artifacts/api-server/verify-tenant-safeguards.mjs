@@ -4,6 +4,8 @@ import {
   expectedForeignKeys,
   organizationParentValidatedTenantTables,
   tenantTables,
+  employeeOwnedTables,
+  platformVaultConfigurationTables,
 } from "./tenant-safeguards-manifest.mjs";
 import {
   findTransferCustodyReadinessFailures,
@@ -328,6 +330,14 @@ export function findTenantMetadataFailures({
       );
     }
   }
+  // Independent ownership is deliberately a different inventory, never
+  // interpreted as a missing-organization migration/backfill opportunity.
+  if (knownTables?.has("employee_vault_profiles")) {
+    for (const table of [...employeeOwnedTables, ...platformVaultConfigurationTables]) {
+      if (!knownTables.has(table)) failures.push(`independent Vault table missing: ${table}`);
+      if (columnsByTable.has(table)) failures.push(`independent Vault table incorrectly tenant-owned: ${table}`);
+    }
+  }
 
   for (const expected of expectedForeignKeys) {
     const found = (Array.isArray(foreignKeys) ? foreignKeys : []).some(
@@ -531,7 +541,7 @@ export async function verifyTenantSafeguards(options = {}) {
               AND table_name = ANY($2::text[])
               AND table_type = 'BASE TABLE'
           `,
-          [schema, tenantTables],
+          [schema, [...tenantTables, ...employeeOwnedTables, ...platformVaultConfigurationTables]],
           statementTimeoutMs,
           deadlineAt,
         ),

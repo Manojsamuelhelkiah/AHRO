@@ -29,6 +29,7 @@ import {
   hasTrustedHrisActivationEvidence,
   hasTrustedProviderConfiguration,
 } from "./connector-evidence-provenance";
+import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 
 /**
  * Runtime-only governance rules.
@@ -525,6 +526,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     )).limit(1),
   ]);
   const snapshotVersion = hrisState[0]?.snapshotVersion;
+  const vaultBgvClear = await hasCurrentVaultBgvReceipt(db, organizationId, input.caseRow.id);
   const hrisAttestations = snapshotVersion === undefined
     ? []
     : await db.select().from(onbReadinessSlaAttestations).where(and(
@@ -599,12 +601,12 @@ export async function evaluateStoredCaseGovernanceGate(input: {
         // source must have completed a server-recorded synchronization.
         providerConfigured: providerKey ? hasTrustedProviderConfiguration(provider[0]) : undefined,
         realEvidenceAvailable: workflow === "it-identity-access"
-          ? hasTrustedBgvClearanceEvidence(checks)
+          ? hasTrustedBgvClearanceEvidence(checks) || vaultBgvClear
           : undefined,
       })),
     standardHireAccess: {
       standardNewHire: standardNewHireForStoredCase(input.caseRow),
-      bgvClear: hasTrustedBgvClearanceEvidence(checks),
+      bgvClear: hasTrustedBgvClearanceEvidence(checks) || vaultBgvClear,
         hrisActive: snapshotVersion !== undefined && currentCase[0] !== undefined && hasTrustedHrisActivationEvidence(hrisAttestations[0], {
           joiningDate: currentCase[0].joiningDate,
           snapshotVersion,

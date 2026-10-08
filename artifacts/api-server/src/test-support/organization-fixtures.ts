@@ -5,13 +5,18 @@ import { db, organizationsTable, hroContextAnchors, hroContextTransactions, hroC
  * Test-only fixture teardown. Production organization deletion remains
  * restricted by its foreign keys; do not weaken that boundary for tests.
  */
-export async function deleteTestOrganizations(predicate: SQL | undefined) {
+export async function deleteTestOrganizations(
+  predicate: SQL | undefined,
+  cleanup?: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], ids: string[]) => Promise<void>,
+) {
   if (!predicate) throw new Error("Test organization cleanup requires an explicit scope");
   return db.transaction(async tx => {
     const organizations = await tx.select({ id: organizationsTable.id })
       .from(organizationsTable).where(predicate).for("update");
     const ids = organizations.map(organization => organization.id);
     if (!ids.length) return;
+    // Keep bootstrap children and the parent deletion under the same FK lock.
+    if (cleanup) await cleanup(tx, ids);
     await tx.delete(hroContextRetentionState).where(inArray(hroContextRetentionState.organizationId, ids));
     await tx.delete(hroContextRetentionPolicies).where(inArray(hroContextRetentionPolicies.organizationId, ids));
     await tx.delete(hroContextSteps).where(inArray(hroContextSteps.organizationId, ids));
