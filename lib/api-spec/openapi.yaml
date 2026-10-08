@@ -89,6 +89,26 @@ paths:
       responses:
         "204": { description: Exact authenticated source result or idempotent replay }
         "403": { description: "Unapproved, forged, stale or conflicting source evidence" }
+  /vault/expiry-preferences:
+    patch:
+      operationId: updateVaultExpiryPreferences
+      tags: [employeeVault]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VaultExpiryPreferences" } } }
+      responses:
+        "200":
+          description: Independent employee notice preference
+          content: { application/json: { schema: { $ref: "#/components/schemas/VaultExpiryPreferences" } } }
+  /vault/expiry-notices/{id}/dismiss:
+    post:
+      operationId: dismissVaultExpiryNotice
+      tags: [employeeVault]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Notice dismissed for its owner }
+        "404": { description: Notice unavailable }
   /vault/documents:
     post:
       operationId: reserveVaultDocument
@@ -6705,8 +6725,10 @@ components:
         employeeBound: { type: boolean }
     VaultDashboard:
       type: object
-      required: [vaultId, documents, checks, requests, readiness, privacyNotice, policyRevision, policyJurisdiction]
+      required: [vaultId, documents, checks, requests, readiness, privacyNotice, policyRevision, policyJurisdiction, expiryNoticesEnabled, expiryNotices]
       properties:
+        expiryNoticesEnabled: { type: boolean }
+        expiryNotices: { type: array, items: { $ref: "#/components/schemas/VaultExpiryNotice" } }
         vaultId: { type: string }
         documents: { type: array, items: { $ref: "#/components/schemas/VaultDocument" } }
         checks: { type: array, items: { $ref: "#/components/schemas/VaultCheck" } }
@@ -6715,6 +6737,20 @@ components:
         privacyNotice: { type: string, nullable: true }
         policyRevision: { type: integer, nullable: true }
         policyJurisdiction: { type: string, nullable: true }
+    VaultExpiryPreferences:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+    VaultExpiryNotice:
+      type: object
+      required: [id, targetType, label, expiresAt]
+      properties:
+        id: { type: string }
+        targetType: { type: string, enum: [check, grant] }
+        label: { type: string }
+        expiresAt: { type: string }
     VaultProductInput:
       type: object
       additionalProperties: false

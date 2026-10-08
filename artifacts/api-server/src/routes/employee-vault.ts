@@ -17,6 +17,8 @@ import { VAULT_MAX_BYTES, VAULT_QUOTA_BYTES, VAULT_MAX_DOCUMENTS } from "../lib/
 import { acceptVaultSourceResult, authoritativeCheckIsCurrent } from "../lib/employee-vault/verification";
 import { shareProjection } from "../lib/employee-vault/reuse";
 import { configuredMalwareScanner } from "../lib/onboarding/malware-scanner";
+import { UpdateVaultExpiryPreferencesBody, UpdateVaultExpiryPreferencesResponse, DismissVaultExpiryNoticeParams } from "@workspace/api-zod";
+import { getExpiryInbox, setExpiryPreference, dismissExpiryNotice } from "../lib/employee-vault/expiry-notices";
 
 export const employeeVaultSourceRouter: IRouter = Router();
 employeeVaultSourceRouter.post("/vault/source-results", async (req, res, next) => {
@@ -70,9 +72,26 @@ router.get("/vault/profile", async (req, res, next) => {
       }
       return projection;
     }));
-    res.json({ vaultId: p.id, documents: documents.filter(d => d.state !== "deleted").map(documentProjection),
+    const expiryInbox = await getExpiryInbox(p.id, req.authUserId!);
+    res.json({ ...expiryInbox, vaultId: p.id, documents: documents.filter(d => d.state !== "deleted").map(documentProjection),
       checks: checkViews, requests: sharing.map(shareProjection), readiness,
       privacyNotice: policy?.privacyNotice ?? null, policyRevision: policy?.revision ?? null, policyJurisdiction: policy?.jurisdiction ?? null });
+  } catch (e) { next(e); }
+});
+router.patch("/vault/expiry-preferences", async (req, res, next) => {
+  try {
+    const parsed = UpdateVaultExpiryPreferencesBody.safeParse(req.body);
+    if (!parsed.success) return fail(400, "Invalid expiry notice preference.");
+    const p = await ownProfile(req.authUserId!);
+    res.json(UpdateVaultExpiryPreferencesResponse.parse(await setExpiryPreference(p.id, req.authUserId!, parsed.data.enabled)));
+  } catch (e) { next(e); }
+});
+router.post("/vault/expiry-notices/:id/dismiss", async (req, res, next) => {
+  try {
+    const { id } = DismissVaultExpiryNoticeParams.parse(req.params);
+    const p = await ownProfile(req.authUserId!);
+    await dismissExpiryNotice(p.id, req.authUserId!, id);
+    res.status(204).send();
   } catch (e) { next(e); }
 });
 router.post("/vault/documents", async (req, res, next) => {

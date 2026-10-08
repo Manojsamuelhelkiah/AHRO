@@ -318,6 +318,7 @@ import type {
   VaultDocument,
   VaultDocumentInput,
   VaultEmployerRequestInput,
+  VaultExpiryPreferences,
   VaultProductInput,
   VaultProductSettings,
   VaultReuse,
@@ -665,6 +666,136 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getAcceptVaultSourceResultMutationOptions(options));
+    }
+
+export const getUpdateVaultExpiryPreferencesUrl = () => {
+
+
+
+
+  return `/api/vault/expiry-preferences`
+}
+
+export const updateVaultExpiryPreferences = async (vaultExpiryPreferences: VaultExpiryPreferences, options?: RequestInit): Promise<VaultExpiryPreferences> => {
+
+  return customFetch<VaultExpiryPreferences>(getUpdateVaultExpiryPreferencesUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vaultExpiryPreferences)
+  }
+);}
+
+
+
+
+
+export const getUpdateVaultExpiryPreferencesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVaultExpiryPreferences>>, TError,{data: BodyType<VaultExpiryPreferences>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateVaultExpiryPreferences>>, TError,{data: BodyType<VaultExpiryPreferences>}, TContext> => {
+
+const mutationKey = ['updateVaultExpiryPreferences'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateVaultExpiryPreferences>>, {data: BodyType<VaultExpiryPreferences>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateVaultExpiryPreferences(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateVaultExpiryPreferencesMutationResult = NonNullable<Awaited<ReturnType<typeof updateVaultExpiryPreferences>>>
+    export type UpdateVaultExpiryPreferencesMutationBody = BodyType<VaultExpiryPreferences>
+    export type UpdateVaultExpiryPreferencesMutationError = ErrorType<unknown>
+
+    export const useUpdateVaultExpiryPreferences = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVaultExpiryPreferences>>, TError,{data: BodyType<VaultExpiryPreferences>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateVaultExpiryPreferences>>,
+        TError,
+        {data: BodyType<VaultExpiryPreferences>},
+        TContext
+      > => {
+      return useMutation(getUpdateVaultExpiryPreferencesMutationOptions(options));
+    }
+
+export const getDismissVaultExpiryNoticeUrl = (id: string,) => {
+
+
+
+
+  return `/api/vault/expiry-notices/${id}/dismiss`
+}
+
+export const dismissVaultExpiryNotice = async (id: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDismissVaultExpiryNoticeUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDismissVaultExpiryNoticeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dismissVaultExpiryNotice>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof dismissVaultExpiryNotice>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['dismissVaultExpiryNotice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof dismissVaultExpiryNotice>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  dismissVaultExpiryNotice(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DismissVaultExpiryNoticeMutationResult = NonNullable<Awaited<ReturnType<typeof dismissVaultExpiryNotice>>>
+
+    export type DismissVaultExpiryNoticeMutationError = ErrorType<void>
+
+    export const useDismissVaultExpiryNotice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dismissVaultExpiryNotice>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof dismissVaultExpiryNotice>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDismissVaultExpiryNoticeMutationOptions(options));
     }
 
 export const getReserveVaultDocumentUrl = () => {

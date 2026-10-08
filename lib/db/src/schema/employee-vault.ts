@@ -9,8 +9,23 @@ export type VaultEvidenceBinding = { id: string; revision: number; sha256: strin
 export const employeeVaultProfiles = pgTable("employee_vault_profiles", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().unique(),
+  expiryNoticesEnabled: boolean("expiry_notices_enabled").notNull().default(false),
   createdAt: date("created_at").notNull().defaultNow(),
 });
+/** Durable private inbox. No finding, recipient address, document or link payload. */
+export const employeeVaultExpiryNotices = pgTable("employee_vault_expiry_notices", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").notNull().references(() => employeeVaultProfiles.id),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  targetVersion: integer("target_version").notNull(),
+  expiresAt: date("expires_at").notNull(),
+  createdAt: date("created_at").notNull().defaultNow(),
+  dismissedAt: date("dismissed_at"),
+}, t => [
+  unique("vault_expiry_notice_generation_unique").on(t.profileId, t.targetType, t.targetId, t.targetVersion, t.expiresAt),
+  index("vault_expiry_notice_inbox_idx").on(t.profileId, t.dismissedAt),
+]);
 export const employeeVaultDocuments = pgTable("employee_vault_documents", {
   id: text("id").primaryKey(),
   profileId: text("profile_id").notNull().references(() => employeeVaultProfiles.id),

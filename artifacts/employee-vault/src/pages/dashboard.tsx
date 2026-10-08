@@ -10,6 +10,7 @@ import {
 import { AppHeader, StateBadge } from '@/components/vault-ui';
 import { UploadDialog } from '@/components/upload-dialog';
 import { RevokeButton } from '@/components/revoke-button';
+import { ExpiryNotices } from '@/components/expiry-notices';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -172,6 +173,7 @@ export default function Dashboard() {
               </div>
               <p className="mt-6 max-w-xl text-sm text-primary-foreground/70">Readiness reflects checks reported for you, not how many files you've stored.</p>
             </section>
+            <ExpiryNotices key={userId} dashboard={d} userId={userId} />
 
             {pending.length > 0 && (
               <section className="mt-6 rounded-3xl border border-accent bg-[hsl(36_95%_92%)] p-5" data-testid="section-outstanding">

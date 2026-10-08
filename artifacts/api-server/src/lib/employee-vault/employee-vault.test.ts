@@ -8,6 +8,7 @@ import {
   db, employeeVaultProfiles as profiles, employeeVaultDocuments as docs, employeeVaultChecks as checks,
   employeeVaultRequests as requests, employeeVaultReceipts as receipts, employeeVaultProducts as products,
   employeeVaultIssuers as issuers, employeeVaultPolicies as policies, employeeVaultAudit as audit,
+  employeeVaultExpiryNotices as expiryNotices,
   organizationsTable, organizationMembershipsTable, onbCases,
   onbGovernanceAuthorityAssignments, onbGovernanceDecisions, onbGovernanceDecisionReviews,
   onbApprovals, onbApprovalNotifications, onbEvents, onbConnectors, onbSettings,
@@ -124,6 +125,7 @@ before(async () => {
 });
 after(async () => {
   if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+  await db.delete(expiryNotices).where(inArray(expiryNotices.profileId, [profileA, profileB]));
   await db.delete(receipts).where(inArray(receipts.organizationId, [orgA, orgB]));
   await db.delete(requests).where(inArray(requests.organizationId, [orgA, orgB]));
   await db.delete(products).where(inArray(products.organizationId, [orgA, orgB]));
@@ -154,6 +156,37 @@ test("public identity authentication creates no employer membership, directory o
   assert.equal((await call("/employee-vault/settings", employeeA)).status, 403);
   assert.equal((await call(`/vault/documents/${docId}/bytes`, employeeB)).status, 404);
   assert.equal((await call(`/vault/documents/${docId}`, employeeB, "DELETE")).status, 404);
+});
+test("private expiry inbox opts in without membership, deduplicates, and rechecks grants, preference and ownership", async () => {
+  const check = randomUUID(), grant = randomUUID(), soon = new Date(Date.now() + 3 * 86400000);
+  await db.insert(checks).values({ id: check, profileId: profileA, kind: "reference",
+    jurisdiction: "IN", bindings: [], state: "clear", expiresAt: soon });
+  await db.insert(requests).values({ id: grant, organizationId: orgA, caseId: caseA,
+    employerName: "https://not-a-link.example/secret", purpose: "Synthetic grant",
+    scope: ["reference"], jurisdiction: "IN", requirementsDigest: "fixture", requestedBy: ownerA,
+    profileId: profileA, state: "approved", expiresAt: soon });
+  assert.equal((await call("/vault/profile", employeeA)).body.expiryNoticesEnabled, false);
+  assert.equal((await call("/vault/expiry-preferences", employeeA, "PATCH", { enabled: "true" })).status, 400);
+  assert.equal((await call("/vault/expiry-preferences", employeeA, "PATCH", { enabled: true })).body.enabled, true);
+  await runEmployeeVaultTick({ profileId: profileA });
+  await runEmployeeVaultTick({ profileId: profileA });
+  const inbox = (await call("/vault/profile", employeeA)).body.expiryNotices;
+  assert.equal(inbox.length, 2);
+  assert(!JSON.stringify(inbox).includes("not-a-link"));
+  assert(!JSON.stringify(inbox).includes("Synthetic grant"));
+  assert.equal((await call("/vault/profile", employeeB)).body.expiryNotices.length, 0);
+  assert.equal((await call(`/vault/expiry-notices/${inbox[0].id}/dismiss`, employeeB, "POST")).status, 404);
+  assert.equal((await call(`/vault/expiry-notices/${inbox[0].id}/dismiss`, employeeA, "POST")).status, 204);
+  await runEmployeeVaultTick({ profileId: profileA });
+  assert.equal((await call("/vault/profile", employeeA)).body.expiryNotices.length, 1);
+  await db.update(requests).set({ state: "revoked", version: 2 }).where(eq(requests.id, grant));
+  await db.update(checks).set({ expiresAt: new Date(Date.now() + 40 * 86400000) }).where(eq(checks.id, check));
+  assert.equal((await call("/vault/profile", employeeA)).body.expiryNotices.length, 0);
+  assert.equal((await call("/vault/expiry-preferences", employeeA, "PATCH", { enabled: false })).body.enabled, false);
+  assert.equal((await call("/vault/profile", employeeA)).body.expiryNotices.length, 0);
+  assert.equal((await db.select().from(expiryNotices).where(eq(expiryNotices.profileId, profileA))).length, 2);
+  await db.delete(requests).where(eq(requests.id, grant));
+  await db.delete(checks).where(eq(checks.id, check));
 });
 test("source authenticity binds subject, exact revision, issuer, jurisdiction, outcome and expiry", () => {
   assert.equal(allRequiredChecks(["identity"], ["identity"]), false, "Identity alone is never full BGV");

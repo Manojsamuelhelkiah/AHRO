@@ -72,3 +72,4 @@
 - [Context retention boundaries](context-retention-boundaries.md) — opaque subjects require conservative tenant holds; stale unfinished work must not be inferred abandoned for pruning.
 - [Browser regression runtime](browser-regression-runtime.md) — UI tester and workspace Playwright have independent browser/recorder installations; setup failures do not justify skipped validation.
 - [Independent employee Vault](independent-employee-vault.md) — personal ownership without membership; all-required BGV reuse; privacy withdrawal must not depend on new collection approval.
+- [Vault expiry notice boundaries](vault-expiry-notice-boundaries.md) — independent opt-in in-app notices; never infer email identity or treat notification as renewal.

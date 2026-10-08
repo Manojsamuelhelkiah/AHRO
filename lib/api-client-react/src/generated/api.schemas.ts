@@ -170,7 +170,24 @@ export interface VaultShareRequest {
   employeeBound?: boolean;
 }
 
+export type VaultExpiryNoticeTargetType = typeof VaultExpiryNoticeTargetType[keyof typeof VaultExpiryNoticeTargetType];
+
+
+export const VaultExpiryNoticeTargetType = {
+  check: 'check',
+  grant: 'grant',
+} as const;
+
+export interface VaultExpiryNotice {
+  id: string;
+  targetType: VaultExpiryNoticeTargetType;
+  label: string;
+  expiresAt: string;
+}
+
 export interface VaultDashboard {
+  expiryNoticesEnabled: boolean;
+  expiryNotices: VaultExpiryNotice[];
   vaultId: string;
   documents: VaultDocument[];
   checks: VaultCheck[];
@@ -179,6 +196,10 @@ export interface VaultDashboard {
   privacyNotice: string | null;
   policyRevision: number | null;
   policyJurisdiction: string | null;
+}
+
+export interface VaultExpiryPreferences {
+  enabled: boolean;
 }
 
 export interface VaultProductInput {

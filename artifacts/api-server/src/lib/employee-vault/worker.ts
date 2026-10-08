@@ -7,6 +7,7 @@ import { auditVault, liveVaultPolicy, vaultWrite, invalidateDocumentChecks, inva
 import { VAULT_MAX_BYTES } from "./policy";
 import { evaluateVaultReuse } from "./reuse";
 import { onbCases } from "@workspace/db";
+import { runExpiryNoticeTick } from "./expiry-notices";
 
 /** Durable queue driven by the existing supported heartbeat, not a new timer. */
 export async function runEmployeeVaultTick(options: {
@@ -21,6 +22,7 @@ export async function runEmployeeVaultTick(options: {
     if (!p?.userId.startsWith("vault-test-employee-")) throw new Error("Synthetic worker adapters are restricted to explicitly named test-only profiles.");
   }
   const now = new Date();
+  await runExpiryNoticeTick(options.profileId);
   const scope = options.profileId ? eq(docs.profileId, options.profileId) : undefined;
   const expiredRequests = await db.select().from(requests).where(and(
     options.profileId ? eq(requests.profileId, options.profileId) : undefined,

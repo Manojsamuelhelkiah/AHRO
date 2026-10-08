@@ -92,6 +92,13 @@ export const SaveHroContextRetentionResponse = zod.object({
 
 
 export const GetVaultDashboardResponse = zod.object({
+  "expiryNoticesEnabled": zod.boolean(),
+  "expiryNotices": zod.array(zod.object({
+  "id": zod.string(),
+  "targetType": zod.enum(['check', 'grant']),
+  "label": zod.string(),
+  "expiresAt": zod.string()
+})),
   "vaultId": zod.string(),
   "documents": zod.array(zod.object({
   "id": zod.string(),
@@ -167,6 +174,22 @@ export const AcceptVaultSourceResultBody = zod.object({
 })
 
 export const AcceptVaultSourceResultResponse = zod.void()
+
+
+export const UpdateVaultExpiryPreferencesBody = zod.object({
+  "enabled": zod.boolean()
+})
+
+export const UpdateVaultExpiryPreferencesResponse = zod.object({
+  "enabled": zod.boolean()
+})
+
+
+export const DismissVaultExpiryNoticeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DismissVaultExpiryNoticeResponse = zod.void()
 
 
 export const reserveVaultDocumentBodyNameMax = 200;
