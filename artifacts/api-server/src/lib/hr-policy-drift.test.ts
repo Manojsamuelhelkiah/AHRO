@@ -4,6 +4,7 @@ import { before, after, test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { db, onbSettings, organizationsTable, organizationMembershipsTable, onbGovernanceAuthorityAssignments } from "@workspace/db";
 import { deleteTestOrganizations } from "../test-support/organization-fixtures";
+import { buildDriftFaultWorker, runDriftFaultWorker, type FaultStage } from "../test-support/drift-fault-harness";
 import { benchmarkHash, benchmarkProvenance, LIVE_LIMITS, type BenchmarkSelector } from "./hr-policy-benchmark";
 import { DRIFT_KEY, DRIFT_CONFIRMATION, comparePolicyDrift, eligibleDriftBaseline, type DriftEvidence } from "./hr-policy-drift";
 import { configurePolicyDrift, runPolicyDriftTick, policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark, REVIEW_CONFIRMATION, LIVE_CONFIRMATION } from "./hr-policy-evaluation";
@@ -106,7 +107,7 @@ test("separate consent requires reviewer, eligible baseline and strict fictional
   await tick(async (...args) => { calls++; return correct(...args); });
   assert.equal(calls, 0); // not due
   await due();
-  await runPolicyDriftTick(); // production worker skips durable isolated fixture
+  await runPolicyDriftTick(undefined, org); // production mode skips fixture; never scan other tenants
   assert.equal((await programme()).checksReserved, 0);
   await stop();
 });
@@ -156,6 +157,70 @@ test("interrupted reservations are unfinished without redispatch and consent exp
   await put(DRIFT_KEY, { ...next, expiresAt: new Date(0).toISOString(), nextDueAt: new Date(0).toISOString() });
   await tick(async () => { throw new Error("expired spend"); });
   assert.equal((await programme()).status, "expired");
+});
+test("SIGKILL at each dispatch boundary survives worker restart without redispatch or refunded reservations", { timeout: 180_000 }, async () => {
+  const worker = await buildDriftFaultWorker();
+  const otherOrg = `drift-fixture-${randomUUID()}`;
+  try {
+    await db.insert(organizationsTable).values({ id: otherOrg, name: "Fictional untouched drift sentinel",
+      slug: otherOrg, joinCodeHash: otherOrg, createdByUserId: owner });
+    const stages: FaultStage[] = ["reserved", "dispatched", "receipt", "before-finalization"];
+    for (const stage of stages) {
+      await put("policy-evaluation:live-budget", { day: new Date().toISOString().slice(0, 10), count: 1, activeUntil: 0 });
+      const p = await approve();
+      await due();
+      assert.equal(p.providerIsolated, true, "Persist isolation before any child or live worker can select the programme");
+      const sentinel = { ...p, nextDueAt: new Date(0).toISOString() };
+      await db.insert(onbSettings).values({ organizationId: otherOrg, key: DRIFT_KEY, value: JSON.stringify(sentinel) })
+        .onConflictDoUpdate({ target: [onbSettings.organizationId, onbSettings.key], set: { value: JSON.stringify(sentinel) } });
+      const messages = await runDriftFaultWorker(worker.workerPath, org, stage);
+      const dispatches = stage === "reserved" ? 0 : stage === "before-finalization" ? LIVE_LIMITS.calls : 1;
+      const receipts = stage === "reserved" || stage === "dispatched" ? 0 : stage === "before-finalization" ? LIVE_LIMITS.calls : 1;
+      assert.equal(messages.filter(m => m.kind === "dispatch").length, dispatches, stage);
+      assert.equal(messages.filter(m => m.kind === "receipt").length, receipts, stage);
+      assert.ok(messages.filter(m => m.kind === "dispatch" || m.kind === "receipt").every(m => m.org === org));
+      const reserved = await programme();
+      assert.equal(reserved.checksReserved, 1, stage);
+      assert.notEqual(reserved.latestRunId, null);
+      const [budgetRow] = await db.select().from(onbSettings).where(keyWhere("policy-evaluation:live-budget"));
+      const budget = JSON.parse(budgetRow.value);
+      assert.equal(budget.count, 2, "One reservation shares the manual live daily budget");
+      const runKey = `policy-evaluation:run:${reserved.latestRunId}`;
+      const catalog = await policyEvaluationCatalog(org, actor);
+      const running = catalog.runs.find(r => r.runId === reserved.latestRunId)!;
+      assert.equal(running.status, "running", "SIGKILL must not execute finalization");
+      // A fresh process must not resend even before the ambiguity window expires.
+      const immediate = await runDriftFaultWorker(worker.workerPath, org, "recover");
+      assert.equal(immediate.filter(m => m.kind === "dispatch" || m.kind === "receipt").length, 0);
+      assert.deepEqual(await programme(), reserved);
+      // Advance only this owned run's timestamp, not budget/consent, to avoid a real-time wait.
+      await put(runKey, { ...running, createdAt: new Date(0).toISOString() });
+      for (let restart = 0; restart < 2; restart++) {
+        const recovery = await runDriftFaultWorker(worker.workerPath, org, "recover");
+        assert.equal(recovery.filter(m => m.kind === "dispatch" || m.kind === "receipt").length, 0);
+        const visible = await policyEvaluationCatalog(org, actor);
+        assert.equal(visible.drift.programme!.status, "paused");
+        assert.equal(visible.drift.programme!.checksReserved, 1);
+        assert.equal(visible.drift.programme!.latestRunId, reserved.latestRunId);
+        assert.match(visible.drift.programme!.warning!, /unfinished.*reservation consumed.*No automatic retry/i);
+        assert.equal(visible.currentLiveEvidence, false);
+        const unfinished = visible.runs.find(r => r.runId === reserved.latestRunId)!;
+        assert.equal(unfinished.status, "unfinished");
+        assert.equal(unfinished.authorizationCurrent, false);
+        assert.equal(unfinished.comparison, undefined, "Unfinished receipts must not imply a completed drift verdict");
+      }
+      const [afterBudget] = await db.select().from(onbSettings).where(keyWhere("policy-evaluation:live-budget"));
+      assert.deepEqual(JSON.parse(afterBudget.value), budget, "Recovery must neither refund nor spend shared daily budget");
+      const [untouched] = await db.select().from(onbSettings).where(and(eq(onbSettings.organizationId, otherOrg), eq(onbSettings.key, DRIFT_KEY)));
+      assert.deepEqual(JSON.parse(untouched.value), sentinel, "Child workers must never claim another fixture tenant");
+      await runPolicyDriftTick(undefined, org);
+      assert.equal((await programme()).checksReserved, 1, "Production workers cannot dispatch isolated fixture programmes");
+    }
+  } finally {
+    await worker.dispose();
+    await db.delete(onbSettings).where(eq(onbSettings.organizationId, otherOrg));
+    await deleteTestOrganizations(eq(organizationsTable.id, otherOrg));
+  }
 });
 test("at most three checks consume durable programme reservations, and provider changes warn despite passing answers", async () => {
   await put("policy-evaluation:live-budget", { day: "old", count: 0, activeUntil: 0 });

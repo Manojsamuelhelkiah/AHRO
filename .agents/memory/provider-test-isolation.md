@@ -48,3 +48,14 @@ isolated test is executing, causing intermittent foreign-key teardown failures.
 
 **How to apply:** Apply this only to explicitly scoped synthetic fixtures;
 never disable production foreign keys or append-only history guards.
+
+Crash regressions must count fake provider dispatches and receipts outside the
+process being terminated.
+
+**Why:** A killed worker loses its counters and in-memory receipts. Observing
+only the restarted worker can falsely report no duplicate calls while missing
+what the original worker already sent.
+
+**How to apply:** Keep a surviving parent-side transport ledger, confirm a real
+hard-kill exit, and inspect both immediate recovery and recovery after the
+ambiguity window without refunding or rewriting budget reservations.

@@ -12,6 +12,8 @@ import { withoutHroContext } from "./hro-context/core";
 const REVIEW_KEY = "policy-evaluation:review";
 const SLOT_KEY = "policy-evaluation:live-budget";
 const RUN_PREFIX = "policy-evaluation:run:";
+/** In-process fault injection only; never supplied by routes or the heartbeat. */
+export type DriftTestCheckpoint = (stage: "reserved" | "before-finalization") => Promise<void>;
 export const REVIEW_CONFIRMATION = "I reviewed every synthetic question, paraphrase and translation for semantic equivalence, and checked its source, audience, dates, expected quote, outcome and abstention.";
 export const LIVE_CONFIRMATION = "Run the approved synthetic benchmark against the real model within the displayed budget.";
 type Review = { reviewId: string; benchmarkHash: string; decision: "approved" | "rejected"; reviewer: string; reviewedAt: string; authorityId: number; reference: string };
@@ -84,7 +86,8 @@ export async function reviewPolicyBenchmark(org: string, actor: string, input: u
     return { review };
   });
 }
-export async function runPolicyBenchmark(org: string, actor: string, input: unknown, testSelector?: BenchmarkSelector, programmeId?: string) {
+export async function runPolicyBenchmark(org: string, actor: string, input: unknown, testSelector?: BenchmarkSelector, programmeId?: string, testCheckpoint?: DriftTestCheckpoint) {
+  if (testCheckpoint && (!testSelector || !programmeId)) throw new Error("Drift fault injection requires an isolated programme and fake transport.");
   const body = bodyRecord(input, ["benchmarkHash", "mode", "confirmation", "requestId"]);
   if (body.benchmarkHash !== benchmarkHash()) throw new HrPolicyError("The benchmark changed; refresh before running.", 409);
   if ((body.mode !== "offline" && body.mode !== "live") || typeof body.requestId !== "string" || !/^[a-zA-Z0-9-]{8,80}$/.test(body.requestId)) throw new HrPolicyError("A valid run mode and request id are required.");
@@ -130,6 +133,7 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
     return { existing: null, review, baselineRunId: programme?.baselineRunId };
   });
   if (reserved.existing) return { run: reserved.existing };
+  await testCheckpoint?.("reserved");
   const authorize = () => db.transaction(async tx => {
     await fence(tx, org);
     await verifiedAuthority(tx, org, actor, "hr-compliance");
@@ -149,6 +153,7 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
     ...report, providerReceipts, providerIsolated: Boolean(testSelector), authorizationCurrent, runId: body.requestId, actor, review: reserved.review,
     status: authorizationCurrent && report.failed === 0 && report.pairedFailed === 0 ? "passed" : "failed",
   };
+  await testCheckpoint?.("before-finalization");
   await db.transaction(async tx => {
     await fence(tx, org);
     if (programmeId) {
@@ -226,10 +231,11 @@ export async function configurePolicyDrift(org: string, actor: string, input: un
 }
 
 /** Only the runtime heartbeat calls this; builds, catalog reads and publication never dispatch. */
-export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isolatedOrg?: string) {
+export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isolatedOrg?: string, testCheckpoint?: DriftTestCheckpoint) {
   if (testSelector && !isolatedOrg) throw new Error("Isolated drift workers require their fixture tenant.");
+  if (testCheckpoint && !testSelector) throw new Error("Drift fault injection requires fake transport.");
   const rows = await db.select().from(onbSettings).where(and(eq(onbSettings.key, DRIFT_KEY),
-    testSelector ? eq(onbSettings.organizationId, isolatedOrg!) : undefined))
+    isolatedOrg ? eq(onbSettings.organizationId, isolatedOrg) : undefined))
     .orderBy(onbSettings.updatedAt);
   for (const row of rows) {
     const p = JSON.parse(row.value) as DriftProgramme;
@@ -262,7 +268,7 @@ export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isola
         organizationId: org, workflow: "hr-policy", subjectType: "tenant", subjectId: org,
         initiatingUserId: p.actor, executor: { type: "system" },
       }, () => runPolicyBenchmark(org, p.actor, { benchmarkHash: benchmarkHash(), mode: "live",
-        requestId: randomUUID(), confirmation: LIVE_CONFIRMATION }, testSelector, p.programmeId)));
+        requestId: randomUUID(), confirmation: LIVE_CONFIRMATION }, testSelector, p.programmeId, testCheckpoint)));
     } catch (error) {
       // Budget contention is visible, not silently reported as stability.
       await db.transaction(async tx => {
