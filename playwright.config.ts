@@ -1,4 +1,12 @@
 import { defineConfig } from "@playwright/test";
+import { existsSync } from "node:fs";
+
+// Nix environments provide a runnable Chromium; Playwright's downloaded Linux
+// binary is not always present or compatible. Other environments keep the
+// standard Playwright-managed browser unless an explicit override is supplied.
+const chromiumExecutable =
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
+  (existsSync("/repl/tools/bin/chromium") ? "/repl/tools/bin/chromium" : undefined);
 
 export default defineConfig({
   testDir: "./browser-regression",
@@ -10,6 +18,7 @@ export default defineConfig({
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: "http://127.0.0.1:4177",
+    launchOptions: chromiumExecutable ? { executablePath: chromiumExecutable } : {},
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

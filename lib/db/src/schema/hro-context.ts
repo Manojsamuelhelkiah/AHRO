@@ -1,4 +1,4 @@
-import { foreignKey, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { organizationsTable } from "./organizations";
 
@@ -41,6 +41,8 @@ export const hroContextTransactions = pgTable("hro_context_transactions", {
   uniqueIndex("hro_context_transaction_org_id_unique").on(table.organizationId, table.id),
   index("hro_context_transactions_actor_idx").on(table.organizationId, table.initiatingUserId, table.startedAt),
   index("hro_context_transactions_anchor_idx").on(table.organizationId, table.anchorId, table.startedAt),
+  index("hro_context_transactions_correlation_idx").on(table.organizationId, table.correlationId),
+  index("hro_context_transactions_parent_idx").on(table.organizationId, table.parentTransactionId),
 ]);
 
 export const hroContextSteps = pgTable("hro_context_steps", {
@@ -65,3 +67,32 @@ export const insertHroContextTransactionSchema = createInsertSchema(hroContextTr
 export const insertHroContextStepSchema = createInsertSchema(hroContextSteps);
 export type HroContextAnchor = typeof hroContextAnchors.$inferSelect;
 export type HroContextTransaction = typeof hroContextTransactions.$inferSelect;
+
+/** Append-only reviewed rules, separate from disposable execution metadata. No seeded approval. */
+export const hroContextRetentionPolicies = pgTable("hro_context_retention_policies", {
+  id: serial("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  revision: integer("revision").notNull(),
+  enabled: boolean("enabled").notNull(),
+  retentionDays: integer("retention_days").notNull(),
+  purpose: text("purpose").notNull(),
+  lawfulBasis: text("lawful_basis").notNull(),
+  policyReference: text("policy_reference").notNull(),
+  approvalReference: text("approval_reference").notNull(),
+  approvedByUserId: text("approved_by_user_id").notNull(),
+  approvedAuthorityAssignmentId: integer("approved_authority_assignment_id").notNull(),
+  approvedAt: timestamp("approved_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex("hro_context_retention_revision_unique").on(table.organizationId, table.revision),
+]);
+
+/** Durable bounded-sweep status; no subjects or principal IDs. */
+export const hroContextRetentionState = pgTable("hro_context_retention_state", {
+  organizationId: text("organization_id").primaryKey().references(() => organizationsTable.id),
+  lastSweepAt: timestamp("last_sweep_at", { withTimezone: true }).notNull(),
+  policyRevision: integer("policy_revision").notNull(),
+  outcome: text("outcome").notNull(),
+  transactionsPruned: integer("transactions_pruned").notNull().default(0),
+  stepsPruned: integer("steps_pruned").notNull().default(0),
+  anchorsPruned: integer("anchors_pruned").notNull().default(0),
+});

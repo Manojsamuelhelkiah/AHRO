@@ -5,6 +5,65 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface HroContextRetentionInput {
+  expectedRevision: number;
+  enabled: boolean;
+  /** Server enforces integer days from 0 through 3650. No automatic default is approved. */
+  retentionDays: number;
+  purpose: string;
+  lawfulBasis: string;
+  policyReference: string;
+  approvalReference: string;
+  confirmPruning: boolean;
+}
+
+export interface HroContextRetentionPolicy {
+  revision: number;
+  enabled: boolean;
+  retentionDays: number;
+  purpose: string;
+  lawfulBasis: string;
+  policyReference: string;
+  approvalReference: string;
+  approvedAt: string;
+}
+
+export type HroContextRetentionStatusStatus = typeof HroContextRetentionStatusStatus[keyof typeof HroContextRetentionStatusStatus];
+
+
+export const HroContextRetentionStatusStatus = {
+  'approval-required': 'approval-required',
+  paused: 'paused',
+  held: 'held',
+  approved: 'approved',
+} as const;
+
+export type HroContextRetentionStatusLimits = {
+  organizations: number;
+  correlations: number;
+  transactions: number;
+  steps: number;
+  anchors: number;
+};
+
+export type HroContextRetentionStatusLastSweep = {
+  lastSweepAt: string;
+  policyRevision: number;
+  outcome: string;
+  transactionsPruned: number;
+  stepsPruned: number;
+  anchorsPruned: number;
+} | null;
+
+export interface HroContextRetentionStatus {
+  policy: HroContextRetentionPolicy | null;
+  status: HroContextRetentionStatusStatus;
+  holdActive: boolean;
+  safeguards: string;
+  limits: HroContextRetentionStatusLimits;
+  lastSweep: HroContextRetentionStatusLastSweep;
+}
+
 export type HroContextWorkflow = typeof HroContextWorkflow[keyof typeof HroContextWorkflow];
 
 

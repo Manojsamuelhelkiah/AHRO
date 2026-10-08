@@ -4958,7 +4958,8 @@ const watcherTick = async (req: Request, res: Response) => {
     res.json({ ran: false, reason: "throttled" });
     return;
   }
-  const [systemWatcher, emailWatch, inboundEmail, approverInbox, scenarioFiles, candidateAccess, connectedReadiness] = await Promise.all([
+  const { runContextRetentionTick } = await import("../lib/hro-context/retention");
+  const [systemWatcher, emailWatch, inboundEmail, approverInbox, scenarioFiles, candidateAccess, connectedReadiness, contextRetention] = await Promise.all([
     runSystemWatcherTick(),
     runEmailWatchTick(),
     runInboundEmailTick(),
@@ -4966,6 +4967,7 @@ const watcherTick = async (req: Request, res: Response) => {
     runScenarioFileMaintenance(),
     runCandidateAccessCleanup(),
     runConnectedReadinessTick(),
+    runContextRetentionTick(),
   ]);
   res.json({
     ran: true,
@@ -4977,6 +4979,7 @@ const watcherTick = async (req: Request, res: Response) => {
     scenarioFiles,
     candidateAccess,
     connectedReadiness,
+    contextRetention,
   });
 };
 

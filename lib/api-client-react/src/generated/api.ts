@@ -126,6 +126,8 @@ import type {
   HrPolicySupersedeInput,
   HrPolicyVersionDetailResponse,
   HroContextHistory,
+  HroContextRetentionInput,
+  HroContextRetentionStatus,
   ImportScenarioWorkbookBody,
   ImportWorkbookResult,
   IntentCorpus,
@@ -365,6 +367,156 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetHroContextRetentionUrl = () => {
+
+
+
+
+  return `/api/context-manager/retention`
+}
+
+/**
+ * Requires current server-verified privacy or legal authority and current tenant membership. No default approval is created.
+ * @summary Read metadata retention policy and bounded sweep status
+ */
+export const getHroContextRetention = async ( options?: RequestInit): Promise<HroContextRetentionStatus> => {
+
+  return customFetch<HroContextRetentionStatus>(getGetHroContextRetentionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHroContextRetentionQueryKey = () => {
+    return [
+    `/api/context-manager/retention`
+    ] as const;
+    }
+
+
+export const getGetHroContextRetentionQueryOptions = <TData = Awaited<ReturnType<typeof getHroContextRetention>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHroContextRetention>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHroContextRetentionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHroContextRetention>>> = ({ signal }) => getHroContextRetention({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHroContextRetention>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHroContextRetentionQueryResult = NonNullable<Awaited<ReturnType<typeof getHroContextRetention>>>
+export type GetHroContextRetentionQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read metadata retention policy and bounded sweep status
+ */
+
+export function useGetHroContextRetention<TData = Awaited<ReturnType<typeof getHroContextRetention>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHroContextRetention>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHroContextRetentionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveHroContextRetentionUrl = () => {
+
+
+
+
+  return `/api/context-manager/retention`
+}
+
+/**
+ * Requires current verified privacy or legal authority. Enabling requires explicit irreversible-pruning confirmation and an approval reference. Optimistic revision checks and the shared lifecycle fence serialize approval, holds and deletion.
+ * @summary Record a new reviewed metadata retention revision or pause pruning
+ */
+export const saveHroContextRetention = async (hroContextRetentionInput: HroContextRetentionInput, options?: RequestInit): Promise<HroContextRetentionStatus> => {
+
+  return customFetch<HroContextRetentionStatus>(getSaveHroContextRetentionUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hroContextRetentionInput)
+  }
+);}
+
+
+
+
+
+export const getSaveHroContextRetentionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveHroContextRetention>>, TError,{data: BodyType<HroContextRetentionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveHroContextRetention>>, TError,{data: BodyType<HroContextRetentionInput>}, TContext> => {
+
+const mutationKey = ['saveHroContextRetention'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveHroContextRetention>>, {data: BodyType<HroContextRetentionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveHroContextRetention(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveHroContextRetentionMutationResult = NonNullable<Awaited<ReturnType<typeof saveHroContextRetention>>>
+    export type SaveHroContextRetentionMutationBody = BodyType<HroContextRetentionInput>
+    export type SaveHroContextRetentionMutationError = ErrorType<void>
+
+    /**
+ * @summary Record a new reviewed metadata retention revision or pause pruning
+ */
+export const useSaveHroContextRetention = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveHroContextRetention>>, TError,{data: BodyType<HroContextRetentionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveHroContextRetention>>,
+        TError,
+        {data: BodyType<HroContextRetentionInput>},
+        TContext
+      > => {
+      return useMutation(getSaveHroContextRetentionMutationOptions(options));
+    }
 
 export const getListHroContextTransactionsUrl = (params?: ListHroContextTransactionsParams,) => {
   const normalizedParams = new URLSearchParams();

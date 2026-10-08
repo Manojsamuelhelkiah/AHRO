@@ -43,6 +43,34 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /context-manager/retention:
+    get:
+      operationId: getHroContextRetention
+      tags: [onboarding]
+      summary: Read metadata retention policy and bounded sweep status
+      description: Requires current server-verified privacy or legal authority and current tenant membership. No default approval is created.
+      responses:
+        "200":
+          description: Reviewed policy, hold state and latest sweep status
+          content: { application/json: { schema: { $ref: "#/components/schemas/HroContextRetentionStatus" } } }
+        "401": { description: Authentication required }
+        "403": { description: Verified privacy or legal authority required }
+    put:
+      operationId: saveHroContextRetention
+      tags: [onboarding]
+      summary: Record a new reviewed metadata retention revision or pause pruning
+      description: Requires current verified privacy or legal authority. Enabling requires explicit irreversible-pruning confirmation and an approval reference. Optimistic revision checks and the shared lifecycle fence serialize approval, holds and deletion.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/HroContextRetentionInput" } } }
+      responses:
+        "200":
+          description: Newly recorded reviewed policy and current status
+          content: { application/json: { schema: { $ref: "#/components/schemas/HroContextRetentionStatus" } } }
+        "400": { description: Invalid rule or missing explicit pruning confirmation }
+        "401": { description: Authentication required }
+        "403": { description: Verified privacy or legal authority required }
+        "409": { description: Policy revision changed; reload and review }
   /context-manager/transactions:
     get:
       operationId: listHroContextTransactions
@@ -6411,6 +6439,60 @@ components:
         type: integer
         minimum: 1
   schemas:
+    HroContextRetentionInput:
+      type: object
+      required: [expectedRevision, enabled, retentionDays, purpose, lawfulBasis, policyReference, approvalReference, confirmPruning]
+      properties:
+        expectedRevision: { type: integer }
+        enabled: { type: boolean }
+        retentionDays: { type: integer, description: "Server enforces integer days from 0 through 3650. No automatic default is approved." }
+        purpose: { type: string }
+        lawfulBasis: { type: string }
+        policyReference: { type: string }
+        approvalReference: { type: string }
+        confirmPruning: { type: boolean }
+    HroContextRetentionPolicy:
+      type: object
+      required: [revision, enabled, retentionDays, purpose, lawfulBasis, policyReference, approvalReference, approvedAt]
+      properties:
+        revision: { type: integer }
+        enabled: { type: boolean }
+        retentionDays: { type: integer }
+        purpose: { type: string }
+        lawfulBasis: { type: string }
+        policyReference: { type: string }
+        approvalReference: { type: string }
+        approvedAt: { type: string, format: date-time }
+    HroContextRetentionStatus:
+      type: object
+      required: [policy, status, holdActive, lastSweep, safeguards, limits]
+      properties:
+        policy:
+          allOf: [{ $ref: "#/components/schemas/HroContextRetentionPolicy" }]
+          nullable: true
+        status: { type: string, enum: [approval-required, paused, held, approved] }
+        holdActive: { type: boolean }
+        safeguards: { type: string }
+        limits:
+          type: object
+          required: [organizations, correlations, transactions, steps, anchors]
+          properties:
+            organizations: { type: integer }
+            correlations: { type: integer }
+            transactions: { type: integer }
+            steps: { type: integer }
+            anchors: { type: integer }
+        lastSweep:
+          type: object
+          nullable: true
+          required: [lastSweepAt, policyRevision, outcome, transactionsPruned, stepsPruned, anchorsPruned]
+          properties:
+            lastSweepAt: { type: string, format: date-time }
+            policyRevision: { type: integer }
+            outcome: { type: string }
+            transactionsPruned: { type: integer }
+            stepsPruned: { type: integer }
+            anchorsPruned: { type: integer }
     HroContextHistory:
       type: object
       required: [available, operatorAvailable, transactions]

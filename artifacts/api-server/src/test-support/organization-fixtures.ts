@@ -1,5 +1,5 @@
 import { inArray, type SQL } from "drizzle-orm";
-import { db, organizationsTable, hroContextAnchors, hroContextTransactions, hroContextSteps } from "@workspace/db";
+import { db, organizationsTable, hroContextAnchors, hroContextTransactions, hroContextSteps, hroContextRetentionPolicies, hroContextRetentionState } from "@workspace/db";
 
 /**
  * Test-only fixture teardown. Production organization deletion remains
@@ -12,6 +12,8 @@ export async function deleteTestOrganizations(predicate: SQL | undefined) {
       .from(organizationsTable).where(predicate).for("update");
     const ids = organizations.map(organization => organization.id);
     if (!ids.length) return;
+    await tx.delete(hroContextRetentionState).where(inArray(hroContextRetentionState.organizationId, ids));
+    await tx.delete(hroContextRetentionPolicies).where(inArray(hroContextRetentionPolicies.organizationId, ids));
     await tx.delete(hroContextSteps).where(inArray(hroContextSteps.organizationId, ids));
     await tx.delete(hroContextTransactions).where(inArray(hroContextTransactions.organizationId, ids));
     await tx.delete(hroContextAnchors).where(inArray(hroContextAnchors.organizationId, ids));

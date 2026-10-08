@@ -6,6 +6,7 @@ import {
   type ListHroContextTransactionsParams, HroContextWorkflow, type HroContextHistoryItem,
 } from '@workspace/api-client-react';
 import { Button, Card, CardContent } from '@/components/ui-shared';
+import { ContextRetentionSettings } from './settings-context-retention';
 
 export function ContextManagerSettingsCard() {
   const { userId } = useAuth();
@@ -48,6 +49,7 @@ export function ContextManagerSettingsCard() {
           Confirmed failure means the attempt recorded an error, not that all provider effects failed.
           This read-only view cannot retry business workflows or replay provider actions.
         </p>
+        <ContextRetentionSettings />
         <div className="flex flex-wrap gap-3 items-end">
           <label className="text-xs space-y-1">History view
             <select aria-label="History view" className="block rounded border bg-background p-2 min-h-11"

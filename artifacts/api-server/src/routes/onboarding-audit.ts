@@ -1,3 +1,4 @@
+import { lockHroContextRetention } from "../lib/hro-context/retention-lock";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -408,6 +409,9 @@ router.post("/onboarding/audit/lifecycle/legal-hold", async (req, res, next) => 
     const organizationId = getOrganizationId(req);
     const now = new Date();
     await db.transaction(async (tx) => {
+      // Context metadata conservatively honors this tenant hold too. Serialize
+      // the hold transition with pruning before mutating the lifecycle row.
+      await lockHroContextRetention(tx, organizationId);
       const set = action === "set"
         ? {
             legalHoldActive: true, legalHoldReason: reason, legalHoldSetBy: req.authUserId!,

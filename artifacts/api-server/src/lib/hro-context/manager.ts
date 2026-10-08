@@ -6,11 +6,22 @@ import {
   HRO_CONTEXT_STEP_CODES, type HroContextFrame, type HroContextSeed, type HroContextStepCode, type HroWorkflow,
 } from "./core";
 import { checkHroAiBudget } from "./ai-budget";
+import { lockHroContextRetention } from "./retention-lock";
 
 export async function openHroContext(seed: HroContextSeed): Promise<HroContextFrame> {
   // Validate parent boundaries before doing any persistence.
   const proposed = makeHroContextFrame(seed, randomUUID());
   return db.transaction(async (tx) => {
+    await lockHroContextRetention(tx, proposed.organizationId);
+    if (proposed.parentTransactionId) {
+      const [parent] = await tx.select({ id: hroContextTransactions.id }).from(hroContextTransactions).where(and(
+        eq(hroContextTransactions.organizationId, proposed.organizationId),
+        eq(hroContextTransactions.id, proposed.parentTransactionId),
+        eq(hroContextTransactions.correlationId, proposed.correlationId),
+        eq(hroContextTransactions.status, "running"),
+      ));
+      if (!parent) throw new Error("HRO_CONTEXT_PARENT_UNAVAILABLE");
+    }
     await tx.insert(hroContextAnchors).values({
       id: proposed.anchorId, organizationId: proposed.organizationId,
       subjectType: proposed.subjectType, subjectHash: proposed.subjectHash,

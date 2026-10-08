@@ -6,8 +6,28 @@ import { getOrganizationId } from "../lib/organization-scope";
 import { resolveEffectiveAccess } from "../lib/access-governance";
 import { HRO_WORKFLOWS } from "../lib/hro-context/core";
 import { ListHroContextTransactionsQueryParams } from "@workspace/api-zod";
+import { getContextRetentionStatus, saveContextRetentionPolicy } from "../lib/hro-context/retention";
+import { SensitiveLifecycleConflictError, SensitiveLifecyclePermissionError, SensitiveLifecycleValidationError } from "../lib/onboarding/sensitive-lifecycle";
 
 const router: IRouter = Router();
+for (const method of ["get", "put"] as const) {
+  router[method]("/context-manager/retention", async (req, res, next) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      if (!req.authUserId) { res.status(401).json({ message: "Authentication required" }); return; }
+      if (await registeredDemoProfile(req.authUserId)) { res.status(403).json({ message: "Shared demo logins cannot review retention." }); return; }
+      const organizationId = getOrganizationId(req);
+      res.json(method === "get" ? await getContextRetentionStatus(organizationId, req.authUserId)
+        : await saveContextRetentionPolicy(organizationId, req.authUserId, req.body));
+    } catch (error) {
+      if (error instanceof SensitiveLifecyclePermissionError || error instanceof SensitiveLifecycleValidationError || error instanceof SensitiveLifecycleConflictError) {
+        res.status(error instanceof SensitiveLifecyclePermissionError ? 403 : error instanceof SensitiveLifecycleConflictError ? 409 : 400).json({ message: error.message });
+        return;
+      }
+      next(error);
+    }
+  });
+}
 router.get("/context-manager/transactions", async (req, res, next) => {
   try {
     res.setHeader("Cache-Control", "no-store");

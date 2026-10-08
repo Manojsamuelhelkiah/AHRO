@@ -9,6 +9,89 @@ import * as zod from 'zod';
 
 
 /**
+ * Requires current server-verified privacy or legal authority and current tenant membership. No default approval is created.
+ * @summary Read metadata retention policy and bounded sweep status
+ */
+export const GetHroContextRetentionResponse = zod.object({
+  "policy": zod.object({
+  "revision": zod.number(),
+  "enabled": zod.boolean(),
+  "retentionDays": zod.number(),
+  "purpose": zod.string(),
+  "lawfulBasis": zod.string(),
+  "policyReference": zod.string(),
+  "approvalReference": zod.string(),
+  "approvedAt": zod.coerce.date()
+}).nullable(),
+  "status": zod.enum(['approval-required', 'paused', 'held', 'approved']),
+  "holdActive": zod.boolean(),
+  "safeguards": zod.string(),
+  "limits": zod.object({
+  "organizations": zod.number(),
+  "correlations": zod.number(),
+  "transactions": zod.number(),
+  "steps": zod.number(),
+  "anchors": zod.number()
+}),
+  "lastSweep": zod.object({
+  "lastSweepAt": zod.coerce.date(),
+  "policyRevision": zod.number(),
+  "outcome": zod.string(),
+  "transactionsPruned": zod.number(),
+  "stepsPruned": zod.number(),
+  "anchorsPruned": zod.number()
+}).nullable()
+})
+
+
+/**
+ * Requires current verified privacy or legal authority. Enabling requires explicit irreversible-pruning confirmation and an approval reference. Optimistic revision checks and the shared lifecycle fence serialize approval, holds and deletion.
+ * @summary Record a new reviewed metadata retention revision or pause pruning
+ */
+export const SaveHroContextRetentionBody = zod.object({
+  "expectedRevision": zod.number(),
+  "enabled": zod.boolean(),
+  "retentionDays": zod.number().describe('Server enforces integer days from 0 through 3650. No automatic default is approved.'),
+  "purpose": zod.string(),
+  "lawfulBasis": zod.string(),
+  "policyReference": zod.string(),
+  "approvalReference": zod.string(),
+  "confirmPruning": zod.boolean()
+})
+
+export const SaveHroContextRetentionResponse = zod.object({
+  "policy": zod.object({
+  "revision": zod.number(),
+  "enabled": zod.boolean(),
+  "retentionDays": zod.number(),
+  "purpose": zod.string(),
+  "lawfulBasis": zod.string(),
+  "policyReference": zod.string(),
+  "approvalReference": zod.string(),
+  "approvedAt": zod.coerce.date()
+}).nullable(),
+  "status": zod.enum(['approval-required', 'paused', 'held', 'approved']),
+  "holdActive": zod.boolean(),
+  "safeguards": zod.string(),
+  "limits": zod.object({
+  "organizations": zod.number(),
+  "correlations": zod.number(),
+  "transactions": zod.number(),
+  "steps": zod.number(),
+  "anchors": zod.number()
+}),
+  "lastSweep": zod.object({
+  "lastSweepAt": zod.coerce.date(),
+  "policyRevision": zod.number(),
+  "outcome": zod.string(),
+  "transactionsPruned": zod.number(),
+  "stepsPruned": zod.number(),
+  "anchorsPruned": zod.number()
+}).nullable()
+})
+
+
+/**
  * @summary Read the authenticated user's recent metadata-only execution attempts
  */
 export const listHroContextTransactionsQueryViewDefault = `personal`;

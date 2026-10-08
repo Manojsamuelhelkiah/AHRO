@@ -29,3 +29,15 @@ An isolated task branch can already contain the same invalid interleaving before
 it reaches main. Treat that branch as evidence of intent, not as an automatically
 trustworthy restore source; use the last typechecked main version as the base and
 reapply only coherent behavior.
+
+An automatically merged file can have no conflict markers and still omit an
+entire feature boundary while retaining its imports.
+
+**Why:** Overlapping additions once retained the history route and retention
+imports but dropped the retention routes themselves; typechecking alone would
+not prove those endpoints still existed.
+
+**How to apply:** Compare both feature intents after conflict resolution and
+run focused route/render checks for each, even for files reported as already
+marker-free. Regenerate shared API clients from the combined specification
+instead of trusting automatically merged generated output.
