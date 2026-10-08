@@ -569,6 +569,48 @@ export const ActivateScenarioSystemSetupResponse = zod.object({
 
 
 /**
+ * @summary Read the signed-in reviewer's private drift inbox with fresh authority checks
+ */
+export const GetHrPolicyDriftNotificationsResponse = zod.object({
+  "enabled": zod.boolean(),
+  "optedIn": zod.boolean(),
+  "canSubscribe": zod.boolean(),
+  "version": zod.number(),
+  "notices": zod.array(zod.object({
+  "id": zod.string(),
+  "programmeId": zod.string(),
+  "runId": zod.string().nullable(),
+  "reasons": zod.array(zod.enum(['provider-changed', 'answer-regression', 'programme-paused'])),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
+ * @summary Separately opt in or out, or acknowledge a private drift notice without model spending
+ */
+export const UpdateHrPolicyDriftNotificationsBody = zod.object({
+  "action": zod.enum(['enable', 'disable', 'acknowledge']),
+  "expectedVersion": zod.number(),
+  "noticeId": zod.string().optional()
+})
+
+export const UpdateHrPolicyDriftNotificationsResponse = zod.object({
+  "enabled": zod.boolean(),
+  "optedIn": zod.boolean(),
+  "canSubscribe": zod.boolean(),
+  "version": zod.number(),
+  "notices": zod.array(zod.object({
+  "id": zod.string(),
+  "programmeId": zod.string(),
+  "runId": zod.string().nullable(),
+  "reasons": zod.array(zod.enum(['provider-changed', 'answer-regression', 'programme-paused'])),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
  * @summary Get synthetic answer key, business review and regression history
  */
 export const GetHrPolicyEvaluationResponse = zod.object({

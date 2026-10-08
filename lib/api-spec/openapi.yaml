@@ -312,6 +312,30 @@ paths:
               schema: { $ref: "#/components/schemas/Scenario" }
         "403": { description: Organization owner or admin required }
         "404": { description: Scenario not found }
+  /policies/evaluation/notifications:
+    get:
+      operationId: getHrPolicyDriftNotifications
+      tags: [hrPolicyLibrary]
+      summary: Read the signed-in reviewer's private drift inbox with fresh authority checks
+      responses:
+        "200":
+          description: Separate notification preference and authorized unread notices
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyDriftInbox" } } }
+        "403": { description: Current membership required }
+    post:
+      operationId: updateHrPolicyDriftNotifications
+      tags: [hrPolicyLibrary]
+      summary: Separately opt in or out, or acknowledge a private drift notice without model spending
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyDriftNoticeInput" } } }
+      responses:
+        "200":
+          description: Updated private inbox
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyDriftInbox" } } }
+        "400": { description: Invalid input }
+        "403": { description: Current verified authority required to opt in or acknowledge }
+        "409": { description: Stale preference or unavailable notice }
   /policies/evaluation:
     get:
       operationId: getHrPolicyEvaluation
@@ -7133,6 +7157,35 @@ components:
         modelRequired: { type: boolean }
         consistent: { type: boolean }
         passed: { type: boolean }
+    HrPolicyDriftNoticeInput:
+      type: object
+      additionalProperties: false
+      required: [action, expectedVersion]
+      properties:
+        action: { type: string, enum: [enable, disable, acknowledge] }
+        expectedVersion: { type: integer }
+        noticeId: { type: string }
+    HrPolicyDriftInbox:
+      type: object
+      required: [enabled, optedIn, canSubscribe, version, notices]
+      properties:
+        enabled: { type: boolean }
+        optedIn: { type: boolean }
+        canSubscribe: { type: boolean }
+        version: { type: integer }
+        notices:
+          type: array
+          items:
+            type: object
+            required: [id, programmeId, runId, reasons, createdAt]
+            properties:
+              id: { type: string }
+              programmeId: { type: string }
+              runId: { type: string, nullable: true }
+              reasons:
+                type: array
+                items: { type: string, enum: [provider-changed, answer-regression, programme-paused] }
+              createdAt: { type: string }
     HrPolicyEvaluationCatalog:
       type: object
       additionalProperties: true

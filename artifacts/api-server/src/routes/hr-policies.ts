@@ -1,10 +1,12 @@
 import { Router, type IRouter, type Response } from "express";
 import { getOrganizationId } from "../lib/organization-scope";
 import { policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark, configurePolicyDrift } from "../lib/hr-policy-evaluation";
+import { policyDriftInbox, updatePolicyDriftInbox } from "../lib/hr-policy-drift-notifications";
 import {
   GetHrPolicyEvaluationResponse, ReviewHrPolicyEvaluationBody, ReviewHrPolicyEvaluationResponse,
   RunHrPolicyEvaluationBody, RunHrPolicyEvaluationResponse,
   ConfigureHrPolicyDriftBody, ConfigureHrPolicyDriftResponse,
+  GetHrPolicyDriftNotificationsResponse, UpdateHrPolicyDriftNotificationsBody, UpdateHrPolicyDriftNotificationsResponse,
 } from "@workspace/api-zod";
 import {
   answerPolicyQuestion,
@@ -48,6 +50,17 @@ function positive(value: string | undefined, field: string): number {
 
 export function createHrPolicyRouter(): IRouter {
   const router: IRouter = Router();
+  router.get("/policies/evaluation/notifications", async (req, res, next) => {
+    try { res.json(GetHrPolicyDriftNotificationsResponse.parse(await policyDriftInbox(getOrganizationId(req), req.authUserId!))); }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+  router.post("/policies/evaluation/notifications", async (req, res, next) => {
+    try {
+      const body = UpdateHrPolicyDriftNotificationsBody.strict().safeParse(req.body);
+      if (!body.success) { res.status(400).json({ message: "Invalid notification preference." }); return; }
+      res.json(UpdateHrPolicyDriftNotificationsResponse.parse(await updatePolicyDriftInbox(getOrganizationId(req), req.authUserId!, body.data)));
+    } catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
   router.post("/policies/evaluation/drift", async (req, res, next): Promise<void> => {
     try {
       const body = ConfigureHrPolicyDriftBody.strict().safeParse(req.body);

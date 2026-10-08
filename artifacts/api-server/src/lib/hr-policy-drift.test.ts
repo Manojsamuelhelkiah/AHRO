@@ -12,8 +12,10 @@ import { HrPolicyError } from "./hr-policy-library";
 import { currentHroContext } from "./hro-context/core";
 import { dispatchHroAi } from "./hro-context/manager";
 import { policySelectionRequest } from "./hr-policy-selection";
+import { policyDriftInbox, updatePolicyDriftInbox, deliverPolicyDriftNotice } from "./hr-policy-drift-notifications";
 
 const org = `drift-fixture-${randomUUID()}`, actor = `reviewer-${randomUUID()}`, owner = `owner-${randomUUID()}`;
+const recipient = `independent-reviewer-${randomUUID()}`;
 const tick = (selector: BenchmarkSelector) => runPolicyDriftTick(selector, org);
 let baseline: DriftEvidence;
 const correct: BenchmarkSelector = async (question, excerpt, context) => {
@@ -46,9 +48,14 @@ before(async () => {
   await db.insert(organizationsTable).values({ id: org, name: "Isolated synthetic drift", slug: org, joinCodeHash: org, createdByUserId: owner });
   await db.insert(organizationMembershipsTable).values([
     { organizationId: org, clerkUserId: actor, role: "admin" }, { organizationId: org, clerkUserId: owner, role: "owner" },
+    { organizationId: org, clerkUserId: recipient, role: "member" },
   ]);
   await db.insert(onbGovernanceAuthorityAssignments).values({
     organizationId: org, authorityRole: "hr-compliance", assigneeUserId: actor,
+    verifiedByUserId: "synthetic-operator", verificationReference: "fixture-only",
+  });
+  await db.insert(onbGovernanceAuthorityAssignments).values({
+    organizationId: org, authorityRole: "hr-compliance", assigneeUserId: recipient,
     verifiedByUserId: "synthetic-operator", verificationReference: "fixture-only",
   });
   const { review } = await reviewPolicyBenchmark(org, actor, { benchmarkHash: benchmarkHash(), decision: "approved",
@@ -101,6 +108,7 @@ test("separate consent requires reviewer, eligible baseline and strict fictional
   await denied(() => configurePolicyDrift(org, actor, { ...input, confirmation: "yes" }, true), 403);
   await denied(() => configurePolicyDrift(org, actor, input), 409); // isolated fixture never accepted over HTTP
   const p = await approve();
+  assert.equal((await policyDriftInbox(org, actor)).optedIn, false, "spending consent never opts into notifications");
   assert.equal(p.checksReserved, 0);
   assert.equal((await policyEvaluationCatalog(org, actor)).currentLiveEvidence, false);
   let calls = 0;
@@ -110,6 +118,36 @@ test("separate consent requires reviewer, eligible baseline and strict fictional
   await runPolicyDriftTick(undefined, org); // production mode skips fixture; never scan other tenants
   assert.equal((await programme()).checksReserved, 0);
   await stop();
+});
+test("private notices require separate verified opt-in, redact evidence, and deduplicate concurrent programme/run deliveries", async () => {
+  await denied(() => policyDriftInbox(`unrelated-${randomUUID()}`, actor), 403);
+  await denied(() => updatePolicyDriftInbox(org, owner, { action: "enable", expectedVersion: 0 }), 403);
+  const before = await policyDriftInbox(org, actor);
+  const preference = await updatePolicyDriftInbox(org, actor, { action: "enable", expectedVersion: before.version });
+  assert.equal(preference.enabled, true);
+  assert.deepEqual(preference.notices, [], "opting in never backfills prior warnings");
+  await denied(() => updatePolicyDriftInbox(org, actor, { action: "disable", expectedVersion: before.version }), 409);
+  const event = { programmeId: randomUUID(), runId: randomUUID(), reasons: ["provider-changed", "answer-regression", "programme-paused"] as const };
+  const deliver = () => db.transaction(async tx => {
+    await tx.execute((await import("drizzle-orm")).sql`select pg_advisory_xact_lock(hashtext(${`policy-evaluation:${org}`}))`);
+    await deliverPolicyDriftNotice(tx, org, { ...event, reasons: [...event.reasons] });
+  });
+  await Promise.all([deliver(), deliver()]);
+  const received = await policyDriftInbox(org, actor);
+  assert.equal(received.notices.length, 1);
+  assert.deepEqual(Object.keys(received.notices[0]).sort(), ["createdAt", "id", "programmeId", "reasons", "runId"]);
+  assert.deepEqual(received.notices[0].reasons, event.reasons);
+  assert.deepEqual((await policyDriftInbox(org, owner)).notices, [], "tenant ownership grants no reviewer disclosure");
+  const acknowledged = await updatePolicyDriftInbox(org, actor, { action: "acknowledge", noticeId: received.notices[0].id, expectedVersion: received.version });
+  assert.deepEqual(acknowledged.notices, []);
+  await deliver();
+  assert.deepEqual((await policyDriftInbox(org, actor)).notices, [], "acknowledgement survives repeated delivery");
+  const disabled = await updatePolicyDriftInbox(org, actor, { action: "disable", expectedVersion: received.version });
+  const enabled = await updatePolicyDriftInbox(org, actor, { action: "enable", expectedVersion: disabled.version });
+  assert.deepEqual(enabled.notices, [], "prior generations never reappear");
+  await deliver();
+  assert.deepEqual((await policyDriftInbox(org, actor)).notices, []);
+  await updatePolicyDriftInbox(org, recipient, { action: "enable", expectedVersion: 0 });
 });
 test("concurrent workers reserve once, share daily budget and record failed missing-receipt evidence", async () => {
   await approve(); await due();
@@ -153,6 +191,11 @@ test("interrupted reservations are unfinished without redispatch and consent exp
   await tick(async () => { throw new Error("crash retry"); });
   assert.equal((await programme()).status, "paused");
   assert.equal((await policyEvaluationCatalog(org, actor)).runs.find(r => r.runId === runId).status, "unfinished");
+  const notices = (await policyDriftInbox(org, actor)).notices.filter(n => n.programmeId === p.programmeId);
+  assert.equal(notices.length, 1);
+  assert.deepEqual(notices[0].reasons, ["programme-paused"]);
+  await tick(async () => { throw new Error("notification must never retry the provider"); });
+  assert.equal((await policyDriftInbox(org, actor)).notices.filter(n => n.programmeId === p.programmeId).length, 1);
   const next = await approve();
   await put(DRIFT_KEY, { ...next, expiresAt: new Date(0).toISOString(), nextDueAt: new Date(0).toISOString() });
   await tick(async () => { throw new Error("expired spend"); });
@@ -256,9 +299,35 @@ test("at most three checks consume durable programme reservations, and provider 
   const p = await programme();
   assert.equal(p.status, "paused");
   assert.match(p.warning, /Provider identity changed/);
+  const notice = (await policyDriftInbox(org, actor)).notices.find(n => n.programmeId === p.programmeId)!;
+  assert.ok(notice);
+  assert.deepEqual(notice.reasons, ["provider-changed", "programme-paused"]);
   const run = (await policyEvaluationCatalog(org, actor)).runs.find(r => r.runId === p.latestRunId);
   assert.equal(run.failed, 0);
   assert.equal(run.comparison.verdict, "review-required");
+});
+test("answer regressions deliver a content-free run notice and opt-out prevents subsequent delivery", async () => {
+  const p = await approve(); await due();
+  await put("policy-evaluation:live-budget", { day: "old", count: 0, activeUntil: 0 });
+  await tick(async (_q, _e, _c, _s, receipt) => {
+    receipt!({ responseId: randomUUID(), resolvedModel: "resolved-a", systemFingerprint: "fp-a", promptTokens: 100, completionTokens: 100 });
+    return { outcome: "insufficient", excerptId: null, quotedText: null };
+  });
+  assert.equal((await programme()).status, "paused");
+  const inbox = await policyDriftInbox(org, actor);
+  const notice = inbox.notices.find(n => n.programmeId === p.programmeId)!;
+  assert.deepEqual(notice.reasons, ["answer-regression", "programme-paused"]);
+  assert.equal(notice.runId, (await programme()).latestRunId);
+  const beforeBudget = await db.select().from(onbSettings).where(keyWhere("policy-evaluation:live-budget"));
+  await policyDriftInbox(org, actor);
+  const disabled = await updatePolicyDriftInbox(org, actor, { action: "disable", expectedVersion: inbox.version });
+  const event = { programmeId: randomUUID(), runId: null, reasons: ["programme-paused" as const] };
+  await db.transaction(tx => deliverPolicyDriftNotice(tx, org, event));
+  assert.deepEqual((await policyDriftInbox(org, actor)).notices, []);
+  const reenabled = await updatePolicyDriftInbox(org, actor, { action: "enable", expectedVersion: disabled.version });
+  assert.deepEqual(reenabled.notices, []);
+  assert.deepEqual(await db.select().from(onbSettings).where(keyWhere("policy-evaluation:live-budget")), beforeBudget,
+    "reading notices and changing notification consent cannot consume or reset the model budget");
 });
 test("changed answer-key review pauses the programme without provider spending", async () => {
   await approve(); await due();
@@ -281,5 +350,24 @@ test("revoked authority pauses rather than spending", async () => {
   assert.equal((await programme()).status, "paused");
   assert.equal((await programme()).checksReserved, 0);
   const id = (await programme()).programmeId;
+  const otherReviewer = await policyDriftInbox(org, recipient);
+  assert.deepEqual(otherReviewer.notices.find(n => n.programmeId === id)?.reasons, ["programme-paused"],
+    "loss of the spending actor's authority still notifies separately opted-in current reviewers");
   await denied(() => configurePolicyDrift(org, actor, { action: "stop", expectedProgrammeId: id }), 403);
+  const hidden = await policyDriftInbox(org, actor);
+  assert.equal(hidden.enabled, false);
+  assert.equal(hidden.optedIn, true);
+  assert.deepEqual(hidden.notices, [], "already delivered warnings cannot be read after authority revocation");
+  const optedOut = await updatePolicyDriftInbox(org, actor, { action: "disable", expectedVersion: hidden.version });
+  assert.equal(optedOut.optedIn, false, "privacy withdrawal requires membership, not renewed specialist authority");
+  await db.update(organizationMembershipsTable).set({ revokedAt: new Date() }).where(and(
+    eq(organizationMembershipsTable.organizationId, org), eq(organizationMembershipsTable.clerkUserId, recipient)));
+  await denied(() => policyDriftInbox(org, recipient), 403);
+  await db.transaction(tx => deliverPolicyDriftNotice(tx, org, {
+    programmeId: randomUUID(), runId: null, reasons: ["programme-paused"],
+  }));
+  await db.update(organizationMembershipsTable).set({ revokedAt: null }).where(and(
+    eq(organizationMembershipsTable.organizationId, org), eq(organizationMembershipsTable.clerkUserId, recipient)));
+  assert.equal((await policyDriftInbox(org, recipient)).notices.length, otherReviewer.notices.length,
+    "delivery does not use a reviewer whose membership was revoked");
 });

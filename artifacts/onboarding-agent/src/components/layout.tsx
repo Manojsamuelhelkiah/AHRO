@@ -5,6 +5,7 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
+import { DriftNotificationBanner } from './drift-notifications';
 import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen, Waypoints, ClipboardCheck } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
@@ -139,6 +140,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <main className="flex-1 flex flex-col min-w-0 transition-colors duration-300">
         <MonitorAlertBanner />
+        <DriftNotificationBanner />
         
         <header className="sticky top-0 z-30 flex items-center justify-between px-6 shrink-0 transition-colors duration-300" style={{ height: '48px', backgroundColor: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>

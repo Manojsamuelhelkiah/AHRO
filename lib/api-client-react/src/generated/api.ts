@@ -113,7 +113,9 @@ import type {
   HrPolicyCapabilities,
   HrPolicyCitationExcerpt,
   HrPolicyCreateInput,
+  HrPolicyDriftInbox,
   HrPolicyDriftInput,
+  HrPolicyDriftNoticeInput,
   HrPolicyEvaluationCatalog,
   HrPolicyEvaluationReviewInput,
   HrPolicyEvaluationRunInput,
@@ -1993,6 +1995,154 @@ export const useActivateScenarioSystemSetup = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getActivateScenarioSystemSetupMutationOptions(options));
+    }
+
+export const getGetHrPolicyDriftNotificationsUrl = () => {
+
+
+
+
+  return `/api/policies/evaluation/notifications`
+}
+
+/**
+ * @summary Read the signed-in reviewer's private drift inbox with fresh authority checks
+ */
+export const getHrPolicyDriftNotifications = async ( options?: RequestInit): Promise<HrPolicyDriftInbox> => {
+
+  return customFetch<HrPolicyDriftInbox>(getGetHrPolicyDriftNotificationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHrPolicyDriftNotificationsQueryKey = () => {
+    return [
+    `/api/policies/evaluation/notifications`
+    ] as const;
+    }
+
+
+export const getGetHrPolicyDriftNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof getHrPolicyDriftNotifications>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyDriftNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHrPolicyDriftNotificationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHrPolicyDriftNotifications>>> = ({ signal }) => getHrPolicyDriftNotifications({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyDriftNotifications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHrPolicyDriftNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof getHrPolicyDriftNotifications>>>
+export type GetHrPolicyDriftNotificationsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read the signed-in reviewer's private drift inbox with fresh authority checks
+ */
+
+export function useGetHrPolicyDriftNotifications<TData = Awaited<ReturnType<typeof getHrPolicyDriftNotifications>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyDriftNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHrPolicyDriftNotificationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateHrPolicyDriftNotificationsUrl = () => {
+
+
+
+
+  return `/api/policies/evaluation/notifications`
+}
+
+/**
+ * @summary Separately opt in or out, or acknowledge a private drift notice without model spending
+ */
+export const updateHrPolicyDriftNotifications = async (hrPolicyDriftNoticeInput: HrPolicyDriftNoticeInput, options?: RequestInit): Promise<HrPolicyDriftInbox> => {
+
+  return customFetch<HrPolicyDriftInbox>(getUpdateHrPolicyDriftNotificationsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hrPolicyDriftNoticeInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateHrPolicyDriftNotificationsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateHrPolicyDriftNotifications>>, TError,{data: BodyType<HrPolicyDriftNoticeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateHrPolicyDriftNotifications>>, TError,{data: BodyType<HrPolicyDriftNoticeInput>}, TContext> => {
+
+const mutationKey = ['updateHrPolicyDriftNotifications'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateHrPolicyDriftNotifications>>, {data: BodyType<HrPolicyDriftNoticeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateHrPolicyDriftNotifications(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateHrPolicyDriftNotificationsMutationResult = NonNullable<Awaited<ReturnType<typeof updateHrPolicyDriftNotifications>>>
+    export type UpdateHrPolicyDriftNotificationsMutationBody = BodyType<HrPolicyDriftNoticeInput>
+    export type UpdateHrPolicyDriftNotificationsMutationError = ErrorType<void>
+
+    /**
+ * @summary Separately opt in or out, or acknowledge a private drift notice without model spending
+ */
+export const useUpdateHrPolicyDriftNotifications = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateHrPolicyDriftNotifications>>, TError,{data: BodyType<HrPolicyDriftNoticeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateHrPolicyDriftNotifications>>,
+        TError,
+        {data: BodyType<HrPolicyDriftNoticeInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateHrPolicyDriftNotificationsMutationOptions(options));
     }
 
 export const getGetHrPolicyEvaluationUrl = () => {

@@ -572,6 +572,46 @@ export interface HrPolicyEvaluationRun {
   [key: string]: unknown;
  }
 
+export type HrPolicyDriftNoticeInputAction = typeof HrPolicyDriftNoticeInputAction[keyof typeof HrPolicyDriftNoticeInputAction];
+
+
+export const HrPolicyDriftNoticeInputAction = {
+  enable: 'enable',
+  disable: 'disable',
+  acknowledge: 'acknowledge',
+} as const;
+
+export interface HrPolicyDriftNoticeInput {
+  action: HrPolicyDriftNoticeInputAction;
+  expectedVersion: number;
+  noticeId?: string;
+}
+
+export type HrPolicyDriftInboxNoticesItemReasonsItem = typeof HrPolicyDriftInboxNoticesItemReasonsItem[keyof typeof HrPolicyDriftInboxNoticesItemReasonsItem];
+
+
+export const HrPolicyDriftInboxNoticesItemReasonsItem = {
+  'provider-changed': 'provider-changed',
+  'answer-regression': 'answer-regression',
+  'programme-paused': 'programme-paused',
+} as const;
+
+export type HrPolicyDriftInboxNoticesItem = {
+  id: string;
+  programmeId: string;
+  runId: string | null;
+  reasons: HrPolicyDriftInboxNoticesItemReasonsItem[];
+  createdAt: string;
+};
+
+export interface HrPolicyDriftInbox {
+  enabled: boolean;
+  optedIn: boolean;
+  canSubscribe: boolean;
+  version: number;
+  notices: HrPolicyDriftInboxNoticesItem[];
+}
+
 export type HrPolicyEvaluationCatalogDrift = {
   programme: HrPolicyDriftProgramme | null;
   confirmation: string;

@@ -8,6 +8,7 @@ import { DRIFT_KEY, DRIFT_CONFIRMATION, DRIFT_INTERVAL, DRIFT_DURATION, DRIFT_MA
   eligibleDriftBaseline, comparePolicyDrift, type DriftProgramme, type DriftEvidence } from "./hr-policy-drift";
 import { withHroContext } from "./hro-context/manager";
 import { withoutHroContext } from "./hro-context/core";
+import { deliverPolicyDriftNotice } from "./hr-policy-drift-notifications";
 
 const REVIEW_KEY = "policy-evaluation:review";
 const SLOT_KEY = "policy-evaluation:live-budget";
@@ -169,6 +170,10 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
           status: programme.status === "stopped" ? "stopped" : comparison.verdict !== "no-observed-drift" ? "paused"
             : programme.checksReserved >= DRIFT_MAX_CHECKS ? "exhausted" : "active",
           warning: comparison.warning });
+        if (programme.status !== "stopped" && comparison.verdict !== "no-observed-drift")
+          await deliverPolicyDriftNotice(tx, org, { programmeId, runId: run.runId,
+            reasons: [...(comparison.providerChanged ? ["provider-changed" as const] : []),
+              ...(comparison.changedCases.length || run.failed > 0 ? ["answer-regression" as const] : []), "programme-paused"] });
       }
     }
     await writeSetting(tx, org, runKey, run);
@@ -250,6 +255,7 @@ export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isola
         if (Date.parse(last.createdAt) + DRIFT_RUN_WINDOW > Date.now()) return false;
         await writeSetting(tx, org, `${RUN_PREFIX}${current.latestRunId}`, { ...last, status: "unfinished", authorizationCurrent: false });
         await writeSetting(tx, org, DRIFT_KEY, { ...current, status: "paused", warning: "Drift check unfinished after interruption; reservation consumed. No automatic retry." });
+        await deliverPolicyDriftNotice(tx, org, { programmeId: current.programmeId, runId: current.latestRunId, reasons: ["programme-paused"] });
         return false;
       }
       if (Date.parse(current.expiresAt) <= Date.now()) {
@@ -258,6 +264,7 @@ export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isola
       try { await assertDriftAuthority(tx, org, p.actor, p.programmeId, p.reviewId); }
       catch {
         await writeSetting(tx, org, DRIFT_KEY, { ...current, status: "paused", warning: "Drift authorization or reviewed baseline is no longer current. No provider call made." });
+        await deliverPolicyDriftNotice(tx, org, { programmeId: current.programmeId, runId: current.latestRunId, reasons: ["programme-paused"] });
         return false;
       }
       return Date.parse(current.nextDueAt) <= Date.now();
@@ -274,8 +281,11 @@ export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isola
       await db.transaction(async tx => {
         await fence(tx, org);
         const current = await readSetting(tx, org, DRIFT_KEY) as DriftProgramme;
-        if (current.programmeId === p.programmeId && current.status === "active" && current.latestRunId === p.latestRunId) await writeSetting(tx, org, DRIFT_KEY,
-          { ...current, status: "paused", warning: "Drift check blocked or failed; inspect evidence and shared tenant budget before reauthorizing." });
+        if (current.programmeId === p.programmeId && current.status === "active" && current.latestRunId === p.latestRunId) {
+          await writeSetting(tx, org, DRIFT_KEY,
+            { ...current, status: "paused", warning: "Drift check blocked or failed; inspect evidence and shared tenant budget before reauthorizing." });
+          await deliverPolicyDriftNotice(tx, org, { programmeId: current.programmeId, runId: current.latestRunId, reasons: ["programme-paused"] });
+        }
       });
     }
     break; // at most one bounded programme per shared tick

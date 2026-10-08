@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-client-react";
 import { usePolicyScope } from "../hooks/use-policies";
 import { Button, Card, Input, Label } from "./ui-shared";
+import { DriftNotificationPreference } from "./drift-notifications";
 
 export function PolicyQualityPanel() {
   const scope = usePolicyScope();
@@ -121,6 +122,7 @@ export function PolicyQualityPanel() {
         </>}
         <p className="text-sm">Changed receipts or answers, failed checks and revoked authority pause the programme for review. Missing provider fingerprints mean unknown implementation stability, not proof that the model is unchanged. No automatic baseline replacement or retry of interrupted calls.</p>
       </section>}
+      <DriftNotificationPreference key={identity} />
       {data.review && <p className="text-sm">Last decision: {data.review.decision}, {data.review.reviewedAt}. Review reference: {data.review.reference}{data.review.benchmarkHash !== data.benchmarkHash ? " (superseded benchmark — review again)" : ""}</p>}
       <details>
         <summary className="cursor-pointer font-medium">Review questions, sources, audiences and expected abstentions</summary>
