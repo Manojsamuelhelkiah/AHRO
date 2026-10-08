@@ -166,5 +166,13 @@
     "title": "Feature Coverage by View",
     "description": "Appendix map of current feature areas to application views, not a verification claim.",
     "speakerNotes": ""
+  },
+  {
+    "id": "a6c37d58-a458-4e5a-927b-f0d9ff7b91d5",
+    "position": 22,
+    "filepath": "src/pages/slides/SecurityTrustResponsibleAI.tsx",
+    "title": "Security, Trust & Responsible AI",
+    "description": "One-slide overview of implemented security, trust and responsible AI controls, with explicit configuration and assurance boundaries.",
+    "speakerNotes": ""
   }
 ]
