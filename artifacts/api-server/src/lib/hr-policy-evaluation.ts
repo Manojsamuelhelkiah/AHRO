@@ -3,12 +3,12 @@ import { and, desc, eq, like, sql } from "drizzle-orm";
 import { db, onbSettings } from "@workspace/db";
 import { HrPolicyError, policyCapabilities, verifiedAuthority } from "./hr-policy-library";
 import { selectApprovedPolicyExtract, type PolicyProviderReceipt } from "./hr-policy-ai";
-import { benchmarkHash, benchmarkProvenance, POLICY_BENCHMARK, evaluateBenchmark, LIVE_LIMITS, type BenchmarkSelector } from "./hr-policy-benchmark";
+import { benchmarkHash, benchmarkProvenance, POLICY_BENCHMARK, evaluateBenchmark, LIVE_LIMITS, BENCHMARK_LIMITATION, type BenchmarkSelector } from "./hr-policy-benchmark";
 
 const REVIEW_KEY = "policy-evaluation:review";
 const SLOT_KEY = "policy-evaluation:live-budget";
 const RUN_PREFIX = "policy-evaluation:run:";
-export const REVIEW_CONFIRMATION = "I reviewed every synthetic question, source, expected outcome and abstention.";
+export const REVIEW_CONFIRMATION = "I reviewed every synthetic question, paraphrase and translation for semantic equivalence, and checked its source, audience, dates, expected quote, outcome and abstention.";
 export const LIVE_CONFIRMATION = "Run the approved synthetic benchmark against the real model within the displayed budget.";
 type Review = { reviewId: string; benchmarkHash: string; decision: "approved" | "rejected"; reviewer: string; reviewedAt: string; authorityId: number; reference: string };
 async function readSetting(tx: any, org: string, key: string) {
@@ -51,7 +51,7 @@ export async function policyEvaluationCatalog(org: string, actor: string) {
     currentLiveEvidence: runs.some(r => r.mode === "live" && r.status === "passed" && !r.providerIsolated && r.authorizationCurrent &&
       r.benchmarkHash === provenance.benchmarkHash && r.requestHash === provenance.requestHash && r.contractHash === provenance.contractHash &&
       r.review?.reviewId === review?.reviewId && review?.decision === "approved"),
-    limitation: "Synthetic regression evidence only. Offline replay does not measure model accuracy. No current accuracy guarantee.",
+    limitation: BENCHMARK_LIMITATION,
   };
 }
 export async function reviewPolicyBenchmark(org: string, actor: string, input: unknown) {
@@ -123,7 +123,7 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
   }
   const run = {
     ...report, providerReceipts, providerIsolated: Boolean(testSelector), authorizationCurrent, runId: body.requestId, actor, review: reserved.review,
-    status: authorizationCurrent && report.failed === 0 ? "passed" : "failed",
+    status: authorizationCurrent && report.failed === 0 && report.pairedFailed === 0 ? "passed" : "failed",
   };
   await db.transaction(async tx => { await fence(tx, org); await writeSetting(tx, org, runKey, run); });
   await policyCapabilities(org, actor);

@@ -375,6 +375,7 @@ export interface HrPolicyEvaluationReview {
   reference: string;
 }
 
+export type HrPolicyBenchmarkCasePairingVariant = typeof HrPolicyBenchmarkCasePairingVariant[keyof typeof HrPolicyBenchmarkCasePairingVariant];
 export type HrPolicyBenchmarkCaseSourceApplicability = {[key: string]: string};
 
 export type HrPolicyBenchmarkCaseSource = {
@@ -421,6 +422,7 @@ export interface HrPolicyBenchmarkCase {
   id: string;
   category: string;
   question: string;
+  pairing?: HrPolicyBenchmarkCasePairing;
   source: HrPolicyBenchmarkCaseSource;
   role: string;
   applicability: HrPolicyBenchmarkCaseApplicability;
@@ -444,6 +446,14 @@ export type HrPolicyEvaluationRunResultsItem = {
   abstained: boolean;
 };
 
+export interface HrPolicyEvaluationLimits {
+  calls: number;
+  completionTokensPerCall: number;
+  totalCompletionTokens: number;
+  inputCharactersPerCall: number;
+  milliseconds: number;
+  liveRunsPerTenantPerDay?: number;
+}
 export interface HrPolicyEvaluationRun {
   runId: string;
   mode: HrPolicyEvaluationRunMode;
@@ -457,6 +467,12 @@ export interface HrPolicyEvaluationRun {
   failed?: number;
   outcomeAgreement?: number | null;
   unsafeSupportCount?: number;
+  pairedFailed?: number;
+  pairedConsistency?: number | null;
+  pairedSupportAgreement?: number | null;
+  pairedAbstentionAgreement?: number | null;
+  limits?: HrPolicyEvaluationLimits;
+  pairs?: HrPolicyBenchmarkPairResult[];
   results?: HrPolicyEvaluationRunResultsItem[];
   [key: string]: unknown;
  }
@@ -477,6 +493,7 @@ export interface HrPolicyEvaluationCatalog {
   limitation: string;
   reviewConfirmation: string;
   liveConfirmation: string;
+  limits: HrPolicyEvaluationLimits;
   [key: string]: unknown;
  }
 
@@ -10917,3 +10934,27 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
 
+
+export type HrPolicyBenchmarkCasePairing = {
+  groupId: string;
+  language: string;
+  variant: HrPolicyBenchmarkCasePairingVariant;
+};
+
+export const HrPolicyBenchmarkCasePairingVariant = {
+  canonical: 'canonical',
+  paraphrase: 'paraphrase',
+  translation: 'translation',
+} as const;
+
+export interface HrPolicyBenchmarkPairResult {
+  groupId: string;
+  anchorCaseId: string;
+  variantCaseId: string;
+  language: string;
+  variant: string;
+  expected: string;
+  modelRequired: boolean;
+  consistent: boolean;
+  passed: boolean;
+}

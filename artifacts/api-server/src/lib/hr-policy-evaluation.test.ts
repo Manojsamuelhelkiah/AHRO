@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db, onbGovernanceAuthorityAssignments, onbSettings, organizationsTable, organizationMembershipsTable } from "@workspace/db";
 import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import { HrPolicyError } from "./hr-policy-library";
-import { benchmarkHash, POLICY_BENCHMARK } from "./hr-policy-benchmark";
+import { benchmarkHash, POLICY_BENCHMARK, LIVE_LIMITS } from "./hr-policy-benchmark";
 import { LIVE_CONFIRMATION, REVIEW_CONFIRMATION, policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark } from "./hr-policy-evaluation";
 
 const suffix = randomUUID();
@@ -65,6 +65,16 @@ test("verified review binds every synthetic source, expected outcome and explici
   assert.equal(catalog.approved, true);
   assert.equal(catalog.review?.reviewId, approved.review.reviewId);
   assert.equal(catalog.review?.benchmarkHash, benchmarkHash());
+  const translation = POLICY_BENCHMARK.find(c => c.pairing?.language === "es")!;
+  const originalQuestion = translation.question;
+  try {
+    translation.question += " Synthetic changed wording.";
+    assert.equal((await policyEvaluationCatalog(org, member)).approved, false);
+    await denied(() => runPolicyBenchmark(org, member, runInput("offline")), 409);
+    await denied(() => runPolicyBenchmark(org, reviewer, runInput("live"), async () => {
+      throw new Error("Unreviewed translation reached provider");
+    }), 409);
+  } finally { translation.question = originalQuestion; }
   await denied(() => reviewPolicyBenchmark(org, reviewer, reviewInput()), 409);
   const id = randomUUID();
   const input = runInput("offline", id);
@@ -74,6 +84,9 @@ test("verified review binds every synthetic source, expected outcome and explici
   assert.equal(first.run.calls, 0);
   assert.equal(first.run.failed, 0);
   assert.equal(first.run.outcomeAgreement, null);
+  assert.equal(first.run.pairedConsistency, null);
+  assert.equal(first.run.pairedFailed, 0);
+  assert.equal(first.run.pairs.length, 15);
   assert.equal(first.run.review.reviewId, approved.review.reviewId);
   assert.equal((await policyEvaluationCatalog(org, member)).currentLiveEvidence, false);
   await denied(() => runPolicyBenchmark(org, owner, input), 409);
@@ -106,9 +119,11 @@ test("a reserved live run is idempotent, provider-isolated and bounded across co
   await denied(() => runPolicyBenchmark(org, reviewer, runInput("live"), async () => { throw new Error("Concurrent dispatch"); }), 409);
   release();
   const finished = await running;
-  assert.equal(calls, 8);
+  assert.equal(calls, LIVE_LIMITS.calls);
   assert.equal(finished.run.failed, 0);
   assert.equal(finished.run.providerIsolated, true);
+  assert.equal(finished.run.pairedConsistency, 1);
+  assert.equal(finished.run.pairedFailed, 0);
   assert.equal((await policyEvaluationCatalog(org, reviewer)).currentLiveEvidence, false);
 });
 test("review rejection, budget exhaustion and revoked memberships remain fail closed", async () => {

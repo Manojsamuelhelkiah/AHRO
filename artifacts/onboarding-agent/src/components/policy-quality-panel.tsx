@@ -76,6 +76,7 @@ export function PolicyQualityPanel() {
     {error && <p role="alert" className="text-[var(--status-red)]">{error}</p>}
     {data && <>
       <p className="text-sm"><strong>{data.approved ? "Business-approved answer key" : "Not approved for evaluation"}</strong> · {data.cases.length} synthetic cases · {data.model} · prompt {data.promptVersion}</p>
+      <p className="text-sm">{data.limitation}</p>
       <p className="text-sm">{data.currentLiveEvidence ? "A passing real-model run matches the current benchmark and selection contract." : "No passing real-model evidence matches the current model, prompt and benchmark. Offline passes do not satisfy this check."}</p>
       {data.review && <p className="text-sm">Last decision: {data.review.decision}, {data.review.reviewedAt}. Review reference: {data.review.reference}{data.review.benchmarkHash !== data.benchmarkHash ? " (superseded benchmark — review again)" : ""}</p>}
       <details>
@@ -84,6 +85,7 @@ export function PolicyQualityPanel() {
           {data.cases.map(c => <article key={c.id} className="border rounded-md p-3 text-sm">
             <h3 className="font-semibold">{c.id} · {c.category}</h3>
             <p>Question: {c.question}</p>
+            {c.pairing && <p>Equivalence group: {c.pairing.groupId} · language {c.pairing.language} · {c.pairing.variant}. Source, audience, dates and expected quote are unchanged across this group.</p>}
             <p>Expected: {c.expected.outcome} · {c.expected.abstain ? "Abstain; no quote or citation" : "Exact server-created quote only"} · {c.expected.modelCalled ? "Selection required" : "Blocked before model disclosure"}</p>
             {c.expected.quotedText && <p>Reviewed quote: “{c.expected.quotedText}” ({c.expected.excerptId})</p>}
             <p className="my-1">{c.expected.rationale}</p>
@@ -106,7 +108,7 @@ export function PolicyQualityPanel() {
       <div className="space-y-3">
         <Button disabled={busy || !data.approved} onClick={() => void evaluate("offline")}>Run provider-free contract replay</Button>
         {data.canReview && <div className="border rounded-md p-3 space-y-3">
-          <p className="text-sm">Real-model budget: at most 8 calls, 3,000 completion tokens per call (24,000 total), 6,000 input characters per call, 90 seconds, and 3 runs per tenant per UTC day. No automatic retries. Only fixed fictional policy text is sent.</p>
+          <p className="text-sm">Real-model budget: at most {data.limits.calls} calls, {data.limits.completionTokensPerCall.toLocaleString()} completion tokens per call ({data.limits.totalCompletionTokens.toLocaleString()} total), {data.limits.inputCharactersPerCall.toLocaleString()} input characters per call, {data.limits.milliseconds / 1000} seconds, and {data.limits.liveRunsPerTenantPerDay} runs per tenant per UTC day. No automatic retries. Only fixed fictional policy text is sent.</p>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={liveConfirmed} onChange={e => setLiveConfirmed(e.target.checked)} />{data.liveConfirmation}</label>
           <Button variant="outline" disabled={busy || !data.approved || !liveConfirmed} onClick={() => void evaluate("live")}>Authorize and run real-model benchmark</Button>
         </div>}
@@ -123,11 +125,20 @@ export function PolicyQualityPanel() {
       {visibleReport && <div className="border rounded-md p-3 space-y-2">
         <h3 className="font-semibold">{visibleReport.mode === "offline" ? "Contract replay — not model accuracy" : "Real-model benchmark evidence"}: {visibleReport.status}</h3>
         <p className="text-sm">Outcome agreement: {visibleReport.outcomeAgreement == null ? "not measured" : `${Math.round(visibleReport.outcomeAgreement * 100)}%`} · Unsafe supported answers: {visibleReport.unsafeSupportCount ?? "not measured"}.</p>
+        <p className="text-sm">Model-required pairs only: consistency {visibleReport.pairedConsistency == null ? "not measured" : `${Math.round(visibleReport.pairedConsistency * 100)}%`}; correct support {visibleReport.pairedSupportAgreement == null ? "not measured" : `${Math.round(visibleReport.pairedSupportAgreement * 100)}%`}; correct abstention {visibleReport.pairedAbstentionAgreement == null ? "not measured" : `${Math.round(visibleReport.pairedAbstentionAgreement * 100)}%`}. Equal wrong answers do not pass. Pre-disclosure gates are reported separately below.</p>
         {visibleReport.status === "running" && <p className="text-sm">No completion evidence has been recorded. An interrupted run remains unfinished and will not be automatically retried.</p>}
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr><th className="text-left">Case</th><th>Expected</th><th>Observed</th><th>Result</th></tr></thead>
           <tbody>{visibleReport.results?.map(r => <tr key={r.caseId}><td>{r.caseId}</td><td className="text-center">{r.expected}</td><td className="text-center">{r.actual}</td><td className="text-center">{r.passed ? "Passed" : "Failed"}</td></tr>)}</tbody>
         </table></div>
+        {visibleReport.pairs && <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr><th className="text-left">Paired questions</th><th>Language / variant</th><th>Evidence</th><th>Consistent</th><th>Both correct</th></tr></thead>
+          <tbody>{visibleReport.pairs.map(p => <tr key={p.variantCaseId}>
+            <td>{p.anchorCaseId} / {p.variantCaseId}</td><td className="text-center">{p.language} / {p.variant}</td>
+            <td className="text-center">{p.modelRequired ? visibleReport.mode === "live" ? "Model selection" : "Scripted replay" : "Pre-disclosure gate"}</td>
+            <td className="text-center">{p.consistent ? "Yes" : "No"}</td><td className="text-center">{p.passed ? "Passed" : "Failed"}</td>
+          </tr>)}</tbody>
+        </table></div>}
         <Button variant="outline" onClick={() => {
           const url = URL.createObjectURL(new Blob([JSON.stringify(visibleReport, null, 2)], { type: "application/json" }));
           const a = document.createElement("a"); a.href = url; a.download = `policy-quality-${visibleReport.runId}.json`; a.click(); URL.revokeObjectURL(url);

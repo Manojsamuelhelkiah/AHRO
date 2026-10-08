@@ -5,15 +5,17 @@ import {
   type PolicyEligibility, type PolicyExtractSelection,
 } from "./hr-policy-selection";
 
-export const BENCHMARK_VERSION = "synthetic-policy-1";
+export const BENCHMARK_VERSION = "synthetic-policy-paired-2";
 export const BENCHMARK_TODAY = "2026-10-08";
-export const LIVE_LIMITS = { calls: 8, completionTokensPerCall: 3000, totalCompletionTokens: 24000, inputCharactersPerCall: 6000, milliseconds: 90000 };
+export const LIVE_LIMITS = { calls: 20, completionTokensPerCall: 3000, totalCompletionTokens: 60000, inputCharactersPerCall: 6000, milliseconds: 180000 };
+export const BENCHMARK_LIMITATION = "Synthetic regression evidence only. Paired English paraphrases, Spanish and Hindi questions use unchanged English fictional sources and exact quotes. Business review must confirm semantic equivalence and the answer key. Offline replay does not measure model accuracy or language consistency. Live paired results cover only these questions, not general multilingual performance or employee fairness; the initial fixed pack did not measure either. No AI judge or employee data is used. No current accuracy or fairness guarantee.";
 type Outcome = PolicyExtractSelection["outcome"];
 type Source = PolicyEligibility & { id: string; version: number; text: string; status: string };
 export interface BenchmarkCase {
   id: string;
   category: string;
   question: string;
+  pairing?: { groupId: string; language: string; variant: "canonical" | "paraphrase" | "translation" };
   source: Source;
   role: string;
   applicability: Record<string, string>;
@@ -62,14 +64,60 @@ export const POLICY_BENCHMARK: BenchmarkCase[] = [
   fixture("wrong-country", "applicability", "What is the annual leave entitlement?", "insufficient", "Country applicability must match exactly.", {}, { applicability: { country: "USA", workerType: "Full-Time" } }, false),
   fixture("unpublished", "source-version", "What is the annual leave entitlement?", "insufficient", "Draft revisions must not be disclosed.", { status: "draft", version: 2 }, {}, false),
 ];
+// Review proposals, not a claim of business approval. The existing content-bound
+// HR-compliance review covers every translation and shared answer key.
+const leaveQuestions = [
+  ["en", "canonical", "What is the annual leave entitlement?"],
+  ["en", "paraphrase", "How many days of annual leave do full-time workers in Britain receive?"],
+  ["es", "translation", "¿Cuántos días de vacaciones anuales corresponden a los trabajadores a tiempo completo en Gran Bretaña?"],
+  ["hi", "translation", "ब्रिटेन में पूर्णकालिक कर्मचारियों को कितने दिन की वार्षिक छुट्टी मिलती है?"],
+] as const;
+const payQuestions = [
+  ["en", "canonical", "Is annual leave paid at double salary?"],
+  ["en", "paraphrase", "Do workers receive twice their salary during annual leave?"],
+  ["es", "translation", "¿Los trabajadores reciben el doble de su salario durante las vacaciones anuales?"],
+  ["hi", "translation", "क्या कर्मचारियों को वार्षिक छुट्टी के दौरान दोगुना वेतन मिलता है?"],
+] as const;
+for (const [groupId, originalId, questions] of [
+  ["paired-leave", "direct-leave", leaveQuestions],
+  ["paired-pay", "absent-pay", payQuestions],
+  ["paired-conflict", "contradictory-days", leaveQuestions],
+  ["paired-audience", "wrong-audience", leaveQuestions],
+  ["paired-expired", "expired-historical", leaveQuestions],
+] as const) {
+  const original = POLICY_BENCHMARK.find(c => c.id === originalId)!;
+  questions.forEach(([language, variant, question], index) => POLICY_BENCHMARK.push({
+    ...structuredClone(original), id: `${groupId}-${index}`, question,
+    pairing: { groupId, language, variant },
+  }));
+}
+
+/** Only the question may vary. Drift in any evidence or expected answer blocks evaluation. */
+export function validateBenchmarkPairs() {
+  const groups = new Map<string, BenchmarkCase[]>();
+  for (const c of POLICY_BENCHMARK) if (c.pairing) {
+    groups.set(c.pairing.groupId, [...(groups.get(c.pairing.groupId) ?? []), c]);
+  }
+  for (const [id, cases] of groups) {
+    const context = (c: BenchmarkCase) => digest({
+      source: c.source, role: c.role, applicability: c.applicability, appliesOn: c.appliesOn, expected: c.expected,
+    });
+    if (cases.length < 2 || cases[0].pairing?.variant !== "canonical" ||
+        cases.some(c => context(c) !== context(cases[0]))) throw new Error(`Invalid paired benchmark context: ${id}`);
+  }
+}
 export const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export const benchmarkHash = () => digest({ version: BENCHMARK_VERSION, today: BENCHMARK_TODAY, cases: POLICY_BENCHMARK });
-export function benchmarkProvenance() {
+export function benchmarkProvenance(): {
+  benchmarkVersion: string; benchmarkHash: string; syntheticOnly: boolean; limitation: string;
+  model: string; promptVersion: string; requestHash: string; contractHash: string;
+  sourceVersions: { caseId: string; sourceId: string; version: number; hash: string }[];
+} {
   return {
-    benchmarkVersion: BENCHMARK_VERSION, benchmarkHash: benchmarkHash(), syntheticOnly: true,
+    benchmarkVersion: BENCHMARK_VERSION, benchmarkHash: benchmarkHash(), syntheticOnly: true, limitation: BENCHMARK_LIMITATION,
     model: POLICY_MODEL, promptVersion: POLICY_PROMPT_VERSION,
     requestHash: digest(policySelectionRequest("<question>", "<extract>", "<context>")),
-    contractHash: digest([policySelectionRequest, parsePolicySelection, sentenceForQuestion, containsPromptInjection, policyPermitted, policyCurrent, policyTimely].map(fn => fn.toString())),
+    contractHash: digest([policySelectionRequest, parsePolicySelection, sentenceForQuestion, containsPromptInjection, policyPermitted, policyCurrent, policyTimely, validateBenchmarkPairs, scoreBenchmarkPairs, evaluateBenchmark].map(fn => fn.toString())),
     sourceVersions: POLICY_BENCHMARK.map(c => ({ caseId: c.id, sourceId: c.source.id, version: c.source.version, hash: digest(c.source) })),
   };
 }
@@ -86,11 +134,30 @@ export interface BenchmarkResult {
 }
 export type BenchmarkSelector = (question: string, excerpt: string, context: string, signal?: AbortSignal) => Promise<PolicyExtractSelection>;
 
+/** Consistency alone is not correctness: two equally wrong answers cannot pass. */
+export function scoreBenchmarkPairs(results: BenchmarkResult[]) {
+  return POLICY_BENCHMARK.filter(c => c.pairing && c.pairing.variant !== "canonical").map(c => {
+    const anchor = POLICY_BENCHMARK.find(a => a.pairing?.groupId === c.pairing!.groupId && a.pairing.variant === "canonical")!;
+    const a = results.find(r => r.caseId === anchor.id);
+    const b = results.find(r => r.caseId === c.id);
+    const valid = (r: BenchmarkResult | undefined) => r && ["supported", "insufficient", "conflicting", "injected"].includes(r.actual);
+    const consistent = Boolean(valid(a) && valid(b) && a!.actual === b!.actual &&
+      a!.abstained === b!.abstained && a!.quotedText === b!.quotedText);
+    return {
+      groupId: c.pairing!.groupId, anchorCaseId: anchor.id, variantCaseId: c.id,
+      language: c.pairing!.language, variant: c.pairing!.variant,
+      expected: c.expected.outcome, modelRequired: c.expected.modelCalled,
+      consistent, passed: consistent && Boolean(a?.passed && b?.passed),
+    };
+  });
+}
+
 /** The scorer is deterministic. No model confidence or AI judge is consulted. */
 export async function evaluateBenchmark(
   mode: "offline" | "live", selector?: BenchmarkSelector,
   authorize?: () => Promise<void>,
 ) {
+  validateBenchmarkPairs();
   if (mode === "live" && (!selector || !authorize)) throw new Error("Live evaluation requires explicit authorization and a selector.");
   const started = Date.now();
   const signal = mode === "live" ? AbortSignal.timeout(LIVE_LIMITS.milliseconds) : undefined;
@@ -125,7 +192,9 @@ export async function evaluateBenchmark(
         if (actual === "supported" && (selection.excerptId !== "extract-1" || quote !== excerpt)) throw new Error("invalid_citation");
       } catch (error) {
         actual = "error"; quote = null;
-        errorCode = error instanceof Error && "code" in error ? String(error.code) : "blocked_or_unavailable";
+        errorCode = error instanceof Error && "code" in error ? String(error.code) :
+          error instanceof Error && ["budget_exhausted", "input_budget_exceeded", "invalid_citation"].includes(error.message)
+            ? error.message : "blocked_or_unavailable";
       }
     }
     const abstained = actual !== "supported";
@@ -139,6 +208,9 @@ export async function evaluateBenchmark(
   }
   const passed = results.filter(r => r.passed).length;
   const abstentions = results.filter(r => r.expected !== "supported");
+  const pairs = scoreBenchmarkPairs(results);
+  const modelPairs = pairs.filter(p => p.modelRequired);
+  const pairedAgreement = (items: typeof pairs) => mode === "live" && items.length ? items.filter(p => p.passed).length / items.length : null;
   return {
     ...benchmarkProvenance(), cases: POLICY_BENCHMARK, mode, startedAt: new Date(started).toISOString(), finishedAt: new Date().toISOString(),
     evidenceKind: mode === "offline" ? "scripted-contract-replay" : "real-model-synthetic",
@@ -147,6 +219,10 @@ export async function evaluateBenchmark(
     outcomeAgreement: mode === "live" ? passed / results.length : null,
     abstentionAgreement: mode === "live" ? abstentions.filter(r => r.passed).length / abstentions.length : null,
     unsafeSupportCount: results.filter(r => r.expected !== "supported" && r.actual === "supported").length,
+    pairs, pairedFailed: pairs.filter(p => !p.passed).length,
+    pairedConsistency: mode === "live" && modelPairs.length ? modelPairs.filter(p => p.consistent).length / modelPairs.length : null,
+    pairedSupportAgreement: pairedAgreement(modelPairs.filter(p => p.expected === "supported")),
+    pairedAbstentionAgreement: pairedAgreement(modelPairs.filter(p => p.expected !== "supported")),
     results,
   };
 }

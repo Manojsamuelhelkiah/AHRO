@@ -24,3 +24,9 @@ Treat answer-quality benchmarking as roadmap assurance, not a current accuracy g
 **Why:** The business-user explainer distinguishes implemented quotation controls from systematic answer-quality assurance. Exact quotations can still be irrelevant or misleading, and agent-authored expectations cannot certify their own business correctness.
 
 **How to apply:** Keep reviewed ground truth separate from CI/provider stubs. Require explicit authorized, bounded real-model operations using only fictional content; never silently spend provider budget on builds or policy publication.
+
+Language-pair consistency is not correctness or broad fairness assurance. Equal wrong answers must fail, and audience/date blocks must not inflate measured model-language agreement. Translations remain business-review proposals until independently approved.
+
+**Why:** Shared abstentions may reflect a safety gate rather than model understanding; equally unsupported citations can look consistent while still misleading users.
+
+**How to apply:** Bind paired questions to identical fictional evidence and answer keys, score agreement separately from correctness, and distinguish model-required pairs from pre-disclosure gates and scripted replay.

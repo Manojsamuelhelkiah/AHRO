@@ -6986,6 +6986,13 @@ components:
         id: { type: string }
         category: { type: string }
         question: { type: string }
+        pairing:
+          type: object
+          required: [groupId, language, variant]
+          properties:
+            groupId: { type: string }
+            language: { type: string }
+            variant: { type: string, enum: [canonical, paraphrase, translation] }
         source:
           type: object
           required: [id, version, status, text, audience, applicability, effectiveFrom, effectiveUntil, reviewBy]
@@ -7029,6 +7036,14 @@ components:
         failed: { type: integer }
         outcomeAgreement: { type: number, nullable: true }
         unsafeSupportCount: { type: integer }
+        pairedFailed: { type: integer }
+        pairedConsistency: { type: number, nullable: true }
+        pairedSupportAgreement: { type: number, nullable: true }
+        pairedAbstentionAgreement: { type: number, nullable: true }
+        limits: { $ref: "#/components/schemas/HrPolicyEvaluationLimits" }
+        pairs:
+          type: array
+          items: { $ref: "#/components/schemas/HrPolicyBenchmarkPairResult" }
         results:
           type: array
           items:
@@ -7040,10 +7055,23 @@ components:
               actual: { type: string }
               passed: { type: boolean }
               abstained: { type: boolean }
+    HrPolicyBenchmarkPairResult:
+      type: object
+      required: [groupId, anchorCaseId, variantCaseId, language, variant, expected, modelRequired, consistent, passed]
+      properties:
+        groupId: { type: string }
+        anchorCaseId: { type: string }
+        variantCaseId: { type: string }
+        language: { type: string }
+        variant: { type: string }
+        expected: { type: string }
+        modelRequired: { type: boolean }
+        consistent: { type: boolean }
+        passed: { type: boolean }
     HrPolicyEvaluationCatalog:
       type: object
       additionalProperties: true
-      required: [benchmarkVersion, benchmarkHash, model, promptVersion, requestHash, contractHash, currentLiveEvidence, cases, canReview, approved, review, runs, limitation, reviewConfirmation, liveConfirmation]
+      required: [benchmarkVersion, benchmarkHash, model, promptVersion, requestHash, contractHash, currentLiveEvidence, cases, canReview, approved, review, runs, limitation, reviewConfirmation, liveConfirmation, limits]
       properties:
         benchmarkVersion: { type: string }
         benchmarkHash: { type: string }
@@ -7060,6 +7088,17 @@ components:
         limitation: { type: string }
         reviewConfirmation: { type: string }
         liveConfirmation: { type: string }
+        limits: { $ref: "#/components/schemas/HrPolicyEvaluationLimits" }
+    HrPolicyEvaluationLimits:
+      type: object
+      required: [calls, completionTokensPerCall, totalCompletionTokens, inputCharactersPerCall, milliseconds]
+      properties:
+        calls: { type: integer }
+        completionTokensPerCall: { type: integer }
+        totalCompletionTokens: { type: integer }
+        inputCharactersPerCall: { type: integer }
+        milliseconds: { type: integer }
+        liveRunsPerTenantPerDay: { type: integer }
     VaultEvidenceBinding:
       type: object
       additionalProperties: false
