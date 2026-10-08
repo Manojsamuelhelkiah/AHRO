@@ -1,0 +1,36 @@
+name: Provider-free HR policy regression
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/lib/hr-policy*.ts"
+      - "artifacts/api-server/src/routes/hr-policies.ts"
+      - "artifacts/api-server/test-policy-quality.mjs"
+      - "artifacts/onboarding-agent/src/components/policy-quality-panel.tsx"
+      - "artifacts/onboarding-agent/src/pages/policy-assistant.tsx"
+      - "lib/api-spec/openapi.yaml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/policy-answer-quality.yml"
+  push:
+    paths:
+      - "artifacts/api-server/src/lib/hr-policy*.ts"
+      - "artifacts/api-server/test-policy-quality.mjs"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - ".github/workflows/policy-answer-quality.yml"
+permissions:
+  contents: read
+jobs:
+  policy-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:policy-quality

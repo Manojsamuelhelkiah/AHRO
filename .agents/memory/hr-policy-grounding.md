@@ -18,3 +18,9 @@ Separate durable reminder persistence from transactions holding membership or au
 **Why:** Policy lifecycle operations do not share a single authority/version lock order. Reminder foreign-key checks also lock parent versions, so adding reminder writes to an authorization transaction can introduce a deadlock even without explicit version locking.
 
 **How to apply:** Authorize first, persist separately without authority locks, then reauthorize and read current lifecycle/audience/date state. A durable stale reminder must not imply current access or continued publication.
+
+Treat answer-quality benchmarking as roadmap assurance, not a current accuracy guarantee. A synthetic answer key checked into code is a review proposal until a business reviewer approves it; scripted contract replay is not model accuracy.
+
+**Why:** The business-user explainer distinguishes implemented quotation controls from systematic answer-quality assurance. Exact quotations can still be irrelevant or misleading, and agent-authored expectations cannot certify their own business correctness.
+
+**How to apply:** Keep reviewed ground truth separate from CI/provider stubs. Require explicit authorized, bounded real-model operations using only fictional content; never silently spend provider budget on builds or policy publication.

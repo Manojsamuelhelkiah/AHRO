@@ -21,6 +21,7 @@ import { AlertTriangle, ChevronLeft, Clock3, Download, ExternalLink, FileSpreads
 import { Link, useLocation, useSearch } from "wouter";
 import { Badge, Button, Card, Input, Label, PageHeader } from "@/components/ui-shared";
 import { normalizeLearningCatalog, type CanonicalLearningCatalog } from "./learning-guide";
+import { PolicyQualityPanel } from "../components/policy-quality-panel";
 
 type CandidatePortalDescriptor = {
   state?: string;
@@ -302,6 +303,7 @@ export function UatTestCenterPage() {
   if (isError || !catalog) return <ErrorState message="The UAT catalog could not be loaded. No run has been created." onRetry={() => void refetch()} />;
   return <div className="mx-auto max-w-7xl space-y-6 pb-16">
     <PageHeader title="UAT Test Center" subtitle="Guided, tenant-scoped acceptance runs with explicit expected/observed evidence. Simulated evidence is non-authoritative and never changes live readiness." />
+    <PolicyQualityPanel />
     <div className="rounded-[var(--radius-md)] border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4 text-sm text-[var(--text-secondary)]" role="note" data-testid="text-uat-safety-boundary">
       <strong className="text-[var(--text-primary)]">Safety boundary:</strong> the default run simulates exchanges only. A manual observation records what a person saw; it does not fabricate workflow execution. Provider sandbox and real-email verification remain explicitly blocked until their separately governed conditions are available.
     </div>

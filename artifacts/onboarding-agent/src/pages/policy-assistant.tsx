@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { usePolicyAnswer, usePolicyExcerpt, useCreateHandoff, usePolicyScope, type PolicyApplicability } from '../hooks/use-policies';
 import { Search, CheckCircle, MessageSquareWarning, ExternalLink, ShieldAlert, Loader2 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import { Link } from "wouter";
 
 export function PolicyAssistantPage() {
   const scope = usePolicyScope();
@@ -80,6 +81,11 @@ export function PolicyAssistantPage() {
         <h1 className="text-[var(--text-3xl)] font-bold text-[var(--primary)] mb-2">HR Policy Assistant</h1>
         <p className="text-[var(--text-muted)] text-[var(--text-base)]">
           Search approved HR policies. Answers are strictly sourced from active, published documents based on the exact applicability selected below.
+        </p>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          Exact quotations do not guarantee that a policy answers every question.
+          {" "}<Link href="/uat-test-center" className="underline">Review synthetic answer-quality evidence in the UAT Test Center</Link>.
+          {" "}Benchmark results are not a current accuracy guarantee.
         </p>
       </div>
 

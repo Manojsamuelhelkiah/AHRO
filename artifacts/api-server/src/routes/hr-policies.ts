@@ -1,5 +1,10 @@
 import { Router, type IRouter, type Response } from "express";
 import { getOrganizationId } from "../lib/organization-scope";
+import { policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark } from "../lib/hr-policy-evaluation";
+import {
+  GetHrPolicyEvaluationResponse, ReviewHrPolicyEvaluationBody, ReviewHrPolicyEvaluationResponse,
+  RunHrPolicyEvaluationBody, RunHrPolicyEvaluationResponse,
+} from "@workspace/api-zod";
 import {
   answerPolicyQuestion,
   createPolicy,
@@ -42,6 +47,32 @@ function positive(value: string | undefined, field: string): number {
 
 export function createHrPolicyRouter(): IRouter {
   const router: IRouter = Router();
+  router.get("/policies/evaluation", async (req, res, next) => {
+    try {
+      const result = await policyEvaluationCatalog(getOrganizationId(req), req.authUserId!);
+      GetHrPolicyEvaluationResponse.parse(result);
+      res.json(result); // retain documented additional provenance fields
+    }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+  router.post("/policies/evaluation/review", async (req, res, next) => {
+    try {
+      const body = ReviewHrPolicyEvaluationBody.strict().safeParse(req.body);
+      if (!body.success) { res.status(400).json({ message: "Invalid evaluation review." }); return; }
+      res.json(ReviewHrPolicyEvaluationResponse.parse(await reviewPolicyBenchmark(getOrganizationId(req), req.authUserId!, body.data)));
+    }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+  router.post("/policies/evaluation/runs", async (req, res, next) => {
+    try {
+      const body = RunHrPolicyEvaluationBody.strict().safeParse(req.body);
+      if (!body.success) { res.status(400).json({ message: "Invalid evaluation run." }); return; }
+      const result = await runPolicyBenchmark(getOrganizationId(req), req.authUserId!, body.data);
+      RunHrPolicyEvaluationResponse.parse(result);
+      res.json(result); // retain source snapshots, receipts and per-case quote evidence
+    }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
   router.get("/policies/capabilities", async (req, res, next) => {
     try { res.json(await policyCapabilities(getOrganizationId(req), req.authUserId!)); }
     catch (error) { if (!errorResponse(error, res)) next(error); }

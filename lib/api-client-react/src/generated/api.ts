@@ -109,6 +109,9 @@ import type {
   HrPolicyCapabilities,
   HrPolicyCitationExcerpt,
   HrPolicyCreateInput,
+  HrPolicyEvaluationCatalog,
+  HrPolicyEvaluationReviewInput,
+  HrPolicyEvaluationRunInput,
   HrPolicyHandoffCreateInput,
   HrPolicyHandoffCreateResponse,
   HrPolicyHandoffListResponse,
@@ -265,11 +268,13 @@ import type {
   RestartOnboardingCaseSimulationBody,
   RetryOnboardingEvidenceMalwareScan200,
   ReviewGovernanceDecisionBody,
+  ReviewHrPolicyEvaluation200,
   ReviseGovernanceDecisionBody,
   RevokeOnboardingAuthorityAssignmentBody,
   Rollup,
   RollupRequest,
   RoutingSummary,
+  RunHrPolicyEvaluation200,
   Scenario,
   ScenarioFile,
   ScenarioFileFinalizeRequest,
@@ -1983,6 +1988,225 @@ export const useActivateScenarioSystemSetup = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getActivateScenarioSystemSetupMutationOptions(options));
+    }
+
+export const getGetHrPolicyEvaluationUrl = () => {
+
+
+
+
+  return `/api/policies/evaluation`
+}
+
+/**
+ * @summary Get synthetic answer key, business review and regression history
+ */
+export const getHrPolicyEvaluation = async ( options?: RequestInit): Promise<HrPolicyEvaluationCatalog> => {
+
+  return customFetch<HrPolicyEvaluationCatalog>(getGetHrPolicyEvaluationUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHrPolicyEvaluationQueryKey = () => {
+    return [
+    `/api/policies/evaluation`
+    ] as const;
+    }
+
+
+export const getGetHrPolicyEvaluationQueryOptions = <TData = Awaited<ReturnType<typeof getHrPolicyEvaluation>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyEvaluation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHrPolicyEvaluationQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHrPolicyEvaluation>>> = ({ signal }) => getHrPolicyEvaluation({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyEvaluation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHrPolicyEvaluationQueryResult = NonNullable<Awaited<ReturnType<typeof getHrPolicyEvaluation>>>
+export type GetHrPolicyEvaluationQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get synthetic answer key, business review and regression history
+ */
+
+export function useGetHrPolicyEvaluation<TData = Awaited<ReturnType<typeof getHrPolicyEvaluation>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyEvaluation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHrPolicyEvaluationQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReviewHrPolicyEvaluationUrl = () => {
+
+
+
+
+  return `/api/policies/evaluation/review`
+}
+
+/**
+ * @summary Record verified HR compliance review of an exact synthetic answer key
+ */
+export const reviewHrPolicyEvaluation = async (hrPolicyEvaluationReviewInput: HrPolicyEvaluationReviewInput, options?: RequestInit): Promise<ReviewHrPolicyEvaluation200> => {
+
+  return customFetch<ReviewHrPolicyEvaluation200>(getReviewHrPolicyEvaluationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hrPolicyEvaluationReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewHrPolicyEvaluationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewHrPolicyEvaluation>>, TError,{data: BodyType<HrPolicyEvaluationReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewHrPolicyEvaluation>>, TError,{data: BodyType<HrPolicyEvaluationReviewInput>}, TContext> => {
+
+const mutationKey = ['reviewHrPolicyEvaluation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewHrPolicyEvaluation>>, {data: BodyType<HrPolicyEvaluationReviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reviewHrPolicyEvaluation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewHrPolicyEvaluationMutationResult = NonNullable<Awaited<ReturnType<typeof reviewHrPolicyEvaluation>>>
+    export type ReviewHrPolicyEvaluationMutationBody = BodyType<HrPolicyEvaluationReviewInput>
+    export type ReviewHrPolicyEvaluationMutationError = ErrorType<void>
+
+    /**
+ * @summary Record verified HR compliance review of an exact synthetic answer key
+ */
+export const useReviewHrPolicyEvaluation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewHrPolicyEvaluation>>, TError,{data: BodyType<HrPolicyEvaluationReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewHrPolicyEvaluation>>,
+        TError,
+        {data: BodyType<HrPolicyEvaluationReviewInput>},
+        TContext
+      > => {
+      return useMutation(getReviewHrPolicyEvaluationMutationOptions(options));
+    }
+
+export const getRunHrPolicyEvaluationUrl = () => {
+
+
+
+
+  return `/api/policies/evaluation/runs`
+}
+
+/**
+ * @summary Run offline replay or explicitly authorized bounded real-model evaluation
+ */
+export const runHrPolicyEvaluation = async (hrPolicyEvaluationRunInput: HrPolicyEvaluationRunInput, options?: RequestInit): Promise<RunHrPolicyEvaluation200> => {
+
+  return customFetch<RunHrPolicyEvaluation200>(getRunHrPolicyEvaluationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hrPolicyEvaluationRunInput)
+  }
+);}
+
+
+
+
+
+export const getRunHrPolicyEvaluationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runHrPolicyEvaluation>>, TError,{data: BodyType<HrPolicyEvaluationRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runHrPolicyEvaluation>>, TError,{data: BodyType<HrPolicyEvaluationRunInput>}, TContext> => {
+
+const mutationKey = ['runHrPolicyEvaluation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runHrPolicyEvaluation>>, {data: BodyType<HrPolicyEvaluationRunInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runHrPolicyEvaluation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunHrPolicyEvaluationMutationResult = NonNullable<Awaited<ReturnType<typeof runHrPolicyEvaluation>>>
+    export type RunHrPolicyEvaluationMutationBody = BodyType<HrPolicyEvaluationRunInput>
+    export type RunHrPolicyEvaluationMutationError = ErrorType<void>
+
+    /**
+ * @summary Run offline replay or explicitly authorized bounded real-model evaluation
+ */
+export const useRunHrPolicyEvaluation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runHrPolicyEvaluation>>, TError,{data: BodyType<HrPolicyEvaluationRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runHrPolicyEvaluation>>,
+        TError,
+        {data: BodyType<HrPolicyEvaluationRunInput>},
+        TContext
+      > => {
+      return useMutation(getRunHrPolicyEvaluationMutationOptions(options));
     }
 
 export const getGetHrPolicyCapabilitiesUrl = () => {

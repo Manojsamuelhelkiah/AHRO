@@ -16,3 +16,9 @@ Pin the generator's Zod target to the installed major rather than relying on aut
 **Why:** Catalog-based version metadata can make inference select a different major version from the library consuming the generated validators.
 
 **How to apply:** Keep the target aligned with the consuming library when changing versions. Regenerate rather than hand-edit validators, then build the shared libraries.
+
+The same ordering failure can affect referenced string `maxLength` constraints, not just numeric ranges. Keep essential input limits in server-side validation when a reused schema emits a late `*Max` declaration.
+
+**Why:** Schema consumers may load generated source directly rather than a server bundle, so a bundled server and a previously passing typecheck do not prove that every consumer can import it safely after regeneration or formatting.
+
+**How to apply:** Smoke-import the generated Zod source with the same source loader used by browser regression after code generation. Do not fix ordering by hand in generated files.

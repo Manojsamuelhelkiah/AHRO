@@ -15,6 +15,7 @@ import {
   selectApprovedPolicyExtract,
   type PolicyExtractSelection,
 } from "./hr-policy-ai";
+import { sentenceForQuestion, containsPromptInjection, policyPermitted, policyCurrent, policyTimely } from "./hr-policy-selection";
 
 export type PolicyRole = "owner" | "admin" | "member";
 type PolicyStatus = "draft" | "in_review" | "published" | "superseded" | "retired";
@@ -131,7 +132,7 @@ async function liveMember(tx: any, organizationId: string, userId: string): Prom
 }
 
 /** Trusted governance records are intentionally the only specialist authority. */
-async function verifiedAuthority(tx: any, organizationId: string, userId: string, authorityRole: string) {
+export async function verifiedAuthority(tx: any, organizationId: string, userId: string, authorityRole: string) {
   await liveMember(tx, organizationId, userId);
   const now = new Date();
   const [grant] = await tx.select().from(onbGovernanceAuthorityAssignments).where(and(
@@ -612,19 +613,6 @@ function matchesApplicability(policy: PolicyApplicability, selected: PolicyAppli
   return Object.entries(policy).every(([key, value]) => selected[key] === value);
 }
 
-function sentenceForQuestion(source: string, question: string): string {
-  const terms = new Set(question.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
-  const sentences = source.match(/[^.!?\n]+[.!?]?/g)?.map((item) => item.trim()).filter(Boolean) ?? [];
-  return sentences.sort((a, b) =>
-    [...terms].filter((term) => b.toLowerCase().includes(term)).length -
-    [...terms].filter((term) => a.toLowerCase().includes(term)).length,
-  )[0]?.slice(0, 1500) ?? source.slice(0, 1500);
-}
-
-function containsPromptInjection(excerpt: string): boolean {
-  return /\b(ignore|disregard)\s+(all\s+)?(prior|previous|above)?\s*instructions?\b|\bsystem\s+prompt\b|\bact\s+as\s+(an?\s+)?ai\b/i.test(excerpt);
-}
-
 function topicalScore(row: { title: string; sourceReference: string }, question: string): number {
   const terms = new Set((question.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((term) => !TOPIC_STOPWORDS.has(term)));
   const haystack = `${row.title} ${row.sourceReference}`.toLowerCase();
@@ -651,15 +639,12 @@ export async function answerPolicyQuestion(
       effectiveFrom: onbHrPolicyVersions.effectiveFrom, effectiveUntil: onbHrPolicyVersions.effectiveUntil,
       reviewBy: onbHrPolicyVersions.reviewBy, status: onbHrPolicyVersions.status,
     }).from(onbHrPolicyVersions).where(and(eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.status, "published")));
-    const permitted = metadata.filter((row: any) => isAudience(row, role) && matchesApplicability(row.applicability, selected));
+    const permitted = metadata.filter((row: any) => policyPermitted(row, role, selected));
     const today = new Date().toISOString().slice(0, 10);
     // A past selected date never revives expired or review-overdue material
     // for ordinary assistant advice. Historical use has its own guarded route.
-    const currentPeriod = permitted.filter((row: any) =>
-      row.effectiveFrom <= today && (!row.effectiveUntil || row.effectiveUntil >= today),
-    );
-    const timely = currentPeriod.filter((row: any) => !row.reviewBy || row.reviewBy >= today)
-      .filter((row: any) => row.effectiveFrom <= appliesOn && (!row.effectiveUntil || row.effectiveUntil >= appliesOn));
+    const currentPeriod = permitted.filter((row: any) => policyCurrent(row, today));
+    const timely = currentPeriod.filter((row: any) => policyTimely(row, today, appliesOn));
     const limitation = (code: string, message: string) => ({ answer: null, limitation: { code, message }, citations: [] });
     if (timely.length === 0) {
       if (currentPeriod.some((row: any) => row.reviewBy && row.reviewBy < today) ||

@@ -5,6 +5,162 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type HrPolicyEvaluationReviewInputDecision = typeof HrPolicyEvaluationReviewInputDecision[keyof typeof HrPolicyEvaluationReviewInputDecision];
+
+
+export const HrPolicyEvaluationReviewInputDecision = {
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface HrPolicyEvaluationReviewInput {
+  benchmarkHash: string;
+  decision: HrPolicyEvaluationReviewInputDecision;
+  /** @minLength 1 */
+  reference: string;
+  confirmation: string;
+  expectedReviewId: string | null;
+}
+
+export type HrPolicyEvaluationRunInputMode = typeof HrPolicyEvaluationRunInputMode[keyof typeof HrPolicyEvaluationRunInputMode];
+
+
+export const HrPolicyEvaluationRunInputMode = {
+  offline: 'offline',
+  live: 'live',
+} as const;
+
+export interface HrPolicyEvaluationRunInput {
+  benchmarkHash: string;
+  mode: HrPolicyEvaluationRunInputMode;
+  /** @pattern ^[a-zA-Z0-9-]{8,80}$ */
+  requestId: string;
+  confirmation?: string;
+}
+
+export type HrPolicyEvaluationReviewDecision = typeof HrPolicyEvaluationReviewDecision[keyof typeof HrPolicyEvaluationReviewDecision];
+
+
+export const HrPolicyEvaluationReviewDecision = {
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface HrPolicyEvaluationReview {
+  reviewId: string;
+  benchmarkHash: string;
+  decision: HrPolicyEvaluationReviewDecision;
+  reviewer: string;
+  reviewedAt: string;
+  authorityId: number;
+  reference: string;
+}
+
+export type HrPolicyBenchmarkCaseSourceApplicability = {[key: string]: string};
+
+export type HrPolicyBenchmarkCaseSource = {
+  id: string;
+  version: number;
+  status: string;
+  text: string;
+  audience: string[];
+  applicability: HrPolicyBenchmarkCaseSourceApplicability;
+  effectiveFrom: string;
+  effectiveUntil: string | null;
+  reviewBy: string | null;
+};
+
+export type HrPolicyBenchmarkCaseApplicability = {[key: string]: string};
+
+export type HrPolicyBenchmarkCaseExpectedOutcome = typeof HrPolicyBenchmarkCaseExpectedOutcome[keyof typeof HrPolicyBenchmarkCaseExpectedOutcome];
+
+
+export const HrPolicyBenchmarkCaseExpectedOutcome = {
+  supported: 'supported',
+  insufficient: 'insufficient',
+  conflicting: 'conflicting',
+  injected: 'injected',
+} as const;
+
+export type HrPolicyBenchmarkCaseExpectedExcerptId = typeof HrPolicyBenchmarkCaseExpectedExcerptId[keyof typeof HrPolicyBenchmarkCaseExpectedExcerptId] | null;
+
+
+export const HrPolicyBenchmarkCaseExpectedExcerptId = {
+  'extract-1': 'extract-1',
+} as const;
+
+export type HrPolicyBenchmarkCaseExpected = {
+  outcome: HrPolicyBenchmarkCaseExpectedOutcome;
+  abstain: boolean;
+  modelCalled: boolean;
+  excerptId: HrPolicyBenchmarkCaseExpectedExcerptId;
+  quotedText: string | null;
+  rationale: string;
+};
+
+export interface HrPolicyBenchmarkCase {
+  id: string;
+  category: string;
+  question: string;
+  source: HrPolicyBenchmarkCaseSource;
+  role: string;
+  applicability: HrPolicyBenchmarkCaseApplicability;
+  appliesOn: string;
+  expected: HrPolicyBenchmarkCaseExpected;
+}
+
+export type HrPolicyEvaluationRunMode = typeof HrPolicyEvaluationRunMode[keyof typeof HrPolicyEvaluationRunMode];
+
+
+export const HrPolicyEvaluationRunMode = {
+  offline: 'offline',
+  live: 'live',
+} as const;
+
+export type HrPolicyEvaluationRunResultsItem = {
+  caseId: string;
+  expected: string;
+  actual: string;
+  passed: boolean;
+  abstained: boolean;
+};
+
+export interface HrPolicyEvaluationRun {
+  runId: string;
+  mode: HrPolicyEvaluationRunMode;
+  status: string;
+  benchmarkHash: string;
+  evidenceKind?: string;
+  requestHash?: string;
+  contractHash?: string;
+  passed?: number;
+  total?: number;
+  failed?: number;
+  outcomeAgreement?: number | null;
+  unsafeSupportCount?: number;
+  results?: HrPolicyEvaluationRunResultsItem[];
+  [key: string]: unknown;
+ }
+
+export interface HrPolicyEvaluationCatalog {
+  benchmarkVersion: string;
+  benchmarkHash: string;
+  model: string;
+  promptVersion: string;
+  requestHash: string;
+  contractHash: string;
+  currentLiveEvidence: boolean;
+  cases: HrPolicyBenchmarkCase[];
+  canReview: boolean;
+  approved: boolean;
+  review: HrPolicyEvaluationReview | null;
+  runs: HrPolicyEvaluationRun[];
+  limitation: string;
+  reviewConfirmation: string;
+  liveConfirmation: string;
+  [key: string]: unknown;
+ }
+
 export interface VaultEvidenceBinding {
   id: string;
   revision: number;
@@ -9922,6 +10078,14 @@ export const ListHroContextTransactionsStatus = {
   completed: 'completed',
   failed: 'failed',
 } as const;
+
+export type ReviewHrPolicyEvaluation200 = {
+  review: HrPolicyEvaluationReview;
+};
+
+export type RunHrPolicyEvaluation200 = {
+  run: HrPolicyEvaluationRun;
+};
 
 export type ReviseGovernanceDecisionBody = {
   /** @minimum 1 */

@@ -569,6 +569,147 @@ export const ActivateScenarioSystemSetupResponse = zod.object({
 
 
 /**
+ * @summary Get synthetic answer key, business review and regression history
+ */
+export const GetHrPolicyEvaluationResponse = zod.object({
+  "benchmarkVersion": zod.string(),
+  "benchmarkHash": zod.string(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "requestHash": zod.string(),
+  "contractHash": zod.string(),
+  "currentLiveEvidence": zod.boolean(),
+  "cases": zod.array(zod.object({
+  "id": zod.string(),
+  "category": zod.string(),
+  "question": zod.string(),
+  "source": zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "text": zod.string(),
+  "audience": zod.array(zod.string()),
+  "applicability": zod.record(zod.string(), zod.string()),
+  "effectiveFrom": zod.string(),
+  "effectiveUntil": zod.string().nullable(),
+  "reviewBy": zod.string().nullable()
+}),
+  "role": zod.string(),
+  "applicability": zod.record(zod.string(), zod.string()),
+  "appliesOn": zod.string(),
+  "expected": zod.object({
+  "outcome": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "abstain": zod.boolean(),
+  "modelCalled": zod.boolean(),
+  "excerptId": zod.enum(['extract-1']).nullable(),
+  "quotedText": zod.string().nullable(),
+  "rationale": zod.string()
+})
+})),
+  "canReview": zod.boolean(),
+  "approved": zod.boolean(),
+  "review": zod.object({
+  "reviewId": zod.string(),
+  "benchmarkHash": zod.string(),
+  "decision": zod.enum(['approved', 'rejected']),
+  "reviewer": zod.string(),
+  "reviewedAt": zod.string(),
+  "authorityId": zod.number(),
+  "reference": zod.string()
+}).nullable(),
+  "runs": zod.array(zod.object({
+  "runId": zod.string(),
+  "mode": zod.enum(['offline', 'live']),
+  "status": zod.string(),
+  "benchmarkHash": zod.string(),
+  "evidenceKind": zod.string().optional(),
+  "requestHash": zod.string().optional(),
+  "contractHash": zod.string().optional(),
+  "passed": zod.number().optional(),
+  "total": zod.number().optional(),
+  "failed": zod.number().optional(),
+  "outcomeAgreement": zod.number().nullish(),
+  "unsafeSupportCount": zod.number().optional(),
+  "results": zod.array(zod.object({
+  "caseId": zod.string(),
+  "expected": zod.string(),
+  "actual": zod.string(),
+  "passed": zod.boolean(),
+  "abstained": zod.boolean()
+})).optional()
+})),
+  "limitation": zod.string(),
+  "reviewConfirmation": zod.string(),
+  "liveConfirmation": zod.string()
+})
+
+
+/**
+ * @summary Record verified HR compliance review of an exact synthetic answer key
+ */
+
+
+
+export const ReviewHrPolicyEvaluationBody = zod.object({
+  "benchmarkHash": zod.string(),
+  "decision": zod.enum(['approved', 'rejected']),
+  "reference": zod.string().min(1),
+  "confirmation": zod.string(),
+  "expectedReviewId": zod.string().nullable()
+})
+
+export const ReviewHrPolicyEvaluationResponse = zod.object({
+  "review": zod.object({
+  "reviewId": zod.string(),
+  "benchmarkHash": zod.string(),
+  "decision": zod.enum(['approved', 'rejected']),
+  "reviewer": zod.string(),
+  "reviewedAt": zod.string(),
+  "authorityId": zod.number(),
+  "reference": zod.string()
+})
+})
+
+
+/**
+ * @summary Run offline replay or explicitly authorized bounded real-model evaluation
+ */
+export const runHrPolicyEvaluationBodyRequestIdRegExp = new RegExp('^[a-zA-Z0-9-]{8,80}$');
+
+
+export const RunHrPolicyEvaluationBody = zod.object({
+  "benchmarkHash": zod.string(),
+  "mode": zod.enum(['offline', 'live']),
+  "requestId": zod.string().regex(runHrPolicyEvaluationBodyRequestIdRegExp),
+  "confirmation": zod.string().optional()
+})
+
+export const RunHrPolicyEvaluationResponse = zod.object({
+  "run": zod.object({
+  "runId": zod.string(),
+  "mode": zod.enum(['offline', 'live']),
+  "status": zod.string(),
+  "benchmarkHash": zod.string(),
+  "evidenceKind": zod.string().optional(),
+  "requestHash": zod.string().optional(),
+  "contractHash": zod.string().optional(),
+  "passed": zod.number().optional(),
+  "total": zod.number().optional(),
+  "failed": zod.number().optional(),
+  "outcomeAgreement": zod.number().nullish(),
+  "unsafeSupportCount": zod.number().optional(),
+  "results": zod.array(zod.object({
+  "caseId": zod.string(),
+  "expected": zod.string(),
+  "actual": zod.string(),
+  "passed": zod.boolean(),
+  "abstained": zod.boolean()
+})).optional()
+})
+})
+
+
+/**
  * @summary Get current verified policy-library capabilities
  */
 export const GetHrPolicyCapabilitiesResponse = zod.object({

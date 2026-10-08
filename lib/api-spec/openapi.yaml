@@ -312,6 +312,46 @@ paths:
               schema: { $ref: "#/components/schemas/Scenario" }
         "403": { description: Organization owner or admin required }
         "404": { description: Scenario not found }
+  /policies/evaluation:
+    get:
+      operationId: getHrPolicyEvaluation
+      tags: [hrPolicyLibrary]
+      summary: Get synthetic answer key, business review and regression history
+      responses:
+        "200":
+          description: Tenant-scoped synthetic benchmark evidence, not an accuracy guarantee
+          content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyEvaluationCatalog" } } }
+        "403": { description: Current membership required }
+  /policies/evaluation/review:
+    post:
+      operationId: reviewHrPolicyEvaluation
+      tags: [hrPolicyLibrary]
+      summary: Record verified HR compliance review of an exact synthetic answer key
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyEvaluationReviewInput" } } }
+      responses:
+        "200":
+          description: Business review recorded
+          content: { application/json: { schema: { type: object, required: [review], properties: { review: { $ref: "#/components/schemas/HrPolicyEvaluationReview" } } } } }
+        "400": { description: Invalid review }
+        "403": { description: Verified HR compliance authority required }
+        "409": { description: Benchmark changed }
+  /policies/evaluation/runs:
+    post:
+      operationId: runHrPolicyEvaluation
+      tags: [hrPolicyLibrary]
+      summary: Run offline replay or explicitly authorized bounded real-model evaluation
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyEvaluationRunInput" } } }
+      responses:
+        "200":
+          description: Synthetic run evidence
+          content: { application/json: { schema: { type: object, required: [run], properties: { run: { $ref: "#/components/schemas/HrPolicyEvaluationRun" } } } } }
+        "400": { description: Invalid run }
+        "403": { description: Current membership or verified live-run authority required }
+        "409": { description: "Missing review, stale benchmark or budget exhausted" }
   /policies/capabilities:
     get:
       operationId: getHrPolicyCapabilities
@@ -6614,6 +6654,118 @@ components:
         type: integer
         minimum: 1
   schemas:
+    HrPolicyEvaluationReviewInput:
+      type: object
+      additionalProperties: false
+      required: [benchmarkHash, decision, reference, confirmation, expectedReviewId]
+      properties:
+        benchmarkHash: { type: string }
+        decision: { type: string, enum: [approved, rejected] }
+        # Enforced as <=500 by the service: Orval can reorder reused max constants after eager schemas.
+        reference: { type: string, minLength: 1 }
+        confirmation: { type: string }
+        expectedReviewId: { type: string, nullable: true }
+    HrPolicyEvaluationRunInput:
+      type: object
+      additionalProperties: false
+      required: [benchmarkHash, mode, requestId]
+      properties:
+        benchmarkHash: { type: string }
+        mode: { type: string, enum: [offline, live] }
+        requestId: { type: string, pattern: '^[a-zA-Z0-9-]{8,80}$' }
+        confirmation: { type: string }
+    HrPolicyEvaluationReview:
+      type: object
+      required: [reviewId, benchmarkHash, decision, reviewer, reviewedAt, authorityId, reference]
+      properties:
+        reviewId: { type: string }
+        benchmarkHash: { type: string }
+        decision: { type: string, enum: [approved, rejected] }
+        reviewer: { type: string }
+        reviewedAt: { type: string }
+        authorityId: { type: integer }
+        reference: { type: string }
+    HrPolicyBenchmarkCase:
+      type: object
+      required: [id, category, question, source, role, applicability, appliesOn, expected]
+      properties:
+        id: { type: string }
+        category: { type: string }
+        question: { type: string }
+        source:
+          type: object
+          required: [id, version, status, text, audience, applicability, effectiveFrom, effectiveUntil, reviewBy]
+          properties:
+            id: { type: string }
+            version: { type: integer }
+            status: { type: string }
+            text: { type: string }
+            audience: { type: array, items: { type: string } }
+            applicability: { type: object, additionalProperties: { type: string } }
+            effectiveFrom: { type: string }
+            effectiveUntil: { type: string, nullable: true }
+            reviewBy: { type: string, nullable: true }
+        role: { type: string }
+        applicability: { type: object, additionalProperties: { type: string } }
+        appliesOn: { type: string }
+        expected:
+          type: object
+          required: [outcome, abstain, modelCalled, excerptId, quotedText, rationale]
+          properties:
+            outcome: { type: string, enum: [supported, insufficient, conflicting, injected] }
+            abstain: { type: boolean }
+            modelCalled: { type: boolean }
+            excerptId: { type: string, nullable: true, enum: [extract-1] }
+            quotedText: { type: string, nullable: true }
+            rationale: { type: string }
+    HrPolicyEvaluationRun:
+      type: object
+      additionalProperties: true
+      required: [runId, mode, status, benchmarkHash]
+      properties:
+        runId: { type: string }
+        mode: { type: string, enum: [offline, live] }
+        status: { type: string }
+        benchmarkHash: { type: string }
+        evidenceKind: { type: string }
+        requestHash: { type: string }
+        contractHash: { type: string }
+        passed: { type: integer }
+        total: { type: integer }
+        failed: { type: integer }
+        outcomeAgreement: { type: number, nullable: true }
+        unsafeSupportCount: { type: integer }
+        results:
+          type: array
+          items:
+            type: object
+            required: [caseId, expected, actual, passed, abstained]
+            properties:
+              caseId: { type: string }
+              expected: { type: string }
+              actual: { type: string }
+              passed: { type: boolean }
+              abstained: { type: boolean }
+    HrPolicyEvaluationCatalog:
+      type: object
+      additionalProperties: true
+      required: [benchmarkVersion, benchmarkHash, model, promptVersion, requestHash, contractHash, currentLiveEvidence, cases, canReview, approved, review, runs, limitation, reviewConfirmation, liveConfirmation]
+      properties:
+        benchmarkVersion: { type: string }
+        benchmarkHash: { type: string }
+        model: { type: string }
+        promptVersion: { type: string }
+        requestHash: { type: string }
+        contractHash: { type: string }
+        currentLiveEvidence: { type: boolean }
+        cases: { type: array, items: { $ref: "#/components/schemas/HrPolicyBenchmarkCase" } }
+        canReview: { type: boolean }
+        approved: { type: boolean }
+        review: { allOf: [{ $ref: "#/components/schemas/HrPolicyEvaluationReview" }], nullable: true }
+        runs: { type: array, items: { $ref: "#/components/schemas/HrPolicyEvaluationRun" } }
+        limitation: { type: string }
+        reviewConfirmation: { type: string }
+        liveConfirmation: { type: string }
     VaultEvidenceBinding:
       type: object
       additionalProperties: false
