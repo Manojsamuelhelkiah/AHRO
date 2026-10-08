@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 /**
  * DB persistence + crash-recovery tests for AI voice-call sessions (real DB).
  *
@@ -119,7 +120,7 @@ describe("voice session persistence (real DB)", () => {
     await db.delete(onbGovernanceDecisions).where(
       eq(onbGovernanceDecisions.organizationId, organizationId),
     );
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
   });
 
   test("a session survives a 'restart': fresh read sees turns and binds CallSid", async () => {

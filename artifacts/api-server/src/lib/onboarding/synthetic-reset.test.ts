@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -191,7 +192,7 @@ async function cleanupOrganizations() {
   await db.delete(onbGovernanceRequirements).where(inArray(onbGovernanceRequirements.organizationId, ids));
   await db.delete(onbGovernanceDecisions).where(inArray(onbGovernanceDecisions.organizationId, ids));
   await db.delete(onbSensitiveLifecyclePolicies).where(inArray(onbSensitiveLifecyclePolicies.organizationId, ids));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, ids));
+  await deleteTestOrganizations(inArray(organizationsTable.id, ids));
 }
 
 describe("synthetic reset safety boundary", { skip: !hasDb }, () => {

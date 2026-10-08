@@ -493,12 +493,13 @@ async function completeChecklistProfileDraft(
     // keeps pure validation consumers/provider-free tests independent of
     // runtime integration provisioning.
     const { openai } = await import("@workspace/integrations-openai-ai-server");
-    response = await openai.chat.completions.create({
+    const { dispatchHroAi } = await import("../hro-context/manager");
+    response = await dispatchHroAi({
       model: MODEL,
-      reasoning_effort: "low",
+      reasoning_effort: "low" as const,
       max_completion_tokens: MAX_COMPLETION_TOKENS,
       response_format: {
-        type: "json_schema",
+        type: "json_schema" as const,
         json_schema: {
           name: "onboarding_checklist_profile_draft",
           strict: true,
@@ -507,15 +508,15 @@ async function completeChecklistProfileDraft(
       },
       messages: [
         {
-          role: "system",
+          role: "system" as const,
           content: "You are a conservative HR policy drafting assistant. You propose configuration only; you never publish, execute, or infer authority.",
         },
-        { role: "user", content: modelPrompt(description, base) },
+        { role: "user" as const, content: modelPrompt(description, base) },
       ],
-    }, {
+    }, request => openai.chat.completions.create(request, {
       timeout: REQUEST_TIMEOUT_MS,
       maxRetries: 0,
-    });
+    }));
   } catch {
     throw new ChecklistProfileDraftFailure("unavailable", "The checklist profile drafting service is unavailable.");
   }

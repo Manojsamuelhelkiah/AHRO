@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
@@ -94,7 +95,7 @@ after(async () => {
   await db.delete(onbGovernanceDecisions).where(inArray(onbGovernanceDecisions.organizationId, organizations));
   await db.delete(onbGovernanceAuthorityAssignments).where(inArray(onbGovernanceAuthorityAssignments.organizationId, organizations));
   await db.delete(organizationMembershipsTable).where(inArray(organizationMembershipsTable.organizationId, organizations));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, organizations));
+  await deleteTestOrganizations(inArray(organizationsTable.id, organizations));
 });
 
 describe("governance decision register", { concurrency: false }, () => {

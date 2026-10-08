@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -119,7 +120,7 @@ after(async () => {
   await db.delete(onbSensitiveLifecycleHolds).where(eq(onbSensitiveLifecycleHolds.organizationId, organizationId));
   await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
   await db.delete(onbCases).where(eq(onbCases.organizationId, organizationId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
 });
 
 test("recovered communication job redacts content while retaining ID and protected audit evidence", async () => {

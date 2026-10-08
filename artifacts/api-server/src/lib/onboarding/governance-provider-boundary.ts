@@ -17,6 +17,7 @@ import {
   type SensitiveDataClass,
 } from "./sensitive-lifecycle";
 import { getUatCaseIsolation } from "./uat-isolation";
+import { withHroCaseContext, recordHroContextStep } from "../hro-context/manager";
 
 /**
  * Canonical provider-boundary scopes. These are server-owned constants: a
@@ -258,7 +259,10 @@ export async function dispatchWithProviderGovernance<T>(input: {
           return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
         }
       }
-      const dispatched = await input.dispatch();
+      const dispatched = await withHroCaseContext(currentCase, async () => {
+        await recordHroContextStep("provider-boundary", { reference: input.operation });
+        return input.dispatch();
+      }, input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing ? "documents" : "communications");
       return { value: dispatched, disposition: input.disposition(dispatched) };
     });
   });

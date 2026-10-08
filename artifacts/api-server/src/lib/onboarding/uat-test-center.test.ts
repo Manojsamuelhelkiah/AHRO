@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -87,8 +88,8 @@ describe("UAT Test Center durable isolation", { skip: !hasDb }, () => {
     await db.delete(onbGovernanceDispatchMarkers).where(eq(onbGovernanceDispatchMarkers.organizationId, organizationId));
     await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, organizationId));
     await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, organizationId));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, otherOrganizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, otherOrganizationId));
   });
 
   test("create request is durable/idempotent and case is dispatch-offline", async () => {

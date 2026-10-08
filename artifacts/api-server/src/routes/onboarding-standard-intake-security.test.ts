@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -140,8 +141,8 @@ after(async () => {
   await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, orgA));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgA));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgB));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, orgA));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, orgB));
+  await deleteTestOrganizations(eq(organizationsTable.id, orgA));
+  await deleteTestOrganizations(eq(organizationsTable.id, orgB));
 });
 
 test("standard intake evidence is not disclosed across tenants", { skip: !hasDb }, async () => {

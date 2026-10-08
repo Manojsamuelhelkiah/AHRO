@@ -12,6 +12,8 @@ import {
   type OnbWorkstreamRow,
 } from "@workspace/db/schema";
 import { and, desc, eq, or, sql } from "drizzle-orm";
+import { withHroCaseContext, recordHroContextStep } from "../hro-context/manager";
+import { currentHroContext } from "../hro-context/core";
 import { sendOutbound } from "./channels";
 import { recordGuardrailEvent } from "./guardrails";
 import {
@@ -218,7 +220,11 @@ export async function enforceOfferAcceptanceGate(
 }
 
 async function getCase(caseId: number): Promise<CaseRow> {
-  const [row] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+  const scope = currentHroContext();
+  const [row] = await db.select().from(onbCases).where(and(
+    eq(onbCases.id, caseId),
+    scope ? eq(onbCases.organizationId, scope.organizationId) : undefined,
+  ));
   if (!row) throw new Error(`case ${caseId} not found`);
   return row;
 }
@@ -421,6 +427,9 @@ async function fencedCaseUpdate(
     eq(onbCases.orchestrationClaimToken, claim.token),
   )).returning({ id: onbCases.id });
   if (!updated) throw new Error("Orchestration claim was fenced by a newer worker");
+  if (patch.orchestrationCheckpoint && currentHroContext()) {
+    await recordHroContextStep("checkpoint-recorded", { reference: patch.orchestrationCheckpoint });
+  }
 }
 
 async function renewOrchestrationClaim(caseId: number, claim: OrchestrationClaim): Promise<void> {
@@ -853,6 +862,13 @@ async function runPlanGeneration(
 export async function runWorkstreams(
   caseId: number,
   claim?: OrchestrationClaim,
+): Promise<"paused" | "complete"> {
+  const record = await getCase(caseId);
+  return withHroCaseContext(record, () => runWorkstreamsInContext(caseId, claim));
+}
+
+async function runWorkstreamsInContext(
+  caseId: number, claim?: OrchestrationClaim,
 ): Promise<"paused" | "complete"> {
   const c = await getCase(caseId);
   // Ordinary provider effects each need their own reviewed specialist
@@ -1480,7 +1496,7 @@ async function runFromPlan(
 
 /** Fire-and-forget orchestration for a freshly created case. */
 export function startOrchestration(caseId: number) {
-  void (async () => {
+  void runCaseContextAttempt(caseId, async () => {
     let claim: OrchestrationClaim | undefined;
     try {
       const [offlineCase] = await db
@@ -1519,8 +1535,19 @@ export function startOrchestration(caseId: number) {
       }
       await logEvent(caseId, "orchestrator", "system", "Orchestration error",
         `Unexpected failure: ${String(err).slice(0, 300)}`).catch(() => {});
+      throw err;
     }
-  })();
+  });
+}
+
+/** Detached continuations reload the subject; a closed HTTP frame is never revived. */
+async function runCaseContextAttempt(caseId: number, action: () => Promise<void>) {
+  try {
+    const record = await getCase(caseId);
+    await withHroCaseContext(record, action);
+  } catch {
+    console.error("[onboarding context] case execution attempt failed");
+  }
 }
 
 /**
@@ -1528,6 +1555,12 @@ export function startOrchestration(caseId: number) {
  * simultaneous item completions and retries collapse to one orchestration run.
  */
 export async function resumeChecklistOrchestration(caseId: number): Promise<boolean> {
+  const record = await getCase(caseId);
+  if (!record) return false;
+  return withHroCaseContext(record, () => resumeChecklistOrchestrationInContext(caseId));
+}
+
+async function resumeChecklistOrchestrationInContext(caseId: number): Promise<boolean> {
   const [offlineCase] = await db
     .select()
     .from(onbCases)
@@ -1905,7 +1938,7 @@ export function resumeAfterDecision(opts: {
   resumeAction: string;
   authorityScope?: OnbAuthorityScope | null;
 }) {
-  void (async () => {
+  void runCaseContextAttempt(opts.caseId, async () => {
     try {
       const [offlineCase] = await db
         .select()
@@ -2022,13 +2055,14 @@ export function resumeAfterDecision(opts: {
       await reconcileDecidedApprovals(opts.caseId);
     } catch (err) {
       console.error(`[onboarding engine] resume case ${opts.caseId} failed:`, err);
+      throw err;
     }
-  })();
+  });
 }
 
 /** React to an inbound message from the new hire (LLM reply, act-then-review). */
 export function handleInbound(caseId: number, channel: "email" | "whatsapp", body: string) {
-  void (async () => {
+  void runCaseContextAttempt(caseId, async () => {
     try {
       const c = await getCase(caseId);
       if (isSyntheticOfflineCase(c)) return;
@@ -2176,6 +2210,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
       } catch (alertErr) {
         console.error(`[onboarding engine] failed to raise HITL alert for case ${caseId}:`, alertErr);
       }
+      throw err;
     }
-  })();
+  });
 }

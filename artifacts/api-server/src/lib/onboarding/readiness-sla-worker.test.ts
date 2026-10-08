@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -74,7 +75,7 @@ describe("readiness SLA outbox claim fencing (real DB)", { skip: !hasDb }, () =>
     await db.delete(onbGovernanceAuthorityAssignments).where(
       eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
     );
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
   });
 
   async function createFixture() {

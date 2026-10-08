@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Request } from "express";
@@ -820,7 +821,7 @@ after(async () => {
       demoPrincipalSettingKey(demoReviewer),
     ]),
   ));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, organizationIds));
+  await deleteTestOrganizations(inArray(organizationsTable.id, organizationIds));
 });
 
 describe("Action Center focused regression suite", { concurrency: false }, () => {

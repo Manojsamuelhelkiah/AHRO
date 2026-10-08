@@ -125,6 +125,7 @@ import type {
   HrPolicySubmitReviewInput,
   HrPolicySupersedeInput,
   HrPolicyVersionDetailResponse,
+  HroContextHistory,
   ImportScenarioWorkbookBody,
   ImportWorkbookResult,
   IntentCorpus,
@@ -363,6 +364,83 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListHroContextTransactionsUrl = () => {
+
+
+
+
+  return `/api/context-manager/transactions`
+}
+
+/**
+ * @summary Read the authenticated user's recent metadata-only execution attempts
+ */
+export const listHroContextTransactions = async ( options?: RequestInit): Promise<HroContextHistory> => {
+
+  return customFetch<HroContextHistory>(getListHroContextTransactionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListHroContextTransactionsQueryKey = () => {
+    return [
+    `/api/context-manager/transactions`
+    ] as const;
+    }
+
+
+export const getListHroContextTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listHroContextTransactions>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroContextTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListHroContextTransactionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHroContextTransactions>>> = ({ signal }) => listHroContextTransactions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listHroContextTransactions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListHroContextTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof listHroContextTransactions>>>
+export type ListHroContextTransactionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read the authenticated user's recent metadata-only execution attempts
+ */
+
+export function useListHroContextTransactions<TData = Awaited<ReturnType<typeof listHroContextTransactions>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroContextTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListHroContextTransactionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListScenarioSystemCapabilitiesUrl = () => {
 

@@ -1,4 +1,5 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { dispatchHroAi } from "../hro-context/manager";
 import {
   dispatchWithProviderGovernance,
   PROVIDER_GOVERNANCE_WORKFLOW,
@@ -8,15 +9,15 @@ import {
 const MODEL = "gpt-5-nano";
 
 async function complete(system: string, user: string, maxTokens: number, json = false) {
-  return openai.chat.completions.create({
+  return dispatchHroAi({
     model: MODEL,
     max_completion_tokens: maxTokens + 2500,
     ...(json ? { response_format: { type: "json_object" as const } } : {}),
     messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
+      { role: "system" as const, content: system },
+      { role: "user" as const, content: user },
     ],
-  });
+  }, request => openai.chat.completions.create(request));
 }
 
 /**

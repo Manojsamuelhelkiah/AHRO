@@ -37,6 +37,7 @@ import {
 } from "../lib/onboarding/settings";
 import { registeredDemoProfile } from "../lib/demo-principal";
 import accessGovernanceRouter from "./access-governance";
+import { hroRequestContext } from "../middlewares/hro-context";
 
 const router: IRouter = Router();
 
@@ -77,7 +78,7 @@ router.use("/organizations", async (req, res, next): Promise<void> => {
 });
 router.use(demoControllerSetupRouter);
 const requireTenantContext = createTenantContextMiddleware(lookupMembership);
-router.use("/organizations/current/access", requireTenantContext, accessGovernanceRouter);
+router.use("/organizations/current/access", requireTenantContext, hroRequestContext, accessGovernanceRouter);
 
 function hashJoinCode(value: string): string {
   return createHash("sha256").update(value.trim().toUpperCase()).digest("hex");

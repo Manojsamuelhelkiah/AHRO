@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -78,8 +79,8 @@ after(async () => {
     organizationMembershipsTable.clerkUserId,
     [privacyActor, revokedMembershipActor],
   ));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, otherOrganizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, otherOrganizationId));
 });
 
 test("transactional sensitive-authority verification rejects a revoked membership", async () => {

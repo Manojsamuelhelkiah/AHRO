@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -155,7 +156,7 @@ after(async () => {
     organizationMembershipsTable.organizationId,
     [orgA, orgB],
   ));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
+  await deleteTestOrganizations(inArray(organizationsTable.id, [orgA, orgB]));
 });
 
 test("ordinary members cannot submit staff standard intake", { skip: !hasDb }, async () => {

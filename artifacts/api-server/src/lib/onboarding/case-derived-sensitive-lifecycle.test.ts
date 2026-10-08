@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -48,7 +49,7 @@ after(async () => {
   await db.delete(onbSensitiveLifecycleDeletionJobs).where(eq(onbSensitiveLifecycleDeletionJobs.organizationId, organizationId));
   await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
   await db.delete(onbCases).where(eq(onbCases.organizationId, organizationId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
 });
 
 test("a real sensitive collection gate rejects an exact policy when mixed-envelope classes remain unapproved", async () => {

@@ -41,6 +41,8 @@ import governanceRouter from "./governance";
 import hrPolicyRouter from "./hr-policies";
 import privacyLifecycleRouter from "./privacy-lifecycle";
 import agentInvocationsRouter from "./agent-invocations";
+import { hroRequestContext } from "../middlewares/hro-context";
+import hroContextRouter from "./hro-context";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -66,6 +68,8 @@ router.use((req, res, next) => {
     });
   });
 });
+router.use(hroRequestContext);
+router.use(hroContextRouter);
 router.use(corpusRouter);
 router.use(scenariosRouter);
 router.use(scenarioFilesRouter);

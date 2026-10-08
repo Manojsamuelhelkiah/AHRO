@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -160,7 +161,7 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
       eq(organizationMembershipsTable.clerkUserId, requesterUserId),
     ));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
+    await deleteTestOrganizations(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
   });
 
   test("Gate A applies only to new external onboarding and rehires", () => {

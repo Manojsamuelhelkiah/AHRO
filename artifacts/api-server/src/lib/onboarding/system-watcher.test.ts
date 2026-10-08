@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import { randomUUID } from "node:crypto";
 import { test, describe, after, before } from "node:test";
 import assert from "node:assert/strict";
@@ -780,5 +781,5 @@ after(async () => {
   await db.delete(onbConnectors).where(
     eq(onbConnectors.organizationId, systemWatcherOrganizationId),
   );
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, systemWatcherOrganizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, systemWatcherOrganizationId));
 });

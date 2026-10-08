@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -27,7 +28,7 @@ describe("workforce evidence safety (real DB)", { skip: !hasDb }, () => {
     await db.delete(onbConnectors).where(eq(onbConnectors.organizationId, organizationId));
     await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, organizationId));
     await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
   });
 
   test("scoped authority, prerequisites, and version fences are enforced", async () => {

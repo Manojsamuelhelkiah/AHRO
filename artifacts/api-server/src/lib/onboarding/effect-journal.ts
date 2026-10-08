@@ -3,6 +3,8 @@ import { onbEffectJournal } from "@workspace/db/schema";
 import { and, eq, or, sql } from "drizzle-orm";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
 import { getUatCaseIsolation } from "./uat-isolation";
+import { withHroContext, recordHroContextStep } from "../hro-context/manager";
+import { currentHroContext } from "../hro-context/core";
 
 export type EffectJournalIdentity = {
   logicalOperationKey: string;
@@ -27,6 +29,18 @@ export type EffectDispatchClaim =
 
 /** Create the single durable row for a logical remote operation. */
 export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
+  // This is a server-owned journal identity, not a client permission receipt.
+  return withHroContext({
+    organizationId: input.organizationId, subjectType: "case", subjectId: String(input.caseId),
+    workflow: currentHroContext()?.workflow ?? "onboarding",
+  }, async () => {
+    const entry = await ensureEffectJournalEntryInContext(input);
+    await recordHroContextStep("effect-bound", { reference: entry.logicalOperationKey });
+    return entry;
+  });
+}
+
+async function ensureEffectJournalEntryInContext(input: EffectJournalIdentity) {
   if ((await getUatCaseIsolation({ organizationId: input.organizationId, id: input.caseId })).isolated) {
     throw new Error("UAT-isolated cases cannot create ordinary durable effect-journal entries.");
   }

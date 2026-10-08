@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { request as httpRequest, type Server } from "node:http";
@@ -386,8 +387,8 @@ after(async () => {
   await db.delete(accessUserGroups).where(inArray(accessUserGroups.organizationId, [orgA, orgB]));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgA));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, orgB));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, orgA));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, orgB));
+  await deleteTestOrganizations(eq(organizationsTable.id, orgA));
+  await deleteTestOrganizations(eq(organizationsTable.id, orgB));
   await db.delete(onbCandidateExchangeFailures);
 });
 

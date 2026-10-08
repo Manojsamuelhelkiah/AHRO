@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { db } from "@workspace/db";
@@ -52,7 +53,7 @@ describe("email retry durable claim", { skip: !hasDb }, () => {
     await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, DEMO_ORGANIZATION_ID));
     await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID));
     await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
+    await deleteTestOrganizations(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
   });
 
   test("two concurrent retries claim one row and invoke the injected provider once", async () => {

@@ -68,3 +68,4 @@
 - [Multi-estate connector modes](multi-estate-connector-modes.md) — payroll and ticketing estates may repeat, but watcher state remains connector-wide and must agree across instances.
 - [Versioned local drafts](versioned-local-drafts.md) — migrate only scoped drafts; map unambiguous legacy values and force explicit choices for unsupported ones.
 - [Countryless lifecycle quarantine](countryless-lifecycle-quarantine.md) — missing jurisdiction stays fail-closed, but workers persist one fixed remediation marker instead of failing every tick.
+- [Unified HRO context](unified-context-boundaries.md) — all-HRO scope; continuity metadata is not authority, evidence storage, or a second workflow engine.

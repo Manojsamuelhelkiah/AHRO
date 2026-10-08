@@ -138,12 +138,14 @@ export async function completeExplainabilityJson(
       operation: `onboarding-case-explainability:${caseRow.id}:${stage}`,
       providerId: "openai",
       dataClass: "candidate-contact",
-      dispatch: () => openai.chat.completions.create({
+      dispatch: async () => {
+        const { dispatchHroAi } = await import("../hro-context/manager");
+        return dispatchHroAi({
         model: MODEL,
-        reasoning_effort: "low",
+        reasoning_effort: "low" as const,
         max_completion_tokens: MAX_COMPLETION_TOKENS,
         response_format: {
-          type: "json_schema",
+          type: "json_schema" as const,
           json_schema: {
             name: schema.name,
             strict: true,
@@ -151,14 +153,15 @@ export async function completeExplainabilityJson(
           },
         },
         messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
+          { role: "system" as const, content: system },
+          { role: "user" as const, content: user },
         ],
-      }, {
+      }, request => openai.chat.completions.create(request, {
         timeout: REQUEST_TIMEOUT_MS,
         maxRetries: 0,
         signal,
-      }),
+      }));
+      },
       disposition: () => "sent",
     });
     if (!guarded.dispatched) {

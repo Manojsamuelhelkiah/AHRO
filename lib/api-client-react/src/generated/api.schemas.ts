@@ -5,6 +5,52 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type HroContextHistoryItemStatus = typeof HroContextHistoryItemStatus[keyof typeof HroContextHistoryItemStatus];
+
+
+export const HroContextHistoryItemStatus = {
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type HroContextHistoryItemExecutorType = typeof HroContextHistoryItemExecutorType[keyof typeof HroContextHistoryItemExecutorType];
+
+
+export const HroContextHistoryItemExecutorType = {
+  human: 'human',
+  system: 'system',
+  agent: 'agent',
+} as const;
+
+export interface HroContextHistoryStep {
+  code: string;
+  createdAt: string;
+  inputBytes?: number;
+  outputTokens?: number;
+}
+
+export interface HroContextHistoryItem {
+  id: string;
+  anchorId: string;
+  correlationId: string;
+  /** @nullable */
+  parentTransactionId: string | null;
+  workflow: string;
+  status: HroContextHistoryItemStatus;
+  version: number;
+  executorType: HroContextHistoryItemExecutorType;
+  startedAt: string;
+  /** @nullable */
+  finishedAt: string | null;
+  steps: HroContextHistoryStep[];
+}
+
+export interface HroContextHistory {
+  available: boolean;
+  transactions: HroContextHistoryItem[];
+}
+
 export type ScenarioSystemSetupMode = typeof ScenarioSystemSetupMode[keyof typeof ScenarioSystemSetupMode];
 
 

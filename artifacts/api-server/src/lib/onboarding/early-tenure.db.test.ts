@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -107,7 +108,7 @@ after(async () => {
   await db.delete(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.organizationId, organizationId));
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, organizationId));
   await db.delete(onbAuthorityGovernance).where(eq(onbAuthorityGovernance.organizationId, organizationId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
 });
 
 test("database fences concurrent anchor updates and re-anchors untouched overdue planned work", async () => {
@@ -354,7 +355,7 @@ test("bounded reminder scans skip already-outboxed work and reach a later tenant
     if (laterCaseId) await db.delete(onbCases).where(and(eq(onbCases.organizationId, laterTenant), eq(onbCases.id, laterCaseId)));
     await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, laterTenant));
     await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, laterTenant));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, laterTenant));
+    await deleteTestOrganizations(eq(organizationsTable.id, laterTenant));
   }
 });
 

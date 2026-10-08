@@ -177,6 +177,14 @@ async function appendInvocationProtectedAudit(
  * body agent identity, owner, version, or permissions are accepted as authority.
  */
 export async function invokeAgentTool(input: InvokeAgentToolInput): Promise<InvokeAgentToolResult> {
+  const { withHroContext } = await import("./hro-context/manager");
+  return withHroContext({
+    organizationId: input.organizationId, subjectType: "tenant", subjectId: input.organizationId,
+    workflow: "agent", initiatingUserId: input.initiatingUserId,
+  }, () => invokeAgentToolInContext(input));
+}
+
+async function invokeAgentToolInContext(input: InvokeAgentToolInput): Promise<InvokeAgentToolResult> {
   const toolKey = auditableToolKey(input.toolKey);
   const action = actionForTool(input.toolKey);
   const auditToolName = (AGENT_TOOL_CATALOG as readonly string[]).includes(input.toolKey)
@@ -306,6 +314,12 @@ export async function invokeAgentTool(input: InvokeAgentToolInput): Promise<Invo
         eq(onbCases.id, input.caseId),
       )).limit(1);
       if (!record) throw new Error("Authorized case disappeared during invocation.");
+      const { withHroContext, recordHroContextStep } = await import("./hro-context/manager");
+      await withHroContext({
+        organizationId: input.organizationId, subjectType: "case", subjectId: String(record.id),
+        workflow: "agent", initiatingUserId: input.initiatingUserId,
+        executor: { type: "agent", id: agent.id, version: agent.version },
+      }, () => recordHroContextStep("agent-authorized", { reference: action }));
       const auditId = await appendInvocationAudit(tx, {
         organizationId: input.organizationId,
         agentId: agent.id,

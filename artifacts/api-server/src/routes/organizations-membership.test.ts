@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -176,8 +177,8 @@ after(async () => {
     .where(eq(onbConnectors.organizationId, organizationId));
   await db.delete(organizationMembershipsTable)
     .where(eq(organizationMembershipsTable.organizationId, otherOrganizationId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, otherOrganizationId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, otherOrganizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
 });
 
 function request(
@@ -250,7 +251,7 @@ test("organization creation requires, canonicalizes, stores, and returns a prima
     .where(eq(organizationsTable.id, response.organization.id));
   assert.equal(stored?.primaryCountry, "CA");
   await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, response.organization.id));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, response.organization.id));
+  await deleteTestOrganizations(eq(organizationsTable.id, response.organization.id));
 });
 
 test("member administration enforces owner-only CAS mutations and active listing", { concurrency: false }, async () => {

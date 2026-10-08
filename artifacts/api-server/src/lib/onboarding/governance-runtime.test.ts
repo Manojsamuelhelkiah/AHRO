@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, test } from "node:test";
@@ -327,7 +328,7 @@ describe("governance case rebase persistence", { concurrency: false }, () => {
       await db.delete(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, organizationId));
       await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, organizationId));
       await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
-      await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+      await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
     }
   });
 });

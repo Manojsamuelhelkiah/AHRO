@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
@@ -132,7 +133,7 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
   after(async () => {
     await db.delete(onbCases).where(or(eq(onbCases.organizationId, organizationId), eq(onbCases.organizationId, otherOrganizationId)));
     await db.delete(onbSensitiveLifecyclePolicies).where(or(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId), eq(onbSensitiveLifecyclePolicies.organizationId, otherOrganizationId)));
-    await db.delete(organizationsTable).where(or(eq(organizationsTable.id, organizationId), eq(organizationsTable.id, otherOrganizationId)));
+    await deleteTestOrganizations(or(eq(organizationsTable.id, organizationId), eq(organizationsTable.id, otherOrganizationId)));
   });
 
   test("requires a real age result, separate medical/safety authorities, wage and timesheet, dated statutory evidence, acknowledged assets, and then reblocks revoked authority", async () => {

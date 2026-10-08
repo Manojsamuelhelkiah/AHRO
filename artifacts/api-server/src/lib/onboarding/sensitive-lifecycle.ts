@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { withHroOrganizationContext, withHroCaseContext } from "../hro-context/manager";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   and, asc, desc, eq, gt, inArray, isNull, lte, or, sql,
@@ -264,6 +265,10 @@ function notifyNestedFenceCallsDrained(token: LifecycleFenceToken): void {
  * connection.
  */
 export async function withSensitiveLifecycleFence<T>(organizationId: string, action: () => Promise<T>): Promise<T> {
+  return withHroOrganizationContext(organizationId, () => withSensitiveLifecycleFenceInner(organizationId, action));
+}
+
+async function withSensitiveLifecycleFenceInner<T>(organizationId: string, action: () => Promise<T>): Promise<T> {
   const held = lifecycleFenceContext.getStore();
   const inherited = held?.get(organizationId);
   if (inherited?.active) {
@@ -314,7 +319,7 @@ export async function withCaseDerivedLifecycleWrite<T>(
 ): Promise<T> {
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     const caseRow = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
-    return write(tx, caseRow);
+    return withHroCaseContext(caseRow, () => write(tx, caseRow));
   }));
 }
 

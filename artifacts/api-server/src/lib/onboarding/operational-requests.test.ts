@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -678,7 +679,7 @@ after(async () => {
   await db.delete(onbSensitiveLifecyclePolicies).where(inArray(onbSensitiveLifecyclePolicies.organizationId, [orgA, orgB]));
   await db.delete(onbConnectors).where(inArray(onbConnectors.organizationId, [orgA, orgB]));
   await db.delete(onbCases).where(inArray(onbCases.id, [caseA, caseB, offlineCase, workforceCase, allNonblockingCase, officeNoSiteCase]));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
+  await deleteTestOrganizations(inArray(organizationsTable.id, [orgA, orgB]));
 });
 
 test("GET is read-only and initialization persists tenant-scoped simulated communications", async () => {

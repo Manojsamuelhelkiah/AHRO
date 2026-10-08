@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -79,7 +80,7 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
       eq(organizationMembershipsTable.organizationId, organizationId),
       eq(organizationMembershipsTable.clerkUserId, approverUserId),
     ));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
   });
 
   async function ensureDecisionAuthority() {

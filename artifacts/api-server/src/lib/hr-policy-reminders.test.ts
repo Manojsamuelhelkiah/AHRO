@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { before, after, test } from "node:test";
@@ -117,7 +118,7 @@ after(async () => {
   await db.delete(organizationMembershipsTable).where(inArray(organizationMembershipsTable.organizationId, [
     organizationId, otherOrganizationId,
   ]));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, [
+  await deleteTestOrganizations(inArray(organizationsTable.id, [
     organizationId, otherOrganizationId,
   ]));
 });

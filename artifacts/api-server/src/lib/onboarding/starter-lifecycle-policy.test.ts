@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -138,7 +139,7 @@ test("starter policy persists with optimistic versioning and never inserts appro
       organizationMembershipsTable.clerkUserId,
       [actor, otherActor],
     ));
-    await db.delete(organizationsTable).where(inArray(organizationsTable.id, [organizationId, otherOrganizationId]));
+    await deleteTestOrganizations(inArray(organizationsTable.id, [organizationId, otherOrganizationId]));
   }
 });
 
@@ -161,6 +162,6 @@ test("starter policy reads and writes are tenant-fenced", async () => {
     );
   } finally {
     await db.delete(organizationMembershipsTable).where(eq(organizationMembershipsTable.organizationId, liveOrg));
-    await db.delete(organizationsTable).where(inArray(organizationsTable.id, [liveOrg, liveOtherOrg]));
+    await deleteTestOrganizations(inArray(organizationsTable.id, [liveOrg, liveOtherOrg]));
   }
 });

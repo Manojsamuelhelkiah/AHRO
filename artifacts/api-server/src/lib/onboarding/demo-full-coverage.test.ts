@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -54,9 +55,9 @@ describe("offline Demo full coverage seed", { skip: !hasDb }, () => {
     await db.delete(onbCommunications).where(eq(onbCommunications.organizationId, organizationId));
     await db.delete(onbEvents).where(eq(onbEvents.organizationId, organizationId));
     await db.delete(onbCases).where(eq(onbCases.organizationId, organizationId));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
     await db.delete(onbCases).where(eq(onbCases.organizationId, customerOrganizationId));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, customerOrganizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, customerOrganizationId));
   });
 
   test("creates every family exactly once without execution side effects", async () => {

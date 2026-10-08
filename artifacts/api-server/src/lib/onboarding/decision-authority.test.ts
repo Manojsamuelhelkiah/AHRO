@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { clerkClient } from "@clerk/express";
@@ -120,10 +121,10 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
     await db.delete(onbCases).where(eq(onbCases.organizationId, otherOrganizationId));
     await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
     await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, otherOrganizationId));
-    await db.delete(organizationsTable).where(and(
+    await deleteTestOrganizations(and(
       eq(organizationsTable.id, organizationId),
     ));
-    await db.delete(organizationsTable).where(and(
+    await deleteTestOrganizations(and(
       eq(organizationsTable.id, otherOrganizationId),
     ));
   });
@@ -398,7 +399,7 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
     });
     await db.delete(onbCases).where(eq(onbCases.organizationId, org));
     await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, org));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, org));
+    await deleteTestOrganizations(eq(organizationsTable.id, org));
   });
 
   test("revocation or governance withdrawal that wins the tenant fence denies a concurrent decision", async () => {
@@ -467,7 +468,7 @@ describe("verified specialist authority security boundaries (real DB)", { skip: 
       assert.equal(current.status, "pending");
       await db.delete(onbCases).where(eq(onbCases.organizationId, org));
       await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, org));
-      await db.delete(organizationsTable).where(eq(organizationsTable.id, org));
+      await deleteTestOrganizations(eq(organizationsTable.id, org));
     }
   });
 });

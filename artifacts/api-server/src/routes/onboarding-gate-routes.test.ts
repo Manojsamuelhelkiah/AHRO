@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -260,7 +261,7 @@ after(async () => {
   await db.delete(onbGovernanceDecisions).where(inArray(
     onbGovernanceDecisions.organizationId, [orgA, orgB],
   ));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
+  await deleteTestOrganizations(inArray(organizationsTable.id, [orgA, orgB]));
 });
 
 function intake(name: string, offerAcceptanceComplete: boolean) {

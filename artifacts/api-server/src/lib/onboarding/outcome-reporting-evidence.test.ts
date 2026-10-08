@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -127,7 +128,7 @@ after(async () => {
   await db.delete(onbAuthorityGovernance).where(eq(
     onbAuthorityGovernance.organizationId, organizationId,
   ));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
 });
 
 test("outcome evidence loader returns only minimized authoritative projections", async () => {

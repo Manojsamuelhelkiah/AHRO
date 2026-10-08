@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { db } from "@workspace/db";
@@ -90,7 +91,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
     await db.delete(onbAuthorityGovernance).where(
       eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID),
     );
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
+    await deleteTestOrganizations(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
   });
 
   async function createCase() {

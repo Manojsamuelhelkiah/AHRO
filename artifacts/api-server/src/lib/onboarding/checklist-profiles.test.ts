@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -516,7 +517,7 @@ describe("targeted checklist policy concurrency", { skip: !hasDb }, () => {
       await db.delete(onbChecklistProfiles).where(eq(onbChecklistProfiles.organizationId, organizationId));
       await db.delete(onbChecklistTemplates).where(eq(onbChecklistTemplates.organizationId, organizationId));
       await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, organizationId));
-      await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+      await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
     }
   });
 });

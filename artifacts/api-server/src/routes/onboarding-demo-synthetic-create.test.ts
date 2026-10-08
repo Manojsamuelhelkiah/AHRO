@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -247,7 +248,7 @@ describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
       eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
       eq(organizationMembershipsTable.clerkUserId, ordinaryCreator),
     ));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, foreignOrganizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, foreignOrganizationId));
   });
 
   test("creates an offline case, grants only case-bound read access, and opens it", async () => {

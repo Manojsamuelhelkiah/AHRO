@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
@@ -109,7 +110,7 @@ describe("case evidence communications (real DB, read-only collector)", { skip: 
         eq(onbCases.id, caseId),
       ));
     }
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
   });
 
   test("uses allowlisted operational evidence only and does not mutate DB", async () => {

@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import express from "express";
@@ -200,7 +201,7 @@ after(async () => {
     );
   }
   if (caseId) await db.delete(onbCases).where(eq(onbCases.id, caseId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
 });
 
 test("access governance routes preserve independent approvals for mixed-principal multi-group access", { skip: !hasDb }, async () => {

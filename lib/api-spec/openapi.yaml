@@ -43,6 +43,20 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /context-manager/transactions:
+    get:
+      operationId: listHroContextTransactions
+      tags: [onboarding]
+      summary: Read the authenticated user's recent metadata-only execution attempts
+      responses:
+        "200":
+          description: Own execution metadata in the current organization, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HroContextHistory"
+        "401":
+          description: Authentication required
   /scenario-system-capabilities:
     get:
       operationId: listScenarioSystemCapabilities
@@ -6377,6 +6391,39 @@ components:
         type: integer
         minimum: 1
   schemas:
+    HroContextHistory:
+      type: object
+      required: [available, transactions]
+      properties:
+        available: { type: boolean }
+        transactions:
+          type: array
+          items: { $ref: "#/components/schemas/HroContextHistoryItem" }
+    HroContextHistoryItem:
+      type: object
+      required: [id, anchorId, correlationId, parentTransactionId, workflow, status, version, executorType, startedAt, finishedAt, steps]
+      properties:
+        id: { type: string }
+        anchorId: { type: string }
+        correlationId: { type: string }
+        parentTransactionId: { type: [string, "null"] }
+        workflow: { type: string }
+        status: { type: string, enum: [running, completed, failed] }
+        version: { type: integer }
+        executorType: { type: string, enum: [human, system, agent] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: [string, "null"], format: date-time }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/HroContextHistoryStep" }
+    HroContextHistoryStep:
+      type: object
+      required: [code, createdAt]
+      properties:
+        code: { type: string }
+        createdAt: { type: string, format: date-time }
+        inputBytes: { type: integer }
+        outputTokens: { type: integer }
     ScenarioSystemSetupMode:
       type: string
       enum: [direct-integration, email-watch, file-transfer, webhook, manual]

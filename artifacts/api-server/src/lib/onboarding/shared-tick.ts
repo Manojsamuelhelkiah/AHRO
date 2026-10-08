@@ -16,6 +16,8 @@
  * tick started by someone else — either way, a completed tick has happened
  * by the time the promise resolves.
  */
+import { withoutHroContext } from "../hro-context/core";
+
 export function makeSharedTick(run: () => Promise<void>): () => Promise<boolean> {
   let inFlight: Promise<void> | null = null;
   return async () => {
@@ -23,7 +25,7 @@ export function makeSharedTick(run: () => Promise<void>): () => Promise<boolean>
       await inFlight;
       return false;
     }
-    inFlight = run().finally(() => {
+    inFlight = withoutHroContext(run).finally(() => {
       inFlight = null;
     });
     await inFlight;

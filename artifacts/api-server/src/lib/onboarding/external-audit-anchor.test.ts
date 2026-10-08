@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { afterEach, test } from "node:test";
@@ -39,7 +40,7 @@ afterEach(async () => {
   await Promise.all(anchorHealthOrganizations.splice(0).map(async (organizationId) => {
     await db.delete(onbAuditHeads).where(eq(onbAuditHeads.organizationId, organizationId));
     await db.delete(onbSettings).where(eq(onbSettings.organizationId, organizationId));
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
   }));
 });
 

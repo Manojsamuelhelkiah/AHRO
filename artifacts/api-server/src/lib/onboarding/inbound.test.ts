@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import { after, before, test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
@@ -104,7 +105,7 @@ describe("inbound dedup by provider message id", { skip: !hasDb }, () => {
     await db.delete(onbSensitiveLifecyclePolicies).where(
       eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
     );
-    await db.delete(organizationsTable).where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
+    await deleteTestOrganizations(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
   });
 
   test("duplicate provider ids and own outbound ids are skipped", async () => {

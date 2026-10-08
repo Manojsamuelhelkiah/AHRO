@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -573,7 +574,7 @@ after(async () => {
     onbGovernanceDecisions.organizationId,
     [orgA, orgB],
   ));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
+  await deleteTestOrganizations(inArray(organizationsTable.id, [orgA, orgB]));
   if (oldAllowedRecipients === undefined) delete process.env.ONBOARDING_ALLOWED_RECIPIENTS;
   else process.env.ONBOARDING_ALLOWED_RECIPIENTS = oldAllowedRecipients;
 });

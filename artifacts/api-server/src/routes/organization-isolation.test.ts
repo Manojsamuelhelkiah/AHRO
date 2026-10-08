@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -638,7 +639,7 @@ after(async () => {
     (organizationId) => !retainedOrganizationIds.has(organizationId),
   );
   if (removableOrganizationIds.length) {
-    await db.delete(organizationsTable).where(inArray(
+    await deleteTestOrganizations(inArray(
       organizationsTable.id,
       removableOrganizationIds,
     ));

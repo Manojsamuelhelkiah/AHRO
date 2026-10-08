@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 import { db } from "@workspace/db";
@@ -181,7 +182,7 @@ after(async () => {
   await db.delete(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, unitOrganizationId));
   await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, unitOrganizationId));
   await db.delete(onbReadinessSlaPolicies).where(eq(onbReadinessSlaPolicies.organizationId, unitOrganizationId));
-  await db.delete(organizationsTable).where(eq(organizationsTable.id, unitOrganizationId));
+  await deleteTestOrganizations(eq(organizationsTable.id, unitOrganizationId));
   for (const id of createdCaseIds) {
     await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, id));
     await db.delete(onbCases).where(eq(onbCases.id, id));

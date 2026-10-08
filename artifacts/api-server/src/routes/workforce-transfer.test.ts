@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -554,7 +555,7 @@ after(async () => {
   await db.delete(organizationMembershipsTable).where(inArray(organizationMembershipsTable.organizationId, organizations));
   // The running watcher can seed settings for these isolated test tenants.
   await db.delete(onbSettings).where(inArray(onbSettings.organizationId, organizations));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, organizations));
+  await deleteTestOrganizations(inArray(organizationsTable.id, organizations));
 });
 
 test("database custody makes imported source facts immutable and binds reconciliation evidence", async () => {

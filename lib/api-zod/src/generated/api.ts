@@ -9,6 +9,32 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Read the authenticated user's recent metadata-only execution attempts
+ */
+export const ListHroContextTransactionsResponse = zod.object({
+  "available": zod.boolean(),
+  "transactions": zod.array(zod.object({
+  "id": zod.string(),
+  "anchorId": zod.string(),
+  "correlationId": zod.string(),
+  "parentTransactionId": zod.string().nullable(),
+  "workflow": zod.string(),
+  "status": zod.enum(['running', 'completed', 'failed']),
+  "version": zod.number(),
+  "executorType": zod.enum(['human', 'system', 'agent']),
+  "startedAt": zod.coerce.date(),
+  "finishedAt": zod.coerce.date().nullable(),
+  "steps": zod.array(zod.object({
+  "code": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "inputBytes": zod.number().optional(),
+  "outputTokens": zod.number().optional()
+}))
+}))
+})
+
+
+/**
  * @summary List server-supported client setup system connection choices
  */
 

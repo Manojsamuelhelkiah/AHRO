@@ -1,3 +1,4 @@
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -88,7 +89,7 @@ after(async () => {
   await db.delete(onbHrPolicySources).where(inArray(onbHrPolicySources.organizationId, [orgA, orgB]));
   await db.delete(onbGovernanceAuthorityAssignments).where(inArray(onbGovernanceAuthorityAssignments.organizationId, [orgA, orgB]));
   await db.delete(organizationMembershipsTable).where(inArray(organizationMembershipsTable.organizationId, [orgA, orgB]));
-  await db.delete(organizationsTable).where(inArray(organizationsTable.id, [orgA, orgB]));
+  await deleteTestOrganizations(inArray(organizationsTable.id, [orgA, orgB]));
 });
 
 test("policy lifecycle uses verified governance authority, exact review, and immutable successor drafts", { concurrency: false }, async () => {
