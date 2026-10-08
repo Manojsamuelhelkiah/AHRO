@@ -289,12 +289,54 @@ content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.d
 id = "XtcfmypUcy7Kfuq0mFlgY"
 uri = "file://deliverables/Agentic_HRO_Business_User_Explainer.pdf"
 type = "pdf"
-title = "Final Business-User Explainer — Security, Privacy & Responsible AI"
-description = "Six-page guide with practical examples, agent and testing harnesses, Employee Vault, and clear labels for implemented features, configuration prerequisites and roadmap items."
+title = "Updated Business-User Explainer"
+description = "Eight-page guide with examples, security/privacy controls, both harnesses, responsible-AI measurement limits and explicit roadmap labels."
 logical_id = "7dbdbfef-9373-43f7-ae8d-277b0ffb9845"
-content_hash = "sha256:78afcb95f809ae07dbc5861b79c40adbc20157c69e5f725b62324ff985770e06"
-size = 58127
-mtime_ms = 1791465345381
-storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/7dbdbfef-9373-43f7-ae8d-277b0ffb9845/b7a77824-b5c1-4b75-a882-076dfb71ab6f"
-storage_version_token = "1791465394050253"
+content_hash = "sha256:e71190efc97e5afdcfee264414bf67bd9bbd18d6a092cb799f1367ab9f08c1c3"
+size = 59776
+mtime_ms = 1791466916693
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/7dbdbfef-9373-43f7-ae8d-277b0ffb9845/019ba8ea-f01b-4928-9e3f-7f3bb61d6737"
+storage_version_token = "1791467085356463"
+content_type = "application/pdf"
+
+[[outputs]]
+id = "QCtIWJ_yDSQyVxsTzsSYq"
+uri = "file://deliverables/Security_Privacy_Assurance.html"
+type = "html"
+title = "Read the Security & AI Assurance Pack"
+description = "Standalone browser-readable business guide, security-leadership brief, 50-control register, metric definitions and roadmap. No PDF download is needed."
+logical_id = "41933fa4-e454-4da9-825d-df14a3df0d84"
+content_hash = "sha256:c35184e12c7432b254d1afdde44876c0eba79058757607c68f1f73916453a5f5"
+size = 67051
+mtime_ms = 1791466916944
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/41933fa4-e454-4da9-825d-df14a3df0d84/abaf2b6a-8565-4699-bcc0-3bca8b099362"
+storage_version_token = "1791467083944612"
+content_type = "text/html"
+
+[[outputs]]
+id = "yzRCjiIGDMUD3mqpkHV-z"
+uri = "file://deliverables/Agentic_HRO_Security_Leadership_Brief.pdf"
+type = "pdf"
+title = "Security-Leadership Brief — Two Pages"
+description = "Technical brief for CSOs and information-security heads covering trust boundaries, control posture, harnesses, metrics and residual assurance."
+logical_id = "81174a26-21b0-45a2-b5f4-bb8674bf1e7b"
+content_hash = "sha256:c856e7e6a7406ff1a640285eac71cba124aac77451261758546ea79353e78594"
+size = 48203
+mtime_ms = 1791466916709
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/81174a26-21b0-45a2-b5f4-bb8674bf1e7b/57be88e5-c550-45c8-8d8a-598968c5241a"
+storage_version_token = "1791467086801973"
+content_type = "application/pdf"
+
+[[outputs]]
+id = "QGfJtYvoJM9dIiJiq3AfQ"
+uri = "file://deliverables/Agentic_HRO_Control_and_Evidence_Register.pdf"
+type = "pdf"
+title = "Complete Reviewed Control & Evidence Register"
+description = "Detailed register of 50 controls across eight families, 12 metric/evidence definitions, source/test pointers, configuration dependencies, roadmap and deployment evidence still to verify."
+logical_id = "d440707f-7491-4626-9636-a1692cdaf3c9"
+content_hash = "sha256:b9e7a86e2463a2d2501fb79d8b6608339ad0191c6995b0aa1e17c61b65267c07"
+size = 84455
+mtime_ms = 1791466916925
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/d440707f-7491-4626-9636-a1692cdaf3c9/0d713605-7871-4d4d-a419-4fb8a1592401"
+storage_version_token = "1791467088093293"
 content_type = "application/pdf"

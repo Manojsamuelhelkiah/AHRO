@@ -1,0 +1,1235 @@
+{
+  "review_date": "08 October 2026",
+  "scope": "Reviewed application control families across the HRO Control Tower, API, unified context manager and Employee Vault. Cost Explorer figures are estimates, not security or outcome assurance. This is a code-and-content inventory, not a production configuration audit, penetration test or certification.",
+  "status_definitions": {
+    "Implemented": "An application control exists; this does not establish live effectiveness.",
+    "Configuration required": "The framework exists, but approved policies, authority, providers or evidence are prerequisites.",
+    "Roadmap": "The additional capability described is not established as a completed feature in this review.",
+    "Deployment evidence not verified": "A deployment, contractual or operational fact requiring separate evidence; not a claim of absence."
+  },
+  "live_values_collected": false,
+  "tests_executed_for_this_pack": false,
+  "groups": [
+    {
+      "title": "Identity and authority",
+      "suggested_reviewer": "Security / access-governance reviewer",
+      "controls": [
+        {
+          "id": "SEC-01",
+          "name": "Authenticated operational access",
+          "status": "Implemented",
+          "mechanism": "Signed-in identity is required for operational API access; provider callbacks have separate verification boundaries.",
+          "safe_behavior": "Unauthorized access is rejected.",
+          "limitation": "Authentication does not grant organization, case or specialist authority.",
+          "sources": [
+            "guards",
+            "access"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts",
+            "artifacts/api-server/src/lib/access-governance.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts",
+            "artifacts/api-server/src/lib/access-governance.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-02",
+          "name": "Organization and case isolation",
+          "status": "Implemented",
+          "mechanism": "Application-owned organizations and subject scopes constrain access to client records.",
+          "safe_behavior": "Cross-scope requests are denied.",
+          "limitation": "Tenant membership alone is not permission for every case or record.",
+          "sources": [
+            "access",
+            "sensitive"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/access-governance.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/access-governance.test.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-03",
+          "name": "Group, field and tool permissions",
+          "status": "Implemented",
+          "mechanism": "Access groups and scoped permissions govern eligible flows, fields and tools.",
+          "safe_behavior": "Disallowed reads or actions are blocked.",
+          "limitation": "Coverage must be checked for each new endpoint and tool.",
+          "sources": [
+            "access",
+            "agent"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/access-governance.ts",
+            "artifacts/api-server/src/lib/agent-invocation.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/access-governance.test.ts",
+            "artifacts/api-server/src/lib/agent-invocation.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-04",
+          "name": "Temporary access and lifecycle fencing",
+          "status": "Implemented",
+          "mechanism": "Time-bounded grants and membership lifecycle state are evaluated against current access.",
+          "safe_behavior": "Expired or revoked grants cannot authorize subsequent work.",
+          "limitation": "Race-sensitive flows need ongoing regression evidence; expiry is not a historical audit rewrite.",
+          "sources": [
+            "access",
+            "history"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/access-governance.ts",
+            "artifacts/api-server/src/routes/hro-context.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/access-governance.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-05",
+          "name": "Verified specialist authority",
+          "status": "Configuration required",
+          "mechanism": "Professional governance authority is distinct from tenant administration and mailbox personas.",
+          "safe_behavior": "Missing or unverified authority blocks specialist actions.",
+          "limitation": "Authority must be established through the applicable approval process.",
+          "sources": [
+            "governance"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/governance-runtime.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/governance-runtime.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-06",
+          "name": "Versioned approvals and policies",
+          "status": "Implemented",
+          "mechanism": "Consequential work uses approved policy revisions and evidence-bound review rather than unreviewed drafts.",
+          "safe_behavior": "Changed evidence or missing approvals require review.",
+          "limitation": "A new policy cannot prove the rationale of an older decision.",
+          "sources": [
+            "governance",
+            "dispatch"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/governance-runtime.ts",
+            "artifacts/api-server/src/lib/onboarding/dispatch-guard.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/governance-runtime.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-07",
+          "name": "Registered agent identity",
+          "status": "Implemented",
+          "mechanism": "Agent identity and version are resolved against server-side registration and permitted execution scope.",
+          "safe_behavior": "Unknown or unauthorized executors are rejected.",
+          "limitation": "Client-supplied role or permission claims are not authority.",
+          "sources": [
+            "agent",
+            "context"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/agent-invocation.ts",
+            "artifacts/api-server/src/lib/hro-context/core.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/agent-invocation.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-08",
+          "name": "Candidate-link access lifecycle",
+          "status": "Implemented",
+          "mechanism": "Candidate portal credentials and access records are scoped and expire; eligible metadata has a separate cleanup lifecycle.",
+          "safe_behavior": "Invalid or expired links cannot authorize portal operations.",
+          "limitation": "Portal access is not full Control Tower access; active links are not deleted just for metadata age.",
+          "sources": [
+            "portal",
+            "portal-cleanup"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/candidate-portal.ts",
+            "artifacts/api-server/src/lib/onboarding/candidate-access-cleanup.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/candidate-portal.test.ts",
+            "artifacts/api-server/src/lib/onboarding/candidate-access-cleanup.test.ts"
+          ]
+        },
+        {
+          "id": "SEC-09",
+          "name": "Hashed portal credentials and exchange throttling",
+          "status": "Implemented",
+          "mechanism": "Candidate token/session secrets are hashed for lookup; bounded failure records and cooldowns constrain exchange attempts.",
+          "safe_behavior": "Repeated invalid exchange attempts are throttled; expired or revoked link/session bindings fail.",
+          "limitation": "These controls protect the candidate portal, not every authentication provider or application endpoint.",
+          "sources": [
+            "portal"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/candidate-portal.ts"
+          ],
+          "risk_addressed": "Unauthorized record access, privilege escalation or unverified professional authority.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/candidate-portal.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Communication safety and abuse prevention",
+      "suggested_reviewer": "Security / communication-channel owner",
+      "controls": [
+        {
+          "id": "COM-01",
+          "name": "Signed webhook verification",
+          "status": "Implemented",
+          "mechanism": "Twilio callbacks are signature-validated; voice callbacks also bind to the expected call identity.",
+          "safe_behavior": "Forged callbacks are rejected before influencing state.",
+          "limitation": "Applies to configured channel boundaries; it is not a universal vendor identity guarantee.",
+          "sources": [
+            "guards"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+          ],
+          "risk_addressed": "Forged, misrouted, duplicated or runaway external communication.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "COM-02",
+          "name": "Trusted status senders",
+          "status": "Configuration required",
+          "mechanism": "Configured sender allowlists gate external status-email processing; an unset list trusts nobody.",
+          "safe_behavior": "Untrusted status messages do not change checks.",
+          "limitation": "A trusted sender still needs the applicable case binding and evidence checks.",
+          "sources": [
+            "guards"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+          ],
+          "risk_addressed": "Forged, misrouted, duplicated or runaway external communication.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "COM-03",
+          "name": "Case binding and replay protection",
+          "status": "Implemented",
+          "mechanism": "Inbound communication is subject-bound, with provider-message deduplication and self-echo protection.",
+          "safe_behavior": "Unmatched, ambiguous or duplicate messages do not drive new effects.",
+          "limitation": "Sender identity alone cannot establish tenant or specialist authority.",
+          "sources": [
+            "guards"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+          ],
+          "risk_addressed": "Forged, misrouted, duplicated or runaway external communication.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "COM-04",
+          "name": "Recipient and volunteer restrictions",
+          "status": "Implemented",
+          "mechanism": "External messages and calls require authorized recipients; demo volunteer authorization is explicit.",
+          "safe_behavior": "Unauthorized delivery is blocked or recorded as logged-only.",
+          "limitation": "A delivery record is not proof of stakeholder approval or completed employment work.",
+          "sources": [
+            "guards"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+          ],
+          "risk_addressed": "Forged, misrouted, duplicated or runaway external communication.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "COM-05",
+          "name": "Send and call caps",
+          "status": "Implemented",
+          "mechanism": "Communication limits and voice-turn serialization constrain runaway activity and replays.",
+          "safe_behavior": "Excess or overlapping work is rate-limited, held or safely ended.",
+          "limitation": "These are scoped controls, not evidence of an enterprise-wide denial-of-service guarantee.",
+          "sources": [
+            "guards"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+          ],
+          "risk_addressed": "Forged, misrouted, duplicated or runaway external communication.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "COM-06",
+          "name": "Bounded voice interaction",
+          "status": "Implemented",
+          "mechanism": "Voice accepts fixed structured decisions with bounded speech, output and conversation turns.",
+          "safe_behavior": "Unsafe or invalid output routes to a human callback or ends safely.",
+          "limitation": "Successful voice exchange does not authorize record changes or professional commitments.",
+          "sources": [
+            "guards"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+          ],
+          "risk_addressed": "Forged, misrouted, duplicated or runaway external communication.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Privacy and data lifecycle",
+      "suggested_reviewer": "Privacy / legal reviewer",
+      "controls": [
+        {
+          "id": "PRI-01",
+          "name": "Sensitive collection and disclosure policy",
+          "status": "Configuration required",
+          "mechanism": "Approved, versioned policies govern sensitive collection and disclosure at the relevant boundary.",
+          "safe_behavior": "Unknown classification or missing approval can block handling.",
+          "limitation": "Administrative access does not establish a lawful processing basis.",
+          "sources": [
+            "sensitive",
+            "lifecycle"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.ts"
+          ],
+          "risk_addressed": "Unauthorized sensitive disclosure, excessive retention or unsafe deletion.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.test.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.test.ts"
+          ]
+        },
+        {
+          "id": "PRI-02",
+          "name": "Opaque-content confidentiality",
+          "status": "Implemented",
+          "mechanism": "Free text and opaque subject material are not presumed public or harmless.",
+          "safe_behavior": "Unclassified sensitive material is withheld from unauthorized use.",
+          "limitation": "Each new content type needs conservative classification and disclosure coverage.",
+          "sources": [
+            "sensitive",
+            "lifecycle"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.ts"
+          ],
+          "risk_addressed": "Unauthorized sensitive disclosure, excessive retention or unsafe deletion.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.test.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.test.ts"
+          ]
+        },
+        {
+          "id": "PRI-03",
+          "name": "Minimized and masked evidence",
+          "status": "Implemented",
+          "mechanism": "Domain builders restrict model evidence; communication audit paths mask contacts and bound input snippets.",
+          "safe_behavior": "Inputs are sanitized or rejected at relevant boundaries.",
+          "limitation": "Scoped masking is not proof that all stored records are anonymous.",
+          "sources": [
+            "guards",
+            "sensitive"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.ts"
+          ],
+          "risk_addressed": "Unauthorized sensitive disclosure, excessive retention or unsafe deletion.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts",
+            "artifacts/api-server/src/lib/onboarding/sensitive-access.test.ts"
+          ]
+        },
+        {
+          "id": "PRI-04",
+          "name": "Retention, deletion and legal holds",
+          "status": "Configuration required",
+          "mechanism": "Sensitive-record cleanup uses reviewed policy and hold-aware lifecycle controls.",
+          "safe_behavior": "Active holds or unsafe lifecycle state prevent eligible cleanup.",
+          "limitation": "Retention periods are approved by the client; no universal statutory period is invented.",
+          "sources": [
+            "lifecycle"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.ts"
+          ],
+          "risk_addressed": "Unauthorized sensitive disclosure, excessive retention or unsafe deletion.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.test.ts"
+          ]
+        },
+        {
+          "id": "PRI-05",
+          "name": "Metadata-only unified context",
+          "status": "Implemented",
+          "mechanism": "Context history records scope, identifiers, statuses and bounded metrics, not prompts, answers or documents.",
+          "safe_behavior": "Cross-tenant or cross-actor context inheritance is rejected.",
+          "limitation": "Business records and protected audit evidence have separate retention rules.",
+          "sources": [
+            "context",
+            "manager"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/hro-context/core.ts",
+            "artifacts/api-server/src/lib/hro-context/manager.ts"
+          ],
+          "risk_addressed": "Unauthorized sensitive disclosure, excessive retention or unsafe deletion.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "PRI-06",
+          "name": "Safe context-history pruning",
+          "status": "Configuration required",
+          "mechanism": "Approved rules govern bounded cleanup of eligible complete chains while preserving unsafe or unfinished chains.",
+          "safe_behavior": "Holds, unfinished or unsafe chains prevent pruning.",
+          "limitation": "A display window is not retention; pruning is not deletion of all business evidence.",
+          "sources": [
+            "retention"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/hro-context/retention.ts"
+          ],
+          "risk_addressed": "Unauthorized sensitive disclosure, excessive retention or unsafe deletion.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/hro-context/retention.test.ts"
+          ]
+        },
+        {
+          "id": "PRI-07",
+          "name": "Restricted aggregate analytics",
+          "status": "Implemented",
+          "mechanism": "Analytics bounds disclosure and uses a local deterministic narrative instead of sending opaque cohort content to a model.",
+          "safe_behavior": "Unauthorized sensitive forecasts are withheld.",
+          "limitation": "A privacy badge or threshold label is not proof of full differential privacy or safe release of every cohort.",
+          "sources": [
+            "analytics-api",
+            "analytics-ui"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/routes/onboarding.ts",
+            "artifacts/onboarding-agent/src/pages/analytics.tsx"
+          ],
+          "risk_addressed": "Unauthorized sensitive disclosure, excessive retention or unsafe deletion.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        }
+      ]
+    },
+    {
+      "title": "Documents and employee-owned evidence",
+      "suggested_reviewer": "Security / verification / privacy reviewers",
+      "controls": [
+        {
+          "id": "DOC-01",
+          "name": "Private bounded upload lifecycle",
+          "status": "Implemented",
+          "mechanism": "Scoped upload reservations and bounded file handling track completion and interrupted writes.",
+          "safe_behavior": "Incomplete or invalid writes cannot become accepted evidence.",
+          "limitation": "An upload signature alone does not bind all size/type restrictions.",
+          "sources": [
+            "uploads"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/candidate-upload-reservations.ts"
+          ],
+          "risk_addressed": "Unsafe, forged, stale or unconsented document reuse.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/candidate-upload-reservations.test.ts"
+          ]
+        },
+        {
+          "id": "DOC-02",
+          "name": "Malware quarantine and evidence gates",
+          "status": "Implemented",
+          "mechanism": "Malware state and current evidence gates govern whether a document may be used for readiness.",
+          "safe_behavior": "Quarantined or unavailable safety evidence cannot be bypassed by authenticity claims.",
+          "limitation": "Live scan results require a configured scanner; clean files can still be forged.",
+          "sources": [
+            "malware",
+            "scanner"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/document-malware-gate.ts",
+            "artifacts/api-server/src/lib/onboarding/malware-scanner-monitor.ts"
+          ],
+          "risk_addressed": "Unsafe, forged, stale or unconsented document reuse.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/malware-scanner-monitor.test.ts"
+          ]
+        },
+        {
+          "id": "DOC-03",
+          "name": "Document validation versus authenticity",
+          "status": "Implemented",
+          "mechanism": "Local file validation is distinguished from source-backed verification and human review.",
+          "safe_behavior": "Unavailable, uncertain or adverse results require review.",
+          "limitation": "Readable text, matching fields or an AI plausibility score do not authenticate a document.",
+          "sources": [
+            "documents"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/document-validation.ts"
+          ],
+          "risk_addressed": "Unsafe, forged, stale or unconsented document reuse.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/document-validation.test.ts"
+          ]
+        },
+        {
+          "id": "DOC-04",
+          "name": "Independent Employee Vault ownership",
+          "status": "Implemented",
+          "mechanism": "Employee profiles are separately owned; registration does not confer employer or reviewer roles.",
+          "safe_behavior": "Other users cannot act as the employee merely through organization membership.",
+          "limitation": "A personal Vault account is not proof of employer identity binding.",
+          "sources": [
+            "vault"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/employee-vault/core.ts"
+          ],
+          "risk_addressed": "Unsafe, forged, stale or unconsented document reuse.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "DOC-05",
+          "name": "Signed source and revision binding",
+          "status": "Configuration required",
+          "mechanism": "Approved issuer keys verify signed results bound to profile, jurisdiction, document revision and content digest.",
+          "safe_behavior": "Changed, expired or mismatched bindings cannot establish current reuse.",
+          "limitation": "Cryptography proves an accepted issuer's statement, not that every issuer or document type is supported.",
+          "sources": [
+            "verify"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/employee-vault/verification.ts"
+          ],
+          "risk_addressed": "Unsafe, forged, stale or unconsented document reuse.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "DOC-06",
+          "name": "Consent, complete requirements and revocation",
+          "status": "Implemented",
+          "mechanism": "Reuse requires current employee consent, employer-case binding and all required eligible checks.",
+          "safe_behavior": "Partial verification, expired consent or revoked sharing cannot satisfy full reuse.",
+          "limitation": "Revocation stops future sharing; it does not undo earlier lawful disclosures.",
+          "sources": [
+            "reuse"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/employee-vault/reuse.ts"
+          ],
+          "risk_addressed": "Unsafe, forged, stale or unconsented document reuse.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "DOC-07",
+          "name": "Private opt-in expiry notices",
+          "status": "Implemented",
+          "mechanism": "Employee-owned in-app notices warn of eligible verification or sharing expiry under a separate preference.",
+          "safe_behavior": "Disabled, stale or no-longer-eligible notices are not disclosed.",
+          "limitation": "Notices do not renew checks, extend consent or imply verified email delivery.",
+          "sources": [
+            "notices"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/employee-vault/expiry-notices.ts"
+          ],
+          "risk_addressed": "Unsafe, forged, stale or unconsented document reuse.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        }
+      ]
+    },
+    {
+      "title": "Responsible AI and answer boundaries",
+      "suggested_reviewer": "AI assurance / domain-policy reviewer",
+      "controls": [
+        {
+          "id": "AI-01",
+          "name": "Approved extractive policy answers",
+          "status": "Implemented",
+          "mechanism": "The assistant selects an authorized approved extract with a constrained identifier and exact quotation validation.",
+          "safe_behavior": "Insufficient, conflicting or injected content can prevent an answer.",
+          "limitation": "Exact quote validity is not a measured end-to-end answer-correctness guarantee.",
+          "sources": [
+            "policy"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/hr-policy-ai.ts"
+          ],
+          "risk_addressed": "Unsupported, manipulated or harmful AI-supported answers and actions.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "AI-02",
+          "name": "Prompt-injection evidence fencing",
+          "status": "Implemented",
+          "mechanism": "Inbound text and speech are treated as evidence, with structured output and restricted state decisions.",
+          "safe_behavior": "Instruction-like, contradictory or risky content is escalated instead of accepted as authority.",
+          "limitation": "Defense is layered risk reduction, not proof that every possible injection is defeated.",
+          "sources": [
+            "guards",
+            "policy"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts",
+            "artifacts/api-server/src/lib/hr-policy-ai.ts"
+          ],
+          "risk_addressed": "Unsupported, manipulated or harmful AI-supported answers and actions.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "AI-03",
+          "name": "Sensitive-topic human handoff",
+          "status": "Implemented",
+          "mechanism": "Deterministic sensitive-topic gates suppress automated AI replies and request human review.",
+          "safe_behavior": "Sensitive questions receive a holding or escalation path.",
+          "limitation": "Human review itself does not guarantee correctness or fairness.",
+          "sources": [
+            "guards"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+          ],
+          "risk_addressed": "Unsupported, manipulated or harmful AI-supported answers and actions.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "AI-04",
+          "name": "No automated adverse employment decisions",
+          "status": "Implemented",
+          "mechanism": "Adverse background-check or core-data exceptions pause orchestration for appropriate human approval.",
+          "safe_behavior": "Automation cannot simply reject or clear the case from model output.",
+          "limitation": "Review quality and lawful criteria still require domain governance.",
+          "sources": [
+            "guards",
+            "dispatch"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts",
+            "artifacts/api-server/src/lib/onboarding/dispatch-guard.ts"
+          ],
+          "risk_addressed": "Unsupported, manipulated or harmful AI-supported answers and actions.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "AI-05",
+          "name": "Strict AI request budgets",
+          "status": "Implemented",
+          "mechanism": "Exact registered model payloads receive conservative input-size and output-allocation checks.",
+          "safe_behavior": "Oversized or invalid requests are rejected without silently truncating mandatory evidence.",
+          "limitation": "Input bytes are a conservative token bound; output allocation is not actual token usage.",
+          "sources": [
+            "budget",
+            "manager"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/hro-context/ai-budget.ts",
+            "artifacts/api-server/src/lib/hro-context/manager.ts"
+          ],
+          "risk_addressed": "Unsupported, manipulated or harmful AI-supported answers and actions.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "AI-06",
+          "name": "Recorded-evidence explanations",
+          "status": "Implemented",
+          "mechanism": "Case explanations remain read-only and distinguish recorded evidence from hidden model reasoning or invented historical rationale.",
+          "safe_behavior": "Missing historical evidence cannot be replaced by a confident explanation.",
+          "limitation": "Present policy does not establish why an earlier decision occurred.",
+          "sources": [
+            "case-explain"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/case-explainability.ts"
+          ],
+          "risk_addressed": "Unsupported, manipulated or harmful AI-supported answers and actions.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "AI-07",
+          "name": "Fresh citation and answer disclosure",
+          "status": "Implemented",
+          "mechanism": "Policy answers recheck current source, publication, applicability and disclosure authorization after model selection and at citation access.",
+          "safe_behavior": "Changed or no-longer-authorized source material cannot be disclosed as a current supported answer.",
+          "limitation": "The check guards freshness and authority; it is not a semantic accuracy score.",
+          "sources": [
+            "policy-library"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/hr-policy-library.ts"
+          ],
+          "risk_addressed": "Unsupported, manipulated or harmful AI-supported answers and actions.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/hr-policy-library.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Agent execution and unified context harness",
+      "suggested_reviewer": "Platform engineering / security reviewer",
+      "controls": [
+        {
+          "id": "RUN-01",
+          "name": "Scoped transaction continuity",
+          "status": "Implemented",
+          "mechanism": "Organization, subject, correlation, parent attempt, initiator and executor/version define execution continuity.",
+          "safe_behavior": "Invalid tenant, actor, executor or parent scope is rejected.",
+          "limitation": "The manager is continuity metadata, not authority, business evidence or a second workflow engine.",
+          "sources": [
+            "context",
+            "manager"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/hro-context/core.ts",
+            "artifacts/api-server/src/lib/hro-context/manager.ts"
+          ],
+          "risk_addressed": "Cross-scope execution, stale authority or duplicated/ambiguous remote effects.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "RUN-02",
+          "name": "Fresh dispatch eligibility",
+          "status": "Implemented",
+          "mechanism": "Final dispatch gates recheck authority, holds, policy and evidence at the consequential action boundary.",
+          "safe_behavior": "Stale or withdrawn prerequisites block effects.",
+          "limitation": "A preliminary status read or older successful log is not permission to act now.",
+          "sources": [
+            "dispatch",
+            "agent"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/dispatch-guard.ts",
+            "artifacts/api-server/src/lib/agent-invocation.ts"
+          ],
+          "risk_addressed": "Cross-scope execution, stale authority or duplicated/ambiguous remote effects.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/agent-invocation.test.ts"
+          ]
+        },
+        {
+          "id": "RUN-03",
+          "name": "Durable effect journal",
+          "status": "Implemented",
+          "mechanism": "Remote effects use durable claims and stable logical-operation identity with provider idempotency where supported.",
+          "safe_behavior": "Ambiguous non-idempotent outcomes stop for reconciliation rather than blind redispatch.",
+          "limitation": "Database fencing cannot substitute for a provider's idempotency contract.",
+          "sources": [
+            "effect"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/effect-journal.ts"
+          ],
+          "risk_addressed": "Cross-scope execution, stale authority or duplicated/ambiguous remote effects.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/effect-journal.test.ts"
+          ]
+        },
+        {
+          "id": "RUN-04",
+          "name": "Recovery and concurrency fencing",
+          "status": "Implemented",
+          "mechanism": "Checkpoints, owner-fenced claims and conditional completion guard resumed or simultaneous work.",
+          "safe_behavior": "Stale owners cannot finalize newly claimed work.",
+          "limitation": "Unfinished attempts are not automatically business failures or completed outcomes.",
+          "sources": [
+            "effect",
+            "manager"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/effect-journal.ts",
+            "artifacts/api-server/src/lib/hro-context/manager.ts"
+          ],
+          "risk_addressed": "Cross-scope execution, stale authority or duplicated/ambiguous remote effects.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/effect-journal.test.ts"
+          ]
+        },
+        {
+          "id": "RUN-05",
+          "name": "History disclosure permission",
+          "status": "Implemented",
+          "mechanism": "Personal and separately authorized operator history use live scoped checks, filters and older-page navigation.",
+          "safe_behavior": "Unauthorized history disclosure is denied.",
+          "limitation": "History access is not a grant to retry actions; shared demo personas do not establish personal attribution.",
+          "sources": [
+            "history"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/routes/hro-context.ts"
+          ],
+          "risk_addressed": "Cross-scope execution, stale authority or duplicated/ambiguous remote effects.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        },
+        {
+          "id": "RUN-06",
+          "name": "Detached background identity",
+          "status": "Implemented",
+          "mechanism": "Background work must establish its own tenant/executor context instead of inheriting a heartbeat caller's authority.",
+          "safe_behavior": "Cross-actor or cross-tenant continuation cannot borrow ambient identity.",
+          "limitation": "Worker scheduling and availability require separate operational assurance.",
+          "sources": [
+            "context"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/hro-context/core.ts"
+          ],
+          "risk_addressed": "Cross-scope execution, stale authority or duplicated/ambiguous remote effects.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": []
+        }
+      ]
+    },
+    {
+      "title": "Audit and operational assurance",
+      "suggested_reviewer": "Audit / security operations reviewer",
+      "controls": [
+        {
+          "id": "AUD-01",
+          "name": "Protected append-only audit",
+          "status": "Implemented",
+          "mechanism": "Protected audit records and tamper-evident chain verification retain consequential action evidence.",
+          "safe_behavior": "Detected inconsistency prevents treating the chain as verified.",
+          "limitation": "A privileged rewrite of a local chain requires independent evidence to detect.",
+          "sources": [
+            "audit"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/protected-audit.ts"
+          ],
+          "risk_addressed": "Undetected tampering, unready regulated launch or silent loss of safety services.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/protected-audit.test.ts"
+          ]
+        },
+        {
+          "id": "AUD-02",
+          "name": "Independent audit anchoring",
+          "status": "Configuration required",
+          "mechanism": "An approved external provider verifies generation-bound checkpoints and independent archive, restore and hold-drill receipts.",
+          "safe_behavior": "Missing, stale or mismatched protection evidence blocks readiness.",
+          "limitation": "Framework existence is not proof that a client's live provider is connected; protection added today does not certify earlier records.",
+          "sources": [
+            "anchor"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/external-audit-anchor.ts"
+          ],
+          "risk_addressed": "Undetected tampering, unready regulated launch or silent loss of safety services.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/external-audit-anchor.test.ts"
+          ]
+        },
+        {
+          "id": "AUD-03",
+          "name": "Opt-in regulated launch guard",
+          "status": "Configuration required",
+          "mechanism": "Explicitly selected regulated tenants must satisfy protected audit and external archive readiness before startup proceeds.",
+          "safe_behavior": "Unverifiable or unready selected tenants block regulated production startup.",
+          "limitation": "Not every tenant or deployment automatically has this opt-in safeguard enabled.",
+          "sources": [
+            "startup"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/regulated-production-startup-guard.ts"
+          ],
+          "risk_addressed": "Undetected tampering, unready regulated launch or silent loss of safety services.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/regulated-production-startup-guard.test.ts"
+          ]
+        },
+        {
+          "id": "AUD-04",
+          "name": "Scanner outage monitoring",
+          "status": "Configuration required",
+          "mechanism": "Scanner health and durable outage handling support explicit degraded-state visibility and alerts.",
+          "safe_behavior": "Unavailable safety evidence remains unavailable instead of becoming a clean scan.",
+          "limitation": "Alerts need configured channels and delivery evidence; monitoring is not uptime certification.",
+          "sources": [
+            "scanner"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/malware-scanner-monitor.ts"
+          ],
+          "risk_addressed": "Undetected tampering, unready regulated launch or silent loss of safety services.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/malware-scanner-monitor.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Testing harness and truthful demonstrations",
+      "suggested_reviewer": "Quality assurance / security reviewer",
+      "controls": [
+        {
+          "id": "TST-01",
+          "name": "Guardrail catalogue and interventions",
+          "status": "Implemented",
+          "mechanism": "The Guardrails screen identifies enforcement mechanisms, evidence pointers and recorded blocked, rejected or escalated activity.",
+          "safe_behavior": "Recording is bounded against abuse; enforcement remains distinct from display counts.",
+          "limitation": "The 13 communication guardrails are a subset of this inventory; counts are not exhaustive attack-volume estimates.",
+          "sources": [
+            "guards",
+            "guard-ui"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts",
+            "artifacts/onboarding-agent/src/pages/guardrails.tsx"
+          ],
+          "risk_addressed": "Mistaking limited test, synthetic or demo evidence for live assurance.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts"
+          ]
+        },
+        {
+          "id": "TST-02",
+          "name": "Controlled security drill",
+          "status": "Implemented",
+          "mechanism": "Synthetic attack scenarios exercise selected real enforcement boundaries with protected delivery-deny conditions.",
+          "safe_behavior": "Unexpected live authorization or delivery aborts the drill.",
+          "limitation": "A scenario pass is not a comprehensive penetration test or fresh independent audit.",
+          "sources": [
+            "drill",
+            "guard-ui"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/security-drill.ts",
+            "artifacts/onboarding-agent/src/pages/guardrails.tsx"
+          ],
+          "risk_addressed": "Mistaking limited test, synthetic or demo evidence for live assurance.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/security-drill.test.ts"
+          ]
+        },
+        {
+          "id": "TST-03",
+          "name": "UAT evidence and isolated fixtures",
+          "status": "Implemented",
+          "mechanism": "UAT distinguishes observed workflow evidence, run-owned fixtures, blocked steps and manual work.",
+          "safe_behavior": "Initialization or evidence gaps do not become a manual bypass to a pass.",
+          "limitation": "Synthetic initialization or simulated exchange does not establish real provider execution.",
+          "sources": [
+            "uat"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/uat-workflow-evaluator.ts"
+          ],
+          "risk_addressed": "Mistaking limited test, synthetic or demo evidence for live assurance.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/uat-workflow-evaluator.test.ts"
+          ]
+        },
+        {
+          "id": "TST-04",
+          "name": "Regression and demo boundaries",
+          "status": "Implemented",
+          "mechanism": "Unit, integration and browser checks plus controlled demonstrations support change assurance.",
+          "safe_behavior": "Tests should exercise denial, recovery, scope changes and uncertainty as well as success.",
+          "limitation": "Tests found in source are not a claim that the latest suite has passed; volunteer delivery still needs authorization.",
+          "sources": [
+            "guards",
+            "uat"
+          ],
+          "source_paths": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.ts",
+            "artifacts/api-server/src/lib/onboarding/uat-workflow-evaluator.ts"
+          ],
+          "risk_addressed": "Mistaking limited test, synthetic or demo evidence for live assurance.",
+          "published_effectiveness_rate": "Not asserted; see the metric register for defined available evidence and roadmap measurements.",
+          "nearby_test_paths_not_run": [
+            "artifacts/api-server/src/lib/onboarding/guardrails.test.ts",
+            "artifacts/api-server/src/lib/onboarding/uat-workflow-evaluator.test.ts"
+          ]
+        }
+      ]
+    }
+  ],
+  "metrics": [
+    {
+      "id": "MET-01",
+      "title": "Recorded guardrail interventions",
+      "status": "Instrumented",
+      "definition": "Recorded events by guardrail/action and the screen's summed count.",
+      "limitation": "Bounded recording means this is not total attack volume; a prevention rate needs a valid attempted-action denominator.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/onboarding/guardrails.ts",
+        "artifacts/onboarding-agent/src/pages/guardrails.tsx"
+      ]
+    },
+    {
+      "id": "MET-02",
+      "title": "Security-drill outcomes",
+      "status": "Scenario evidence",
+      "definition": "Step outcomes from the scenarios in the executed drill.",
+      "limitation": "Identify scope and run date; no fresh drill was run for this document.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/onboarding/security-drill.ts"
+      ]
+    },
+    {
+      "id": "MET-03",
+      "title": "Human-review indicator",
+      "status": "Derived operational rate",
+      "definition": "Filtered cases with recorded all-time approval history / all filtered cases.",
+      "limitation": "Counts review records, not necessarily completed human decisions; not an AI-correctness measure.",
+      "source_paths": [
+        "artifacts/onboarding-agent/src/pages/analytics.tsx"
+      ]
+    },
+    {
+      "id": "MET-04",
+      "title": "Autonomy indicator",
+      "status": "Derived operational rate",
+      "definition": "Completed filtered cases without recorded all-time approval history / completed filtered cases.",
+      "limitation": "No recorded approval is not proof of safe AI autonomy; underlying completion provenance matters.",
+      "source_paths": [
+        "artifacts/onboarding-agent/src/pages/analytics.tsx"
+      ]
+    },
+    {
+      "id": "MET-05",
+      "title": "Exception rate",
+      "status": "Derived operational rate",
+      "definition": "Filtered cases currently in the exception stage / all filtered cases.",
+      "limitation": "Current-state measure, not all historical exceptions or a fairness score.",
+      "source_paths": [
+        "artifacts/onboarding-agent/src/pages/analytics.tsx"
+      ]
+    },
+    {
+      "id": "MET-06",
+      "title": "AI request budgets",
+      "status": "Instrumented",
+      "definition": "Recorded inputBytes, output-token allowance and budget approval/rejection steps.",
+      "limitation": "Conservative size bound and allowance, not actual tokens consumed, spend or response correctness.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/hro-context/ai-budget.ts",
+        "artifacts/api-server/src/lib/hro-context/manager.ts"
+      ]
+    },
+    {
+      "id": "MET-07",
+      "title": "Execution continuity",
+      "status": "Trace evidence",
+      "definition": "Attempt status/timestamps, step codes and correlation/parent links.",
+      "limitation": "An execution status is not case completion, SLA evidence or professional approval.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/hro-context/manager.ts",
+        "artifacts/api-server/src/routes/hro-context.ts"
+      ]
+    },
+    {
+      "id": "MET-08",
+      "title": "SLA and average resolution time",
+      "status": "Not measured in current dashboard",
+      "definition": "The main Analytics summary shows insufficient data for these two measures.",
+      "limitation": "Do not substitute current checklist state, estimates or simulated results for dated outcome evidence.",
+      "source_paths": [
+        "artifacts/onboarding-agent/src/pages/analytics.tsx"
+      ]
+    },
+    {
+      "id": "MET-09",
+      "title": "Answer correctness and unsupported claims",
+      "status": "Roadmap",
+      "definition": "Reviewed benchmark answers passing correctness/support criteria / eligible evaluated answers.",
+      "limitation": "Requires approved ground truth, dataset coverage, versions and uncertainty reporting; no value claimed.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/hr-policy-ai.ts"
+      ]
+    },
+    {
+      "id": "MET-10",
+      "title": "Appropriate abstention",
+      "status": "Roadmap",
+      "definition": "Correctly withheld answers / evaluated questions requiring abstention; also report unnecessary withholding.",
+      "limitation": "The assistant has abstention outcomes, but an outcome is not an evaluated aggregate quality rate.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/hr-policy-ai.ts"
+      ]
+    },
+    {
+      "id": "MET-11",
+      "title": "Fairness disparities",
+      "status": "Roadmap",
+      "definition": "Reviewed paired-case differences and lawful cohort outcomes where a permitted analysis exists.",
+      "limitation": "Report sample sizes and context; do not collect real protected traits without separately approved purpose and safeguards.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/onboarding/guardrails.ts"
+      ]
+    },
+    {
+      "id": "MET-12",
+      "title": "Privacy leakage and recovery assurance",
+      "status": "Roadmap",
+      "definition": "Prohibited disclosures in scoped tests, protected-data coverage, verified recovery outcomes and latency with defined denominators.",
+      "limitation": "Existing blocking/recovery controls are not a published leakage rate, recovery SLO or full assurance score.",
+      "source_paths": [
+        "artifacts/api-server/src/lib/onboarding/sensitive-access.ts",
+        "artifacts/api-server/src/lib/onboarding/effect-journal.ts"
+      ]
+    }
+  ],
+  "roadmap": [
+    {
+      "id": "MAP-01",
+      "title": "Consolidated compliance assurance",
+      "scope": "Map reviewed legal obligations to controls, owners and evidence; assemble consolidated gap-aware evidence packs and independent assessments.",
+      "limitation": "Existing governance review and audit records remain useful but are not certification.",
+      "suggested_reviewer": "Compliance / legal / audit"
+    },
+    {
+      "id": "MAP-02",
+      "title": "Expanded live authenticity coverage",
+      "scope": "Approve and validate selected issuer/provider adapters, source revocation and freshness coverage for required document types.",
+      "limitation": "Signed-result infrastructure is already present; commercial source coverage is configuration- and provider-dependent.",
+      "suggested_reviewer": "Verification / procurement / security"
+    },
+    {
+      "id": "MAP-03",
+      "title": "Systematic answer-quality evaluation",
+      "scope": "Use business-reviewed synthetic questions and expected outcomes across policy dates, audiences, contradictory evidence and model changes.",
+      "limitation": "Broader benchmark work is underway separately; this pack does not claim it has shipped or publish an accuracy result.",
+      "suggested_reviewer": "AI assurance / domain-policy owner"
+    },
+    {
+      "id": "MAP-04",
+      "title": "Fairness evaluation and challenge process",
+      "scope": "Introduce reviewed paired scenarios, governed disparity analysis and a dedicated independent challenge/appeal process for relevant AI-supported decisions.",
+      "limitation": "Fairness work is underway separately; human oversight does not establish bias-free decisions.",
+      "suggested_reviewer": "AI assurance / HR / legal"
+    },
+    {
+      "id": "MAP-05",
+      "title": "Consolidated assurance reporting",
+      "scope": "Bring quality, privacy, control, provider and recovery evidence into defined reports with thresholds, denominators, owners and evidence dates.",
+      "limitation": "Existing operational counts and source records are not a completed responsible-AI scorecard.",
+      "suggested_reviewer": "Security operations / AI assurance"
+    }
+  ],
+  "deployment_evidence_not_verified": [
+    {
+      "id": "DEP-01",
+      "title": "Identity-provider posture",
+      "required_evidence": "Tenant MFA, SSO, session settings and administrator recovery configuration."
+    },
+    {
+      "id": "DEP-02",
+      "title": "Encryption and key management",
+      "required_evidence": "Transport/storage coverage, key ownership and rotation, backup encryption and relevant provider contracts."
+    },
+    {
+      "id": "DEP-03",
+      "title": "Residency and international transfer",
+      "required_evidence": "Actual application, database, storage, AI and channel-provider locations and transfer arrangements."
+    },
+    {
+      "id": "DEP-04",
+      "title": "AI-provider data-use terms",
+      "required_evidence": "Training use, provider retention, subprocessors, deletion commitments and contractual restrictions."
+    },
+    {
+      "id": "DEP-05",
+      "title": "Incident response and independent security assessment",
+      "required_evidence": "SIEM integration, response ownership, vulnerability management and fresh independent penetration-test evidence."
+    },
+    {
+      "id": "DEP-06",
+      "title": "Recovery and compliance attestations",
+      "required_evidence": "Verified backup/restore scope, RTO/RPO evidence and any applicable external certifications. Existing audit-provider drills do not establish full service disaster recovery."
+    }
+  ]
+}
