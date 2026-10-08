@@ -17,6 +17,7 @@ from assurance_content import (
     REVIEW_DATE, SCOPE, STATUS, SOURCE, GROUPS, METRICS, ROADMAP, DEPLOYMENT,
     BUSINESS_PAGES, TECH_PAGES,
 )
+from control_use_cases import CONTROL_USE_CASES
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "deliverables"
@@ -54,12 +55,14 @@ WIDTH = W - 92
 def validate_sources():
     ids = [row.id for _, _, rows in GROUPS for row in rows]
     assert len(ids) == len(set(ids)), "Duplicate control ID"
+    assert len(ids) == 50 and set(ids) == set(CONTROL_USE_CASES), "Use cases must cover exactly all 50 controls"
     for key, path in SOURCE.items():
         assert (ROOT / path).is_file(), f"Missing evidence pointer: {key}: {path}"
     for _, _, rows in GROUPS:
         for row in rows:
             assert row.status in STATUS
             assert all(key in SOURCE for key in row.sources)
+            assert 10 <= len(row.business_use_case.split()) <= 60, f"Missing or oversized use case: {row.id}"
     assert len(BUSINESS_PAGES) == 8 and len(TECH_PAGES) == 2
 
 
@@ -199,6 +202,8 @@ def build_inventory():
     doc.add("Reviewer roles below are suggested evidence owners, not assigned people or certified "
         "accountability. Obtain dated tenant-specific policy, configuration, test and provider evidence "
         "before claiming operational assurance.")
+    doc.add("Business use cases are fictional illustrations of when each control matters, "
+        "not records of executed checks, measured effectiveness or certification.", "small")
     doc.story.append(PageBreak())
     for title, owner, rows in GROUPS:
         doc.add(escape(title), "h2")
@@ -210,6 +215,7 @@ def build_inventory():
                 doc.p("<b>Status:</b> " + escape(row.status), "small"),
                 doc.p("<b>Risk addressed:</b> " + escape(RISKS[row.id.split("-")[0]]), "small"),
                 doc.p("<b>Control:</b> " + escape(row.mechanism)),
+                doc.p("<b>Business use case:</b> " + escape(row.business_use_case)),
                 doc.p("<b>Safe behavior:</b> " + escape(row.safe_behavior)),
                 doc.p("<b>Limit / residual risk:</b> " + escape(row.limitation)),
                 doc.p("<b>Source:</b> " + escape(sources_text(row.sources)), "ref"),
@@ -326,11 +332,14 @@ summary{cursor:pointer;font-weight:650;color:#10243e}summary:focus-visible,a:foc
         parts.append(f'<p><b>{escape(label)}:</b> {escape(definition)}</p>')
     parts.append("<p class='muted'>Suggested reviewer roles are not assigned accountability. "
         "Source/test pointers are evidence locations, not a statement that tests passed.</p>")
+    parts.append("<p class='muted'>Each business use case is a fictional illustration, "
+        "not evidence of an executed check, measured effectiveness or certification.</p>")
     for title, owner, rows in GROUPS:
         parts.append(f'<h3>{escape(title)}</h3><p class="muted">Suggested reviewer: {escape(owner)}</p>')
         for row in rows:
             parts.append(f'<details><summary>{row.id} · {escape(row.name)} — {escape(row.status)}</summary>'
                 f'<p><b>Control:</b> {escape(row.mechanism)}</p>'
+                f'<div class="example"><b>Business use case:</b><br>{escape(row.business_use_case)}</div>'
                 f'<p><b>Risk addressed:</b> {escape(RISKS[row.id.split("-")[0]])}</p>'
                 f'<p><b>Safe behavior:</b> {escape(row.safe_behavior)}</p>'
                 f'<p><b>Limitation:</b> {escape(row.limitation)}</p>'
@@ -364,6 +373,9 @@ def main():
     build_inventory()
     (OUT / FILES["json"]).write_text(json.dumps(inventory_data(), indent=2), encoding="utf-8")
     build_html()
+    public = ROOT / "artifacts" / "onboarding-agent" / "public"
+    for kind in ("business", "technical", "inventory", "html"):
+        (public / FILES[kind]).write_bytes((OUT / FILES[kind]).read_bytes())
     for filename in FILES.values():
         print(f"deliverables/{filename}")
 

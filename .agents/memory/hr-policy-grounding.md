@@ -25,6 +25,12 @@ Treat answer-quality benchmarking as roadmap assurance, not a current accuracy g
 
 **How to apply:** Keep reviewed ground truth separate from CI/provider stubs. Require explicit authorized, bounded real-model operations using only fictional content; never silently spend provider budget on builds or policy publication.
 
+Treat provider identity changes as a new human-review question even when the fixed synthetic answer key still passes. Never automatically promote a changed provider run to the reviewed baseline.
+
+**Why:** Passing a small fictional pack cannot establish that an aliased model's behavior is unchanged outside those cases. Missing fingerprints likewise cannot prove implementation stability.
+
+**How to apply:** Keep recurring-check consent separate from answer-key approval, bind it to the exact reviewer authority, and pause for investigation rather than silently accepting replacement behavior.
+
 Language-pair consistency is not correctness or broad fairness assurance. Equal wrong answers must fail, and audience/date blocks must not inflate measured model-language agreement. Translations remain business-review proposals until independently approved.
 
 **Why:** Shared abstentions may reflect a safety gate rather than model understanding; equally unsupported citations can look consistent while still misleading users.

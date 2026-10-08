@@ -1,9 +1,10 @@
 import { Router, type IRouter, type Response } from "express";
 import { getOrganizationId } from "../lib/organization-scope";
-import { policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark } from "../lib/hr-policy-evaluation";
+import { policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark, configurePolicyDrift } from "../lib/hr-policy-evaluation";
 import {
   GetHrPolicyEvaluationResponse, ReviewHrPolicyEvaluationBody, ReviewHrPolicyEvaluationResponse,
   RunHrPolicyEvaluationBody, RunHrPolicyEvaluationResponse,
+  ConfigureHrPolicyDriftBody, ConfigureHrPolicyDriftResponse,
 } from "@workspace/api-zod";
 import {
   answerPolicyQuestion,
@@ -47,6 +48,13 @@ function positive(value: string | undefined, field: string): number {
 
 export function createHrPolicyRouter(): IRouter {
   const router: IRouter = Router();
+  router.post("/policies/evaluation/drift", async (req, res, next): Promise<void> => {
+    try {
+      const body = ConfigureHrPolicyDriftBody.strict().safeParse(req.body);
+      if (!body.success) { res.status(400).json({ message: "Invalid drift programme request." }); return; }
+      res.json(ConfigureHrPolicyDriftResponse.parse(await configurePolicyDrift(getOrganizationId(req), req.authUserId!, body.data)));
+    } catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
   router.get("/policies/evaluation", async (req, res, next) => {
     try {
       const result = await policyEvaluationCatalog(getOrganizationId(req), req.authUserId!);

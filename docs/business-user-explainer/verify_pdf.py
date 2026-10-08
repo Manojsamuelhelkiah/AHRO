@@ -1,5 +1,6 @@
 """Validate every deliverable and render representative PDF pages for visual review."""
 import json
+from html import escape
 from pathlib import Path
 import re
 
@@ -22,6 +23,15 @@ html = (ROOT / "deliverables" / FILES["html"]).read_text()
 assert 'name="viewport"' in html and "<script" not in html
 for row in controls:
     assert row.id in html
+    assert escape(row.business_use_case) in html, f"Missing HTML use case: {row.id}"
+    stored = next(control for group in data["groups"] for control in group["controls"] if control["id"] == row.id)
+    assert stored["business_use_case"] == row.business_use_case, f"Missing JSON use case: {row.id}"
+assert html.count("<b>Business use case:</b>") == 50
+assert len({row.business_use_case for row in controls}) == 50
+for kind in ("inventory", "html"):
+    assert (ROOT / "deliverables" / FILES[kind]).read_bytes() == (
+        ROOT / "artifacts" / "onboarding-agent" / "public" / FILES[kind]
+    ).read_bytes(), f"Stale public register copy: {kind}"
 
 for kind in ("business", "technical", "inventory"):
     pdf = ROOT / "deliverables" / FILES[kind]
@@ -31,8 +41,11 @@ for kind in ("business", "technical", "inventory"):
             expected = 8 if kind == "business" else 2
             assert document.page_count == expected, f"{kind}: expected {expected}, found {document.page_count}"
         else:
+            normalized = re.sub(r"\s+", " ", text)
             for row in controls:
                 assert row.id in text, f"Missing control {row.id}"
+                assert row.business_use_case in normalized, f"Missing PDF use case: {row.id}"
+            assert text.count("Business use case:") == 50
             for id, *_ in METRICS:
                 assert id in text, f"Missing metric {id}"
             for term in ("MAP-05", "DEP-06", "Nearby test pointers", "No live metric values"):

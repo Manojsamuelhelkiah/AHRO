@@ -57,6 +57,7 @@ import type {
   AgentInvocationResponse,
   BootstrapOnboardingAuthorityGovernanceBody,
   CompleteDemoControllerSetupBody,
+  ConfigureHrPolicyDrift200,
   ConfirmSensitiveRetentionShorteningBody,
   CorpusSummary,
   CustomIntent,
@@ -112,6 +113,7 @@ import type {
   HrPolicyCapabilities,
   HrPolicyCitationExcerpt,
   HrPolicyCreateInput,
+  HrPolicyDriftInput,
   HrPolicyEvaluationCatalog,
   HrPolicyEvaluationReviewInput,
   HrPolicyEvaluationRunInput,
@@ -2139,6 +2141,77 @@ export const useReviewHrPolicyEvaluation = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getReviewHrPolicyEvaluationMutationOptions(options));
+    }
+
+export const getConfigureHrPolicyDriftUrl = () => {
+
+
+
+
+  return `/api/policies/evaluation/drift`
+}
+
+/**
+ * @summary Separately approve bounded scheduled synthetic drift checks or stop consent
+ */
+export const configureHrPolicyDrift = async (hrPolicyDriftInput: HrPolicyDriftInput, options?: RequestInit): Promise<ConfigureHrPolicyDrift200> => {
+
+  return customFetch<ConfigureHrPolicyDrift200>(getConfigureHrPolicyDriftUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hrPolicyDriftInput)
+  }
+);}
+
+
+
+
+
+export const getConfigureHrPolicyDriftMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof configureHrPolicyDrift>>, TError,{data: BodyType<HrPolicyDriftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof configureHrPolicyDrift>>, TError,{data: BodyType<HrPolicyDriftInput>}, TContext> => {
+
+const mutationKey = ['configureHrPolicyDrift'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof configureHrPolicyDrift>>, {data: BodyType<HrPolicyDriftInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  configureHrPolicyDrift(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfigureHrPolicyDriftMutationResult = NonNullable<Awaited<ReturnType<typeof configureHrPolicyDrift>>>
+    export type ConfigureHrPolicyDriftMutationBody = BodyType<HrPolicyDriftInput>
+    export type ConfigureHrPolicyDriftMutationError = ErrorType<void>
+
+    /**
+ * @summary Separately approve bounded scheduled synthetic drift checks or stop consent
+ */
+export const useConfigureHrPolicyDrift = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof configureHrPolicyDrift>>, TError,{data: BodyType<HrPolicyDriftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof configureHrPolicyDrift>>,
+        TError,
+        {data: BodyType<HrPolicyDriftInput>},
+        TContext
+      > => {
+      return useMutation(getConfigureHrPolicyDriftMutationOptions(options));
     }
 
 export const getRunHrPolicyEvaluationUrl = () => {

@@ -1,4 +1,5 @@
 import { db } from "@workspace/db";
+import { runPolicyDriftTick } from "../hr-policy-evaluation";
 import { randomUUID } from "node:crypto";
 import {
   onbCases,
@@ -1423,6 +1424,11 @@ async function tickOnce(): Promise<void> {
   // heartbeat. They only create persisted review work; no provider is called.
   await runGovernanceReminderTick().catch((error) => {
     logger.error({ component: "governance-reminder", error: String(error).slice(0, 300) }, "governance reminder tick failed");
+  });
+  // Only separately approved, finite synthetic programmes may spend here.
+  // No startup/build/publication path calls the drift worker directly.
+  await runPolicyDriftTick().catch(() => {
+    logger.error({ component: "policy-drift" }, "Synthetic drift check failed; inspect durable programme evidence");
   });
   // Timer-only lifecycle deletion can be frozen on autoscale. This shared
   // heartbeat awaits an in-flight deletion tick and therefore cannot return

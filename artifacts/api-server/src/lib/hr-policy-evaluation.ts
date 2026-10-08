@@ -4,6 +4,10 @@ import { db, onbSettings } from "@workspace/db";
 import { HrPolicyError, policyCapabilities, verifiedAuthority } from "./hr-policy-library";
 import { selectApprovedPolicyExtract, type PolicyProviderReceipt } from "./hr-policy-ai";
 import { benchmarkHash, benchmarkProvenance, POLICY_BENCHMARK, evaluateBenchmark, LIVE_LIMITS, BENCHMARK_LIMITATION, type BenchmarkSelector } from "./hr-policy-benchmark";
+import { DRIFT_KEY, DRIFT_CONFIRMATION, DRIFT_INTERVAL, DRIFT_DURATION, DRIFT_MAX_CHECKS, DRIFT_RUN_WINDOW,
+  eligibleDriftBaseline, comparePolicyDrift, type DriftProgramme, type DriftEvidence } from "./hr-policy-drift";
+import { withHroContext } from "./hro-context/manager";
+import { withoutHroContext } from "./hro-context/core";
 
 const REVIEW_KEY = "policy-evaluation:review";
 const SLOT_KEY = "policy-evaluation:live-budget";
@@ -43,12 +47,18 @@ export async function policyEvaluationCatalog(org: string, actor: string) {
   await policyCapabilities(org, actor); // reauthorize response
   const provenance = benchmarkProvenance();
   const runs = rows.map(r => JSON.parse(r.value));
+  const programme = await readSetting(db, org, DRIFT_KEY) as DriftProgramme | null;
+  const eligibleBaselineIds = review?.decision === "approved" ? runs
+    .filter(r => eligibleDriftBaseline(r, review.reviewId)).map(r => r.runId) as string[] : [];
+  await policyCapabilities(org, actor);
   return {
     ...provenance, cases: POLICY_BENCHMARK, canReview, review,
     approved: review?.decision === "approved" && review.benchmarkHash === benchmarkHash(),
     reviewConfirmation: REVIEW_CONFIRMATION, liveConfirmation: LIVE_CONFIRMATION,
     limits: { ...LIVE_LIMITS, liveRunsPerTenantPerDay: 3 }, runs,
-    currentLiveEvidence: runs.some(r => r.mode === "live" && r.status === "passed" && !r.providerIsolated && r.authorizationCurrent &&
+    drift: { programme, confirmation: DRIFT_CONFIRMATION, eligibleBaselineIds,
+      maxChecks: DRIFT_MAX_CHECKS, durationDays: 7, intervalHours: 24 },
+    currentLiveEvidence: !programme?.warning && runs.some(r => r.mode === "live" && r.status === "passed" && !r.providerIsolated && r.authorizationCurrent &&
       r.benchmarkHash === provenance.benchmarkHash && r.requestHash === provenance.requestHash && r.contractHash === provenance.contractHash &&
       r.review?.reviewId === review?.reviewId && review?.decision === "approved"),
     limitation: BENCHMARK_LIMITATION,
@@ -74,7 +84,7 @@ export async function reviewPolicyBenchmark(org: string, actor: string, input: u
     return { review };
   });
 }
-export async function runPolicyBenchmark(org: string, actor: string, input: unknown, testSelector?: BenchmarkSelector) {
+export async function runPolicyBenchmark(org: string, actor: string, input: unknown, testSelector?: BenchmarkSelector, programmeId?: string) {
   const body = bodyRecord(input, ["benchmarkHash", "mode", "confirmation", "requestId"]);
   if (body.benchmarkHash !== benchmarkHash()) throw new HrPolicyError("The benchmark changed; refresh before running.", 409);
   if ((body.mode !== "offline" && body.mode !== "live") || typeof body.requestId !== "string" || !/^[a-zA-Z0-9-]{8,80}$/.test(body.requestId)) throw new HrPolicyError("A valid run mode and request id are required.");
@@ -86,10 +96,16 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
     if (mode === "live") await verifiedAuthority(tx, org, actor, "hr-compliance");
     else await policyCapabilities(org, actor);
     const review = await assertReview(tx, org);
+    let programme: DriftProgramme | null = null;
+    if (programmeId) {
+      if (mode !== "live") throw new HrPolicyError("Drift checks require live mode.");
+      programme = await assertDriftAuthority(tx, org, actor, programmeId, review.reviewId);
+      if (programme.providerIsolated !== Boolean(testSelector)) throw new HrPolicyError("Drift provider isolation mismatch.", 409);
+    }
     const existing = await readSetting(tx, org, runKey);
     if (existing) {
       if (existing.mode !== mode || existing.actor !== actor || existing.benchmarkHash !== benchmarkHash()) throw new HrPolicyError("This request id belongs to a different run.", 409);
-      return { existing, review };
+      return { existing, review, baselineRunId: programme?.baselineRunId };
     }
     if (mode === "live") {
       const slot = await readSetting(tx, org, SLOT_KEY);
@@ -101,10 +117,17 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
       // never reclaim an ambiguous real-model call or reset the daily count.
       await writeSetting(tx, org, SLOT_KEY, { day, count: count + 1, activeUntil: Date.now() + LIVE_LIMITS.milliseconds + 30000 });
     }
+    if (programme) {
+      if (Date.parse(programme.nextDueAt) > Date.now() || programme.checksReserved >= DRIFT_MAX_CHECKS)
+        throw new HrPolicyError("The approved drift programme is not due or is exhausted.", 409);
+      await writeSetting(tx, org, DRIFT_KEY, { ...programme, checksReserved: programme.checksReserved + 1,
+        latestRunId: body.requestId, nextDueAt: new Date(Date.now() + DRIFT_INTERVAL).toISOString() });
+    }
     await writeSetting(tx, org, runKey, {
       ...benchmarkProvenance(), runId: body.requestId, mode, actor, review, status: "running", createdAt: new Date().toISOString(),
+      ...(programmeId ? { programmeId, baselineRunId: programme!.baselineRunId } : {}),
     });
-    return { existing: null, review };
+    return { existing: null, review, baselineRunId: programme?.baselineRunId };
   });
   if (reserved.existing) return { run: reserved.existing };
   const authorize = () => db.transaction(async tx => {
@@ -112,20 +135,143 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
     await verifiedAuthority(tx, org, actor, "hr-compliance");
     const current = await assertReview(tx, org);
     if (current.reviewId !== reserved.review.reviewId) throw new HrPolicyError("The business review changed during this run.", 409);
+    if (programmeId) await assertDriftAuthority(tx, org, actor, programmeId, current.reviewId);
   });
   const providerReceipts: PolicyProviderReceipt[] = [];
   const report = await evaluateBenchmark(mode, mode === "live"
-    ? testSelector ?? ((q, e, c, signal) => selectApprovedPolicyExtract(q, e, c, signal, receipt => providerReceipts.push(receipt)))
-    : undefined, mode === "live" ? authorize : undefined);
+    ? testSelector ?? selectApprovedPolicyExtract
+    : undefined, mode === "live" ? authorize : undefined, receipt => providerReceipts.push(receipt));
   let authorizationCurrent = true;
   if (mode === "live") {
     try { await authorize(); } catch { authorizationCurrent = false; }
   }
-  const run = {
+  let run: Record<string, any> = {
     ...report, providerReceipts, providerIsolated: Boolean(testSelector), authorizationCurrent, runId: body.requestId, actor, review: reserved.review,
     status: authorizationCurrent && report.failed === 0 && report.pairedFailed === 0 ? "passed" : "failed",
   };
-  await db.transaction(async tx => { await fence(tx, org); await writeSetting(tx, org, runKey, run); });
+  await db.transaction(async tx => {
+    await fence(tx, org);
+    if (programmeId) {
+      const programme = await readSetting(tx, org, DRIFT_KEY) as DriftProgramme;
+      // Fence final evidence against stop, replaced consent, review or authority changes.
+      try { await assertDriftAuthority(tx, org, actor, programmeId, reserved.review.reviewId); }
+      catch { run.authorizationCurrent = false; run.status = "failed"; }
+      const baseline = await readSetting(tx, org, `${RUN_PREFIX}${reserved.baselineRunId}`);
+      const comparison = comparePolicyDrift(baseline, run as DriftEvidence);
+      run = { ...run, programmeId, comparison };
+      if (programme.programmeId === programmeId) {
+        await writeSetting(tx, org, DRIFT_KEY, { ...programme,
+          status: programme.status === "stopped" ? "stopped" : comparison.verdict !== "no-observed-drift" ? "paused"
+            : programme.checksReserved >= DRIFT_MAX_CHECKS ? "exhausted" : "active",
+          warning: comparison.warning });
+      }
+    }
+    await writeSetting(tx, org, runKey, run);
+  });
   await policyCapabilities(org, actor);
   return { run };
+}
+
+async function assertDriftAuthority(tx: any, org: string, actor: string, id: string, reviewId: string) {
+  const p = await readSetting(tx, org, DRIFT_KEY) as DriftProgramme | null;
+  const grant = await verifiedAuthority(tx, org, actor, "hr-compliance");
+  if (!p || p.programmeId !== id || p.status !== "active" || p.actor !== actor || p.authorityId !== grant.id ||
+    p.reviewId !== reviewId || Date.parse(p.expiresAt) <= Date.now())
+    throw new HrPolicyError("Drift consent, exact reviewer authority or baseline review is no longer current.", 409);
+  const currentReview = await assertReview(tx, org);
+  const baseline = await readSetting(tx, org, `${RUN_PREFIX}${p.baselineRunId}`);
+  if (currentReview.reviewId !== reviewId || !eligibleDriftBaseline(baseline, reviewId, p.providerIsolated))
+    throw new HrPolicyError("The reviewed live baseline no longer matches this benchmark and contract.", 409);
+  return p;
+}
+
+export async function configurePolicyDrift(org: string, actor: string, input: unknown, providerIsolated = false) {
+  const body = bodyRecord(input, ["action", "baselineRunId", "expectedProgrammeId", "confirmation"]);
+  if (!["approve", "stop"].includes(String(body.action))) throw new HrPolicyError("Invalid drift programme action.");
+  return db.transaction(async tx => {
+    await fence(tx, org);
+    const grant = await verifiedAuthority(tx, org, actor, "hr-compliance");
+    const old = await readSetting(tx, org, DRIFT_KEY) as DriftProgramme | null;
+    if ((old?.programmeId ?? null) !== body.expectedProgrammeId) throw new HrPolicyError("Drift consent changed; refresh.", 409);
+    if (body.action === "stop") {
+      if (!old) throw new HrPolicyError("There is no approved drift programme.", 409);
+      const programme = { ...old, status: "stopped" as const };
+      await writeSetting(tx, org, DRIFT_KEY, programme);
+      await writeSetting(tx, org, `${DRIFT_KEY}:history:${randomUUID()}`, { ...programme, stoppedBy: actor, stoppedAt: new Date().toISOString() });
+      return { programme };
+    }
+    if (body.confirmation !== DRIFT_CONFIRMATION || typeof body.baselineRunId !== "string")
+      throw new HrPolicyError("Separate explicit drift budget consent and reviewed live baseline are required.", 403);
+    const pending = old?.latestRunId ? await readSetting(tx, org, `${RUN_PREFIX}${old.latestRunId}`) : null;
+    if (pending?.status === "running") {
+      if (Date.parse(pending.createdAt) + DRIFT_RUN_WINDOW > Date.now())
+        throw new HrPolicyError("An unfinished drift run must settle before replacing consent.", 409);
+      await writeSetting(tx, org, `${RUN_PREFIX}${old!.latestRunId}`, { ...pending, status: "unfinished", authorizationCurrent: false });
+    }
+    const review = await assertReview(tx, org);
+    const baseline = await readSetting(tx, org, `${RUN_PREFIX}${body.baselineRunId}`);
+    if (!eligibleDriftBaseline(baseline, review.reviewId, providerIsolated)) throw new HrPolicyError("Select a completed, non-isolated current live baseline.", 409);
+    if (old?.status === "active") throw new HrPolicyError("Stop the active programme before replacing its consent.", 409);
+    const now = Date.now();
+    const programme: DriftProgramme = {
+      programmeId: randomUUID(), baselineRunId: body.baselineRunId, actor, authorityId: grant.id, reviewId: review.reviewId,
+      status: "active", approvedAt: new Date(now).toISOString(), expiresAt: new Date(now + DRIFT_DURATION).toISOString(),
+      nextDueAt: new Date(now + DRIFT_INTERVAL).toISOString(), checksReserved: 0, latestRunId: null, warning: null,
+      providerIsolated,
+    };
+    await writeSetting(tx, org, DRIFT_KEY, programme);
+    await writeSetting(tx, org, `${DRIFT_KEY}:history:${programme.programmeId}`, programme);
+    return { programme };
+  });
+}
+
+/** Only the runtime heartbeat calls this; builds, catalog reads and publication never dispatch. */
+export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isolatedOrg?: string) {
+  if (testSelector && !isolatedOrg) throw new Error("Isolated drift workers require their fixture tenant.");
+  const rows = await db.select().from(onbSettings).where(and(eq(onbSettings.key, DRIFT_KEY),
+    testSelector ? eq(onbSettings.organizationId, isolatedOrg!) : undefined))
+    .orderBy(onbSettings.updatedAt);
+  for (const row of rows) {
+    const p = JSON.parse(row.value) as DriftProgramme;
+    if (p.status !== "active" || p.providerIsolated !== Boolean(testSelector)) continue;
+    const org = row.organizationId;
+    const ready = await db.transaction(async tx => {
+      await fence(tx, org);
+      const current = await readSetting(tx, org, DRIFT_KEY) as DriftProgramme;
+      if (current.programmeId !== p.programmeId || current.status !== "active") return false;
+      const last = current.latestRunId ? await readSetting(tx, org, `${RUN_PREFIX}${current.latestRunId}`) : null;
+      if (last?.status === "running") {
+        if (Date.parse(last.createdAt) + DRIFT_RUN_WINDOW > Date.now()) return false;
+        await writeSetting(tx, org, `${RUN_PREFIX}${current.latestRunId}`, { ...last, status: "unfinished", authorizationCurrent: false });
+        await writeSetting(tx, org, DRIFT_KEY, { ...current, status: "paused", warning: "Drift check unfinished after interruption; reservation consumed. No automatic retry." });
+        return false;
+      }
+      if (Date.parse(current.expiresAt) <= Date.now()) {
+        await writeSetting(tx, org, DRIFT_KEY, { ...current, status: "expired" }); return false;
+      }
+      try { await assertDriftAuthority(tx, org, p.actor, p.programmeId, p.reviewId); }
+      catch {
+        await writeSetting(tx, org, DRIFT_KEY, { ...current, status: "paused", warning: "Drift authorization or reviewed baseline is no longer current. No provider call made." });
+        return false;
+      }
+      return Date.parse(current.nextDueAt) <= Date.now();
+    });
+    if (!ready) continue;
+    try {
+      await withoutHroContext(() => withHroContext({
+        organizationId: org, workflow: "hr-policy", subjectType: "tenant", subjectId: org,
+        initiatingUserId: p.actor, executor: { type: "system" },
+      }, () => runPolicyBenchmark(org, p.actor, { benchmarkHash: benchmarkHash(), mode: "live",
+        requestId: randomUUID(), confirmation: LIVE_CONFIRMATION }, testSelector, p.programmeId)));
+    } catch (error) {
+      // Budget contention is visible, not silently reported as stability.
+      await db.transaction(async tx => {
+        await fence(tx, org);
+        const current = await readSetting(tx, org, DRIFT_KEY) as DriftProgramme;
+        if (current.programmeId === p.programmeId && current.status === "active" && current.latestRunId === p.latestRunId) await writeSetting(tx, org, DRIFT_KEY,
+          { ...current, status: "paused", warning: "Drift check blocked or failed; inspect evidence and shared tenant budget before reauthorizing." });
+      });
+    }
+    break; // at most one bounded programme per shared tick
+  }
 }

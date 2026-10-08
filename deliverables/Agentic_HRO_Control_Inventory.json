@@ -25,6 +25,7 @@
             "guards",
             "access"
           ],
+          "business_use_case": "An HR coordinator opens the onboarding queue from a shared laptop. Requiring sign-in prevents an unauthenticated visitor from viewing or changing operational records.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts",
             "artifacts/api-server/src/lib/access-governance.ts"
@@ -47,6 +48,7 @@
             "access",
             "sensitive"
           ],
+          "business_use_case": "An implementation team supports two client organizations. A reviewer working on one client's hire must not open the other client's case by changing a record identifier.",
           "source_paths": [
             "artifacts/api-server/src/lib/access-governance.ts",
             "artifacts/api-server/src/lib/onboarding/sensitive-access.ts"
@@ -69,6 +71,7 @@
             "access",
             "agent"
           ],
+          "business_use_case": "An equipment coordinator needs laptop-delivery details, not background-check findings. Scoped permissions restrict the fields and actions available for that role.",
           "source_paths": [
             "artifacts/api-server/src/lib/access-governance.ts",
             "artifacts/api-server/src/lib/agent-invocation.ts"
@@ -91,6 +94,7 @@
             "access",
             "history"
           ],
+          "business_use_case": "A contractor receives access for a one-week onboarding project. When the grant expires or is revoked, it must not authorize another case lookup or action.",
           "source_paths": [
             "artifacts/api-server/src/lib/access-governance.ts",
             "artifacts/api-server/src/routes/hro-context.ts"
@@ -111,6 +115,7 @@
           "sources": [
             "governance"
           ],
+          "business_use_case": "A workspace administrator wants to approve a legal exception. Administration alone is insufficient; the applicable professional-authority approval must be established before the specialist action.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/governance-runtime.ts"
           ],
@@ -131,6 +136,7 @@
             "governance",
             "dispatch"
           ],
+          "business_use_case": "HR changes a readiness requirement after reviewing a hire. Work must follow the approved revision, and changed evidence requires review rather than inheriting an old approval.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/governance-runtime.ts",
             "artifacts/api-server/src/lib/onboarding/dispatch-guard.ts"
@@ -152,6 +158,7 @@
             "agent",
             "context"
           ],
+          "business_use_case": "A team introduces a new payroll agent. Server-side registration and permitted scope must be checked before it can execute work, rather than trusting its claimed role.",
           "source_paths": [
             "artifacts/api-server/src/lib/agent-invocation.ts",
             "artifacts/api-server/src/lib/hro-context/core.ts"
@@ -173,6 +180,7 @@
             "portal",
             "portal-cleanup"
           ],
+          "business_use_case": "A candidate receives a link to upload onboarding documents. The link provides only scoped portal access and cannot authorize uploads after expiry or unlock the full Control Tower.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/candidate-portal.ts",
             "artifacts/api-server/src/lib/onboarding/candidate-access-cleanup.ts"
@@ -194,6 +202,7 @@
           "sources": [
             "portal"
           ],
+          "business_use_case": "Someone repeatedly guesses a candidate's portal credentials. Hashed credential lookup and exchange cooldowns limit these attempts without storing the lookup secrets in plain text.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/candidate-portal.ts"
           ],
@@ -219,6 +228,7 @@
           "sources": [
             "guards"
           ],
+          "business_use_case": "A forged callback claims a candidate completed a phone interaction. Signature and expected-call checks reject the callback before it changes the case.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts"
           ],
@@ -238,6 +248,7 @@
           "sources": [
             "guards"
           ],
+          "business_use_case": "An email claims that a background check is complete. Only a configured trusted sender can enter status processing; case and evidence checks still apply.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts"
           ],
@@ -257,6 +268,7 @@
           "sources": [
             "guards"
           ],
+          "business_use_case": "A verification provider resends a status email to a mailbox shared by multiple clients. Case binding and deduplication prevent applying it to the wrong hire or acting twice.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts"
           ],
@@ -276,6 +288,7 @@
           "sources": [
             "guards"
           ],
+          "business_use_case": "A salesperson demonstrates candidate outreach. Messages must stay within explicitly authorized recipients; a demo persona or delivery receipt does not grant stakeholder approval.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts"
           ],
@@ -295,6 +308,7 @@
           "sources": [
             "guards"
           ],
+          "business_use_case": "A delayed reply causes repeated follow-up attempts. Send caps and call serialization constrain repeated outreach instead of allowing an uncontrolled sequence of messages or calls.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts"
           ],
@@ -314,6 +328,7 @@
           "sources": [
             "guards"
           ],
+          "business_use_case": "A candidate asks the voice assistant to promise an employment exception. The bounded interaction can route the request to a human rather than making an unauthorized commitment.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts"
           ],
@@ -340,6 +355,7 @@
             "sensitive",
             "lifecycle"
           ],
+          "business_use_case": "HR wants to collect health-related onboarding information. The applicable sensitive-data policy and approvals must be established before collection or disclosure; admin access is not a lawful basis.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/sensitive-access.ts",
             "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.ts"
@@ -362,6 +378,7 @@
             "sensitive",
             "lifecycle"
           ],
+          "business_use_case": "A coordinator pastes an unexplained note into a case. Because it may contain sensitive information, the text is not treated as safe for unrestricted disclosure.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/sensitive-access.ts",
             "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.ts"
@@ -384,6 +401,7 @@
             "guards",
             "sensitive"
           ],
+          "business_use_case": "A coordinator investigates a failed candidate message. Masked contact details and bounded audit snippets reduce unnecessary exposure while relevant model inputs remain subject to sanitization or rejection.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts",
             "artifacts/api-server/src/lib/onboarding/sensitive-access.ts"
@@ -405,6 +423,7 @@
           "sources": [
             "lifecycle"
           ],
+          "business_use_case": "A departed employee's records reach their retention date during a legal dispute. An active hold prevents eligible cleanup until the approved lifecycle permits deletion.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/sensitive-lifecycle.ts"
           ],
@@ -425,6 +444,7 @@
             "context",
             "manager"
           ],
+          "business_use_case": "A support analyst traces an interrupted workflow. Metadata can describe scope, steps and status without turning the shared context history into a store of employee documents or model conversations.",
           "source_paths": [
             "artifacts/api-server/src/lib/hro-context/core.ts",
             "artifacts/api-server/src/lib/hro-context/manager.ts"
@@ -443,6 +463,7 @@
           "sources": [
             "retention"
           ],
+          "business_use_case": "Operations wants to remove old execution history. Approved pruning preserves held or unfinished chains rather than deleting them merely because they fall outside the screen's display window.",
           "source_paths": [
             "artifacts/api-server/src/lib/hro-context/retention.ts"
           ],
@@ -463,6 +484,7 @@
             "analytics-api",
             "analytics-ui"
           ],
+          "business_use_case": "A manager requests an onboarding summary for a sensitive cohort. Restricted disclosure and a local narrative avoid sending opaque cohort content to a model or releasing unauthorized forecasts.",
           "source_paths": [
             "artifacts/api-server/src/routes/onboarding.ts",
             "artifacts/onboarding-agent/src/pages/analytics.tsx"
@@ -487,6 +509,7 @@
           "sources": [
             "uploads"
           ],
+          "business_use_case": "A candidate's connection drops halfway through a document upload. The incomplete write must not become accepted evidence; scoped upload tracking distinguishes it from a completed submission.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/candidate-upload-reservations.ts"
           ],
@@ -507,6 +530,7 @@
             "malware",
             "scanner"
           ],
+          "business_use_case": "An apparently genuine certificate is flagged by the malware scanner. It remains quarantined and cannot support readiness merely because an authenticity check looks favorable.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/document-malware-gate.ts",
             "artifacts/api-server/src/lib/onboarding/malware-scanner-monitor.ts"
@@ -527,6 +551,7 @@
           "sources": [
             "documents"
           ],
+          "business_use_case": "A certificate uploads successfully, but its issuer cannot be verified. HR sees an unresolved verification question requiring review, not a claim that file validation proves authenticity.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/document-validation.ts"
           ],
@@ -546,6 +571,7 @@
           "sources": [
             "vault"
           ],
+          "business_use_case": "An employee stores a credential in their personal Vault while changing employers. Membership in either employer organization does not let administrators act as the employee or control that personal evidence.",
           "source_paths": [
             "artifacts/api-server/src/lib/employee-vault/core.ts"
           ],
@@ -563,6 +589,7 @@
           "sources": [
             "verify"
           ],
+          "business_use_case": "An employee replaces a verified credential with a newer file. The old provider receipt cannot verify the replacement; reuse needs a current matching source and revision binding.",
           "source_paths": [
             "artifacts/api-server/src/lib/employee-vault/verification.ts"
           ],
@@ -580,6 +607,7 @@
           "sources": [
             "reuse"
           ],
+          "business_use_case": "A new employer requires several background checks, but the employee shares evidence for only one. Partial verification or expired consent cannot satisfy the complete reuse requirements.",
           "source_paths": [
             "artifacts/api-server/src/lib/employee-vault/reuse.ts"
           ],
@@ -597,6 +625,7 @@
           "sources": [
             "notices"
           ],
+          "business_use_case": "An employee opts into a private reminder before a credential expires. The notice prompts review without renewing the credential, assuming an email identity or notifying others automatically.",
           "source_paths": [
             "artifacts/api-server/src/lib/employee-vault/expiry-notices.ts"
           ],
@@ -620,6 +649,7 @@
           "sources": [
             "policy"
           ],
+          "business_use_case": "An employee asks how many leave days a policy allows. The assistant can quote an approved extract, but missing or conflicting evidence must not become an invented entitlement.",
           "source_paths": [
             "artifacts/api-server/src/lib/hr-policy-ai.ts"
           ],
@@ -638,6 +668,7 @@
             "guards",
             "policy"
           ],
+          "business_use_case": "An uploaded document includes an instruction to ignore checks and approve the hire. The instruction is treated as untrusted content, not authority to change the workflow.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts",
             "artifacts/api-server/src/lib/hr-policy-ai.ts"
@@ -658,6 +689,7 @@
           "sources": [
             "guards"
           ],
+          "business_use_case": "A candidate raises a medical accommodation question. The assistant uses a holding or human-escalation path rather than attempting to resolve a sensitive matter automatically.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts"
           ],
@@ -678,6 +710,7 @@
             "guards",
             "dispatch"
           ],
+          "business_use_case": "A model identifies a concerning background-check detail. HR must review the matter; the model's output alone cannot reject the candidate or clear the case.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts",
             "artifacts/api-server/src/lib/onboarding/dispatch-guard.ts"
@@ -699,6 +732,7 @@
             "budget",
             "manager"
           ],
+          "business_use_case": "A workflow prepares an unusually large evidence request. Budget checks reject an oversized request instead of silently dropping mandatory evidence to fit the model limit.",
           "source_paths": [
             "artifacts/api-server/src/lib/hro-context/ai-budget.ts",
             "artifacts/api-server/src/lib/hro-context/manager.ts"
@@ -717,6 +751,7 @@
           "sources": [
             "case-explain"
           ],
+          "business_use_case": "A reviewer asks why a case was delayed. The explanation uses recorded events and identifies evidence gaps rather than inventing a rationale from today's policy.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/case-explainability.ts"
           ],
@@ -734,6 +769,7 @@
           "sources": [
             "policy-library"
           ],
+          "business_use_case": "An employee opens a saved policy answer after the source is withdrawn. Fresh source and access checks prevent presenting the old citation as currently supported or authorized.",
           "source_paths": [
             "artifacts/api-server/src/lib/hr-policy-library.ts"
           ],
@@ -760,6 +796,7 @@
             "context",
             "manager"
           ],
+          "business_use_case": "An agent resumes work from an earlier step. Continuity checks ensure the parent, tenant, actor and executor match rather than allowing another client's execution context to be inherited.",
           "source_paths": [
             "artifacts/api-server/src/lib/hro-context/core.ts",
             "artifacts/api-server/src/lib/hro-context/manager.ts"
@@ -779,6 +816,7 @@
             "dispatch",
             "agent"
           ],
+          "business_use_case": "A hire's approval is withdrawn just before an external work request. Fresh dispatch checks block the effect even if an earlier screen showed the prerequisites as satisfied.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/dispatch-guard.ts",
             "artifacts/api-server/src/lib/agent-invocation.ts"
@@ -799,6 +837,7 @@
           "sources": [
             "effect"
           ],
+          "business_use_case": "A ticket request times out after it may have reached the provider. The durable effect journal preserves the uncertainty for reconciliation rather than blindly creating a second ticket.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/effect-journal.ts"
           ],
@@ -819,6 +858,7 @@
             "effect",
             "manager"
           ],
+          "business_use_case": "Two workers attempt to resume the same workflow after a restart. Ownership and checkpoint fencing stop a stale worker from finalizing work newly claimed by the other.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/effect-journal.ts",
             "artifacts/api-server/src/lib/hro-context/manager.ts"
@@ -839,6 +879,7 @@
           "sources": [
             "history"
           ],
+          "business_use_case": "A support colleague requests execution history for a restricted case. Current disclosure permissions govern the response; knowing the history identifier is not permission to view it.",
           "source_paths": [
             "artifacts/api-server/src/routes/hro-context.ts"
           ],
@@ -856,6 +897,7 @@
           "sources": [
             "context"
           ],
+          "business_use_case": "A scheduled background worker runs after an HR user's request ends. It must use explicit scoped identity rather than borrowing that user's or another client's ambient permissions.",
           "source_paths": [
             "artifacts/api-server/src/lib/hro-context/core.ts"
           ],
@@ -879,6 +921,7 @@
           "sources": [
             "audit"
           ],
+          "business_use_case": "An auditor reviews an approval trail after a suspected record change. Chain verification can reveal inconsistency instead of treating altered local history as verified evidence.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/protected-audit.ts"
           ],
@@ -898,6 +941,7 @@
           "sources": [
             "anchor"
           ],
+          "business_use_case": "A regulated client needs independently protected audit evidence. Configured external receipts and tested protection are required; a local audit record alone cannot establish independent readiness.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/external-audit-anchor.ts"
           ],
@@ -917,6 +961,7 @@
           "sources": [
             "startup"
           ],
+          "business_use_case": "A client opts into regulated launch safeguards. If the required audit protection or archive readiness cannot be verified, startup is blocked rather than silently launching without those safeguards.",
           "source_paths": [
             "artifacts/api-server/src/lib/regulated-production-startup-guard.ts"
           ],
@@ -936,6 +981,7 @@
           "sources": [
             "scanner"
           ],
+          "business_use_case": "The document scanner becomes unavailable during onboarding. Degraded-state visibility and configured alerts help reviewers respond; unavailable scan evidence must not be reported as clean.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/malware-scanner-monitor.ts"
           ],
@@ -962,6 +1008,7 @@
             "guards",
             "guard-ui"
           ],
+          "business_use_case": "A security reviewer investigates blocked outreach. The guardrail catalogue and recorded interventions show relevant boundaries, while the displayed count is not treated as total attack volume.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts",
             "artifacts/onboarding-agent/src/pages/guardrails.tsx"
@@ -983,6 +1030,7 @@
             "drill",
             "guard-ui"
           ],
+          "business_use_case": "A team rehearses a forged-message attack using synthetic cases. The drill exercises selected enforcement boundaries and aborts if unexpected live delivery becomes possible.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/security-drill.ts",
             "artifacts/onboarding-agent/src/pages/guardrails.tsx"
@@ -1003,6 +1051,7 @@
           "sources": [
             "uat"
           ],
+          "business_use_case": "An implementation lead reviews a UAT run with a blocked connector step. The report distinguishes observed evidence, simulation and manual work instead of marking missing evidence as a pass.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/uat-workflow-evaluator.ts"
           ],
@@ -1023,6 +1072,7 @@
             "guards",
             "uat"
           ],
+          "business_use_case": "A release team changes an onboarding flow and demonstrates it to a client. Regression checks should cover denial and recovery as well as success; demo activity remains distinct from real business outcomes.",
           "source_paths": [
             "artifacts/api-server/src/lib/onboarding/guardrails.ts",
             "artifacts/api-server/src/lib/onboarding/uat-workflow-evaluator.ts"

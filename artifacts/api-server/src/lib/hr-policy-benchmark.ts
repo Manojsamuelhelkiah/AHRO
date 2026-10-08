@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { PolicyProviderReceipt } from "./hr-policy-ai";
 import {
   POLICY_MODEL, POLICY_PROMPT_VERSION, policySelectionRequest, parsePolicySelection,
   containsPromptInjection, sentenceForQuestion, policyPermitted, policyCurrent, policyTimely,
@@ -132,7 +133,8 @@ export interface BenchmarkResult {
   passed: boolean; abstained: boolean; modelCalled: boolean; errorCode: string | null;
   candidate: string; quotedText: string | null;
 }
-export type BenchmarkSelector = (question: string, excerpt: string, context: string, signal?: AbortSignal) => Promise<PolicyExtractSelection>;
+export type BenchmarkSelector = (question: string, excerpt: string, context: string, signal?: AbortSignal,
+  receipt?: (value: PolicyProviderReceipt) => void) => Promise<PolicyExtractSelection>;
 
 /** Consistency alone is not correctness: two equally wrong answers cannot pass. */
 export function scoreBenchmarkPairs(results: BenchmarkResult[]) {
@@ -156,6 +158,7 @@ export function scoreBenchmarkPairs(results: BenchmarkResult[]) {
 export async function evaluateBenchmark(
   mode: "offline" | "live", selector?: BenchmarkSelector,
   authorize?: () => Promise<void>,
+  receipt?: (value: PolicyProviderReceipt) => void,
 ) {
   validateBenchmarkPairs();
   if (mode === "live" && (!selector || !authorize)) throw new Error("Live evaluation requires explicit authorization and a selector.");
@@ -185,7 +188,7 @@ export async function evaluateBenchmark(
           await authorize!();
           if (signal!.aborted) throw new Error("budget_exhausted");
           modelCalled = true; calls++;
-          selection = await selector!(c.question, excerpt, c.source.text, signal);
+          selection = await selector!(c.question, excerpt, c.source.text, signal, receipt);
         }
         actual = selection.outcome;
         quote = selection.quotedText;

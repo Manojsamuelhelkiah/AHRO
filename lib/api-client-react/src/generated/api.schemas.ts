@@ -5,6 +5,63 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type HrPolicyDriftInputAction = typeof HrPolicyDriftInputAction[keyof typeof HrPolicyDriftInputAction];
+
+
+export const HrPolicyDriftInputAction = {
+  approve: 'approve',
+  stop: 'stop',
+} as const;
+
+export interface HrPolicyDriftInput {
+  action: HrPolicyDriftInputAction;
+  /** @nullable */
+  expectedProgrammeId: string | null;
+  baselineRunId?: string;
+  confirmation?: string;
+}
+
+export type HrPolicyDriftProgrammeStatus = typeof HrPolicyDriftProgrammeStatus[keyof typeof HrPolicyDriftProgrammeStatus];
+
+
+export const HrPolicyDriftProgrammeStatus = {
+  active: 'active',
+  paused: 'paused',
+  stopped: 'stopped',
+  expired: 'expired',
+  exhausted: 'exhausted',
+} as const;
+
+export interface HrPolicyDriftProgramme {
+  programmeId: string;
+  baselineRunId: string;
+  actor: string;
+  authorityId: number;
+  reviewId: string;
+  status: HrPolicyDriftProgrammeStatus;
+  approvedAt: string;
+  expiresAt: string;
+  nextDueAt: string;
+  checksReserved: number;
+  providerIsolated?: boolean;
+  /** @nullable */
+  latestRunId: string | null;
+  /** @nullable */
+  warning: string | null;
+}
+
+export interface HrPolicyDriftComparison {
+  baselineRunId: string;
+  providerChanged: boolean;
+  changedCases: string[];
+  oldIdentity: string[];
+  newIdentity: string[];
+  fingerprintCoverage: string;
+  verdict: string;
+  /** @nullable */
+  warning: string | null;
+}
+
 export type FairnessProgrammeActionKind = typeof FairnessProgrammeActionKind[keyof typeof FairnessProgrammeActionKind];
 
 
@@ -376,6 +433,20 @@ export interface HrPolicyEvaluationReview {
 }
 
 export type HrPolicyBenchmarkCasePairingVariant = typeof HrPolicyBenchmarkCasePairingVariant[keyof typeof HrPolicyBenchmarkCasePairingVariant];
+
+
+export const HrPolicyBenchmarkCasePairingVariant = {
+  canonical: 'canonical',
+  paraphrase: 'paraphrase',
+  translation: 'translation',
+} as const;
+
+export type HrPolicyBenchmarkCasePairing = {
+  groupId: string;
+  language: string;
+  variant: HrPolicyBenchmarkCasePairingVariant;
+};
+
 export type HrPolicyBenchmarkCaseSourceApplicability = {[key: string]: string};
 
 export type HrPolicyBenchmarkCaseSource = {
@@ -438,6 +509,13 @@ export const HrPolicyEvaluationRunMode = {
   live: 'live',
 } as const;
 
+export type HrPolicyEvaluationRunProviderReceiptsItem = {
+  responseId: string;
+  resolvedModel: string;
+  /** @nullable */
+  systemFingerprint: string | null;
+};
+
 export type HrPolicyEvaluationRunResultsItem = {
   caseId: string;
   expected: string;
@@ -454,6 +532,19 @@ export interface HrPolicyEvaluationLimits {
   milliseconds: number;
   liveRunsPerTenantPerDay?: number;
 }
+
+export interface HrPolicyBenchmarkPairResult {
+  groupId: string;
+  anchorCaseId: string;
+  variantCaseId: string;
+  language: string;
+  variant: string;
+  expected: string;
+  modelRequired: boolean;
+  consistent: boolean;
+  passed: boolean;
+}
+
 export interface HrPolicyEvaluationRun {
   runId: string;
   mode: HrPolicyEvaluationRunMode;
@@ -467,6 +558,10 @@ export interface HrPolicyEvaluationRun {
   failed?: number;
   outcomeAgreement?: number | null;
   unsafeSupportCount?: number;
+  comparison?: HrPolicyDriftComparison;
+  programmeId?: string;
+  providerIsolated?: boolean;
+  providerReceipts?: HrPolicyEvaluationRunProviderReceiptsItem[];
   pairedFailed?: number;
   pairedConsistency?: number | null;
   pairedSupportAgreement?: number | null;
@@ -476,6 +571,15 @@ export interface HrPolicyEvaluationRun {
   results?: HrPolicyEvaluationRunResultsItem[];
   [key: string]: unknown;
  }
+
+export type HrPolicyEvaluationCatalogDrift = {
+  programme: HrPolicyDriftProgramme | null;
+  confirmation: string;
+  eligibleBaselineIds: string[];
+  maxChecks: number;
+  durationDays: number;
+  intervalHours: number;
+};
 
 export interface HrPolicyEvaluationCatalog {
   benchmarkVersion: string;
@@ -493,6 +597,7 @@ export interface HrPolicyEvaluationCatalog {
   limitation: string;
   reviewConfirmation: string;
   liveConfirmation: string;
+  drift?: HrPolicyEvaluationCatalogDrift;
   limits: HrPolicyEvaluationLimits;
   [key: string]: unknown;
  }
@@ -10419,6 +10524,10 @@ export type ReviewHrPolicyEvaluation200 = {
   review: HrPolicyEvaluationReview;
 };
 
+export type ConfigureHrPolicyDrift200 = {
+  programme: HrPolicyDriftProgramme;
+};
+
 export type RunHrPolicyEvaluation200 = {
   run: HrPolicyEvaluationRun;
 };
@@ -10934,27 +11043,3 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
 
-
-export type HrPolicyBenchmarkCasePairing = {
-  groupId: string;
-  language: string;
-  variant: HrPolicyBenchmarkCasePairingVariant;
-};
-
-export const HrPolicyBenchmarkCasePairingVariant = {
-  canonical: 'canonical',
-  paraphrase: 'paraphrase',
-  translation: 'translation',
-} as const;
-
-export interface HrPolicyBenchmarkPairResult {
-  groupId: string;
-  anchorCaseId: string;
-  variantCaseId: string;
-  language: string;
-  variant: string;
-  expected: string;
-  modelRequired: boolean;
-  consistent: boolean;
-  passed: boolean;
-}

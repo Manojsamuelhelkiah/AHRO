@@ -46,9 +46,10 @@ employee records to this pack. Review references must not contain personal data.
   supply custom questions, sources, model names or employee identifiers.
 
 Use **Authorize and run real-model benchmark** only after approval. This can
-consume provider budget. Limits are eight calls, 3,000 completion tokens per
-call / 24,000 completion tokens per run, 6,000 total request-content characters
-per call, 90 seconds and three reserved live runs per tenant per UTC day.
+consume provider budget. The current paired pack is bounded at 20 calls,
+3,000 completion tokens per call / 60,000 completion tokens per run, 6,000 total
+request-content characters per call, 180 seconds and three reserved live runs
+per tenant per UTC day.
 Requests are sequential with a 30-second per-call timeout, cancellation at the
 run deadline and no provider retries. Input tokens also incur provider cost;
 character limits bound input size, not a dollar-price guarantee.
@@ -113,6 +114,66 @@ alias changes; builds and policy publication never silently spend provider
 budget. The harness does not assess every published client policy automatically
 and does not replace the assistant's live source authorization or post-model
 reauthorization.
+
+## Separately approved provider drift programme
+
+In the same UAT panel, select a current completed **passing real-model** report,
+inspect every actual outcome, quote, source and provider receipt, then attest
+that you reviewed that baseline and separately authorize the displayed budget.
+Answer-key approval or a one-off live run does **not** opt in to drift checking.
+Only a freshly verified HR compliance reviewer can approve or stop a programme.
+The exact authority assignment and answer-key review are bound to consent.
+Offline, failed, incomplete, provider-isolated, superseded or receipt-less
+reports cannot serve as production baselines. Baselines are never replaced
+automatically after drift.
+
+Consent permits at most **three checks in seven days**, starting no sooner
+than 24 hours after approval and spaced at least 24 hours apart. The runtime
+System Watcher / external heartbeat drives due checks; it processes at most
+one programme per tick. This is not a promise of exact clock-time execution:
+if the heartbeat is absent, no new evidence exists. Each check uses the same
+current 20-call / 60,000 completion-token / 6,000-character-per-call / 180-second
+limits as an explicit live run, and shares the durable tenant-wide allowance
+of three live runs per UTC day. Consent creation, catalog reads, ordinary
+builds, CI, policy review and publication never trigger provider spending.
+
+Before reservation, every provider call and completion, the worker checks
+current membership, the **same verified authority assignment**, unexpired and
+unstopped programme consent, exact reviewed baseline and current answer-key,
+request and selection-contract hashes. A changed local benchmark or prompt
+requires a new reviewed live baseline, not an automatic migration of consent.
+Only checked-in fictional sources and questions are dispatched; API requests
+cannot provide model names, prompts, employee content, cadence or larger limits.
+
+Comparison records requested model, baseline and fresh resolved-model /
+fingerprint identity sets, changed case ids, and actual outcome, abstention
+and exact-quotation differences. A resolved model or fingerprint change under
+the unchanged requested name warns reviewers **even when all answers pass**.
+Changed answers or ground-truth failures also warn reviewers. No AI judge is
+used. Missing fingerprints are explicitly “unknown” and an unchanged receipt
+is never proof that the provider implementation stayed fixed.
+
+Provider errors, missing receipts, budget contention, revoked authority,
+changed review or stopped consent pause the programme, with failed/incomplete
+evidence distinct from “no observed drift.” Drift warnings suppress the
+catalog’s current-live-evidence indicator pending a separately reviewed new
+programme. Reservations are consumed before dispatch; concurrent workers
+cannot double-spend, and an interrupted check is marked **unfinished** after
+its deadline, never retried automatically. A reviewer may stop future calls;
+already dispatched provider requests cannot be undone or refunded. After
+investigation, stop/reapprove with current consent identity and a reviewed
+baseline; renewed consent still cannot reset the shared daily tenant budget.
+Programme approvals, stops and run evidence are tenant-scoped and durable.
+
+Database-backed drift safety tests (fake selectors only):
+
+```
+TEST_FILE=src/lib/hr-policy-drift.test.ts pnpm --filter @workspace/api-server exec node run-tests.mjs
+```
+
+Their durable provider-isolated programmes are excluded by the production
+worker. Isolated fixtures never become production live evidence, and HTTP
+routes cannot enable the test lane.
 
 The initial pack covers supported, missing, conflicting, injected,
 misleading-citation, dated, audience, applicability and unpublished-revision

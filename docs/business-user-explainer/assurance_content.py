@@ -1,5 +1,6 @@
 """Shared, reviewed content for the control register and both audience guides."""
 from dataclasses import dataclass
+from control_use_cases import CONTROL_USE_CASES
 
 REVIEW_DATE = "08 October 2026"
 SCOPE = (
@@ -63,10 +64,11 @@ class Control:
     safe_behavior: str
     limitation: str
     sources: tuple[str, ...]
+    business_use_case: str
 
 
 def c(id, name, mechanism, safe_behavior, limitation, *sources, status="Implemented"):
-    return Control(id, name, status, mechanism, safe_behavior, limitation, sources)
+    return Control(id, name, status, mechanism, safe_behavior, limitation, sources, CONTROL_USE_CASES[id])
 
 
 GROUPS = [

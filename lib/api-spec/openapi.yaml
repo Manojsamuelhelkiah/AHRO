@@ -337,6 +337,21 @@ paths:
         "400": { description: Invalid review }
         "403": { description: Verified HR compliance authority required }
         "409": { description: Benchmark changed }
+  /policies/evaluation/drift:
+    post:
+      operationId: configureHrPolicyDrift
+      tags: [hrPolicyLibrary]
+      summary: Separately approve bounded scheduled synthetic drift checks or stop consent
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyDriftInput" } } }
+      responses:
+        "200":
+          description: Durable reviewer consent recorded without provider spending
+          content: { application/json: { schema: { type: object, required: [programme], properties: { programme: { $ref: "#/components/schemas/HrPolicyDriftProgramme" } } } } }
+        "400": { description: Invalid request }
+        "403": { description: Fresh verified reviewer authority and explicit consent required }
+        "409": { description: Stale consent or ineligible live baseline }
   /policies/evaluation/runs:
     post:
       operationId: runHrPolicyEvaluation
@@ -6694,6 +6709,44 @@ components:
         type: integer
         minimum: 1
   schemas:
+    HrPolicyDriftInput:
+      type: object
+      additionalProperties: false
+      required: [action, expectedProgrammeId]
+      properties:
+        action: { type: string, enum: [approve, stop] }
+        expectedProgrammeId: { type: [string, "null"] }
+        baselineRunId: { type: string }
+        confirmation: { type: string }
+    HrPolicyDriftProgramme:
+      type: object
+      required: [programmeId, baselineRunId, actor, authorityId, reviewId, status, approvedAt, expiresAt, nextDueAt, checksReserved, latestRunId, warning]
+      properties:
+        programmeId: { type: string }
+        baselineRunId: { type: string }
+        actor: { type: string }
+        authorityId: { type: integer }
+        reviewId: { type: string }
+        status: { type: string, enum: [active, paused, stopped, expired, exhausted] }
+        approvedAt: { type: string }
+        expiresAt: { type: string }
+        nextDueAt: { type: string }
+        checksReserved: { type: integer }
+        providerIsolated: { type: boolean }
+        latestRunId: { type: [string, "null"] }
+        warning: { type: [string, "null"] }
+    HrPolicyDriftComparison:
+      type: object
+      required: [baselineRunId, providerChanged, changedCases, oldIdentity, newIdentity, fingerprintCoverage, verdict, warning]
+      properties:
+        baselineRunId: { type: string }
+        providerChanged: { type: boolean }
+        changedCases: { type: array, items: { type: string } }
+        oldIdentity: { type: array, items: { type: string } }
+        newIdentity: { type: array, items: { type: string } }
+        fingerprintCoverage: { type: string }
+        verdict: { type: string }
+        warning: { type: [string, "null"] }
     FairnessProgrammeAction:
       type: object
       additionalProperties: false
@@ -7036,6 +7089,18 @@ components:
         failed: { type: integer }
         outcomeAgreement: { type: number, nullable: true }
         unsafeSupportCount: { type: integer }
+        comparison: { $ref: "#/components/schemas/HrPolicyDriftComparison" }
+        programmeId: { type: string }
+        providerIsolated: { type: boolean }
+        providerReceipts:
+          type: array
+          items:
+            type: object
+            required: [responseId, resolvedModel, systemFingerprint]
+            properties:
+              responseId: { type: string }
+              resolvedModel: { type: string }
+              systemFingerprint: { type: [string, "null"] }
         pairedFailed: { type: integer }
         pairedConsistency: { type: number, nullable: true }
         pairedSupportAgreement: { type: number, nullable: true }
@@ -7088,6 +7153,16 @@ components:
         limitation: { type: string }
         reviewConfirmation: { type: string }
         liveConfirmation: { type: string }
+        drift:
+          type: object
+          required: [programme, confirmation, eligibleBaselineIds, maxChecks, durationDays, intervalHours]
+          properties:
+            programme: { allOf: [{ $ref: "#/components/schemas/HrPolicyDriftProgramme" }], nullable: true }
+            confirmation: { type: string }
+            eligibleBaselineIds: { type: array, items: { type: string } }
+            maxChecks: { type: integer }
+            durationDays: { type: integer }
+            intervalHours: { type: integer }
         limits: { $ref: "#/components/schemas/HrPolicyEvaluationLimits" }
     HrPolicyEvaluationLimits:
       type: object
