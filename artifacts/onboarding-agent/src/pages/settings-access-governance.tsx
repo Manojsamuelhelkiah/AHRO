@@ -10,8 +10,9 @@ type CatalogItem = { key: string; label: string; sensitivity: string; kind: stri
 type Agent = { id: string; name: string; ownerUserId: string; status: string; version: number };
 type UserGroup = {
   id: string; name: string; status: string; version: number;
-  members: Array<{ principalType: string; principalId: string }>;
+  members: Array<{ principalType: string; principalId: string; expiresAt: string | null }>;
   securityGroups: string[];
+  securityGroupAttachments: Array<{ securityGroupId: string; expiresAt: string | null }>;
 };
 type SecurityGroup = {
   id: string; name: string; status: string; version: number;
@@ -31,7 +32,7 @@ type AccessSnapshot = {
   agents: Agent[];
   userGroups: UserGroup[];
   securityGroups: SecurityGroup[];
-  grants: Array<{ principalType: string; principalId: string; securityGroupId: string }>;
+  grants: Array<{ principalType: string; principalId: string; securityGroupId: string; expiresAt: string | null }>;
   pendingGrants?: Array<{ principalType: string; principalId: string; securityGroupId: string }>;
   pendingMembers?: PendingMember[];
   history: GovernanceEvent[];
@@ -58,10 +59,29 @@ type ProposedPreview = {
   futureOnly: boolean;
   sensitive: boolean;
   policyApprovalNeeded: boolean;
+  expiresAt: string | null;
 };
 
 const basePath = "/api/organizations/current/access";
 const inputClass = "h-8 rounded-md border border-input bg-background px-2 text-xs text-[var(--text-primary)]";
+
+function expiryIso(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) throw new Error("Choose a future expiration time.");
+  return date.toISOString();
+}
+
+function expiryLabel(value: string | null): string {
+  return value ? `Expires ${new Date(value).toLocaleString()}` : "No expiration";
+}
+
+function localExpiry(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 19);
+}
 
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -165,6 +185,7 @@ export function AccessGovernanceSettings() {
     enabled: canRead && !!organizationId,
     refetchOnMount: "always",
     staleTime: 0,
+    refetchInterval: 60_000,
   });
   const snapshot = snapshotQuery.data;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
@@ -179,11 +200,14 @@ export function AccessGovernanceSettings() {
   const [memberGroupId, setMemberGroupId] = useState("");
   const [memberType, setMemberType] = useState<PrincipalType>("user");
   const [memberId, setMemberId] = useState("");
+  const [memberExpiry, setMemberExpiry] = useState("");
   const [attachUserGroupId, setAttachUserGroupId] = useState("");
   const [attachSecurityGroupId, setAttachSecurityGroupId] = useState("");
+  const [attachmentExpiry, setAttachmentExpiry] = useState("");
   const [grantType, setGrantType] = useState<PrincipalType>("user");
   const [grantPrincipalId, setGrantPrincipalId] = useState("");
   const [grantSecurityGroupId, setGrantSecurityGroupId] = useState("");
+  const [grantExpiry, setGrantExpiry] = useState("");
   const [previewType, setPreviewType] = useState<PrincipalType>("user");
   const [previewPrincipalId, setPreviewPrincipalId] = useState("");
   const [previewEnabled, setPreviewEnabled] = useState(false);
@@ -255,6 +279,27 @@ export function AccessGovernanceSettings() {
   const activeGroupMembers = data.members.filter((member) => member.role !== "removed");
   const pendingDirectGrants = data.pendingGrants ?? [];
   const pendingMembers = data.pendingMembers ?? [];
+  const upcomingExpirations = [
+    ...data.userGroups.flatMap((group) => [
+      ...group.members.map((member) => ({
+        key: `member-${group.id}-${member.principalType}-${member.principalId}`,
+        label: `${principalLabel(member.principalType, member.principalId, data.members, data.agents)} in ${group.name}`,
+        expiresAt: member.expiresAt,
+      })),
+      ...(group.securityGroupAttachments ?? []).map((link) => ({
+        key: `link-${group.id}-${link.securityGroupId}`,
+        label: `${group.name} → ${data.securityGroups.find((item) => item.id === link.securityGroupId)?.name ?? link.securityGroupId}`,
+        expiresAt: link.expiresAt,
+      })),
+    ]),
+    ...data.grants.map((grant) => ({
+      key: `grant-${grant.principalType}-${grant.principalId}-${grant.securityGroupId}`,
+      label: `${principalLabel(grant.principalType, grant.principalId, data.members, data.agents)} → ${data.securityGroups.find((item) => item.id === grant.securityGroupId)?.name ?? grant.securityGroupId}`,
+      expiresAt: grant.expiresAt,
+    })),
+  ].filter((item): item is { key: string; label: string; expiresAt: string } =>
+    Boolean(item.expiresAt && new Date(item.expiresAt).getTime() > Date.now()),
+  ).sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
   const pendingGroupLinks = useMemo(() => {
     const seen = new Set<string>();
     const pending: PendingGroupLink[] = [];
@@ -286,12 +331,25 @@ export function AccessGovernanceSettings() {
     securityGroupIds: string[];
     userGroupId?: string;
     securityGroupId?: string;
+    expiry?: string;
   }) => {
     if (!input.principalId && !input.affectedPrincipals?.length && input.kind !== "group-link") return;
     setProposalLoading(true);
     setProposedPreview(null);
     setNotice(null);
     try {
+      const existingExpiry = input.kind === "membership"
+        ? data.userGroups.find((group) => group.id === input.userGroupId)?.members.find((member) =>
+          member.principalType === input.principalType && member.principalId === input.principalId,
+        )?.expiresAt
+        : input.kind === "group-link"
+          ? data.userGroups.find((group) => group.id === input.userGroupId)?.securityGroupAttachments?.find((link) =>
+            link.securityGroupId === input.securityGroupId,
+          )?.expiresAt
+          : data.grants.find((grant) => grant.principalType === input.principalType &&
+            grant.principalId === input.principalId && grant.securityGroupId === input.securityGroupId)?.expiresAt;
+      const expiresAt = existingExpiry && localExpiry(existingExpiry) === input.expiry
+        ? existingExpiry : expiryIso(input.expiry ?? "");
       const policyGroups = input.securityGroupIds
         .map((id) => data.securityGroups.find((group) => group.id === id))
         .filter((group): group is SecurityGroup => Boolean(group));
@@ -334,6 +392,7 @@ export function AccessGovernanceSettings() {
         futureOnly: targets.length === 0,
         sensitive,
         policyApprovalNeeded: sensitive && policyGroups.some((group) => group.approvalStatus !== "approved"),
+        expiresAt,
       });
     } catch (error) {
       setNotice({ ok: false, message: errorText(error) });
@@ -349,21 +408,21 @@ export function AccessGovernanceSettings() {
     if (proposal.kind === "grant" && proposal.securityGroupId && proposal.principalType && proposal.principalId) {
       action = () => accessRequest("/grants", { method: "PUT", body: JSON.stringify({
         principalType: proposal.principalType, principalId: proposal.principalId,
-        securityGroupId: proposal.securityGroupId, active: true,
+        securityGroupId: proposal.securityGroupId, active: true, expiresAt: proposal.expiresAt,
       }) });
       message = (result) => result?.status === "pending"
         ? "Grant request recorded as pending. A different organization owner must approve it."
         : "Grant saved and effective access updated.";
     } else if (proposal.kind === "group-link" && proposal.userGroupId && proposal.securityGroupId) {
       action = () => accessRequest(`/user-groups/${encodeURIComponent(proposal.userGroupId!)}/security-groups`, {
-        method: "PUT", body: JSON.stringify({ securityGroupId: proposal.securityGroupId, active: true }),
+        method: "PUT", body: JSON.stringify({ securityGroupId: proposal.securityGroupId, active: true, expiresAt: proposal.expiresAt }),
       });
       message = (result) => result?.status === "pending"
         ? "Group attachment is pending independent owner review."
         : "Security group attached.";
     } else if (proposal.kind === "membership" && proposal.userGroupId && proposal.principalType && proposal.principalId) {
       action = () => accessRequest(`/user-groups/${encodeURIComponent(proposal.userGroupId!)}/members`, {
-        method: "PUT", body: JSON.stringify({ principalType: proposal.principalType, principalId: proposal.principalId, active: true }),
+        method: "PUT", body: JSON.stringify({ principalType: proposal.principalType, principalId: proposal.principalId, active: true, expiresAt: proposal.expiresAt }),
       });
       message = (result) => result?.status === "pending"
         ? "Membership request is pending independent review. Access remains blocked until an active, different organization owner approves it."
@@ -416,6 +475,13 @@ export function AccessGovernanceSettings() {
             ) : (
               <>
                 {!canManage && <div className="flex items-start gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-xs text-[var(--text-muted)]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Read-only access. Only organization owners can create or change agents, groups, memberships, grants, and approvals.</div>}
+
+                <section className="rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                  <SectionTitle title="Upcoming access expirations" detail="Active temporary assignments stop granting access at the listed time. Times are shown in your local timezone." />
+                  {upcomingExpirations.length ? <div className="space-y-1 text-xs">{upcomingExpirations.map((item) =>
+                    <p key={item.key}><span className="font-medium">{item.label}</span> · {expiryLabel(item.expiresAt)}</p>,
+                  )}</div> : <p className="text-xs text-[var(--text-muted)]">No active temporary assignments are scheduled to expire.</p>}
+                </section>
 
                 <section className="rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3">
                   <SectionTitle title="Access evaluation context" detail="Use the same context for access previews, proposed grant impacts, and sensitive-field reviews." />
@@ -502,21 +568,24 @@ export function AccessGovernanceSettings() {
                     <Button type="submit" size="sm" disabled={busy || !userGroupName.trim()}><Plus className="mr-1 h-3.5 w-3.5" />Create user group</Button>
                   </form>}
                   {canManage && <div className="mb-3 flex flex-wrap gap-2 rounded-md bg-[var(--surface-alt)] p-3">
-                    <select aria-label="Group for principal" className={inputClass} value={memberGroupId} onChange={(event) => setMemberGroupId(event.target.value)}><option value="">Choose user group</option>{userGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
-                    <select aria-label="Principal type" className={inputClass} value={memberType} onChange={(event) => { setMemberType(event.target.value as PrincipalType); setMemberId(""); }}><option value="user">Human</option><option value="agent">Registered agent</option></select>
-                    <select aria-label="Existing principal" className={inputClass} value={memberId} onChange={(event) => setMemberId(event.target.value)}><option value="">Choose existing {memberType}</option>{effectiveMembers.map((principal) => <option key={principal.id} value={principal.id}>{principal.label}</option>)}</select>
+                    <select aria-label="Group for principal" className={inputClass} value={memberGroupId} onChange={(event) => { setMemberGroupId(event.target.value); setMemberExpiry(""); }}><option value="">Choose user group</option>{userGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+                    <select aria-label="Principal type" className={inputClass} value={memberType} onChange={(event) => { setMemberType(event.target.value as PrincipalType); setMemberId(""); setMemberExpiry(""); }}><option value="user">Human</option><option value="agent">Registered agent</option></select>
+                    <select aria-label="Existing principal" className={inputClass} value={memberId} onChange={(event) => { setMemberId(event.target.value); setMemberExpiry(localExpiry(data.userGroups.find((group) => group.id === memberGroupId)?.members.find((member) => member.principalType === memberType && member.principalId === event.target.value)?.expiresAt ?? null)); }}><option value="">Choose existing {memberType}</option>{effectiveMembers.map((principal) => <option key={principal.id} value={principal.id}>{principal.label}</option>)}</select>
+                    <label className="flex items-center gap-1 text-xs">Expires (optional) <input aria-label="Membership expires at" type="datetime-local" step="1" className={inputClass} value={memberExpiry} onChange={(event) => setMemberExpiry(event.target.value)} /></label>
                     <Button size="sm" variant="secondary" disabled={busy || proposalLoading || !memberGroupId || !memberId} onClick={() => {
                       const group = data.userGroups.find((item) => item.id === memberGroupId);
                       void startProposalPreview({
                         kind: "membership", title: `Add principal to ${group?.name ?? "user group"}`,
                         principalType: memberType, principalId: memberId, userGroupId: memberGroupId,
+                        expiry: memberExpiry,
                         securityGroupIds: group?.securityGroups ?? [],
                       });
                     }}><Users className="mr-1 h-3.5 w-3.5" />Preview membership impact</Button>
                   </div>}
                   {canManage && <div className="mb-3 flex flex-wrap gap-2 rounded-md bg-[var(--surface-alt)] p-3">
-                    <select aria-label="User group to attach security group" className={inputClass} value={attachUserGroupId} onChange={(event) => setAttachUserGroupId(event.target.value)}><option value="">Choose user group</option>{userGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
-                    <select aria-label="Security group to attach" className={inputClass} value={attachSecurityGroupId} onChange={(event) => setAttachSecurityGroupId(event.target.value)}><option value="">Choose security group</option>{activeSecurityGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+                    <select aria-label="User group to attach security group" className={inputClass} value={attachUserGroupId} onChange={(event) => { setAttachUserGroupId(event.target.value); setAttachmentExpiry(""); }}><option value="">Choose user group</option>{userGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+                    <select aria-label="Security group to attach" className={inputClass} value={attachSecurityGroupId} onChange={(event) => { setAttachSecurityGroupId(event.target.value); setAttachmentExpiry(localExpiry(data.userGroups.find((group) => group.id === attachUserGroupId)?.securityGroupAttachments?.find((link) => link.securityGroupId === event.target.value)?.expiresAt ?? null)); }}><option value="">Choose security group</option>{activeSecurityGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+                    <label className="flex items-center gap-1 text-xs">Expires (optional) <input aria-label="Group attachment expires at" type="datetime-local" step="1" className={inputClass} value={attachmentExpiry} onChange={(event) => setAttachmentExpiry(event.target.value)} /></label>
                     <Button size="sm" variant="secondary" disabled={busy || proposalLoading || !attachUserGroupId || !attachSecurityGroupId} onClick={() => {
                       const group = data.userGroups.find((item) => item.id === attachUserGroupId);
                       void startProposalPreview({
@@ -527,6 +596,7 @@ export function AccessGovernanceSettings() {
                         })),
                         userGroupId: attachUserGroupId,
                         securityGroupId: attachSecurityGroupId,
+                        expiry: attachmentExpiry,
                         securityGroupIds: [attachSecurityGroupId],
                       });
                     }}>{proposalLoading ? "Preparing preview..." : "Preview attachment impact"}</Button>
@@ -544,8 +614,8 @@ export function AccessGovernanceSettings() {
                         </div>}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {group.members.map((principal) => <span key={`${principal.principalType}-${principal.principalId}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-alt)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{principalLabel(principal.principalType, principal.principalId, data.members, data.agents)}{canManage && group.status === "active" && <button type="button" aria-label={`Remove ${principalLabel(principal.principalType, principal.principalId, data.members, data.agents)} from ${group.name}`} disabled={busy} className="font-bold text-[var(--status-red)] disabled:opacity-50" onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}/members`, { method: "PUT", body: JSON.stringify({ principalType: principal.principalType, principalId: principal.principalId, active: false }) }), "Principal removed from user group.")}>×</button>}</span>)}
-                        {group.securityGroups.map((groupId) => <span key={groupId} className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-light)] px-2 py-1 text-[10px] text-[var(--primary)]">{data.securityGroups.find((securityGroup) => securityGroup.id === groupId)?.name ?? groupId}{canManage && group.status === "active" && <button type="button" aria-label={`Detach ${groupId} from ${group.name}`} disabled={busy} className="font-bold text-[var(--status-red)] disabled:opacity-50" onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}/security-groups`, { method: "PUT", body: JSON.stringify({ securityGroupId: groupId, active: false }) }), "Security group detached.")}>×</button>}</span>)}
+                        {group.members.map((principal) => <span key={`${principal.principalType}-${principal.principalId}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-alt)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{principalLabel(principal.principalType, principal.principalId, data.members, data.agents)} · {expiryLabel(principal.expiresAt)}{canManage && group.status === "active" && <button type="button" aria-label={`Remove ${principalLabel(principal.principalType, principal.principalId, data.members, data.agents)} from ${group.name}`} disabled={busy} className="font-bold text-[var(--status-red)] disabled:opacity-50" onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}/members`, { method: "PUT", body: JSON.stringify({ principalType: principal.principalType, principalId: principal.principalId, active: false }) }), "Principal removed from user group.")}>×</button>}</span>)}
+                        {group.securityGroups.map((groupId) => <span key={groupId} className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-light)] px-2 py-1 text-[10px] text-[var(--primary)]">{data.securityGroups.find((securityGroup) => securityGroup.id === groupId)?.name ?? groupId} · {expiryLabel(group.securityGroupAttachments?.find((link) => link.securityGroupId === groupId)?.expiresAt ?? null)}{canManage && group.status === "active" && <button type="button" aria-label={`Detach ${groupId} from ${group.name}`} disabled={busy} className="font-bold text-[var(--status-red)] disabled:opacity-50" onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}/security-groups`, { method: "PUT", body: JSON.stringify({ securityGroupId: groupId, active: false }) }), "Security group detached.")}>×</button>}</span>)}
                       </div>
                     </div>)}
                   </div>
@@ -638,14 +708,16 @@ export function AccessGovernanceSettings() {
                 <section className="border-t border-[var(--border)] pt-5">
                   <SectionTitle title="Direct grants" detail="Grant an existing security group directly to a named human or registered agent. Group membership grants remain visible above." />
                   {canManage && <div className="flex flex-wrap gap-2 rounded-md bg-[var(--surface-alt)] p-3">
-                    <select aria-label="Grant principal type" className={inputClass} value={grantType} onChange={(event) => { setGrantType(event.target.value as PrincipalType); setGrantPrincipalId(""); }}><option value="user">Human</option><option value="agent">Registered agent</option></select>
-                    <select aria-label="Grant principal" className={inputClass} value={grantPrincipalId} onChange={(event) => setGrantPrincipalId(event.target.value)}><option value="">Choose existing principal</option>{grantPrincipals.map((principal) => <option key={principal.id} value={principal.id}>{principal.label}</option>)}</select>
-                    <select aria-label="Grant security group" className={inputClass} value={grantSecurityGroupId} onChange={(event) => setGrantSecurityGroupId(event.target.value)}><option value="">Choose security group</option>{activeSecurityGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+                    <select aria-label="Grant principal type" className={inputClass} value={grantType} onChange={(event) => { setGrantType(event.target.value as PrincipalType); setGrantPrincipalId(""); setGrantExpiry(""); }}><option value="user">Human</option><option value="agent">Registered agent</option></select>
+                    <select aria-label="Grant principal" className={inputClass} value={grantPrincipalId} onChange={(event) => { setGrantPrincipalId(event.target.value); setGrantExpiry(localExpiry(data.grants.find((grant) => grant.principalType === grantType && grant.principalId === event.target.value && grant.securityGroupId === grantSecurityGroupId)?.expiresAt ?? null)); }}><option value="">Choose existing principal</option>{grantPrincipals.map((principal) => <option key={principal.id} value={principal.id}>{principal.label}</option>)}</select>
+                    <select aria-label="Grant security group" className={inputClass} value={grantSecurityGroupId} onChange={(event) => { setGrantSecurityGroupId(event.target.value); setGrantExpiry(localExpiry(data.grants.find((grant) => grant.securityGroupId === event.target.value && grant.principalType === grantType && grant.principalId === grantPrincipalId)?.expiresAt ?? null)); }}><option value="">Choose security group</option>{activeSecurityGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+                    <label className="flex items-center gap-1 text-xs">Expires (optional) <input aria-label="Direct grant expires at" type="datetime-local" step="1" className={inputClass} value={grantExpiry} onChange={(event) => setGrantExpiry(event.target.value)} /></label>
                     <Button size="sm" disabled={busy || proposalLoading || !grantPrincipalId || !grantSecurityGroupId} onClick={() => {
                       void startProposalPreview({
                         kind: "grant", title: `Grant ${data.securityGroups.find((group) => group.id === grantSecurityGroupId)?.name ?? "security group"}`,
                         principalType: grantType, principalId: grantPrincipalId,
                         securityGroupId: grantSecurityGroupId, securityGroupIds: [grantSecurityGroupId],
+                        expiry: grantExpiry,
                       });
                     }}>{proposalLoading ? "Preparing preview..." : "Preview grant impact"}</Button>
                   </div>}
@@ -668,7 +740,7 @@ export function AccessGovernanceSettings() {
                       </div>;
                     })}
                   </div>}
-                  <div className="mt-3 space-y-1.5">{data.grants.map((grant, index) => <div key={`${grant.principalType}-${grant.principalId}-${grant.securityGroupId}-${index}`} data-testid={`row-access-grant-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-xs"><span>{principalLabel(grant.principalType, grant.principalId, data.members, data.agents)}<span className="mx-2 text-[var(--text-muted)]">→</span>{data.securityGroups.find((group) => group.id === grant.securityGroupId)?.name ?? grant.securityGroupId}</span>{canManage && <Button size="sm" variant="outline" disabled={busy} onClick={() => void perform(() => accessRequest("/grants", { method: "PUT", body: JSON.stringify({ principalType: grant.principalType, principalId: grant.principalId, securityGroupId: grant.securityGroupId, active: false }) }), "Direct grant revoked.")}>Revoke</Button>}</div>)}</div>
+                  <div className="mt-3 space-y-1.5">{data.grants.map((grant, index) => <div key={`${grant.principalType}-${grant.principalId}-${grant.securityGroupId}-${index}`} data-testid={`row-access-grant-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-xs"><span>{principalLabel(grant.principalType, grant.principalId, data.members, data.agents)}<span className="mx-2 text-[var(--text-muted)]">→</span>{data.securityGroups.find((group) => group.id === grant.securityGroupId)?.name ?? grant.securityGroupId} · {expiryLabel(grant.expiresAt)}</span>{canManage && <Button size="sm" variant="outline" disabled={busy} onClick={() => void perform(() => accessRequest("/grants", { method: "PUT", body: JSON.stringify({ principalType: grant.principalType, principalId: grant.principalId, securityGroupId: grant.securityGroupId, active: false }) }), "Direct grant revoked.")}>Revoke</Button>}</div>)}</div>
                 </section>
 
                 {proposedPreview && <div data-testid="card-access-proposed-preview" className="rounded-md border border-[var(--primary)] bg-[var(--primary-light)]/30 p-4">
@@ -677,6 +749,7 @@ export function AccessGovernanceSettings() {
                       <h4 className="text-sm font-semibold text-[var(--text-primary)]">Review proposed access before saving</h4>
                       <p className="mt-1 text-xs text-[var(--text-muted)]">{proposedPreview.title}. Current effective access is compared against the additional permissions from this change.</p>
                       <p className="mt-1 text-xs text-[var(--text-muted)]">Evaluation context: {caseScopeId ? `case ${caseScopeId}` : "organization-wide"}{proposedPreview.impacts.some((impact) => impact.principal.includes("agent")) && initiatorUserId ? ` · initiator ${principalLabel("user", initiatorUserId, data.members, data.agents)}` : ""}. Agent access is evaluated using the selected initiator, not an implicit owner.</p>
+                      <p className="mt-1 text-xs font-medium">{expiryLabel(proposedPreview.expiresAt)}. The server denies expired access immediately, without a cleanup job.</p>
                     </div>
                     {proposedPreview.sensitive && <Badge className="bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]">Independent review required</Badge>}
                   </div>

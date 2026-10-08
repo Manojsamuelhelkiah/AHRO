@@ -81,6 +81,7 @@ export const accessUserGroupMembers = pgTable("access_user_group_members", {
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   revokedByUserId: text("revoked_by_user_id"),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
   addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.organizationId, t.groupId, t.principalType, t.principalId] }),
@@ -166,6 +167,7 @@ export const accessSecurityGroupUserGroups = pgTable("access_security_group_user
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   approvedPolicyVersion: integer("approved_policy_version"),
   attachedByUserId: text("attached_by_user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
   attachedAt: timestamp("attached_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.organizationId, t.securityGroupId, t.userGroupId] }),
@@ -206,6 +208,7 @@ export const accessSecurityGroupAttachments = pgTable("access_security_group_att
   approvedByUserId: text("approved_by_user_id"),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   approvedPolicyVersion: integer("approved_policy_version"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
   attachedAt: timestamp("attached_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   foreignKey({
@@ -260,6 +263,7 @@ export const accessPrincipalSecurityGroupAttachments = pgTable("access_principal
   approvedPolicyVersion: integer("approved_policy_version"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
 }, (t) => [
   foreignKey({
     columns: [t.organizationId, t.securityGroupId],

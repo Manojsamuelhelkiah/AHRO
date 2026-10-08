@@ -8,7 +8,16 @@ import {
   isSensitivePolicyOwner,
   membershipNeedsIndependentApproval,
   isReviewedAccessKey,
+  grantIsLive,
 } from "./access-governance";
+
+test("temporary grants end at their exclusive expiry instant", () => {
+  const now = new Date("2026-09-29T12:00:00.000Z");
+  assert.equal(grantIsLive(null, now), true);
+  assert.equal(grantIsLive(new Date(now.getTime() + 1), now), true);
+  assert.equal(grantIsLive(now, now), false);
+  assert.equal(grantIsLive(new Date(now.getTime() - 1), now), false);
+});
 
 test("catalog contains reviewed high-sensitivity fields and case flow keys", () => {
   assert.ok(ACCESS_GOVERNANCE_CATALOG.fields.includes("data.identity.read"));

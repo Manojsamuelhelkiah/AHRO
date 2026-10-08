@@ -68,3 +68,9 @@ Real client tenant selection must use a named, individually authenticated person
 **Why:** The user confirmed named sign-in for real tenants. Public one-click demo identities cannot safely hold a client grant, even when a UI offers a tenant or group-mode chooser.
 
 **How to apply:** Show only tenants that granted the named person access; revalidate membership, grant scope and group mode server-side on each request. Preserve the demo profile's current default and do not turn no selection into cross-client access.
+
+Volunteer-backed Demo simulation eligibility must remain separate from fictional/offline identity eligibility.
+
+**Why:** A volunteer run can legitimately show simulated progression without making the person's identity fictional or giving the Demo Administrator sensitive-record authority.
+
+**How to apply:** Require server-issued case authorization, one exact persisted non-retired run with a matching case and volunteer recipient, and current lifecycle policy/reviewer readiness. Never enable the simulation from notes alone or widen identity permissions to make the panel visible.

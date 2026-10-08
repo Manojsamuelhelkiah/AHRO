@@ -279,6 +279,14 @@ export function CaseDetailPage() {
       )}
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
 
+      {!offlineSample && c.hybridDemoSimulation === true && permissions.access.flowRead && (
+        <SimulationPanel
+          caseId={caseId}
+          recipientEmail={null}
+          emailPromptAvailable={c.candidateEmailAuthorized === true}
+        />
+      )}
+
       {offlineSample ? (
         <>
           <div className="mb-6 rounded-lg border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4 shadow-sm">

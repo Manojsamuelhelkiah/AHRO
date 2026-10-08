@@ -176,6 +176,7 @@ const {
   onbEffectJournal,
   onbEvents,
   onbGovernanceAuthorityAssignments,
+  onbGovernanceDecisions,
   onbSensitiveLifecyclePolicies,
   onbSettings,
   organizationMembershipsTable,
@@ -266,6 +267,34 @@ async function ensureFixture() {
     expiresAt: new Date(Date.now() + 60 * 60_000),
   }).returning({ id: onbGovernanceAuthorityAssignments.id });
   if (!privacyReviewer) throw new Error("Unable to seed a verified browser-regression privacy reviewer.");
+  // These approvals exist only in the disposable test schema, and authorize
+  // only the in-process fake provider behind the existing network deny fence.
+  const { ensureGovernanceSeeded, reviewGovernanceDecision } =
+    await import("./src/lib/onboarding/governance.ts");
+  await ensureGovernanceSeeded(DEMO_ORGANIZATION_ID);
+  for (const key of ["GD-10", "GD-11"]) {
+    const [decision] = await db.select().from(onbGovernanceDecisions).where(and(
+      eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID),
+      eq(onbGovernanceDecisions.key, key),
+      eq(onbGovernanceDecisions.isCurrent, true),
+    ));
+    if (!decision) throw new Error(`Missing browser-regression governance decision ${key}`);
+    await db.insert(onbGovernanceAuthorityAssignments).values({
+      organizationId: DEMO_ORGANIZATION_ID,
+      authorityRole: decision.accountableRole,
+      assigneeUserId: reviewer,
+      verificationStatus: "verified",
+      verifiedByUserId: administrator,
+      verificationReference: `browser-regression:${suffix}:${key}:verified-reviewer`,
+      expiresAt: new Date(Date.now() + 60 * 60_000),
+    });
+    await reviewGovernanceDecision(DEMO_ORGANIZATION_ID, { userId: reviewer, role: "member" }, key, {
+      revision: 1,
+      outcome: "approved",
+      reason: "Disposable browser fixture approval for fake controlled Demo email only.",
+      verificationReference: `browser-regression:${suffix}:${key}`,
+    });
+  }
   await db.insert(onbSettings).values([
     {
       organizationId: DEMO_ORGANIZATION_ID,

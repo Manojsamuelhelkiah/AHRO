@@ -9,6 +9,8 @@ import {
   accessNamedGrants,
   accessPrincipalSecurityGroupAttachments,
   accessSecurityGroupPolicies,
+  accessSecurityGroupAttachments,
+  accessSecurityGroupUserGroups,
   accessUserGroupMembers,
   db,
   onbCases,
@@ -18,6 +20,7 @@ import {
 import { errorHandler } from "../middlewares/error-handler";
 import { createTenantContextMiddleware, lookupMembership } from "../middlewares/tenant-context";
 import accessGovernanceRouter from "./access-governance";
+
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const suffix = `access-governance-route-${process.pid}-${randomUUID()}`;
@@ -202,6 +205,85 @@ after(async () => {
   }
   if (caseId) await db.delete(onbCases).where(eq(onbCases.id, caseId));
   await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
+});
+
+test("temporary memberships and group/direct attachments stop granting access at expiry without cleanup", { skip: !hasDb }, async () => {
+  const expiry = new Date(Date.now() + 3_600_000).toISOString();
+  const past = new Date(Date.now() - 1_000);
+  const group = (await mutate("/user-groups", "POST", userGroupOwnerUserId, { name: "Temporary review group" })).body.userGroup;
+  const security = (await mutate("/security-groups", "POST", securityGroupOwnerUserId, {
+    name: "Temporary review policy", allows: ["flow.onboarding.read"],
+  })).body.securityGroup;
+  const memberPath = `/user-groups/${group.id}/members`;
+  const attachmentPath = `/user-groups/${group.id}/security-groups`;
+  expectStatus(await mutate(memberPath, "PUT", managerUserId, {
+    principalType: "user", principalId: humanMemberUserId, active: true, expiresAt: expiry,
+  }), 200);
+  expectStatus(await mutate(attachmentPath, "PUT", managerUserId, {
+    securityGroupId: security.id, active: true, expiresAt: expiry,
+  }), 200);
+  expectStatus(await mutate(memberPath, "PUT", managerUserId, {
+    principalType: "user", principalId: humanMemberUserId, active: true,
+  }), 200);
+  expectStatus(await mutate(attachmentPath, "PUT", managerUserId, {
+    securityGroupId: security.id, active: true,
+  }), 200);
+  const preview = () => api(`/preview?principalType=user&principalId=${humanMemberUserId}`, managerUserId);
+  assert.ok((await preview()).body.allows.includes("flow.onboarding.read"));
+  let snapshot = await currentSnapshot();
+  const groupSnapshot = snapshot.userGroups.find((item: JsonRecord) => item.id === group.id);
+  assert.equal(groupSnapshot.members[0].expiresAt, expiry);
+  assert.equal(groupSnapshot.securityGroupAttachments[0].expiresAt, expiry);
+  expectStatus(await mutate(memberPath, "PUT", managerUserId, {
+    principalType: "user", principalId: humanMemberUserId, active: true,
+    expiresAt: "2000-01-01T00:00:00Z",
+  }), 400);
+  await db.update(accessUserGroupMembers).set({ expiresAt: past }).where(and(
+    eq(accessUserGroupMembers.organizationId, organizationId),
+    eq(accessUserGroupMembers.groupId, group.id),
+  ));
+  assert.ok(!(await preview()).body.allows.includes("flow.onboarding.read"));
+  assert.equal((await currentSnapshot()).userGroups.find((item: JsonRecord) => item.id === group.id).members.length, 0);
+  await db.update(accessUserGroupMembers).set({ expiresAt: null }).where(and(
+    eq(accessUserGroupMembers.organizationId, organizationId),
+    eq(accessUserGroupMembers.groupId, group.id),
+  ));
+  await db.update(accessSecurityGroupUserGroups).set({ expiresAt: past }).where(and(
+    eq(accessSecurityGroupUserGroups.organizationId, organizationId),
+    eq(accessSecurityGroupUserGroups.userGroupId, group.id),
+  ));
+  assert.ok(!(await preview()).body.allows.includes("flow.onboarding.read"));
+  await db.update(accessSecurityGroupUserGroups).set({ expiresAt: null }).where(and(
+    eq(accessSecurityGroupUserGroups.organizationId, organizationId),
+    eq(accessSecurityGroupUserGroups.userGroupId, group.id),
+  ));
+  await db.update(accessSecurityGroupAttachments).set({ expiresAt: past }).where(and(
+    eq(accessSecurityGroupAttachments.organizationId, organizationId),
+    eq(accessSecurityGroupAttachments.securityGroupId, security.id),
+  ));
+  assert.ok(!(await preview()).body.allows.includes("flow.onboarding.read"));
+  await db.update(accessSecurityGroupAttachments).set({ expiresAt: null }).where(and(
+    eq(accessSecurityGroupAttachments.organizationId, organizationId),
+    eq(accessSecurityGroupAttachments.securityGroupId, security.id),
+  ));
+  const grant = { principalType: "user", principalId: humanMemberUserId, securityGroupId: security.id, active: true, expiresAt: expiry };
+  expectStatus(await mutate("/grants", "PUT", managerUserId, grant), 200);
+  expectStatus(await mutate("/grants", "PUT", managerUserId, {
+    principalType: "user", principalId: humanMemberUserId, securityGroupId: security.id, active: true,
+  }), 200);
+  assert.equal((await currentSnapshot()).grants.find((item: JsonRecord) => item.securityGroupId === security.id).expiresAt, expiry);
+  assert.ok((await preview()).body.allows.includes("flow.onboarding.read"));
+  await db.update(accessPrincipalSecurityGroupAttachments).set({ expiresAt: past }).where(and(
+    eq(accessPrincipalSecurityGroupAttachments.organizationId, organizationId),
+    eq(accessPrincipalSecurityGroupAttachments.securityGroupId, security.id),
+  ));
+  await db.update(accessSecurityGroupUserGroups).set({ expiresAt: past }).where(and(
+    eq(accessSecurityGroupUserGroups.organizationId, organizationId),
+    eq(accessSecurityGroupUserGroups.userGroupId, group.id),
+  ));
+  assert.ok(!(await preview()).body.allows.includes("flow.onboarding.read"));
+  snapshot = await currentSnapshot();
+  assert.ok(!snapshot.grants.some((item: JsonRecord) => item.securityGroupId === security.id));
 });
 
 test("access governance routes preserve independent approvals for mixed-principal multi-group access", { skip: !hasDb }, async () => {
@@ -392,10 +474,10 @@ test("access governance routes preserve independent approvals for mixed-principa
   expectStatus(selfLinkApproval, 403);
   for (const securityGroupId of [firstSecurityGroup.id, secondSecurityGroup.id]) {
     const approved = await mutate(
-      `/user-groups/${userGroup.id}/security-groups/approve`,
+      `/user-groups/${userGroup.id}/members/approve`,
       "POST",
-      securityGroupOwnerUserId,
-      { securityGroupId, expectedVersion: currentPolicyVersions.get(securityGroupId) },
+      userGroupOwnerUserId,
+      { ...member, expectedVersion: await currentUserGroupVersion(userGroup.id) },
     );
     expectStatus(approved, 200);
   }
@@ -419,7 +501,7 @@ test("access governance routes preserve independent approvals for mixed-principa
     {
       principalType: "user",
       principalId: humanMemberUserId,
-      expectedVersion: pendingMembershipSnapshot.userGroups[0].version,
+      expectedVersion: pendingMembershipSnapshot.userGroups.find((item: JsonRecord) => item.id === userGroup.id).version,
     },
   );
   expectStatus(selfMembershipApproval, 403);
@@ -509,5 +591,5 @@ test("access governance routes preserve independent approvals for mixed-principa
   const finalSnapshot = await currentSnapshot();
   const finalGroup = finalSnapshot.userGroups.find((item: JsonRecord) => item.id === userGroup.id);
   assert.equal(finalGroup.name, "Renamed Mixed Access Group");
-  assert.deepEqual(finalGroup.members, [{ principalType: "agent", principalId: agentId }]);
+  assert.deepEqual(finalGroup.members, [{ principalType: "agent", principalId: agentId, expiresAt: null }]);
 });

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, type AnyColumn } from "drizzle-orm";
 import {
   accessAgents,
   accessGovernanceHistory,
@@ -93,6 +93,11 @@ export class AccessGovernanceDeniedError extends Error {
 
 type AccessGovernanceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type PrincipalSubject = { principalType: "human" | "agent"; principalId: string };
+
+/** Expiry is exclusive; equality with the current instant is already expired. */
+export function grantIsLive(expiresAt: Date | null, now: Date): boolean {
+  return expiresAt === null || expiresAt.getTime() > now.getTime();
+}
 
 function knownKey(key: string): key is AccessGovernanceKey {
   return FIELD_KEYS.has(key) || FLOW_KEYS.has(key) || TOOL_KEYS.has(key);
@@ -231,6 +236,9 @@ async function resolveSubjectCapabilities(
   const allows = new Set<AccessGovernanceKey>();
   const denies = new Set<AccessGovernanceKey>();
   const reasons = new Map<AccessGovernanceKey, string[]>();
+  const now = new Date();
+  const unexpired = (column: AnyColumn) =>
+    or(isNull(column), gt(column, now))!;
   const groupMemberships = await tx.select().from(accessUserGroupMembers)
     .where(and(
       eq(accessUserGroupMembers.organizationId, input.organizationId),
@@ -238,6 +246,7 @@ async function resolveSubjectCapabilities(
       eq(accessUserGroupMembers.principalId, subject.principalId),
       eq(accessUserGroupMembers.status, "active"),
       isNull(accessUserGroupMembers.revokedAt),
+      unexpired(accessUserGroupMembers.expiresAt),
     ));
   const groupIds = [...new Set(groupMemberships.map((row) => row.groupId))];
   const activeUserGroups = groupIds.length
@@ -260,6 +269,7 @@ async function resolveSubjectCapabilities(
       eq(accessSecurityGroupUserGroups.organizationId, input.organizationId),
       inArray(accessSecurityGroupUserGroups.userGroupId, liveUserGroupIds),
       eq(accessSecurityGroupUserGroups.status, "active"),
+      unexpired(accessSecurityGroupUserGroups.expiresAt),
     ))
     : [];
   const directLinks = await tx.select().from(accessPrincipalSecurityGroupAttachments).where(and(
@@ -268,6 +278,7 @@ async function resolveSubjectCapabilities(
     eq(accessPrincipalSecurityGroupAttachments.principalId, subject.principalId),
     eq(accessPrincipalSecurityGroupAttachments.status, "active"),
     isNull(accessPrincipalSecurityGroupAttachments.revokedAt),
+    unexpired(accessPrincipalSecurityGroupAttachments.expiresAt),
     input.caseId === undefined
       ? eq(accessPrincipalSecurityGroupAttachments.scope, "tenant")
       : or(
@@ -305,6 +316,7 @@ async function resolveSubjectCapabilities(
       eq(accessSecurityGroupAttachments.organizationId, input.organizationId),
       inArray(accessSecurityGroupAttachments.securityGroupId, securityGroupIds),
       eq(accessSecurityGroupAttachments.status, "active"),
+      unexpired(accessSecurityGroupAttachments.expiresAt),
       attachmentScope!,
     ))
     : [];

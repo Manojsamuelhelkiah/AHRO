@@ -136,7 +136,7 @@ async function probeDemoEmailReadiness(): Promise<DemoEmailReadiness> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const response = await Promise.race([
-      connectors.proxy(
+      connectorProxy(
         "google-mail",
         "/gmail/v1/users/me/profile",
         { method: "GET" },

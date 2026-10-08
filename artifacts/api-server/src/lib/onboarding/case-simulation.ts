@@ -13,7 +13,7 @@ import { demoPrincipalSettingKey } from "../demo-principal";
 import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
 import { UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
 import { getDemoEmailReadiness, sendOutbound } from "./channels";
-import { withApprovedDemoVolunteerEmail } from "./demo-controller";
+import { isEligibleHybridDemoSimulation, withApprovedDemoVolunteerEmail } from "./demo-controller";
 
 export const CASE_SIMULATION_SETTING_PREFIX = "onboarding:case-simulation:";
 export const CASE_SIMULATION_MAX_EXCHANGES = 64;
@@ -417,8 +417,8 @@ async function authorizeCase(
     eq(onbCases.id, caseId),
   )).limit(1);
   if (!caseRow) throw new CaseSimulationNotFoundError();
-  if (!isSyntheticOfflineCase(caseRow)) {
-    throw new CaseSimulationDeniedError("Only server-marked synthetic cases may be simulated.");
+  if (!isSyntheticOfflineCase(caseRow) && !await isEligibleHybridDemoSimulation(tx, caseRow)) {
+    throw new CaseSimulationDeniedError("Only server-marked fictional cases or currently authorized, pinned Demo Controller cases may be simulated.");
   }
   const uatRunRows = await tx.select({ value: onbSettings.value })
     .from(onbSettings)

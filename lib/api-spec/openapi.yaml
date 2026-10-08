@@ -7376,6 +7376,7 @@ components:
       properties:
         principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
         principalId: { type: string }
+        expiresAt: { type: ["string", "null"], format: date-time }
       required: [principalType, principalId]
     AccessUserGroup:
       type: object
@@ -7391,6 +7392,14 @@ components:
         securityGroups:
           type: array
           items: { type: string }
+        securityGroupAttachments:
+          type: array
+          items:
+            type: object
+            properties:
+              securityGroupId: { type: string }
+              expiresAt: { type: ["string", "null"], format: date-time }
+            required: [securityGroupId, expiresAt]
       required: [id, name, ownerUserId, status, version, members, securityGroups]
     AccessSecurityGroup:
       type: object
@@ -7413,6 +7422,7 @@ components:
         securityGroupId: { type: string }
         status: { type: string, const: active }
         version: { type: integer }
+        expiresAt: { type: ["string", "null"], format: date-time }
       required: [principalType, principalId, securityGroupId, status, version]
     AccessPendingGrant:
       type: object
@@ -7557,6 +7567,7 @@ components:
         principalType: { $ref: "#/components/schemas/AccessPrincipalType" }
         principalId: { type: string, minLength: 1 }
         active: { type: boolean }
+        expiresAt: { type: ["string", "null"], format: date-time }
       required: [principalType, principalId, active]
     AccessUserGroupMemberApproval:
       type: object
@@ -7570,6 +7581,7 @@ components:
       properties:
         securityGroupId: { type: string, minLength: 1 }
         active: { type: boolean }
+        expiresAt: { type: ["string", "null"], format: date-time }
       required: [securityGroupId, active]
     AccessUserGroupSecurityGroupApproval:
       type: object
@@ -7615,6 +7627,7 @@ components:
         principalId: { type: string, minLength: 1 }
         securityGroupId: { type: string, minLength: 1 }
         active: { type: boolean }
+        expiresAt: { type: ["string", "null"], format: date-time }
       required: [principalType, principalId, securityGroupId, active]
     AccessGrantApproval:
       type: object
@@ -10162,6 +10175,9 @@ components:
         fictionalOfflineIdentity:
           type: boolean
           description: Case-scoped identity projection is synthetic and does not represent sensitive-record authority
+        hybridDemoSimulation:
+          type: boolean
+          description: Server-verified volunteer-backed Demo Controller run is eligible for simulation; never grants sensitive-record authority
         planSummary:
           type: ["string", "null"]
           description: LLM-generated onboarding plan narrative

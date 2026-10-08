@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Response } from "express";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import {
   accessAgents,
   accessGovernanceHistory,
@@ -20,6 +20,7 @@ import {
   ACCESS_GOVERNANCE_CATALOG,
   isActiveDistinctOwnerApprovalValid,
   isIndependentOwnerApprovalValid,
+  grantIsLive,
   isReviewedAccessKey,
   resolveEffectiveAccess,
 } from "../lib/access-governance";
@@ -76,6 +77,14 @@ function optionalCaseId(value: unknown): number | undefined | null {
   if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) return null;
   const caseId = Number(value);
   return Number.isSafeInteger(caseId) ? caseId : null;
+}
+
+function parseExpiry(value: unknown, active: boolean): Date | null | undefined {
+  if (value === undefined) return null;
+  if (!active || value === null) return null;
+  if (typeof value !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(?:Z|[+-]\d\d:\d\d)$/.test(value)) return undefined;
+  const expiresAt = new Date(value);
+  return Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() > Date.now() ? expiresAt : undefined;
 }
 
 function toSchemaPrincipalType(value: PrincipalType): "human" | "agent" {
@@ -268,6 +277,7 @@ async function requestSensitiveMembershipReviews(
       eq(accessUserGroupMembers.status, "pending"),
     ),
     isNull(accessUserGroupMembers.revokedAt),
+    or(isNull(accessUserGroupMembers.expiresAt), gt(accessUserGroupMembers.expiresAt, new Date())),
   ));
   if (activeMembers.length && requestedByUserId === userGroup.ownerUserId) {
     throw Object.assign(new Error("The user-group owner cannot request membership approval on their own policy path."), { status: 409, code: "ACCESS_INDEPENDENT_REVIEW_REQUIRED" });
@@ -397,6 +407,7 @@ async function resolveRouteAccess(
 }
 
 async function snapshot(organizationId: string) {
+  const now = new Date();
   const [members, agents, userGroups, securityGroups, policies, memberships, attachments, scopeAttachments, directAttachments, allEvents] =
     await Promise.all([
       db.select({
@@ -425,11 +436,11 @@ async function snapshot(organizationId: string) {
     groupPolicies.push(policy);
     policiesByGroup.set(policy.securityGroupId, groupPolicies);
   }
-  const membersByGroup = new Map<string, Array<{ principalType: string; principalId: string }>>();
+  const membersByGroup = new Map<string, Array<{ principalType: string; principalId: string; expiresAt: string | null }>>();
   for (const member of memberships) {
-    if (member.status !== "active" || member.revokedAt) continue;
+    if (member.status !== "active" || member.revokedAt || !grantIsLive(member.expiresAt, now)) continue;
     const userGroup = userGroups.find((group) => group.id === member.groupId);
-    if (!userGroup || !await isMembershipApprovalCurrent(
+    if (!userGroup || userGroup.status !== "active" || !await isMembershipApprovalCurrent(
       db as unknown as OnboardingDbTransaction,
       organizationId,
       userGroup,
@@ -442,25 +453,26 @@ async function snapshot(organizationId: string) {
     if (principalType === "user" && member.principalId === userGroup.ownerUserId) continue;
     if (!await hasActivePrincipal(db as unknown as OnboardingDbTransaction, organizationId, principalType, member.principalId)) continue;
     const list = membersByGroup.get(member.groupId) ?? [];
-    list.push({ principalType, principalId: member.principalId });
+    list.push({ principalType, principalId: member.principalId, expiresAt: member.expiresAt?.toISOString() ?? null });
     membersByGroup.set(member.groupId, list);
   }
   const securityGroupsByUserGroup = new Map<string, Set<string>>();
   for (const attachment of attachments) {
     const group = securityGroups.find((item) => item.id === attachment.securityGroupId);
-    if (attachment.status !== "active" || !group || group.status !== "active") continue;
+    if (attachment.status !== "active" || !grantIsLive(attachment.expiresAt, now) || !group || group.status !== "active" ||
+      userGroups.find((item) => item.id === attachment.userGroupId)?.status !== "active") continue;
+    const scopeLink = scopeAttachments.find((item) =>
+      item.securityGroupId === group.id && item.scope === "tenant" &&
+      item.status === "active" && grantIsLive(item.expiresAt, now) && item.caseId === null,
+    );
+    if (!scopeLink) continue;
     const policy = currentPolicy(policiesByGroup.get(group.id) ?? []);
     if (!policy) continue;
     if (groupAllows(policy.policy).some(isSensitive)) {
       const ownerIsActiveMember = await hasActivePrincipal(
         db as unknown as OnboardingDbTransaction, organizationId, "user", group.ownerUserId,
       );
-      const scopeLink = scopeAttachments.find((item) =>
-        item.securityGroupId === group.id && item.scope === "tenant" &&
-        item.status === "active" && item.caseId === null,
-      );
-      if (!scopeLink ||
-        !isIndependentOwnerApprovalValid({
+      if (!isIndependentOwnerApprovalValid({
           status: attachment.status,
           ownerUserId: group.ownerUserId,
           attachedByUserId: attachment.attachedByUserId,
@@ -491,6 +503,7 @@ async function snapshot(organizationId: string) {
     securityGroupId: string;
     status: "active";
     version: number;
+    expiresAt: string | null;
   }> = [];
   const pendingGrants: Array<{
     principalType: string;
@@ -507,7 +520,7 @@ async function snapshot(organizationId: string) {
     const securityGroupId = binding.securityGroupId;
     const group = securityGroups.find((item) => item.id === securityGroupId);
     const policy = currentPolicy(policiesByGroup.get(securityGroupId) ?? []);
-    if (binding.status === "revoked" || binding.revokedAt || !group || group.status !== "active" || !policy) continue;
+    if (binding.status === "revoked" || binding.revokedAt || !grantIsLive(binding.expiresAt, now) || !group || group.status !== "active" || !policy) continue;
     if (!await hasActivePrincipal(db as unknown as OnboardingDbTransaction, organizationId, principalType, principalId)) continue;
     const keys = groupAllows(policy.policy);
     if (keys.some((key) => !isReviewedAccessKey(key))) continue;
@@ -543,7 +556,7 @@ async function snapshot(organizationId: string) {
         continue;
       }
     }
-    normalizedGrants.push({ ...relation, status: "active", version: binding.version });
+    normalizedGrants.push({ ...relation, status: "active", version: binding.version, expiresAt: binding.expiresAt?.toISOString() ?? null });
   }
   const latestUserGroupAttachments = new Map<string, (typeof allEvents)[number]>();
   for (const event of allEvents) {
@@ -596,6 +609,11 @@ async function snapshot(organizationId: string) {
     if (!group || group.status !== "active" || !validPrincipalType(principalType) ||
       typeof principalId !== "string" ||
       !await hasActivePrincipal(db as unknown as OnboardingDbTransaction, organizationId, principalType, principalId)) continue;
+    const pendingMember = memberships.find((item) =>
+      item.groupId === group.id && item.principalType === toSchemaPrincipalType(principalType) &&
+      item.principalId === principalId && item.status === "pending" && grantIsLive(item.expiresAt, now),
+    );
+    if (!pendingMember) continue;
     pendingMembers.push({
       groupId: group.id,
       principalType,
@@ -630,6 +648,9 @@ async function snapshot(organizationId: string) {
       version: group.version,
       members: membersByGroup.get(group.id) ?? [],
       securityGroups: [...(securityGroupsByUserGroup.get(group.id) ?? [])],
+      securityGroupAttachments: attachments.filter((link) =>
+        link.userGroupId === group.id && (securityGroupsByUserGroup.get(group.id)?.has(link.securityGroupId) ?? false),
+      ).map((link) => ({ securityGroupId: link.securityGroupId, expiresAt: link.expiresAt?.toISOString() ?? null })),
     })),
     securityGroups: securityGroups.map((group) => {
       const policy = currentPolicy(policiesByGroup.get(group.id) ?? []);
@@ -1007,6 +1028,11 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
     const principalType = body.principalType as PrincipalType;
     const principalId = body.principalId as string;
     const active = body.active as boolean;
+    let expiresAt = parseExpiry(body.expiresAt, active);
+    if (expiresAt === undefined) {
+      fail(res, 400, "expiresAt must be a future date-time with a timezone, or null.", "ACCESS_INVALID_EXPIRY");
+      return;
+    }
     const organizationId = getOrganizationId(req);
     const actor = req.authUserId!;
     let membershipStatus = active ? "active" : "revoked";
@@ -1028,6 +1054,7 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
         eq(accessUserGroupMembers.principalId, principalId),
       );
       const [existingMember] = await tx.select().from(accessUserGroupMembers).where(where).limit(1);
+      if (active && body.expiresAt === undefined && existingMember) expiresAt = existingMember.expiresAt;
       const sensitiveGroups = active
         ? await highSensitivityGroupsForUserGroup(tx, organizationId, group.id)
         : [];
@@ -1036,8 +1063,10 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
           tx, organizationId, group, existingMember, sensitiveGroups,
         )
         : false;
+      const expiryChanged = existingMember?.expiresAt?.getTime() !== expiresAt?.getTime() &&
+        !(existingMember?.expiresAt === null && expiresAt === null);
       if (active && sensitiveGroups.length &&
-        (existingMember?.status !== "active" || !currentMembershipApproval)) {
+        (existingMember?.status !== "active" || !currentMembershipApproval || expiryChanged || !grantIsLive(existingMember.expiresAt, new Date()))) {
         if (actor === group.ownerUserId || principalId === actor || (principalType === "user" && (
           principalId === group.ownerUserId ||
           sensitiveGroups.some((securityGroup) => securityGroup.ownerUserId === principalId)
@@ -1049,7 +1078,7 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
           organizationId, actorUserId: actor, eventType: "user-group.member.pending",
           entityType: "user-group", entityId: group.id,
           detail: {
-            principalType, principalId, active: true,
+            principalType, principalId, active: true, expiresAt: expiresAt?.toISOString() ?? null,
             policyVersions: sensitiveGroups.map(({ id, policyVersion }) => `${id}@${policyVersion}`).sort().join(","),
           },
         });
@@ -1059,6 +1088,7 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
           principalType: toSchemaPrincipalType(principalType),
           principalId,
           status: "pending",
+          expiresAt,
           version: existingMember ? existingMember.version + 1 : 1,
           requiresApproval: "yes",
           attachedByUserId: actor,
@@ -1075,6 +1105,7 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
           ],
           set: {
             status: "pending",
+            expiresAt,
             requiresApproval: "yes",
             attachedByUserId: actor,
             approvedByUserId: null,
@@ -1090,10 +1121,13 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
         ));
         return;
       }
+      if (active && sensitiveGroups.length && existingMember?.status === "active" &&
+        currentMembershipApproval && !expiryChanged) return;
       if (active) {
         await tx.insert(accessUserGroupMembers).values({
           organizationId, groupId: req.params.id, principalType: toSchemaPrincipalType(principalType),
           principalId, attachedByUserId: actor, status: "active", version: 1,
+          expiresAt,
           requiresApproval: "no", approvedByUserId: null, approvedAt: null,
         }).onConflictDoUpdate({
           target: [
@@ -1104,6 +1138,7 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
           ],
           set: {
             status: "active",
+            expiresAt,
             revokedAt: null,
             revokedByUserId: null,
             attachedByUserId: actor,
@@ -1131,6 +1166,7 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
           principalType,
           principalId,
           active,
+          expiresAt: active ? expiresAt?.toISOString() ?? null : null,
         },
       });
     });
@@ -1227,6 +1263,9 @@ router.post("/user-groups/:id/members/approve", async (req, res, next) => {
       if (!membership || membership.revokedAt || membership.attachedByUserId !== pending.actorUserId) {
         throw Object.assign(new Error("A pending sensitive membership request was not found."), { status: 409, code: "ACCESS_MEMBERSHIP_NOT_PENDING" });
       }
+      if (!grantIsLive(membership.expiresAt, new Date())) {
+        throw Object.assign(new Error("The requested membership has expired; submit a new request."), { status: 409, code: "ACCESS_INVALID_EXPIRY" });
+      }
       await tx.update(accessUserGroupMembers).set({
         status: "active",
         requiresApproval: "yes",
@@ -1245,7 +1284,7 @@ router.post("/user-groups/:id/members/approve", async (req, res, next) => {
         entityType: "user-group", entityId: group.id,
         detail: {
           principalType, principalId, active: true,
-          requestedByUserId: pending.actorUserId,
+          requestedByUserId: pending.actorUserId, expiresAt: membership.expiresAt?.toISOString() ?? null,
           policyVersions: expectedPolicyVersions,
         },
       });
@@ -1274,6 +1313,11 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
     }
     const securityGroupId = body.securityGroupId as string;
     const active = body.active as boolean;
+    let expiresAt = parseExpiry(body.expiresAt, active);
+    if (expiresAt === undefined) {
+      fail(res, 400, "expiresAt must be a future date-time with a timezone, or null.", "ACCESS_INVALID_EXPIRY");
+      return;
+    }
     const organizationId = getOrganizationId(req);
     const actor = req.authUserId!;
     let attachmentStatus = active ? "active" : "revoked";
@@ -1303,6 +1347,7 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
             eq(accessUserGroupMembers.principalId, securityGroup.ownerUserId),
             eq(accessUserGroupMembers.status, "active"),
             isNull(accessUserGroupMembers.revokedAt),
+            or(isNull(accessUserGroupMembers.expiresAt), gt(accessUserGroupMembers.expiresAt, new Date())),
           ))
           .limit(1);
         if (ownerMembership) {
@@ -1325,6 +1370,7 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
             eq(accessUserGroupMembers.principalId, group.ownerUserId),
             eq(accessUserGroupMembers.status, "active"),
             isNull(accessUserGroupMembers.revokedAt),
+            or(isNull(accessUserGroupMembers.expiresAt), gt(accessUserGroupMembers.expiresAt, new Date())),
           ))
           .limit(1);
         if (userGroupOwnerMembership) {
@@ -1336,6 +1382,8 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
         eq(accessSecurityGroupUserGroups.userGroupId, group.id),
         eq(accessSecurityGroupUserGroups.securityGroupId, securityGroup.id),
       );
+      const [existingLink] = await tx.select().from(accessSecurityGroupUserGroups).where(where).limit(1);
+      if (active && body.expiresAt === undefined && existingLink) expiresAt = existingLink.expiresAt;
       if (active) {
         if (keys.some(isSensitive)) {
           const membershipPolicies = [
@@ -1349,7 +1397,7 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
           await recordHistory(tx, {
             organizationId, actorUserId: actor, eventType: "user-group.security-group.pending",
             entityType: "user-group", entityId: group.id,
-            detail: { securityGroupId: securityGroup.id, policyVersion: policy.version },
+            detail: { securityGroupId: securityGroup.id, policyVersion: policy.version, expiresAt: expiresAt?.toISOString() ?? null },
           });
           await tx.update(accessUserGroups).set({ version: group.version + 1 }).where(and(
             eq(accessUserGroups.organizationId, organizationId),
@@ -1357,16 +1405,17 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
           ));
           return;
         }
-        const [existingLink] = await tx.select().from(accessSecurityGroupUserGroups).where(where).limit(1);
         if (existingLink) {
           await tx.update(accessSecurityGroupUserGroups).set({
             status: "active", version: existingLink.version + 1, requiresApproval: "no",
+            expiresAt,
             approvedByUserId: null, approvedAt: null, approvedPolicyVersion: null, attachedByUserId: actor,
           }).where(where);
         } else {
           await tx.insert(accessSecurityGroupUserGroups).values({
             organizationId, userGroupId: group.id, securityGroupId: securityGroup.id,
             status: "active", version: 1, requiresApproval: "no", attachedByUserId: actor,
+            expiresAt,
             approvedPolicyVersion: null,
           });
         }
@@ -1380,6 +1429,7 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
         if (existingScope) {
           await tx.update(accessSecurityGroupAttachments).set({
             status: "active", version: existingScope.version + 1, requiresApproval: "no",
+            expiresAt: null,
             approvedByUserId: null, approvedAt: null, approvedPolicyVersion: null, attachedByUserId: actor,
           }).where(eq(accessSecurityGroupAttachments.id, existingScope.id));
         } else {
@@ -1419,7 +1469,7 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
       await recordHistory(tx, {
         organizationId, actorUserId: actor, eventType: active ? "user-group.security-group.attached" : "user-group.security-group.detached",
         entityType: "user-group", entityId: group.id,
-        detail: { securityGroupId: securityGroup.id, active, policyVersion: policy.version },
+        detail: { securityGroupId: securityGroup.id, active, policyVersion: policy.version, expiresAt: active ? expiresAt?.toISOString() ?? null : null },
       });
     });
     res.json({ ok: true, status: attachmentStatus });
@@ -1483,6 +1533,7 @@ router.post("/user-groups/:id/security-groups/approve", async (req, res, next) =
           eq(accessUserGroupMembers.principalId, userGroup.ownerUserId),
           eq(accessUserGroupMembers.status, "active"),
           isNull(accessUserGroupMembers.revokedAt),
+          or(isNull(accessUserGroupMembers.expiresAt), gt(accessUserGroupMembers.expiresAt, new Date())),
         ))
         .limit(1);
       if (userGroupOwnerMembership) {
@@ -1507,6 +1558,7 @@ router.post("/user-groups/:id/security-groups/approve", async (req, res, next) =
           eq(accessUserGroupMembers.principalId, securityGroup.ownerUserId),
           eq(accessUserGroupMembers.status, "active"),
           isNull(accessUserGroupMembers.revokedAt),
+          or(isNull(accessUserGroupMembers.expiresAt), gt(accessUserGroupMembers.expiresAt, new Date())),
         ))
         .limit(1);
       if (ownerMembership) {
@@ -1543,7 +1595,11 @@ router.post("/user-groups/:id/security-groups/approve", async (req, res, next) =
         approvedAt: new Date(),
         approvedPolicyVersion: policy.version,
         attachedByUserId: pending.actorUserId,
+        expiresAt: typeof pending.detail?.expiresAt === "string" ? new Date(pending.detail.expiresAt) : null,
       };
+      if (attachmentApproval.expiresAt && !grantIsLive(attachmentApproval.expiresAt, new Date())) {
+        throw Object.assign(new Error("The requested attachment has expired; submit a new request."), { status: 409, code: "ACCESS_INVALID_EXPIRY" });
+      }
       if (existingAssociation) {
         await tx.update(accessSecurityGroupUserGroups).set({
           ...attachmentApproval,
@@ -1564,13 +1620,13 @@ router.post("/user-groups/:id/security-groups/approve", async (req, res, next) =
       const [existingScope] = await tx.select().from(accessSecurityGroupAttachments).where(scopeWhere).limit(1);
       if (existingScope) {
         await tx.update(accessSecurityGroupAttachments).set({
-          ...attachmentApproval,
+          ...attachmentApproval, expiresAt: null,
           version: existingScope.version + 1,
         }).where(eq(accessSecurityGroupAttachments.id, existingScope.id));
       } else {
         await tx.insert(accessSecurityGroupAttachments).values({
           organizationId, securityGroupId: securityGroup.id, scope: "tenant", caseId: null,
-          ...attachmentApproval, version: 1,
+          ...attachmentApproval, expiresAt: null, version: 1,
         });
       }
       await tx.update(accessUserGroups).set({ version: userGroup.version + 1 }).where(and(
@@ -1580,7 +1636,7 @@ router.post("/user-groups/:id/security-groups/approve", async (req, res, next) =
       await recordHistory(tx, {
         organizationId, actorUserId: actor, eventType: "user-group.security-group.approved",
         entityType: "user-group", entityId: userGroup.id,
-        detail: { securityGroupId: securityGroup.id, policyVersion: policy.version },
+        detail: { securityGroupId: securityGroup.id, policyVersion: policy.version, expiresAt: attachmentApproval.expiresAt?.toISOString() ?? null },
       });
     });
     res.json({ ok: true, status: "active" });
@@ -1879,6 +1935,11 @@ router.put("/grants", async (req, res, next) => {
     const principalId = body.principalId as string;
     const securityGroupId = body.securityGroupId as string;
     const active = body.active as boolean;
+    let expiresAt = parseExpiry(body.expiresAt, active);
+    if (expiresAt === undefined) {
+      fail(res, 400, "expiresAt must be a future date-time with a timezone, or null.", "ACCESS_INVALID_EXPIRY");
+      return;
+    }
     const organizationId = getOrganizationId(req);
     const actor = req.authUserId!;
     let grantStatus = active ? "active" : "revoked";
@@ -1915,9 +1976,12 @@ router.put("/grants", async (req, res, next) => {
       );
       const [existing] = await tx.select().from(accessPrincipalSecurityGroupAttachments)
         .where(bindingWhere).limit(1);
+      if (active && body.expiresAt === undefined && existing) expiresAt = existing.expiresAt;
       if (active) {
         const alreadyApproved = Boolean(
           existing?.status === "active" &&
+          grantIsLive(existing.expiresAt, new Date()) &&
+          existing.expiresAt?.getTime() === expiresAt?.getTime() &&
           (!sensitiveBinding || isIndependentOwnerApprovalValid({
             status: existing.status,
             ownerUserId: group.ownerUserId,
@@ -1939,6 +2003,7 @@ router.put("/grants", async (req, res, next) => {
             approvedAt: alreadyApproved ? existing.approvedAt : null,
             approvedPolicyVersion: alreadyApproved ? existing.approvedPolicyVersion : null,
             revokedAt: null,
+            expiresAt,
             version: existing.version + (alreadyApproved ? 0 : 1),
           }).where(bindingWhere);
         } else {
@@ -1953,6 +2018,7 @@ router.put("/grants", async (req, res, next) => {
             version: 1,
             requiresApproval: sensitiveBinding ? "yes" : "no",
             attachedByUserId: actor,
+            expiresAt,
             approvedPolicyVersion: null,
           });
         }
@@ -1961,7 +2027,7 @@ router.put("/grants", async (req, res, next) => {
           eventType: grantStatus === "pending" ? "grant.pending" : "grant.active",
           entityType: "principal-security-group",
           entityId: `${principalType}:${principalId}:${securityGroupId}`,
-          detail: { principalType, principalId, securityGroupId, policyVersion: policy.version },
+          detail: { principalType, principalId, securityGroupId, policyVersion: policy.version, expiresAt: expiresAt?.toISOString() ?? null },
         });
       } else if (existing && existing.status !== "revoked") {
         await tx.update(accessPrincipalSecurityGroupAttachments).set({
@@ -2057,6 +2123,9 @@ router.post("/grants/approve", async (req, res, next) => {
       if (!binding || binding.status !== "pending" || binding.revokedAt) {
         throw Object.assign(new Error("A pending direct grant request was not found."), { status: 409, code: "ACCESS_GRANT_NOT_PENDING" });
       }
+      if (!grantIsLive(binding.expiresAt, new Date())) {
+        throw Object.assign(new Error("The requested grant has expired; submit a new request."), { status: 409, code: "ACCESS_INVALID_EXPIRY" });
+      }
       if (binding.attachedByUserId === actor) {
         throw Object.assign(new Error("The security-group owner cannot approve their own direct binding request."), { status: 403, code: "ACCESS_INDEPENDENT_REVIEW_REQUIRED" });
       }
@@ -2072,7 +2141,7 @@ router.post("/grants/approve", async (req, res, next) => {
         eventType: "grant.approved",
         entityType: "principal-security-group",
         entityId: `${principalType}:${principalId}:${securityGroupId}`,
-        detail: { principalType, principalId, securityGroupId, policyVersion: policy.version },
+        detail: { principalType, principalId, securityGroupId, policyVersion: policy.version, expiresAt: binding.expiresAt?.toISOString() ?? null },
       });
     });
     res.json({ ok: true, status: "active" });

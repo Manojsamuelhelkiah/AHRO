@@ -79,7 +79,7 @@ import {
   isDemoFullCoverageScenarioKey,
   seedDemoFullCoverage,
 } from "../lib/onboarding/demo-full-coverage";
-import { normalizedDemoWorkCountry } from "../lib/onboarding/demo-controller";
+import { isEligibleHybridDemoSimulation, normalizedDemoWorkCountry } from "../lib/onboarding/demo-controller";
 import {
   ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS,
   ensureConnectorsSeeded,
@@ -765,6 +765,7 @@ async function serializeCase(
     // This server-derived output flag keeps every marker-backed offline case
     // out of interactive provider/contact controls in the client.
     offlineSample: isSyntheticOfflineCase(row),
+    hybridDemoSimulation: caseAccess.flowRead && await isEligibleHybridDemoSimulation(db, row),
     /** Only server-marked, fictional Demo fixtures may bypass identity authority. */
     fictionalOfflineIdentity: canReadProfile && fictionalOfflineIdentity,
     planSummary: canReadNotes

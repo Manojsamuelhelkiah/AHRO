@@ -1451,6 +1451,8 @@ export const AccessPrincipalType = {
 export interface AccessPrincipal {
   principalType: AccessPrincipalType;
   principalId: string;
+  /** @nullable */
+  expiresAt?: string | null;
 }
 
 export type AccessUserGroupStatus = typeof AccessUserGroupStatus[keyof typeof AccessUserGroupStatus];
@@ -1461,6 +1463,11 @@ export const AccessUserGroupStatus = {
   retired: 'retired',
 } as const;
 
+export type AccessUserGroupSecurityGroupAttachmentsItem = {
+  securityGroupId: string;
+  /** @nullable */
+  expiresAt: string | null;
+};
 export interface AccessUserGroup {
   id: string;
   name: string;
@@ -1469,6 +1476,7 @@ export interface AccessUserGroup {
   version: number;
   members: AccessPrincipal[];
   securityGroups: string[];
+  securityGroupAttachments?: AccessUserGroupSecurityGroupAttachmentsItem[];
 }
 
 export type AccessSecurityGroupStatus = typeof AccessSecurityGroupStatus[keyof typeof AccessSecurityGroupStatus];
@@ -1504,6 +1512,8 @@ export interface AccessDirectGrant {
   securityGroupId: string;
   status: 'active';
   version: number;
+  /** @nullable */
+  expiresAt?: string | null;
 }
 
 export interface AccessPendingGrant {
@@ -1612,6 +1622,8 @@ export interface AccessUserGroupMemberUpdate {
   /** @minLength 1 */
   principalId: string;
   active: boolean;
+  /** @nullable */
+  expiresAt?: string | null;
 }
 
 export interface AccessUserGroupMemberApproval {
@@ -1625,6 +1637,8 @@ export interface AccessUserGroupSecurityGroupUpdate {
   /** @minLength 1 */
   securityGroupId: string;
   active: boolean;
+  /** @nullable */
+  expiresAt?: string | null;
 }
 
 export interface AccessUserGroupSecurityGroupApproval {
@@ -1667,6 +1681,8 @@ export interface AccessGrantUpdate {
   /** @minLength 1 */
   securityGroupId: string;
   active: boolean;
+  /** @nullable */
+  expiresAt?: string | null;
 }
 
 export interface AccessGrantApproval {
@@ -3980,6 +3996,8 @@ export interface OnbCase {
   offlineSample: boolean;
   /** Case-scoped identity projection is synthetic and does not represent sensitive-record authority */
   fictionalOfflineIdentity: boolean;
+  /** Server-verified volunteer-backed Demo Controller run is eligible for simulation; never grants sensitive-record authority */
+  hybridDemoSimulation?: boolean;
   /**
      * LLM-generated onboarding plan narrative
      * @nullable
@@ -10048,4 +10066,3 @@ export type ListSensitiveLifecycleDeletionJobs200JobsItem = { [key: string]: unk
 export type ListSensitiveLifecycleDeletionJobs200 = {
   jobs: ListSensitiveLifecycleDeletionJobs200JobsItem[];
 };
-

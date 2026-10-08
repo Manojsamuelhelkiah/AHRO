@@ -29,13 +29,17 @@ import { runWithDemoControllerLive } from "./provider-policy";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
 import {
   grantSyntheticDemoAuthorityForCase,
+  isVerifiedHybridDemoControllerCase,
   SyntheticDemoCaseAuthorityDeniedError,
 } from "./demo-admin-access";
 import { demoPrincipalSettingKey, parseRegisteredDemoProfile } from "../demo-principal";
+import { governanceSnapshotForNewCase, withGovernanceDecisionSnapshot } from "./governance-runtime";
+import { assertGovernanceMutationAllowed } from "./governance-dispatch";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
   effectiveSensitiveDataClassesForCandidateUpload,
   evaluateCaseDerivedLifecycleGateInTransaction,
+  jurisdictionForWorkforceContext,
   SensitiveLifecycleConflictError,
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
@@ -449,6 +453,37 @@ function parseRun(value: string): DemoRun | null {
   }
 }
 
+/** A volunteer case is not fictional: its simulation needs a current, pinned run. */
+export async function isEligibleHybridDemoSimulation(
+  tx: Pick<typeof db, "select">,
+  caseRow: typeof onbCases.$inferSelect,
+): Promise<boolean> {
+  if (caseRow.organizationId !== DEMO_ORGANIZATION_ID ||
+    !isVerifiedHybridDemoControllerCase(caseRow)) return false;
+  const markers = [...(caseRow.notes ?? "").matchAll(/\[demo-controller-run:([^\]]+)\]/g)];
+  if (markers.length !== 1) return false;
+  const runId = markers[0][1];
+  const [stored] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+    eq(onbSettings.key, runKey(runId)),
+  )).limit(1);
+  const run = stored ? parseRun(stored.value) : null;
+  if (!run || run.runId !== runId || run.caseId !== caseRow.id ||
+    run.mode !== "hybrid" || !["active", "blocked", "completed"].includes(run.status) ||
+    typeof run.selectedVolunteerId !== "string" || !run.selectedVolunteerId || !run.selectedVolunteer ||
+    run.selectedVolunteer.id !== run.selectedVolunteerId ||
+    typeof run.selectedVolunteer.email !== "string" || !run.selectedVolunteer.email.trim() ||
+    run.selectedVolunteer.email.trim().toLowerCase() !== caseRow.workerEmail?.trim().toLowerCase()) return false;
+  const [gate, authority] = await Promise.all([
+    evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+      organizationId: DEMO_ORGANIZATION_ID,
+      jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+    }),
+    getSensitiveLifecycleAuthorityContextInTransaction(tx, DEMO_ORGANIZATION_ID),
+  ]);
+  return lifecycleReady(gate, authority);
+}
+
 async function writeRun(tx: Pick<OnboardingDbTransaction, "insert" | "update">, organizationId: string, run: DemoRun) {
   await tx.insert(onbSettings).values({
     organizationId,
@@ -511,6 +546,8 @@ async function createCase(
     : scenario.intake;
   const joiningDate = new Date(Date.now() + intake.joiningDateOffsetDays * 86400_000)
     .toISOString().slice(0, 10);
+  await assertGovernanceMutationAllowed(tx, organizationId);
+  const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
   const [row] = await tx.insert(onbCases).values({
     organizationId,
     workerName: intake.workerName,
@@ -542,6 +579,7 @@ async function createCase(
     workstreams: defaultWorkstreams(),
     scenarioKey,
     workforceContext: { workCountry },
+    processPolicySnapshot: withGovernanceDecisionSnapshot({}, governanceSnapshot),
     primarySkill: intake.primarySkill,
     skillCriticality: intake.skillCriticality,
     notes: `${SYNTHETIC_OFFLINE_MARKER}\n[demo-controller-run:${runId}]\n${intake.notes ?? "Synthetic case; no ordinary engine authority."}`,
@@ -660,6 +698,9 @@ export async function createDemoRun(
   const runId = randomUUID();
   const createdAt = nowIso();
   const workCountry = normalizedDemoWorkCountry(volunteer?.geography ?? scenario.intake.geography);
+  // Seed outside the transaction; adoption below reads under the shared
+  // governance fence and never turns provisional decisions into approvals.
+  await governanceSnapshotForNewCase(organizationId);
   const row = await withSensitiveLifecycleFence(organizationId, async () => {
     const created = await db.transaction(async (tx) => {
       // Scenarios can include a real configured demo recipient, while a
