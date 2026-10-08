@@ -20,6 +20,7 @@ test("temporary grants end at their exclusive expiry instant", () => {
 });
 
 test("catalog contains reviewed high-sensitivity fields and case flow keys", () => {
+  assert.ok(ACCESS_GOVERNANCE_CATALOG.fields.includes("data.context.metadata.read"));
   assert.ok(ACCESS_GOVERNANCE_CATALOG.fields.includes("data.identity.read"));
   assert.ok(ACCESS_GOVERNANCE_CATALOG.fields.includes("data.medical.edit"));
   assert.ok(ACCESS_GOVERNANCE_CATALOG.fields.includes("data.payroll.read"));
@@ -40,6 +41,10 @@ test("catalog and principal checks reject wildcards and unknown capabilities", (
 });
 
 test("agents require both their own and initiator access and cannot approve", () => {
+  assert.equal(isAccessAllowedForPrincipal({
+    principalType: "agent", key: "data.context.metadata.read",
+    principalAllows: true, initiatorAllows: true,
+  }), false);
   assert.equal(isAccessAllowedForPrincipal({
     principalType: "agent",
     key: "flow.case.read",

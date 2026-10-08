@@ -14,3 +14,9 @@ Unified context is execution scope and continuity metadata, never professional a
 **Why:** Workflow unification must not let a historical context record authorize new disclosure, replay an uncertain provider effect, or override independently governed evidence.
 
 **How to apply:** Keep prompt/evidence construction behind existing live domain authorization. Do not persist prompts, answers, source documents or contact details in context history. Reject an oversized authorized prompt rather than silently truncating mandatory evidence or inventing a summary.
+
+Operator investigation must remain a separately granted, live human metadata capability, not a consequence of tenant administration or specialist authority. Shared public demo identities may never use organization-wide context history, even if accidentally granted that capability.
+
+**Why:** Operational continuity must be inspectable without disclosing business evidence or enabling a historical record to authorize recovery effects.
+
+**How to apply:** Correlation navigation stays inside the same current tenant and permission boundary. Treat absence of finalization as unfinished regardless of age; do not turn it into confirmed failure or a manual provider replay.

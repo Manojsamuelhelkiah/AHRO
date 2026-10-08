@@ -32,6 +32,8 @@ export const ACCESS_GOVERNANCE_CATALOG = {
     "data.case.notes.read", "data.case.notes.edit",
     "data.documents.read", "data.documents.edit",
     "data.audit.read",
+    // Operational continuity only; never business evidence or specialist authority.
+    "data.context.metadata.read",
   ],
   flows: [
     "flow.case.read", "flow.case.edit",
@@ -66,7 +68,7 @@ const HIGH_SENSITIVITY_KEYS = new Set<AccessGovernanceKey>([
   "data.payroll.read", "data.payroll.edit",
   "data.bgv.read", "data.bgv.edit",
 ]);
-const HUMAN_ONLY_KEYS = new Set<AccessGovernanceKey>(["tool.approval.decide"]);
+const HUMAN_ONLY_KEYS = new Set<AccessGovernanceKey>(["tool.approval.decide", "data.context.metadata.read"]);
 
 export type ResolveEffectiveAccessInput = {
   organizationId: string;
@@ -117,7 +119,7 @@ export function isAccessAllowedForPrincipal(input: {
 }): boolean {
   if (!knownKey(input.key) || !input.principalAllows) return false;
   if (input.principalType === "human") return true;
-  return input.key !== "tool.approval.decide" && input.initiatorAllows === true;
+  return !HUMAN_ONLY_KEYS.has(input.key) && input.initiatorAllows === true;
 }
 
 /** Sensitive policy owners are not recipients of the policy they own. */
@@ -568,7 +570,7 @@ export async function resolveEffectiveAccessInTransaction(
     if (initiator && !initiatorAllowed) entries.push("Agent access is intersected with its initiating human.");
     if (!principalAllowed) entries.push("No current governance policy or exact named grant permits this key.");
     if (input.principalType === "agent" && HUMAN_ONLY_KEYS.has(key)) {
-      entries.push("Approval authority is human-only; agents cannot approve.");
+      entries.push("This permission is human-only; agents cannot exercise it.");
     }
     if (isAccessAllowedForPrincipal({
       principalType: input.principalType,

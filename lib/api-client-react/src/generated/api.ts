@@ -135,6 +135,7 @@ import type {
   ListCustomIntentsParams,
   ListEaAssessmentsParams,
   ListGovernanceHistoryParams,
+  ListHroContextTransactionsParams,
   ListOnboardingApprovalsParams,
   ListOnboardingPolicyRecommendationsParams,
   ListOnboardingProtectedAuditParams,
@@ -365,20 +366,27 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getListHroContextTransactionsUrl = () => {
+export const getListHroContextTransactionsUrl = (params?: ListHroContextTransactionsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/context-manager/transactions`
+  return stringifiedParams.length > 0 ? `/api/context-manager/transactions?${stringifiedParams}` : `/api/context-manager/transactions`
 }
 
 /**
  * @summary Read the authenticated user's recent metadata-only execution attempts
  */
-export const listHroContextTransactions = async ( options?: RequestInit): Promise<HroContextHistory> => {
+export const listHroContextTransactions = async (params?: ListHroContextTransactionsParams, options?: RequestInit): Promise<HroContextHistory> => {
 
-  return customFetch<HroContextHistory>(getListHroContextTransactionsUrl(),
+  return customFetch<HroContextHistory>(getListHroContextTransactionsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -391,23 +399,23 @@ export const listHroContextTransactions = async ( options?: RequestInit): Promis
 
 
 
-export const getListHroContextTransactionsQueryKey = () => {
+export const getListHroContextTransactionsQueryKey = (params?: ListHroContextTransactionsParams,) => {
     return [
-    `/api/context-manager/transactions`
+    `/api/context-manager/transactions`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListHroContextTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listHroContextTransactions>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroContextTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListHroContextTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listHroContextTransactions>>, TError = ErrorType<void>>(params?: ListHroContextTransactionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroContextTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListHroContextTransactionsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListHroContextTransactionsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHroContextTransactions>>> = ({ signal }) => listHroContextTransactions({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHroContextTransactions>>> = ({ signal }) => listHroContextTransactions(params, { signal, ...requestOptions });
 
 
 
@@ -425,11 +433,11 @@ export type ListHroContextTransactionsQueryError = ErrorType<void>
  */
 
 export function useListHroContextTransactions<TData = Awaited<ReturnType<typeof listHroContextTransactions>>, TError = ErrorType<void>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroContextTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListHroContextTransactionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroContextTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListHroContextTransactionsQueryOptions(options)
+  const queryOptions = getListHroContextTransactionsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -5,6 +5,27 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type HroContextWorkflow = typeof HroContextWorkflow[keyof typeof HroContextWorkflow];
+
+
+export const HroContextWorkflow = {
+  onboarding: 'onboarding',
+  'standard-intake': 'standard-intake',
+  documents: 'documents',
+  communications: 'communications',
+  readiness: 'readiness',
+  'early-tenure': 'early-tenure',
+  frontline: 'frontline',
+  'workforce-transfer': 'workforce-transfer',
+  governance: 'governance',
+  'hr-policy': 'hr-policy',
+  'privacy-lifecycle': 'privacy-lifecycle',
+  demo: 'demo',
+  uat: 'uat',
+  agent: 'agent',
+  organization: 'organization',
+} as const;
+
 export type HroContextHistoryItemStatus = typeof HroContextHistoryItemStatus[keyof typeof HroContextHistoryItemStatus];
 
 
@@ -21,6 +42,14 @@ export const HroContextHistoryItemExecutorType = {
   human: 'human',
   system: 'system',
   agent: 'agent',
+} as const;
+
+export type HroContextHistoryItemInitiatorType = typeof HroContextHistoryItemInitiatorType[keyof typeof HroContextHistoryItemInitiatorType];
+
+
+export const HroContextHistoryItemInitiatorType = {
+  human: 'human',
+  system: 'system',
 } as const;
 
 export interface HroContextHistoryStep {
@@ -40,6 +69,9 @@ export interface HroContextHistoryItem {
   status: HroContextHistoryItemStatus;
   version: number;
   executorType: HroContextHistoryItemExecutorType;
+  initiatorType: HroContextHistoryItemInitiatorType;
+  /** Seconds since start; age is not proof of failure. */
+  ageSeconds: number;
   startedAt: string;
   /** @nullable */
   finishedAt: string | null;
@@ -48,6 +80,8 @@ export interface HroContextHistoryItem {
 
 export interface HroContextHistory {
   available: boolean;
+  operatorAvailable: boolean;
+  workflows?: HroContextWorkflow[];
   transactions: HroContextHistoryItem[];
 }
 
@@ -1468,6 +1502,7 @@ export type AccessUserGroupSecurityGroupAttachmentsItem = {
   /** @nullable */
   expiresAt: string | null;
 };
+
 export interface AccessUserGroup {
   id: string;
   name: string;
@@ -9558,6 +9593,39 @@ export interface StandardOperationsView {
   manualFulfillment: StandardOperationsViewManualFulfillmentItem[];
 }
 
+export type ListHroContextTransactionsParams = {
+/**
+ * Operator view requires a live human data.context.metadata.read grant.
+ */
+view?: ListHroContextTransactionsView;
+workflow?: HroContextWorkflow;
+/**
+ * Running means unfinished, not confirmed failure.
+ */
+status?: ListHroContextTransactionsStatus;
+/**
+ * Metadata-only correlation lookup; the same tenant and view permissions still apply.
+ */
+correlationId?: string;
+};
+
+export type ListHroContextTransactionsView = typeof ListHroContextTransactionsView[keyof typeof ListHroContextTransactionsView];
+
+
+export const ListHroContextTransactionsView = {
+  personal: 'personal',
+  operator: 'operator',
+} as const;
+
+export type ListHroContextTransactionsStatus = typeof ListHroContextTransactionsStatus[keyof typeof ListHroContextTransactionsStatus];
+
+
+export const ListHroContextTransactionsStatus = {
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
 export type ReviseGovernanceDecisionBody = {
   /** @minimum 1 */
   expectedRevision: number;
@@ -10066,3 +10134,4 @@ export type ListSensitiveLifecycleDeletionJobs200JobsItem = { [key: string]: unk
 export type ListSensitiveLifecycleDeletionJobs200 = {
   jobs: ListSensitiveLifecycleDeletionJobs200JobsItem[];
 };
+

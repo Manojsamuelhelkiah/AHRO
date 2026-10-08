@@ -474,10 +474,10 @@ test("access governance routes preserve independent approvals for mixed-principa
   expectStatus(selfLinkApproval, 403);
   for (const securityGroupId of [firstSecurityGroup.id, secondSecurityGroup.id]) {
     const approved = await mutate(
-      `/user-groups/${userGroup.id}/members/approve`,
+      `/user-groups/${userGroup.id}/security-groups/approve`,
       "POST",
-      userGroupOwnerUserId,
-      { ...member, expectedVersion: await currentUserGroupVersion(userGroup.id) },
+      securityGroupOwnerUserId,
+      { securityGroupId, expectedVersion: currentPolicyVersions.get(securityGroupId) },
     );
     expectStatus(approved, 200);
   }

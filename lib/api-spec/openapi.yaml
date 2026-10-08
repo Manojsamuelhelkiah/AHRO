@@ -48,6 +48,22 @@ paths:
       operationId: listHroContextTransactions
       tags: [onboarding]
       summary: Read the authenticated user's recent metadata-only execution attempts
+      parameters:
+        - in: query
+          name: view
+          schema: { type: string, enum: [personal, operator], default: personal }
+          description: Operator view requires a live human data.context.metadata.read grant.
+        - in: query
+          name: workflow
+          schema: { $ref: "#/components/schemas/HroContextWorkflow" }
+        - in: query
+          name: status
+          schema: { type: string, enum: [running, completed, failed] }
+          description: Running means unfinished, not confirmed failure.
+        - in: query
+          name: correlationId
+          schema: { type: string, format: uuid }
+          description: Metadata-only correlation lookup; the same tenant and view permissions still apply.
       responses:
         "200":
           description: Own execution metadata in the current organization, newest first
@@ -57,6 +73,10 @@ paths:
                 $ref: "#/components/schemas/HroContextHistory"
         "401":
           description: Authentication required
+        "403":
+          description: Live operator permission required or shared demo principal
+        "400":
+          description: Invalid history filter
   /scenario-system-capabilities:
     get:
       operationId: listScenarioSystemCapabilities
@@ -6393,15 +6413,19 @@ components:
   schemas:
     HroContextHistory:
       type: object
-      required: [available, transactions]
+      required: [available, operatorAvailable, transactions]
       properties:
         available: { type: boolean }
+        operatorAvailable: { type: boolean }
+        workflows:
+          type: array
+          items: { $ref: "#/components/schemas/HroContextWorkflow" }
         transactions:
           type: array
           items: { $ref: "#/components/schemas/HroContextHistoryItem" }
     HroContextHistoryItem:
       type: object
-      required: [id, anchorId, correlationId, parentTransactionId, workflow, status, version, executorType, startedAt, finishedAt, steps]
+      required: [id, anchorId, correlationId, parentTransactionId, workflow, status, version, executorType, initiatorType, startedAt, finishedAt, ageSeconds, steps]
       properties:
         id: { type: string }
         anchorId: { type: string }
@@ -6411,6 +6435,8 @@ components:
         status: { type: string, enum: [running, completed, failed] }
         version: { type: integer }
         executorType: { type: string, enum: [human, system, agent] }
+        initiatorType: { type: string, enum: [human, system] }
+        ageSeconds: { type: integer, description: Seconds since start; age is not proof of failure. }
         startedAt: { type: string, format: date-time }
         finishedAt: { type: [string, "null"], format: date-time }
         steps:
@@ -6424,6 +6450,9 @@ components:
         createdAt: { type: string, format: date-time }
         inputBytes: { type: integer }
         outputTokens: { type: integer }
+    HroContextWorkflow:
+      type: string
+      enum: [onboarding, standard-intake, documents, communications, readiness, early-tenure, frontline, workforce-transfer, governance, hr-policy, privacy-lifecycle, demo, uat, agent, organization]
     ScenarioSystemSetupMode:
       type: string
       enum: [direct-integration, email-watch, file-transfer, webhook, manual]
