@@ -19557,3 +19557,358 @@ export const RetrySensitiveLifecycleDeletionJobParams = zod.object({
 export const RetrySensitiveLifecycleDeletionJobResponse = zod.unknown()
 
 
+export const GetFairnessProgrammeResponse = zod.object({
+  "programme": zod.object({
+  "version": zod.number(),
+  "scopeRevision": zod.number(),
+  "criteriaRevision": zod.number(),
+  "criteriaIdentityDigest": zod.string().nullish(),
+  "scope": zod.union([zod.null(),zod.object({
+  "decisionType": zod.string(),
+  "pairIds": zod.array(zod.string()),
+  "note": zod.string(),
+  "definedBy": zod.string(),
+  "catalogVersion": zod.string().optional(),
+  "catalogDigest": zod.string().optional()
+})]),
+  "scopeReviews": zod.array(zod.object({
+  "userId": zod.string(),
+  "role": zod.enum(['business', 'hr-compliance', 'legal']),
+  "assignmentId": zod.number().nullable(),
+  "membershipRevision": zod.number(),
+  "stage": zod.enum(['scope', 'criteria']).optional(),
+  "revision": zod.number().optional(),
+  "bindingDigest": zod.string().optional(),
+  "at": zod.string(),
+  "approved": zod.boolean(),
+  "note": zod.string()
+})),
+  "criteria": zod.array(zod.object({
+  "pairId": zod.string(),
+  "expected": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "rationale": zod.string()
+})),
+  "criteriaReviews": zod.array(zod.object({
+  "userId": zod.string(),
+  "role": zod.enum(['business', 'hr-compliance', 'legal']),
+  "assignmentId": zod.number().nullable(),
+  "membershipRevision": zod.number(),
+  "stage": zod.enum(['scope', 'criteria']).optional(),
+  "revision": zod.number().optional(),
+  "bindingDigest": zod.string().optional(),
+  "at": zod.string(),
+  "approved": zod.boolean(),
+  "note": zod.string()
+})),
+  "runs": zod.array(zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['running', 'completed', 'blocked']),
+  "at": zod.string(),
+  "finishedAt": zod.string().nullable(),
+  "actor": zod.string(),
+  "programmeVersion": zod.number(),
+  "scopeRevision": zod.number(),
+  "criteriaRevision": zod.number(),
+  "provenance": zod.enum(['synthetic-model-observation']),
+  "catalogVersion": zod.string(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "promptDigest": zod.string(),
+  "outputContractVersion": zod.string(),
+  "approvals": zod.array(zod.object({
+  "userId": zod.string(),
+  "role": zod.enum(['business', 'hr-compliance', 'legal']),
+  "assignmentId": zod.number().nullable(),
+  "membershipRevision": zod.number(),
+  "stage": zod.enum(['scope', 'criteria']).optional(),
+  "revision": zod.number().optional(),
+  "bindingDigest": zod.string().optional(),
+  "at": zod.string(),
+  "approved": zod.boolean(),
+  "note": zod.string()
+})),
+  "criteria": zod.array(zod.object({
+  "pairId": zod.string(),
+  "expected": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "rationale": zod.string()
+})),
+  "observations": zod.array(zod.object({
+  "pairId": zod.string(),
+  "expected": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "rationale": zod.string(),
+  "outputs": zod.array(zod.union([zod.object({
+  "outcome": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "excerptId": zod.string().nullable(),
+  "quotedText": zod.string().nullable()
+}),zod.null()])),
+  "errors": zod.array(zod.string().nullable()),
+  "status": zod.enum(['blocked', 'investigate', 'observed-match']),
+  "differences": zod.array(zod.string()),
+  "policyDigest": zod.string(),
+  "policyVersion": zod.string().optional(),
+  "modelReceipts": zod.array(zod.union([zod.null(),zod.object({
+  "requestedModel": zod.string(),
+  "resolvedModel": zod.string(),
+  "providerResponseId": zod.string(),
+  "systemFingerprint": zod.string().nullable()
+})])).optional(),
+  "inputDigests": zod.array(zod.string()),
+  "investigation": zod.union([zod.null(),zod.object({
+  "disposition": zod.enum(['open', 'remediation-required', 'explained']),
+  "note": zod.string(),
+  "reviewedBy": zod.string(),
+  "at": zod.string()
+})])
+})),
+  "limitation": zod.string().nullable(),
+  "fixtures": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "variation": zod.string(),
+  "relevantFacts": zod.string(),
+  "excerpt": zod.string(),
+  "sourceContext": zod.string(),
+  "variants": zod.array(zod.object({
+  "label": zod.string(),
+  "characteristic": zod.string(),
+  "question": zod.string()
+}))
+})).optional()
+})),
+  "evidence": zod.array(zod.object({
+  "at": zod.string(),
+  "actor": zod.string(),
+  "kind": zod.string(),
+  "version": zod.number(),
+  "provenance": zod.enum(['manual-evidence', 'synthetic-model-observation']),
+  "note": zod.string(),
+  "details": zod.record(zod.string(), zod.unknown()).optional()
+}))
+}),
+  "catalog": zod.object({
+  "version": zod.string(),
+  "identity": zod.object({
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "promptDigest": zod.string(),
+  "outputContractVersion": zod.string()
+}).optional(),
+  "scope": zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "decisions": zod.array(zod.string()),
+  "description": zod.string(),
+  "relevantFacts": zod.array(zod.string())
+}),
+  "pairs": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "variation": zod.string(),
+  "relevantFacts": zod.string(),
+  "excerpt": zod.string(),
+  "sourceContext": zod.string(),
+  "variants": zod.array(zod.object({
+  "label": zod.string(),
+  "characteristic": zod.string(),
+  "question": zod.string()
+}))
+})),
+  "limitations": zod.array(zod.string())
+}),
+  "capabilities": zod.object({
+  "canDefine": zod.boolean(),
+  "reviewerRoles": zod.array(zod.enum(['business', 'hr-compliance', 'legal'])),
+  "scopeApproved": zod.boolean(),
+  "criteriaApproved": zod.boolean()
+})
+})
+
+
+export const ApplyFairnessActionBody = zod.object({
+  "kind": zod.enum(['define-scope', 'review-scope', 'set-criteria', 'review-criteria', 'run', 'recover', 'investigate']),
+  "expectedVersion": zod.number(),
+  "decisionType": zod.enum(['policy-extract-recommendation']).optional(),
+  "pairIds": zod.array(zod.string()).optional(),
+  "role": zod.enum(['business', 'hr-compliance', 'legal']).optional(),
+  "approved": zod.boolean().optional(),
+  "note": zod.string().optional(),
+  "criteria": zod.array(zod.object({
+  "pairId": zod.string(),
+  "expected": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "rationale": zod.string()
+})).optional(),
+  "runId": zod.string().optional(),
+  "pairId": zod.string().optional(),
+  "disposition": zod.enum(['open', 'remediation-required', 'explained']).optional()
+})
+
+export const ApplyFairnessActionResponse = zod.object({
+  "programme": zod.object({
+  "version": zod.number(),
+  "scopeRevision": zod.number(),
+  "criteriaRevision": zod.number(),
+  "criteriaIdentityDigest": zod.string().nullish(),
+  "scope": zod.union([zod.null(),zod.object({
+  "decisionType": zod.string(),
+  "pairIds": zod.array(zod.string()),
+  "note": zod.string(),
+  "definedBy": zod.string(),
+  "catalogVersion": zod.string().optional(),
+  "catalogDigest": zod.string().optional()
+})]),
+  "scopeReviews": zod.array(zod.object({
+  "userId": zod.string(),
+  "role": zod.enum(['business', 'hr-compliance', 'legal']),
+  "assignmentId": zod.number().nullable(),
+  "membershipRevision": zod.number(),
+  "stage": zod.enum(['scope', 'criteria']).optional(),
+  "revision": zod.number().optional(),
+  "bindingDigest": zod.string().optional(),
+  "at": zod.string(),
+  "approved": zod.boolean(),
+  "note": zod.string()
+})),
+  "criteria": zod.array(zod.object({
+  "pairId": zod.string(),
+  "expected": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "rationale": zod.string()
+})),
+  "criteriaReviews": zod.array(zod.object({
+  "userId": zod.string(),
+  "role": zod.enum(['business', 'hr-compliance', 'legal']),
+  "assignmentId": zod.number().nullable(),
+  "membershipRevision": zod.number(),
+  "stage": zod.enum(['scope', 'criteria']).optional(),
+  "revision": zod.number().optional(),
+  "bindingDigest": zod.string().optional(),
+  "at": zod.string(),
+  "approved": zod.boolean(),
+  "note": zod.string()
+})),
+  "runs": zod.array(zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['running', 'completed', 'blocked']),
+  "at": zod.string(),
+  "finishedAt": zod.string().nullable(),
+  "actor": zod.string(),
+  "programmeVersion": zod.number(),
+  "scopeRevision": zod.number(),
+  "criteriaRevision": zod.number(),
+  "provenance": zod.enum(['synthetic-model-observation']),
+  "catalogVersion": zod.string(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "promptDigest": zod.string(),
+  "outputContractVersion": zod.string(),
+  "approvals": zod.array(zod.object({
+  "userId": zod.string(),
+  "role": zod.enum(['business', 'hr-compliance', 'legal']),
+  "assignmentId": zod.number().nullable(),
+  "membershipRevision": zod.number(),
+  "stage": zod.enum(['scope', 'criteria']).optional(),
+  "revision": zod.number().optional(),
+  "bindingDigest": zod.string().optional(),
+  "at": zod.string(),
+  "approved": zod.boolean(),
+  "note": zod.string()
+})),
+  "criteria": zod.array(zod.object({
+  "pairId": zod.string(),
+  "expected": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "rationale": zod.string()
+})),
+  "observations": zod.array(zod.object({
+  "pairId": zod.string(),
+  "expected": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "rationale": zod.string(),
+  "outputs": zod.array(zod.union([zod.object({
+  "outcome": zod.enum(['supported', 'insufficient', 'conflicting', 'injected']),
+  "excerptId": zod.string().nullable(),
+  "quotedText": zod.string().nullable()
+}),zod.null()])),
+  "errors": zod.array(zod.string().nullable()),
+  "status": zod.enum(['blocked', 'investigate', 'observed-match']),
+  "differences": zod.array(zod.string()),
+  "policyDigest": zod.string(),
+  "policyVersion": zod.string().optional(),
+  "modelReceipts": zod.array(zod.union([zod.null(),zod.object({
+  "requestedModel": zod.string(),
+  "resolvedModel": zod.string(),
+  "providerResponseId": zod.string(),
+  "systemFingerprint": zod.string().nullable()
+})])).optional(),
+  "inputDigests": zod.array(zod.string()),
+  "investigation": zod.union([zod.null(),zod.object({
+  "disposition": zod.enum(['open', 'remediation-required', 'explained']),
+  "note": zod.string(),
+  "reviewedBy": zod.string(),
+  "at": zod.string()
+})])
+})),
+  "limitation": zod.string().nullable(),
+  "fixtures": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "variation": zod.string(),
+  "relevantFacts": zod.string(),
+  "excerpt": zod.string(),
+  "sourceContext": zod.string(),
+  "variants": zod.array(zod.object({
+  "label": zod.string(),
+  "characteristic": zod.string(),
+  "question": zod.string()
+}))
+})).optional()
+})),
+  "evidence": zod.array(zod.object({
+  "at": zod.string(),
+  "actor": zod.string(),
+  "kind": zod.string(),
+  "version": zod.number(),
+  "provenance": zod.enum(['manual-evidence', 'synthetic-model-observation']),
+  "note": zod.string(),
+  "details": zod.record(zod.string(), zod.unknown()).optional()
+}))
+}),
+  "catalog": zod.object({
+  "version": zod.string(),
+  "identity": zod.object({
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "promptDigest": zod.string(),
+  "outputContractVersion": zod.string()
+}).optional(),
+  "scope": zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "decisions": zod.array(zod.string()),
+  "description": zod.string(),
+  "relevantFacts": zod.array(zod.string())
+}),
+  "pairs": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "variation": zod.string(),
+  "relevantFacts": zod.string(),
+  "excerpt": zod.string(),
+  "sourceContext": zod.string(),
+  "variants": zod.array(zod.object({
+  "label": zod.string(),
+  "characteristic": zod.string(),
+  "question": zod.string()
+}))
+})),
+  "limitations": zod.array(zod.string())
+}),
+  "capabilities": zod.object({
+  "canDefine": zod.boolean(),
+  "reviewerRoles": zod.array(zod.enum(['business', 'hr-compliance', 'legal'])),
+  "scopeApproved": zod.boolean(),
+  "criteriaApproved": zod.boolean()
+})
+})
+
+
+export const DownloadFairnessEvidenceReportResponse = zod.record(zod.string(), zod.unknown())
+
+

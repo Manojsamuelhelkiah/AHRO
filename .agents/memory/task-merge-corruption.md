@@ -40,3 +40,13 @@ boundaries that an automatic merge silently removed.
 run focused route/render checks for each, even for files reported as already
 marker-free. Regenerate shared API clients from the combined specification
 instead of trusting automatically merged generated output.
+
+Treat merged source snippets as literal text, including regex dollar anchors.
+
+**Why:** JavaScript replacement strings interpret dollar sequences, so a
+literal source snippet can silently expand surrounding content and corrupt a
+large specification even after conflict markers are removed.
+
+**How to apply:** Use replacement callbacks for source-text transformations,
+or context patches; validate the combined specification through generation
+and a runtime validator import before trusting the merge.

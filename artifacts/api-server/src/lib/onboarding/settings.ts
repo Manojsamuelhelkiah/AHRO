@@ -603,7 +603,7 @@ export async function getSetting(organizationId: string, key: string): Promise<s
 
 /** Upsert a setting; pass null to clear it (fall back to env defaults). */
 export async function setSetting(organizationId: string, key: string, value: string | null): Promise<void> {
-  if (key.startsWith(UAT_RUN_SETTING_PREFIX)) {
+  if (key.startsWith(UAT_RUN_SETTING_PREFIX) || key === "hro-fairness-programme-v1") {
     throw new Error("UAT run ownership is server-managed and cannot be changed or deleted through settings.");
   }
   if (value === null) {

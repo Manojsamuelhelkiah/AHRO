@@ -304,6 +304,7 @@ export function UatTestCenterPage() {
   return <div className="mx-auto max-w-7xl space-y-6 pb-16">
     <PageHeader title="UAT Test Center" subtitle="Guided, tenant-scoped acceptance runs with explicit expected/observed evidence. Simulated evidence is non-authoritative and never changes live readiness." />
     <PolicyQualityPanel />
+    <Card className="p-4"><Link href="/uat-test-center/fairness" className="font-medium underline">Synthetic fairness evaluation</Link><p className="text-sm text-[var(--text-muted)]">Review policy-recommendation scope and fictional paired scenarios before defining expected behavior. Observations are not statistical or legal certification.</p></Card>
     <div className="rounded-[var(--radius-md)] border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4 text-sm text-[var(--text-secondary)]" role="note" data-testid="text-uat-safety-boundary">
       <strong className="text-[var(--text-primary)]">Safety boundary:</strong> the default run simulates exchanges only. A manual observation records what a person saw; it does not fabricate workflow execution. Provider sandbox and real-email verification remain explicitly blocked until their separately governed conditions are available.
     </div>

@@ -69,6 +69,7 @@ import type {
   DemoRunInput,
   DemoVolunteerList,
   DistributionProfile,
+  DownloadFairnessEvidenceReport200,
   EaArchiveRequest,
   EaAssessment,
   EaAssessmentInput,
@@ -81,6 +82,8 @@ import type {
   ErrorMessage,
   ExportOnboardingProtectedAuditParams,
   ExportScenarioWorkbookLinkParams,
+  FairnessProgrammeAction,
+  FairnessProgrammeView,
   FlowClass,
   FlowOverride,
   FlowOverrideInput,
@@ -21732,4 +21735,211 @@ export const useRetrySensitiveLifecycleDeletionJob = <TError = ErrorType<void>,
       > => {
       return useMutation(getRetrySensitiveLifecycleDeletionJobMutationOptions(options));
     }
+
+export const getGetFairnessProgrammeUrl = () => {
+
+
+
+
+  return `/api/onboarding/uat/fairness`
+}
+
+export const getFairnessProgramme = async ( options?: RequestInit): Promise<FairnessProgrammeView> => {
+
+  return customFetch<FairnessProgrammeView>(getGetFairnessProgrammeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFairnessProgrammeQueryKey = () => {
+    return [
+    `/api/onboarding/uat/fairness`
+    ] as const;
+    }
+
+
+export const getGetFairnessProgrammeQueryOptions = <TData = Awaited<ReturnType<typeof getFairnessProgramme>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFairnessProgramme>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFairnessProgrammeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFairnessProgramme>>> = ({ signal }) => getFairnessProgramme({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFairnessProgramme>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFairnessProgrammeQueryResult = NonNullable<Awaited<ReturnType<typeof getFairnessProgramme>>>
+export type GetFairnessProgrammeQueryError = ErrorType<unknown>
+
+
+
+export function useGetFairnessProgramme<TData = Awaited<ReturnType<typeof getFairnessProgramme>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFairnessProgramme>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFairnessProgrammeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApplyFairnessActionUrl = () => {
+
+
+
+
+  return `/api/onboarding/uat/fairness/actions`
+}
+
+export const applyFairnessAction = async (fairnessProgrammeAction: FairnessProgrammeAction, options?: RequestInit): Promise<FairnessProgrammeView> => {
+
+  return customFetch<FairnessProgrammeView>(getApplyFairnessActionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(fairnessProgrammeAction)
+  }
+);}
+
+
+
+
+
+export const getApplyFairnessActionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFairnessAction>>, TError,{data: BodyType<FairnessProgrammeAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyFairnessAction>>, TError,{data: BodyType<FairnessProgrammeAction>}, TContext> => {
+
+const mutationKey = ['applyFairnessAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyFairnessAction>>, {data: BodyType<FairnessProgrammeAction>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  applyFairnessAction(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyFairnessActionMutationResult = NonNullable<Awaited<ReturnType<typeof applyFairnessAction>>>
+    export type ApplyFairnessActionMutationBody = BodyType<FairnessProgrammeAction>
+    export type ApplyFairnessActionMutationError = ErrorType<unknown>
+
+    export const useApplyFairnessAction = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFairnessAction>>, TError,{data: BodyType<FairnessProgrammeAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyFairnessAction>>,
+        TError,
+        {data: BodyType<FairnessProgrammeAction>},
+        TContext
+      > => {
+      return useMutation(getApplyFairnessActionMutationOptions(options));
+    }
+
+export const getDownloadFairnessEvidenceReportUrl = () => {
+
+
+
+
+  return `/api/onboarding/uat/fairness/evidence-report`
+}
+
+export const downloadFairnessEvidenceReport = async ( options?: RequestInit): Promise<DownloadFairnessEvidenceReport200> => {
+
+  return customFetch<DownloadFairnessEvidenceReport200>(getDownloadFairnessEvidenceReportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadFairnessEvidenceReportQueryKey = () => {
+    return [
+    `/api/onboarding/uat/fairness/evidence-report`
+    ] as const;
+    }
+
+
+export const getDownloadFairnessEvidenceReportQueryOptions = <TData = Awaited<ReturnType<typeof downloadFairnessEvidenceReport>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadFairnessEvidenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadFairnessEvidenceReportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadFairnessEvidenceReport>>> = ({ signal }) => downloadFairnessEvidenceReport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadFairnessEvidenceReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadFairnessEvidenceReportQueryResult = NonNullable<Awaited<ReturnType<typeof downloadFairnessEvidenceReport>>>
+export type DownloadFairnessEvidenceReportQueryError = ErrorType<unknown>
+
+
+
+export function useDownloadFairnessEvidenceReport<TData = Awaited<ReturnType<typeof downloadFairnessEvidenceReport>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadFairnessEvidenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadFairnessEvidenceReportQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

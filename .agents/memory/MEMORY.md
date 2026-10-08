@@ -1,7 +1,6 @@
 # Memory Index
 
 - [HRO proposals and simulations](hro-proposal-simulation-boundaries.md) — generated workflows need human review; aggregate what-if means are not causal forecasts or case-level SLA rates.
-
 - [Cost-explorer model conventions](cost-model-conventions.md) — assumptions register is the single source of truth; every input must move the result; reconcile rows/buckets/totals in tests.
 - [Scenario form/API mapping](scenario-form-mapping.md) — use the canonical mapper pair in `scenario-form.ts`; never spread raw API inputs into form state or stale overrides survive resets.
 - [Orval numeric-constraint TDZ](orval-codegen-max-tdz.md) — referenced numeric constraints can break generated Zod initialization; validate generated output and prefer app-side ranges.
@@ -20,7 +19,6 @@
 - [TSX tests in node harness](tsx-tests-node-harness.md) — renderToStaticMarkup UI tests need jsx:automatic, bare builtin externals, and a createRequire banner in the esbuild bundle.
 - [Commercial pricing basis](commercial-pricing-basis.md) — quote full committed volume; exclude client labor from supplier COGS; overage recovers variable supplier cost only.
 - [Customer-facing copy](customer-facing-copy.md) — product screens must stand alone; never refer users to decks, slides, or other internal documents.
-- [Security assurance documentation](security-assurance-documentation.md) — business and shorter security-leadership explainers must cover privacy, AI metrics and both harnesses.
 - [OpenAPI integer persistence](openapi-integer-persistence.md) — generated Zod may accept fractional values for integer fields; enforce integrality before storing inputs used for derived snapshots.
 - [Versioned aggregate editing](versioned-aggregate-editing.md) — JSON aggregate editors need server version preconditions plus queued latest-state transforms, including archive and delete.
 - [Intent taxonomy provenance](intent-taxonomy-provenance.md) — count reference outcomes separately from parents, aliases, custom rows, and candidates; type source edges by evidence strength.
@@ -74,3 +72,4 @@
 - [Browser regression runtime](browser-regression-runtime.md) — UI tester and workspace Playwright have independent browser/recorder installations; setup failures do not justify skipped validation.
 - [Independent employee Vault](independent-employee-vault.md) — personal ownership without membership; all-required BGV reuse; privacy withdrawal must not depend on new collection approval.
 - [Vault expiry notice boundaries](vault-expiry-notice-boundaries.md) — independent opt-in in-app notices; never infer email identity or treat notification as renewal.
+- [Synthetic fairness boundaries](synthetic-fairness-boundaries.md) — scope and variations require review before criteria; equal answers may be wrong; paired observations are not certification.

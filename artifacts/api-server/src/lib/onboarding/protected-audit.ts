@@ -82,8 +82,10 @@ export function minimizeAuditPayload(
   if (!payload) return {};
   return Object.fromEntries(
     Object.entries(payload)
-      .filter(([key]) =>
+      .filter(([key, value]) =>
         ALLOWED_METADATA_KEYS.has(key) ||
+        (key === "evidenceDigest" && action?.startsWith("fairness.") === true &&
+          typeof value === "string" && /^[0-9a-f]{64}$/.test(value)) ||
         (key === "reason" && action === "organization.membership.reinstated"),
       )
       .flatMap(([key, value]) => {

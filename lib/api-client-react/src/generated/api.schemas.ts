@@ -5,6 +5,325 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type FairnessProgrammeActionKind = typeof FairnessProgrammeActionKind[keyof typeof FairnessProgrammeActionKind];
+
+
+export const FairnessProgrammeActionKind = {
+  'define-scope': 'define-scope',
+  'review-scope': 'review-scope',
+  'set-criteria': 'set-criteria',
+  'review-criteria': 'review-criteria',
+  run: 'run',
+  recover: 'recover',
+  investigate: 'investigate',
+} as const;
+
+export type FairnessProgrammeActionDecisionType = typeof FairnessProgrammeActionDecisionType[keyof typeof FairnessProgrammeActionDecisionType];
+
+
+export const FairnessProgrammeActionDecisionType = {
+  'policy-extract-recommendation': 'policy-extract-recommendation',
+} as const;
+
+export type FairnessProgrammeActionRole = typeof FairnessProgrammeActionRole[keyof typeof FairnessProgrammeActionRole];
+
+
+export const FairnessProgrammeActionRole = {
+  business: 'business',
+  'hr-compliance': 'hr-compliance',
+  legal: 'legal',
+} as const;
+
+export type FairnessProgrammeActionDisposition = typeof FairnessProgrammeActionDisposition[keyof typeof FairnessProgrammeActionDisposition];
+
+
+export const FairnessProgrammeActionDisposition = {
+  open: 'open',
+  'remediation-required': 'remediation-required',
+  explained: 'explained',
+} as const;
+
+export type FairnessCriterionExpected = typeof FairnessCriterionExpected[keyof typeof FairnessCriterionExpected];
+
+
+export const FairnessCriterionExpected = {
+  supported: 'supported',
+  insufficient: 'insufficient',
+  conflicting: 'conflicting',
+  injected: 'injected',
+} as const;
+
+export interface FairnessCriterion {
+  pairId: string;
+  expected: FairnessCriterionExpected;
+  rationale: string;
+}
+
+export interface FairnessProgrammeAction {
+  kind: FairnessProgrammeActionKind;
+  expectedVersion: number;
+  decisionType?: FairnessProgrammeActionDecisionType;
+  pairIds?: string[];
+  role?: FairnessProgrammeActionRole;
+  approved?: boolean;
+  note?: string;
+  criteria?: FairnessCriterion[];
+  runId?: string;
+  pairId?: string;
+  disposition?: FairnessProgrammeActionDisposition;
+}
+
+export type FairnessReviewRole = typeof FairnessReviewRole[keyof typeof FairnessReviewRole];
+
+
+export const FairnessReviewRole = {
+  business: 'business',
+  'hr-compliance': 'hr-compliance',
+  legal: 'legal',
+} as const;
+
+export type FairnessReviewStage = typeof FairnessReviewStage[keyof typeof FairnessReviewStage];
+
+
+export const FairnessReviewStage = {
+  scope: 'scope',
+  criteria: 'criteria',
+} as const;
+
+export interface FairnessReview {
+  userId: string;
+  role: FairnessReviewRole;
+  /** @nullable */
+  assignmentId: number | null;
+  membershipRevision: number;
+  stage?: FairnessReviewStage;
+  revision?: number;
+  bindingDigest?: string;
+  at: string;
+  approved: boolean;
+  note: string;
+}
+
+export type FairnessPairVariantsItem = {
+  label: string;
+  characteristic: string;
+  question: string;
+};
+
+export interface FairnessPair {
+  id: string;
+  title: string;
+  variation: string;
+  relevantFacts: string;
+  excerpt: string;
+  sourceContext: string;
+  variants: FairnessPairVariantsItem[];
+}
+
+export type FairnessSelectionOutcome = typeof FairnessSelectionOutcome[keyof typeof FairnessSelectionOutcome];
+
+
+export const FairnessSelectionOutcome = {
+  supported: 'supported',
+  insufficient: 'insufficient',
+  conflicting: 'conflicting',
+  injected: 'injected',
+} as const;
+
+export interface FairnessSelection {
+  outcome: FairnessSelectionOutcome;
+  /** @nullable */
+  excerptId: string | null;
+  /** @nullable */
+  quotedText: string | null;
+}
+
+export type FairnessObservationExpected = typeof FairnessObservationExpected[keyof typeof FairnessObservationExpected];
+
+
+export const FairnessObservationExpected = {
+  supported: 'supported',
+  insufficient: 'insufficient',
+  conflicting: 'conflicting',
+  injected: 'injected',
+} as const;
+
+export type FairnessObservationStatus = typeof FairnessObservationStatus[keyof typeof FairnessObservationStatus];
+
+
+export const FairnessObservationStatus = {
+  blocked: 'blocked',
+  investigate: 'investigate',
+  'observed-match': 'observed-match',
+} as const;
+
+export type FairnessObservationModelReceiptsItem = {
+  requestedModel: string;
+  resolvedModel: string;
+  providerResponseId: string;
+  /** @nullable */
+  systemFingerprint: string | null;
+} | null;
+
+export type FairnessObservationInvestigationDisposition = typeof FairnessObservationInvestigationDisposition[keyof typeof FairnessObservationInvestigationDisposition];
+
+
+export const FairnessObservationInvestigationDisposition = {
+  open: 'open',
+  'remediation-required': 'remediation-required',
+  explained: 'explained',
+} as const;
+
+export type FairnessObservationInvestigation = {
+  disposition: FairnessObservationInvestigationDisposition;
+  note: string;
+  reviewedBy: string;
+  at: string;
+} | null;
+
+export interface FairnessObservation {
+  pairId: string;
+  expected: FairnessObservationExpected;
+  rationale: string;
+  outputs: (FairnessSelection | null)[];
+  errors: (string | null)[];
+  status: FairnessObservationStatus;
+  differences: string[];
+  policyDigest: string;
+  policyVersion?: string;
+  modelReceipts?: FairnessObservationModelReceiptsItem[];
+  inputDigests: string[];
+  investigation: FairnessObservationInvestigation;
+}
+
+export type FairnessRunStatus = typeof FairnessRunStatus[keyof typeof FairnessRunStatus];
+
+
+export const FairnessRunStatus = {
+  running: 'running',
+  completed: 'completed',
+  blocked: 'blocked',
+} as const;
+
+export type FairnessRunProvenance = typeof FairnessRunProvenance[keyof typeof FairnessRunProvenance];
+
+
+export const FairnessRunProvenance = {
+  'synthetic-model-observation': 'synthetic-model-observation',
+} as const;
+
+export interface FairnessRun {
+  id: string;
+  status: FairnessRunStatus;
+  at: string;
+  /** @nullable */
+  finishedAt: string | null;
+  actor: string;
+  programmeVersion: number;
+  scopeRevision: number;
+  criteriaRevision: number;
+  provenance: FairnessRunProvenance;
+  catalogVersion: string;
+  model: string;
+  promptVersion: string;
+  promptDigest: string;
+  outputContractVersion: string;
+  approvals: FairnessReview[];
+  criteria: FairnessCriterion[];
+  observations: FairnessObservation[];
+  /** @nullable */
+  limitation: string | null;
+  fixtures?: FairnessPair[];
+}
+
+export type FairnessProgrammeScope = {
+  decisionType: string;
+  pairIds: string[];
+  note: string;
+  definedBy: string;
+  catalogVersion?: string;
+  catalogDigest?: string;
+} | null;
+
+export type FairnessProgrammeEvidenceItemProvenance = typeof FairnessProgrammeEvidenceItemProvenance[keyof typeof FairnessProgrammeEvidenceItemProvenance];
+
+
+export const FairnessProgrammeEvidenceItemProvenance = {
+  'manual-evidence': 'manual-evidence',
+  'synthetic-model-observation': 'synthetic-model-observation',
+} as const;
+
+export type FairnessProgrammeEvidenceItemDetails = { [key: string]: unknown };
+
+export type FairnessProgrammeEvidenceItem = {
+  at: string;
+  actor: string;
+  kind: string;
+  version: number;
+  provenance: FairnessProgrammeEvidenceItemProvenance;
+  note: string;
+  details?: FairnessProgrammeEvidenceItemDetails;
+};
+
+export interface FairnessProgramme {
+  version: number;
+  scopeRevision: number;
+  criteriaRevision: number;
+  /** @nullable */
+  criteriaIdentityDigest?: string | null;
+  scope: FairnessProgrammeScope;
+  scopeReviews: FairnessReview[];
+  criteria: FairnessCriterion[];
+  criteriaReviews: FairnessReview[];
+  runs: FairnessRun[];
+  evidence: FairnessProgrammeEvidenceItem[];
+}
+
+export type FairnessProgrammeViewCatalogIdentity = {
+  model: string;
+  promptVersion: string;
+  promptDigest: string;
+  outputContractVersion: string;
+};
+
+export type FairnessProgrammeViewCatalogScope = {
+  id: string;
+  title: string;
+  decisions: string[];
+  description: string;
+  relevantFacts: string[];
+};
+
+export type FairnessProgrammeViewCatalog = {
+  version: string;
+  identity?: FairnessProgrammeViewCatalogIdentity;
+  scope: FairnessProgrammeViewCatalogScope;
+  pairs: FairnessPair[];
+  limitations: string[];
+};
+
+export type FairnessProgrammeViewCapabilitiesReviewerRolesItem = typeof FairnessProgrammeViewCapabilitiesReviewerRolesItem[keyof typeof FairnessProgrammeViewCapabilitiesReviewerRolesItem];
+
+
+export const FairnessProgrammeViewCapabilitiesReviewerRolesItem = {
+  business: 'business',
+  'hr-compliance': 'hr-compliance',
+  legal: 'legal',
+} as const;
+
+export type FairnessProgrammeViewCapabilities = {
+  canDefine: boolean;
+  reviewerRoles: FairnessProgrammeViewCapabilitiesReviewerRolesItem[];
+  scopeApproved: boolean;
+  criteriaApproved: boolean;
+};
+
+export interface FairnessProgrammeView {
+  programme: FairnessProgramme;
+  catalog: FairnessProgrammeViewCatalog;
+  capabilities: FairnessProgrammeViewCapabilities;
+}
+
 export type HrPolicyEvaluationReviewInputDecision = typeof HrPolicyEvaluationReviewInputDecision[keyof typeof HrPolicyEvaluationReviewInputDecision];
 
 
@@ -10595,4 +10914,6 @@ export type ListSensitiveLifecycleDeletionJobs200JobsItem = { [key: string]: unk
 export type ListSensitiveLifecycleDeletionJobs200 = {
   jobs: ListSensitiveLifecycleDeletionJobs200JobsItem[];
 };
+
+export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
 

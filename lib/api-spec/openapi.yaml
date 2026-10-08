@@ -6624,6 +6624,46 @@ paths:
         "200": { description: Requeued job }
         "403": { description: Verified privacy or legal authority required }
         "409": { description: Job is not failed or is absent }
+  /onboarding/uat/fairness:
+    get:
+      operationId: getFairnessProgramme
+      tags: [onboardingUat]
+      responses:
+        "200":
+          description: Governed synthetic fairness programme and live reviewer capabilities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FairnessProgrammeView"
+  /onboarding/uat/fairness/actions:
+    post:
+      operationId: applyFairnessAction
+      tags: [onboardingUat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FairnessProgrammeAction"
+      responses:
+        "200":
+          description: Updated programme; version conflicts and missing authority fail explicitly
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FairnessProgrammeView"
+  /onboarding/uat/fairness/evidence-report:
+    get:
+      operationId: downloadFairnessEvidenceReport
+      tags: [onboardingUat]
+      responses:
+        "200":
+          description: Synthetic observations, immutable provenance, coverage, limitations and unresolved differences
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 components:
   securitySchemes:
     bearerAuth:
@@ -6654,6 +6694,260 @@ components:
         type: integer
         minimum: 1
   schemas:
+    FairnessProgrammeAction:
+      type: object
+      additionalProperties: false
+      required: [kind, expectedVersion]
+      properties:
+        kind:
+          type: string
+          enum: [define-scope, review-scope, set-criteria, review-criteria, run, recover, investigate]
+        expectedVersion: { type: integer }
+        decisionType: { type: string, enum: [policy-extract-recommendation] }
+        pairIds:
+          type: array
+          items: { type: string }
+        role: { type: string, enum: [business, hr-compliance, legal] }
+        approved: { type: boolean }
+        note: { type: string }
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessCriterion"
+        runId: { type: string }
+        pairId: { type: string }
+        disposition: { type: string, enum: [open, remediation-required, explained] }
+    FairnessCriterion:
+      type: object
+      required: [pairId, expected, rationale]
+      properties:
+        pairId: { type: string }
+        expected: { type: string, enum: [supported, insufficient, conflicting, injected] }
+        rationale: { type: string }
+    FairnessReview:
+      type: object
+      required: [userId, role, assignmentId, membershipRevision, at, approved, note]
+      properties:
+        userId: { type: string }
+        role: { type: string, enum: [business, hr-compliance, legal] }
+        assignmentId: { type: [integer, "null"] }
+        membershipRevision: { type: integer }
+        stage: { type: string, enum: [scope, criteria] }
+        revision: { type: integer }
+        bindingDigest: { type: string }
+        at: { type: string }
+        approved: { type: boolean }
+        note: { type: string }
+    FairnessPair:
+      type: object
+      required: [id, title, variation, relevantFacts, excerpt, sourceContext, variants]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        variation: { type: string }
+        relevantFacts: { type: string }
+        excerpt: { type: string }
+        sourceContext: { type: string }
+        variants:
+          type: array
+          items:
+            type: object
+            required: [label, characteristic, question]
+            properties:
+              label: { type: string }
+              characteristic: { type: string }
+              question: { type: string }
+    FairnessSelection:
+      type: object
+      required: [outcome, excerptId, quotedText]
+      properties:
+        outcome: { type: string, enum: [supported, insufficient, conflicting, injected] }
+        excerptId: { type: [string, "null"] }
+        quotedText: { type: [string, "null"] }
+    FairnessObservation:
+      type: object
+      required: [pairId, expected, rationale, outputs, errors, status, differences, policyDigest, inputDigests, investigation]
+      properties:
+        pairId: { type: string }
+        expected: { type: string, enum: [supported, insufficient, conflicting, injected] }
+        rationale: { type: string }
+        outputs:
+          type: array
+          items:
+            anyOf:
+              - $ref: "#/components/schemas/FairnessSelection"
+              - type: "null"
+        errors:
+          type: array
+          items: { type: [string, "null"] }
+        status: { type: string, enum: [blocked, investigate, observed-match] }
+        differences:
+          type: array
+          items: { type: string }
+        policyDigest: { type: string }
+        policyVersion: { type: string }
+        modelReceipts:
+          type: array
+          items:
+            anyOf:
+              - type: "null"
+              - type: object
+                required: [requestedModel, resolvedModel, providerResponseId, systemFingerprint]
+                properties:
+                  requestedModel: { type: string }
+                  resolvedModel: { type: string }
+                  providerResponseId: { type: string }
+                  systemFingerprint: { type: [string, "null"] }
+        inputDigests:
+          type: array
+          items: { type: string }
+        investigation:
+          anyOf:
+            - type: "null"
+            - type: object
+              required: [disposition, note, reviewedBy, at]
+              properties:
+                disposition: { type: string, enum: [open, remediation-required, explained] }
+                note: { type: string }
+                reviewedBy: { type: string }
+                at: { type: string }
+    FairnessRun:
+      type: object
+      required: [id, status, at, finishedAt, actor, programmeVersion, scopeRevision, criteriaRevision, provenance, catalogVersion, model, promptVersion, promptDigest, outputContractVersion, approvals, criteria, observations, limitation]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [running, completed, blocked] }
+        at: { type: string }
+        finishedAt: { type: [string, "null"] }
+        actor: { type: string }
+        programmeVersion: { type: integer }
+        scopeRevision: { type: integer }
+        criteriaRevision: { type: integer }
+        provenance: { type: string, enum: [synthetic-model-observation] }
+        catalogVersion: { type: string }
+        model: { type: string }
+        promptVersion: { type: string }
+        promptDigest: { type: string }
+        outputContractVersion: { type: string }
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessReview"
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessCriterion"
+        observations:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessObservation"
+        limitation: { type: [string, "null"] }
+        fixtures:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessPair"
+    FairnessProgramme:
+      type: object
+      required: [version, scopeRevision, criteriaRevision, scope, scopeReviews, criteria, criteriaReviews, runs, evidence]
+      properties:
+        version: { type: integer }
+        scopeRevision: { type: integer }
+        criteriaRevision: { type: integer }
+        criteriaIdentityDigest: { type: [string, "null"] }
+        scope:
+          anyOf:
+            - type: "null"
+            - type: object
+              required: [decisionType, pairIds, note, definedBy]
+              properties:
+                decisionType: { type: string }
+                pairIds:
+                  type: array
+                  items: { type: string }
+                note: { type: string }
+                definedBy: { type: string }
+                catalogVersion: { type: string }
+                catalogDigest: { type: string }
+        scopeReviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessReview"
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessCriterion"
+        criteriaReviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessReview"
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/FairnessRun"
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [at, actor, kind, version, provenance, note]
+            properties:
+              at: { type: string }
+              actor: { type: string }
+              kind: { type: string }
+              version: { type: integer }
+              provenance: { type: string, enum: [manual-evidence, synthetic-model-observation] }
+              note: { type: string }
+              details:
+                type: object
+                additionalProperties: true
+    FairnessProgrammeView:
+      type: object
+      required: [programme, catalog, capabilities]
+      properties:
+        programme:
+          $ref: "#/components/schemas/FairnessProgramme"
+        catalog:
+          type: object
+          required: [version, scope, pairs, limitations]
+          properties:
+            version: { type: string }
+            identity:
+              type: object
+              required: [model, promptVersion, promptDigest, outputContractVersion]
+              properties:
+                model: { type: string }
+                promptVersion: { type: string }
+                promptDigest: { type: string }
+                outputContractVersion: { type: string }
+            scope:
+              type: object
+              required: [id, title, decisions, description, relevantFacts]
+              properties:
+                id: { type: string }
+                title: { type: string }
+                decisions:
+                  type: array
+                  items: { type: string }
+                description: { type: string }
+                relevantFacts:
+                  type: array
+                  items: { type: string }
+            pairs:
+              type: array
+              items:
+                $ref: "#/components/schemas/FairnessPair"
+            limitations:
+              type: array
+              items: { type: string }
+        capabilities:
+          type: object
+          required: [canDefine, reviewerRoles, scopeApproved, criteriaApproved]
+          properties:
+            canDefine: { type: boolean }
+            reviewerRoles:
+              type: array
+              items: { type: string, enum: [business, hr-compliance, legal] }
+            scopeApproved: { type: boolean }
+            criteriaApproved: { type: boolean }
     HrPolicyEvaluationReviewInput:
       type: object
       additionalProperties: false
