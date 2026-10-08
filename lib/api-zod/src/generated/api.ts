@@ -92,20 +92,25 @@ export const SaveHroContextRetentionResponse = zod.object({
 
 
 /**
- * @summary Read the authenticated user's recent metadata-only execution attempts
+ * @summary Read bounded metadata-only execution attempts, with operator keyset pagination
  */
 export const listHroContextTransactionsQueryViewDefault = `personal`;
+export const listHroContextTransactionsQueryCursorMax = 2048;
+
+
 
 export const ListHroContextTransactionsQueryParams = zod.object({
   "view": zod.enum(['personal', 'operator']).default(listHroContextTransactionsQueryViewDefault).describe('Operator view requires a live human data.context.metadata.read grant.'),
   "workflow": zod.enum(['onboarding', 'standard-intake', 'documents', 'communications', 'readiness', 'early-tenure', 'frontline', 'workforce-transfer', 'governance', 'hr-policy', 'privacy-lifecycle', 'demo', 'uat', 'agent', 'organization']).optional(),
   "status": zod.enum(['running', 'completed', 'failed']).optional().describe('Running means unfinished, not confirmed failure.'),
-  "correlationId": zod.coerce.string().uuid().optional().describe('Metadata-only correlation lookup; the same tenant and view permissions still apply.')
+  "correlationId": zod.coerce.string().uuid().optional().describe('Metadata-only correlation lookup; the same tenant and view permissions still apply.'),
+  "cursor": zod.coerce.string().min(1).max(listHroContextTransactionsQueryCursorMax).optional().describe('Opaque next-page cursor for operator view only. Keep the same tenant, user and filters.')
 })
 
 export const ListHroContextTransactionsResponse = zod.object({
   "available": zod.boolean(),
   "operatorAvailable": zod.boolean(),
+  "nextCursor": zod.string().nullish().describe('Next older operator page, or null when no older matches exist. Pages contain at most 30 attempts.'),
   "workflows": zod.array(zod.enum(['onboarding', 'standard-intake', 'documents', 'communications', 'readiness', 'early-tenure', 'frontline', 'workforce-transfer', 'governance', 'hr-policy', 'privacy-lifecycle', 'demo', 'uat', 'agent', 'organization'])).optional(),
   "transactions": zod.array(zod.object({
   "id": zod.string(),

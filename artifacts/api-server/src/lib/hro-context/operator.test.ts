@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import express from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   db, pool, organizationsTable, organizationMembershipsTable, accessNamedGrants,
   hroContextTransactions, onbSettings, DEMO_ORGANIZATION_ID,
@@ -130,6 +130,77 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
       assert.deepEqual(filtered.transactions.map((t: { id: string }) => t.id), ids);
     }
     assert.equal((await get("?view=operator", orgB)).status, 403, "tenant A grant never grants tenant B");
+    // More than two pages, including exact ties and timestamps inside the same
+    // JS millisecond: neither newer inserts nor a deleted boundary may shift a seek.
+    const paginationCorrelation = randomUUID();
+    const fixtureIds = Array.from({ length: 67 }, () => randomUUID());
+    await db.insert(hroContextTransactions).values(fixtureIds.map((id, index) => ({
+      id, organizationId: orgA, anchorId: background.anchorId, correlationId: paginationCorrelation,
+      workflow: "documents", status: "running", initiatorType: "system", executorType: "system",
+      startedAt: sql`${index < 35 ? "2026-01-01T00:00:00.123456Z" : "2026-01-01T00:00:00.123455Z"}::timestamptz`,
+    })));
+    const expected = [
+      ...fixtureIds.slice(0, 35).sort().reverse(),
+      ...fixtureIds.slice(35).sort().reverse(),
+    ];
+    const pageQuery = `?view=operator&workflow=documents&status=running&correlationId=${paginationCorrelation}`;
+    const firstPage = await readHistory(await get(pageQuery));
+    assert.equal(firstPage.transactions.length, 30);
+    assert.deepEqual(firstPage.transactions.map(t => t.id), expected.slice(0, 30));
+    assert(firstPage.nextCursor);
+    const olderQuery = `${pageQuery}&cursor=${firstPage.nextCursor}`;
+    // The cursor remains bound to all filters, principal and tenant, without
+    // replacing the normal live authorization checks on the next request.
+    for (const changed of [
+      olderQuery.replace("workflow=documents", "workflow=agent"),
+      olderQuery.replace("status=running", "status=failed"),
+      olderQuery.replace(paginationCorrelation, randomUUID()),
+      `?view=operator&cursor=${firstPage.nextCursor}`,
+      `?cursor=${firstPage.nextCursor}`,
+      `${pageQuery}&cursor=not-a-cursor`,
+      `${pageQuery}&cursor=${"a".repeat(2049)}`,
+    ]) assert.equal((await get(changed)).status, 400, changed);
+    const tenantBGrant = await grant(orgB);
+    try {
+      assert.equal((await get(olderQuery, orgB)).status, 400, "cannot reuse tenant A seek in authorized tenant B");
+    } finally { await db.delete(accessNamedGrants).where(eq(accessNamedGrants.id, tenantBGrant.id)); }
+    const newId = randomUUID();
+    await db.insert(hroContextTransactions).values({
+      id: newId, organizationId: orgA, anchorId: background.anchorId, correlationId: paginationCorrelation,
+      workflow: "documents", status: "running", initiatorType: "system", executorType: "system",
+    });
+    // Simulate retention removing the exact boundary row, not just fresh arrivals.
+    await db.delete(hroContextTransactions).where(eq(hroContextTransactions.id, expected[29]!));
+    const secondPage = await readHistory(await get(olderQuery));
+    assert.equal(secondPage.transactions.length, 30);
+    assert.deepEqual(secondPage.transactions.map(t => t.id), expected.slice(30, 60));
+    assert(secondPage.nextCursor);
+    const thirdPage = await readHistory(await get(`${pageQuery}&cursor=${secondPage.nextCursor}`));
+    assert.deepEqual(thirdPage.transactions.map(t => t.id), expected.slice(60));
+    assert.equal(thirdPage.nextCursor, null);
+    assert.equal(new Set([...firstPage.transactions, ...secondPage.transactions, ...thirdPage.transactions]
+      .map(t => t.id)).size, 67, "no duplicate or skipped original attempts");
+    assert.equal((await readHistory(await get(pageQuery))).transactions[0]?.id, newId, "refresh sees new arrivals");
+    assert(!JSON.stringify(secondPage).includes("cursorStartedAt"), "internal seek timestamp stays out of projections");
+    const connection = await pool.connect();
+    try {
+      await connection.query("BEGIN");
+      await connection.query("SET LOCAL enable_seqscan = off");
+      for (const filter of ["", "AND workflow = 'documents'", "AND status = 'running'",
+        "AND workflow = 'documents' AND status = 'running'", "AND correlation_id = $2"]) {
+        const plan = await connection.query(`EXPLAIN SELECT id, started_at FROM hro_context_transactions
+          WHERE organization_id = $1 ${filter}
+          AND (started_at, id) < ('2026-01-01T00:00:00.123456Z'::timestamptz, 'ffffffff-ffff-ffff-ffff-ffffffffffff')
+          ORDER BY started_at DESC, id DESC LIMIT 31`,
+        filter.includes("$2") ? [orgA, paginationCorrelation] : [orgA]);
+        const text = plan.rows.map(row => row["QUERY PLAN"]).join("\n");
+        assert.match(text, /Index (Only )?Scan using hro_context_history_/);
+        assert.doesNotMatch(text, /Sort|Seq Scan/, "seek ordering is supported directly by an index");
+      }
+    } finally {
+      await connection.query("ROLLBACK");
+      connection.release();
+    }
     assert.equal((await get("?view=operator", `unverified-${randomUUID()}`)).status, 403);
     for (const query of ["?view=admin", "?workflow=unknown", "?status=interrupted",
       "?correlationId=not-a-uuid", "?status=running&status=failed", "?organizationId=spoofed"]) {
@@ -143,10 +214,12 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
       effect: "deny", createdByUserId: actor,
     }).returning();
     assert.equal((await get("?view=operator")).status, 403);
+    assert.equal((await get(olderQuery)).status, 403, "explicit deny applies on older pages");
     await db.delete(accessNamedGrants).where(eq(accessNamedGrants.id, deny!.id));
     await db.update(accessNamedGrants).set({ revokedAt: new Date(), revokedByUserId: actor })
       .where(eq(accessNamedGrants.id, permission.id));
     assert.equal((await get("?view=operator")).status, 403, "grant revocation is live");
+    assert.equal((await get(olderQuery)).status, 403, "a cursor never preserves revoked authority");
     assert.equal((await readHistory(await get())).operatorAvailable, false);
     await db.update(accessNamedGrants).set({ revokedAt: null, revokedByUserId: null })
       .where(eq(accessNamedGrants.id, permission.id));
@@ -163,6 +236,8 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
     try {
       assert.equal((await get("?view=operator", DEMO_ORGANIZATION_ID, demoActor)).status, 403,
         "shared demo cannot investigate even with an accidental operator grant");
+      assert.equal((await get(olderQuery, DEMO_ORGANIZATION_ID, demoActor)).status, 403,
+        "shared demo cannot use older-page cursors");
       const demo = await (await get("", DEMO_ORGANIZATION_ID, demoActor)).json();
       assert.deepEqual(demo, { available: false, operatorAvailable: false, transactions: [] });
       assert.equal((await get("?view=operator", orgB, demoActor)).status, 403);

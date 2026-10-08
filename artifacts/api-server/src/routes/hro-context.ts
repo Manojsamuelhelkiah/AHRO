@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
 import { db, hroContextTransactions, hroContextSteps } from "@workspace/db";
 import { registeredDemoProfile } from "../lib/demo-principal";
 import { getOrganizationId } from "../lib/organization-scope";
@@ -8,6 +7,8 @@ import { HRO_WORKFLOWS } from "../lib/hro-context/core";
 import { ListHroContextTransactionsQueryParams } from "@workspace/api-zod";
 import { getContextRetentionStatus, saveContextRetentionPolicy } from "../lib/hro-context/retention";
 import { SensitiveLifecycleConflictError, SensitiveLifecyclePermissionError, SensitiveLifecycleValidationError } from "../lib/onboarding/sensitive-lifecycle";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { decodeHistoryCursor, encodeHistoryCursor, HISTORY_PAGE_SIZE } from "../lib/hro-context/history-pagination";
 
 const router: IRouter = Router();
 for (const method of ["get", "put"] as const) {
@@ -37,7 +38,7 @@ router.get("/context-manager/transactions", async (req, res, next) => {
     }
     const parsed = ListHroContextTransactionsQueryParams.safeParse(req.query);
     if (!parsed.success || Object.keys(req.query).some(key =>
-      !["view", "workflow", "status", "correlationId"].includes(key))) {
+      !["view", "workflow", "status", "correlationId", "cursor"].includes(key))) {
       res.status(400).json({ message: "Invalid execution history filter" });
       return;
     }
@@ -59,6 +60,18 @@ router.get("/context-manager/transactions", async (req, res, next) => {
       res.status(403).json({ message: "Live execution metadata permission required" });
       return;
     }
+    const scope = { organizationId, userId: req.authUserId,
+      workflow: filters.workflow, status: filters.status, correlationId: filters.correlationId };
+    let position: ReturnType<typeof decodeHistoryCursor> | undefined;
+    if (filters.cursor) {
+      try {
+        if (!operator) throw new Error("Operator pagination only");
+        position = decodeHistoryCursor(filters.cursor, scope);
+      } catch {
+        res.status(400).json({ message: "Invalid execution history cursor for this tenant and filters" });
+        return;
+      }
+    }
     const transactions = await db.select({
       id: hroContextTransactions.id, anchorId: hroContextTransactions.anchorId,
       correlationId: hroContextTransactions.correlationId,
@@ -67,15 +80,23 @@ router.get("/context-manager/transactions", async (req, res, next) => {
       version: hroContextTransactions.version, executorType: hroContextTransactions.executorType,
       initiatorType: hroContextTransactions.initiatorType,
       startedAt: hroContextTransactions.startedAt, finishedAt: hroContextTransactions.finishedAt,
+      // PostgreSQL microseconds must survive the cursor; JS Date loses them.
+      cursorStartedAt: sql<string>`to_char(${hroContextTransactions.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
     }).from(hroContextTransactions).where(and(
       eq(hroContextTransactions.organizationId, organizationId),
       operator ? undefined : eq(hroContextTransactions.initiatingUserId, req.authUserId),
       filters.workflow ? eq(hroContextTransactions.workflow, filters.workflow) : undefined,
       filters.status ? eq(hroContextTransactions.status, filters.status) : undefined,
       filters.correlationId ? eq(hroContextTransactions.correlationId, filters.correlationId) : undefined,
-    )).orderBy(desc(hroContextTransactions.startedAt), desc(hroContextTransactions.id)).limit(30);
-    // Bounded last steps, not a business evidence viewer or a permission cache.
-    const history = await Promise.all(transactions.map(async transaction => ({
+      position ? sql`(${hroContextTransactions.startedAt}, ${hroContextTransactions.id}) < (${position.startedAt}::timestamptz, ${position.id}::text)` : undefined,
+    )).orderBy(desc(hroContextTransactions.startedAt), desc(hroContextTransactions.id))
+      .limit(operator ? HISTORY_PAGE_SIZE + 1 : HISTORY_PAGE_SIZE);
+
+    const page = transactions.slice(0, HISTORY_PAGE_SIZE);
+    const last = page.at(-1);
+    const nextCursor = operator && transactions.length > HISTORY_PAGE_SIZE && last
+      ? encodeHistoryCursor(scope, last.cursorStartedAt, last.id) : null;
+    const history = await Promise.all(page.map(async ({ cursorStartedAt: _cursorStartedAt, ...transaction }) => ({
       ...transaction,
       ageSeconds: Math.max(0, Math.floor((Date.now() - transaction.startedAt.getTime()) / 1000)),
       steps: (await db.select({
@@ -95,7 +116,8 @@ router.get("/context-manager/transactions", async (req, res, next) => {
       res.status(403).json({ message: "Execution metadata permission is no longer active" });
       return;
     }
-    res.json({ available: true, operatorAvailable: stillAuthorized, workflows: HRO_WORKFLOWS, transactions: history });
+    res.json({ available: true, operatorAvailable: stillAuthorized, workflows: HRO_WORKFLOWS,
+      transactions: history, nextCursor });
   } catch (error) { next(error); }
 });
 export default router;

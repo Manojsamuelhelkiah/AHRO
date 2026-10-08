@@ -11,12 +11,12 @@ const entryPoints = [
   ...globSync("src/**/*.test.ts", { cwd: dir }),
   ...globSync("src/**/*.test.tsx", { cwd: dir }),
 ].map((f) => path.join(dir, f));
-const integratedEntryPoint = path.join(
+const integratedEntryPoints = [path.join(
   dir,
   "src/pages/demo-controller/access-setup.integration.test.tsx",
-);
+), path.join(dir, "src/pages/settings-context-retention.integration.test.tsx")];
 const standardEntryPoints = entryPoints.filter(
-  (entryPoint) => entryPoint !== integratedEntryPoint,
+  (entryPoint) => !integratedEntryPoints.includes(entryPoint),
 );
 
 if (entryPoints.length === 0) {
@@ -99,10 +99,10 @@ if (standardEntryPoints.length > 0) {
   });
 }
 
-if (entryPoints.includes(integratedEntryPoint)) {
+if (integratedEntryPoints.some(entryPoint => entryPoints.includes(entryPoint))) {
   await build({
     ...commonBuildOptions,
-    entryPoints: [integratedEntryPoint],
+    entryPoints: integratedEntryPoints.filter(entryPoint => entryPoints.includes(entryPoint)),
     outdir: path.join(dir, "dist-test/integration"),
     external: [
       "node:*",
@@ -136,6 +136,7 @@ if (entryPoints.includes(integratedEntryPoint)) {
                   "  return React.createElement(UserContext.Provider, { value: { user } }, children);",
                   "}",
                   "export function useUser() { return useContext(UserContext); }",
+                  "export function useAuth() { return { userId: useContext(UserContext).user?.id }; }",
                 ].join("\n"),
             }),
           );

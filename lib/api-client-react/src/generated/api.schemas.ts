@@ -140,6 +140,11 @@ export interface HroContextHistoryItem {
 export interface HroContextHistory {
   available: boolean;
   operatorAvailable: boolean;
+  /**
+     * Next older operator page, or null when no older matches exist. Pages contain at most 30 attempts.
+     * @nullable
+     */
+  nextCursor?: string | null;
   workflows?: HroContextWorkflow[];
   transactions: HroContextHistoryItem[];
 }
@@ -9666,6 +9671,12 @@ status?: ListHroContextTransactionsStatus;
  * Metadata-only correlation lookup; the same tenant and view permissions still apply.
  */
 correlationId?: string;
+/**
+ * Opaque next-page cursor for operator view only. Keep the same tenant, user and filters.
+ * @minLength 1
+ * @maxLength 2048
+ */
+cursor?: string;
 };
 
 export type ListHroContextTransactionsView = typeof ListHroContextTransactionsView[keyof typeof ListHroContextTransactionsView];

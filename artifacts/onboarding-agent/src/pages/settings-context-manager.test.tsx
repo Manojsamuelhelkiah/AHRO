@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { HroContextHistoryItem } from '@workspace/api-client-react';
-import { ContextTransactionList } from './settings-context-manager';
+import { ContextTransactionList, ContextHistoryPagination } from './settings-context-manager';
 
 const unfinished: HroContextHistoryItem = {
   id: 'transaction-id', anchorId: 'opaque-anchor', correlationId: '8b106d54-cf8a-4e19-a2f2-fb1c15e074b9',
@@ -19,6 +19,22 @@ test('old system attempts show unfinished, age and safe metadata-only correlatio
   assert.match(html, /href="\?contextView=operator&amp;contextCorrelation=8b106d54-cf8a-4e19-a2f2-fb1c15e074b9#unified-context-manager"/);
   assert.match(html, /checkpoint recorded/);
   assert.doesNotMatch(html, /Confirmed failed|<button|\/cases\/|\/documents\/|retry|replay/i);
+});
+
+test('bounded read-only pagination identifies the page and disables unavailable navigation', () => {
+  const first = renderToStaticMarkup(<ContextHistoryPagination page={1} hasOlder busy={false}
+    onNewer={() => {}} onOlder={() => {}} />);
+  assert.match(first, /Execution history pages/);
+  assert.match(first, /Page 1 · up to 30 attempts/);
+  assert.match(first, /disabled=""[^>]*>Newer attempts/);
+  assert.doesNotMatch(first, /disabled=""[^>]*>Older attempts/);
+  const last = renderToStaticMarkup(<ContextHistoryPagination page={3} hasOlder={false} busy={false}
+    onNewer={() => {}} onOlder={() => {}} />);
+  assert.doesNotMatch(last, /disabled=""[^>]*>Newer attempts/);
+  assert.match(last, /disabled=""[^>]*>Older attempts/);
+  const loading = renderToStaticMarkup(<ContextHistoryPagination page={2} hasOlder busy
+    onNewer={() => {}} onOlder={() => {}} />);
+  assert.equal((loading.match(/disabled=""/g) ?? []).length, 2);
 });
 
 test('confirmed failure and completion describe execution attempts, not business outcomes', () => {

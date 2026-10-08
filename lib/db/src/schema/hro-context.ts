@@ -41,6 +41,11 @@ export const hroContextTransactions = pgTable("hro_context_transactions", {
   uniqueIndex("hro_context_transaction_org_id_unique").on(table.organizationId, table.id),
   index("hro_context_transactions_actor_idx").on(table.organizationId, table.initiatingUserId, table.startedAt),
   index("hro_context_transactions_anchor_idx").on(table.organizationId, table.anchorId, table.startedAt),
+  index("hro_context_history_idx").on(table.organizationId, table.startedAt.desc(), table.id.desc()),
+  index("hro_context_history_workflow_idx").on(table.organizationId, table.workflow, table.startedAt.desc(), table.id.desc()),
+  index("hro_context_history_status_idx").on(table.organizationId, table.status, table.startedAt.desc(), table.id.desc()),
+  index("hro_context_history_workflow_status_idx").on(table.organizationId, table.workflow, table.status, table.startedAt.desc(), table.id.desc()),
+  index("hro_context_history_correlation_idx").on(table.organizationId, table.correlationId, table.startedAt.desc(), table.id.desc()),
   index("hro_context_transactions_correlation_idx").on(table.organizationId, table.correlationId),
   index("hro_context_transactions_parent_idx").on(table.organizationId, table.parentTransactionId),
 ]);

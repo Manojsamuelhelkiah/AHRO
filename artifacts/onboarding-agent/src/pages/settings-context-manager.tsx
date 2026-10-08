@@ -10,6 +10,16 @@ import { ContextRetentionSettings } from './settings-context-retention';
 
 export function ContextManagerSettingsCard() {
   const { userId } = useAuth();
+  const organizationId = getPinnedOrganizationIdForPage();
+  // Remount pagination state when the authenticated tenant/principal changes.
+  return <ContextManagerHistory key={`${userId}:${organizationId}`} userId={userId} organizationId={organizationId} />;
+}
+
+function ContextManagerHistory({ userId, organizationId }: {
+  userId: string | null | undefined; organizationId: string | null;
+}) {
+  const [cursors, setCursors] = useState<string[]>([]);
+  const cursor = cursors.at(-1);
   const [view, setView] = useState<'personal' | 'operator'>(() =>
     new URLSearchParams(window.location.search).get('contextView') === 'operator' ? 'operator' : 'personal');
   const [workflow, setWorkflow] = useState<HroContextWorkflow | ''>('');
@@ -19,11 +29,14 @@ export function ContextManagerSettingsCard() {
   const params: ListHroContextTransactionsParams = {
     view, ...(workflow ? { workflow } : {}), ...(status ? { status } : {}),
     ...(correlationId ? { correlationId } : {}),
+    ...(view === 'operator' && cursor ? { cursor } : {}),
   };
   const { data, isLoading, isError, refetch, isFetching } = useListHroContextTransactions(params, {
     query: {
-      queryKey: [...getListHroContextTransactionsQueryKey(params), userId, getPinnedOrganizationIdForPage()],
-      enabled: Boolean(userId), staleTime: 0, gcTime: 0, retry: false, refetchInterval: 30_000,
+      queryKey: [...getListHroContextTransactionsQueryKey(params), userId, organizationId],
+      enabled: Boolean(userId), staleTime: 0, gcTime: 0, retry: false,
+      // New arrivals must not move the seek position on an older page.
+      refetchInterval: cursor ? false : 30_000,
     },
   });
   return (
@@ -33,13 +46,14 @@ export function ContextManagerSettingsCard() {
           <div className="min-w-0">
             <h2 className="text-base font-semibold">Unified context manager</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {view === 'operator' ? 'The latest 30 matching organization attempts, including background work.' :
+              {view === 'operator' ? 'Organization attempts, including background work, in pages of up to 30.' :
                 'Your latest 30 matching execution attempts in this organization.'} Context links requests,
               agents and workflow checkpoints; it does not grant access or replace live policy checks.
             </p>
           </div>
-          <Button variant="outline" className="shrink-0 min-h-11" disabled={isFetching} onClick={() => void refetch()}>
-            Refresh
+          <Button variant="outline" className="shrink-0 min-h-11" disabled={isFetching}
+            onClick={() => { if (cursor) setCursors([]); else void refetch(); }}>
+            {cursor ? 'Refresh latest' : 'Refresh'}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -53,28 +67,28 @@ export function ContextManagerSettingsCard() {
         <div className="flex flex-wrap gap-3 items-end">
           <label className="text-xs space-y-1">History view
             <select aria-label="History view" className="block rounded border bg-background p-2 min-h-11"
-              value={view} onChange={event => { setView(event.target.value as 'personal' | 'operator'); setCorrelationId(''); }}>
+              value={view} onChange={event => { setCursors([]); setView(event.target.value as 'personal' | 'operator'); setCorrelationId(''); }}>
               <option value="personal">My attempts</option>
               {(data?.operatorAvailable || view === 'operator') && <option value="operator">Operator — organization metadata</option>}
             </select>
           </label>
           <label className="text-xs space-y-1">Workflow
             <select aria-label="Workflow" className="block rounded border bg-background p-2 min-h-11"
-              value={workflow} onChange={event => setWorkflow(event.target.value as HroContextWorkflow | '')}>
+              value={workflow} onChange={event => { setCursors([]); setWorkflow(event.target.value as HroContextWorkflow | ''); }}>
               <option value="">All workflows</option>
               {Object.values(HroContextWorkflow).map(value => <option key={value} value={value}>{value.replaceAll('-', ' ')}</option>)}
             </select>
           </label>
           <label className="text-xs space-y-1">Status
             <select aria-label="Status" className="block rounded border bg-background p-2 min-h-11"
-              value={status} onChange={event => setStatus(event.target.value as typeof status)}>
+              value={status} onChange={event => { setCursors([]); setStatus(event.target.value as typeof status); }}>
               <option value="">All statuses</option>
               <option value="running">Unfinished (no final result)</option>
               <option value="completed">Completed attempt</option>
               <option value="failed">Confirmed failed attempt</option>
             </select>
           </label>
-          {correlationId && <Button variant="outline" onClick={() => setCorrelationId('')}>Clear correlation filter</Button>}
+          {correlationId && <Button variant="outline" onClick={() => { setCursors([]); setCorrelationId(''); }}>Clear correlation filter</Button>}
         </div>
         {view === 'operator' && <p className="text-xs text-muted-foreground">
           Requires a live data.context.metadata.read grant. Organization roles alone do not grant this
@@ -88,9 +102,23 @@ export function ContextManagerSettingsCard() {
           data?.available === false ? <p className="text-sm">Personal execution history is unavailable for shared demo logins.</p> :
           !data?.transactions.length ? <p className="text-sm text-muted-foreground">No execution attempts match this view and its filters.</p> :
           <ContextTransactionList transactions={data.transactions} view={view} />}
+        {view === 'operator' && <ContextHistoryPagination page={cursors.length + 1}
+          hasOlder={!isError && Boolean(data?.nextCursor)} busy={isFetching}
+          onNewer={() => setCursors(previous => previous.slice(0, -1))}
+          onOlder={() => { if (!isError && data?.nextCursor) setCursors(previous => [...previous, data.nextCursor!]); }} />}
       </CardContent>
     </Card>
   );
+}
+
+export function ContextHistoryPagination({ page, hasOlder, busy, onNewer, onOlder }: {
+  page: number; hasOlder: boolean; busy: boolean; onNewer: () => void; onOlder: () => void;
+}) {
+  return <nav aria-label="Execution history pages" className="flex flex-wrap gap-3 items-center">
+    <Button variant="outline" disabled={busy || page === 1} onClick={onNewer}>Newer attempts</Button>
+    <span role="status" className="text-xs text-muted-foreground">Page {page} · up to 30 attempts</span>
+    <Button variant="outline" disabled={busy || !hasOlder} onClick={onOlder}>Older attempts</Button>
+  </nav>;
 }
 
 /** Metadata-only rendering; correlation links return to this same permission boundary. */

@@ -534,7 +534,7 @@ export const getListHroContextTransactionsUrl = (params?: ListHroContextTransact
 }
 
 /**
- * @summary Read the authenticated user's recent metadata-only execution attempts
+ * @summary Read bounded metadata-only execution attempts, with operator keyset pagination
  */
 export const listHroContextTransactions = async (params?: ListHroContextTransactionsParams, options?: RequestInit): Promise<HroContextHistory> => {
 
@@ -581,7 +581,7 @@ export type ListHroContextTransactionsQueryError = ErrorType<void>
 
 
 /**
- * @summary Read the authenticated user's recent metadata-only execution attempts
+ * @summary Read bounded metadata-only execution attempts, with operator keyset pagination
  */
 
 export function useListHroContextTransactions<TData = Awaited<ReturnType<typeof listHroContextTransactions>>, TError = ErrorType<void>>(

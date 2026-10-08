@@ -33,9 +33,8 @@ reapply only coherent behavior.
 An automatically merged file can have no conflict markers and still omit an
 entire feature boundary while retaining its imports.
 
-**Why:** Overlapping additions once retained the history route and retention
-imports but dropped the retention routes themselves; typechecking alone would
-not prove those endpoints still existed.
+**Why:** Typechecking validates retained code, not the existence of feature
+boundaries that an automatic merge silently removed.
 
 **How to apply:** Compare both feature intents after conflict resolution and
 run focused route/render checks for each, even for files reported as already

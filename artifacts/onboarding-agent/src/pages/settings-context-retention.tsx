@@ -1,17 +1,37 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useAuth } from '@clerk/react';
 import {
   useGetHroContextRetention, useSaveHroContextRetention, getGetHroContextRetentionQueryKey,
   getListHroContextTransactionsQueryKey, type HroContextRetentionPolicy,
+  getPinnedOrganizationIdForPage,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Input } from '@/components/ui-shared';
 
 export function ContextRetentionSettings() {
+  const { userId } = useAuth();
+  const organizationId = getPinnedOrganizationIdForPage();
+  return <ContextRetentionSettingsForPrincipal key={`${userId}:${organizationId}`}
+    userId={userId} organizationId={organizationId} />;
+}
+
+export function getScopedRetentionQueryKey(userId: string | null | undefined, organizationId: string | null) {
+  return [...getGetHroContextRetentionQueryKey(), organizationId, userId];
+}
+
+export function ContextRetentionSettingsForPrincipal({ userId, organizationId }: {
+  userId: string | null | undefined; organizationId: string | null;
+}) {
   const queryClient = useQueryClient();
+  useEffect(() => () => {
+    queryClient.removeQueries({ queryKey: getScopedRetentionQueryKey(userId, organizationId), exact: true });
+  }, [queryClient, userId, organizationId]);
   const { data, isLoading, error, refetch } = useGetHroContextRetention({
-    query: { queryKey: getGetHroContextRetentionQueryKey(), staleTime: 10_000, refetchInterval: 30_000, retry: false },
+    query: { queryKey: getScopedRetentionQueryKey(userId, organizationId), enabled: Boolean(userId),
+      staleTime: 0, gcTime: 0, refetchInterval: 30_000, retry: false },
   });
   const [editing, setEditing] = useState(false);
+  if (!userId) return null;
   if (isLoading) return <p className="text-xs" role="status">Loading retention status…</p>;
   if (error) {
     const forbidden = 'status' in error && error.status === 403;

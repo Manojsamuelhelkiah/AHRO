@@ -29,6 +29,12 @@ When parallel merges collide on a migration journal index, repair the index with
 
 **How to apply:** Distinguish journal ordering metadata from ledger identity, preserve recorded migration identity, and confirm the repair through the normal post-merge reconciliation.
 
+If parallel merges leave an already-applied index migration's timestamp older than a preceding migration, add an idempotent forward index migration with a later timestamp rather than rewriting its recorded identity or reordering trusted receipt history.
+
+**Why:** Timestamp-based runners may skip the earlier indexes, while the custom reconciler uses the latest journal entry's trusted schema receipt. Reordering applied history can select a receipt that was never recorded.
+
+**How to apply:** Keep applied tags, timestamps, hashes and receipt order intact; put the compatible DDL in a new forward migration newer than the merged predecessor.
+
 Do not treat an empty result from the built-in database query surface as evidence about the application database.
 
 **Why:** In this workspace the built-in development SQL surface did not contain the application's governance tables while the app's configured database did. The two connections can target different databases.
