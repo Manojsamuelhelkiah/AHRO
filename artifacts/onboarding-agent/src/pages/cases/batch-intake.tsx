@@ -1,103 +1,176 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'wouter';
-import { AlertTriangle, Check, Plus, Trash2, Upload, X } from 'lucide-react';
-import { Button, Input, Label, cn } from '@/components/ui-shared';
-import { listJobProfiles, releaseBatchIntakeCase, submitBatchIntake, updateWorkforceContext, type BatchIntakePerson, type WorkforceContext } from '@/lib/workforce-policy-api';
+import { useUser } from '@clerk/react';
+import { AlertTriangle, Check, Download, Upload, X } from 'lucide-react';
 import { getListOnboardingCasesQueryKey } from '@workspace/api-client-react';
+import type { HroBatchResult, HroBatchTemplate, HroBatchValidation } from '@workspace/api-client-react';
+import { Button, Input, Label } from '@/components/ui-shared';
+import { useOrganizationRole } from '@/hooks/use-organization-role';
+import { ManualBatchIntakeForm } from './manual-batch-intake';
+import {
+  MAX_ROWS, MAX_UPLOAD_BYTES, createHroBatch, downloadHroBatchTemplate, hroBatchHistoryKey, hroBatchTemplatesKey,
+  issuesToCsv, listHroBatchHistory, listHroBatchTemplates, saveBlob, validateHroBatchFile,
+} from '@/lib/hro-batch-intake-api';
 
-const control = 'h-8 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]';
-const jobProfileKey = ['onboarding', 'job-profiles'];
-
-function nextWeek() {
-  return new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
-}
-function blankPerson(): BatchIntakePerson {
-  return {
-    personKey: crypto.randomUUID(), workerName: '', workerEmail: '', channelPreference: 'email',
-    hireType: 'external-fte', workerCategory: 'employee', role: '', department: '',
-    geography: '', legalEntity: '', managerName: '', recruiterName: '', joiningDate: nextWeek(),
-    urgency: 'normal', workforceContext: { hiringMode: 'batch' },
-  };
-}
-function isReady(person: BatchIntakePerson) {
-  return Boolean(person.workerName.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(person.workerEmail) &&
-    person.role.trim() && person.department.trim() && person.geography.trim() && person.legalEntity.trim() &&
-    person.managerName.trim() && person.recruiterName.trim() && person.joiningDate &&
-    person.workforceContext?.workCountry?.trim());
-}
+const select = 'h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-sm outline-none focus:border-[var(--primary)]';
 
 export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
-  const profiles = useQuery({ queryKey: jobProfileKey, queryFn: listJobProfiles });
-  const submit = useMutation({ mutationFn: (data: { idempotencyKey: string; name: string; people: BatchIntakePerson[] }) => submitBatchIntake(data) });
-  const release = useMutation({ mutationFn: ({ batchId, caseId }: { batchId: string; caseId: number }) => releaseBatchIntakeCase(batchId, caseId) });
-  const [batchName, setBatchName] = useState('');
-  const [retryKey] = useState(() => crypto.randomUUID());
-  const [people, setPeople] = useState<BatchIntakePerson[]>([blankPerson()]);
+  const { user } = useUser();
+  const org = useOrganizationRole();
+  const scope = user?.id && org.organizationId ? `${user.id}:${org.organizationId}` : '';
+  const [mode, setMode] = useState<'upload' | 'manual'>('upload');
+  const [family, setFamily] = useState('');
+  const [templateId, setTemplateId] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState('');
+  const [consent, setConsent] = useState(false);
+  const [validation, setValidation] = useState<HroBatchValidation | null>(null);
+  const [result, setResult] = useState<HroBatchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Awaited<ReturnType<typeof submitBatchIntake>> | null>(null);
-  const edit = (index: number, patch: Partial<BatchIntakePerson>) =>
-    setPeople((current) => current.map((person, position) => position === index ? { ...person, ...patch } : person));
-  const editContext = (index: number, key: keyof WorkforceContext, value: string | boolean | string[] | undefined) =>
-    setPeople((current) => current.map((person, position) => position === index ? {
-      ...person,
-      workforceContext: { ...updateWorkforceContext(person.workforceContext ?? {}, key, value), hiringMode: 'batch' },
-    } : person));
-  const create = () => {
-    setError(null);
-    if (!batchName.trim() || people.some((person) => !isReady(person))) {
-      setError('Give the batch a name and complete every required person row before creating held cases.');
-      return;
-    }
-    submit.mutate({ idempotencyKey: retryKey, name: batchName.trim(), people }, {
-      onSuccess: (response) => {
-        setResult(response);
-        queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
-      },
-      onError: (error: Error) => setError(error.message),
-    });
+  const [busy, setBusy] = useState<'validate' | 'commit' | null>(null);
+  const epoch = useRef(0);
+  const lock = useRef(false);
+  const abort = useRef<AbortController | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [settledScope, setSettledScope] = useState(scope);
+
+  const templates = useQuery({ queryKey: hroBatchTemplatesKey(scope), queryFn: ({ signal }) => listHroBatchTemplates({ signal }), enabled: !!scope });
+  const history = useQuery({ queryKey: hroBatchHistoryKey(scope), queryFn: ({ signal }) => listHroBatchHistory({ signal }), enabled: !!scope });
+
+  const resetWork = (clearInput = true) => {
+    epoch.current += 1; abort.current?.abort(); lock.current = false;
+    setFile(null); setValidation(null); setResult(null); setConsent(false); setError(null); setBusy(null);
+    if (clearInput && fileInput.current) fileInput.current.value = '';
   };
+  useEffect(() => { resetWork(); setFamily(''); setTemplateId(''); setName(''); setSettledScope(scope); return () => abort.current?.abort(); }, [scope]);
+
+  const families = useMemo(() => Array.from(new Set((templates.data ?? []).map((t) => t.family))), [templates.data]);
+  const options = (templates.data ?? []).filter((t) => t.family === family);
+  const template: HroBatchTemplate | undefined = options.find((t) => t.id === templateId);
+
+  const download = async (format: 'csv' | 'xlsx') => {
+    if (!template) return;
+    try { saveBlob(await downloadHroBatchTemplate(template.id, format), `${template.id}-v${template.version}.${format}`); }
+    catch (e) { setError((e as Error).message); }
+  };
+  const pick = (f: File | null) => {
+    resetWork(false);
+    if (f && f.size > MAX_UPLOAD_BYTES) { setError('File exceeds the 2 MB limit.'); setFile(null); return; }
+    setFile(f);
+  };
+  const validate = async () => {
+    if (!file || !template || lock.current) return;
+    lock.current = true; const mine = ++epoch.current; abort.current?.abort(); abort.current = new AbortController();
+    setBusy('validate'); setError(null); setValidation(null); setConsent(false);
+    try {
+      const v = await validateHroBatchFile(file, template, abort.current.signal);
+      if (mine !== epoch.current) return;
+      if (v.rows.length > MAX_ROWS) setError(`Limit is ${MAX_ROWS} rows.`);
+      setValidation(v);
+    } catch (e) { if (mine === epoch.current) setError((e as Error).message); }
+    finally { if (mine === epoch.current) { lock.current = false; setBusy(null); } }
+  };
+  const commit = async () => {
+    if (!validation?.valid || !template || !consent || !name.trim() || lock.current) return;
+    lock.current = true; const mine = ++epoch.current; abort.current?.abort(); abort.current = new AbortController();
+    setBusy('commit'); setError(null);
+    try {
+      const r = await createHroBatch({ templateId: template.id, templateVersion: template.version, name: name.trim(), rows: validation.rows }, abort.current.signal);
+      if (mine !== epoch.current) return;
+      setResult(r); setValidation(null); setFile(null); setConsent(false);
+      if (fileInput.current) fileInput.current.value = '';
+      queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: hroBatchHistoryKey(scope) });
+    } catch (e) { if (mine === epoch.current) setError((e as Error).message); }
+    finally { if (mine === epoch.current) { lock.current = false; setBusy(null); } }
+  };
+  const errorCsv = () => validation && saveBlob(new Blob([issuesToCsv(validation.issues)], { type: 'text/csv' }), 'validation-errors.csv');
+
+  const cols = template?.columns ?? [];
+  const specialist = template && template.family !== 'onboarding' && !template.hireType;
+
+  if (settledScope !== scope) return <div role="status" className="p-4 text-sm text-[var(--text-muted)]">Loading the current organization’s batch intake…</div>;
   return (
-    <div className="mb-6 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-md">
-      <div className="flex items-start justify-between border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">
-        <div><h3 className="text-sm font-semibold text-[var(--text-primary)]">Batch intake</h3><p className="mt-1 text-xs text-[var(--text-muted)]">Creates one held case per person with an individual context and immutable policy snapshot. This intake does not send messages, call providers, or start orchestration.</p></div>
-        <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" /></Button>
+    <div className="mb-6 max-w-full rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-md">
+      <div className="flex items-start justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">
+        <div className="min-w-0"><h3 className="text-sm font-semibold text-[var(--text-primary)]">Batch intake</h3>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Upload a template file to create held review cases. Nothing starts automatically; uploaded files are parsed and not retained.</p></div>
+        <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-close-batch"><X className="h-4 w-4" /></Button>
       </div>
+      <div className="flex gap-2 border-b border-[var(--border)] p-3">
+        <Button size="sm" variant={mode === 'upload' ? 'default' : 'outline'} onClick={() => { resetWork(); setMode('upload'); }} data-testid="button-mode-upload">Template upload</Button>
+        <Button size="sm" variant={mode === 'manual' ? 'default' : 'outline'} onClick={() => { resetWork(); setMode('manual'); }} data-testid="button-mode-manual">Manual entry</Button>
+      </div>
+      {mode === 'manual' ? <div className="p-3"><ManualBatchIntakeForm key={scope} onClose={onClose} /></div> : (
       <div className="space-y-4 p-[var(--space-lg)]">
-        <div className="max-w-md"><Label>Batch name</Label><Input className="mt-1" value={batchName} onChange={(event) => setBatchName(event.target.value)} placeholder="e.g. Pune warehouse April cohort" /></div>
-        <div className="rounded border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-3 text-xs text-[var(--status-amber-fg)]"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" /> Every row gets its own resolved policy. Unknown safety applicability stays unknown and generates the required human context review gate; it is never inferred from a cohort average.</div>
-        {people.map((person, index) => (
-          <div key={person.personKey} className="rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3">
-            <div className="mb-2 flex items-center justify-between"><strong className="text-xs text-[var(--text-primary)]">Person {index + 1}</strong>{people.length > 1 && <Button size="sm" variant="ghost" className="h-7 text-[var(--status-red)]" onClick={() => setPeople((current) => current.filter((_, position) => position !== index))}><Trash2 className="h-3.5 w-3.5" /></Button>}</div>
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-              <input className={control} placeholder="Name *" value={person.workerName} onChange={(event) => edit(index, { workerName: event.target.value })} />
-              <input className={control} placeholder="Email *" type="email" value={person.workerEmail} onChange={(event) => edit(index, { workerEmail: event.target.value })} />
-              <input className={control} placeholder="Role *" value={person.role} onChange={(event) => edit(index, { role: event.target.value })} />
-              <input className={control} placeholder="Department *" value={person.department} onChange={(event) => edit(index, { department: event.target.value })} />
-              <input className={control} placeholder="Geography *" value={person.geography} onChange={(event) => edit(index, { geography: event.target.value })} />
-              <input className={control} placeholder="Legal entity *" value={person.legalEntity} onChange={(event) => edit(index, { legalEntity: event.target.value })} />
-              <input className={control} placeholder="Manager *" value={person.managerName} onChange={(event) => edit(index, { managerName: event.target.value })} />
-              <input className={control} placeholder="Recruiter *" value={person.recruiterName} onChange={(event) => edit(index, { recruiterName: event.target.value })} />
-              <input className={control} type="date" value={person.joiningDate} onChange={(event) => edit(index, { joiningDate: event.target.value })} />
-              <select className={control} value={person.jobProfileId ?? ''} onChange={(event) => edit(index, { jobProfileId: event.target.value || undefined })}><option value="">No reusable job profile</option>{profiles.data?.filter((profile) => profile.enabled).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.name} · v{profile.version}</option>)}</select>
-              <input className={control} placeholder="Work country (e.g. US) *" value={person.workforceContext?.workCountry ?? ''} onChange={(event) => editContext(index, 'workCountry', event.target.value)} />
-              <select className={control} value={person.workforceContext?.workEnvironment ?? ''} onChange={(event) => editContext(index, 'workEnvironment', event.target.value || undefined)}><option value="">Work environment unknown</option><option value="office">Office</option><option value="remote">Remote</option><option value="site">Site</option><option value="field">Field</option><option value="mixed">Mixed</option></select>
-              <input className={control} placeholder="Site (if applicable)" value={person.workforceContext?.site ?? ''} onChange={(event) => editContext(index, 'site', event.target.value)} />
-            </div>
-            <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-[var(--text-secondary)] md:grid-cols-3">
-              {(['siteExposure', 'safetyCritical', 'assistedIntake'] as const).map((field) => <label key={field}>{field.replace(/([A-Z])/g, ' $1')}<select className="ml-2 h-7 rounded border border-[var(--border)] bg-[var(--surface)] px-1" value={person.workforceContext?.[field] === undefined ? '' : String(person.workforceContext?.[field])} onChange={(event) => editContext(index, field, event.target.value === '' ? undefined : event.target.value === 'true')}><option value="">Unknown</option><option value="true">Yes</option><option value="false">No</option></select></label>)}
-            </div>
+        {!scope && <p className="text-xs text-[var(--text-muted)]">Loading your session and organization...</p>}
+        {templates.isError && <p role="alert" className="text-xs text-[var(--status-red)]">Could not load templates. <button className="underline" onClick={() => templates.refetch()}>Retry</button></p>}
+        {templates.isLoading && <div className="h-9 animate-pulse rounded bg-[var(--surface-alt)]" />}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div><Label>Case family</Label>
+            <select className={select} data-testid="select-family" value={family} onChange={(e) => { resetWork(); setFamily(e.target.value); setTemplateId(''); }}>
+              <option value="">Choose a family</option>{families.map((f) => <option key={f} value={f}>{f}</option>)}</select></div>
+          <div><Label>Template</Label>
+            <select className={select} data-testid="select-template" value={templateId} disabled={!family} onChange={(e) => { resetWork(); setTemplateId(e.target.value); }}>
+              <option value="">Choose a template</option>{options.map((t) => <option key={t.id} value={t.id}>{t.name} (v{t.version})</option>)}</select></div>
+        </div>
+        {template && <>
+          <p className="text-xs text-[var(--text-secondary)]" data-testid="text-template-description">{template.description}</p>
+          {specialist && <p className="rounded border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-2 text-xs text-[var(--status-amber-fg)]"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />Creates specialist-review requests only. Nothing is executed or authorized automatically.</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => download('xlsx')} data-testid="button-download-xlsx"><Download className="mr-1 h-4 w-4" />Excel</Button>
+            <Button size="sm" variant="outline" onClick={() => download('csv')} data-testid="button-download-csv"><Download className="mr-1 h-4 w-4" />CSV</Button>
           </div>
-        ))}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4"><Button variant="outline" onClick={() => setPeople((current) => [...current, blankPerson()])}><Plus className="mr-1 h-4 w-4" /> Add person</Button><Button onClick={create} disabled={submit.isPending}><Upload className="mr-1 h-4 w-4" /> {submit.isPending ? 'Creating held cases…' : 'Create batch cases'}</Button></div>
-        {error && <p role="alert" className="text-xs text-[var(--status-red)]">{error}</p>}
-        {result && <div className="rounded border border-[var(--status-green)]/30 bg-[var(--status-green-bg)] p-3 text-xs text-[var(--status-green-fg)]"><p className="font-semibold"><Check className="mr-1 inline h-4 w-4" />{result.retry ? 'Retry reconciled safely; no duplicate cases were created.' : `Batch ${result.name} created without starting providers.`}</p><div className="mt-2 space-y-1">{result.results.map((row) => {
-          const person = people.find((candidate) => candidate.personKey === row.personKey);
-          const gateARequired = person?.hireType === 'external-fte' || person?.hireType === 'contractor' || person?.hireType === 'rehire';
-          return <div key={row.personKey} className="flex flex-wrap items-center gap-2"><span className="uppercase">{row.status}</span><Link className="underline" href={`/cases/${row.caseId}`}>Case #{row.caseId}</Link><span>policy {row.profileId} v{row.profileVersion}</span>{!gateARequired && <Button size="sm" variant="outline" disabled={release.isPending} onClick={() => release.mutate({ batchId: result.batchId, caseId: row.caseId }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() }), onError: (error: Error) => setError(error.message) })}>Release to orchestration</Button>}{gateARequired && <span className="text-[var(--status-amber-fg)]">Gate A confirmation required</span>}</div>;
-        })}</div></div>}
-      </div>
+          <div className="max-h-56 overflow-auto rounded border border-[var(--border)]">
+            <table className="w-full text-left text-xs"><thead className="sticky top-0 bg-[var(--surface-alt)]"><tr><th className="p-2">Field</th><th className="p-2">Required</th><th className="p-2">Instructions</th></tr></thead>
+              <tbody>{cols.map((c) => <tr key={c.key} className="border-t border-[var(--border)] align-top"><td className="p-2 font-medium">{c.label}</td><td className="p-2">{c.required ? 'Yes' : 'No'}</td><td className="p-2">{c.description}{c.values?.length ? ` Allowed: ${c.values.join(', ')}.` : ''}</td></tr>)}</tbody></table>
+          </div>
+          <div><Label>Filled file (CSV or Excel, up to 2 MB and {MAX_ROWS} rows)</Label>
+            <input ref={fileInput} type="file" accept=".csv,.xlsx" data-testid="input-file" className="mt-1 block w-full text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} /></div>
+          <Button onClick={validate} disabled={!file || busy !== null} data-testid="button-validate"><Upload className="mr-1 h-4 w-4" />{busy === 'validate' ? 'Validating...' : 'Validate file'}</Button>
+        </>}
+        {error && <p role="alert" data-testid="text-error" className="text-xs text-[var(--status-red)]">{error}</p>}
+        {validation && template && (
+          <div className="space-y-3" data-testid="section-preview">
+            {validation.issues.length > 0 ? (
+              <div className="rounded border border-[var(--status-red)]/30 p-3 text-xs">
+                <p className="font-semibold text-[var(--status-red)]">{validation.issues.length} issue(s) found. Fix the file and validate again.</p>
+                <ul className="mt-2 max-h-40 space-y-1 overflow-auto">{validation.issues.slice(0, 100).map((i, n) => <li key={n}>Row {i.row}, {i.column}: {i.message}</li>)}</ul>
+                <Button size="sm" variant="outline" className="mt-2" onClick={errorCsv} data-testid="button-download-errors"><Download className="mr-1 h-4 w-4" />Download error CSV</Button>
+              </div>) : <p className="text-xs text-[var(--status-green-fg)]"><Check className="mr-1 inline h-4 w-4" />{validation.rows.length} valid row(s).</p>}
+            <div className="max-h-64 overflow-auto rounded border border-[var(--border)]">
+              <table className="w-full text-left text-xs"><thead className="sticky top-0 bg-[var(--surface-alt)]"><tr><th className="p-2">#</th>{cols.map((c) => <th key={c.key} className="whitespace-nowrap p-2">{c.label}</th>)}</tr></thead>
+                <tbody>{validation.rows.slice(0, 50).map((r, n) => <tr key={n} className="border-t border-[var(--border)]"><td className="p-2">{n + 1}</td>{cols.map((c) => <td key={c.key} className="whitespace-nowrap p-2">{r[c.key]}</td>)}</tr>)}</tbody></table>
+            </div>
+            {validation.rows.length > 50 && <p className="text-xs text-[var(--text-muted)]">Showing the first 50 rows.</p>}
+            {validation.valid && validation.rows.length <= MAX_ROWS && (
+              <div className="space-y-3 border-t border-[var(--border)] pt-3">
+                <div className="max-w-md"><Label>Batch name</Label><Input className="mt-1" value={name} onChange={(e) => setName(e.target.value)} data-testid="input-batch-name" /></div>
+                <label className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5" checked={consent} onChange={(e) => setConsent(e.target.checked)} data-testid="checkbox-consent" />
+                  <span>I confirm I am authorized to submit this personal data and that it should create {validation.rows.length} held review case(s). Duplicates are reconciled, not recreated.</span></label>
+                <Button onClick={commit} disabled={!consent || !name.trim() || busy !== null} data-testid="button-confirm-create">{busy === 'commit' ? 'Creating held cases...' : 'Create held cases'}</Button>
+              </div>)}
+          </div>)}
+        {result && (
+          <div className="rounded border border-[var(--status-green)]/30 bg-[var(--status-green-bg)] p-3 text-xs text-[var(--status-green-fg)]" data-testid="section-result">
+            <p className="font-semibold"><Check className="mr-1 inline h-4 w-4" />{result.retry ? 'Retry reconciled; no duplicates created.' : `Batch ${result.name} created.`}</p>
+            <ul className="mt-2 space-y-1">{result.results.map((r) => <li key={r.personKey} className="flex flex-wrap gap-2"><span className="uppercase">{r.status}</span><Link className="underline" href={`/cases/${r.caseId}`}>Case #{r.caseId}</Link></li>)}</ul>
+          </div>)}
+        <div className="border-t border-[var(--border)] pt-3" data-testid="section-history">
+          <h4 className="text-xs font-semibold text-[var(--text-primary)]">Import history</h4>
+          {history.isLoading && <div className="mt-2 h-8 animate-pulse rounded bg-[var(--surface-alt)]" />}
+          {history.isError && <p className="mt-2 text-xs text-[var(--status-red)]">Could not load history. <button className="underline" onClick={() => history.refetch()}>Retry</button></p>}
+          {history.data?.length === 0 && <p className="mt-2 text-xs text-[var(--text-muted)]">No imports yet.</p>}
+          <ul className="mt-2 space-y-2">{history.data?.map((h) => (
+            <li key={h.batchId} className="rounded border border-[var(--border)] p-2 text-xs" data-testid={`row-history-${h.batchId}`}>
+              <div className="flex flex-wrap justify-between gap-2"><strong className="break-words">{h.name}</strong><span className="text-[var(--text-muted)]">{new Date(h.createdAt).toLocaleString()}</span></div>
+              <div className="text-[var(--text-muted)]">{h.family} / {h.templateId} / {h.count} case(s)</div>
+              <div className="mt-1 flex flex-wrap gap-2">{h.caseIds.slice(0, 20).map((id) => <Link key={id} className="underline" href={`/cases/${id}`}>#{id}</Link>)}{h.caseIds.length > 20 && <span>+{h.caseIds.length - 20} more</span>}</div>
+            </li>))}</ul>
+        </div>
+      </div>)}
     </div>
   );
 }

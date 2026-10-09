@@ -20,6 +20,8 @@ export type CaseTypeFilter = (typeof CASE_TYPES)[number];
 export type CaseFamily = Exclude<CaseTypeFilter, 'All Cases'>;
 
 type CaseLike = {
+  caseFamily?: string | null;
+  requestType?: string | null;
   scenarioKey?: string | null;
   hireType?: string | null;
 };
@@ -55,11 +57,13 @@ export function casePresentationOf(c: CaseLike) {
 }
 
 export function caseTypeOf(c: CaseLike): CaseFamily {
+  if (c.caseFamily && CASE_TYPES.includes(c.caseFamily as CaseTypeFilter) && c.caseFamily !== "All Cases") return c.caseFamily as CaseFamily;
   return casePresentationOf(c)?.type ??
     (c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding');
 }
 
 export function caseTitleOf(c: CaseLike): string {
+  if (c.requestType) return c.requestType;
   const presentation = casePresentationOf(c);
   if (presentation) return presentation.title;
   switch (c.hireType) {

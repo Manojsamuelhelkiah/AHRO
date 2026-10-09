@@ -43,6 +43,69 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /onboarding/batch-upload/templates:
+    get:
+      operationId: listHroBatchTemplates
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Versioned intake templates, not policy approval.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/HroBatchTemplate" } }
+  /onboarding/batch-upload/templates/{templateId}/download:
+    get:
+      operationId: downloadHroBatchTemplate
+      tags: [onboarding]
+      parameters:
+        - { name: templateId, in: path, required: true, schema: { type: string } }
+        - { name: format, in: query, required: true, schema: { type: string, enum: [csv, xlsx] } }
+      responses:
+        "200":
+          description: Empty case-specific spreadsheet with instructions.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+  /onboarding/batch-upload/validate:
+    post:
+      operationId: validateHroBatchUpload
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/HroBatchUploadInput" }
+      responses:
+        "200":
+          description: Parsed rows and validation findings. No cases created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroBatchValidation" }
+  /onboarding/batch-upload:
+    post:
+      operationId: createHroBatchUpload
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroBatchCaseInput" }
+      responses:
+        "200":
+          description: Held cases created or safely reconciled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroBatchResult" }
+  /onboarding/batch-upload/history:
+    get:
+      operationId: listHroBatchUploadHistory
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Authorized batches submitted by the current user.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/HroBatchHistoryItem" } }
   /context-manager/retention:
     get:
       operationId: getHroContextRetention
@@ -6733,6 +6796,100 @@ components:
         type: integer
         minimum: 1
   schemas:
+    HroBatchColumn:
+      type: object
+      required: [key, label, required, description, kind]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        required: { type: boolean }
+        description: { type: string }
+        kind: { type: string, enum: [text, date, email, country, choice] }
+        values: { type: array, items: { type: string } }
+    HroBatchTemplate:
+      type: object
+      required: [id, version, family, name, description, columns]
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        family: { type: string }
+        name: { type: string }
+        description: { type: string }
+        hireType: { type: string }
+        columns: { type: array, items: { $ref: "#/components/schemas/HroBatchColumn" } }
+    HroBatchDataRow:
+      type: object
+      additionalProperties: { type: string }
+    HroBatchIssue:
+      type: object
+      required: [row, column, message]
+      properties:
+        row: { type: integer }
+        column: { type: string }
+        message: { type: string }
+    HroBatchUploadInput:
+      type: object
+      required: [file, templateId, templateVersion]
+      properties:
+        file: { type: string, format: binary }
+        templateId: { type: string }
+        templateVersion: { type: integer }
+    HroBatchCaseInput:
+      type: object
+      required: [templateId, templateVersion, name, rows]
+      properties:
+        templateId: { type: string }
+        templateVersion: { type: integer }
+        name: { type: string }
+        rows: { type: array, items: { $ref: "#/components/schemas/HroBatchDataRow" } }
+    HroBatchValidation:
+      type: object
+      required: [valid, rows, issues]
+      properties:
+        valid: { type: boolean }
+        rows: { type: array, items: { $ref: "#/components/schemas/HroBatchDataRow" } }
+        issues: { type: array, items: { $ref: "#/components/schemas/HroBatchIssue" } }
+    HroBatchCreatedRow:
+      type: object
+      required: [personKey, caseId, status, profileId, profileVersion]
+      properties:
+        personKey: { type: string }
+        caseId: { type: integer }
+        status: { type: string, enum: [created, reconciled] }
+        profileId: { type: string }
+        profileVersion: { type: integer }
+    HroBatchResult:
+      type: object
+      required: [batchId, name, retry, results]
+      properties:
+        batchId: { type: string }
+        name: { type: string }
+        retry: { type: boolean }
+        results: { type: array, items: { $ref: "#/components/schemas/HroBatchCreatedRow" } }
+    HroBatchHistoryItem:
+      type: object
+      required: [batchId, name, createdAt, family, templateId, caseIds, count]
+      properties:
+        batchId: { type: string }
+        name: { type: string }
+        createdAt: { type: string }
+        family: { type: string }
+        templateId: { type: string }
+        caseIds: { type: array, items: { type: integer } }
+        count: { type: integer }
+    HroBatchRequest:
+      type: ["object", "null"]
+      required: [templateId, templateVersion, family, requestType, requestId, data, fingerprint, employeeReferenceStatus, executionMode]
+      properties:
+        templateId: { type: string }
+        templateVersion: { type: integer }
+        family: { type: string }
+        requestType: { type: string }
+        requestId: { type: string }
+        data: { $ref: "#/components/schemas/HroBatchDataRow" }
+        fingerprint: { type: string }
+        employeeReferenceStatus: { type: string, enum: [supplied-not-verified, not-applicable] }
+        executionMode: { type: string, enum: [onboarding-review, specialist-review-only] }
     HrPolicyDriftInput:
       type: object
       additionalProperties: false
@@ -11177,6 +11334,9 @@ components:
     OnbCase:
       type: object
       properties:
+        caseFamily: { type: ["string", "null"] }
+        requestType: { type: ["string", "null"] }
+        batchIntake: { $ref: "#/components/schemas/HroBatchRequest" }
         id:
           type: integer
         workerName:

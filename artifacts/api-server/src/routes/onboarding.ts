@@ -317,6 +317,8 @@ import {
   type SensitiveAccess,
 } from "../lib/onboarding/sensitive-access";
 
+import { readHroBatchRequest, policyWithoutBatchIntake } from "../lib/onboarding/hro-batch-templates";
+
 const router: IRouter = Router();
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
 const RESTRICTED_WORKFORCE_CONTEXT_MESSAGE =
@@ -725,6 +727,7 @@ async function serializeCase(
   const gateways = await deriveGateways(row);
   const canReadProfile = caseAccess.profileRead && caseAccess.flowRead;
   const canReadNotes = caseAccess.notesRead && caseAccess.flowRead;
+  const intakeRequest = readHroBatchRequest(row.processPolicySnapshot);
   const canReadReadiness = caseAccess.readinessRead && caseAccess.flowRead;
   // The marker is server-owned. Offline, unauthorized Demo cases are wholly
   // fictional fixtures, so their identity projection does not imply or grant
@@ -739,6 +742,9 @@ async function serializeCase(
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   return {
     id: row.id,
+    caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
+    requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
+    batchIntake: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest : null,
     workerName: canReadIdentity ? row.workerName : "Restricted candidate",
     workerEmail: canReadIdentity ? row.workerEmail : null,
     workerPhone: canReadIdentity ? row.workerPhone : null,
@@ -793,7 +799,7 @@ async function serializeCase(
       : null,
     workforceContextVersion: row.workforceContextVersion,
     processPolicySnapshot: canReadProfile && hasOpaqueNarrativeAccess(sensitiveAccess)
-      ? row.processPolicySnapshot
+      ? policyWithoutBatchIntake(row.processPolicySnapshot)
       : {},
     jobProfileId: canReadProfile ? row.jobProfileId : null,
     jobProfileVersion: canReadProfile ? row.jobProfileVersion : null,
@@ -833,7 +839,7 @@ function serializeEvent(
   };
 }
 
-async function serializeCaseForRequest(req: Request, row: typeof onbCases.$inferSelect) {
+export async function serializeCaseForRequest(req: Request, row: typeof onbCases.$inferSelect) {
   const [sensitiveAccess, caseAccess] = await Promise.all([
     sensitiveAccessForCase(req, row),
     caseGovernanceAccessForRequest(req, row),
@@ -1912,7 +1918,12 @@ router.post("/onboarding/cases/:id/checklist-profile", async (req, res, next) =>
         checklistMatchedCriteria: profile.matchedCriteria,
         checklistMatchExplanation: profile.explanation,
         workforceClassification: recalculatedClassification,
-        processPolicySnapshot: nextProcessPolicySnapshot,
+        processPolicySnapshot: {
+          ...nextProcessPolicySnapshot,
+          ...(readHroBatchRequest(current.processPolicySnapshot)
+            ? { batchIntake: readHroBatchRequest(current.processPolicySnapshot) }
+            : {}),
+        },
         readiness,
         ...(correctedUnexecutedPreworkstream && policyRebaseGateRemoved
           ? {

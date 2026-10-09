@@ -71,6 +71,7 @@ import type {
   DemoVolunteerList,
   DistributionProfile,
   DownloadFairnessEvidenceReport200,
+  DownloadHroBatchTemplateParams,
   EaArchiveRequest,
   EaAssessment,
   EaAssessmentInput,
@@ -135,6 +136,12 @@ import type {
   HrPolicySubmitReviewInput,
   HrPolicySupersedeInput,
   HrPolicyVersionDetailResponse,
+  HroBatchCaseInput,
+  HroBatchHistoryItem,
+  HroBatchResult,
+  HroBatchTemplate,
+  HroBatchUploadInput,
+  HroBatchValidation,
   HroContextHistory,
   HroContextRetentionInput,
   HroContextRetentionStatus,
@@ -393,6 +400,365 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListHroBatchTemplatesUrl = () => {
+
+
+
+
+  return `/api/onboarding/batch-upload/templates`
+}
+
+export const listHroBatchTemplates = async ( options?: RequestInit): Promise<HroBatchTemplate[]> => {
+
+  return customFetch<HroBatchTemplate[]>(getListHroBatchTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListHroBatchTemplatesQueryKey = () => {
+    return [
+    `/api/onboarding/batch-upload/templates`
+    ] as const;
+    }
+
+
+export const getListHroBatchTemplatesQueryOptions = <TData = Awaited<ReturnType<typeof listHroBatchTemplates>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroBatchTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListHroBatchTemplatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHroBatchTemplates>>> = ({ signal }) => listHroBatchTemplates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listHroBatchTemplates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListHroBatchTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof listHroBatchTemplates>>>
+export type ListHroBatchTemplatesQueryError = ErrorType<unknown>
+
+
+
+export function useListHroBatchTemplates<TData = Awaited<ReturnType<typeof listHroBatchTemplates>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroBatchTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListHroBatchTemplatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDownloadHroBatchTemplateUrl = (templateId: string,
+    params: DownloadHroBatchTemplateParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/batch-upload/templates/${templateId}/download?${stringifiedParams}` : `/api/onboarding/batch-upload/templates/${templateId}/download`
+}
+
+export const downloadHroBatchTemplate = async (templateId: string,
+    params: DownloadHroBatchTemplateParams, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadHroBatchTemplateUrl(templateId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadHroBatchTemplateQueryKey = (templateId: string,
+    params?: DownloadHroBatchTemplateParams,) => {
+    return [
+    `/api/onboarding/batch-upload/templates/${templateId}/download`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getDownloadHroBatchTemplateQueryOptions = <TData = Awaited<ReturnType<typeof downloadHroBatchTemplate>>, TError = ErrorType<unknown>>(templateId: string,
+    params: DownloadHroBatchTemplateParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadHroBatchTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadHroBatchTemplateQueryKey(templateId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadHroBatchTemplate>>> = ({ signal }) => downloadHroBatchTemplate(templateId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: templateId !== null && templateId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadHroBatchTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadHroBatchTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof downloadHroBatchTemplate>>>
+export type DownloadHroBatchTemplateQueryError = ErrorType<unknown>
+
+
+
+export function useDownloadHroBatchTemplate<TData = Awaited<ReturnType<typeof downloadHroBatchTemplate>>, TError = ErrorType<unknown>>(
+ templateId: string,
+    params: DownloadHroBatchTemplateParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadHroBatchTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadHroBatchTemplateQueryOptions(templateId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getValidateHroBatchUploadUrl = () => {
+
+
+
+
+  return `/api/onboarding/batch-upload/validate`
+}
+
+export const validateHroBatchUpload = async (hroBatchUploadInput: HroBatchUploadInput, options?: RequestInit): Promise<HroBatchValidation> => {
+    const formData = new FormData();
+formData.append(`file`, hroBatchUploadInput.file);
+formData.append(`templateId`, hroBatchUploadInput.templateId);
+formData.append(`templateVersion`, hroBatchUploadInput.templateVersion.toString())
+
+  return customFetch<HroBatchValidation>(getValidateHroBatchUploadUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getValidateHroBatchUploadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateHroBatchUpload>>, TError,{data: BodyType<HroBatchUploadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof validateHroBatchUpload>>, TError,{data: BodyType<HroBatchUploadInput>}, TContext> => {
+
+const mutationKey = ['validateHroBatchUpload'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof validateHroBatchUpload>>, {data: BodyType<HroBatchUploadInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  validateHroBatchUpload(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ValidateHroBatchUploadMutationResult = NonNullable<Awaited<ReturnType<typeof validateHroBatchUpload>>>
+    export type ValidateHroBatchUploadMutationBody = BodyType<HroBatchUploadInput>
+    export type ValidateHroBatchUploadMutationError = ErrorType<unknown>
+
+    export const useValidateHroBatchUpload = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateHroBatchUpload>>, TError,{data: BodyType<HroBatchUploadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof validateHroBatchUpload>>,
+        TError,
+        {data: BodyType<HroBatchUploadInput>},
+        TContext
+      > => {
+      return useMutation(getValidateHroBatchUploadMutationOptions(options));
+    }
+
+export const getCreateHroBatchUploadUrl = () => {
+
+
+
+
+  return `/api/onboarding/batch-upload`
+}
+
+export const createHroBatchUpload = async (hroBatchCaseInput: HroBatchCaseInput, options?: RequestInit): Promise<HroBatchResult> => {
+
+  return customFetch<HroBatchResult>(getCreateHroBatchUploadUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hroBatchCaseInput)
+  }
+);}
+
+
+
+
+
+export const getCreateHroBatchUploadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createHroBatchUpload>>, TError,{data: BodyType<HroBatchCaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createHroBatchUpload>>, TError,{data: BodyType<HroBatchCaseInput>}, TContext> => {
+
+const mutationKey = ['createHroBatchUpload'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createHroBatchUpload>>, {data: BodyType<HroBatchCaseInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createHroBatchUpload(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateHroBatchUploadMutationResult = NonNullable<Awaited<ReturnType<typeof createHroBatchUpload>>>
+    export type CreateHroBatchUploadMutationBody = BodyType<HroBatchCaseInput>
+    export type CreateHroBatchUploadMutationError = ErrorType<unknown>
+
+    export const useCreateHroBatchUpload = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createHroBatchUpload>>, TError,{data: BodyType<HroBatchCaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createHroBatchUpload>>,
+        TError,
+        {data: BodyType<HroBatchCaseInput>},
+        TContext
+      > => {
+      return useMutation(getCreateHroBatchUploadMutationOptions(options));
+    }
+
+export const getListHroBatchUploadHistoryUrl = () => {
+
+
+
+
+  return `/api/onboarding/batch-upload/history`
+}
+
+export const listHroBatchUploadHistory = async ( options?: RequestInit): Promise<HroBatchHistoryItem[]> => {
+
+  return customFetch<HroBatchHistoryItem[]>(getListHroBatchUploadHistoryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListHroBatchUploadHistoryQueryKey = () => {
+    return [
+    `/api/onboarding/batch-upload/history`
+    ] as const;
+    }
+
+
+export const getListHroBatchUploadHistoryQueryOptions = <TData = Awaited<ReturnType<typeof listHroBatchUploadHistory>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroBatchUploadHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListHroBatchUploadHistoryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHroBatchUploadHistory>>> = ({ signal }) => listHroBatchUploadHistory({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listHroBatchUploadHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListHroBatchUploadHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof listHroBatchUploadHistory>>>
+export type ListHroBatchUploadHistoryQueryError = ErrorType<unknown>
+
+
+
+export function useListHroBatchUploadHistory<TData = Awaited<ReturnType<typeof listHroBatchUploadHistory>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHroBatchUploadHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListHroBatchUploadHistoryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetHroContextRetentionUrl = () => {
 

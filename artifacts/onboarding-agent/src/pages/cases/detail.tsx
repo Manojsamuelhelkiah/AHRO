@@ -41,6 +41,7 @@ import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 import { SimulationPanel } from './detail/simulation-panel';
 import { isDemoCoverageCase } from './case-presentation';
+import { HroIntakeRequestPanel } from '../../components/hro-intake-request-panel';
 import { CaseAccessProvider, RestrictedActionNotice, type CaseAccessPermissions } from './detail/case-access';
 
 export function CaseDetailPage() {
@@ -245,6 +246,18 @@ export function CaseDetailPage() {
   if (!canViewIdentity || c.workerName === "Restricted candidate") {
     restrictedFields.push("Identity (Name, Email, Phone, Manager, Recruiter)");
   }
+  if (c.hireType === 'service-request' || c.orchestrationStatus === 'hro-request-pending-review') {
+    return <CaseAccessProvider value={permissions}>
+      <div className="mx-auto max-w-5xl space-y-5 px-4 md:px-8">
+        <Link href="/cases" className="inline-flex min-h-10 items-center text-sm text-[var(--primary)]">Back to cases</Link>
+        <div><h1 className="text-2xl font-semibold text-[var(--text-primary)]">{c.requestType || 'Service request'}</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Case #{caseId} · Held for specialist review · No external action authorized</p></div>
+        {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} /> :
+          <RestrictedActionNotice>Submitted fields require current profile, notes and sensitive-record read authority. They have not been removed from the case.</RestrictedActionNotice>}
+        {permissions.access.notesRead && <ActivityTab events={events || []} />}
+      </div>
+    </CaseAccessProvider>;
+  }
 
   return (
     <CaseAccessProvider value={permissions}>
@@ -289,6 +302,7 @@ export function CaseDetailPage() {
         />
       )}
 
+      {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} />}
       {offlineSample ? (
         <>
           <div className="mb-6 rounded-lg border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4 shadow-sm">

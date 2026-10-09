@@ -5,6 +5,127 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type HroBatchColumnKind = typeof HroBatchColumnKind[keyof typeof HroBatchColumnKind];
+
+
+export const HroBatchColumnKind = {
+  text: 'text',
+  date: 'date',
+  email: 'email',
+  country: 'country',
+  choice: 'choice',
+} as const;
+
+export interface HroBatchColumn {
+  key: string;
+  label: string;
+  required: boolean;
+  description: string;
+  kind: HroBatchColumnKind;
+  values?: string[];
+}
+
+export interface HroBatchTemplate {
+  id: string;
+  version: number;
+  family: string;
+  name: string;
+  description: string;
+  hireType?: string;
+  columns: HroBatchColumn[];
+}
+
+export interface HroBatchDataRow {[key: string]: string}
+
+export interface HroBatchIssue {
+  row: number;
+  column: string;
+  message: string;
+}
+
+export interface HroBatchUploadInput {
+  file: Blob;
+  templateId: string;
+  templateVersion: number;
+}
+
+export interface HroBatchCaseInput {
+  templateId: string;
+  templateVersion: number;
+  name: string;
+  rows: HroBatchDataRow[];
+}
+
+export interface HroBatchValidation {
+  valid: boolean;
+  rows: HroBatchDataRow[];
+  issues: HroBatchIssue[];
+}
+
+export type HroBatchCreatedRowStatus = typeof HroBatchCreatedRowStatus[keyof typeof HroBatchCreatedRowStatus];
+
+
+export const HroBatchCreatedRowStatus = {
+  created: 'created',
+  reconciled: 'reconciled',
+} as const;
+
+export interface HroBatchCreatedRow {
+  personKey: string;
+  caseId: number;
+  status: HroBatchCreatedRowStatus;
+  profileId: string;
+  profileVersion: number;
+}
+
+export interface HroBatchResult {
+  batchId: string;
+  name: string;
+  retry: boolean;
+  results: HroBatchCreatedRow[];
+}
+
+export interface HroBatchHistoryItem {
+  batchId: string;
+  name: string;
+  createdAt: string;
+  family: string;
+  templateId: string;
+  caseIds: number[];
+  count: number;
+}
+
+export type HroBatchRequestEmployeeReferenceStatus = typeof HroBatchRequestEmployeeReferenceStatus[keyof typeof HroBatchRequestEmployeeReferenceStatus];
+
+
+export const HroBatchRequestEmployeeReferenceStatus = {
+  'supplied-not-verified': 'supplied-not-verified',
+  'not-applicable': 'not-applicable',
+} as const;
+
+export type HroBatchRequestExecutionMode = typeof HroBatchRequestExecutionMode[keyof typeof HroBatchRequestExecutionMode];
+
+
+export const HroBatchRequestExecutionMode = {
+  'onboarding-review': 'onboarding-review',
+  'specialist-review-only': 'specialist-review-only',
+} as const;
+
+/**
+ * @nullable
+ */
+export type HroBatchRequest = {
+  templateId: string;
+  templateVersion: number;
+  family: string;
+  requestType: string;
+  requestId: string;
+  data: HroBatchDataRow;
+  fingerprint: string;
+  employeeReferenceStatus: HroBatchRequestEmployeeReferenceStatus;
+  executionMode: HroBatchRequestExecutionMode;
+} | null;
+
 export type HrPolicyDriftInputAction = typeof HrPolicyDriftInputAction[keyof typeof HrPolicyDriftInputAction];
 
 
@@ -4907,6 +5028,11 @@ export type OnbCaseGateways = {
 };
 
 export interface OnbCase {
+  /** @nullable */
+  caseFamily?: string | null;
+  /** @nullable */
+  requestType?: string | null;
+  batchIntake?: HroBatchRequest | null;
   id: number;
   workerName: string;
   workerEmail: string;
@@ -10520,6 +10646,18 @@ export interface StandardOperationsView {
   exceptions: StandardOperationsViewExceptionsItem[];
   manualFulfillment: StandardOperationsViewManualFulfillmentItem[];
 }
+
+export type DownloadHroBatchTemplateParams = {
+format: DownloadHroBatchTemplateFormat;
+};
+
+export type DownloadHroBatchTemplateFormat = typeof DownloadHroBatchTemplateFormat[keyof typeof DownloadHroBatchTemplateFormat];
+
+
+export const DownloadHroBatchTemplateFormat = {
+  csv: 'csv',
+  xlsx: 'xlsx',
+} as const;
 
 export type ListHroContextTransactionsParams = {
 /**

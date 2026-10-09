@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import {
@@ -39,10 +39,11 @@ import {
 } from "../lib/onboarding/governance-runtime";
 import { assertGovernanceMutationAllowed } from "../lib/onboarding/governance-dispatch";
 import { acquireCaseDispatchMutationLock } from "../lib/onboarding/dispatch-guard";
+import { readHroBatchRequest, type HroBatchRequest } from "../lib/onboarding/hro-batch-templates";
 
 const router: IRouter = Router();
 
-function requireBatchAdministrator(req: Request, res: Response): boolean {
+export function requireBatchAdministrator(req: Request, res: Response): boolean {
   if (isChecklistAdministrator(req.organizationRole)) return true;
   res.status(403).json({ message: "Organization owner or admin role required for batch intake and policy authority administration." });
   return false;
@@ -59,7 +60,7 @@ function containsReservedSyntheticMarker(notes: unknown): boolean {
     /\[demo-controller-run:/i.test(notes);
 }
 
-type BatchPerson = {
+export type BatchPerson = {
   personKey: string;
   workerName: string;
   workerEmail: string;
@@ -79,6 +80,8 @@ type BatchPerson = {
   notes?: string;
   jobProfileId?: string;
   workforceContext?: OnbWorkforceContext;
+  /** Only populated by the validated spreadsheet route, never from the legacy body. */
+  batchRequest?: HroBatchRequest;
 };
 
 function parsePerson(value: unknown): BatchPerson | null {
@@ -122,7 +125,7 @@ function parsePerson(value: unknown): BatchPerson | null {
  * any communication/provider path; an HR user reviews the resulting cases
  * before a downstream workflow is allowed to run.
  */
-router.post("/onboarding/batch-intake", async (req, res, next) => {
+export async function createHeldBatch(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!requireBatchAdministrator(req, res)) return;
     const input = req.body as Record<string, unknown>;
@@ -139,7 +142,8 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
       });
       return;
     }
-    const people = rawPeople.map(parsePerson);
+    const trustedPeople = res.locals.hroBatchPeople as BatchPerson[] | undefined;
+    const people = trustedPeople ?? rawPeople.map(parsePerson);
     if (!idempotencyKey || !name || people.length === 0 || people.length > 500 || people.some((person) => !person)) {
       res.status(400).json({ message: "A batch name, retry key, and 1–500 valid people are required." });
       return;
@@ -158,6 +162,9 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
       await governanceSnapshotForNewCase(organizationId);
       return db.transaction(async (tx) => {
         await assertGovernanceMutationAllowed(tx, organizationId);
+        // Serialize source-request reconciliation across different upload files,
+        // not only retries carrying the same batch key.
+        if (trustedPeople) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`hro-batch:${organizationId}`}, 0))`);
         const caseAccess = await resolveEffectiveAccessInTransaction(tx, {
           organizationId,
           principalType: "human",
@@ -167,7 +174,7 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
         const requiredCaseKeys = [
           "flow.case.edit",
           "data.case.profile.edit",
-          ...(parsedPeople.some((person) => Boolean(person.notes?.trim()))
+          ...(parsedPeople.some((person) => Boolean(person.notes?.trim()) || person.batchRequest)
             ? ["data.case.notes.edit"]
             : []),
         ];
@@ -178,6 +185,12 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
           );
         }
         const governanceSnapshot = await governanceSnapshotForNewCase(organizationId, new Date(), tx);
+        if (trustedPeople) {
+          for (const country of new Set(trustedPeople.map(person => jurisdictionForWorkforceContext(person.workforceContext ?? {})))) {
+            const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, { organizationId, jurisdiction: country });
+            if (!gate.allowed) throw Object.assign(new Error(gate.reason), { statusCode: 409 });
+          }
+        }
         let [existing] = await tx.select().from(onbIntakeBatches).where(and(
           eq(onbIntakeBatches.organizationId, organizationId),
           eq(onbIntakeBatches.idempotencyKey, idempotencyKey),
@@ -210,9 +223,37 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
             eq(onbIntakeBatchPeople.personKey, person.personKey),
           )).limit(1);
           if (prior) {
+            const access = await resolveEffectiveAccessInTransaction(tx, {
+              organizationId, principalType: "human", principalId: req.authUserId!, caseId: prior.caseId, purpose: "batch-retry-case-reference",
+            });
+            if (!access.allows.includes("flow.case.read")) throw Object.assign(new Error("Current case access is required to reconcile this request."), { statusCode: 403 });
             const policy = prior.processPolicySnapshot as { profileId?: string; profileVersion?: number };
             results.push({ personKey: person.personKey, caseId: prior.caseId, status: "reconciled", profileId: policy.profileId ?? "unknown", profileVersion: policy.profileVersion ?? 0 });
             continue;
+          }
+          if (person.batchRequest) {
+            const [source] = await tx.select({ case: onbCases, original: onbIntakeBatchPeople.processPolicySnapshot, originalContext: onbIntakeBatchPeople.workforceContextSnapshot }).from(onbIntakeBatchPeople)
+              .innerJoin(onbCases, and(eq(onbCases.organizationId, onbIntakeBatchPeople.organizationId), eq(onbCases.id, onbIntakeBatchPeople.caseId)))
+              .where(and(
+                eq(onbIntakeBatchPeople.organizationId, organizationId),
+                sql`${onbIntakeBatchPeople.processPolicySnapshot}->'batchIntake'->>'templateId' = ${person.batchRequest.templateId}`,
+                sql`${onbIntakeBatchPeople.processPolicySnapshot}->'batchIntake'->>'requestId' = ${person.batchRequest.requestId}`,
+              )).limit(1);
+            if (source) {
+              const duplicate = source.case;
+              const previous = readHroBatchRequest(source.original);
+              if (previous?.fingerprint !== person.batchRequest.fingerprint) throw Object.assign(new Error(`Request ${person.personKey} already exists with different data. A retry cannot overwrite an existing case.`), { statusCode: 409 });
+              const access = await resolveEffectiveAccessInTransaction(tx, {
+                organizationId, principalType: "human", principalId: req.authUserId!, caseId: duplicate.id, purpose: "batch-source-request-reconciliation",
+              });
+              if (!access.allows.includes("flow.case.read")) throw Object.assign(new Error("Current case access is required to reconcile this request."), { statusCode: 403 });
+              await tx.insert(onbIntakeBatchPeople).values({
+                organizationId, batchId, personKey: person.personKey, caseId: duplicate.id,
+                workforceContextSnapshot: source.originalContext, processPolicySnapshot: source.original,
+              });
+              results.push({ personKey: person.personKey, caseId: duplicate.id, status: "reconciled", profileId: duplicate.checklistProfileId, profileVersion: duplicate.checklistProfileVersion ?? 1 });
+              continue;
+            }
           }
           const [jobProfile] = person.jobProfileId
             ? await tx.select().from(onbJobProfiles).where(and(
@@ -228,7 +269,23 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
             hiringMode: "batch",
             batchId,
           });
-          const workforcePolicy = await resolveEffectiveWorkforcePolicyInTransaction(
+          const specialistRequest = person.batchRequest?.executionMode === "specialist-review-only";
+          const workforcePolicy = specialistRequest ? {
+            profile: {
+              profileId: `hro-intake:${person.batchRequest!.templateId}`,
+              profileVersion: person.batchRequest!.templateVersion, templateVersion: person.batchRequest!.templateVersion,
+              profileName: `${person.batchRequest!.requestType} — intake review`,
+              matchedCriteria: {}, explanation: "Input-schema snapshot only; not approved employment policy or execution authority.",
+              processPolicy: {},
+            },
+            classification: null,
+            effectiveItems: [{
+              id: "hro-specialist-request-review", label: "Authorized specialist review of submitted request",
+              order: 0, enabled: true, mandatory: true, evidenceRequired: true,
+              enforcementStage: "before-workstreams" as const, executor: "human-task" as const,
+              completionAuthority: "designated-human" as const, responsibleRole: "Designated specialist",
+            }],
+          } : await resolveEffectiveWorkforcePolicyInTransaction(
             tx,
             organizationId,
             workforceContext,
@@ -239,6 +296,7 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
           const processPolicySnapshot = withGovernanceDecisionSnapshot({
             profileId: profile.profileId, profileVersion: profile.profileVersion, templateVersion: profile.templateVersion,
             processPolicy: profile.processPolicy ?? {}, classification,
+            ...(person.batchRequest ? { batchIntake: person.batchRequest, specialistReviewOnly: specialistRequest } : {}),
           }, governanceSnapshot);
           // The case envelope, logistics, and the batch-person snapshot can
           // retain opaque candidate facts. Check the server-normalized work
@@ -264,7 +322,8 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
             checklistMatchExplanation: profile.explanation, workforceContext, workforceClassification: classification,
             processPolicySnapshot, jobProfileId: jobProfile?.profileId ?? null, jobProfileVersion: jobProfile?.version ?? null,
             readiness: readinessFromChecklist(checklistSnapshot), workstreams: [], lifecycleStage: "trigger-received",
-            orchestrationStatus: "batch-intake-pending-review",
+            orchestrationStatus: specialistRequest ? "hro-request-pending-review" : "batch-intake-pending-review",
+            createdByUserId: req.authUserId!,
           }).returning();
           await tx.insert(onbCaseLogistics).values({
             organizationId, caseId: created.id, ...logisticsForCase(logisticsDefault, created.joiningDate),
@@ -294,7 +353,8 @@ router.post("/onboarding/batch-intake", async (req, res, next) => {
     }
     next(err);
   }
-});
+};
+router.post("/onboarding/batch-intake", createHeldBatch);
 
 /**
  * Batch intake is deliberately inert. An owner/admin must explicitly release
@@ -324,6 +384,9 @@ router.post("/onboarding/batch-intake/:batchId/cases/:caseId/release", async (re
           eq(onbIntakeBatchPeople.caseId, caseId),
         )).for("update");
       if (!row) return { kind: "not-found" as const };
+      if (readHroBatchRequest(row.case.processPolicySnapshot)?.executionMode === "specialist-review-only") {
+        return { kind: "specialist-review-only" as const };
+      }
       const caseAccess = await resolveEffectiveAccessInTransaction(tx, {
         organizationId,
         principalType: "human",
@@ -368,6 +431,7 @@ router.post("/onboarding/batch-intake/:batchId/cases/:caseId/release", async (re
       return { kind: "released" as const, case: released };
     }));
     if (outcome.kind === "not-found") return void res.status(404).json({ message: "Batch case not found in this organization." });
+    if (outcome.kind === "specialist-review-only") return void res.status(409).json({ message: "This is a specialist-review request, not an onboarding case. Batch release cannot authorize external changes." });
     if (outcome.kind === "gate-a-required") return void res.status(409).json({ message: "This case requires the dedicated Gate A offer-acceptance confirmation; batch release cannot bypass it." });
     if (outcome.kind === "policy-rebase-required") return void res.status(409).json({ message: "This batch case has a pending workforce context correction. Rebase its policy before explicit release." });
     if (outcome.kind === "already-released") return void res.status(409).json({ message: `This case is no longer held for batch review (status: ${outcome.status}).` });

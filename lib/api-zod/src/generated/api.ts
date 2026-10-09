@@ -8,6 +8,86 @@
 import * as zod from 'zod';
 
 
+export const ListHroBatchTemplatesResponseItem = zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "family": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "hireType": zod.string().optional(),
+  "columns": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "required": zod.boolean(),
+  "description": zod.string(),
+  "kind": zod.enum(['text', 'date', 'email', 'country', 'choice']),
+  "values": zod.array(zod.string()).optional()
+}))
+})
+export const ListHroBatchTemplatesResponse = zod.array(ListHroBatchTemplatesResponseItem)
+
+
+export const DownloadHroBatchTemplateParams = zod.object({
+  "templateId": zod.coerce.string()
+})
+
+export const DownloadHroBatchTemplateQueryParams = zod.object({
+  "format": zod.enum(['csv', 'xlsx'])
+})
+
+export const DownloadHroBatchTemplateResponse = zod.unknown()
+
+
+export const ValidateHroBatchUploadBody = zod.object({
+  "file": zod.instanceof(File),
+  "templateId": zod.string(),
+  "templateVersion": zod.number()
+})
+
+export const ValidateHroBatchUploadResponse = zod.object({
+  "valid": zod.boolean(),
+  "rows": zod.array(zod.record(zod.string(), zod.string())),
+  "issues": zod.array(zod.object({
+  "row": zod.number(),
+  "column": zod.string(),
+  "message": zod.string()
+}))
+})
+
+
+export const CreateHroBatchUploadBody = zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "name": zod.string(),
+  "rows": zod.array(zod.record(zod.string(), zod.string()))
+})
+
+export const CreateHroBatchUploadResponse = zod.object({
+  "batchId": zod.string(),
+  "name": zod.string(),
+  "retry": zod.boolean(),
+  "results": zod.array(zod.object({
+  "personKey": zod.string(),
+  "caseId": zod.number(),
+  "status": zod.enum(['created', 'reconciled']),
+  "profileId": zod.string(),
+  "profileVersion": zod.number()
+}))
+})
+
+
+export const ListHroBatchUploadHistoryResponseItem = zod.object({
+  "batchId": zod.string(),
+  "name": zod.string(),
+  "createdAt": zod.string(),
+  "family": zod.string(),
+  "templateId": zod.string(),
+  "caseIds": zod.array(zod.number()),
+  "count": zod.number()
+})
+export const ListHroBatchUploadHistoryResponse = zod.array(ListHroBatchUploadHistoryResponseItem)
+
+
 /**
  * Requires current server-verified privacy or legal authority and current tenant membership. No default approval is created.
  * @summary Read metadata retention policy and bounded sweep status
@@ -10881,6 +10961,19 @@ export const runOnboardingScenarioResponseWorkforceContextLanguagePreferenceMax 
 
 
 export const RunOnboardingScenarioResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -11104,6 +11197,19 @@ export const listOnboardingCasesResponseWorkforceContextLanguagePreferenceMax = 
 
 
 export const ListOnboardingCasesResponseItem = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -11420,6 +11526,19 @@ export const createOnboardingCaseResponseWorkforceContextLanguagePreferenceMax =
 
 
 export const CreateOnboardingCaseResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -11647,6 +11766,19 @@ export const getOnboardingCaseResponseWorkforceContextLanguagePreferenceMax = 12
 
 
 export const GetOnboardingCaseResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -11952,6 +12084,19 @@ export const confirmOnboardingOfferAcceptanceResponseWorkforceContextLanguagePre
 
 
 export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -12196,6 +12341,19 @@ export const recalculateOnboardingChecklistProfileResponseWorkforceContextLangua
 
 
 export const RecalculateOnboardingChecklistProfileResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -15123,6 +15281,19 @@ export const updateOnboardingChecklistItemResponseWorkforceContextLanguagePrefer
 
 
 export const UpdateOnboardingChecklistItemResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -15386,6 +15557,19 @@ export const verifyOnboardingChecklistEvidenceResponseWorkforceContextLanguagePr
 
 
 export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),
@@ -15706,6 +15890,19 @@ export const correctOnboardingWorkforceContextResponseWorkforceContextLanguagePr
 
 
 export const CorrectOnboardingWorkforceContextResponse = zod.object({
+  "caseFamily": zod.string().nullish(),
+  "requestType": zod.string().nullish(),
+  "batchIntake": zod.object({
+  "templateId": zod.string(),
+  "templateVersion": zod.number(),
+  "family": zod.string(),
+  "requestType": zod.string(),
+  "requestId": zod.string(),
+  "data": zod.record(zod.string(), zod.string()),
+  "fingerprint": zod.string(),
+  "employeeReferenceStatus": zod.enum(['supplied-not-verified', 'not-applicable']),
+  "executionMode": zod.enum(['onboarding-review', 'specialist-review-only'])
+}).nullish(),
   "id": zod.number(),
   "workerName": zod.string(),
   "workerEmail": zod.string(),

@@ -1,4 +1,7 @@
 import { Router, type IRouter } from "express";
+import { db, onbCases } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import healthRouter from "./health";
 import corpusRouter from "./corpus";
 import scenariosRouter from "./scenarios";
@@ -12,6 +15,7 @@ import onboardingRouter from "./onboarding";
 import onboardingCaseSimulationRouter from "./onboarding-case-simulation";
 import onboardingChecklistProfileDraftRouter from "./onboarding-checklist-profile-draft";
 import onboardingBatchIntakeRouter from "./onboarding-batch-intake";
+import onboardingBatchUploadRouter from "./onboarding-batch-upload";
 import onboardingStandardIntakeRouter from "./onboarding-standard-intake";
 import onboardingTaIntakeRouter from "./onboarding-ta-intake";
 import onboardingSlaRouter from "./onboarding-sla";
@@ -75,6 +79,24 @@ router.use((req, res, next) => {
   });
 });
 router.use(hroRequestContext);
+// Imported service requests have no onboarding execution adapter. Keep every
+// onboarding mutation fail-closed, including direct calls bypassing the UI.
+// DELETE retains the existing hold-aware deletion path.
+router.use("/onboarding/cases/:caseId", async (req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS", "DELETE"].includes(req.method)) { next(); return; }
+  const caseId = Number(req.params.caseId);
+  if (!Number.isSafeInteger(caseId) || caseId < 1) { next(); return; }
+  const [record] = await db.select({ hireType: onbCases.hireType }).from(onbCases).where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, req.organizationId!))).limit(1);
+  if (record?.hireType === "service-request") {
+    const access = await db.transaction(tx => resolveEffectiveAccessInTransaction(tx, {
+      organizationId: req.organizationId!, principalType: "human", principalId: req.authUserId!, caseId, purpose: "held-service-request-mutation",
+    }));
+    if (!access.allows.includes("flow.case.edit")) { res.status(403).json({ message: "Current case-flow edit access is required." }); return; }
+    res.status(409).json({ message: "This request is held for specialist review. Onboarding mutations cannot authorize or execute this service request." });
+    return;
+  }
+  next();
+});
 router.use(hroContextRouter);
 router.use(employeeVaultEmployerRouter);
 router.use(corpusRouter);
@@ -94,6 +116,7 @@ router.use(onboardingCaseSimulationRouter);
 router.use(onboardingRouter);
 router.use(onboardingAuditRouter);
 router.use(onboardingBatchIntakeRouter);
+router.use(onboardingBatchUploadRouter);
 router.use(onboardingStandardIntakeRouter);
 router.use(onboardingStandardProvidersRouter);
 router.use(actionCenterRouter);

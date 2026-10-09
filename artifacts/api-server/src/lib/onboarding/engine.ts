@@ -865,6 +865,7 @@ export async function runWorkstreams(
   claim?: OrchestrationClaim,
 ): Promise<"paused" | "complete"> {
   const record = await getCase(caseId);
+  if (record.hireType === "service-request") return "paused";
   return withHroCaseContext(record, () => runWorkstreamsInContext(caseId, claim));
 }
 
@@ -1543,6 +1544,10 @@ export function startOrchestration(caseId: number) {
 
 /** Detached continuations reload the subject; a closed HTTP frame is never revived. */
 async function runCaseContextAttempt(caseId: number, action: () => Promise<void>) {
+  const [intakeCase] = await db.select({ hireType: onbCases.hireType }).from(onbCases).where(eq(onbCases.id, caseId));
+  // Service imports are real human-review requests, never an alternative
+  // trigger for the onboarding engine or its communications/provider effects.
+  if (intakeCase?.hireType === "service-request") return;
   try {
     const record = await getCase(caseId);
     await withHroCaseContext(record, action);
