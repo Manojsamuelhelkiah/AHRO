@@ -15,6 +15,8 @@ The active client/workspace name must remain visually identifiable even when the
 
 The product is SaaS, and the user requires one platform-wide administrator for client setup and administration, rather than relying only on separate client owners.
 
+The initial cross-client administration is intended for two operators. The user wants the privileged administrator login tied to a private verified email, not unrestricted public demo access.
+
 **Why:** The user explicitly requested one administrator with universal rights and said finer restrictions can be introduced later.
 
 **How to apply:** Treat platform administration as an explicit cross-client privilege. Bind it to a verified private identity, never a public shared demo identity. Preserve active-client context and attribution of the actual actor; administrative access does not manufacture professional qualifications, source verification or employee consent.
