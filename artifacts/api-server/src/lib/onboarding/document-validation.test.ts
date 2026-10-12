@@ -47,7 +47,7 @@ test("legacy checksum initialization is not an actionable correction", () => {
   assert.equal(actionableCorrectionReason({ code: "legacy_checksum_initialized", evidence: "initialized" }), false);
 });
 
-test("candidate reminders are authorized per case and WhatsApp-only cases stay logged-only", () => {
+test("candidate reminders use deliverable case email even when WhatsApp is selected", () => {
   assert.equal(candidateEmailMaySend({
     channelPreference: "email", caseAuthorized: true, explicitlyAllowlisted: false, validEmail: true,
   }), true);
@@ -56,11 +56,11 @@ test("candidate reminders are authorized per case and WhatsApp-only cases stay l
   }), false);
   assert.equal(candidateEmailMaySend({
     channelPreference: "whatsapp", caseAuthorized: true, explicitlyAllowlisted: false, validEmail: true,
-  }), false);
+  }), true);
   assert.equal(candidateEmailDeliveryDecision({
-    workerEmail: "candidate@example.com", channelPreference: "whatsapp", candidateEmailAuthorizedAt: new Date(),
-  }).allowed, false);
+    workerEmail: "candidate@mailhost.com", channelPreference: "whatsapp", candidateEmailAuthorizedAt: null,
+  }).allowed, true);
   assert.match(candidateEmailDeliveryDecision({
     workerEmail: "candidate@example.com", channelPreference: "whatsapp", candidateEmailAuthorizedAt: new Date(),
-  }).reason ?? "", /logged, not delivered/);
+  }).reason ?? "", /reserved placeholder/);
 });

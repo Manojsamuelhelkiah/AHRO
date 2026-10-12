@@ -275,6 +275,7 @@ import type {
   RefreshOnboardingPolicyRecommendationsBody,
   ReleaseSensitiveLifecycleHoldBody,
   RemovedOrganizationMember,
+  RequestOnboardingOfferPackageEmail200,
   ResolveIntentRouteInput,
   ResolvedIntentRoute,
   RestartOnboardingCaseSimulationBody,
@@ -13837,6 +13838,77 @@ export const useExplainOnboardingCase = <TError = ErrorType<ErrorMessage>,
         TContext
       > => {
       return useMutation(getExplainOnboardingCaseMutationOptions(options));
+    }
+
+export const getRequestOnboardingOfferPackageEmailUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${id}/offer-package-request`
+}
+
+/**
+ * @summary Request the idempotent candidate offer-package email without activating the case
+ */
+export const requestOnboardingOfferPackageEmail = async (id: number, options?: RequestInit): Promise<RequestOnboardingOfferPackageEmail200> => {
+
+  return customFetch<RequestOnboardingOfferPackageEmail200>(getRequestOnboardingOfferPackageEmailUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRequestOnboardingOfferPackageEmailMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestOnboardingOfferPackageEmail>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestOnboardingOfferPackageEmail>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['requestOnboardingOfferPackageEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestOnboardingOfferPackageEmail>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  requestOnboardingOfferPackageEmail(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestOnboardingOfferPackageEmailMutationResult = NonNullable<Awaited<ReturnType<typeof requestOnboardingOfferPackageEmail>>>
+
+    export type RequestOnboardingOfferPackageEmailMutationError = ErrorType<void>
+
+    /**
+ * @summary Request the idempotent candidate offer-package email without activating the case
+ */
+export const useRequestOnboardingOfferPackageEmail = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestOnboardingOfferPackageEmail>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestOnboardingOfferPackageEmail>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRequestOnboardingOfferPackageEmailMutationOptions(options));
     }
 
 export const getConfirmOnboardingOfferAcceptanceUrl = (id: number,) => {

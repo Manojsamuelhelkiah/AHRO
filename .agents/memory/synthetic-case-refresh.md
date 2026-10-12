@@ -3,9 +3,9 @@ name: Synthetic case refresh safety
 description: Consent, provenance, offline authority, and storage boundaries for replacing demo cases.
 ---
 
-Refreshing synthetic cases does not authorize outreach or external business changes. Fresh reset examples must remain offline until a separately designed, explicit activation flow is authorized. Their persistent offline marker is authoritative; editing names or contact details must never implicitly activate them.
+Refreshing synthetic cases does not activate workflows or authorize external business changes. Their persistent offline marker remains authoritative for non-email operations. A supplied deliverable candidate address permits normal requested email under the separate [candidate email boundaries](candidate-email-boundaries.md), never non-email activation or isolated UAT delivery.
 
-**Why:** Existing synthetic scenarios use a real demonstration mailbox. Synthetic-looking names, scenario keys, and membership in a demo workspace do not establish either fictitious identity or permission to contact someone.
+**Why:** Synthetic-looking names, scenario keys and demo membership do not establish professional authority or evidence. The user explicitly revised the blanket email denial on 2026-10-12, but retained privacy/governance review, reset locking and all non-email fences.
 
 **How to apply:** Confirm an explicit, tenant-scoped inventory against source provenance; preserve ambiguous and manually entered cases. Do not broaden a reset to every row with a scenario key or every row in a demo workspace.
 

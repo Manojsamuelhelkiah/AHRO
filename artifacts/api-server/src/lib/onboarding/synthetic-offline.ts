@@ -1,4 +1,5 @@
 import type { OnbSyntheticProvenance } from "@workspace/db/schema";
+import { candidateEmailDeliveryDecision } from "./channel-routing";
 
 /**
  * A reserved, server-created marker for demo reset samples.
@@ -42,6 +43,17 @@ export function isUatRunIsolatedCase(row: SyntheticOfflineCase): boolean {
   return typeof row.scenarioKey === "string" && row.scenarioKey.startsWith("UAT-");
 }
 
+/**
+ * This exception only permits candidate email, not activation of the sample.
+ * The durable UAT run ledger must also be checked by every dispatch boundary.
+ */
+export function sampleCandidateEmailEligible(row: SyntheticOfflineCase): boolean {
+  const coverageSample = row.syntheticProvenance === "demo-full-coverage" &&
+    row.scenarioKey?.startsWith("UAT-DEMO-COVERAGE:") === true;
+  return (!isUatRunIsolatedCase(row) || coverageSample) &&
+    candidateEmailDeliveryDecision({ workerEmail: row.workerEmail ?? "" }).allowed;
+}
+
 export function isSyntheticDemoAuthority(input: {
   organizationId: string;
   caseRow: SyntheticOfflineCase;
@@ -53,4 +65,4 @@ export function isSyntheticDemoAuthority(input: {
 }
 
 export const SYNTHETIC_OFFLINE_WARNING =
-  "Synthetic sample is paused offline: no orchestration, provider dispatch, outreach, or readiness completion has run.";
+  "Synthetic sample workflows remain offline: no non-email provider operation or readiness completion is authorized. Candidate email may be requested for a deliverable address, subject to privacy and governance checks; isolated UAT runs never send email.";

@@ -22,8 +22,10 @@ import {
 import {
   SYNTHETIC_OFFLINE_WARNING,
   isSyntheticOfflineCase,
+  sampleCandidateEmailEligible,
 } from "./synthetic-offline";
 import { withCaseDispatchGuard } from "./dispatch-guard";
+import { getUatCaseIsolation } from "./uat-isolation";
 import {
   dispatchWithProviderGovernance,
   evaluateProviderGovernanceGate,
@@ -33,15 +35,18 @@ import {
   evaluateSensitiveLifecycleGate,
   jurisdictionForWorkforceContext,
   withSensitiveLifecycleFence,
+  SensitiveLifecyclePermissionError,
 } from "./sensitive-lifecycle";
 
 const connectors = new ReplitConnectors();
 let connectorProxy: typeof connectors.proxy = connectors.proxy.bind(connectors);
+let fakeConnectorInstalled = false;
 
 /** Test-only seam for the process-owned connector instance. */
 export function setOnboardingConnectorProxyForTests(
   proxy: typeof connectors.proxy | null,
 ): void {
+  fakeConnectorInstalled = proxy !== null;
   connectorProxy = proxy ? proxy : connectors.proxy.bind(connectors);
 }
 
@@ -185,6 +190,11 @@ export async function sendEmail(
       failureReason: "External email delivery is denied by the active execution safety policy.",
       externalMessageId: null,
     };
+  }
+  // The automated runner may exercise real eligibility, but never the real
+  // Gmail connector. A fake transport is the only permitted test send.
+  if (process.env.ONBOARDING_AUTOMATED_TEST === "true" && !fakeConnectorInstalled) {
+    return { status: "logged-only", failureReason: "Automated tests cannot call the live email provider.", externalMessageId: null };
   }
   try {
     const rfc2822 = [
@@ -466,6 +476,8 @@ export async function sendOutbound(opts: {
   idempotencyKey?: string;
   /** The caller has already persisted the exact delivery payload. */
   stableBody?: boolean;
+  /** Server-only receipt from this invocation's freshly inserted payload. */
+  freshPreparedMessageId?: number;
   /** The caller has already added the case-bound reply reference. */
   skipCandidateReplyReference?: boolean;
   /** Keeps explicitly approved Demo volunteer mail out of candidate KPIs. */
@@ -482,6 +494,7 @@ export async function sendOutbound(opts: {
   const guarded = await withCaseDispatchGuard(opts.caseId, () =>
     withSensitiveLifecycleFence(caseForFence.organizationId, () => sendOutboundUnsafe(opts)),
     {
+      operation: opts.channel === "email" ? "candidate-email" : undefined,
       onOffline: () => withSensitiveLifecycleFence(caseForFence.organizationId, () => sendOutboundUnsafe(opts)),
       isUnknownResult: (result) => result.status === "sending",
     },
@@ -501,14 +514,35 @@ async function sendOutboundUnsafe(opts: {
   sensitive?: boolean;
   idempotencyKey?: string;
   stableBody?: boolean;
+  freshPreparedMessageId?: number;
   skipCandidateReplyReference?: boolean;
   audience?: "candidate";
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
   if (!caseRow) throw new Error(`case ${opts.caseId} not found`);
+  if (opts.channel === "email" && opts.idempotencyKey) {
+    const [recorded] = await db.select().from(onbCommunications).where(and(
+      eq(onbCommunications.organizationId, caseRow.organizationId),
+      eq(onbCommunications.idempotencyKey, opts.idempotencyKey),
+    ));
+    if (recorded) {
+      if (recorded.caseId !== opts.caseId || recorded.channel !== "email" || recorded.audience !== "candidate") {
+        throw new Error("Communication idempotency key is bound to another payload");
+      }
+      // Eligibility changes cannot resend stored denials. Only an authorized
+      // retry may dispatch a definitive failure; preserve uncertain outcomes.
+      if (!(recorded.status === "sending" && recorded.id === opts.freshPreparedMessageId)) {
+        return { id: recorded.id, status: recorded.status, failureReason: recorded.failureReason };
+      }
+    }
+  }
   const timelineAudience = opts.audience ?? "candidate";
-  if (!isSyntheticOfflineCase(caseRow)) {
+  const isolation = await getUatCaseIsolation(caseRow);
+  const offline = isSyntheticOfflineCase(caseRow) || isolation.isolated || isRetiredControllerCase(caseRow);
+  const emailException = opts.channel === "email" && sampleCandidateEmailEligible(caseRow) &&
+    !isolation.linkedToRun && !isRetiredControllerCase(caseRow);
+  if (!offline || emailException) {
     const lifecycle = await withSensitiveLifecycleFence(caseRow.organizationId, () =>
       evaluateSensitiveLifecycleGate({
         organizationId: caseRow.organizationId,
@@ -518,7 +552,7 @@ async function sendOutboundUnsafe(opts: {
       }),
     );
     if (!lifecycle.allowed) {
-      throw new Error(`Candidate communication collection is blocked: ${lifecycle.reason}`);
+      throw new SensitiveLifecyclePermissionError(`Candidate communication collection is blocked: ${lifecycle.reason}`);
     }
   }
   // Authorize the address supplied by the caller first.  It is only a
@@ -540,10 +574,9 @@ async function sendOutboundUnsafe(opts: {
   // boundary below: a volunteer can be revoked or edited while this
   // operation is preparing its payload.
   // Keep the offline guard before the effect journal/provider claim. A prior
-  // interrupted attempt may have left its timeline row in `sending`; the
-  // authoritative offline decision must close that row as `blocked` rather
-  // than replaying the unknown state forever.
-  if (isSyntheticOfflineCase(caseRow) || isRetiredControllerCase(caseRow)) {
+  // interrupted attempt may have left its timeline row in `sending`. Offline
+  // mode cannot prove non-delivery, so preserve uncertainty until reconciled.
+  if (offline && !emailException) {
     if (opts.idempotencyKey) {
       const [existing] = await db.select().from(onbCommunications).where(and(
         eq(onbCommunications.organizationId, caseRow.organizationId),
@@ -553,22 +586,8 @@ async function sendOutboundUnsafe(opts: {
         if (existing.caseId !== opts.caseId || existing.channel !== opts.channel) {
           throw new Error("Communication idempotency key is bound to another payload");
         }
-        if (existing.status === "sending") {
-          const [blockedExisting] = await db.update(onbCommunications).set({
-            status: "blocked",
-            failureReason: SYNTHETIC_OFFLINE_WARNING,
-          }).where(and(
-            eq(onbCommunications.id, existing.id),
-            eq(onbCommunications.organizationId, caseRow.organizationId),
-          )).returning({ id: onbCommunications.id });
-          if (blockedExisting) {
-            return {
-              id: blockedExisting.id,
-              status: "blocked",
-              failureReason: SYNTHETIC_OFFLINE_WARNING,
-            };
-          }
-        }
+        // Offline mode cannot prove an earlier ambiguous send did not happen.
+        // Preserve `sending` for reconciliation, never turn it retryable.
         return { id: existing.id, status: existing.status, failureReason: existing.failureReason };
       }
     }
@@ -596,6 +615,7 @@ async function sendOutboundUnsafe(opts: {
   const governance = await evaluateProviderGovernanceGate(
     caseRow,
     PROVIDER_GOVERNANCE_WORKFLOW.communication,
+    { candidateEmailDelivery: opts.channel === "email" },
   );
   if (!governance.allowed) {
     return recordGovernanceBlockedCommunication({
@@ -708,9 +728,7 @@ async function sendOutboundUnsafe(opts: {
       communicationId: await ensureCommunication(null),
     };
   }
-  // Preserve prior explicit demo/env authorization for a case candidate while
-  // still deriving the target from the record. It is not a blanket bypass:
-  // the address itself must be allowlisted and the case must allow email.
+  // Email eligibility is case-address based, independent of legacy allowlists.
   const candidateMaySend = candidateEmail && candidateEmailMaySend({
     channelPreference: caseRow.channelPreference,
     caseAuthorized: candidateEmail.allowed,
@@ -729,7 +747,7 @@ async function sendOutboundUnsafe(opts: {
       caseId: opts.caseId,
       key: "recipient-allowlist",
       action: "blocked",
-      detail: `Live email delivery to ${maskEmail(actualAddress)} withheld — case-scoped candidate authorization is absent. Message logged only.`,
+      detail: `Candidate email to ${maskEmail(actualAddress)} withheld — ${candidateEmail.reason}`,
     });
   } else if (
     opts.channel !== "email" &&
@@ -766,6 +784,7 @@ async function sendOutboundUnsafe(opts: {
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
       operation: `candidate-email:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
       providerId: "gmail",
+      candidateEmailDelivery: true,
       dispatch: () => sendEmail(actualAddress, subject ?? "Onboarding update", body),
       disposition: (value) => value.status === "sending"
         ? "unknown"
@@ -1126,11 +1145,8 @@ export async function retryCandidateEmail(
     caseId,
     () => retryCandidateEmailUnsafe(caseId, communicationId, reviewer, send, claimLiveSend),
     {
-      onOffline: async () => ({
-        ok: false as const,
-        code: "not-retryable" as const,
-        reason: SYNTHETIC_OFFLINE_WARNING,
-      }),
+      operation: "candidate-email",
+      onOffline: async () => ({ ok: false as const, code: "not-retryable" as const, reason: SYNTHETIC_OFFLINE_WARNING }),
       isUnknownResult: (result) =>
         result.ok && result.communication.status === "sending",
     },
@@ -1152,14 +1168,14 @@ async function retryCandidateEmailUnsafe(
   const [existing] = await db
     .select({ communication: onbCommunications, candidate: onbCases })
     .from(onbCommunications)
-    .innerJoin(onbCases, eq(onbCommunications.caseId, onbCases.id))
+    .innerJoin(onbCases, and(eq(onbCommunications.caseId, onbCases.id), eq(onbCommunications.organizationId, onbCases.organizationId)))
     .where(and(eq(onbCommunications.id, communicationId), eq(onbCommunications.caseId, caseId)));
   if (!existing) return { ok: false, code: "not-found", reason: "Communication not found." };
   const msg = existing.communication;
   if (isRetiredControllerCase(existing.candidate)) {
     return { ok: false, code: "not-retryable", reason: "Historical controller delivery is retired; no retry is permitted." };
   }
-  if (isSyntheticOfflineCase(existing.candidate)) {
+  if (isSyntheticOfflineCase(existing.candidate) && !sampleCandidateEmailEligible(existing.candidate)) {
     return {
       ok: false,
       code: "not-retryable",
@@ -1168,6 +1184,15 @@ async function retryCandidateEmailUnsafe(
   }
   if (!isRetryableCandidateEmail(msg)) {
     return { ok: false, code: "not-retryable", reason: `Email with status "${msg.status}" is not safe to retry.` };
+  }
+  if (msg.idempotencyKey) {
+    const [uncertain] = await db.select({ key: onbEffectJournal.logicalOperationKey }).from(onbEffectJournal).where(and(
+      eq(onbEffectJournal.organizationId, existing.candidate.organizationId),
+      eq(onbEffectJournal.caseId, caseId),
+      eq(onbEffectJournal.logicalOperationKey, `candidate-communication:${msg.idempotencyKey}`),
+      sql`${onbEffectJournal.status} in ('dispatching', 'unknown_effect_manual_repair')`,
+    )).limit(1);
+    if (uncertain) return { ok: false, code: "not-retryable", reason: "The prior provider outcome is uncertain; reconcile it before retrying." };
   }
   // Pick up explicit volunteer authorization changed on another process
   // before evaluating the legacy fallback path.
@@ -1197,6 +1222,7 @@ async function retryCandidateEmailUnsafe(
   const governance = await evaluateProviderGovernanceGate(
     existing.candidate,
     PROVIDER_GOVERNANCE_WORKFLOW.communication,
+    { candidateEmailDelivery: true },
   );
   if (!governance.allowed) {
     return { ok: false, code: "not-authorized", reason: governance.reason! };
@@ -1214,7 +1240,8 @@ async function retryCandidateEmailUnsafe(
     .where(and(
       eq(onbCommunications.id, communicationId),
       eq(onbCommunications.caseId, caseId),
-      sql`${onbCommunications.status} in ('failed', 'logged-only')`,
+      eq(onbCommunications.organizationId, existing.candidate.organizationId),
+      sql`${onbCommunications.status} in ('failed', 'logged-only', 'blocked')`,
     ))
     .returning();
   if (!claimed) {
@@ -1244,6 +1271,7 @@ async function retryCandidateEmailUnsafe(
     workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
     operation: `candidate-email-retry:${caseId}:${communicationId}:${claimedAt.toISOString()}`,
     providerId: "gmail",
+    candidateEmailDelivery: true,
     dispatch: () => send(authorization.address, msg.subject ?? "Onboarding update", msg.body),
     disposition: (value) => value.status === "sending"
       ? "unknown"

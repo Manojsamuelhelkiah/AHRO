@@ -62,7 +62,7 @@ const result = spawnSync(
       path.join(dir, f),
     ),
   ],
-  { stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } },
+  { stdio: "inherit", env: { ...process.env, NODE_ENV: "production", ONBOARDING_AUTOMATED_TEST: "true" } },
 );
 // This provider-stubbed suite explicitly requires development semantics.
 // Keep all other suites on their established production-mode harness.
@@ -70,5 +70,5 @@ const bgvResult = requestedTestFile
   ? { status: 0 }
   : spawnSync(process.execPath, [
     "--test", path.join(dir, "dist-test/lib/onboarding/bgv-notifications.test.mjs"),
-  ], { stdio: "inherit", env: { ...process.env, NODE_ENV: "development" } });
+  ], { stdio: "inherit", env: { ...process.env, NODE_ENV: "development", ONBOARDING_AUTOMATED_TEST: "true" } });
 process.exit((result.status ?? 1) || (bgvResult.status ?? 1));

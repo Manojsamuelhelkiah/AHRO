@@ -41,6 +41,7 @@ test("high-risk route templates retain distinct operation semantics", () => {
     ["/onboarding/cases/1/contact", "case-contact"],
     ["/onboarding/cases/1/evidence/9/decision", "evidence-decision"],
     ["/onboarding/cases/1/evidence/9/retry-malware-scan", "evidence-malware-retry"],
+    ["/onboarding/cases/1/offer-package-request", "offer-package-email-request"],
     ["/onboarding/cases/1/operational-requests/8/actions", "operational-request-action"],
     ["/onboarding/cases/1/checklist/7", "checklist-decision"],
     ["/onboarding/action-center/actions/assign", "action-center-assign"],

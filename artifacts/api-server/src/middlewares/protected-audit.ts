@@ -78,6 +78,7 @@ export function requestAction(req: Pick<Request, "path" | "method">): string {
     [/^\/onboarding\/cases\/[^/]+\/evidence(?:\/|$)/, "case-evidence"],
     [/^\/onboarding\/cases\/[^/]+\/documents(?:\/|$)/, "case-document"],
     [/^\/onboarding\/cases\/[^/]+\/communications\/[^/]+\/retry$/, "communication-retry"],
+    [/^\/onboarding\/cases\/[^/]+\/offer-package-request$/, "offer-package-email-request"],
     [/^\/onboarding\/cases\/[^/]+\/communications(?:\/|$)/, "case-communication"],
     [/^\/onboarding\/cases\/[^/]+\/bgv-notifications\/reconcile$/, "bgv-reconciliation"],
     [/^\/onboarding\/cases\/[^/]+\/bgv-notifications$/, "bgv-notification"],

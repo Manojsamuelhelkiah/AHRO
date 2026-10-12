@@ -1,10 +1,11 @@
 import { db } from "@workspace/db";
-import { onbEffectJournal } from "@workspace/db/schema";
+import { onbEffectJournal, onbCases } from "@workspace/db/schema";
 import { and, eq, or, sql } from "drizzle-orm";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
 import { getUatCaseIsolation } from "./uat-isolation";
 import { withHroContext, recordHroContextStep } from "../hro-context/manager";
 import { currentHroContext } from "../hro-context/core";
+import { sampleCandidateEmailEligible } from "./synthetic-offline";
 
 export type EffectJournalIdentity = {
   logicalOperationKey: string;
@@ -40,8 +41,19 @@ export async function ensureEffectJournalEntry(input: EffectJournalIdentity) {
   });
 }
 
+async function journalOperationAllowed(input: EffectJournalIdentity): Promise<boolean> {
+  const isolation = await getUatCaseIsolation({ organizationId: input.organizationId, id: input.caseId });
+  if (!isolation.isolated) return true;
+  if (isolation.linkedToRun || input.toolName !== "send-email" ||
+    !input.logicalOperationKey.startsWith("candidate-communication:")) return false;
+  const [c] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId),
+  ));
+  return Boolean(c && sampleCandidateEmailEligible(c));
+}
+
 async function ensureEffectJournalEntryInContext(input: EffectJournalIdentity) {
-  if ((await getUatCaseIsolation({ organizationId: input.organizationId, id: input.caseId })).isolated) {
+  if (!await journalOperationAllowed(input)) {
     throw new Error("UAT-isolated cases cannot create ordinary durable effect-journal entries.");
   }
   return db.transaction(async (tx) => {
@@ -102,7 +114,7 @@ async function ensureEffectJournalEntryInContext(input: EffectJournalIdentity) {
  * unrelated current workstream blockers.
  */
 export async function isConfirmedEffect(input: EffectJournalIdentity): Promise<boolean> {
-  if ((await getUatCaseIsolation({ organizationId: input.organizationId, id: input.caseId })).isolated) return false;
+  if (!await journalOperationAllowed(input)) return false;
   const [entry] = await db
     .select()
     .from(onbEffectJournal)

@@ -196,7 +196,7 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
                     {msg.sensitive && <span className="text-[9px] bg-[var(--surface-soft)] text-[var(--status-amber)] border px-1.5 py-0.5 rounded font-bold" style={{ borderColor: 'var(--status-amber)' }}>SENSITIVE</span>}
                     {msg.channel === 'email'
                       && msg.audience === 'candidate'
-                      && ['failed', 'logged-only'].includes(msg.status)
+                      && ['failed', 'logged-only', 'blocked'].includes(msg.status)
                       && !/^\[AP-\d+\](?:\s|$)/i.test((msg.subject ?? '').trim())
                       && !/^Onboarding channel test$/i.test((msg.subject ?? '').trim())
                       && canEditCommunication

@@ -136,7 +136,7 @@ function caseValues(organizationId: string, options: {
   return {
     organizationId,
     workerName: options.name,
-    workerEmail: options.email ?? `${options.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}@example.test`,
+    workerEmail: options.email ?? `${options.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}@fake-provider.mailhost.com`,
     channelPreference: "email",
     hireType: "external",
     workerCategory: "full-time",
@@ -577,7 +577,7 @@ before(async () => {
 
   const liveCaseId = await createCase(orgA, {
     name: `Action Center Live ${suffix}`,
-    email: `action-center-live-${suffix}@example.test`,
+    email: `action-center-live-${suffix}@fake-provider.mailhost.com`,
     candidateAuthorized: true,
   });
   await createDocument(orgA, liveCaseId, {

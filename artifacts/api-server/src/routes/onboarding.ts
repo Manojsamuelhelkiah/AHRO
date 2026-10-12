@@ -68,6 +68,7 @@ import {
   createApproval,
   handleInbound,
   enforceOfferAcceptanceGate,
+  requestOfferPackageEmail,
   offerAcceptanceRequired,
   OFFER_ACCEPTANCE_GATE_RULE,
   startOrchestration,
@@ -157,7 +158,7 @@ import {
 } from "../lib/onboarding/email-watch";
 import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
 import { applicableSystems, systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
-import { normalizePreference, shouldAuthorizeCandidateEmail } from "../lib/onboarding/channel-routing";
+import { normalizePreference, shouldAuthorizeCandidateEmail, candidateEmailFailureFeedback } from "../lib/onboarding/channel-routing";
 import {
   getCandidateAccessCleanupHealth,
   runCandidateAccessCleanup,
@@ -262,6 +263,7 @@ import {
 } from "../lib/onboarding/operational-requests";
 import {
   isSyntheticOfflineCase,
+  sampleCandidateEmailEligible,
   SYNTHETIC_OFFLINE_MARKER,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
@@ -524,7 +526,12 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
       organizationId: getOrganizationId(req),
       id: caseId,
     });
-    if (isolation.isolated) {
+    const candidateEmailAction = req.method === "POST" &&
+      (/\/offer-package-request$/.test(req.path) || /\/communications\/\d+\/retry$/.test(req.path) ||
+        (/\/portal-links$/.test(req.path) && req.body?.sendEmail === true));
+    const sampleEmailException = candidateEmailAction && retainedCase &&
+      sampleCandidateEmailEligible(retainedCase) && !isolation.linkedToRun;
+    if (isolation.isolated && !sampleEmailException) {
       res.status(409).json({
         message: "UAT-isolated cases may only use their explicit no-email candidate portal upload/read journey.",
       });
@@ -668,6 +675,11 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null);
 async function deriveGateways(row: typeof onbCases.$inferSelect) {
   const offerRequired = offerAcceptanceRequired(row);
   const offerAuthorization = candidateEmailAuthorization(row);
+  const [offerDelivery] = await db.select().from(onbCommunications).where(and(
+    eq(onbCommunications.organizationId, row.organizationId),
+    eq(onbCommunications.caseId, row.id),
+    eq(onbCommunications.idempotencyKey, `gateway-a:${row.id}:offer-package:email`),
+  )).limit(1);
   const bgvChecks = await db.select().from(onbSystemChecks).where(and(
     eq(onbSystemChecks.organizationId, row.organizationId),
     eq(onbSystemChecks.caseId, row.id),
@@ -698,8 +710,10 @@ async function deriveGateways(row: typeof onbCases.$inferSelect) {
       : row.offerAcceptanceComplete
         ? { status: "complete" as const, label: "Gate A — offer acceptance", reason: "HR confirmed the offer-acceptance package." }
         : !offerAuthorization.allowed
-          ? { status: "blocked" as const, label: "Gate A — offer acceptance", reason: `${offerAuthorization.reason ?? "Candidate email is not authorized."} The email-only package request is blocked and is in the HR human queue.` }
-          : { status: "human-review" as const, label: "Gate A — offer acceptance", reason: "Offer package completion requires a dedicated HR confirmation; onboarding remains held." },
+          ? { status: "blocked" as const, label: "Gate A — offer acceptance", reason: `${offerAuthorization.reason} The email-only package request cannot be delivered.` }
+          : offerDelivery && !["sent", "delivered"].includes(offerDelivery.status)
+            ? { status: "blocked" as const, label: "Gate A — offer acceptance", reason: `Offer-package email is ${offerDelivery.status}: ${candidateEmailFailureFeedback(row.workerEmail, offerDelivery.failureReason, offerDelivery.status) ?? "Review Communications for the delivery outcome."} Human offer-acceptance confirmation is still required.` }
+            : { status: "human-review" as const, label: "Gate A — offer acceptance", reason: "Candidate email is enabled by the provided address. Sending email is not acceptance; a dedicated HR confirmation is required and onboarding remains held." },
     b: row.hireType === "internal-transfer"
       ? { status: "not-applicable" as const, label: "Gate B — background verification", reason: "This internal-transfer pathway does not run a fresh BGV check." }
       : !bgv
@@ -832,7 +846,7 @@ async function serializeCase(
     jobProfileId: canReadProfile ? row.jobProfileId : null,
     jobProfileVersion: canReadProfile ? row.jobProfileVersion : null,
     orchestrationCheckpoint: row.orchestrationCheckpoint,
-    candidateEmailAuthorized: Boolean(row.candidateEmailAuthorizedAt),
+    candidateEmailAuthorized: candidateEmailAuthorization(row).allowed,
     offerAcceptanceComplete: row.offerAcceptanceComplete,
     offerAcceptanceCompletedAt: iso(row.offerAcceptanceCompletedAt),
     offerAcceptanceCompletedBy: row.offerAcceptanceCompletedBy,
@@ -1384,7 +1398,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
     if (!syntheticDemoCase) await ensureReadinessSlaEnrollment(organizationId, row.id);
     // Gate A owns the first candidate contact only on new/rehire pathways.
     // Unrelated onboarding pathways retain their established portal behavior.
-    if (!syntheticDemoCase && row.candidateEmailAuthorizedAt && (row.offerAcceptanceComplete || !offerAcceptanceRequired(row))) {
+    if (!syntheticDemoCase && candidateEmailAuthorization(row).allowed && (row.offerAcceptanceComplete || !offerAcceptanceRequired(row))) {
       await issueCandidatePortalLink({
         organizationId,
         caseId: row.id,
@@ -1655,7 +1669,7 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
       res.status(409).json({ message: "Gate A is not applicable to this onboarding pathway." });
       return;
     }
-    if (outcome.kind === "confirmed" && outcome.row.candidateEmailAuthorizedAt) {
+    if (outcome.kind === "confirmed" && candidateEmailAuthorization(outcome.row).allowed) {
       await issueCandidatePortalLink({
         organizationId,
         caseId: id,
@@ -2596,6 +2610,7 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
     const id = Number(req.params.id);
     const [caseRow] = await db.select({
       id: onbCases.id,
+      workerEmail: onbCases.workerEmail,
       notes: onbCases.notes,
       scenarioKey: onbCases.scenarioKey,
       syntheticProvenance: onbCases.syntheticProvenance,
@@ -2688,7 +2703,9 @@ router.get("/onboarding/cases/:id/communications", async (req, res, next) => {
         subject: r.subject,
         body: r.body,
         status: r.status,
-        failureReason: r.failureReason,
+        failureReason: r.audience === "candidate" && r.channel === "email"
+          ? candidateEmailFailureFeedback(caseRow.workerEmail, r.failureReason, r.status)
+          : r.failureReason,
         sensitive: r.sensitive,
         sensitiveDataClass: r.sensitiveDataClass,
         externalMessageId: r.externalMessageId,
@@ -3052,6 +3069,42 @@ router.post("/onboarding/cases/:caseId/operational-requests/:requestId/actions",
     ) {
       res.status(409).json({ message: error.message });
       return;
+    }
+    next(error);
+  }
+});
+
+router.post("/onboarding/cases/:id/offer-package-request", async (req, res, next) => {
+  try {
+    const caseId = Number(req.params.id);
+    if (!Number.isSafeInteger(caseId) || caseId < 1) {
+      res.status(400).json({ message: "Valid case id is required." }); return;
+    }
+    const organizationId = getOrganizationId(req);
+    const [c] = await db.select().from(onbCases).where(and(
+      eq(onbCases.organizationId, organizationId), eq(onbCases.id, caseId),
+    ));
+    if (!c) { res.status(404).json({ message: "Case not found" }); return; }
+    if (!offerAcceptanceRequired(c) || c.offerAcceptanceComplete) {
+      res.status(409).json({ message: "An offer-package request is not needed for this case." }); return;
+    }
+    const delivery = await withSensitiveAuthorityFence({
+      organizationId, caseId, actorUserId: req.authUserId!,
+      classification: "identity",
+      additionalClassifications: ["medical", "payroll", "bgv"],
+      additionalAccessKeys: ["tool.notification.send"],
+      mutate: () => requestOfferPackageEmail(caseId),
+    });
+    res.json(delivery);
+  } catch (error) {
+    if (error instanceof SensitiveAuthorityRequiredError) {
+      res.status(403).json({ message: "Current case-scoped sensitive authority is required to request candidate email." }); return;
+    }
+    if (error instanceof SensitiveLifecyclePermissionError) {
+      res.status(403).json({ message: error.message }); return;
+    }
+    if (error instanceof Error && /retained TA acceptance evidence/.test(error.message)) {
+      res.status(409).json({ message: error.message }); return;
     }
     next(error);
   }

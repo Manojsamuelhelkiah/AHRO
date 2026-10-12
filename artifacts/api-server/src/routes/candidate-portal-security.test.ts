@@ -61,6 +61,8 @@ import {
   issueCandidatePortalLink,
 } from "../lib/onboarding/portal-link-issuance";
 import { seedApprovedSensitiveLifecyclePolicies } from "../test-utils/sensitive-lifecycle-fixtures";
+import { setOnboardingConnectorProxyForTests } from "../lib/onboarding/channels";
+import { SYNTHETIC_OFFLINE_MARKER, isSyntheticOfflineCase } from "../lib/onboarding/synthetic-offline";
 import {
   governanceSnapshotForNewCase,
   withGovernanceDecisionSnapshot,
@@ -530,12 +532,55 @@ test("bearer portal links and opaque logistics require live full case-scoped aut
   assert.equal(ordinaryLogisticsWrite.status, 403);
 });
 
+test("sample portal email uses full live authority without authorizing any non-email workflow", async () => {
+  const [original] = await db.select().from(onbCases).where(eq(onbCases.id, caseA2));
+  let calls = 0;
+  setOnboardingConnectorProxyForTests(async () => {
+    calls++;
+    return new Response(JSON.stringify({ id: "fake-sample-portal" }), { status: 200 });
+  });
+  const key = `sample-portal-email:${caseA2}`;
+  try {
+    await seedApprovedSensitiveLifecyclePolicies(orgA, {
+      permittedProviders: ["gmail", "internal-candidate-portal", "replit-object-storage"],
+    });
+    await db.update(onbCases).set({
+      workerEmail: "sample-portal@fake-provider.mailhost.com", channelPreference: "whatsapp",
+      candidateEmailAuthorizedAt: null, candidateEmailAuthorizedBy: null,
+      syntheticProvenance: "demo-full-coverage", notes: SYNTHETIC_OFFLINE_MARKER,
+      scenarioKey: "UAT-DEMO-COVERAGE:portal-email",
+    }).where(eq(onbCases.id, caseA2));
+    const result = await issueCandidatePortalLink({
+      organizationId: orgA, caseId: caseA2, issuedBy: userId, publicBase: baseUrl,
+      sendEmail: true, idempotencyKey: key,
+    });
+    assert.ok(result?.portalUrl);
+    assert.equal(calls, 1);
+    const [message] = await db.select().from(onbCommunications).where(eq(onbCommunications.idempotencyKey, key));
+    assert.equal(message.status, "sent");
+    assert.doesNotMatch(message.body, /#token=/);
+    const [current] = await db.select().from(onbCases).where(eq(onbCases.id, caseA2));
+    assert.equal(isSyntheticOfflineCase(current), true);
+    assert.equal(current.offerAcceptanceComplete, original.offerAcceptanceComplete);
+    assert.equal(current.orchestrationStatus, original.orchestrationStatus);
+  } finally {
+    setOnboardingConnectorProxyForTests(null);
+    await db.update(onbCases).set({
+      workerEmail: original.workerEmail, channelPreference: original.channelPreference,
+      syntheticProvenance: original.syntheticProvenance, notes: original.notes, scenarioKey: original.scenarioKey,
+    }).where(eq(onbCases.id, caseA2));
+    await seedApprovedSensitiveLifecyclePolicies(orgA, {
+      permittedProviders: ["internal-candidate-portal", "replit-object-storage"],
+    });
+  }
+});
+
 test("automatic portal delivery is idempotent and never persists the secret link", async () => {
   await db.update(onbCases).set({
-    candidateEmailAuthorizedAt: new Date(),
-    candidateEmailAuthorizedBy: userId,
-    channelPreference: "email",
-    workerEmail: "invalid-email",
+    candidateEmailAuthorizedAt: null,
+    candidateEmailAuthorizedBy: null,
+    channelPreference: "whatsapp",
+    workerEmail: "portal@fake-provider.mailhost.com",
   }).where(and(eq(onbCases.organizationId, orgA), eq(onbCases.id, caseA2)));
   const key = AUTOMATED_PORTAL_EMAIL_KEY(caseA2);
 

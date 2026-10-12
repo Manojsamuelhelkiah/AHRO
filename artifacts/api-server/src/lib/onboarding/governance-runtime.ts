@@ -465,10 +465,13 @@ export async function evaluateStoredCaseGovernanceGate(input: {
   connector?: "payroll" | "iam" | "background-verification" | "documents";
   operation?: string;
   workflow?: GovernanceWorkflow;
+  /** Candidate email, or its separately authorized internal portal credential. */
+  candidateEmailDelivery?: boolean;
 }): Promise<GovernanceExecutionGate> {
   const organizationId = input.caseRow.organizationId;
   const execution = executionContextForStoredCase({
-    isolatedSimulation: isSyntheticOfflineCase({
+    isolatedSimulation: !(input.candidateEmailDelivery &&
+      (input.workflow === "candidate-communications" || input.workflow === "candidate-portal")) && isSyntheticOfflineCase({
       workerName: input.caseRow.workerName,
       workerEmail: input.caseRow.workerEmail,
       workerPhone: input.caseRow.workerPhone,

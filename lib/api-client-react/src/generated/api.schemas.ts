@@ -5199,7 +5199,7 @@ export interface OnbCase {
      * @nullable
      */
   orchestrationCheckpoint: string | null;
-  /** Whether this manually-created case currently authorizes live email to its candidate record address */
+  /** Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply. */
   candidateEmailAuthorized: boolean;
   /** HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases. */
   offerAcceptanceComplete: boolean;
@@ -10464,6 +10464,12 @@ export type ImportScenarioWorkbookBody = {
 export type ParseActualsLogBody = {
   /** Raw call-log CSV file (max 20 MB). */
   logFile: Blob;
+};
+
+export type RequestOnboardingOfferPackageEmail200 = {
+  id: number;
+  status: string;
+  failureReason: string | null;
 };
 
 export type ListOnboardingPolicyRecommendationsParams = {

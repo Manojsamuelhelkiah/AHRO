@@ -498,8 +498,9 @@ describe("synthetic reset safety boundary", { skip: !hasDb }, () => {
       processPolicySnapshot: withGovernanceDecisionSnapshot({}, governanceSnapshot),
     });
     await db.update(onbCases).set({
-      candidateEmailAuthorizedAt: new Date(),
-      candidateEmailAuthorizedBy: "synthetic-reset-test",
+      workerEmail: "retry@fake-provider.mailhost.com",
+      candidateEmailAuthorizedAt: null,
+      candidateEmailAuthorizedBy: null,
     }).where(eq(onbCases.id, target.id));
     const [message] = await db.insert(onbCommunications).values({
       organizationId,

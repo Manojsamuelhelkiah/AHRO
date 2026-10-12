@@ -6,8 +6,10 @@ import { getOrganizationId } from "../lib/organization-scope";
 import { portalEmailRequested, validateLogistics } from "../lib/onboarding/candidate-portal";
 import { ensureCaseLogistics } from "../lib/onboarding/case-logistics";
 import { issueCandidatePortalLink, portalPublicBase } from "../lib/onboarding/portal-link-issuance";
+import { CandidateEmailUnavailableError } from "../lib/onboarding/channel-routing";
 import {
   SensitiveLifecycleConflictError,
+  SensitiveLifecyclePermissionError,
   withCaseDerivedLifecycleWrite,
   withSensitiveLifecycleFence,
 } from "../lib/onboarding/sensitive-lifecycle";
@@ -118,6 +120,12 @@ router.post("/onboarding/cases/:id/portal-links", async (req, res, next) => {
       }
       if (error instanceof SensitiveAuthorityRequiredError) {
         res.status(403).json({ message: "Current case-scoped sensitive authority is required to issue a candidate portal link." }); return;
+      }
+      if (error instanceof CandidateEmailUnavailableError) {
+        res.status(400).json({ message: error.message }); return;
+      }
+      if (error instanceof SensitiveLifecyclePermissionError) {
+        res.status(403).json({ message: error.message }); return;
       }
       throw error;
     }

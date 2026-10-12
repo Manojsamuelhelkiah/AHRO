@@ -230,8 +230,8 @@ export const onbCases = pgTable("onb_cases", {
   /** Permanent operational deny fence; never implies fictional identity. */
   controllerRetired: boolean("controller_retired").notNull().default(false),
   /**
-   * Case-scoped consent for live candidate email. Set only by the
-   * authenticated manual-intake route; scenario/demo seed paths leave it null.
+   * Legacy case-email authorization audit history. Candidate delivery now
+   * depends on the current deliverable address, not these historical fields.
    */
   candidateEmailAuthorizedAt: timestamp("candidate_email_authorized_at", { withTimezone: true }),
   candidateEmailAuthorizedBy: text("candidate_email_authorized_by"),

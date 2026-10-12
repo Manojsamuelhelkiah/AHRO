@@ -906,10 +906,10 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
             )}
           </div>
           <div className="space-y-1">
-            <RequiredFieldLabel htmlFor="channelPreference">Contact Channel</RequiredFieldLabel>
+            <RequiredFieldLabel htmlFor="channelPreference">Email and additional channels</RequiredFieldLabel>
             <select id="channelPreference" name="channelPreference" value={channelPref} onChange={(e) => setChannelPref(e.target.value)} className="flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]" required>
               <option value="email">Email only</option>
-              <option value="whatsapp">WhatsApp only</option>
+              <option value="whatsapp">Email + WhatsApp (WhatsApp replies)</option>
               <option value="both">Email + WhatsApp</option>
             </select>
           </div>

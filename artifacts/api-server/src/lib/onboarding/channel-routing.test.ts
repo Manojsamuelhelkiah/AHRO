@@ -8,6 +8,7 @@ import {
   candidateEmailDeliveryDecision,
   candidateEmailMaySend,
   isRetryableCandidateEmail,
+  candidateEmailFailureFeedback,
 } from "./channel-routing";
 
 test("normalizePreference defaults unknown/missing values to both", () => {
@@ -26,9 +27,9 @@ test("welcome: email-only preference sends email only, even with a phone", () =>
   assert.equal(r.emailIsFallback, false);
 });
 
-test("welcome: whatsapp-only preference with a phone sends whatsapp only", () => {
+test("welcome: WhatsApp selection adds WhatsApp without duplicating default email", () => {
   const r = resolveWelcomeChannels("whatsapp", "+15550001111");
-  assert.deepEqual(r.channels, ["whatsapp"]);
+  assert.deepEqual(r.channels, ["email", "whatsapp"]);
   assert.equal(r.whatsappSkipped, false);
 });
 
@@ -57,10 +58,11 @@ test("reply: email preference always replies via email", () => {
   assert.equal(r.to, "a@b.com");
 });
 
-test("reply: whatsapp preference with a phone replies via whatsapp", () => {
+test("reply: WhatsApp selection does not redirect an email reply to WhatsApp", () => {
   const r = resolveReplyChannel("whatsapp", "+15550001111", "a@b.com", "email");
-  assert.equal(r.channel, "whatsapp");
-  assert.equal(r.to, "+15550001111");
+  assert.equal(r.channel, "email");
+  assert.equal(r.to, "a@b.com");
+  assert.equal(resolveReplyChannel("whatsapp", "+15550001111", "a@b.com", "whatsapp").channel, "whatsapp");
 });
 
 test("reply: both preference mirrors the inbound channel", () => {
@@ -74,10 +76,10 @@ test("reply: whatsapp preference without a phone falls back to email", () => {
   assert.equal(r.to, "a@b.com");
 });
 
-test("manual intake authorizes valid candidate email only for email-capable preferences", () => {
-  assert.equal(shouldAuthorizeCandidateEmail(" Candidate@Example.com ", "email"), true);
-  assert.equal(shouldAuthorizeCandidateEmail("candidate@example.com", "both"), true);
-  assert.equal(shouldAuthorizeCandidateEmail("candidate@example.com", "whatsapp"), false);
+test("all intake sources and channel preferences use deliverable candidate email", () => {
+  assert.equal(shouldAuthorizeCandidateEmail(" Candidate@MailHost.com ", "email"), true);
+  assert.equal(shouldAuthorizeCandidateEmail("candidate@mailhost.com", "both"), true);
+  assert.equal(shouldAuthorizeCandidateEmail("candidate@mailhost.com", "whatsapp"), true);
   assert.equal(shouldAuthorizeCandidateEmail("not-an-email", "email"), false);
 });
 
@@ -85,28 +87,28 @@ test("candidate email delivery is case-scoped and always resolves the stored rec
   const authorizedAt = new Date();
   assert.deepEqual(
     candidateEmailDeliveryDecision({
-      workerEmail: " Current.Candidate@Example.com ",
+      workerEmail: " Current.Candidate@MailHost.com ",
       channelPreference: "email",
       candidateEmailAuthorizedAt: authorizedAt,
     }),
-    { allowed: true, address: "current.candidate@example.com", reason: null },
+    { allowed: true, address: "current.candidate@mailhost.com", reason: null },
   );
   const seeded = candidateEmailDeliveryDecision({
-    workerEmail: "seed@example.com",
+    workerEmail: "seed@mailhost.com",
     channelPreference: "both",
     candidateEmailAuthorizedAt: null,
   });
-  assert.equal(seeded.allowed, false);
-  assert.match(seeded.reason!, /not authorized/i);
+  assert.equal(seeded.allowed, true);
+  assert.equal(seeded.reason, null);
   assert.equal(candidateEmailDeliveryDecision({
-    workerEmail: "candidate@example.com",
+    workerEmail: "candidate@mailhost.com",
     channelPreference: "whatsapp",
     candidateEmailAuthorizedAt: authorizedAt,
-  }).allowed, false);
+  }).allowed, true);
 });
 
 test("only definitive failed/logged-only outbound email can be manually retried", () => {
-  for (const status of ["failed", "logged-only"]) {
+  for (const status of ["failed", "logged-only", "blocked"]) {
     assert.equal(isRetryableCandidateEmail({ channel: "email", direction: "outbound", status }), true);
   }
   for (const status of ["sent", "delivered", "sending", "received"]) {
@@ -117,12 +119,27 @@ test("only definitive failed/logged-only outbound email can be manually retried"
   assert.equal(isRetryableCandidateEmail({ channel: "email", direction: "outbound", audience: "admin", status: "failed" }), false);
 });
 
-test("an explicit legacy allowlist can deliver only a valid email/both candidate case", () => {
-  assert.equal(candidateEmailMaySend({ channelPreference: "email", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: true }), true);
-  assert.equal(candidateEmailMaySend({ channelPreference: "both", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: true }), true);
-  assert.equal(candidateEmailMaySend({ channelPreference: "whatsapp", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: true }), false);
-  assert.equal(candidateEmailMaySend({ channelPreference: "email", caseAuthorized: false, explicitlyAllowlisted: false, validEmail: true }), false);
-  assert.equal(candidateEmailMaySend({ channelPreference: "email", caseAuthorized: false, explicitlyAllowlisted: true, validEmail: false }), false);
+test("legacy allowlists cannot override address rejection and are not prerequisites", () => {
+  for (const channelPreference of ["email", "both", "whatsapp"]) {
+    assert.equal(candidateEmailMaySend({ channelPreference, caseAuthorized: true, explicitlyAllowlisted: false, validEmail: true }), true);
+    assert.equal(candidateEmailMaySend({ channelPreference, caseAuthorized: false, explicitlyAllowlisted: true, validEmail: true }), false);
+  }
+});
+
+test("missing, malformed and reserved placeholders are accurately rejected", () => {
+  for (const workerEmail of ["", "  ", "bad-email", "a@hro.invalid", "a@test.example", "a@example.com", "a@sub.example.org", "a@localhost", "a@mail.test", "a@mail.invalid.", "a@-host.com", ".a@mail.com", "a..b@mail.com"]) {
+    const decision = candidateEmailDeliveryDecision({ workerEmail });
+    assert.equal(decision.allowed, false, workerEmail);
+    assert.ok(decision.reason);
+  }
+});
+
+test("legacy definitive blocks explain current eligibility without obscuring provider failures or uncertainty", () => {
+  const legacy = "Candidate email is not authorized for live delivery on this case — message logged, not delivered.";
+  assert.match(candidateEmailFailureFeedback("a@mailhost.com", legacy, "logged-only")!, /not been resent automatically/);
+  assert.equal(candidateEmailFailureFeedback("a@mailhost.com", legacy, "sending"), legacy);
+  assert.equal(candidateEmailFailureFeedback("a@example.com", legacy, "logged-only"), legacy);
+  assert.equal(candidateEmailFailureFeedback("a@mailhost.com", "Gmail 500: provider unavailable", "failed"), "Gmail 500: provider unavailable");
 });
 
 test("historical HR approval and Settings test subjects are never candidate-retryable", () => {

@@ -10863,7 +10863,7 @@ export const RunOnboardingScenarioResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -11099,7 +11099,7 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -11428,7 +11428,7 @@ export const CreateOnboardingCaseResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -11668,7 +11668,7 @@ export const GetOnboardingCaseResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -11759,6 +11759,20 @@ export const ExplainOnboardingCaseResponse = zod.object({
 })).max(explainOnboardingCaseResponseSourcesMax),
   "limitations": zod.array(zod.string().max(explainOnboardingCaseResponseLimitationsItemMax)),
   "truncated": zod.boolean()
+})
+
+
+/**
+ * @summary Request the idempotent candidate offer-package email without activating the case
+ */
+export const RequestOnboardingOfferPackageEmailParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RequestOnboardingOfferPackageEmailResponse = zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "failureReason": zod.string().nullable()
 })
 
 
@@ -11986,7 +12000,7 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -12243,7 +12257,7 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -15183,7 +15197,7 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -15459,7 +15473,7 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),
@@ -15792,7 +15806,7 @@ export const CorrectOnboardingWorkforceContextResponse = zod.object({
   "jobProfileId": zod.string().nullable(),
   "jobProfileVersion": zod.number().nullable(),
   "orchestrationCheckpoint": zod.string().nullable().describe('Last completed orchestration boundary, or the exact checklist gate currently blocking the case'),
-  "candidateEmailAuthorized": zod.boolean().describe('Whether this manually-created case currently authorizes live email to its candidate record address'),
+  "candidateEmailAuthorized": zod.boolean().describe('Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.'),
   "offerAcceptanceComplete": zod.boolean().describe('HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.'),
   "offerAcceptanceCompletedAt": zod.coerce.date().nullable(),
   "offerAcceptanceCompletedBy": zod.string().nullable(),

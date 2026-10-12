@@ -11,7 +11,7 @@
 - [Monitor alert dedup must be durable](monitor-alert-dedup.md) — one-alert-per-outage state belongs in the DB, not process memory; failed sub-requests must fail the poll.
 - [Stale composite declarations](stale-composite-decls.md) — `tsc --noEmit` reads workspace libs' built dist d.ts; use `tsc -b` or phantom type errors contradict the source.
 - [Email as a status channel](email-status-channel.md) — inbound email must pass a sender allowlist before changing state; apply first then record the message id; guard on current status+mode.
-- [Candidate email boundaries](candidate-email-boundaries.md) — manual intake authorizes only that case's candidate email; keep admin/WhatsApp permissions separate and retry uncertain sends conservatively.
+- [Candidate email boundaries](candidate-email-boundaries.md) — current deliverable address enables email; sample exceptions keep privacy, UAT, other channels and non-email effects fenced.
 - [Template-driven batch intake](template-driven-batch-intake.md) — each case type needs its own upload templates; spreadsheet schemas are distinct from policy/checklist templates.
 - [Gmail self-send echo loop](gmail-self-send-echo.md) — store outbound provider message ids in the inbound dedup column or the poller replies to its own mail forever.
 - [Task-merge file corruption](task-merge-corruption.md) — platform merges can scramble co-edited files; typecheck after every merge, repair from last good commit + re-apply merge intent.

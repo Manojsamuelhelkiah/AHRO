@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useConfirmOnboardingOfferAcceptance, getGetOnboardingCaseQueryKey, getListOnboardingCaseEventsQueryKey, getListOnboardingCasesQueryKey, getGetOnboardingDashboardQueryKey, getListOnboardingApprovalsQueryKey, getListOnboardingCaseDocumentsQueryKey, getListOnboardingCaseCommunicationsQueryKey, OnbCase } from '@workspace/api-client-react';
 import { customFetch } from '@workspace/api-client-react';
+import { useRequestOnboardingOfferPackageEmail } from '@workspace/api-client-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Label } from '@/components/ui-shared';
 import { Link } from 'wouter';
@@ -30,6 +31,8 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
   const access = useCaseAccess();
   const queryClient = useQueryClient();
   const confirmOffer = useConfirmOnboardingOfferAcceptance();
+  const requestEmail = useRequestOnboardingOfferPackageEmail();
+  const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
   const gateAuthority = useApprovalCapability(gateApproval);
   const [note, setNote] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
@@ -119,6 +122,33 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
               <StatusBadgeText status={g.status} />
             </div>
             <p className="text-[var(--text-xs)] text-[var(--text-secondary)] flex-1">{g.label}</p>
+            {isA && <p className="text-[11px] text-[var(--text-secondary)] mt-1">A deliverable candidate address enables email by default, including with WhatsApp selected. Email sending does not confirm offer acceptance.</p>}
+            {isA && !standardIntakeEvidence && !c.offerAcceptanceComplete && g.status !== 'not-applicable' &&
+              access?.access.flowEdit && access?.sensitive.identity.edit && access?.sensitive.medical.edit &&
+              access?.sensitive.payroll.edit && access?.sensitive.bgv.edit && (
+              <div className="mt-3">
+                <Button variant="outline" size="sm" className="w-full h-auto min-h-7 text-xs whitespace-normal"
+                  disabled={requestEmail.isPending}
+                  onClick={() => {
+                    setEmailFeedback(null);
+                    requestEmail.mutate({ id: c.id }, {
+                      onSuccess: (result) => {
+                        setEmailFeedback(result.status === 'sent' || result.status === 'delivered'
+                          ? 'Offer-package email sent. HR must still confirm acceptance.'
+                          : result.status === 'sending'
+                            ? 'Delivery outcome is uncertain. Do not retry; reconcile it in Communications.'
+                            : `${result.status}: ${result.failureReason ?? 'Review Communications for details.'} Use Retry email for a definitive blocked outcome.`);
+                        queryClient.invalidateQueries({ queryKey: getGetOnboardingCaseQueryKey(c.id) });
+                        queryClient.invalidateQueries({ queryKey: getListOnboardingCaseCommunicationsQueryKey(c.id) });
+                      },
+                      onError: (error: any) => setEmailFeedback(error?.data?.message || error?.message || 'The offer-package email could not be requested.'),
+                    });
+                  }}>
+                  {requestEmail.isPending ? 'Requesting email…' : 'Request offer-package email'}
+                </Button>
+                {emailFeedback && <p role="status" className="mt-1 text-[11px] break-words">{emailFeedback}</p>}
+              </div>
+            )}
             {g.reason && <p className="text-[11px] text-[var(--text-muted)] mt-1">{g.reason}</p>}
              {isA && standardIntakeEvidence && (
                <div className="mt-3 rounded border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-2 text-[11px] text-[var(--status-amber-fg)]">

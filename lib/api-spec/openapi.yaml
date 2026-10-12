@@ -3533,6 +3533,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /onboarding/cases/{id}/offer-package-request:
+    post:
+      operationId: requestOnboardingOfferPackageEmail
+      tags: [onboarding]
+      summary: Request the idempotent candidate offer-package email without activating the case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Recorded candidate email outcome; human acceptance is still required
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, failureReason]
+                properties:
+                  id: { type: integer }
+                  status: { type: string }
+                  failureReason: { type: string, nullable: true }
+        "403": { description: Current case-scoped sensitive authority is required }
+        "404": { description: Case not found in the current organization }
+        "409": { description: "Isolated or retired case, or an offer request is not needed" }
   /onboarding/cases/{id}/offer-acceptance:
     post:
       operationId: confirmOnboardingOfferAcceptance
@@ -11344,7 +11369,7 @@ components:
           description: Last completed orchestration boundary, or the exact checklist gate currently blocking the case
         candidateEmailAuthorized:
           type: boolean
-          description: Whether this manually-created case currently authorizes live email to its candidate record address
+          description: Whether the current candidate address is valid and non-reserved, regardless of intake, preference or legacy authorization. Privacy, governance and provider isolation still apply.
         offerAcceptanceComplete:
           type: boolean
           description: HR-confirmed offer-acceptance package completion. False is not evidence of acceptance for legacy or active cases.

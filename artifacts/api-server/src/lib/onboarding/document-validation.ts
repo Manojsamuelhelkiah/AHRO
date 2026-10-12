@@ -341,7 +341,7 @@ async function prepareStableReminderBody(input: {
   subject: string;
   body: string;
   idempotencyKey: string;
-}): Promise<string> {
+}): Promise<{ body: string; freshPreparedMessageId?: number }> {
   return withCaseDerivedLifecycleWrite({
     organizationId: input.organizationId,
     caseId: input.caseId,
@@ -353,9 +353,9 @@ async function prepareStableReminderBody(input: {
         eq(onbCommunications.organizationId, input.organizationId),
         eq(onbCommunications.idempotencyKey, input.idempotencyKey),
       ));
-    if (existing?.body) return existing.body;
+    if (existing?.body) return { body: existing.body };
     const stableBody = addCandidateReplyReference(input.body);
-    await tx.insert(onbCommunications).values({
+    const [prepared] = await tx.insert(onbCommunications).values({
       organizationId: input.organizationId,
       caseId: input.caseId,
       channel: "email",
@@ -370,7 +370,7 @@ async function prepareStableReminderBody(input: {
       idempotencyKey: input.idempotencyKey,
     }).onConflictDoNothing({
       target: [onbCommunications.organizationId, onbCommunications.idempotencyKey],
-    });
+    }).returning({ id: onbCommunications.id });
     const [persisted] = await tx.select({ body: onbCommunications.body })
       .from(onbCommunications)
       .where(and(
@@ -378,7 +378,7 @@ async function prepareStableReminderBody(input: {
         eq(onbCommunications.idempotencyKey, input.idempotencyKey),
       ));
     if (!persisted?.body) throw new Error("Reminder payload could not be persisted.");
-    return persisted.body;
+    return { body: persisted.body, freshPreparedMessageId: prepared?.id };
   });
 }
 
@@ -478,8 +478,9 @@ export async function sendDocumentReminder(input: {
     channel: "email",
     toAddress: row.c.workerEmail,
     subject,
-    body: stableBody,
-    persistedBody: stableBody,
+    body: stableBody.body,
+    persistedBody: stableBody.body,
+    freshPreparedMessageId: stableBody.freshPreparedMessageId,
     stableBody: true,
     skipCandidateReplyReference: true,
     idempotencyKey: input.idempotencyKey,

@@ -131,7 +131,7 @@ async function updateCase(caseId: number, patch: Partial<typeof onbCases.$inferI
  * Gate A is before Intake: no plan, connector mutation, welcome message, or
  * portal provisioning may happen until a named HR reviewer confirms the
  * package. Ordinary cases receive an email even for a WhatsApp preference;
- * sendOutbound preserves the case-scoped email authorization boundary and
+ * sendOutbound checks the current deliverable address and governance, and
  * durably records a blocked/uncertain attempt rather than falling back.
  * Trusted standard-intake cases instead retain an HR-reviewable TA source
  * evidence reference, so a duplicate acceptance request is not sent.
@@ -154,14 +154,7 @@ export async function enforceOfferAcceptanceGate(
     eq(onbStandardIntakeEvents.caseId, caseId),
     eq(onbStandardIntakeEvents.state, "created"),
   )).limit(1);
-  const delivery = standardIntakeEvidence ? null : await sendOutbound({
-    caseId,
-    channel: "email",
-    toAddress: c.workerEmail,
-    subject: "Action required: complete your offer-acceptance package",
-    body: `Hello ${c.workerName.split(" ")[0]}, before onboarding can begin, please complete your offer-acceptance package by replying to this email or following the instructions provided by HR. A human HR reviewer will confirm completion before any onboarding activity starts.`,
-    idempotencyKey: `gateway-a:${caseId}:offer-package:email`,
-  });
+  const delivery = standardIntakeEvidence ? null : await requestOfferPackageEmail(caseId);
   const blocked = delivery ? delivery.status !== "sent" : false;
   const deliveryFailureReason = delivery?.failureReason;
   const deliveryStatus = delivery?.status ?? "not-dispatched";
@@ -219,6 +212,28 @@ export async function enforceOfferAcceptanceGate(
     },
   );
   return false;
+}
+
+/** Explicit email-only request: no case activation, acceptance, or other effects. */
+export async function requestOfferPackageEmail(caseId: number) {
+  const c = await getCase(caseId);
+  if (!offerAcceptanceRequired(c) || c.offerAcceptanceComplete) {
+    throw new Error("An offer-package request is not needed for this case.");
+  }
+  const [source] = await db.select({ sourceId: onbStandardIntakeEvents.sourceId }).from(onbStandardIntakeEvents).where(and(
+    eq(onbStandardIntakeEvents.organizationId, c.organizationId),
+    eq(onbStandardIntakeEvents.caseId, c.id),
+    eq(onbStandardIntakeEvents.state, "created"),
+  )).limit(1);
+  if (source) throw new Error("Review the retained TA acceptance evidence instead of sending a duplicate acceptance request.");
+  return sendOutbound({
+    caseId,
+    channel: "email",
+    toAddress: c.workerEmail,
+    subject: "Action required: complete your offer-acceptance package",
+    body: `Hello ${c.workerName.split(" ")[0]}, before onboarding can begin, please complete your offer-acceptance package by replying to this email or following the instructions provided by HR. A human HR reviewer will confirm completion before any onboarding activity starts.`,
+    idempotencyKey: `gateway-a:${caseId}:offer-package:email`,
+  });
 }
 
 async function getCase(caseId: number): Promise<CaseRow> {
@@ -1123,7 +1138,7 @@ async function runCommunications(caseId: number) {
 
   const routing = resolveWelcomeChannels(c.channelPreference, c.workerPhone);
   await logEvent(caseId, "channel", "rules", "Channel preference applied",
-    `HR channel preference for this case is "${normalizePreference(c.channelPreference)}". Welcome communications are routed accordingly.`,
+    `Candidate email is the default. "${normalizePreference(c.channelPreference)}" selects whether additional WhatsApp delivery is requested.`,
     { hitlPattern: "notify-only", idempotencyKey: `orchestration:${caseId}:communications:channel` });
 
   if (routing.whatsappSkipped) {

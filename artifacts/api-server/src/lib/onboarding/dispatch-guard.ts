@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, onbCases, onbEffectJournal } from "@workspace/db";
-import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
+import { isSyntheticOfflineCase, isUatRunIsolatedCase, sampleCandidateEmailEligible } from "./synthetic-offline";
 import { isRetiredControllerCase } from "./controller-retirement";
 import { getUatCaseIsolation } from "./uat-isolation";
 
@@ -12,6 +12,8 @@ type DispatchGuardContext = {
 };
 
 type DispatchGuardOptions<T> = {
+  /** Server-owned candidate email path only; still acquires the durable marker. */
+  operation?: "candidate-email";
   /**
    * Offline cases never acquire a provider-dispatch record. Their caller may
    * still persist a blocked/logged-only timeline row in this branch.
@@ -105,8 +107,11 @@ export async function withCaseDispatchGuard<T>(
       ));
     if (!caseRow) return undefined;
     if (isRetiredControllerCase(caseRow)) return undefined;
-    if ((await getUatCaseIsolation(caseRow)).isolated ||
-      isSyntheticOfflineCase(caseRow)) {
+    const isolation = await getUatCaseIsolation(caseRow);
+    const emailException = options.operation === "candidate-email" &&
+      sampleCandidateEmailEligible(caseRow) && !isolation.linkedToRun;
+    if (isolation.linkedToRun || (!emailException &&
+      (isolation.isolated || isSyntheticOfflineCase(caseRow)))) {
       return options.onOffline
         ? options.onOffline(caseRow)
         : undefined;
@@ -127,7 +132,10 @@ export async function withCaseDispatchGuard<T>(
   if (isRetiredControllerCase(candidate)) return undefined;
   // Run ownership is an independent fence for a damaged/migrated case whose
   // scenario key is unavailable. Do not create the guard/effect marker.
-  if ((await getUatCaseIsolation({ organizationId: candidate.organizationId, id: caseId })).isolated) {
+  const isolation = await getUatCaseIsolation(candidate);
+  const emailException = options.operation === "candidate-email" &&
+    sampleCandidateEmailEligible(candidate) && !isolation.linkedToRun;
+  if (isolation.linkedToRun || (isolation.isolated && !emailException)) {
     const [caseRow] = await db.select().from(onbCases).where(and(
       eq(onbCases.id, caseId),
       eq(onbCases.organizationId, candidate.organizationId),
@@ -148,8 +156,8 @@ export async function withCaseDispatchGuard<T>(
       .for("key share");
     if (!caseRow) return { kind: "missing" as const };
     if (isRetiredControllerCase(caseRow)) return { kind: "missing" as const };
-    if (isUatRunIsolatedCase(caseRow) ||
-      isSyntheticOfflineCase(caseRow)) {
+    if ((isUatRunIsolatedCase(caseRow) || isSyntheticOfflineCase(caseRow)) &&
+      !(options.operation === "candidate-email" && sampleCandidateEmailEligible(caseRow))) {
       return { kind: "offline" as const, caseRow };
     }
     await tx.insert(onbEffectJournal).values({

@@ -18,6 +18,8 @@ import {
   type SensitiveDataClass,
 } from "./sensitive-lifecycle";
 import { getUatCaseIsolation } from "./uat-isolation";
+import { candidateEmailDeliveryDecision } from "./channel-routing";
+import { sampleCandidateEmailEligible } from "./synthetic-offline";
 import { withHroCaseContext, recordHroContextStep } from "../hro-context/manager";
 
 /**
@@ -85,6 +87,8 @@ export async function evaluateProviderGovernanceGate(
   caseRow: ProviderGovernanceCase,
   workflow: ProviderGovernanceWorkflow,
   options: {
+    candidateEmailDelivery?: boolean;
+    candidatePortalEmail?: boolean;
     allowIsolatedLocalOperation?: "candidate-private-upload" | "candidate-portal-credential";
   } = {},
 ): Promise<ProviderGovernanceGate> {
@@ -93,6 +97,10 @@ export async function evaluateProviderGovernanceGate(
     // Both modules use the same explicit canonical scope union. No `as never`
     // escape hatch may hide an unmapped real-provider workflow.
     workflow,
+    candidateEmailDelivery: sampleCandidateEmailEligible(caseRow) && (
+      options.candidateEmailDelivery && workflow === PROVIDER_GOVERNANCE_WORKFLOW.communication ||
+      options.candidatePortalEmail && workflow === PROVIDER_GOVERNANCE_WORKFLOW.portal
+    ),
   });
   const [current] = await db.select().from(onbCases).where(and(
     eq(onbCases.organizationId, caseRow.organizationId), eq(onbCases.id, caseRow.id),
@@ -134,6 +142,10 @@ export async function dispatchWithProviderGovernance<T>(input: {
   operation: string;
   /** Stable provider identifier matched against the approved policy allowlist. */
   providerId: string;
+  /** Fixed Gmail candidate path, never administrative mail or other effects. */
+  candidateEmailDelivery?: boolean;
+  /** Internal bearer-link issuance accompanying an explicitly requested email. */
+  candidatePortalEmail?: boolean;
   /** Server-derived data class for document-specific provider disclosures. */
   dataClass?: SensitiveDataClass;
   /**
@@ -210,6 +222,21 @@ export async function dispatchWithProviderGovernance<T>(input: {
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
       const uatIsolation = await getUatCaseIsolation(currentCase);
+      const candidateEmailDelivery = input.candidateEmailDelivery === true &&
+        input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.communication &&
+        input.providerId === "gmail" && sampleCandidateEmailEligible(currentCase) &&
+        !uatIsolation.linkedToRun;
+      const candidatePortalEmail = input.candidatePortalEmail === true &&
+        input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.portal &&
+        input.providerId === "internal-candidate-portal" && sampleCandidateEmailEligible(currentCase) &&
+        !uatIsolation.linkedToRun;
+      if ((input.candidateEmailDelivery || input.candidatePortalEmail) && (
+        !(candidateEmailDelivery || candidatePortalEmail) ||
+        candidateEmailDeliveryDecision(currentCase).address !== candidateEmailDeliveryDecision(input.caseRow).address
+      )) {
+        deniedReason = "Candidate email is unavailable, isolated, or changed after this payload was composed.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
       const localUatOperation =
         input.allowIsolatedLocalOperation === "candidate-private-upload" &&
         input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.documentProcessing &&
@@ -217,7 +244,7 @@ export async function dispatchWithProviderGovernance<T>(input: {
         input.allowIsolatedLocalOperation === "candidate-portal-credential" &&
         input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.portal &&
         input.providerId === "internal-candidate-portal";
-      if (uatIsolation.isolated && (
+      if (uatIsolation.isolated && !candidateEmailDelivery && !candidatePortalEmail && (
         !uatIsolation.fencedByScenarioKey ||
         !uatIsolation.linkedToRun ||
         !localUatOperation
@@ -239,6 +266,8 @@ export async function dispatchWithProviderGovernance<T>(input: {
         input.workflow,
         {
           allowIsolatedLocalOperation: input.allowIsolatedLocalOperation,
+          candidateEmailDelivery,
+          candidatePortalEmail,
         },
       );
       if (!gate.allowed) {
