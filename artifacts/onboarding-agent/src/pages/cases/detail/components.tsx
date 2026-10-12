@@ -96,7 +96,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
              <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{offlineSample && canViewIdentity ? `For ${c.workerName} • ` : ''}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity ? ` • Effective ${format(new Date(c.joiningDate), 'MMM d, yyyy')}` : ''}</p>
             {offlineSample && (
               <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
-                Historical test record — read-only; no provider work or business completion is authorized.
+                {c.fictionalOfflineIdentity ? 'Example · Offline — read-only; no outreach or business completion.' : 'Historical test record — read-only; no provider work or business completion is authorized.'}
               </p>
             )}
            
@@ -179,7 +179,7 @@ export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: 
   const isOnboarding = !offlineSample && onboardingStages.includes(c.lifecycleStage) && !!c.joiningDate;
   
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
       <div className="p-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
         <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Case Health</p>
         <div className="flex items-center gap-2 mb-1">
@@ -216,7 +216,7 @@ export function CaseTabs({ activeTab, setTab, offlineSample = false }: { activeT
     ...(access?.access.notesRead ? ['Activity', 'Communications', 'Audit'] : []),
     ...(access?.access.profileRead && access.access.notesRead && access && Object.values(access.sensitive).every((permission) => permission.read) ? ['Ask AI'] : [])];
   return (
-    <div className="flex overflow-x-auto border-b border-[var(--border)] mb-6 hide-scrollbar -mx-6 md:mx-0 px-6 md:px-0">
+    <div className="flex flex-wrap border-b border-[var(--border)] mb-6">
       {tabs.map(t => (
         <button
           key={t}

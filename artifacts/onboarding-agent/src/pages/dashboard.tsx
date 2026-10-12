@@ -11,6 +11,7 @@ import { Activity, Bot, CheckCircle2, ShieldAlert, UserCheck, Layers, AlertOctag
 import { EngineBadge } from '@/components/engine-badge';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { statusOf, caseTypeOf, caseTitleOf } from './cases/index';
+import { operationalReportingPopulation } from '../lib/operational-reporting';
 
 /* ----------------------------- derived metrics ---------------------------- */
 
@@ -43,8 +44,7 @@ export function DashboardPage() {
   const casesQ = useListOnboardingCases();
   const approvalsQ = useListOnboardingApprovals({ status: 'all' });
 
-  const cases = casesQ.data ?? [];
-  const approvals = approvalsQ.data ?? [];
+  const { cases, approvals } = operationalReportingPopulation(casesQ.data ?? [], approvalsQ.data ?? []);
   const pendingApprovals = useMemo(() => approvals.filter((a) => a.status === 'pending'), [approvals]);
 
   const metrics = useMemo(() => {

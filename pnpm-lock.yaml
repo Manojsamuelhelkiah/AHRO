@@ -265,6 +265,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
       '@types/yauzl':
         specifier: ^3.4.0
         version: 3.4.0

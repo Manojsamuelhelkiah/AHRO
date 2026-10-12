@@ -4,7 +4,6 @@ import {
   useCreateOnboardingCase,
   useGetCurrentOrganization,
   getListOnboardingCasesQueryKey,
-  customFetch,
   getPinnedOrganizationIdForPage,
 } from '@workspace/api-client-react';
 import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
@@ -22,8 +21,8 @@ import {
   CASE_TYPES,
   caseTitleOf as presentedCaseTitleOf,
   caseTypeOf as presentedCaseTypeOf,
-  isDemoCoverageCase,
-  originalCoverageScenarioKey,
+  casesForList,
+  isFictionalOfflineExample,
   type CaseTypeFilter,
 } from './case-presentation';
 
@@ -93,21 +92,6 @@ const PAGE_CONTEXT: Record<CaseTypeFilter, { title: string; subtitle: string }> 
   'Mobility': { title: 'Mobility Cases', subtitle: 'Cross-border moves, relocation, tax, and immigration coordination.' },
   'Documents': { title: 'Document Cases', subtitle: 'Letters, policy acknowledgements, and worker-record documents.' },
 };
-
-const SYNTHETIC_SCENARIO_KEYS = [
-  'standard-fte',
-  'internal-transfer',
-  'payroll-bank-change',
-  'benefits-life-event',
-  'leave-parental',
-  'compliance-work-authorization',
-  'offboarding-voluntary',
-  'helpdesk-employment-letter',
-  'it-privileged-access',
-  'learning-mandatory-certification',
-  'mobility-country-transfer',
-  'documents-policy-acknowledgement',
-] as const;
 
 /* ------------------------------ status badge ------------------------------ */
 
@@ -237,13 +221,13 @@ export function CasesPage() {
     query: {
       queryKey: [...getListOnboardingCasesQueryKey(), organizationId],
       refetchInterval: (query: any) => {
-        const active = query?.state?.data?.some((c: any) => c.orchestrationStatus !== 'completed' && c.orchestrationStatus !== 'done');
+        const active = query?.state?.data?.some((c: any) => !c.controllerRetired && !c.offlineSample && c.orchestrationStatus !== 'completed' && c.orchestrationStatus !== 'done');
         return active ? 5000 : false;
       }
     }
   });
   const [showHistory, setShowHistory] = useState(false);
-  const cases = caseRows?.filter(row => showHistory ? row.controllerRetired : !row.controllerRetired);
+  const cases = caseRows ? casesForList(caseRows, showHistory) : undefined;
   const [showNew, setShowNew] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
   const [showStandardIntake, setShowStandardIntake] = useState(false);
@@ -252,8 +236,6 @@ export function CasesPage() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedError, setSeedError] = useState<string | null>(null);
   const filtersRef = useRef<HTMLDivElement>(null);
   const isDevelopmentDemo = getPinnedOrganizationIdForPage() === 'demo';
 
@@ -315,7 +297,7 @@ export function CasesPage() {
 
   const counts = useMemo(() => {
     const rows = cases ?? [];
-    const by = (s: HroStatus) => rows.filter((c) => statusOf(c) === s).length;
+    const by = (s: HroStatus) => rows.filter((c) => !c.controllerRetired && !c.offlineSample && statusOf(c) === s).length;
     return {
       all: rows.length,
       inProgress: by('In Progress'),
@@ -349,37 +331,6 @@ export function CasesPage() {
   };
 
   const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
-  const existingSyntheticKeys = new Set(
-    (cases ?? [])
-      .filter(isDemoCoverageCase)
-      .map((c) => originalCoverageScenarioKey(c.scenarioKey))
-      .filter((key): key is string => Boolean(key)),
-  );
-  const missingSyntheticKeys = SYNTHETIC_SCENARIO_KEYS.filter((key) => !existingSyntheticKeys.has(key));
-
-  const seedSyntheticCoverage = async () => {
-    if (!isDevelopmentDemo || missingSyntheticKeys.length === 0) return;
-    setIsSeeding(true);
-    setSeedError(null);
-    try {
-      await customFetch<{
-        createdCaseIds: number[];
-        existingCaseIds: number[];
-        scenarioKeys: string[];
-        offline: boolean;
-      }>('/api/onboarding/demo/full-coverage', {
-        method: 'POST',
-        body: JSON.stringify({}),
-        responseType: 'json',
-      });
-      await refetch();
-    } catch (error: any) {
-      setSeedError(error?.response?.data?.message || error?.message || 'The synthetic coverage set could not be created.');
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader title={context.title} subtitle={context.subtitle}>
@@ -400,17 +351,15 @@ export function CasesPage() {
       </PageHeader>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={showHistory} onChange={event => setShowHistory(event.target.checked)} />
-        Show historical test records instead of operational cases
+        Show all historical test records
       </label>
       {showHistory && <p role="status" className="rounded border p-3 text-sm">
         Historical test records are read-only and non-operational. Stored status and evidence describe history, not current business activity or readiness.
       </p>}
 
-      {seedError && (
-        <div role="alert" className="rounded-[var(--radius-md)] border px-4 py-3 text-sm" style={{ borderColor: 'var(--status-red)', backgroundColor: 'var(--status-red-bg)', color: 'var(--status-red-fg)' }}>
-          {seedError}
-        </div>
-      )}
+      {!showHistory && cases?.some(isFictionalOfflineExample) && <p role="status" className="text-sm text-[var(--text-muted)]">
+        Examples are offline and read-only. They are included in list counts, not operational status counts or business outcomes.
+      </p>}
 
       {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
        {showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
@@ -513,7 +462,7 @@ export function CasesPage() {
         )}
 
         {/* case-type tabs */}
-        <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex items-center gap-1 overflow-x-auto">
+        <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex flex-wrap items-center gap-1">
           {workTypes.map((t) => {
             const active = typeFilter === t;
             return (
@@ -586,8 +535,8 @@ export function CasesPage() {
           </div>
         )}
 
-        {/* desktop / tablet table */}
-        <div className="overflow-x-auto hidden md:block">
+        {/* Wide-screen table; narrower viewports use complete case cards. */}
+        <div className="overflow-x-auto hidden lg:block">
           <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
@@ -669,6 +618,7 @@ export function CasesPage() {
                     >
                       <td style={{ padding: '12px var(--space-lg)' }}>
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</div>
+                        {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
                       </td>
                       <td style={{ padding: '12px var(--space-lg)' }}>
@@ -706,7 +656,7 @@ export function CasesPage() {
         </div>
 
         {/* mobile cards */}
-        <div className="md:hidden">
+        <div className="lg:hidden">
           {isLoading ? (
             <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Loading...</div>
           ) : isError ? (
@@ -733,6 +683,7 @@ export function CasesPage() {
                     <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
                     <HroStatusBadge status={status} />
                   </div>
+                  {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{c.workerName}</span>
                     <CaseTypeBadge type={caseTypeOf(c)} />

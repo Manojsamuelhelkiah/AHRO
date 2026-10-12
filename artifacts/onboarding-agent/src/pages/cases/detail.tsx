@@ -279,7 +279,7 @@ export function CaseDetailPage() {
       )}
 
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
-      {c.controllerRetired && <div role="status" className="mb-6 rounded-md border p-4 text-sm">
+      {c.controllerRetired && !c.fictionalOfflineIdentity && <div role="status" className="mb-6 rounded-md border p-4 text-sm">
         This case is retained historical evidence. Operations and outreach are retired; delivery outcomes and private records remain subject to current access and retention rules.
       </div>}
       {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
@@ -287,7 +287,7 @@ export function CaseDetailPage() {
       {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} />}
       {offlineSample ? (
         <div role="status" className="mb-6 rounded-lg border p-4 text-sm">
-          Historical test record — read-only and permanently non-operational.
+          {c.fictionalOfflineIdentity ? 'Example · Offline — read-only and permanently non-operational.' : 'Historical test record — read-only and permanently non-operational.'}
           Retained events and private evidence are not business activity, approval authority, or proof of readiness.
         </div>
       ) : (

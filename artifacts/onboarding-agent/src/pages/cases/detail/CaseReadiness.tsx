@@ -310,16 +310,16 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
                  {(w.status === 'blocked' || w.status === 'exception') && <AlertTriangle className="w-4 h-4 text-[var(--status-amber)]" />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <h4 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)] truncate">{w.label}</h4>
+                <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                  <h4 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)] break-words">{w.label}</h4>
                   <StatusBadgeText status={w.status} />
                   {!w.mandatory && <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--text-muted)] bg-[var(--surface)] px-1.5 py-0.5 rounded border border-[var(--border)]">Optional</span>}
                    {isBlocker && <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--status-red-fg)]">Blocking progress</span>}
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--text-secondary)]">Stage: {w.enforcementStage?.replace(/-/g, ' ') || 'Unknown'}</span>
                    {w.evidenceRequired && <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--status-amber-fg)]">Independent evidence · {w.responsibleRole || 'designated human'}</span>}
-                   {access?.access.notesRead && w.note && <span className="text-[var(--text-xs)] text-[var(--text-secondary)] flex-1 truncate">&bull; {w.note}</span>}
+                   {access?.access.notesRead && w.note && <span className="text-[var(--text-xs)] text-[var(--text-secondary)] break-words">&bull; {w.note}</span>}
                 </div>
               </div>
               

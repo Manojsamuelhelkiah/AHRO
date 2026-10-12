@@ -18,6 +18,10 @@ restricted evidence access, privacy retention and real-outcome exclusion. Do not
 erase compatibility identifiers or immutable historical source text to satisfy
 a search. Never run a legacy reset as cleanup.
 
+An explicitly approved [offline inventory exception](offline-inventory-exception.md)
+allows additive fictional Demo examples only. This does not revive any retired
+product capability.
+
 Retirement overrides email-by-default for historical test records, not for genuine
 intake. Legacy names alone do not establish that a shared eligibility rule is
 exclusive to the retired feature.

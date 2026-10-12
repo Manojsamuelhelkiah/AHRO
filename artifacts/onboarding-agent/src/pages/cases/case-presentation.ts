@@ -26,6 +26,15 @@ type CaseLike = {
   hireType?: string | null;
 };
 
+/** Only the server's fictional identity projection is eligible for ordinary-list examples. */
+export function isFictionalOfflineExample(c: { fictionalOfflineIdentity?: boolean; offlineSample?: boolean }) {
+  return c.fictionalOfflineIdentity === true && c.offlineSample === true;
+}
+
+export function casesForList<T extends { controllerRetired?: boolean; fictionalOfflineIdentity?: boolean; offlineSample?: boolean }>(rows: readonly T[], historyOnly: boolean): T[] {
+  return rows.filter(row => historyOnly ? row.controllerRetired : !row.controllerRetired || isFictionalOfflineExample(row));
+}
+
 const SERVICE_CASE_PRESENTATION: Record<string, { type: CaseFamily; title: string; owner: string }> = {
   'standard-fte': { type: 'Onboarding', title: 'Standard external FTE', owner: 'Onboarding Coordinator' },
   'internal-transfer': { type: 'Employee Changes', title: 'Internal transfer / role change', owner: 'Worker Records Specialist' },
@@ -52,6 +61,10 @@ export function isDemoCoverageCase(c: Pick<CaseLike, 'scenarioKey'>) {
 }
 
 export function casePresentationOf(c: CaseLike) {
+  if (c.caseFamily && CASE_TYPES.includes(c.caseFamily as CaseTypeFilter) && c.caseFamily !== 'All Cases') {
+    const reference = Object.values(SERVICE_CASE_PRESENTATION).find(item => item.type === c.caseFamily)!;
+    return { ...reference, title: c.requestType || reference.title };
+  }
   const scenarioKey = originalCoverageScenarioKey(c.scenarioKey);
   return scenarioKey ? SERVICE_CASE_PRESENTATION[scenarioKey] : undefined;
 }

@@ -322,6 +322,8 @@ import {
 } from "../lib/onboarding/sensitive-access";
 
 import { readHroBatchRequest, policyWithoutBatchIntake } from "../lib/onboarding/hro-batch-templates";
+import { isFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
+import { OFFLINE_CASE_EXAMPLES } from "../lib/onboarding/offline-example-inventory";
 
 const router: IRouter = Router();
 router.use((req, res, next) => {
@@ -790,11 +792,11 @@ async function serializeCase(
   // The marker is server-owned. Offline, unauthorized Demo cases are wholly
   // fictional fixtures, so their identity projection does not imply or grant
   // sensitive-record authority. Volunteered/hybrid cases remain protected.
-  const fictionalOfflineIdentity =
-    row.organizationId === DEMO_ORGANIZATION_ID &&
-    row.candidateEmailAuthorizedAt === null &&
-    row.candidateEmailAuthorizedBy === null &&
-    isExplicitSyntheticDemoCase(row);
+  const fictionalOfflineIdentity = isFictionalOfflineExampleCase(row);
+  // Generic fixed-inventory description only, never a bypass for mutable notes.
+  const offlineExample = fictionalOfflineIdentity
+    ? OFFLINE_CASE_EXAMPLES.find(example => example.key === row.scenarioKey)
+    : undefined;
   const canReadIdentity = canReadProfile &&
     (sensitiveAccess.identity || fictionalOfflineIdentity);
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
@@ -834,7 +836,7 @@ async function serializeCase(
     /** Only server-marked, fictional Demo fixtures may bypass identity authority. */
     fictionalOfflineIdentity: canReadProfile && fictionalOfflineIdentity,
     planSummary: canReadNotes
-      ? redactSensitiveText(row.planSummary, sensitiveAccess) ?? null
+      ? offlineExample?.values.planSummary ?? redactSensitiveText(row.planSummary, sensitiveAccess) ?? null
       : null,
     checklistTemplateVersion: row.checklistTemplateVersion,
     checklistSnapshot: canReadReadiness

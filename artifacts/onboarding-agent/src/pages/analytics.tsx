@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { operationalReportingPopulation } from '../lib/operational-reporting';
 import {
   useGetOnboardingAnalytics, getGetOnboardingAnalyticsQueryKey,
   useListOnboardingCases, getListOnboardingCasesQueryKey,
@@ -50,8 +51,7 @@ export function AnalyticsPage() {
     } catch(e) {}
   };
 
-  const allCases = casesData || [];
-  const allApprovals = approvalsData || [];
+  const { cases: allCases, approvals: allApprovals } = operationalReportingPopulation(casesData ?? [], approvalsData ?? []);
 
   const regions = useMemo(() => Array.from(new Set(allCases.map(c => c.geography).filter(Boolean))).sort(), [allCases]);
   const caseTypes = useMemo(() => Array.from(new Set(allCases.map(c => c.hireType).filter(Boolean))).sort(), [allCases]);

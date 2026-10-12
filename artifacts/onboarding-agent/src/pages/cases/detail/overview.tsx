@@ -17,7 +17,7 @@ import { RestrictedActionNotice, useCaseAccess } from './case-access';
 export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
   const access = useCaseAccess();
   return (
-    <div className="flex flex-col md:flex-row gap-8 pb-12">
+    <div className="flex flex-col xl:flex-row gap-8 pb-12">
       <div className="flex-1 min-w-0">
         <ConnectedReadinessSla caseId={caseId} />
         {access?.access.profileRead
@@ -28,10 +28,10 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
           ? <RecentActivitySummary events={events} />
           : <RestrictedActionNotice>Case notes and activity details are restricted by your current permissions.</RestrictedActionNotice>}
       </div>
-      <div className="w-full md:w-[320px] lg:w-[360px] shrink-0">
-        <div className="md:sticky md:top-[120px] space-y-6">
+      <div className="w-full xl:w-[360px] shrink-0">
+        <div className="xl:sticky xl:top-[120px] space-y-6">
            {access?.access.notesRead
-             ? <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} />
+             ? <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} offlineSample={isOfflineDemoSample(c)} />
              : <RestrictedActionNotice>Approval notes and decision details are restricted by your current permissions.</RestrictedActionNotice>}
            {access?.access.profileRead && <WorkforceContextCard c={c} />}
           {isOfflineDemoSample(c) ? <OfflinePrivacyRestricted /> : <CasePrivacyControls caseId={caseId} />}
@@ -93,7 +93,7 @@ function WorkforceContextCard({ c }: { c: any }) {
   );
 }
 
-function AttentionPanel({ approval, caseId }: any) {
+export function AttentionPanel({ approval, caseId, offlineSample = false }: any) {
   const access = useCaseAccess();
   const action = useApprovalAction(approval, { caseId });
   const [expanded, setExpanded] = useState(false);
@@ -102,10 +102,10 @@ function AttentionPanel({ approval, caseId }: any) {
     return (
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] shadow-[var(--shadow-sm)] p-4 flex flex-col items-center justify-center text-center">
         <div className="w-10 h-10 rounded-full bg-[var(--surface-alt)] flex items-center justify-center mb-3">
-          <CheckCircle2 className="w-5 h-5 text-[var(--status-green)]" />
+          <CheckCircle2 className={cn("w-5 h-5", offlineSample ? "text-[var(--text-muted)]" : "text-[var(--status-green)]")} />
         </div>
-        <h3 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">No decisions pending</h3>
-        <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">Automated execution is proceeding.</p>
+        <h3 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{offlineSample ? 'No live decisions' : 'No decisions pending'}</h3>
+        <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">{offlineSample ? 'Example · Offline — no execution or approval authority.' : 'Automated execution is proceeding.'}</p>
       </div>
     );
   }
