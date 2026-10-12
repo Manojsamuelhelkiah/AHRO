@@ -238,6 +238,185 @@ test("agent registration preserves drafts, prevents repeat submissions and targe
   }
 });
 
+for (const kind of ["user", "security"] as const) {
+  test(`${kind} group edits retain drafts through another owner's update and retirement until cancelled`, async () => {
+    const dom = new Window({ url: "http://localhost/settings" });
+    const names = ["window", "document", "navigator", "location", "localStorage", "self",
+      "HTMLElement", "HTMLInputElement", "Event", "Node", "Text", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT"];
+    const originals = new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+    for (const name of names) Object.defineProperty(globalThis, name, {
+      configurable: true, writable: true,
+      value: name === "IS_REACT_ACT_ENVIRONMENT" ? true : (dom as unknown as Record<string, unknown>)[name],
+    });
+    const { createRoot } = await import("react-dom/client");
+    const { AccessGovernanceSettings } = await import("./settings-access-governance");
+    const group = {
+      id: "shared-group", name: "Original group", status: "active", version: 1,
+      members: [], securityGroups: [], securityGroupAttachments: [],
+      allows: ["flow.case.read"], approvalStatus: "approved",
+    };
+    const requests: Array<Record<string, unknown>> = [];
+    const errors: string[] = [];
+    let reads = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const path = String(url);
+      if (path === "/api/organizations/current") return Response.json({
+        activeOrganizationId: "shared-org", memberships: [{ organizationId: "shared-org", role: "owner" }],
+      });
+      assert.equal(new Headers(init?.headers).get("x-organization-id"), "shared-org");
+      if (init?.method === "PATCH") {
+        assert.equal(path, `/api/organizations/current/access/${kind}-groups/shared-group`);
+        const body = JSON.parse(String(init.body));
+        requests.push(body);
+        const code = body.expectedVersion !== group.version ? "ACCESS_VERSION_CONFLICT" : "ACCESS_GROUP_RETIRED";
+        assert.ok(body.expectedVersion !== group.version || group.status === "retired",
+          "refresh and cancel must never submit a valid write automatically");
+        errors.push(code);
+        return Response.json({ code, message: code === "ACCESS_VERSION_CONFLICT"
+          ? "Group version is stale; reload and try again." : "Retired groups cannot be changed." }, { status: 409 });
+      }
+      assert.equal(init?.method ?? "GET", "GET");
+      assert.equal(path, "/api/organizations/current/access");
+      reads++;
+      return Response.json({
+        catalog: [
+          { key: "flow.case.read", label: "Case overview", sensitivity: "low", kind: "flow" },
+          { key: "data.case.notes.read", label: "Case notes", sensitivity: "medium", kind: "field" },
+        ],
+        members: [], agents: [], userGroupStarters: [], grants: [], history: [],
+        userGroups: kind === "user" ? [group] : [], securityGroups: kind === "security" ? [group] : [],
+      });
+    }) as typeof fetch;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const root = createRoot(document.body);
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+    const row = `#access-${kind}-group-shared-group`;
+    const nameSelector = `${row} input[aria-label^="${kind === "user" ? "Rename " : "Security group name"}"]`;
+    const button = (scope: string, text: string) => {
+      const element = [...dom.document.querySelector(scope)!.querySelectorAll("button")]
+        .find((item) => item.textContent?.trim() === text);
+      assert.ok(element, `Missing ${text} in ${scope}`);
+      return element;
+    };
+    const click = async (element: { click(): void }) => {
+      await act(async () => { element.click(); await settle(); });
+      await act(async () => { await settle(); });
+    };
+    const fill = async (value: string) => {
+      const input = dom.document.querySelector(nameSelector)!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")!.set!.call(input, value);
+        input.dispatchEvent(new dom.Event("input", { bubbles: true }));
+      });
+    };
+    const assertDraft = (name: string) => {
+      assert.equal(dom.document.querySelector<HTMLInputElement>(nameSelector)!.value, name);
+      if (kind === "security") {
+        assert.equal(dom.document.querySelector<HTMLInputElement>('[aria-label="Allow Case overview"]')!.checked, false);
+        assert.equal(dom.document.querySelector<HTMLInputElement>('[aria-label="Allow Case notes"]')!.checked, true);
+      }
+    };
+    const assertFailure = (message: RegExp) => {
+      const notice = dom.document.querySelector("[data-testid=status-access-governance]")!;
+      assert.equal(notice.getAttribute("role"), "alert");
+      assert.match(notice.textContent!, message);
+      assert.doesNotMatch(dom.document.body.textContent!, /User group renamed\.|Security group and policy grants updated\./);
+    };
+    const beginDraft = async (name: string) => {
+      await click(button(row, kind === "user" ? "Rename" : "Edit policies"));
+      await fill(name);
+      if (kind === "security") {
+        const overview = dom.document.querySelector<HTMLInputElement>('[aria-label="Allow Case overview"]')!;
+        const notes = dom.document.querySelector<HTMLInputElement>('[aria-label="Allow Case notes"]')!;
+        if (overview.checked) await click(overview);
+        if (!notes.checked) await click(notes);
+      }
+    };
+    const save = () => click(button(row, kind === "user" ? "Save name" : "Save policy"));
+    const refresh = () => click(button("body", "Refresh"));
+    pinOrganizationIdForPage("shared-org");
+    try {
+      await act(async () => { root.render(<QueryClientProvider client={client}><AccessGovernanceSettings /></QueryClientProvider>); await settle(); });
+      await act(async () => { await settle(); });
+      await beginDraft("Unsaved rename");
+      group.name = "Other owner's rename";
+      group.version = 2;
+      if (kind === "security") group.allows = [];
+      const updated = structuredClone(group);
+      await save();
+      assert.deepEqual(errors, ["ACCESS_VERSION_CONFLICT"]);
+      assertDraft("Unsaved rename");
+      assertFailure(/version is stale/);
+      const readsBefore = reads;
+      await refresh();
+      assert.ok(reads > readsBefore);
+      const refreshed = client.getQueryData<{ userGroups: typeof group[]; securityGroups: typeof group[] }>(
+        ["organization-access-governance", "shared-org"],
+      )!;
+      assert.deepEqual((kind === "user" ? refreshed.userGroups : refreshed.securityGroups)[0], updated);
+      assertDraft("Unsaved rename");
+      assertFailure(/version is stale/);
+      assert.equal(requests.length, 1, "refresh must not retry the rejected draft");
+      await click(button(row, "Cancel"));
+      assert.equal(dom.document.querySelector(nameSelector), null);
+      assert.match(dom.document.querySelector(row)!.textContent!, /Other owner's rename/);
+      assert.deepEqual(group, updated);
+      // Reopening uses the current owner's values, not the cancelled draft.
+      await click(button(row, kind === "user" ? "Rename" : "Edit policies"));
+      assert.equal(dom.document.querySelector<HTMLInputElement>(nameSelector)!.value, updated.name);
+      if (kind === "security") {
+        assert.equal(dom.document.querySelector<HTMLInputElement>('[aria-label="Allow Case overview"]')!.checked, false);
+        assert.equal(dom.document.querySelector<HTMLInputElement>('[aria-label="Allow Case notes"]')!.checked, false);
+      }
+      await click(button(row, "Cancel"));
+      await beginDraft("Unsaved after retirement");
+      group.status = "retired";
+      group.version = 3;
+      const retired = structuredClone(group);
+      await save();
+      assertDraft("Unsaved after retirement");
+      assertFailure(/version is stale/);
+      await refresh();
+      const refreshedRetirement = client.getQueryData<{ userGroups: typeof group[]; securityGroups: typeof group[] }>(
+        ["organization-access-governance", "shared-org"],
+      )!;
+      assert.deepEqual((kind === "user" ? refreshedRetirement.userGroups : refreshedRetirement.securityGroups)[0], retired);
+      assertDraft("Unsaved after retirement");
+      assert.equal(requests.length, 2, "refresh must not resubmit into a retired group");
+      await save();
+      assert.deepEqual(errors, ["ACCESS_VERSION_CONFLICT", "ACCESS_VERSION_CONFLICT", "ACCESS_GROUP_RETIRED"]);
+      assertDraft("Unsaved after retirement");
+      assertFailure(/Retired groups cannot be changed/);
+      await refresh();
+      assertDraft("Unsaved after retirement");
+      assertFailure(/Retired groups cannot be changed/);
+      await click(button(row, "Cancel"));
+      assert.equal(dom.document.querySelector(nameSelector), null);
+      assert.match(dom.document.querySelector(row)!.textContent!, /retired/);
+      assert.equal(requests.length, 3, "cancel must never write");
+      assert.deepEqual(requests, [
+        { name: "Unsaved rename", ...(kind === "security" ? { allows: ["data.case.notes.read"] } : {}), expectedVersion: 1 },
+        { name: "Unsaved after retirement", ...(kind === "security" ? { allows: ["data.case.notes.read"] } : {}), expectedVersion: 2 },
+        { name: "Unsaved after retirement", ...(kind === "security" ? { allows: ["data.case.notes.read"] } : {}), expectedVersion: 3 },
+      ]);
+      assert.deepEqual(group, retired);
+      assert.ok(![...dom.document.querySelector(row)!.querySelectorAll("button")]
+        .some((item) => ["Rename", "Edit policies"].includes(item.textContent?.trim() ?? "")));
+    } finally {
+      await act(async () => { root.unmount(); });
+      client.clear();
+      globalThis.fetch = originalFetch;
+      pinOrganizationIdForPage(null);
+      dom.close();
+      for (const [name, descriptor] of originals) {
+        if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+        else delete (globalThis as Record<string, unknown>)[name];
+      }
+    }
+  });
+}
+
 test("starter picker refreshes persisted selectors, handles failure/retry and remains owner-only", async () => {
   const dom = new Window({ url: "http://localhost/settings" });
   const names = ["window", "document", "navigator", "location", "localStorage", "self",

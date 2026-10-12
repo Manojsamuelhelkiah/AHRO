@@ -477,6 +477,71 @@ test("custom group name conflicts are actionable, atomic, concurrent-safe and te
   }
 });
 
+test("another owner's group edits and retirement survive rejected stale drafts without policy or audit writes", { skip: !hasDb }, async () => {
+  for (const kind of ["user", "security"] as const) {
+    const path = `/${kind}-groups`;
+    const snapshotKey = kind === "user" ? "userGroups" : "securityGroups";
+    const responseKey = kind === "user" ? "userGroup" : "securityGroup";
+    const otherOwner = kind === "user" ? userGroupOwnerUserId : securityGroupOwnerUserId;
+    const created = await mutate(path, "POST", managerUserId, {
+      name: `Shared ${kind} group`, ...(kind === "security" ? { allows: ["flow.case.read"] } : {}),
+    });
+    expectStatus(created, 201);
+    const id = created.body[responseKey].id;
+    const editPath = `${path}/${id}`;
+    const draft = {
+      name: `Unsaved ${kind} rename`,
+      ...(kind === "security" ? { allows: ["data.case.notes.read"] } : {}),
+    };
+    const changed = await mutate(editPath, "PATCH", otherOwner, {
+      name: `Other owner's ${kind} rename`, expectedVersion: 1,
+      ...(kind === "security" ? { allows: ["flow.onboarding.read"] } : {}),
+    });
+    expectStatus(changed, 200);
+
+    const assertRejectedWithoutWrites = async (expectedVersion: number, code: string) => {
+      const before = await currentSnapshot();
+      const policiesBefore = await db.select().from(accessSecurityGroupPolicies).where(and(
+        eq(accessSecurityGroupPolicies.organizationId, organizationId),
+        eq(accessSecurityGroupPolicies.securityGroupId, id),
+      ));
+      const result = await mutate(editPath, "PATCH", managerUserId, { ...draft, expectedVersion });
+      expectStatus(result, 409);
+      assert.equal(result.body.code, code);
+      assert.equal(result.body.ok, undefined);
+      assert.equal(result.body[responseKey], undefined, "failure must not resemble a saved group");
+      assert.equal(result.body.existingGroup, undefined, "version/retirement conflicts are not name conflicts");
+      const after = await currentSnapshot();
+      assert.deepEqual(after[snapshotKey].find((item: JsonRecord) => item.id === id),
+        before[snapshotKey].find((item: JsonRecord) => item.id === id));
+      assert.deepEqual(after.history, before.history, "failed drafts must not announce changes in audit history");
+      assert.deepEqual(await db.select().from(accessSecurityGroupPolicies).where(and(
+        eq(accessSecurityGroupPolicies.organizationId, organizationId),
+        eq(accessSecurityGroupPolicies.securityGroupId, id),
+      )), policiesBefore, "failed drafts must not create or change policy revisions");
+      return after[snapshotKey].find((item: JsonRecord) => item.id === id);
+    };
+
+    const refreshed = await assertRejectedWithoutWrites(1, "ACCESS_VERSION_CONFLICT");
+    assert.equal(refreshed.name, `Other owner's ${kind} rename`);
+    assert.equal(refreshed.version, 2);
+    if (kind === "security") assert.deepEqual(refreshed.allows, ["flow.onboarding.read"]);
+    // A fresh editor still cannot resurrect a group retired by a different owner.
+    expectStatus(await mutate(editPath, "PATCH", otherOwner, {
+      status: "retired", expectedVersion: refreshed.version,
+    }), 200);
+    await assertRejectedWithoutWrites(2, "ACCESS_VERSION_CONFLICT");
+    const retired = await assertRejectedWithoutWrites(3, "ACCESS_GROUP_RETIRED");
+    assert.equal(retired.status, "retired");
+    assert.equal(retired.version, 3);
+    assert.equal(retired.name, refreshed.name);
+    if (kind === "security") assert.deepEqual(retired.allows, refreshed.allows);
+    // Refresh/cancel is read-only: neither changes nor reactivation are implied.
+    const cancelled = await currentSnapshot();
+    assert.deepEqual(cancelled[snapshotKey].find((item: JsonRecord) => item.id === id), retired);
+  }
+});
+
 test("temporary memberships and group/direct attachments stop granting access at expiry without cleanup", { skip: !hasDb }, async () => {
   const expiry = new Date(Date.now() + 3_600_000).toISOString();
   const past = new Date(Date.now() - 1_000);
